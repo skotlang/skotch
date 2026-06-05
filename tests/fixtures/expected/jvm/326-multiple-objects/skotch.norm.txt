@@ -7,12 +7,11 @@ method        main ()V 0x0019
     0000 getstatic Field(Logger.INSTANCE:LLogger;)
     0003 ldc "started"
     0005 invokevirtual Method(Logger.info:(Ljava/lang/String;)V)
-    0008 getstatic Field(Config.INSTANCE:LConfig;)
-    0011 invokevirtual Method(Config.appName:()Ljava/lang/String;)
-    0014 getstatic Field(Logger.INSTANCE:LLogger;)
-    0017 swap
-    0018 invokevirtual Method(Logger.info:(Ljava/lang/String;)V)
-    0021 return
+    0008 getstatic Field(Logger.INSTANCE:LLogger;)
+    0011 getstatic Field(Config.INSTANCE:LConfig;)
+    0014 invokevirtual Method(Config.appName:()Ljava/lang/String;)
+    0017 invokevirtual Method(Logger.info:(Ljava/lang/String;)V)
+    0020 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

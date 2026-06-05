@@ -790,6 +790,14 @@ pub struct MirClass {
     /// (Function1-only, direct invoke) byte-stable.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub is_suspend_lambda: bool,
+    /// True when this class was synthesized from a Kotlin lambda
+    /// expression by the MIR lambda-lifting pass. Used by the JVM
+    /// backend and MIR-lower to recognize lambda classes without
+    /// relying on substring matches against the class name. The
+    /// class name itself follows kotlinc's `<wrapper>$<fn>$<idx>`
+    /// shape so it doesn't carry a structural marker.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub is_lambda: bool,
     /// True for stub entries from cross-file compilation. The stub provides
     /// field/method metadata for the MIR lowerer but should NOT be emitted
     /// as a class file by backends (the real class comes from another file).
@@ -976,4 +984,34 @@ impl MirModule {
     pub fn lookup_string(&self, id: StringId) -> &str {
         &self.strings[id.0 as usize]
     }
+
+    /// Whether the named class is a synthetic lambda (lifted from a
+    /// Kotlin lambda expression). Replaces the legacy
+    /// `name.contains("$Lambda$")` substring check now that lambda
+    /// classes follow kotlinc's `<wrapper>$<fn>$<idx>` naming.
+    pub fn is_lambda_class(&self, name: &str) -> bool {
+        self.classes
+            .iter()
+            .any(|c| c.name == name && (c.is_lambda || c.is_suspend_lambda))
+    }
+}
+
+/// Module-free heuristic for "does this class name LOOK like a
+/// kotlinc-emitted lambda" — used by passes that don't have a
+/// `MirModule` reference. The shape is `<wrapper>$<fn>$<digits>` (or
+/// nested `$<digits>$<digits>`). Matches both the new naming and any
+/// historical `$Lambda$N` form.
+pub fn looks_like_lambda_class_name(name: &str) -> bool {
+    if let Some(idx) = name.rfind('$') {
+        let suffix = &name[idx + 1..];
+        if !suffix.is_empty() && suffix.bytes().all(|b| b.is_ascii_digit()) {
+            // Need at least one more `$` before the digit suffix so we
+            // don't accidentally match `Foo$1` (legacy local class).
+            // The pattern requires `<wrapper>$<fn>$<idx>` — two dollar
+            // signs minimum.
+            let prefix = &name[..idx];
+            return prefix.contains('$');
+        }
+    }
+    false
 }

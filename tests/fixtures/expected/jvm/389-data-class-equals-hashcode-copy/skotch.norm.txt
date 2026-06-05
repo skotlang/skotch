@@ -49,10 +49,10 @@ method        main ()V 0x0019
     0076 iload_3
     0077 invokevirtual Method(java/io/PrintStream.println:(Z)V)
     0080 aload_0
-    0081 getfield Field(Point.x:I)
+    0081 invokevirtual Method(Point.getX:()I)
     0084 istore_3
     0085 aload_0
-    0086 getfield Field(Point.y:I)
+    0086 invokevirtual Method(Point.getY:()I)
     0089 istore 4
     0091 aload_0
     0092 iload_3

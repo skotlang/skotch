@@ -445,10 +445,10 @@ fn suspend_lambda_shell_shape() {
     .expect("compilation should succeed");
 
     // The lambda class lives alongside the wrapper class.
-    let lambda_path = tmp.join("InputKt$Lambda$0.class");
+    let lambda_path = tmp.join("InputKt$makeLambda$1.class");
     assert!(
         lambda_path.exists(),
-        "skotch should emit the InputKt$Lambda$0 class file"
+        "skotch should emit the InputKt$makeLambda$1 class file"
     );
 
     // Normalize & inspect the lambda class.
@@ -505,11 +505,11 @@ fn suspend_lambda_shell_shape() {
     let expected_sm_fragments = [
         // Setup: fetch $SUSPENDED, stash in slot 2, read label off this.
         "invokestatic Method(kotlin/coroutines/intrinsics/IntrinsicsKt.getCOROUTINE_SUSPENDED",
-        "getfield Field(InputKt$Lambda$0.label:I)",
+        "getfield Field(InputKt$makeLambda$1.label:I)",
         "tableswitch",
         // Case 0: throwOnFailure, checkcast this to Continuation, flip label, invoke callee.
         "invokestatic Method(kotlin/ResultKt.throwOnFailure:(Ljava/lang/Object;)V)",
-        "putfield Field(InputKt$Lambda$0.label:I)",
+        "putfield Field(InputKt$makeLambda$1.label:I)",
         "invokestatic Method(InputKt.yield_:(Lkotlin/coroutines/Continuation;)Ljava/lang/Object;)",
         // SUSPENDED bailout: dup; aload SUSPENDED; if_acmpne … areturn.
         "if_acmpne",
@@ -530,7 +530,7 @@ fn suspend_lambda_shell_shape() {
     //    before tail-calling the typed invoke.
     assert!(
         text.contains(
-            "invokevirtual Method(InputKt$Lambda$0.invoke:(Lkotlin/coroutines/Continuation;)Ljava/lang/Object;)"
+            "invokevirtual Method(InputKt$makeLambda$1.invoke:(Lkotlin/coroutines/Continuation;)Ljava/lang/Object;)"
         ),
         "bridge invoke should delegate to typed invoke(Continuation)"
     );
@@ -556,7 +556,7 @@ fn suspend_lambda_shell_shape() {
     let wrapper_text = wrapper_norm.as_text();
     assert!(
         wrapper_text.contains(
-            "invokespecial Method(InputKt$Lambda$0.<init>:(Lkotlin/coroutines/Continuation;)V)"
+            "invokespecial Method(InputKt$makeLambda$1.<init>:(Lkotlin/coroutines/Continuation;)V)"
         ),
         "wrapper should instantiate the lambda via <init>(Continuation)V"
     );
@@ -602,10 +602,10 @@ fn suspend_lambda_multi_suspend_shape() {
     })
     .expect("compilation should succeed");
 
-    let lambda_path = tmp.join("InputKt$Lambda$0.class");
+    let lambda_path = tmp.join("InputKt$makeLambda$1.class");
     assert!(
         lambda_path.exists(),
-        "skotch should emit the InputKt$Lambda$0 class file"
+        "skotch should emit the InputKt$makeLambda$1 class file"
     );
 
     let lambda_bytes = std::fs::read(&lambda_path).unwrap();
@@ -627,7 +627,7 @@ fn suspend_lambda_multi_suspend_shape() {
     //    continuation class).
     for field in ["I$0", "I$1"] {
         assert!(
-            text.contains(&format!("Field(InputKt$Lambda$0.{field}:I)")),
+            text.contains(&format!("Field(InputKt$makeLambda$1.{field}:I)")),
             "suspend lambda should declare the spill field `{field}:I` on itself, \
              got:\n{text}"
         );
@@ -672,18 +672,18 @@ fn suspend_lambda_multi_suspend_shape() {
     let expected_fragments = [
         // Setup: read $SUSPENDED, stash in slot 2, read label off this.
         "invokestatic Method(kotlin/coroutines/intrinsics/IntrinsicsKt.getCOROUTINE_SUSPENDED",
-        "getfield Field(InputKt$Lambda$0.label:I)",
+        "getfield Field(InputKt$makeLambda$1.label:I)",
         // Case 0: throwOnFailure; segment (push 10); callee cont arg
         // (`aload_0; checkcast Continuation`); spill I$0; set label=1;
         // invoke yield_.
         "invokestatic Method(kotlin/ResultKt.throwOnFailure:(Ljava/lang/Object;)V)",
-        "putfield Field(InputKt$Lambda$0.I$0:I)",
-        "putfield Field(InputKt$Lambda$0.label:I)",
+        "putfield Field(InputKt$makeLambda$1.I$0:I)",
+        "putfield Field(InputKt$makeLambda$1.label:I)",
         "invokestatic Method(InputKt.yield_:(Lkotlin/coroutines/Continuation;)Ljava/lang/Object;)",
         // SUSPENDED check (present on every non-final case).
         "if_acmpne",
         // Case N-1 (second yield): spill I$1 as well.
-        "putfield Field(InputKt$Lambda$0.I$1:I)",
+        "putfield Field(InputKt$makeLambda$1.I$1:I)",
         // Final case: `x + y` autoboxed through Integer.valueOf
         // before `areturn`.
         "invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)",
@@ -727,7 +727,7 @@ fn suspend_lambda_multi_suspend_shape() {
 ///    segment before the call must handle `NewInstance` + `Constructor`
 ///    for the lambda instantiation.
 ///
-/// 3. The lambda class (`InputKt$Lambda$0`) is a SuspendLambda with
+/// 3. The lambda class (`InputKt$makeLambda$1`) is a SuspendLambda with
 ///    the canonical 5-method shell.
 #[test]
 fn suspend_runtime_wiring_shape() {
@@ -793,7 +793,7 @@ fn suspend_runtime_wiring_shape() {
     // 7) Lambda is instantiated with Constructor(Continuation)V.
     assert!(
         text.contains(
-            "invokespecial Method(InputKt$Lambda$0.<init>:(Lkotlin/coroutines/Continuation;)V)"
+            "invokespecial Method(InputKt$run_$1.<init>:(Lkotlin/coroutines/Continuation;)V)"
         ),
         "run_ should instantiate lambda with <init>(Continuation)V, got:\n{text}"
     );
@@ -804,10 +804,10 @@ fn suspend_runtime_wiring_shape() {
     );
 
     // ── Lambda class ──────────────────────────────────────────────
-    let lambda_path = tmp.join("InputKt$Lambda$0.class");
+    let lambda_path = tmp.join("InputKt$run_$1.class");
     assert!(
         lambda_path.exists(),
-        "skotch should emit the InputKt$Lambda$0 class file"
+        "skotch should emit the InputKt$run_$1 class file"
     );
     let lambda_bytes = std::fs::read(&lambda_path).unwrap();
     let lambda_norm = skotch_classfile_norm::normalize_default(&lambda_bytes)

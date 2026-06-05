@@ -509,11 +509,11 @@ fn resolve_type_ref(tr: &skotch_syntax::TypeRef, interner: &Interner, module: &M
 /// LambdaMetafactory-based lowering. Used to gate scope-function
 /// lowering, lambda invocation dispatch, and `$Lambda$`-specific
 /// checks throughout MIR-lower.
-fn is_lambda_or_function_ty(ty: &Ty) -> bool {
+fn is_lambda_or_function_ty(ty: &Ty, module: &MirModule) -> bool {
     matches!(
         ty,
         Ty::Class(n)
-            if n.contains("$Lambda$")
+            if module.is_lambda_class(n)
                 || n.starts_with("kotlin/jvm/functions/Function")
     ) || matches!(ty, Ty::Function { .. })
 }
@@ -527,7 +527,7 @@ fn lambda_invoke_return_ty(ty: &Ty, module: &MirModule) -> Ty {
         if n.starts_with("kotlin/jvm/functions/Function") {
             return Ty::Any;
         }
-        if n.contains("$Lambda$") {
+        if module.is_lambda_class(n) {
             return module
                 .classes
                 .iter()
@@ -1886,6 +1886,7 @@ pub fn lower_file(
                         methods: comp_methods,
                         constructor: comp_ctor,
                         secondary_constructors: Vec::new(),
+                        is_lambda: false,
                         is_suspend_lambda: false,
                         is_cross_file_stub: true,
                         annotations: Vec::new(),
@@ -1908,6 +1909,7 @@ pub fn lower_file(
                     methods,
                     constructor: empty_ctor,
                     secondary_constructors: Vec::new(),
+                    is_lambda: false,
                     is_suspend_lambda: false,
                     is_cross_file_stub: true,
                     annotations: Vec::new(),
@@ -2705,6 +2707,7 @@ fn build_continuation_class(
         methods: vec![invoke],
         constructor: ctor,
         secondary_constructors: Vec::new(),
+        is_lambda: false,
         is_suspend_lambda: false,
         is_cross_file_stub: false,
         annotations: Vec::new(),
@@ -2894,7 +2897,12 @@ fn mir_autobox(fb: &mut FnBuilder, val: LocalId, ty: &Ty) -> LocalId {
 /// If `message` is Some, invokes the lambda to get a String and passes it
 /// to the exception constructor. Uses `lookup_constructor` to find the
 /// correct descriptor.
-fn emit_throw_new(fb: &mut FnBuilder, exception_class: &str, message: Option<LocalId>) {
+fn emit_throw_new(
+    fb: &mut FnBuilder,
+    module: &MirModule,
+    exception_class: &str,
+    message: Option<LocalId>,
+) {
     let exc = fb.new_local(Ty::Class(exception_class.to_string()));
     fb.push_stmt(MStmt::Assign {
         dest: exc,
@@ -2905,7 +2913,7 @@ fn emit_throw_new(fb: &mut FnBuilder, exception_class: &str, message: Option<Loc
         // If it's a lambda class, invoke it to get the String. Otherwise
         // use it directly.
         let msg_ty = fb.mf.locals[msg_local.0 as usize].clone();
-        let msg = if is_lambda_or_function_ty(&msg_ty) {
+        let msg = if is_lambda_or_function_ty(&msg_ty, module) {
             let result = fb.new_local(Ty::Any);
             fb.push_stmt(MStmt::Assign {
                 dest: result,
@@ -3287,6 +3295,182 @@ fn body_contains_suspend_call(
         false
     }
     scan_block(body, module, interner, name_to_func)
+}
+
+/// Detect whether a 0-arg lambda body has unqualified calls that don't
+/// resolve to anything in scope — a signal that the lambda is a
+/// receiver lambda (e.g. `StringBuilder.() -> Unit`) whose unqualified
+/// calls (`append("x")`) need a captured receiver to dispatch against.
+/// The metafactory path lowers to a static helper with no `this`, so
+/// any such lambda must take the explicit-class path instead.
+fn body_has_unresolved_unqualified_call(
+    body: &skotch_syntax::Block,
+    scope: &[(Symbol, LocalId)],
+    module: &MirModule,
+    name_to_func: &FxHashMap<Symbol, FuncId>,
+    interner: &mut Interner,
+) -> bool {
+    let println_sym = interner.intern("println");
+    let print_sym = interner.intern("print");
+    fn is_resolved(
+        name: Symbol,
+        scope: &[(Symbol, LocalId)],
+        module: &MirModule,
+        name_to_func: &FxHashMap<Symbol, FuncId>,
+        println_sym: Symbol,
+        print_sym: Symbol,
+        interner: &Interner,
+    ) -> bool {
+        if name == println_sym || name == print_sym {
+            return true;
+        }
+        if name_to_func.contains_key(&name) {
+            return true;
+        }
+        if scope.iter().any(|(s, _)| *s == name) {
+            return true;
+        }
+        let name_str = interner.resolve(name);
+        if module.classes.iter().any(|c| c.name == name_str) {
+            return true;
+        }
+        false
+    }
+    fn scan_expr(
+        e: &Expr,
+        scope: &[(Symbol, LocalId)],
+        module: &MirModule,
+        name_to_func: &FxHashMap<Symbol, FuncId>,
+        println_sym: Symbol,
+        print_sym: Symbol,
+        interner: &Interner,
+    ) -> bool {
+        match e {
+            Expr::Call { callee, args, .. } => {
+                if let Expr::Ident(name, _) = callee.as_ref() {
+                    if !is_resolved(
+                        *name,
+                        scope,
+                        module,
+                        name_to_func,
+                        println_sym,
+                        print_sym,
+                        interner,
+                    ) {
+                        return true;
+                    }
+                }
+                scan_expr(
+                    callee,
+                    scope,
+                    module,
+                    name_to_func,
+                    println_sym,
+                    print_sym,
+                    interner,
+                ) || args.iter().any(|a| {
+                    scan_expr(
+                        &a.expr,
+                        scope,
+                        module,
+                        name_to_func,
+                        println_sym,
+                        print_sym,
+                        interner,
+                    )
+                })
+            }
+            Expr::Binary { lhs, rhs, .. } => {
+                scan_expr(
+                    lhs,
+                    scope,
+                    module,
+                    name_to_func,
+                    println_sym,
+                    print_sym,
+                    interner,
+                ) || scan_expr(
+                    rhs,
+                    scope,
+                    module,
+                    name_to_func,
+                    println_sym,
+                    print_sym,
+                    interner,
+                )
+            }
+            Expr::Field { receiver, .. } | Expr::SafeCall { receiver, .. } => scan_expr(
+                receiver,
+                scope,
+                module,
+                name_to_func,
+                println_sym,
+                print_sym,
+                interner,
+            ),
+            Expr::Paren(inner, _) => scan_expr(
+                inner,
+                scope,
+                module,
+                name_to_func,
+                println_sym,
+                print_sym,
+                interner,
+            ),
+            _ => false,
+        }
+    }
+    fn scan_block(
+        b: &skotch_syntax::Block,
+        scope: &[(Symbol, LocalId)],
+        module: &MirModule,
+        name_to_func: &FxHashMap<Symbol, FuncId>,
+        println_sym: Symbol,
+        print_sym: Symbol,
+        interner: &Interner,
+    ) -> bool {
+        for stmt in &b.stmts {
+            match stmt {
+                Stmt::Expr(e) | Stmt::Return { value: Some(e), .. } => {
+                    if scan_expr(
+                        e,
+                        scope,
+                        module,
+                        name_to_func,
+                        println_sym,
+                        print_sym,
+                        interner,
+                    ) {
+                        return true;
+                    }
+                }
+                Stmt::Val(v) => {
+                    if scan_expr(
+                        &v.init,
+                        scope,
+                        module,
+                        name_to_func,
+                        println_sym,
+                        print_sym,
+                        interner,
+                    ) {
+                        return true;
+                    }
+                }
+                _ => {}
+            }
+        }
+        false
+    }
+    scan_block(
+        body,
+        scope,
+        module,
+        name_to_func,
+        println_sym,
+        print_sym,
+        interner,
+    )
 }
 
 /// Collect free variables in a lambda body: names that are referenced
@@ -3836,6 +4020,10 @@ struct FnBuilder {
     /// Reified type parameter substitutions for the current inline scope.
     /// Maps type param names (e.g. "A", "B") to concrete types (e.g. "String").
     reified_types: FxHashMap<String, String>,
+    /// Per-enclosing-function lambda counter (1-based at first use).
+    /// Used to build kotlinc-style names `<wrapper>$<fn>$<idx>` so the
+    /// emitted class names match kotlinc byte-for-byte.
+    lambda_count: u32,
     // (has_unresolved detection moved to JVM backend's has_null_stubs())
 }
 
@@ -3877,6 +4065,7 @@ impl FnBuilder {
             var_syms: rustc_hash::FxHashSet::default(),
             suspend_callable_locals: rustc_hash::FxHashSet::default(),
             reified_types: FxHashMap::default(),
+            lambda_count: 0,
         }
     }
 
@@ -3961,13 +4150,19 @@ fn extract_suspend_state_machine(
     wrapper_class: &str,
     fn_name: &str,
 ) -> SuspendSitesResult {
-    extract_suspend_state_machine_with_cont(
-        mf,
-        module,
-        wrapper_class,
-        fn_name,
-        format!("{wrapper_class}${fn_name}$1"),
-    )
+    // The state machine class shape is `<wrapper>$<fn>$<idx>` where idx
+    // is 1-based. If a lambda inside this function has already claimed
+    // `<wrapper>$<fn>$1`, bump until we find a free index — same scheme
+    // as the lambda-lifter's uniqueness loop.
+    let mut idx = 1usize;
+    let cont_name = loop {
+        let candidate = format!("{wrapper_class}${fn_name}${idx}");
+        if !module.classes.iter().any(|c| c.name == candidate) {
+            break candidate;
+        }
+        idx += 1;
+    };
+    extract_suspend_state_machine_with_cont(mf, module, wrapper_class, fn_name, cont_name)
 }
 
 /// Variant of [`extract_suspend_state_machine`] that lets the caller
@@ -9005,8 +9200,8 @@ fn lower_expr(
                     // The single argument should be a lambda.
                     let lambda_local = all_args.last().copied().unwrap();
                     let lambda_ty = fb.mf.locals[lambda_local.0 as usize].clone();
-                    let is_lambda =
-                        is_lambda_or_function_ty(&lambda_ty) || matches!(lambda_ty, Ty::Any);
+                    let is_lambda = is_lambda_or_function_ty(&lambda_ty, module)
+                        || matches!(lambda_ty, Ty::Any);
                     if is_lambda {
                         // Invoke the lambda with the receiver as its argument.
                         let invoke_class = match &lambda_ty {
@@ -9086,8 +9281,8 @@ fn lower_expr(
                 if method_name_str == "use" && args.len() == 1 {
                     let lambda_local = all_args.last().copied().unwrap();
                     let lambda_ty = fb.mf.locals[lambda_local.0 as usize].clone();
-                    let is_lambda =
-                        is_lambda_or_function_ty(&lambda_ty) || matches!(lambda_ty, Ty::Any);
+                    let is_lambda = is_lambda_or_function_ty(&lambda_ty, module)
+                        || matches!(lambda_ty, Ty::Any);
                     if is_lambda {
                         // Invoke the lambda with the resource as argument.
                         let invoke_class = match &lambda_ty {
@@ -9194,7 +9389,7 @@ fn lower_expr(
                 {
                     let lambda_local = all_args[1]; // all_args = [receiver, lambda]
                     let lambda_ty = fb.mf.locals[lambda_local.0 as usize].clone();
-                    if is_lambda_or_function_ty(&lambda_ty) {
+                    if is_lambda_or_function_ty(&lambda_ty, module) {
                         let cn = match &lambda_ty {
                             Ty::Class(n) => n.clone(),
                             Ty::Function { params, .. } => stdlib_function_interface(params.len()),
@@ -10684,7 +10879,7 @@ fn lower_expr(
                         let is_fn_ty = |t: &Ty| {
                             matches!(t, Ty::Function { .. })
                                 || matches!(t, Ty::Class(n) if n.starts_with("kotlin/jvm/functions/Function")
-                                    || n.contains("$Lambda$"))
+                                    || module.is_lambda_class(n))
                         };
                         let user_arg_tys: Vec<Ty> = all_args
                             .iter()
@@ -10941,7 +11136,7 @@ fn lower_expr(
                     // `sb.block()` where block: StringBuilder.() -> Unit.
                     let callable_local = *callable_local;
                     let callable_ty = fb.mf.locals[callable_local.0 as usize].clone();
-                    let is_callable = is_lambda_or_function_ty(&callable_ty)
+                    let is_callable = is_lambda_or_function_ty(&callable_ty, module)
                         || matches!(callable_ty, Ty::Any | Ty::Function { .. });
                     if is_callable {
                         let invoke_class = match &callable_ty {
@@ -13872,10 +14067,64 @@ fn lower_expr(
                 return Some(result);
             }
 
-            // `setOf(elements...)` — create Object[] array, call
-            // `kotlin/collections/SetsKt.setOf([Ljava/lang/Object;)Ljava/util/Set;`.
+            // `setOf(elements...)` — mirror the listOf treatment above:
+            // single-arg → `setOf(Object)Set` overload; multi-arg → typed
+            // `anewarray <ElemClass>` when all elements share a class,
+            // else `Object[]`. Both forward to kotlin/collections/SetsKt.
             if callee_str == "setOf" {
                 let arg_count = arg_locals.len();
+
+                if arg_count == 1 {
+                    let arg = arg_locals[0];
+                    let arg_ty = fb.mf.locals[arg.0 as usize].clone();
+                    let boxed = if fb.mf.is_suspend {
+                        mir_autobox_suspend(fb, arg, &arg_ty)
+                    } else {
+                        mir_autobox(fb, arg, &arg_ty)
+                    };
+                    let result = fb.new_local(Ty::Class("java/util/Set".to_string()));
+                    fb.mf.local_generic_args.insert(result.0, vec![arg_ty]);
+                    fb.push_stmt(MStmt::Assign {
+                        dest: result,
+                        value: Rvalue::Call {
+                            kind: CallKind::StaticJava {
+                                class_name: "kotlin/collections/SetsKt".to_string(),
+                                method_name: "setOf".to_string(),
+                                descriptor: "(Ljava/lang/Object;)Ljava/util/Set;".to_string(),
+                            },
+                            args: vec![boxed],
+                        },
+                    });
+                    return Some(result);
+                }
+
+                // Detect when every arg shares a concrete class (boxed
+                // primitives count: Int → Integer, etc.) and use
+                // `anewarray <ElemClass>` like kotlinc. Falls back to
+                // Object[] for heterogeneous shapes.
+                let elem_class_of = |ty: &Ty| -> Option<String> {
+                    match ty {
+                        Ty::Class(name) => Some(name.clone()),
+                        Ty::String => Some("java/lang/String".to_string()),
+                        Ty::Int => Some("java/lang/Integer".to_string()),
+                        Ty::Long => Some("java/lang/Long".to_string()),
+                        Ty::Double => Some("java/lang/Double".to_string()),
+                        Ty::Float => Some("java/lang/Float".to_string()),
+                        Ty::Bool => Some("java/lang/Boolean".to_string()),
+                        Ty::Byte => Some("java/lang/Byte".to_string()),
+                        Ty::Short => Some("java/lang/Short".to_string()),
+                        Ty::Char => Some("java/lang/Character".to_string()),
+                        _ => None,
+                    }
+                };
+                let inferred_element_class: Option<String> = arg_locals
+                    .first()
+                    .and_then(|first| elem_class_of(&fb.mf.locals[first.0 as usize]))
+                    .filter(|cls| {
+                        arg_locals.iter().all(|a| {
+                            elem_class_of(&fb.mf.locals[a.0 as usize]).as_ref() == Some(cls)
+                        })
+                    });
 
                 let count_local = fb.new_local(Ty::Int);
                 fb.push_stmt(MStmt::Assign {
@@ -13883,9 +14132,16 @@ fn lower_expr(
                     value: Rvalue::Const(MirConst::Int(arg_count as i32)),
                 });
                 let array_local = fb.new_local(Ty::Any);
+                let array_rvalue = match &inferred_element_class {
+                    Some(cls) => Rvalue::NewTypedObjectArray {
+                        size: count_local,
+                        element_class: cls.clone(),
+                    },
+                    None => Rvalue::NewObjectArray(count_local),
+                };
                 fb.push_stmt(MStmt::Assign {
                     dest: array_local,
-                    value: Rvalue::NewObjectArray(count_local),
+                    value: array_rvalue,
                 });
 
                 for (i, &arg) in arg_locals.iter().enumerate() {
@@ -13895,7 +14151,11 @@ fn lower_expr(
                         value: Rvalue::Const(MirConst::Int(i as i32)),
                     });
                     let arg_ty = fb.mf.locals[arg.0 as usize].clone();
-                    let boxed = mir_autobox(fb, arg, &arg_ty);
+                    let boxed = if fb.mf.is_suspend {
+                        mir_autobox_suspend(fb, arg, &arg_ty)
+                    } else {
+                        mir_autobox(fb, arg, &arg_ty)
+                    };
                     let store_dest = fb.new_local(Ty::Unit);
                     fb.push_stmt(MStmt::Assign {
                         dest: store_dest,
@@ -13907,7 +14167,12 @@ fn lower_expr(
                     });
                 }
 
+                let elem_ty = arg_locals
+                    .first()
+                    .map(|a| fb.mf.locals[a.0 as usize].clone())
+                    .unwrap_or(Ty::Any);
                 let result = fb.new_local(Ty::Class("java/util/Set".to_string()));
+                fb.mf.local_generic_args.insert(result.0, vec![elem_ty]);
                 fb.push_stmt(MStmt::Assign {
                     dest: result,
                     value: Rvalue::Call {
@@ -14117,6 +14382,7 @@ fn lower_expr(
                 );
                 emit_throw_new(
                     fb,
+                    module,
                     "java/lang/IllegalArgumentException",
                     if arg_locals.len() == 2 {
                         Some(arg_locals[1])
@@ -14145,6 +14411,7 @@ fn lower_expr(
                 );
                 emit_throw_new(
                     fb,
+                    module,
                     "java/lang/IllegalStateException",
                     if arg_locals.len() == 2 {
                         Some(arg_locals[1])
@@ -14159,7 +14426,12 @@ fn lower_expr(
 
             // `error(message)` → throw IllegalStateException(message)
             if callee_str == "error" && arg_locals.len() == 1 {
-                emit_throw_new(fb, "java/lang/IllegalStateException", Some(arg_locals[0]));
+                emit_throw_new(
+                    fb,
+                    module,
+                    "java/lang/IllegalStateException",
+                    Some(arg_locals[0]),
+                );
                 let dest = fb.new_local(Ty::Nothing);
                 return Some(dest);
             }
@@ -14171,7 +14443,7 @@ fn lower_expr(
                 } else {
                     Some(arg_locals[0])
                 };
-                emit_throw_new(fb, "kotlin/NotImplementedError", msg);
+                emit_throw_new(fb, module, "kotlin/NotImplementedError", msg);
                 let dest = fb.new_local(Ty::Nothing);
                 return Some(dest);
             }
@@ -14281,7 +14553,7 @@ fn lower_expr(
                 let count = arg_locals[0];
                 let lambda = arg_locals[1];
                 let lambda_ty = fb.mf.locals[lambda.0 as usize].clone();
-                if is_lambda_or_function_ty(&lambda_ty) {
+                if is_lambda_or_function_ty(&lambda_ty, module) {
                     let cn = match &lambda_ty {
                         Ty::Class(n) => n.clone(),
                         Ty::Function { params, .. } => stdlib_function_interface(params.len()),
@@ -14365,7 +14637,7 @@ fn lower_expr(
                 let receiver = arg_locals[0];
                 let lambda = arg_locals[1];
                 let lambda_ty = fb.mf.locals[lambda.0 as usize].clone();
-                if is_lambda_or_function_ty(&lambda_ty) {
+                if is_lambda_or_function_ty(&lambda_ty, module) {
                     let cn = match &lambda_ty {
                         Ty::Class(n) => n.clone(),
                         Ty::Function { params, .. } => stdlib_function_interface(params.len()),
@@ -14497,7 +14769,8 @@ fn lower_expr(
             // Also: fun apply(f: (Int)->Int, x: Int) = f(x) via FunctionN interface.
             if let Some((_, local_id)) = scope.iter().rev().find(|(s, _)| *s == callee_name) {
                 let local_ty = fb.mf.locals[local_id.0 as usize].clone();
-                let is_lambda_class = matches!(&local_ty, Ty::Class(n) if n.contains("$Lambda$"));
+                let is_lambda_class =
+                    matches!(&local_ty, Ty::Class(n) if module.is_lambda_class(n));
                 let is_function_interface = matches!(&local_ty, Ty::Class(n) if n.starts_with("kotlin/jvm/functions/Function"));
                 // Check if this is a class with an `invoke` operator method.
                 let has_invoke_method = if let Ty::Class(ref cn) = local_ty {
@@ -14665,7 +14938,7 @@ fn lower_expr(
                             .classes
                             .iter()
                             .rev()
-                            .find(|c| c.name.contains("$Lambda$"))
+                            .find(|c| c.is_lambda)
                             .map(|c| c.name.clone())
                             .unwrap_or_else(|| "java/lang/Object".to_string())
                     } else {
@@ -15092,7 +15365,7 @@ fn lower_expr(
                             let is_fn_slot = |ty: &Ty| {
                                 matches!(ty, Ty::Function { .. })
                                     || matches!(ty, Ty::Class(n) if n.starts_with("kotlin/jvm/functions/Function")
-                                        || n.contains("$Lambda$"))
+                                        || module.is_lambda_class(n))
                             };
                             let last_user_slot_is_fn = composer_pos > 0
                                 && desc_param_tys
@@ -15771,7 +16044,7 @@ fn lower_expr(
                             let is_fn_slot = |ty: &Ty| {
                                 matches!(ty, Ty::Function { .. })
                                     || matches!(ty, Ty::Class(n) if n.starts_with("kotlin/jvm/functions/Function")
-                                        || n.contains("$Lambda$"))
+                                        || module.is_lambda_class(n))
                             };
                             let last_user_slot_is_fn = composer_pos > 0
                                 && desc_param_tys
@@ -15985,7 +16258,7 @@ fn lower_expr(
                         };
                         let in_lambda = tid_class_name
                             .as_ref()
-                            .is_some_and(|cn| cn.contains("$Lambda$"));
+                            .is_some_and(|cn| module.is_lambda_class(cn));
                         // Prefer the class that matches `this`'s actual type.
                         // The previous fallback ("first non-stub class") was
                         // wrong for companion-method bodies: `this_local` is
@@ -19294,7 +19567,7 @@ fn lower_expr(
                     scope.iter().rev().find_map(|(s, lid)| {
                         if *s == this_sym {
                             let ty = fb.mf.locals.get(lid.0 as usize).cloned()?;
-                            if matches!(&ty, Ty::Class(cn) if !cn.contains("$Lambda$") && !cn.contains("$Callable")) {
+                            if matches!(&ty, Ty::Class(cn) if !module.is_lambda_class(cn) && !cn.contains("$Callable")) {
                                 Some((*lid, ty))
                             } else {
                                 None
@@ -19334,7 +19607,7 @@ fn lower_expr(
                 let Some(Ty::Class(ext_class_name)) = ext_ty.clone() else {
                     continue;
                 };
-                if ext_class_name.contains("$Lambda$") || ext_class_name.contains("$Callable") {
+                if module.is_lambda_class(&ext_class_name) || ext_class_name.contains("$Callable") {
                     continue;
                 }
                 let ext_sym = interner.intern(&s);
@@ -19365,7 +19638,19 @@ fn lower_expr(
             // and non-primitive results, which it isn't yet (fixture
             // 363's `{ x -> { y -> x + y } }` body returns a Function1
             // but our inference says Unit).
-            if free_vars.is_empty() && !is_suspend_lambda && !params.is_empty() {
+            // For 0-arg lambdas, only take the metafactory path when the
+            // body has no free-floating method calls — receiver lambdas
+            // (`StringBuilder.() -> Unit`) need scope set up to resolve
+            // unqualified calls like `append("x")` against the receiver.
+            let zero_arg_safe = params.is_empty()
+                && !body_has_unresolved_unqualified_call(
+                    body,
+                    scope,
+                    module,
+                    name_to_func,
+                    interner,
+                );
+            if free_vars.is_empty() && !is_suspend_lambda && (!params.is_empty() || zero_arg_safe) {
                 let arity = params.len() as u8;
                 let outer_name = fb.mf.name.clone();
                 // DEX format only allows angle brackets in the special
@@ -19706,6 +19991,7 @@ fn lower_expr(
                     methods: Vec::new(),
                     constructor: ref_init,
                     secondary_constructors: Vec::new(),
+                    is_lambda: false,
                     is_suspend_lambda: false,
                     is_cross_file_stub: false,
                     annotations: Vec::new(),
@@ -19764,10 +20050,29 @@ fn lower_expr(
             // Pre-register the lambda class so nested lambdas get unique indices.
             // (Recalculate lambda_idx since $Ref classes may have been added above.)
             let lambda_idx = module.classes.len();
-            // Include the wrapper class name so lambda classes are
-            // globally unique (e.g. InputKt$Lambda$0). This prevents
-            // JNI DefineClass collisions across REPL turns.
-            let lambda_class_name = format!("{}$Lambda${lambda_idx}", module.wrapper_class);
+            // kotlinc names lambdas `<wrapper>$<enclosingFn>$<local_idx>`
+            // where `local_idx` is 1-based per enclosing function. The
+            // `<clinit>`/`<init>` names get sanitized to `__clinit__`/
+            // `__init__` since `<` and `>` are illegal in class names.
+            // Skip indices already claimed by a state-machine class
+            // (e.g. for a suspend fn `run_`, `InputKt$run_$1` is the
+            // ContinuationImpl shell, so the first lambda inside `run_`
+            // gets `$2`).
+            let enclosing_fn_for_name = match fb.mf.name.as_str() {
+                "<init>" => "__init__".to_string(),
+                "<clinit>" => "__clinit__".to_string(),
+                other => other.to_string(),
+            };
+            let lambda_class_name = loop {
+                fb.lambda_count += 1;
+                let candidate = format!(
+                    "{}${}${}",
+                    module.wrapper_class, enclosing_fn_for_name, fb.lambda_count
+                );
+                if !module.classes.iter().any(|c| c.name == candidate) {
+                    break candidate;
+                }
+            };
             module.classes.push(MirClass {
                 name: lambda_class_name.clone(),
                 super_class: None,
@@ -19805,6 +20110,7 @@ fn lower_expr(
                     local_generic_args: rustc_hash::FxHashMap::default(),
                 },
                 secondary_constructors: Vec::new(),
+                is_lambda: true,
                 is_suspend_lambda,
                 is_cross_file_stub: false,
                 annotations: Vec::new(),
@@ -20454,6 +20760,7 @@ fn lower_expr(
                 methods: vec![invoke_fn],
                 constructor: final_init_fn,
                 secondary_constructors: Vec::new(),
+                is_lambda: true,
                 is_suspend_lambda,
                 is_cross_file_stub: false,
                 annotations: Vec::new(),
@@ -20678,6 +20985,7 @@ fn lower_expr(
                 methods: mir_methods,
                 constructor: init_fn,
                 secondary_constructors: Vec::new(),
+                is_lambda: false,
                 is_suspend_lambda: false,
                 is_cross_file_stub: false,
                 annotations: Vec::new(),
@@ -21552,6 +21860,7 @@ fn lower_enum(
         methods: class_methods,
         constructor: init_fn,
         secondary_constructors: Vec::new(),
+        is_lambda: false,
         is_suspend_lambda: false,
         is_cross_file_stub: false,
         annotations: Vec::new(),
@@ -21878,6 +22187,7 @@ fn lower_object(
         methods: mir_methods,
         constructor: init_fn,
         secondary_constructors: Vec::new(),
+        is_lambda: false,
         is_suspend_lambda: false,
         is_cross_file_stub: false,
         annotations: Vec::new(),
@@ -22176,6 +22486,7 @@ fn lower_class(
         methods: Vec::new(),
         constructor: init_fn.clone(),
         secondary_constructors: Vec::new(),
+        is_lambda: false,
         is_suspend_lambda: false,
         is_cross_file_stub: false,
         annotations: Vec::new(),
@@ -22365,6 +22676,7 @@ fn lower_class(
         methods: stub_methods,
         constructor: init_fn.clone(),
         secondary_constructors: Vec::new(),
+        is_lambda: false,
         is_suspend_lambda: false,
         is_cross_file_stub: false,
         annotations: Vec::new(),
@@ -23307,6 +23619,7 @@ fn lower_class(
             methods: comp_methods,
             constructor: comp_init,
             secondary_constructors: Vec::new(),
+            is_lambda: false,
             is_suspend_lambda: false,
             is_cross_file_stub: false,
             annotations: Vec::new(),
@@ -24157,6 +24470,7 @@ fn lower_class(
         methods: mir_methods,
         constructor: init_fn,
         secondary_constructors: mir_secondary_ctors,
+        is_lambda: false,
         is_suspend_lambda: false,
         is_cross_file_stub: false,
         annotations: Vec::new(),
@@ -24316,6 +24630,7 @@ fn lower_interface(
         methods: stub_methods,
         constructor: dummy_init.clone(),
         secondary_constructors: Vec::new(),
+        is_lambda: false,
         is_suspend_lambda: false,
         is_cross_file_stub: false,
         annotations: Vec::new(),

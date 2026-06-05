@@ -3,22 +3,21 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=4 max_locals=2
+  code        max_stack=5 max_locals=1
     0000 ldc "hello from coroutine"
     0002 astore_0
-    0003 new Class(InputKt$Lambda$0)
-    0006 dup
-    0007 aload_0
-    0008 aconst_null
-    0009 invokespecial Method(InputKt$Lambda$0.<init>:(Ljava/lang/String;Lkotlin/coroutines/Continuation;)V)
-    0012 checkcast Class(kotlin/jvm/functions/Function2)
-    0015 aconst_null
-    0016 swap
-    0017 iconst_1
-    0018 aconst_null
-    0019 invokestatic Method(kotlinx/coroutines/BuildersKt.runBlocking$default:(Lkotlin/coroutines/CoroutineContext;Lkotlin/jvm/functions/Function2;ILjava/lang/Object;)Ljava/lang/Object;)
-    0022 astore_1
-    0023 return
+    0003 aconst_null
+    0004 new Class(InputKt$main$1)
+    0007 dup
+    0008 aload_0
+    0009 aconst_null
+    0010 invokespecial Method(InputKt$main$1.<init>:(Ljava/lang/String;Lkotlin/coroutines/Continuation;)V)
+    0013 checkcast Class(kotlin/jvm/functions/Function2)
+    0016 iconst_1
+    0017 aconst_null
+    0018 invokestatic Method(kotlinx/coroutines/BuildersKt.runBlocking$default:(Lkotlin/coroutines/CoroutineContext;Lkotlin/jvm/functions/Function2;ILjava/lang/Object;)Ljava/lang/Object;)
+    0021 pop
+    0022 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

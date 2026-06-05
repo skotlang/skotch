@@ -270,6 +270,43 @@ impl ConstantPool {
         Some((class_name, name, desc))
     }
 
+    /// Resolve a Fieldref CP index to its `(class, name, descriptor)`
+    /// strings. Returns `None` if the index doesn't point at a field
+    /// reference or the chain is malformed.
+    pub fn lookup_fieldref_parts(&self, idx: u16) -> Option<(&str, &str, &str)> {
+        if idx == 0 {
+            return None;
+        }
+        let entry = self.entries.get((idx - 1) as usize)?;
+        let (class_idx, nt_idx) = match entry {
+            Entry::Fieldref(c, nt) => (*c, *nt),
+            _ => return None,
+        };
+        let class_entry = self.entries.get((class_idx - 1) as usize)?;
+        let class_utf = match class_entry {
+            Entry::Class(u) => *u,
+            _ => return None,
+        };
+        let class_name = match self.entries.get((class_utf - 1) as usize)? {
+            Entry::Utf8(s) => s.as_str(),
+            _ => return None,
+        };
+        let nt = self.entries.get((nt_idx - 1) as usize)?;
+        let (name_idx, desc_idx) = match nt {
+            Entry::NameAndType(n, d) => (*n, *d),
+            _ => return None,
+        };
+        let name = match self.entries.get((name_idx - 1) as usize)? {
+            Entry::Utf8(s) => s.as_str(),
+            _ => return None,
+        };
+        let desc = match self.entries.get((desc_idx - 1) as usize)? {
+            Entry::Utf8(s) => s.as_str(),
+            _ => return None,
+        };
+        Some((class_name, name, desc))
+    }
+
     pub fn descriptor_at(&self, idx: u16) -> Option<&str> {
         if idx == 0 {
             return None;

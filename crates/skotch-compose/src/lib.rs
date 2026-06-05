@@ -313,7 +313,7 @@ fn patch_composable_lambda_interfaces(
     // them breaks call-site casts like `checkcast Function0` that the
     // surrounding code performs before invoking.
     for class in &mut module.classes {
-        if !class.name.contains("$Lambda$") {
+        if !class.is_lambda {
             continue;
         }
         let has_function0 = class
@@ -481,7 +481,7 @@ fn thread_composer_args(func: &mut MirFunction, composer_local: LocalId, changed
             } = value
             {
                 if (class_name.starts_with("kotlin/jvm/functions/Function")
-                    || class_name.contains("$Lambda$"))
+                    || skotch_mir::looks_like_lambda_class_name(class_name))
                     && method_name == "invoke"
                     && args.len() >= 3
                 {
@@ -1196,6 +1196,7 @@ mod tests {
             methods,
             constructor: make_composable_function(), // reuse as dummy
             secondary_constructors: vec![],
+            is_lambda: false,
             is_suspend_lambda: false,
             is_cross_file_stub: false,
             annotations: vec![],

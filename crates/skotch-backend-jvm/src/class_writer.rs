@@ -1046,6 +1046,17 @@ fn emit_instance_property_setter(
 /// `const val` top-level property — `getstatic <field>; <return>`.
 /// For non-null reference returns, also emits the
 /// `@org.jetbrains.annotations.NotNull` attribute kotlinc adds.
+/// Build the synthetic getter name kotlinc uses for a Kotlin property:
+/// `name` → `getName`, `count` → `getCount`, `GREETING` → `getGREETING`.
+/// First character is uppercased; the rest is preserved verbatim.
+fn synthesize_getter_name(field_name: &str) -> String {
+    format!(
+        "get{}{}",
+        field_name.chars().next().unwrap_or('?').to_uppercase(),
+        &field_name[field_name.chars().next().map(|c| c.len_utf8()).unwrap_or(0)..]
+    )
+}
+
 fn emit_property_getter(
     class_name: &str,
     field_name: &str,
@@ -1055,11 +1066,7 @@ fn emit_property_getter(
 ) -> Vec<u8> {
     let access = ACC_PUBLIC | ACC_STATIC | ACC_FINAL;
     // `getName` for `name`, `getGREETING` for `GREETING`.
-    let getter_name = format!(
-        "get{}{}",
-        field_name.chars().next().unwrap_or('?').to_uppercase(),
-        &field_name[field_name.chars().next().map(|c| c.len_utf8()).unwrap_or(0)..]
-    );
+    let getter_name = synthesize_getter_name(field_name);
     let name_idx = cp.utf8(&getter_name);
     let desc = jvm_type_string(ty);
     let descriptor = format!("(){desc}");
@@ -1096,9 +1103,22 @@ fn emit_property_getter(
     code_attr.write_u16::<BigEndian>(0).unwrap(); // sub-attributes count
 
     // Non-null reference returns get a `@NotNull` annotation. Primitive
-    // and Unit returns get no method-level annotation.
-    let needs_notnull = matches!(ty, Ty::String | Ty::Class(_) | Ty::IntArray | Ty::Any);
-    let attr_count: u16 = if needs_notnull { 2 } else { 1 };
+    // and Unit returns get no method-level annotation. Generic-typed
+    // returns (Ty::Generic, e.g. `List<String>`) ALSO get a Signature
+    // attribute carrying the parameterized JVMS §4.7.9 form — kotlinc
+    // emits this so reflection / IDEs can recover the element type.
+    let needs_notnull = matches!(
+        ty,
+        Ty::String | Ty::Class(_) | Ty::IntArray | Ty::Any | Ty::Generic { .. }
+    );
+    let needs_signature = matches!(ty, Ty::Generic { .. });
+    let mut attr_count: u16 = 1; // Code
+    if needs_signature {
+        attr_count += 1;
+    }
+    if needs_notnull {
+        attr_count += 1;
+    }
 
     let mut method: Vec<u8> = Vec::new();
     method.write_u16::<BigEndian>(access).unwrap();
@@ -1110,10 +1130,48 @@ fn emit_property_getter(
         .write_u32::<BigEndian>(code_attr.len() as u32)
         .unwrap();
     method.write_all(&code_attr).unwrap();
+    if needs_signature {
+        // Build a parameterized signature for the getter: `()<erased>;`
+        // becomes e.g. `()Ljava/util/List<Ljava/lang/String;>;`. Byte
+        // parity only requires the attribute be a 2-byte CP-index
+        // payload — the actual string content doesn't matter for the
+        // norm-format comparison, but a per-element-type string keeps
+        // CP entry counts stable.
+        let mut sig = String::from("()");
+        sig.push_str(&jvm_generic_signature(ty));
+        let sig_idx = cp.utf8(&sig);
+        let attr_name = cp.utf8("Signature");
+        method.write_u16::<BigEndian>(attr_name).unwrap();
+        method.write_u32::<BigEndian>(2).unwrap();
+        method.write_u16::<BigEndian>(sig_idx).unwrap();
+    }
     if needs_notnull {
         encode_invisible_notnull_attribute(cp, &mut method);
     }
     method
+}
+
+/// JVMS §4.7.9 parameterized form for a type — used in Signature attrs.
+/// `Ty::Generic { base, args }` becomes `Lbase<arg1arg2…>;`, with
+/// recursion for nested generics. Non-generic types fall back to the
+/// erased JVM descriptor (which `jvm_type_string` already produces).
+fn jvm_generic_signature(ty: &Ty) -> String {
+    match ty {
+        Ty::Generic { base, args } => {
+            let base_str = jvm_type_string(base);
+            // Strip the trailing `;` so we can insert `<…>` before it.
+            let stripped = base_str.strip_suffix(';').unwrap_or(&base_str);
+            let mut out = String::from(stripped);
+            out.push('<');
+            for arg in args {
+                out.push_str(&jvm_generic_signature(arg));
+            }
+            out.push('>');
+            out.push(';');
+            out
+        }
+        _ => jvm_type_string(ty),
+    }
 }
 
 /// Encode the JVM `Deprecated` marker attribute (zero-length payload).
@@ -1359,6 +1417,16 @@ fn compile_class(class_name: &str, module: &MirModule) -> Vec<u8> {
             method_blobs.push(getter);
         }
     }
+    // Collect enum class names from the entry-accessor registry so the
+    // wrapper-class emission can skip the synthetic `<EnumName>$values`
+    // and `<EnumName>$valueOf` helpers. kotlinc inlines (or hoists onto
+    // the enum class itself) these helpers — the wrapper never carries
+    // them. See [skotch-mir-lower] `emit_enum_values_function`.
+    let enum_class_names: rustc_hash::FxHashSet<&str> = module
+        .enum_entry_funcs
+        .values()
+        .map(|(ec, _)| ec.as_str())
+        .collect();
     for (fn_idx, func) in module.functions.iter().enumerate() {
         // Skip abstract stub functions (e.g. the synthetic
         // `delay` entry used only so the state machine extractor can
@@ -1373,6 +1441,15 @@ fn compile_class(class_name: &str, module: &MirModule) -> Vec<u8> {
         // kotlinc never emits these accessors on the wrapper class.
         if module.enum_entry_funcs.contains_key(&(fn_idx as u32)) {
             continue;
+        }
+        // Skip `<EnumName>$values` / `<EnumName>$valueOf` synthetic
+        // helpers — kotlinc emits these on the enum class itself (or
+        // doesn't emit them at all when never called), never on the
+        // file-level wrapper.
+        if let Some((stem, suffix)) = func.name.rsplit_once('$') {
+            if (suffix == "values" || suffix == "valueOf") && enum_class_names.contains(stem) {
+                continue;
+            }
         }
         let mut blob = emit_method(func, module, class_name, &mut cp, code_attr_name_idx);
         append_method_annotations(&mut blob, func, &mut cp, module);
@@ -1414,6 +1491,12 @@ fn compile_class(class_name: &str, module: &MirModule) -> Vec<u8> {
     // Pre-register InnerClasses CP entries so they're committed to the
     // constant pool before it gets written. The actual attribute payload
     // is emitted after the methods table below.
+    //
+    // Only inner classes whose CP class entry was ALREADY pulled in by
+    // this class's method bodies (or by `this_class`/`super_class`) get
+    // an InnerClasses entry. kotlinc emits only directly-referenced
+    // inner classes — listing every module class here would inflate
+    // InnerClasses with siblings that this class never mentions.
     let mut seen_inner: rustc_hash::FxHashSet<u16> = rustc_hash::FxHashSet::default();
     let inner_class_entries: Vec<(u16, u16, u16, u16)> = module
         .classes
@@ -1427,6 +1510,10 @@ fn compile_class(class_name: &str, module: &MirModule) -> Vec<u8> {
             if inner_simple.is_empty() {
                 return None;
             }
+            // Only emit an InnerClasses entry if this class's CP already
+            // contains a Class reference to the inner class (meaning a
+            // method/field/super in THIS class file refers to it).
+            let inner_idx = cp.lookup_class(name)?;
             // Anonymous classes (`Foo$1`, `InputKt$main$g$1`) emit an
             // entry with outer_idx = 0 and inner_name_idx = 0 — the
             // JVM attribute syntax for "no enclosing class info".
@@ -1437,7 +1524,6 @@ fn compile_class(class_name: &str, module: &MirModule) -> Vec<u8> {
             if !is_anonymous && !module.classes.iter().any(|c2| c2.name == outer) {
                 return None;
             }
-            let inner_idx = cp.class(name);
             if !seen_inner.insert(inner_idx) {
                 return None;
             }
@@ -1736,7 +1822,7 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
     if !effective_suspend_lambda
         && !class.is_interface
         && !class.is_object_singleton
-        && !class.name.contains("$Lambda$")
+        && !class.is_lambda
         && !class.name.ends_with("$Companion")
     {
         let n = cp2.utf8("$stable");
@@ -2917,7 +3003,7 @@ fn emit_user_method(
     // For compose-bumped lambda invoke methods, skip the stub check —
     // the typed invoke + bridge pattern ensures valid bytecode.
     let is_compose_lambda_invoke =
-        !is_init && func.name == "invoke" && class_name.contains("$Lambda$") && {
+        !is_init && func.name == "invoke" && module.is_lambda_class(class_name) && {
             let iface_arity = module
                 .classes
                 .iter()
@@ -2942,7 +3028,7 @@ fn emit_user_method(
         // For lambda invoke methods: if a bridge will be added (typed invoke
         // + erased bridge), use the TYPED descriptor for the stub. Otherwise
         // use the erased descriptor to directly implement FunctionN.
-        if func.name == "invoke" && class_name.contains("$Lambda$") {
+        if func.name == "invoke" && module.is_lambda_class(class_name) {
             let iface_arity = module
                 .classes
                 .iter()
@@ -3003,7 +3089,7 @@ fn emit_user_method(
     // Lambda invoke methods whose interface was bumped by the Compose
     // transform (Function0→Function2). If the body has broken patterns
     // emit a stub with the correct FunctionN descriptor.
-    if !is_init && func.name == "invoke" && class_name.contains("$Lambda$") {
+    if !is_init && func.name == "invoke" && module.is_lambda_class(class_name) {
         let iface_arity = module
             .classes
             .iter()
@@ -3114,7 +3200,7 @@ fn emit_user_method(
         if let Some(pd) = parent_desc {
             pd
         } else {
-            if func.name == "invoke" && class_name.contains("$Lambda$") {
+            if func.name == "invoke" && module.is_lambda_class(class_name) {
                 let iface_arity = module
                     .classes
                     .iter()
@@ -3637,7 +3723,7 @@ fn emit_method_body(
                 // include a Composer slot, distinguishing it from the
                 // bridge invoke(Object, Object)Object.
                 let is_composable_typed_invoke = func.name == "invoke"
-                    && class_name.contains("$Lambda$")
+                    && module.is_lambda_class(class_name)
                     && func.params.iter().any(|p| {
                         matches!(
                             func.locals.get(p.0 as usize),
@@ -3645,7 +3731,7 @@ fn emit_method_body(
                         )
                     });
                 let effective_ty = if func.name == "invoke"
-                    && class_name.contains("$Lambda$")
+                    && module.is_lambda_class(class_name)
                     && func.return_ty == Ty::Unit
                     && !is_composable_typed_invoke
                 {
@@ -3704,6 +3790,79 @@ fn emit_method_body(
                 // pattern: ReturnValue of an Any/Object-typed local in a
                 // suspend Unit fn, and emit Unit.INSTANCE directly.
                 let ty = &func.locals[local.0 as usize];
+                // Detect if the local being returned was just defined
+                // by a VirtualJava call to a platform method whose JDK
+                // signature doesn't declare the return as nullable.
+                // kotlinc inserts an `Intrinsics.checkNotNullExpressionValue`
+                // intrinsic in this case to enforce non-nullability at
+                // the JVM-to-Kotlin platform-type boundary (e.g.
+                // `s.substring(...)` returns `String!` which is treated
+                // as `String` here).
+                // Skip synthetic lambda `invoke` methods — kotlinc
+                // doesn't insert the platform-call check inside lambda
+                // bodies; the check (if any) lands at the caller of
+                // the lambda when the result is consumed.
+                let in_lambda_invoke = func.name == "invoke";
+                // For suspend funs the compiled return type is Object, but the
+                // platform-call narrowing is determined by the *user-declared*
+                // return type — pull that from `suspend_original_return_ty`.
+                let effective_return_ty = if func.is_suspend {
+                    func.suspend_original_return_ty
+                        .as_ref()
+                        .unwrap_or(&func.return_ty)
+                } else {
+                    &func.return_ty
+                };
+                let platform_call_intrinsic_name: Option<&'static str> = if in_lambda_invoke {
+                    None
+                } else {
+                    block
+                        .stmts
+                        .last()
+                        .and_then(|stmt| match stmt {
+                            Stmt::Assign {
+                                dest,
+                                value:
+                                    Rvalue::Call {
+                                        kind:
+                                            CallKind::VirtualJava {
+                                                class_name,
+                                                method_name,
+                                                descriptor,
+                                            },
+                                        ..
+                                    },
+                            } if dest == local
+                                && matches!(effective_return_ty, Ty::String | Ty::Class(_))
+                                && (descriptor.ends_with(")Ljava/lang/String;")
+                                    || descriptor.ends_with(")Ljava/lang/CharSequence;"))
+                                && (class_name == "java/lang/String"
+                                    || class_name == "java/lang/StringBuilder") =>
+                            {
+                                Some(method_name.as_str())
+                            }
+                            _ => None,
+                        })
+                        .and_then(|name| -> Option<&'static str> {
+                            // The intrinsic call's String arg is the source
+                            // expression text. kotlinc uses the
+                            // method-name-with-(...) form for synthetic
+                            // contexts. We use a static-lifetime version
+                            // by matching the small set of expected names.
+                            // `toUpperCase` / `toLowerCase` are already
+                            // handled by `peephole_uppercase_to_locale_root`,
+                            // which inserts its own check — emitting one
+                            // here would duplicate, so we exclude them.
+                            match name {
+                                "substring" => Some("substring(...)"),
+                                "trim" => Some("trim(...)"),
+                                "toString" => Some("toString(...)"),
+                                "replace" => Some("replace(...)"),
+                                "concat" => Some("plus(...)"),
+                                _ => None,
+                            }
+                        })
+                };
                 let suspend_returns_unit = func.is_suspend
                     && matches!(func.suspend_original_return_ty, Some(Ty::Unit))
                     && matches!(ty, Ty::Any | Ty::Nullable(_));
@@ -3768,6 +3927,32 @@ fn emit_method_body(
                         }
                         _ => {}
                     }
+                }
+                // For a Java-platform-returning value flowing to a
+                // non-null Kotlin return type, emit
+                // `Intrinsics.checkNotNullExpressionValue(value, "<expr>")`
+                // before the return — matches kotlinc's handling of
+                // `String!`→`String` platform-type narrowing.
+                if let Some(expr_text) = platform_call_intrinsic_name {
+                    code.push(0x59); // dup
+                    bump(&mut stack, &mut max_stack, 1);
+                    let str_idx = cp.string(expr_text);
+                    if str_idx <= 0xFF {
+                        code.push(0x12); // ldc
+                        code.push(str_idx as u8);
+                    } else {
+                        code.push(0x13); // ldc_w
+                        code.write_u16::<BigEndian>(str_idx).unwrap();
+                    }
+                    bump(&mut stack, &mut max_stack, 1);
+                    let m = cp.methodref(
+                        "kotlin/jvm/internal/Intrinsics",
+                        "checkNotNullExpressionValue",
+                        "(Ljava/lang/Object;Ljava/lang/String;)V",
+                    );
+                    code.push(0xB8); // invokestatic
+                    code.write_u16::<BigEndian>(m).unwrap();
+                    bump(&mut stack, &mut max_stack, -2);
                 }
                 // Use the FUNCTION's return type for the return opcode,
                 // not the local's type.
@@ -4017,12 +4202,21 @@ fn emit_method_body(
         // the swap. Matches kotlinc's preference for receiver-first
         // operand order on isub / non-commutative ops.
         peephole_hoist_swap_pattern(&mut code, &mut [], &mut [], &*cp);
+        peephole_hoist_getstatic_swap_pattern(&mut code, &mut [], &mut [], &*cp);
+        peephole_hoist_aconst_null_swap_pattern(&mut code, &mut [], &mut [], &*cp);
+        peephole_hoist_new_dup_around_arg(&mut code, &mut [], &mut [], &*cp);
+        peephole_elide_spill_swap_pattern(&mut code, &*cp);
+        peephole_drop_redundant_swap_swap(&mut code, &mut [], &mut []);
+        peephole_fold_enum_entry_name(&mut code, &mut [], &mut [], cp, module);
         // Fold `aconst_null; if_acmpeq/ne L` to `ifnull/ifnonnull L`.
         peephole_fold_null_compare(&mut code, &mut [], &mut []);
         // Eliminate `<call A>; xload N; swap` patterns left over from
         // swap_pattern by hoisting `xload N` ahead of A's args. Mirrors
         // kotlinc's left-to-right argument evaluation.
         peephole_eliminate_swap_after_call(&mut code);
+        // Replace tail `astore_N; return` with `pop; return` so the
+        // local slot drops out of `actual_max_locals`.
+        peephole_tail_astore_to_pop(&mut code, &[]);
         // Compact slot numbers — also remap `named_slots` so subsequent
         // passes see the post-compact slot numbers. Floor at
         // `param_slot_count` so we never truncate below the JVM-required
@@ -4396,6 +4590,33 @@ fn emit_method_body(
                     &*cp,
                 );
                 peephole_hoist_swap_pattern(&mut code, &mut cmp_targets, &mut block_offsets, &*cp);
+                peephole_hoist_getstatic_swap_pattern(
+                    &mut code,
+                    &mut cmp_targets,
+                    &mut block_offsets,
+                    &*cp,
+                );
+                peephole_hoist_aconst_null_swap_pattern(
+                    &mut code,
+                    &mut cmp_targets,
+                    &mut block_offsets,
+                    &*cp,
+                );
+                peephole_hoist_new_dup_around_arg(
+                    &mut code,
+                    &mut cmp_targets,
+                    &mut block_offsets,
+                    &*cp,
+                );
+                peephole_elide_spill_swap_pattern(&mut code, &*cp);
+                peephole_drop_redundant_swap_swap(&mut code, &mut cmp_targets, &mut block_offsets);
+                peephole_fold_enum_entry_name(
+                    &mut code,
+                    &mut cmp_targets,
+                    &mut block_offsets,
+                    cp,
+                    module,
+                );
                 peephole_fold_null_compare(&mut code, &mut cmp_targets, &mut block_offsets);
                 // Eliminate `<call>; xload N; swap` left over from
                 // swap_pattern by hoisting `xload N` to the start of the
@@ -4408,12 +4629,32 @@ fn emit_method_body(
                     &mut block_offsets,
                     &*cp,
                 );
+                // Replace tail `astore_N; return` with `pop; return`
+                // so the local slot drops out of `actual_max_locals`.
+                let handler_starts_for_tail: Vec<usize> = func
+                    .exception_handlers
+                    .iter()
+                    .filter_map(|eh| block_offsets.get(eh.handler_block as usize).copied())
+                    .collect();
+                peephole_tail_astore_to_pop(&mut code, &handler_starts_for_tail);
                 // Rewrite the slot-based elvis (`?:`) shape into the
                 // dup-based form kotlinc emits. The new `ifnonnull`
                 // target lands at the trailing `astore_T` (mid-block),
                 // so the peephole records an extra frame target with
                 // stack=[Object] for the SMT to honor.
                 peephole_elvis_to_dup(
+                    &mut code,
+                    &mut cmp_targets,
+                    &mut block_offsets,
+                    &mut extra_frame_targets,
+                    cp,
+                );
+                // Variant C: same elvis pattern but with a non-trivial
+                // straight-line use between the second aload and the goto
+                // (e.g. `x?.intValue() ?: 0`). The original peephole only
+                // matches when the use is empty (variant B) or a trailing
+                // astore (variant A); this fills the gap.
+                peephole_elvis_to_dup_with_use(
                     &mut code,
                     &mut cmp_targets,
                     &mut block_offsets,
@@ -10064,7 +10305,7 @@ fn emit_mir_segment(
                     }
                     let dest_ty = &func.locals[dest.0 as usize];
                     let ret_desc = if method_name == "invoke"
-                        && (class_name.contains("$Lambda$")
+                        && (module.is_lambda_class(class_name)
                             || class_name.starts_with("kotlin/jvm/functions/Function"))
                     {
                         "Ljava/lang/Object;".to_string()
@@ -10163,7 +10404,7 @@ fn emit_mir_segment(
                         {
                             let recv_ty = &func.locals[a.0 as usize];
                             let needs_cast = matches!(recv_ty, Ty::Any)
-                                || matches!(recv_ty, Ty::Class(n) if n == "java/lang/Object" || n.contains("$Lambda$"));
+                                || matches!(recv_ty, Ty::Class(n) if n == "java/lang/Object" || skotch_mir::looks_like_lambda_class_name(n));
                             if needs_cast {
                                 let ci = cp.class(class_name);
                                 code.push(0xC0); // checkcast
@@ -10265,18 +10506,69 @@ fn emit_mir_segment(
                 // (skip cross-file stubs whose field types erase to Any).
                 // Falls back to the dest local's type when the field
                 // isn't declared on the resolved class.
-                let declared_ty = module
+                let owning_class = module
                     .classes
                     .iter()
                     .filter(|c| &c.name == class_name)
-                    .min_by_key(|c| c.is_cross_file_stub as u8)
+                    .min_by_key(|c| c.is_cross_file_stub as u8);
+                let declared_ty = owning_class
                     .and_then(|c| c.fields.iter().find(|f| &f.name == field_name))
                     .map(|f| f.ty.clone());
                 let dest_local_ty = &func.locals[dest.0 as usize];
                 let field_ty = declared_ty.as_ref().unwrap_or(dest_local_ty);
-                let fr = cp.fieldref(class_name, field_name, &jvm_param_type_string(field_ty));
-                code.push(0xB4); // getfield
-                code.write_u16::<BigEndian>(fr).unwrap();
+                // Kotlin properties on user classes go through a synthetic
+                // `get<Property>()T` accessor — kotlinc emits invokevirtual
+                // through that getter even when reading the backing field
+                // from outside the class. If the class declares such a
+                // getter (either explicit in `class.methods` or auto-
+                // synthesized from a non-`@JvmField` field by
+                // `compile_user_class`), prefer it over `getfield` so the
+                // bytecode shape matches. Special case: on enum classes,
+                // the `name` field is inherited from `java.lang.Enum` and
+                // accessed via `name()` (no `get` prefix).
+                let is_enum_class = module
+                    .enum_entry_funcs
+                    .values()
+                    .any(|(ec, _)| ec == class_name);
+                let getter_name = if is_enum_class && field_name == "name" {
+                    "name".to_string()
+                } else {
+                    synthesize_getter_name(field_name)
+                };
+                let getter_descriptor = format!("(){}", jvm_param_type_string(field_ty));
+                let has_getter = owning_class
+                    .map(|c| {
+                        if c.is_cross_file_stub {
+                            return false;
+                        }
+                        // Explicit getter declared in MIR.
+                        if c.methods
+                            .iter()
+                            .any(|m| m.name == getter_name && m.params.len() == 1)
+                        {
+                            return true;
+                        }
+                        // Auto-synthesized getter for a non-@JvmField,
+                        // non-synthetic field. Mirror the gating in
+                        // `compile_user_class` (line ~1960).
+                        c.fields.iter().any(|f| {
+                            f.name == *field_name
+                                && !f.is_jvm_field
+                                && f.name != "label"
+                                && f.name != "$stable"
+                                && !f.name.starts_with('$')
+                        })
+                    })
+                    .unwrap_or(false);
+                if has_getter {
+                    let mref = cp.methodref(class_name, &getter_name, &getter_descriptor);
+                    code.push(0xB6); // invokevirtual
+                    code.write_u16::<BigEndian>(mref).unwrap();
+                } else {
+                    let fr = cp.fieldref(class_name, field_name, &jvm_param_type_string(field_ty));
+                    code.push(0xB4); // getfield
+                    code.write_u16::<BigEndian>(fr).unwrap();
+                }
                 emit_store_mir_local(code, func, local_slot, *dest);
             }
             // GetStaticField for getstatic (e.g. GlobalScope.INSTANCE).
@@ -13889,8 +14181,10 @@ fn walk_block(
 
                         // Class equality: dispatch via Object.equals() so data
                         // classes with synthesized equals() compare by value.
-                        // Enum classes compare via toString().equals() because each
-                        // entry-access creates a fresh instance (no singletons yet).
+                        // Enum classes compare by reference (`if_acmp{eq,ne}`):
+                        // enum entries are now emitted as static-final
+                        // singletons (one INSTANCE per entry), so reference
+                        // equality is correct and matches kotlinc's shape.
                         if matches!(lhs_ty, Ty::Class(_))
                             && matches!(op, MBinOp::CmpEq | MBinOp::CmpNe)
                         {
@@ -13901,26 +14195,39 @@ fn walk_block(
                             };
 
                             if is_enum {
-                                // Enum: toString() both sides, compare strings.
-                                let ts = cp.methodref(
-                                    "java/lang/Object",
-                                    "toString",
-                                    "()Ljava/lang/String;",
-                                );
-                                code.push(0x5F); // swap
-                                code.push(0xB6); // invokevirtual toString
-                                code.write_u16::<BigEndian>(ts).unwrap();
-                                code.push(0x5F); // swap
-                                code.push(0xB6); // invokevirtual toString
-                                code.write_u16::<BigEndian>(ts).unwrap();
-                                let equals = cp.methodref(
-                                    "java/lang/String",
-                                    "equals",
-                                    "(Ljava/lang/Object;)Z",
-                                );
-                                code.push(0xB6); // invokevirtual equals
-                                code.write_u16::<BigEndian>(equals).unwrap();
-                                bump(stack, max_stack, -1);
+                                // Enum: reference equality via if_acmp + materialize.
+                                //   if_acmp<NE>{EQ} L_FALSE  (3)
+                                //   iconst_1                   (1)
+                                //   goto L_END               (3)
+                                // L_FALSE: iconst_0           (1)
+                                // L_END:
+                                let branch_op = if *op == MBinOp::CmpEq {
+                                    0xA6 // if_acmpne (branch when NOT eq → push 0)
+                                } else {
+                                    0xA5 // if_acmpeq (branch when eq → push 0)
+                                };
+                                let cmp_start = code.len();
+                                code.push(branch_op);
+                                code.write_i16::<BigEndian>(7).unwrap();
+                                bump(stack, max_stack, -2); // pops both refs
+                                code.push(0x04); // iconst_1
+                                bump(stack, max_stack, 1);
+                                code.push(0xA7); // goto
+                                code.write_i16::<BigEndian>(4).unwrap();
+                                code.push(0x03); // iconst_0
+
+                                cmp_targets.push(CmpBranchTarget {
+                                    offset: cmp_start + 7,
+                                    stack_count: 0,
+                                    cmp_start,
+                                    block_idx,
+                                });
+                                cmp_targets.push(CmpBranchTarget {
+                                    offset: cmp_start + 8,
+                                    stack_count: 1,
+                                    cmp_start,
+                                    block_idx,
+                                });
                             } else {
                                 // Regular class: Object.equals (virtual dispatch).
                                 let equals = cp.methodref(
@@ -13931,14 +14238,13 @@ fn walk_block(
                                 code.push(0xB6); // invokevirtual
                                 code.write_u16::<BigEndian>(equals).unwrap();
                                 bump(stack, max_stack, -1);
-                            }
-
-                            if *op == MBinOp::CmpNe {
-                                code.push(0x04); // iconst_1
-                                bump(stack, max_stack, 1);
-                                code.push(0x5F); // swap
-                                code.push(0x64); // isub
-                                bump(stack, max_stack, -1);
+                                if *op == MBinOp::CmpNe {
+                                    code.push(0x04); // iconst_1
+                                    bump(stack, max_stack, 1);
+                                    code.push(0x5F); // swap
+                                    code.push(0x64); // isub
+                                    bump(stack, max_stack, -1);
+                                }
                             }
                             store_local(code, stack, slots, next_slot, *dest, &func.locals);
                             continue;
@@ -14204,19 +14510,62 @@ fn walk_block(
                 //
                 // Prefer the real MirClass over a cross-file stub when
                 // both exist — see the PutField path above for why.
-                let declared_ty = module
+                let owning_class = module
                     .classes
                     .iter()
                     .filter(|c| &c.name == class_name)
-                    .min_by_key(|c| c.is_cross_file_stub as u8)
+                    .min_by_key(|c| c.is_cross_file_stub as u8);
+                let declared_ty = owning_class
                     .and_then(|c| c.fields.iter().find(|f| &f.name == field_name))
                     .map(|f| f.ty.clone());
                 let dest_ty = &func.locals[dest.0 as usize];
                 let field_ty = declared_ty.as_ref().unwrap_or(dest_ty);
                 let descriptor = jvm_param_type_string(field_ty);
-                let fr = cp.fieldref(class_name, field_name, &descriptor);
-                code.push(0xB4); // getfield
-                code.write_u16::<BigEndian>(fr).unwrap();
+                // Route through the synthesized property getter when one
+                // exists on the owning class — mirrors kotlinc's
+                // invokevirtual-getter shape for Kotlin properties.
+                // Special case: on enum classes, the `name` field is
+                // inherited from `java.lang.Enum` and accessed via
+                // `name()` (no `get` prefix).
+                let is_enum_class = module
+                    .enum_entry_funcs
+                    .values()
+                    .any(|(ec, _)| ec == class_name);
+                let getter_name = if is_enum_class && field_name == "name" {
+                    "name".to_string()
+                } else {
+                    synthesize_getter_name(field_name)
+                };
+                let has_getter = owning_class
+                    .map(|c| {
+                        if c.is_cross_file_stub {
+                            return false;
+                        }
+                        if c.methods
+                            .iter()
+                            .any(|m| m.name == getter_name && m.params.len() == 1)
+                        {
+                            return true;
+                        }
+                        c.fields.iter().any(|f| {
+                            f.name == *field_name
+                                && !f.is_jvm_field
+                                && f.name != "label"
+                                && f.name != "$stable"
+                                && !f.name.starts_with('$')
+                        })
+                    })
+                    .unwrap_or(false);
+                if has_getter {
+                    let getter_descriptor = format!("(){}", descriptor);
+                    let mref = cp.methodref(class_name, &getter_name, &getter_descriptor);
+                    code.push(0xB6); // invokevirtual
+                    code.write_u16::<BigEndian>(mref).unwrap();
+                } else {
+                    let fr = cp.fieldref(class_name, field_name, &descriptor);
+                    code.push(0xB4); // getfield
+                    code.write_u16::<BigEndian>(fr).unwrap();
+                }
                 // getfield pops receiver (1), pushes value (1 or 2 for wide).
                 let field_width = if matches!(field_ty, Ty::Long | Ty::Double) {
                     2
@@ -14582,10 +14931,11 @@ fn walk_block(
                     // If we're inside a lambda class but the target is a
                     // top-level function, use the module's main class name
                     // (e.g. "InputKt") instead of the lambda class name.
-                    let effective_class = if class_name.contains("$Lambda$") {
-                        // Extract the enclosing class: "InputKt$Lambda$0" → "InputKt"
+                    let effective_class = if module.is_lambda_class(class_name) {
+                        // For kotlinc-style names (`InputKt$main$1`), the
+                        // wrapper is the prefix up to the first `$`.
                         class_name
-                            .find("$Lambda$")
+                            .find('$')
                             .map(|pos| &class_name[..pos])
                             .unwrap_or(class_name)
                     } else {
@@ -15415,7 +15765,7 @@ fn walk_block(
                 } => {
                     let dest_ty = &func.locals[dest.0 as usize];
                     let is_function_invoke = method_name == "invoke"
-                        && (class_name.contains("$Lambda$")
+                        && (module.is_lambda_class(class_name)
                             || class_name.starts_with("kotlin/jvm/functions/Function"));
                     // Pre-resolve the target's declared param types so we
                     // can insert `checkcast`s when the caller's local is
@@ -20241,7 +20591,10 @@ fn peephole_hoist_op_general(
             // the top two stack items the hoisted load + value
             // computation produced. Other ops change stack shape in ways
             // the simple hoist doesn't handle.
-            let is_supported_op = matches!(op_code, 0x60..=0x83 | 0xB6 | 0xB8 | 0xBA);
+            let is_supported_op = matches!(
+                op_code,
+                0x60..=0x83 | 0xA5 | 0xA6 | 0xB6 | 0xB8 | 0xB9 | 0xBA
+            );
             if !is_supported_op {
                 i += instruction_len(code, i);
                 continue;
@@ -20547,7 +20900,7 @@ fn peephole_elvis_to_dup(
         //   point includes an astore_T that needs to be preserved
         //   post-rewrite (variant A) or whether the merge falls
         //   straight into the continuation (variant B).
-        let mut applied: Option<(usize, usize, bool)> = None;
+        let mut applied: Option<(usize, usize, bool, bool)> = None;
         let mut i = 0;
         // Need at least i+8 bytes for variant B (aload + ifnull3 + aload
         // + goto3) plus 1 byte of rhs. Variant A needs one more (the
@@ -20568,7 +20921,10 @@ fn peephole_elvis_to_dup(
                 continue;
             }
             let rel = i16::from_be_bytes([code[i + 2], code[i + 3]]) as i32;
-            let variant_a = rel == 8;
+            // Variant A: rel = 8 (compact astore_T) or 9 (generic astore slot).
+            // Variant B: rel = 7 (no astore_T at all).
+            let variant_a = rel == 8 || rel == 9;
+            let variant_a_generic = rel == 9;
             let variant_b = rel == 7;
             if !variant_a && !variant_b {
                 i += instruction_len(code, i);
@@ -20579,18 +20935,32 @@ fn peephole_elvis_to_dup(
                 i += instruction_len(code, i);
                 continue;
             }
-            // For variant A: i+5 = astore_T, i+6 = goto.
-            // For variant B: i+5 = goto (no astore_T).
-            let (store_op, goto_pos) = if variant_a {
+            // For variant A: i+5 = astore_T (1 byte compact, or 2 bytes
+            // generic), i+(5 or 6) = goto. For variant B: i+5 = goto
+            // (no astore_T). `store_op` stores either the compact
+            // opcode (0x4B-0x4E, 1-byte total) OR the generic opcode
+            // packed with its slot byte for trailing-match consistency.
+            let (store_op, store_len, goto_pos) = if variant_a {
                 let s = code[i + 5];
-                if !(0x4B..=0x4E).contains(&s) {
-                    i += instruction_len(code, i);
-                    continue;
+                if variant_a_generic {
+                    // 0x3A = astore (generic), followed by 1-byte slot
+                    if s != 0x3A {
+                        i += instruction_len(code, i);
+                        continue;
+                    }
+                    let slot_t = code[i + 6];
+                    (Some((s, Some(slot_t))), 2usize, i + 7)
+                } else {
+                    if !(0x4B..=0x4E).contains(&s) {
+                        i += instruction_len(code, i);
+                        continue;
+                    }
+                    (Some((s, None)), 1usize, i + 6)
                 }
-                (Some(s), i + 6)
             } else {
-                (None, i + 5)
+                (None, 0usize, i + 5)
             };
+            let _ = store_len;
             if code[goto_pos] != 0xA7 {
                 i += instruction_len(code, i);
                 continue;
@@ -20603,13 +20973,22 @@ fn peephole_elvis_to_dup(
             // trailing astore_T; in variant B it's exactly `m` (rhs
             // flows straight into L_merge).
             let region_end = if variant_a {
-                let store_op_a = store_op.unwrap();
+                let (store_op_a, store_slot_a) = store_op.unwrap();
                 let mut p = rhs_start;
                 let mut s2: Option<usize> = None;
                 let mut rhs_branch = false;
                 while p < code.len() {
                     let op = code[p];
-                    if op == store_op_a {
+                    // Compact form matches by opcode alone; generic
+                    // form must also match the slot byte so we don't
+                    // confuse trailing astore-to-different-slot for
+                    // the elvis convergence.
+                    let matches_trailing = if let Some(slot) = store_slot_a {
+                        op == store_op_a && p + 1 < code.len() && code[p + 1] == slot
+                    } else {
+                        op == store_op_a
+                    };
+                    if matches_trailing {
                         s2 = Some(p);
                         break;
                     }
@@ -20627,7 +21006,12 @@ fn peephole_elvis_to_dup(
                     continue;
                 }
                 let s2 = s2.unwrap();
-                if m != s2 + 1 {
+                // For compact-store: trailing astore is 1 byte at s2;
+                // m (continuation) should be s2 + 1.
+                // For generic-store: trailing astore is 2 bytes at s2..s2+2;
+                // m should be s2 + 2.
+                let trailing_store_len = if store_slot_a.is_some() { 2 } else { 1 };
+                if m != s2 + trailing_store_len {
                     i += instruction_len(code, i);
                     continue;
                 }
@@ -20732,33 +21116,53 @@ fn peephole_elvis_to_dup(
                 i += instruction_len(code, i);
                 continue;
             }
-            applied = Some((i, s2, variant_a));
+            applied = Some((i, s2, variant_a, variant_a_generic));
             break;
         }
-        let Some((i, s2, variant_a)) = applied else {
+        let Some((i, s2, variant_a, variant_a_generic)) = applied else {
             break;
         };
         // Re-derive the prefix sizes and the rhs region from `i` and
         // the variant flag (the original detection state isn't in
-        // scope here).
-        let drain_end = if variant_a { i + 9 } else { i + 8 };
+        // scope here). Generic-form astore_T (2 bytes) shifts the
+        // prefix by 1 extra byte; same applies to the trailing
+        // astore_T occupying 2 bytes instead of 1.
+        let trailing_store_len: usize = if variant_a_generic { 2 } else { 1 };
+        let drain_end = if variant_a {
+            // 1 (aload) + 3 (ifnull) + 1 (aload) + store_len + 3 (goto)
+            // = 8 + store_len
+            i + 8 + trailing_store_len
+        } else {
+            i + 8
+        };
         let drain_size = drain_end - (i + 1);
         // rhs starts at `drain_end` (the byte after the prefix we're
         // about to drain).
         let rhs_start = drain_end;
         // Continuation in pre-rewrite numbering:
-        //   variant A: m = s2 + 1 (just past the trailing astore_T)
+        //   variant A: m = s2 + trailing_store_len
         //   variant B: m = i + 8 + E (the goto target). For variant B
-        //     `s2` we stored is `region_end - 1`, so m = s2 + 1 here too.
-        let m = s2 + 1;
+        //     `s2` we stored is `region_end - 1`, so m = s2 + 1 here.
+        let m = if variant_a {
+            s2 + trailing_store_len
+        } else {
+            s2 + 1
+        };
         // rhs length in bytes.
-        let e = m - rhs_start - if variant_a { 1 } else { 0 };
+        let e = m - rhs_start - if variant_a { trailing_store_len } else { 0 };
         let _ = e;
         // ifnonnull's target after rewrite = position of trailing astore_T
         // in the post-rewrite numbering. Pre-rewrite trailing astore_T is
-        // at s2; post-rewrite it shifts left by 3, to s2 - 3. ifnonnull
-        // is at i+2 (post-rewrite). Rel = (s2 - 3) - (i + 2) = s2 - i - 5
-        //   = (i + 9 + e) - i - 5 = 4 + e.
+        // at s2; post-rewrite it shifts left by drain_size - 5 (we drain
+        // drain_size bytes and insert 5 bytes of dup+ifnonnull+pop), to
+        // s2 - (drain_size - 5). ifnonnull is at i+2 (post-rewrite).
+        // Rel = (s2 - (drain_size - 5)) - (i + 2)
+        //     = s2 - i - drain_size + 3
+        //     = (i + 8 + trailing_store_len + e) - i - drain_size + 3
+        //     = 8 + trailing_store_len + e - drain_size + 3
+        //     = 11 + trailing_store_len + e - drain_size
+        // For compact (trailing=1, drain=8): rel = 11 + 1 + e - 8 = 4 + e ✓
+        // For generic (trailing=2, drain=9): rel = 11 + 2 + e - 9 = 4 + e ✓
         let ifnonnull_rel: i32 = 4 + e as i32;
 
         // Drain the prefix [i+1, drain_end), then insert 5 bytes at
@@ -20962,6 +21366,313 @@ fn peephole_elvis_to_dup(
     }
 }
 
+/// Variant C of the elvis-to-dup rewrite: handles the case where the
+/// non-null branch performs a non-trivial *use* of the loaded value
+/// before the goto, e.g. `x?.intValue() ?: 0` lowers to
+///
+///   aload X
+///   ifnull M
+///   aload X
+///   <use>          // e.g. invokevirtual intValue
+///   goto C
+/// M:
+///   <rhs>
+/// C: ...
+///
+/// kotlinc's preferred shape keeps the value on the stack across the
+/// branch via dup:
+///
+///   aload X
+///   dup
+///   ifnull M'
+///   <use>
+///   goto C'
+/// M':
+///   pop
+///   <rhs>
+/// C': ...
+///
+/// Net: +1 byte (the new `pop` at the fallback target), but matches the
+/// kotlinc bytecode shape for common patterns like suspend functions
+/// returning a primitive via `?.unbox() ?: fallback`. The existing
+/// `peephole_elvis_to_dup` only handles variants A (trailing astore) and
+/// B (empty use); this fills the gap when the use is a short straight-
+/// line sequence (no branches, no stores, no returns).
+fn peephole_elvis_to_dup_with_use(
+    code: &mut Vec<u8>,
+    cmp_targets: &mut [CmpBranchTarget],
+    block_offsets: &mut [usize],
+    extra_frame_targets: &mut Vec<(usize, Vec<u8>)>,
+    cp: &mut ConstantPool,
+) {
+    loop {
+        // (i, use_len, original_goto_rel)
+        let mut applied: Option<(usize, usize, i32)> = None;
+        let mut i = 0;
+        while i + 12 <= code.len() {
+            // i: aload_X (compact form only, slots 0..=3)
+            let op0 = code[i];
+            if !(0x2A..=0x2D).contains(&op0) {
+                i += instruction_len(code, i);
+                continue;
+            }
+            // i+1: ifnull with rel ≥ 8 (use_len ≥ 1; rel=7 is variant B,
+            // already handled by the original peephole).
+            if code[i + 1] != 0xC6 {
+                i += instruction_len(code, i);
+                continue;
+            }
+            let rel = i16::from_be_bytes([code[i + 2], code[i + 3]]) as i32;
+            if rel < 8 {
+                i += instruction_len(code, i);
+                continue;
+            }
+            let use_len = (rel - 7) as usize;
+            // Cap use_len to keep the rewrite scoped to short uses.
+            if use_len > 32 {
+                i += instruction_len(code, i);
+                continue;
+            }
+            // i+4: same-slot aload_X (the reload)
+            if i + 4 + use_len + 3 > code.len() || code[i + 4] != op0 {
+                i += instruction_len(code, i);
+                continue;
+            }
+            // Walk use bytes from i+5 to i+5+use_len; reject branches,
+            // stores, returns, athrow, ret, switches.
+            let mut p = i + 5;
+            let mut safe = true;
+            while p < i + 5 + use_len {
+                let op = code[p];
+                let is_branch = (0x99..=0xA8).contains(&op)
+                    || matches!(op, 0xC6 | 0xC7 | 0xC8 | 0xC9 | 0xAA | 0xAB);
+                let is_store = (0x36..=0x3E).contains(&op) || (0x4F..=0x56).contains(&op);
+                let is_return = (0xAC..=0xB1).contains(&op);
+                let is_other_unsafe = matches!(op, 0xBF | 0xA9 | 0x57 | 0x58);
+                if is_branch || is_store || is_return || is_other_unsafe {
+                    safe = false;
+                    break;
+                }
+                let ilen = instruction_len(code, p);
+                if ilen == 0 {
+                    safe = false;
+                    break;
+                }
+                p += ilen;
+            }
+            if !safe || p != i + 5 + use_len {
+                i += instruction_len(code, i);
+                continue;
+            }
+            let goto_pos = i + 5 + use_len;
+            if goto_pos + 3 > code.len() || code[goto_pos] != 0xA7 {
+                i += instruction_len(code, i);
+                continue;
+            }
+            let goto_rel = i16::from_be_bytes([code[goto_pos + 1], code[goto_pos + 2]]) as i32;
+            let continuation = goto_pos as i32 + goto_rel;
+            let rhs_start = goto_pos + 3;
+            // ifnull target should land exactly at rhs_start.
+            let ifnull_target = (i + 1) as i32 + rel;
+            if ifnull_target as usize != rhs_start {
+                i += instruction_len(code, i);
+                continue;
+            }
+            // Continuation must be past rhs_start (forward branch only).
+            if continuation <= rhs_start as i32 {
+                i += instruction_len(code, i);
+                continue;
+            }
+            // External branches: nothing should source from or target into
+            // the strict interior (i, rhs_start), except our own ifnull and
+            // goto.
+            let mut external = false;
+            let mut k = 0;
+            while k < code.len() {
+                let op = code[k];
+                let (rel_off, is_branch) = match op {
+                    0x99..=0xA7 | 0xC6 | 0xC7 => {
+                        if k + 2 >= code.len() {
+                            (0i32, false)
+                        } else {
+                            (i16::from_be_bytes([code[k + 1], code[k + 2]]) as i32, true)
+                        }
+                    }
+                    0xA8 => {
+                        if k + 2 >= code.len() {
+                            (0, false)
+                        } else {
+                            (i16::from_be_bytes([code[k + 1], code[k + 2]]) as i32, true)
+                        }
+                    }
+                    0xC8 | 0xC9 => {
+                        if k + 4 >= code.len() {
+                            (0, false)
+                        } else {
+                            (
+                                i32::from_be_bytes([
+                                    code[k + 1],
+                                    code[k + 2],
+                                    code[k + 3],
+                                    code[k + 4],
+                                ]),
+                                true,
+                            )
+                        }
+                    }
+                    _ => (0, false),
+                };
+                if is_branch {
+                    let tgt = (k as i32 + rel_off) as usize;
+                    let in_region = |p: usize| p > i && p < rhs_start;
+                    let is_ours_ifnull = k == i + 1;
+                    let is_ours_goto = k == goto_pos;
+                    if in_region(k) && !is_ours_ifnull && !is_ours_goto {
+                        external = true;
+                        break;
+                    }
+                    if in_region(tgt) {
+                        external = true;
+                        break;
+                    }
+                }
+                k += instruction_len(code, k);
+            }
+            if external {
+                i += instruction_len(code, i);
+                continue;
+            }
+            let cmp_conflict = cmp_targets.iter().any(|t| {
+                (t.offset > i && t.offset < rhs_start)
+                    || (t.cmp_start > i && t.cmp_start < rhs_start)
+            });
+            if cmp_conflict {
+                i += instruction_len(code, i);
+                continue;
+            }
+            // MIR-level block boundaries inside (i, rhs_start) — e.g. the
+            // entry of the non-null branch at i+4 — are harmless here:
+            // they were never branch targets (fall-through only), so they
+            // don't reach the SMT computation. Pass 2 (jump patching) has
+            // already consumed `block_offsets`. We leave them in place.
+            applied = Some((i, use_len, goto_rel));
+            break;
+        }
+        let Some((i, use_len, original_goto_rel)) = applied else {
+            break;
+        };
+        let goto_pos = i + 5 + use_len;
+        let rhs_start = i + 8 + use_len; // == ifnull target
+        let continuation = (goto_pos as i32 + original_goto_rel) as usize;
+
+        // Step 1: insert pop (1 byte) at rhs_start. Standard insert +
+        // branch / cmp / block / frame adjustments.
+        let insert_pos = rhs_start;
+        let inserted = 1usize;
+        let mut j = 0;
+        while j < code.len() {
+            let op = code[j];
+            if (0x99..=0xA8).contains(&op) || matches!(op, 0xC6 | 0xC7) {
+                if j + 2 < code.len() {
+                    let rel = i16::from_be_bytes([code[j + 1], code[j + 2]]) as i32;
+                    let src = j as i32;
+                    let dst = src + rel;
+                    let new_rel = if (src as usize) < insert_pos && (dst as usize) >= insert_pos {
+                        rel + inserted as i32
+                    } else if (src as usize) >= insert_pos && (dst as usize) < insert_pos {
+                        rel - inserted as i32
+                    } else {
+                        rel
+                    };
+                    if new_rel != rel {
+                        let nb = (new_rel as i16).to_be_bytes();
+                        code[j + 1] = nb[0];
+                        code[j + 2] = nb[1];
+                    }
+                }
+                j += 3;
+                continue;
+            }
+            if matches!(op, 0xC8 | 0xC9) {
+                if j + 4 < code.len() {
+                    let rel =
+                        i32::from_be_bytes([code[j + 1], code[j + 2], code[j + 3], code[j + 4]]);
+                    let src = j as i32;
+                    let dst = src + rel;
+                    let new_rel = if (src as usize) < insert_pos && (dst as usize) >= insert_pos {
+                        rel + inserted as i32
+                    } else if (src as usize) >= insert_pos && (dst as usize) < insert_pos {
+                        rel - inserted as i32
+                    } else {
+                        rel
+                    };
+                    if new_rel != rel {
+                        let nb = new_rel.to_be_bytes();
+                        code[j + 1] = nb[0];
+                        code[j + 2] = nb[1];
+                        code[j + 3] = nb[2];
+                        code[j + 4] = nb[3];
+                    }
+                }
+                j += 5;
+                continue;
+            }
+            j += instruction_len(code, j);
+        }
+        for ct in cmp_targets.iter_mut() {
+            if ct.offset >= insert_pos {
+                ct.offset += inserted;
+            }
+            if ct.cmp_start >= insert_pos {
+                ct.cmp_start += inserted;
+            }
+        }
+        for b in block_offsets.iter_mut() {
+            if *b >= insert_pos {
+                *b += inserted;
+            }
+        }
+        for ft in extra_frame_targets.iter_mut() {
+            if ft.0 >= insert_pos {
+                ft.0 += inserted;
+            }
+        }
+        code.splice(insert_pos..insert_pos, std::iter::once(0x57u8));
+
+        // Step 2: in-place overwrite of bytes [i+1, i+8+use_len) with the
+        // new prefix. Same size, so no further position shifts. The new
+        // prefix is: dup; ifnull rel; <use copied>; goto rel.
+        let use_bytes: Vec<u8> = code[i + 5..i + 5 + use_len].to_vec();
+        let ifnull_rel: i32 = 6 + use_len as i32;
+        // After step 1's pop insert (at rhs_start), continuation shifted
+        // by +1, so the new goto rel = original_goto_rel + 1.
+        let new_goto_rel: i32 = original_goto_rel + 1;
+        let mut new_prefix: Vec<u8> = Vec::with_capacity(7 + use_len);
+        new_prefix.push(0x59); // dup
+        new_prefix.push(0xC6); // ifnull
+        new_prefix.extend_from_slice(&(ifnull_rel as i16).to_be_bytes());
+        new_prefix.extend_from_slice(&use_bytes);
+        new_prefix.push(0xA7); // goto
+        new_prefix.extend_from_slice(&(new_goto_rel as i16).to_be_bytes());
+        debug_assert_eq!(new_prefix.len(), 7 + use_len);
+        for (k, b) in new_prefix.iter().enumerate() {
+            code[i + 1 + k] = *b;
+        }
+        let _ = continuation; // implicit via original_goto_rel + 1
+
+        // Add a stack-map frame target at the new pop position with
+        // stack=[Object] — the ifnull's true branch arrives there with
+        // the duped X on top.
+        let new_pop_pos = i + 8 + use_len;
+        let object_cls_idx = cp.class("java/lang/Object");
+        let mut stack_verif = vec![7u8];
+        stack_verif.extend_from_slice(&object_cls_idx.to_be_bytes());
+        if !extra_frame_targets.iter().any(|ft| ft.0 == new_pop_pos) {
+            extra_frame_targets.push((new_pop_pos, stack_verif));
+        }
+    }
+}
+
 /// Replace `aconst_null; if_acmpeq L` with `ifnull L` (and the `_acmpne`
 /// variant with `ifnonnull`). kotlinc emits the unary `ifnull`/`ifnonnull`
 /// directly when comparing a reference to null literal; we emit the explicit
@@ -21137,7 +21848,15 @@ fn peephole_hoist_swap_pattern(
                 continue;
             }
             let op_code = code[op_pos];
-            let is_supported_op = matches!(op_code, 0x60..=0x83 | 0xB6 | 0xB8 | 0xBA);
+            // Arithmetic ops (0x60..=0x83), invoke* (0xB6-0xBA), and
+            // reference comparisons (`if_acmpeq` / `if_acmpne`,
+            // 0xA5 / 0xA6) are all 2-consume ops where hoisting an
+            // xload past a prior eval reorders to kotlinc's natural
+            // operand order.
+            let is_supported_op = matches!(
+                op_code,
+                0x60..=0x83 | 0xA5 | 0xA6 | 0xB6 | 0xB8 | 0xB9 | 0xBA
+            );
             if !is_supported_op {
                 i += instruction_len(code, i);
                 continue;
@@ -21316,6 +22035,1401 @@ fn peephole_hoist_swap_pattern(
         }
         code.insert(insert_pos, new_op);
     }
+}
+
+/// Like `peephole_hoist_swap_pattern`, but hoists a 3-byte `getstatic A`
+/// instead of a 1-byte compact `xload N`. Matches the pattern
+///
+///   <arg eval>; getstatic A; swap; <2-consume op>
+///
+/// and rewrites to
+///
+///   getstatic A; <arg eval>; <op>
+///
+/// which is the receiver-first shape kotlinc emits for calls like
+/// `Logger.info(Config.appName())`. Skotch's lowering puts the arg
+/// first and uses a `swap` to fix the receiver position; kotlinc just
+/// emits the receiver eagerly.
+///
+/// Safety: the hoist region must not branch, must not write to any
+/// static field (would race with the hoisted `getstatic`), and must
+/// not contain another `getstatic` of the SAME field (would change
+/// observation of mutations between calls).
+fn peephole_hoist_getstatic_swap_pattern(
+    code: &mut Vec<u8>,
+    cmp_targets: &mut [CmpBranchTarget],
+    block_offsets: &mut [usize],
+    cp: &ConstantPool,
+) {
+    loop {
+        let stack_in = compute_stack_at_entry(code, cp);
+        // (insert_pos, drain_start, [getstatic 3 bytes])
+        let mut applied: Option<(usize, usize, [u8; 3])> = None;
+        let mut i = 0;
+        while i < code.len() {
+            // Match `getstatic A` (3 bytes: 0xB2 + 2-byte CP index) at i.
+            if code[i] != 0xB2 || i + 3 > code.len() {
+                i += instruction_len(code, i);
+                continue;
+            }
+            // Only hoist Kotlin singleton fields (`INSTANCE` for `object`
+            // and `Companion` for companion objects). These are receivers
+            // the user wrote in source as `Foo.method(...)`, and kotlinc
+            // emits them receiver-first. Platform fields like
+            // `System.out` (when used as the implicit receiver for
+            // top-level `println` etc.) keep the arg-first + swap shape;
+            // hoisting them would diverge from kotlinc.
+            let field_cp_idx = u16::from_be_bytes([code[i + 1], code[i + 2]]);
+            let is_kotlin_singleton = cp
+                .lookup_fieldref_parts(field_cp_idx)
+                .map(|(_, name, _)| name == "INSTANCE" || name == "Companion")
+                .unwrap_or(false);
+            if !is_kotlin_singleton {
+                i += instruction_len(code, i);
+                continue;
+            }
+            // Match `swap` (0x5F) at i + 3.
+            let swap_pos = i + 3;
+            if swap_pos >= code.len() || code[swap_pos] != 0x5F {
+                i += instruction_len(code, i);
+                continue;
+            }
+            // Match a 2-consume / 1-or-0-produce op at swap_pos + 1.
+            let op_pos = swap_pos + 1;
+            if op_pos >= code.len() {
+                i += instruction_len(code, i);
+                continue;
+            }
+            let op_code = code[op_pos];
+            let is_supported_op = matches!(
+                op_code,
+                0x60..=0x83 | 0xA5 | 0xA6 | 0xB6 | 0xB8 | 0xB9 | 0xBA
+            );
+            if !is_supported_op {
+                i += instruction_len(code, i);
+                continue;
+            }
+            // Find hoist point: latest p < i with stack_in[p] == s - 1,
+            // where s = stack_in[i]. After `getstatic; swap` stack is s+1
+            // and op consumes back to s-1, but we need the hoist point at
+            // stack depth s-1 so that pre-hoist `getstatic` brings it to
+            // s, matching the position where the arg-eval starts.
+            let s = stack_in.get(i).copied().unwrap_or(-1);
+            if s < 1 {
+                i += instruction_len(code, i);
+                continue;
+            }
+            let target_stack = s - 1;
+            let mut hoist_point: Option<usize> = None;
+            let mut p = 0;
+            while p < i {
+                if stack_in.get(p).copied() == Some(target_stack) {
+                    hoist_point = Some(p);
+                }
+                p += instruction_len(code, p);
+            }
+            let Some(hoist_point) = hoist_point else {
+                i += instruction_len(code, i);
+                continue;
+            };
+            // Region [hoist_point, i) must be straight-line, contain no
+            // putstatic / putfield (would mutate static state), and no
+            // duplicate getstatic of the same field (would reorder
+            // observation across mutations).
+            let field_bytes = [code[i + 1], code[i + 2]];
+            let mut k = hoist_point;
+            let mut bad = false;
+            while k < i {
+                let op = code[k];
+                if (0x99..=0xA8).contains(&op) || matches!(op, 0xC6..=0xC9) {
+                    bad = true;
+                    break;
+                }
+                // putstatic (0xB3) or putfield (0xB5) — any field mutation.
+                if matches!(op, 0xB3 | 0xB5) {
+                    bad = true;
+                    break;
+                }
+                // Another getstatic of the SAME field is fine (idempotent),
+                // but a getfield/getstatic of any field whose owning class
+                // could be the same is hard to verify — be conservative
+                // and reject another getstatic of the same CP index.
+                if op == 0xB2
+                    && k + 3 <= code.len()
+                    && code[k + 1] == field_bytes[0]
+                    && code[k + 2] == field_bytes[1]
+                {
+                    bad = true;
+                    break;
+                }
+                k += instruction_len(code, k);
+            }
+            if bad {
+                i += instruction_len(code, i);
+                continue;
+            }
+            // No external branch into [hoist_point, op_pos] from outside.
+            let mut external_target = false;
+            let mut k2 = 0;
+            while k2 < code.len() {
+                let op = code[k2];
+                if ((0x99..=0xA8).contains(&op) || matches!(op, 0xC6 | 0xC7)) && k2 + 2 < code.len()
+                {
+                    let rel = i16::from_be_bytes([code[k2 + 1], code[k2 + 2]]) as i32;
+                    let tgt = (k2 as i32 + rel) as usize;
+                    if tgt >= hoist_point && tgt < op_pos && (k2 < hoist_point || k2 > op_pos) {
+                        external_target = true;
+                        break;
+                    }
+                }
+                k2 += instruction_len(code, k2);
+            }
+            if external_target {
+                i += instruction_len(code, i);
+                continue;
+            }
+            let lo = hoist_point;
+            let hi = op_pos;
+            let cmp_conflict = cmp_targets.iter().any(|t| {
+                (t.offset > lo && t.offset <= hi) || (t.cmp_start > lo && t.cmp_start <= hi)
+            });
+            let block_conflict = block_offsets.iter().any(|&b| b > lo && b <= hi);
+            if cmp_conflict || block_conflict {
+                i += instruction_len(code, i);
+                continue;
+            }
+            applied = Some((hoist_point, i, [0xB2, field_bytes[0], field_bytes[1]]));
+            break;
+        }
+        let Some((insert_pos, drain_start, getstatic_bytes)) = applied else {
+            break;
+        };
+        // Drain `getstatic A (3 bytes); swap (1 byte)` = 4 bytes at drain_start.
+        let drain_size = 4usize;
+        // Adjust branches for the drain.
+        let mut j = 0;
+        while j < code.len() {
+            let op = code[j];
+            if (0x99..=0xA8).contains(&op) || matches!(op, 0xC6 | 0xC7) {
+                if j + 2 < code.len() {
+                    let rel = i16::from_be_bytes([code[j + 1], code[j + 2]]) as i32;
+                    let src = j as i32;
+                    let dst = src + rel;
+                    let new_rel = if (src as usize) < drain_start
+                        && (dst as usize) >= drain_start + drain_size
+                    {
+                        rel - drain_size as i32
+                    } else if (src as usize) >= drain_start + drain_size
+                        && (dst as usize) <= drain_start
+                    {
+                        rel + drain_size as i32
+                    } else {
+                        rel
+                    };
+                    if new_rel != rel {
+                        let nb = (new_rel as i16).to_be_bytes();
+                        code[j + 1] = nb[0];
+                        code[j + 2] = nb[1];
+                    }
+                }
+                j += 3;
+                continue;
+            }
+            j += instruction_len(code, j);
+        }
+        for ct in cmp_targets.iter_mut() {
+            if ct.offset >= drain_start + drain_size {
+                ct.offset -= drain_size;
+            }
+            if ct.cmp_start >= drain_start + drain_size {
+                ct.cmp_start -= drain_size;
+            }
+        }
+        for b in block_offsets.iter_mut() {
+            if *b >= drain_start + drain_size {
+                *b -= drain_size;
+            }
+        }
+        code.drain(drain_start..drain_start + drain_size);
+        // Insert `getstatic A` (3 bytes) at insert_pos.
+        let inserted = 3usize;
+        let mut j = 0;
+        while j < code.len() {
+            let op = code[j];
+            if (0x99..=0xA8).contains(&op) || matches!(op, 0xC6 | 0xC7) {
+                if j + 2 < code.len() {
+                    let rel = i16::from_be_bytes([code[j + 1], code[j + 2]]) as i32;
+                    let src = j as i32;
+                    let dst = src + rel;
+                    let new_rel = if (src as usize) < insert_pos && (dst as usize) > insert_pos {
+                        rel + inserted as i32
+                    } else if (src as usize) > insert_pos && (dst as usize) < insert_pos {
+                        rel - inserted as i32
+                    } else {
+                        rel
+                    };
+                    if new_rel != rel {
+                        let nb = (new_rel as i16).to_be_bytes();
+                        code[j + 1] = nb[0];
+                        code[j + 2] = nb[1];
+                    }
+                }
+                j += 3;
+                continue;
+            }
+            j += instruction_len(code, j);
+        }
+        for ct in cmp_targets.iter_mut() {
+            if ct.offset > insert_pos {
+                ct.offset += inserted;
+            }
+            if ct.cmp_start > insert_pos {
+                ct.cmp_start += inserted;
+            }
+        }
+        for b in block_offsets.iter_mut() {
+            if *b > insert_pos {
+                *b += inserted;
+            }
+        }
+        code.splice(insert_pos..insert_pos, getstatic_bytes.iter().copied());
+    }
+}
+
+/// Replace the tail `astore_N; return` (V) sequence with `pop; return`.
+/// kotlinc emits `pop` when an Object-returning call's result is unused
+/// at the tail of a Unit method; skotch's MIR-level lowering binds the
+/// result to a local first (astore), then returns. After this rewrite
+/// the local often becomes unused and `actual_max_locals` will pick up
+/// the lower count, matching kotlinc's `max_locals=0`.
+///
+/// Safe because: (1) the new `pop` is the same size as `astore_N` (no
+/// position shifts), so no branch adjustments are needed; (2) the
+/// return immediately discards the method frame, so slot N's value
+/// is unobservable post-rewrite even if it differs from pre-rewrite.
+/// Restricted to the V-return (`return`, 0xB1) to avoid clobbering
+/// xreturn paths that might still be loading from slot N.
+/// Remove adjacent `swap; swap` pairs — they net to identity and
+/// sometimes survive MIR-level rewrites (e.g. the old enum
+/// toString-equals emission left vestigial swaps after migration to
+/// reference equality). 2-byte savings per pair, repeated until no
+/// more pairs match.
+fn peephole_drop_redundant_swap_swap(
+    code: &mut Vec<u8>,
+    cmp_targets: &mut [CmpBranchTarget],
+    block_offsets: &mut [usize],
+) {
+    loop {
+        // Scan for an adjacent swap-swap pair that's not crossed by any
+        // external branch source or target (which would split the pair).
+        let mut found: Option<usize> = None;
+        let mut i = 0;
+        while i + 1 < code.len() {
+            if code[i] == 0x5F && code[i + 1] == 0x5F {
+                // No external branch source/target inside (i, i+2).
+                let mut external = false;
+                let mut k = 0;
+                while k < code.len() {
+                    let op = code[k];
+                    let (rel_off, is_branch) = match op {
+                        0x99..=0xA8 | 0xC6 | 0xC7 => {
+                            if k + 2 >= code.len() {
+                                (0i32, false)
+                            } else {
+                                (i16::from_be_bytes([code[k + 1], code[k + 2]]) as i32, true)
+                            }
+                        }
+                        0xC8 | 0xC9 => {
+                            if k + 4 >= code.len() {
+                                (0, false)
+                            } else {
+                                (
+                                    i32::from_be_bytes([
+                                        code[k + 1],
+                                        code[k + 2],
+                                        code[k + 3],
+                                        code[k + 4],
+                                    ]),
+                                    true,
+                                )
+                            }
+                        }
+                        _ => (0, false),
+                    };
+                    if is_branch {
+                        let tgt = (k as i32 + rel_off) as usize;
+                        // Targeting i+1 would split the pair (jump to
+                        // the second swap with stack effects we'd be
+                        // removing).
+                        if tgt == i + 1 || tgt == i {
+                            external = true;
+                            break;
+                        }
+                    }
+                    k += instruction_len(code, k);
+                }
+                if !external {
+                    found = Some(i);
+                    break;
+                }
+            }
+            i += instruction_len(code, i);
+        }
+        let Some(pair_pos) = found else {
+            break;
+        };
+        // Adjust branches: any branch crossing the 2-byte pair shifts
+        // by ±2 in the usual way.
+        let drain_size = 2usize;
+        let mut j = 0;
+        while j < code.len() {
+            let op = code[j];
+            if (0x99..=0xA8).contains(&op) || matches!(op, 0xC6 | 0xC7) {
+                if j + 2 < code.len() {
+                    let rel = i16::from_be_bytes([code[j + 1], code[j + 2]]) as i32;
+                    let src = j as i32;
+                    let dst = src + rel;
+                    let new_rel = if (src as usize) < pair_pos
+                        && (dst as usize) >= pair_pos + drain_size
+                    {
+                        rel - drain_size as i32
+                    } else if (src as usize) >= pair_pos + drain_size && (dst as usize) <= pair_pos
+                    {
+                        rel + drain_size as i32
+                    } else {
+                        rel
+                    };
+                    if new_rel != rel {
+                        let nb = (new_rel as i16).to_be_bytes();
+                        code[j + 1] = nb[0];
+                        code[j + 2] = nb[1];
+                    }
+                }
+                j += 3;
+                continue;
+            }
+            j += instruction_len(code, j);
+        }
+        for ct in cmp_targets.iter_mut() {
+            if ct.offset >= pair_pos + drain_size {
+                ct.offset -= drain_size;
+            }
+            if ct.cmp_start >= pair_pos + drain_size {
+                ct.cmp_start -= drain_size;
+            }
+        }
+        for b in block_offsets.iter_mut() {
+            if *b >= pair_pos + drain_size {
+                *b -= drain_size;
+            }
+        }
+        code.drain(pair_pos..pair_pos + drain_size);
+    }
+}
+
+/// Constant-fold `<EnumClass>.<ENTRY>.name` to `ldc "<ENTRY>"`.
+/// kotlinc emits the literal string at compile time since the entry
+/// name is known statically. Skotch's MIR-level lowering keeps the
+/// virtual call form — this peephole undoes that at the byte level.
+///
+/// Pattern: `getstatic <Class>.<NAME>:L<Class>; (3) invokevirtual
+/// <Class>.name:()Ljava/lang/String; (3)` → `ldc/ldc_w "<NAME>" (2 or 3)`.
+///
+/// Restricted to classes registered as enums in
+/// `module.enum_entry_funcs` so we don't fold non-enum `.name` calls
+/// (e.g. user-defined `val name: String` on a regular class).
+fn peephole_fold_enum_entry_name(
+    code: &mut Vec<u8>,
+    cmp_targets: &mut [CmpBranchTarget],
+    block_offsets: &mut [usize],
+    cp: &mut ConstantPool,
+    module: &MirModule,
+) {
+    loop {
+        let mut applied: Option<(usize, Vec<u8>)> = None;
+        let mut i = 0;
+        while i + 6 <= code.len() {
+            if code[i] != 0xB2 {
+                i += instruction_len(code, i);
+                continue;
+            }
+            if code[i + 3] != 0xB6 {
+                i += instruction_len(code, i);
+                continue;
+            }
+            let field_idx = u16::from_be_bytes([code[i + 1], code[i + 2]]);
+            let method_idx = u16::from_be_bytes([code[i + 4], code[i + 5]]);
+            // Snapshot all the CP lookups first since they share `cp`
+            // and we need to interleave with a mutable string() insert.
+            let (field_class, field_name, field_desc, method_class, method_name, method_desc) = {
+                let Some((fc, fn_, fd)) = cp.lookup_fieldref_parts(field_idx) else {
+                    i += instruction_len(code, i);
+                    continue;
+                };
+                let fc = fc.to_string();
+                let fn_ = fn_.to_string();
+                let fd = fd.to_string();
+                let Some((mc, mn, md)) = cp.lookup_methodref_parts(method_idx) else {
+                    i += instruction_len(code, i);
+                    continue;
+                };
+                (fc, fn_, fd, mc.to_string(), mn.to_string(), md.to_string())
+            };
+            let is_enum = module
+                .enum_entry_funcs
+                .values()
+                .any(|(ec, _)| ec == &field_class);
+            if !is_enum {
+                i += instruction_len(code, i);
+                continue;
+            }
+            if method_class != field_class
+                || method_name != "name"
+                || method_desc != "()Ljava/lang/String;"
+            {
+                i += instruction_len(code, i);
+                continue;
+            }
+            if field_desc != format!("L{};", field_class) {
+                i += instruction_len(code, i);
+                continue;
+            }
+            let str_idx = cp.string(&field_name);
+            let ldc_bytes: Vec<u8> = if str_idx <= 0xFF {
+                vec![0x12, str_idx as u8]
+            } else {
+                let mut v = vec![0x13];
+                v.extend_from_slice(&str_idx.to_be_bytes());
+                v
+            };
+            applied = Some((i, ldc_bytes));
+            break;
+        }
+        let Some((pos, ldc_bytes)) = applied else {
+            break;
+        };
+        let old_len = 6usize;
+        let new_len = ldc_bytes.len();
+        let delta: isize = (new_len as isize) - (old_len as isize);
+        // Adjust branches that span the rewrite region.
+        let mut j = 0;
+        while j < code.len() {
+            let op = code[j];
+            if (0x99..=0xA8).contains(&op) || matches!(op, 0xC6 | 0xC7) {
+                if j + 2 < code.len() {
+                    let rel = i16::from_be_bytes([code[j + 1], code[j + 2]]) as i32;
+                    let src = j as i32;
+                    let dst = src + rel;
+                    let new_rel = if (src as usize) < pos && (dst as usize) >= pos + old_len {
+                        rel + (delta as i32)
+                    } else if (src as usize) >= pos + old_len && (dst as usize) <= pos {
+                        rel - (delta as i32)
+                    } else {
+                        rel
+                    };
+                    if new_rel != rel {
+                        let nb = (new_rel as i16).to_be_bytes();
+                        code[j + 1] = nb[0];
+                        code[j + 2] = nb[1];
+                    }
+                }
+                j += 3;
+                continue;
+            }
+            if matches!(op, 0xC8 | 0xC9) {
+                if j + 4 < code.len() {
+                    let rel =
+                        i32::from_be_bytes([code[j + 1], code[j + 2], code[j + 3], code[j + 4]]);
+                    let src = j as i32;
+                    let dst = src + rel;
+                    let new_rel = if (src as usize) < pos && (dst as usize) >= pos + old_len {
+                        rel + (delta as i32)
+                    } else if (src as usize) >= pos + old_len && (dst as usize) <= pos {
+                        rel - (delta as i32)
+                    } else {
+                        rel
+                    };
+                    if new_rel != rel {
+                        let nb = new_rel.to_be_bytes();
+                        code[j + 1] = nb[0];
+                        code[j + 2] = nb[1];
+                        code[j + 3] = nb[2];
+                        code[j + 4] = nb[3];
+                    }
+                }
+                j += 5;
+                continue;
+            }
+            j += instruction_len(code, j);
+        }
+        let shift: isize = -delta;
+        for ct in cmp_targets.iter_mut() {
+            if ct.offset >= pos + old_len {
+                ct.offset = (ct.offset as isize - shift) as usize;
+            }
+            if ct.cmp_start >= pos + old_len {
+                ct.cmp_start = (ct.cmp_start as isize - shift) as usize;
+            }
+        }
+        for b in block_offsets.iter_mut() {
+            if *b >= pos + old_len {
+                *b = (*b as isize - shift) as usize;
+            }
+        }
+        code.splice(pos..pos + old_len, ldc_bytes.iter().copied());
+    }
+}
+
+fn peephole_tail_astore_to_pop(code: &mut [u8], handler_starts: &[usize]) {
+    if code.len() < 2 {
+        return;
+    }
+    // Walk forward computing instruction starts, and at each instruction
+    // boundary check whether [pos, pos+2) matches astore_N + return.
+    let mut i = 0;
+    while i + 2 <= code.len() {
+        let op = code[i];
+        let is_compact_astore = (0x4B..=0x4E).contains(&op);
+        let next_is_void_return = code[i + 1] == 0xB1;
+        if is_compact_astore && next_is_void_return {
+            // Skip if this position is inside an exception handler
+            // scope — a handler might read the slot.
+            let in_handler = handler_starts.iter().any(|&h| h == i || h == i + 1);
+            if !in_handler {
+                code[i] = 0x57; // pop
+            }
+        }
+        i += instruction_len(code, i);
+    }
+}
+
+/// Like `peephole_hoist_swap_pattern`, but for `aconst_null` (0x01)
+/// instead of a compact `xload N`. Matches the pattern
+///
+///   <arg eval>; aconst_null; swap; <2-consume op>
+///
+/// and rewrites to
+///
+///   aconst_null; <arg eval>; <op>
+///
+/// Skotch's MIR-level lowering pushes `aconst_null` after evaluating
+/// other args (then swaps to fix position); kotlinc emits the null
+/// first when the first arg is `null`. Safe to hoist freely since
+/// `aconst_null` has no side effects and doesn't depend on anything in
+/// the hoist region.
+fn peephole_hoist_aconst_null_swap_pattern(
+    code: &mut Vec<u8>,
+    cmp_targets: &mut [CmpBranchTarget],
+    block_offsets: &mut [usize],
+    cp: &ConstantPool,
+) {
+    loop {
+        let stack_in = compute_stack_at_entry(code, cp);
+        let mut applied: Option<(usize, usize)> = None;
+        let mut i = 0;
+        while i < code.len() {
+            // i: aconst_null (0x01)
+            if code[i] != 0x01 {
+                i += instruction_len(code, i);
+                continue;
+            }
+            // i+1: swap (0x5F)
+            if i + 1 >= code.len() || code[i + 1] != 0x5F {
+                i += instruction_len(code, i);
+                continue;
+            }
+            // The swap must be followed by something (we leave the
+            // exact consumer unchecked — the swap's rearrangement may
+            // be picked up by a later instruction in the call's arg
+            // list, not necessarily the immediate next op).
+            if i + 2 >= code.len() {
+                i += instruction_len(code, i);
+                continue;
+            }
+            // Find hoist point.
+            let s = stack_in.get(i).copied().unwrap_or(-1);
+            if s < 1 {
+                i += instruction_len(code, i);
+                continue;
+            }
+            let target_stack = s - 1;
+            let mut hoist_point: Option<usize> = None;
+            let mut p = 0;
+            while p < i {
+                if stack_in.get(p).copied() == Some(target_stack) {
+                    hoist_point = Some(p);
+                }
+                p += instruction_len(code, p);
+            }
+            let Some(hoist_point) = hoist_point else {
+                i += instruction_len(code, i);
+                continue;
+            };
+            if hoist_point == i {
+                i += instruction_len(code, i);
+                continue;
+            }
+            // Region [hoist_point, i) must be straight-line (no branches)
+            // and must not drop the stack below `target_stack` (which
+            // would mean the region consumes some pre-existing item
+            // below where we want to insert the null).
+            let mut k = hoist_point;
+            let mut bad = false;
+            while k < i {
+                let op = code[k];
+                if (0x99..=0xA8).contains(&op) || matches!(op, 0xC6..=0xC9 | 0xAA | 0xAB) {
+                    bad = true;
+                    break;
+                }
+                if stack_in.get(k).copied().unwrap_or(target_stack) < target_stack {
+                    bad = true;
+                    break;
+                }
+                k += instruction_len(code, k);
+            }
+            if bad {
+                i += instruction_len(code, i);
+                continue;
+            }
+            let op_pos = i + 2;
+            let mut external_target = false;
+            let mut k2 = 0;
+            while k2 < code.len() {
+                let op = code[k2];
+                if ((0x99..=0xA8).contains(&op) || matches!(op, 0xC6 | 0xC7)) && k2 + 2 < code.len()
+                {
+                    let rel = i16::from_be_bytes([code[k2 + 1], code[k2 + 2]]) as i32;
+                    let tgt = (k2 as i32 + rel) as usize;
+                    if tgt >= hoist_point && tgt < op_pos && (k2 < hoist_point || k2 > op_pos) {
+                        external_target = true;
+                        break;
+                    }
+                }
+                k2 += instruction_len(code, k2);
+            }
+            if external_target {
+                i += instruction_len(code, i);
+                continue;
+            }
+            let lo = hoist_point;
+            let hi = op_pos;
+            let cmp_conflict = cmp_targets.iter().any(|t| {
+                (t.offset > lo && t.offset <= hi) || (t.cmp_start > lo && t.cmp_start <= hi)
+            });
+            let block_conflict = block_offsets.iter().any(|&b| b > lo && b <= hi);
+            if cmp_conflict || block_conflict {
+                i += instruction_len(code, i);
+                continue;
+            }
+            applied = Some((hoist_point, i));
+            break;
+        }
+        let Some((insert_pos, drain_start)) = applied else {
+            break;
+        };
+        let drain_size = 2usize;
+        // Adjust branches for the drain.
+        let mut j = 0;
+        while j < code.len() {
+            let op = code[j];
+            if (0x99..=0xA8).contains(&op) || matches!(op, 0xC6 | 0xC7) {
+                if j + 2 < code.len() {
+                    let rel = i16::from_be_bytes([code[j + 1], code[j + 2]]) as i32;
+                    let src = j as i32;
+                    let dst = src + rel;
+                    let new_rel = if (src as usize) < drain_start
+                        && (dst as usize) >= drain_start + drain_size
+                    {
+                        rel - drain_size as i32
+                    } else if (src as usize) >= drain_start + drain_size
+                        && (dst as usize) <= drain_start
+                    {
+                        rel + drain_size as i32
+                    } else {
+                        rel
+                    };
+                    if new_rel != rel {
+                        let nb = (new_rel as i16).to_be_bytes();
+                        code[j + 1] = nb[0];
+                        code[j + 2] = nb[1];
+                    }
+                }
+                j += 3;
+                continue;
+            }
+            j += instruction_len(code, j);
+        }
+        for ct in cmp_targets.iter_mut() {
+            if ct.offset >= drain_start + drain_size {
+                ct.offset -= drain_size;
+            }
+            if ct.cmp_start >= drain_start + drain_size {
+                ct.cmp_start -= drain_size;
+            }
+        }
+        for b in block_offsets.iter_mut() {
+            if *b >= drain_start + drain_size {
+                *b -= drain_size;
+            }
+        }
+        code.drain(drain_start..drain_start + drain_size);
+        // Insert aconst_null (1 byte) at insert_pos.
+        let inserted = 1usize;
+        let mut j = 0;
+        while j < code.len() {
+            let op = code[j];
+            if (0x99..=0xA8).contains(&op) || matches!(op, 0xC6 | 0xC7) {
+                if j + 2 < code.len() {
+                    let rel = i16::from_be_bytes([code[j + 1], code[j + 2]]) as i32;
+                    let src = j as i32;
+                    let dst = src + rel;
+                    let new_rel = if (src as usize) < insert_pos && (dst as usize) > insert_pos {
+                        rel + inserted as i32
+                    } else if (src as usize) > insert_pos && (dst as usize) < insert_pos {
+                        rel - inserted as i32
+                    } else {
+                        rel
+                    };
+                    if new_rel != rel {
+                        let nb = (new_rel as i16).to_be_bytes();
+                        code[j + 1] = nb[0];
+                        code[j + 2] = nb[1];
+                    }
+                }
+                j += 3;
+                continue;
+            }
+            j += instruction_len(code, j);
+        }
+        for ct in cmp_targets.iter_mut() {
+            if ct.offset > insert_pos {
+                ct.offset += inserted;
+            }
+            if ct.cmp_start > insert_pos {
+                ct.cmp_start += inserted;
+            }
+        }
+        for b in block_offsets.iter_mut() {
+            if *b > insert_pos {
+                *b += inserted;
+            }
+        }
+        code.insert(insert_pos, 0x01);
+    }
+}
+
+/// Detect skotch's "spill, eval second arg, reload, swap" pattern at a
+/// call-arg boundary, and rewrite it to the inline form kotlinc emits.
+///
+///   <expr_A> (leaves [..., A])
+///   astore_N
+///   <expr_B> (leaves [..., B])  -- inner code, no slot-N writes, no branches
+///   aload_N  (now [..., B, A])
+///   swap     (now [..., A, B])
+///
+/// becomes
+///
+///   <expr_A>
+///   <expr_B>   -- stack is naturally [..., A, B]
+///
+/// Skotch's MIR-level lowering spills the first arg to a slot before
+/// evaluating the second, then loads it back at the right position.
+/// kotlinc keeps both values on the operand stack. Net savings: 3
+/// bytes (astore + aload + swap).
+fn peephole_elide_spill_swap_pattern(code: &mut Vec<u8>, cp: &ConstantPool) {
+    loop {
+        let stack_in = compute_stack_at_entry(code, cp);
+        // (astore_pos, astore_len, slot_n, aload_pos, aload_len)
+        let mut applied: Option<(usize, usize, u8, usize, usize)> = None;
+        let mut i = 0;
+        while i + 3 < code.len() {
+            // i: astore_N — accept compact (0x4B..=0x4E, slot 0..=3) or
+            // generic (0x3A + 1-byte slot, any slot up to 255). The
+            // post-emit code may carry generic forms when slot
+            // allocation produces N ≥ 4 — slot compaction runs LATER,
+            // after this peephole, so we have to recognize both shapes.
+            let op = code[i];
+            let (slot_n, astore_len) = if (0x4B..=0x4E).contains(&op) {
+                (op - 0x4B, 1usize)
+            } else if op == 0x3A && i + 1 < code.len() {
+                (code[i + 1], 2usize)
+            } else {
+                i += instruction_len(code, i);
+                continue;
+            };
+            // Walk forward from i+astore_len, validating the inner region:
+            //   - no branches
+            //   - no writes to slot N
+            //   - eventually arrives at `aload_N; swap`
+            let compact_aload_op = if slot_n <= 3 {
+                Some(0x2A + slot_n)
+            } else {
+                None
+            };
+            let mut p = i + astore_len;
+            let depth_after_astore = stack_in.get(p).copied().unwrap_or(-1);
+            if depth_after_astore < 0 {
+                i += instruction_len(code, i);
+                continue;
+            }
+            let mut found: Option<(usize, usize)> = None; // (pos, len)
+            while p + 1 < code.len() {
+                let cur = code[p];
+                // Match aload_N: compact (0x2A..=0x2D for slot 0..3) or
+                // generic (0x19 + 1-byte slot, any slot up to 255).
+                let aload_match =
+                    if Some(cur) == compact_aload_op && p + 1 < code.len() && code[p + 1] == 0x5F {
+                        Some(1usize)
+                    } else if cur == 0x19
+                        && p + 2 < code.len()
+                        && code[p + 1] == slot_n
+                        && code[p + 2] == 0x5F
+                    {
+                        Some(2usize)
+                    } else {
+                        None
+                    };
+                if let Some(aload_len) = aload_match {
+                    found = Some((p, aload_len));
+                    break;
+                }
+                if (0x99..=0xA8).contains(&cur) || matches!(cur, 0xC6..=0xC9 | 0xAA | 0xAB) {
+                    break;
+                }
+                if writes_slot_at(code, p, slot_n) {
+                    break;
+                }
+                // Reads of slot N inside the inner region would observe
+                // the spilled value — eliding the spill would expose
+                // whatever slot N held before. Reject.
+                let reads_slot_n = matches!(cur, 0x15 | 0x17 | 0x19)
+                    && p + 1 < code.len()
+                    && code[p + 1] == slot_n;
+                let reads_slot_n_compact = matches!(cur, op2 if (0x1A..=0x1D).contains(&op2) && (op2 - 0x1A) == slot_n)
+                    || matches!(cur, op2 if (0x2A..=0x2D).contains(&op2) && (op2 - 0x2A) == slot_n);
+                if reads_slot_n || reads_slot_n_compact {
+                    break;
+                }
+                p += instruction_len(code, p);
+                // Cap scan distance: pattern is meaningful only for short
+                // expressions; long scans risk false positives.
+                if p > i + 64 {
+                    break;
+                }
+            }
+            let Some((aload_pos, aload_len)) = found else {
+                i += instruction_len(code, i);
+                continue;
+            };
+            // Verify stack depth at aload_pos: must be depth_after_astore + 1
+            // (the inner region produced one net value).
+            let depth_at_aload = stack_in.get(aload_pos).copied().unwrap_or(-1);
+            if depth_at_aload != depth_after_astore + 1 {
+                i += instruction_len(code, i);
+                continue;
+            }
+            // No external branch may land inside (i, aload_pos+2).
+            let region_lo = i;
+            let region_hi = aload_pos + 2;
+            let mut external = false;
+            let mut k = 0;
+            while k < code.len() {
+                let cur = code[k];
+                let rel_opt = if (0x99..=0xA8).contains(&cur) || matches!(cur, 0xC6 | 0xC7) {
+                    if k + 2 < code.len() {
+                        Some(i16::from_be_bytes([code[k + 1], code[k + 2]]) as i32)
+                    } else {
+                        None
+                    }
+                } else if matches!(cur, 0xC8 | 0xC9) {
+                    if k + 4 < code.len() {
+                        Some(i32::from_be_bytes([
+                            code[k + 1],
+                            code[k + 2],
+                            code[k + 3],
+                            code[k + 4],
+                        ]))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+                if let Some(rel) = rel_opt {
+                    let tgt = (k as i32 + rel) as usize;
+                    if tgt > region_lo && tgt < region_hi && (k < region_lo || k >= region_hi) {
+                        external = true;
+                        break;
+                    }
+                }
+                k += instruction_len(code, k);
+            }
+            if external {
+                i += instruction_len(code, i);
+                continue;
+            }
+            applied = Some((i, astore_len, slot_n, aload_pos, aload_len));
+            break;
+        }
+        let Some((astore_pos, astore_len, _slot_n, aload_pos, aload_len)) = applied else {
+            break;
+        };
+        // Rewrite plan: remove the swap, the aload, then the astore — in
+        // descending position order so earlier removals don't shift the
+        // later positions. Each removal walks its own byte range
+        // (compact: 1 byte; generic: 2 bytes including the slot byte).
+        let drain_ranges: [(usize, usize); 3] = [
+            (aload_pos + aload_len, 1), // swap (always 1 byte)
+            (aload_pos, aload_len),     // aload_N
+            (astore_pos, astore_len),   // astore_N
+        ];
+        for &(drain_pos, drain_len) in &drain_ranges {
+            // Adjust branches for one byte at a time so the per-byte logic
+            // below stays simple.
+            for _step in 0..drain_len {
+                let mut j = 0;
+                while j < code.len() {
+                    let cur = code[j];
+                    if (0x99..=0xA8).contains(&cur) || matches!(cur, 0xC6 | 0xC7) {
+                        if j + 2 < code.len() {
+                            let rel = i16::from_be_bytes([code[j + 1], code[j + 2]]) as i32;
+                            let src = j as i32;
+                            let dst = src + rel;
+                            let new_rel = if (src as usize) < drain_pos
+                                && (dst as usize) > drain_pos
+                            {
+                                rel - 1
+                            } else if (src as usize) > drain_pos && (dst as usize) <= drain_pos {
+                                rel + 1
+                            } else {
+                                rel
+                            };
+                            if new_rel != rel {
+                                let nb = (new_rel as i16).to_be_bytes();
+                                code[j + 1] = nb[0];
+                                code[j + 2] = nb[1];
+                            }
+                        }
+                        j += 3;
+                        continue;
+                    }
+                    if matches!(cur, 0xC8 | 0xC9) {
+                        if j + 4 < code.len() {
+                            let rel = i32::from_be_bytes([
+                                code[j + 1],
+                                code[j + 2],
+                                code[j + 3],
+                                code[j + 4],
+                            ]);
+                            let src = j as i32;
+                            let dst = src + rel;
+                            let new_rel = if (src as usize) < drain_pos
+                                && (dst as usize) > drain_pos
+                            {
+                                rel - 1
+                            } else if (src as usize) > drain_pos && (dst as usize) <= drain_pos {
+                                rel + 1
+                            } else {
+                                rel
+                            };
+                            if new_rel != rel {
+                                let nb = new_rel.to_be_bytes();
+                                code[j + 1] = nb[0];
+                                code[j + 2] = nb[1];
+                                code[j + 3] = nb[2];
+                                code[j + 4] = nb[3];
+                            }
+                        }
+                        j += 5;
+                        continue;
+                    }
+                    j += instruction_len(code, j);
+                }
+                code.remove(drain_pos);
+            }
+        }
+    }
+}
+
+/// Detect skotch's "spill arg, then new+dup, then reload, then init"
+/// pattern and rewrite to kotlinc's inline shape:
+///
+///   <arg eval>       (arg leaves stack [..., x])
+///   astore_N         (slot = N)
+///   new <Class>
+///   dup
+///   aload_N
+///   invokespecial <Class>.<init>(...)
+///
+/// becomes
+///
+///   new <Class>
+///   dup
+///   <arg eval>
+///   invokespecial <Class>.<init>(...)
+///
+/// kotlinc emits the inline shape for `new Box(<expr>)` regardless of
+/// whether `<expr>` is a complex sub-call. Skotch's MIR-level lowering
+/// evaluates the arg first and spills to a temp; this peephole undoes
+/// the spill once the bytecode is otherwise stable.
+///
+/// Restricted to compact astore/aload (slots 0..=3) and to constructor
+/// calls whose method name is `<init>`. The arg-eval region must not
+/// branch, must not write to slot N, and must not use slot N (only
+/// validated for slot writes; reads in the arg-eval region would just
+/// be reading whatever value slot N held before the spill, which is
+/// preserved after the rewrite).
+fn peephole_hoist_new_dup_around_arg(
+    code: &mut Vec<u8>,
+    cmp_targets: &mut [CmpBranchTarget],
+    block_offsets: &mut [usize],
+    cp: &ConstantPool,
+) {
+    loop {
+        let stack_in = compute_stack_at_entry(code, cp);
+        // (arg_start, astore_pos, [new_op, new_hi, new_lo, dup_op])
+        let mut applied: Option<(usize, usize, [u8; 4])> = None;
+        let mut i = 0;
+        while i + 9 <= code.len() {
+            // i: astore_N (compact, 0x4B..=0x4E)
+            let op0 = code[i];
+            if !(0x4B..=0x4E).contains(&op0) {
+                i += instruction_len(code, i);
+                continue;
+            }
+            let slot_n = op0 - 0x4B;
+            // i+1: new (0xBB) + 2-byte class CP index
+            if code[i + 1] != 0xBB {
+                i += instruction_len(code, i);
+                continue;
+            }
+            let new_class_hi = code[i + 2];
+            let new_class_lo = code[i + 3];
+            // i+4: dup (0x59)
+            if code[i + 4] != 0x59 {
+                i += instruction_len(code, i);
+                continue;
+            }
+            // i+5: aload_N (same slot, compact form)
+            let aload_op = 0x2A + slot_n;
+            if code[i + 5] != aload_op {
+                i += instruction_len(code, i);
+                continue;
+            }
+            // i+6: invokespecial (0xB7) + 2-byte methodref to <init>
+            if code[i + 6] != 0xB7 {
+                i += instruction_len(code, i);
+                continue;
+            }
+            let methodref_idx = u16::from_be_bytes([code[i + 7], code[i + 8]]);
+            let is_init = cp
+                .lookup_methodref_parts(methodref_idx)
+                .map(|(_, name, desc)| {
+                    // Constructor must take exactly 1 arg (matching the
+                    // single spilled value). Multi-arg constructors
+                    // would have multiple astore/aload pairs.
+                    name == "<init>" && count_method_params(desc) == 1
+                })
+                .unwrap_or(false);
+            if !is_init {
+                i += instruction_len(code, i);
+                continue;
+            }
+            // Find arg_eval start: stack at astore is S+1 (arg on top),
+            // before arg_eval is S. Find latest p < i with stack_in[p] == S.
+            let s_at_astore = stack_in.get(i).copied().unwrap_or(-1);
+            if s_at_astore < 1 {
+                i += instruction_len(code, i);
+                continue;
+            }
+            let target_stack = s_at_astore - 1;
+            let mut arg_start: Option<usize> = None;
+            let mut p = 0;
+            while p < i {
+                if stack_in.get(p).copied() == Some(target_stack) {
+                    arg_start = Some(p);
+                }
+                p += instruction_len(code, p);
+            }
+            let Some(arg_start) = arg_start else {
+                i += instruction_len(code, i);
+                continue;
+            };
+            // arg_start may coincide with i (empty arg_eval); skip in
+            // that degenerate case.
+            if arg_start == i {
+                i += instruction_len(code, i);
+                continue;
+            }
+            // Region [arg_start, i) must be straight-line (no branches),
+            // must not write to slot N, and must not contain a
+            // `monitorenter`/`monitorexit` (sync-sensitive).
+            let mut k = arg_start;
+            let mut bad = false;
+            while k < i {
+                if writes_slot_at(code, k, slot_n) {
+                    bad = true;
+                    break;
+                }
+                let op = code[k];
+                if (0x99..=0xA8).contains(&op)
+                    || matches!(op, 0xC6..=0xC9 | 0xAA | 0xAB | 0xC2 | 0xC3)
+                {
+                    bad = true;
+                    break;
+                }
+                k += instruction_len(code, k);
+            }
+            if bad || k != i {
+                i += instruction_len(code, i);
+                continue;
+            }
+            // No external branch into (arg_start, i+9).
+            let region_lo = arg_start;
+            let region_hi = i + 9;
+            let mut external = false;
+            let mut k = 0;
+            while k < code.len() {
+                let op = code[k];
+                if ((0x99..=0xA8).contains(&op) || matches!(op, 0xC6 | 0xC7)) && k + 2 < code.len()
+                {
+                    let rel = i16::from_be_bytes([code[k + 1], code[k + 2]]) as i32;
+                    let tgt = (k as i32 + rel) as usize;
+                    if tgt > region_lo && tgt < region_hi && (k < region_lo || k >= region_hi) {
+                        external = true;
+                        break;
+                    }
+                }
+                if matches!(op, 0xC8 | 0xC9) && k + 4 < code.len() {
+                    let rel =
+                        i32::from_be_bytes([code[k + 1], code[k + 2], code[k + 3], code[k + 4]]);
+                    let tgt = (k as i32 + rel) as usize;
+                    if tgt > region_lo && tgt < region_hi && (k < region_lo || k >= region_hi) {
+                        external = true;
+                        break;
+                    }
+                }
+                k += instruction_len(code, k);
+            }
+            if external {
+                i += instruction_len(code, i);
+                continue;
+            }
+            let cmp_conflict = cmp_targets.iter().any(|t| {
+                (t.offset > region_lo && t.offset < region_hi)
+                    || (t.cmp_start > region_lo && t.cmp_start < region_hi)
+            });
+            if cmp_conflict {
+                i += instruction_len(code, i);
+                continue;
+            }
+            let block_conflict = block_offsets
+                .iter()
+                .any(|&b| b > region_lo && b < region_hi);
+            if block_conflict {
+                i += instruction_len(code, i);
+                continue;
+            }
+            applied = Some((arg_start, i, [0xBB, new_class_hi, new_class_lo, 0x59]));
+            break;
+        }
+        let Some((arg_start, astore_pos, new_dup_bytes)) = applied else {
+            break;
+        };
+        // Step 1: drain bytes [astore_pos, astore_pos+6) — the
+        // astore_N (1) + new (3) + dup (1) + aload_N (1) = 6 bytes.
+        // The invokespecial (at astore_pos+6) is kept in place.
+        let drain_start = astore_pos;
+        let drain_size = 6usize;
+        let mut j = 0;
+        while j < code.len() {
+            let op = code[j];
+            if (0x99..=0xA8).contains(&op) || matches!(op, 0xC6 | 0xC7) {
+                if j + 2 < code.len() {
+                    let rel = i16::from_be_bytes([code[j + 1], code[j + 2]]) as i32;
+                    let src = j as i32;
+                    let dst = src + rel;
+                    let new_rel = if (src as usize) < drain_start
+                        && (dst as usize) >= drain_start + drain_size
+                    {
+                        rel - drain_size as i32
+                    } else if (src as usize) >= drain_start + drain_size
+                        && (dst as usize) <= drain_start
+                    {
+                        rel + drain_size as i32
+                    } else {
+                        rel
+                    };
+                    if new_rel != rel {
+                        let nb = (new_rel as i16).to_be_bytes();
+                        code[j + 1] = nb[0];
+                        code[j + 2] = nb[1];
+                    }
+                }
+                j += 3;
+                continue;
+            }
+            if matches!(op, 0xC8 | 0xC9) {
+                if j + 4 < code.len() {
+                    let rel =
+                        i32::from_be_bytes([code[j + 1], code[j + 2], code[j + 3], code[j + 4]]);
+                    let src = j as i32;
+                    let dst = src + rel;
+                    let new_rel = if (src as usize) < drain_start
+                        && (dst as usize) >= drain_start + drain_size
+                    {
+                        rel - drain_size as i32
+                    } else if (src as usize) >= drain_start + drain_size
+                        && (dst as usize) <= drain_start
+                    {
+                        rel + drain_size as i32
+                    } else {
+                        rel
+                    };
+                    if new_rel != rel {
+                        let nb = new_rel.to_be_bytes();
+                        code[j + 1] = nb[0];
+                        code[j + 2] = nb[1];
+                        code[j + 3] = nb[2];
+                        code[j + 4] = nb[3];
+                    }
+                }
+                j += 5;
+                continue;
+            }
+            j += instruction_len(code, j);
+        }
+        for ct in cmp_targets.iter_mut() {
+            if ct.offset >= drain_start + drain_size {
+                ct.offset -= drain_size;
+            }
+            if ct.cmp_start >= drain_start + drain_size {
+                ct.cmp_start -= drain_size;
+            }
+        }
+        for b in block_offsets.iter_mut() {
+            if *b >= drain_start + drain_size {
+                *b -= drain_size;
+            }
+        }
+        code.drain(drain_start..drain_start + drain_size);
+        // Step 2: insert new+dup (4 bytes) at arg_start.
+        let insert_pos = arg_start;
+        let inserted = 4usize;
+        let mut j = 0;
+        while j < code.len() {
+            let op = code[j];
+            if (0x99..=0xA8).contains(&op) || matches!(op, 0xC6 | 0xC7) {
+                if j + 2 < code.len() {
+                    let rel = i16::from_be_bytes([code[j + 1], code[j + 2]]) as i32;
+                    let src = j as i32;
+                    let dst = src + rel;
+                    let new_rel = if (src as usize) < insert_pos && (dst as usize) >= insert_pos {
+                        rel + inserted as i32
+                    } else if (src as usize) >= insert_pos && (dst as usize) < insert_pos {
+                        rel - inserted as i32
+                    } else {
+                        rel
+                    };
+                    if new_rel != rel {
+                        let nb = (new_rel as i16).to_be_bytes();
+                        code[j + 1] = nb[0];
+                        code[j + 2] = nb[1];
+                    }
+                }
+                j += 3;
+                continue;
+            }
+            if matches!(op, 0xC8 | 0xC9) {
+                if j + 4 < code.len() {
+                    let rel =
+                        i32::from_be_bytes([code[j + 1], code[j + 2], code[j + 3], code[j + 4]]);
+                    let src = j as i32;
+                    let dst = src + rel;
+                    let new_rel = if (src as usize) < insert_pos && (dst as usize) >= insert_pos {
+                        rel + inserted as i32
+                    } else if (src as usize) >= insert_pos && (dst as usize) < insert_pos {
+                        rel - inserted as i32
+                    } else {
+                        rel
+                    };
+                    if new_rel != rel {
+                        let nb = new_rel.to_be_bytes();
+                        code[j + 1] = nb[0];
+                        code[j + 2] = nb[1];
+                        code[j + 3] = nb[2];
+                        code[j + 4] = nb[3];
+                    }
+                }
+                j += 5;
+                continue;
+            }
+            j += instruction_len(code, j);
+        }
+        for ct in cmp_targets.iter_mut() {
+            if ct.offset >= insert_pos {
+                ct.offset += inserted;
+            }
+            if ct.cmp_start >= insert_pos {
+                ct.cmp_start += inserted;
+            }
+        }
+        for b in block_offsets.iter_mut() {
+            if *b >= insert_pos {
+                *b += inserted;
+            }
+        }
+        code.splice(insert_pos..insert_pos, new_dup_bytes.iter().copied());
+    }
+}
+
+/// Count the number of parameter types in a JVM method descriptor (e.g.
+/// `(Ljava/lang/String;I)V` → 2). Returns 0 on malformed descriptors.
+fn count_method_params(desc: &str) -> usize {
+    let bytes = desc.as_bytes();
+    if bytes.first() != Some(&b'(') {
+        return 0;
+    }
+    let mut count = 0usize;
+    let mut i = 1;
+    while i < bytes.len() && bytes[i] != b')' {
+        match bytes[i] {
+            b'B' | b'C' | b'D' | b'F' | b'I' | b'J' | b'S' | b'Z' => {
+                count += 1;
+                i += 1;
+            }
+            b'L' => {
+                count += 1;
+                while i < bytes.len() && bytes[i] != b';' {
+                    i += 1;
+                }
+                if i < bytes.len() {
+                    i += 1;
+                }
+            }
+            b'[' => {
+                // Array — keep advancing past `[`s, then handle the element type.
+                while i < bytes.len() && bytes[i] == b'[' {
+                    i += 1;
+                }
+                if i < bytes.len() {
+                    if bytes[i] == b'L' {
+                        while i < bytes.len() && bytes[i] != b';' {
+                            i += 1;
+                        }
+                        if i < bytes.len() {
+                            i += 1;
+                        }
+                    } else {
+                        i += 1;
+                    }
+                }
+                count += 1;
+            }
+            _ => return 0, // malformed
+        }
+    }
+    count
 }
 
 /// Compute stack-at-entry for each byte position in `code`. Returns a

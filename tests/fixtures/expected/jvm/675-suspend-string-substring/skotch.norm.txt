@@ -8,7 +8,10 @@ method        sub (Ljava/lang/String;ILkotlin/coroutines/Continuation;)Ljava/lan
     0001 iconst_0
     0002 iload_1
     0003 invokevirtual Method(java/lang/String.substring:(II)Ljava/lang/String;)
-    0006 areturn
+    0006 dup
+    0007 ldc "substring(...)"
+    0009 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullExpressionValue:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0012 areturn
   attr        Signature (2 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
   attr        RuntimeInvisibleParameterAnnotations (15 bytes)

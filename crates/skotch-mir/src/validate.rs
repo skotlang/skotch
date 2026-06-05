@@ -582,6 +582,7 @@ mod tests {
             methods: Vec::new(),
             constructor: empty_func("<init>", 0),
             secondary_constructors: Vec::new(),
+            is_lambda: false,
             is_suspend_lambda: false,
             is_cross_file_stub: true,
             annotations: Vec::new(),

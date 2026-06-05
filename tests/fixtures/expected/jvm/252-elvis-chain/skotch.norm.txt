@@ -11,16 +11,15 @@ method        first (Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String; 0x0
     0006 aload_1
     0007 astore_2
     0008 aload_2
-    0009 ifnull 17
-    0012 aload_2
-    0013 astore_3
-    0014 goto 20
-    0017 ldc "none"
-    0019 astore_3
-    0020 aload_3
-    0021 checkcast Class(java/lang/String)
-    0024 areturn
-    sub_attr  StackMapTable (14 bytes)
+    0009 dup
+    0010 ifnonnull 16
+    0013 pop
+    0014 ldc "none"
+    0016 astore_3
+    0017 aload_3
+    0018 checkcast Class(java/lang/String)
+    0021 areturn
+    sub_attr  StackMapTable (10 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
   attr        RuntimeInvisibleParameterAnnotations (13 bytes)
 method        main ()V 0x0019

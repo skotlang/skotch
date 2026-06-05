@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=4 max_locals=11
+  code        max_stack=4 max_locals=10
     0000 iconst_1
     0001 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
     0004 astore_0
@@ -55,25 +55,22 @@ method        main ()V 0x0019
     0092 astore 8
     0094 aload 8
     0096 invokeinterface InterfaceMethod(java/util/Iterator.hasNext:()Z)
-    0101 ifeq 150
+    0101 ifeq 145
     0104 aload 8
     0106 invokeinterface InterfaceMethod(java/util/Iterator.next:()Ljava/lang/Object;)
     0111 checkcast Class(java/util/Map$Entry)
     0114 astore 9
     0116 aload 9
     0118 invokeinterface InterfaceMethod(java/util/Map$Entry.getKey:()Ljava/lang/Object;)
-    0123 astore 10
-    0125 aload 9
-    0127 invokeinterface InterfaceMethod(java/util/Map$Entry.getValue:()Ljava/lang/Object;)
-    0132 aload 10
-    0134 swap
-    0135 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/String;)
-    0140 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0143 swap
-    0144 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0147 goto 94
-    0150 return
-    sub_attr  StackMapTable (37 bytes)
+    0123 aload 9
+    0125 invokeinterface InterfaceMethod(java/util/Map$Entry.getValue:()Ljava/lang/Object;)
+    0130 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/String;)
+    0135 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0138 swap
+    0139 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0142 goto 94
+    0145 return
+    sub_attr  StackMapTable (36 bytes)
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)

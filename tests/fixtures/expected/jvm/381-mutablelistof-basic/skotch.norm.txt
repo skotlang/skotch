@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=3 max_locals=5
+  code        max_stack=3 max_locals=2
     0000 iconst_3
     0001 anewarray Class(java/lang/Object)
     0004 astore_0
@@ -30,23 +30,20 @@ method        main ()V 0x0019
     0031 aastore
     0032 aload_0
     0033 invokestatic Method(kotlin/collections/CollectionsKt.mutableListOf:([Ljava/lang/Object;)Ljava/util/List;)
-    0036 astore 4
-    0038 iconst_4
-    0039 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0042 aload 4
-    0044 swap
-    0045 invokeinterface InterfaceMethod(java/util/List.add:(Ljava/lang/Object;)Z)
-    0050 pop
-    0051 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0036 iconst_4
+    0037 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0040 invokeinterface InterfaceMethod(java/util/List.add:(Ljava/lang/Object;)Z)
+    0045 pop
+    0046 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0049 aload 4
+    0051 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
     0054 aload 4
-    0056 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0059 aload 4
-    0061 invokeinterface InterfaceMethod(java/util/List.size:()I)
-    0066 istore_0
-    0067 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0070 iload_0
-    0071 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0074 return
+    0056 invokeinterface InterfaceMethod(java/util/List.size:()I)
+    0061 istore_0
+    0062 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0065 iload_0
+    0066 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0069 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)
