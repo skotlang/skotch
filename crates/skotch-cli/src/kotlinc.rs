@@ -232,7 +232,7 @@ fn collect_source_files(roots: &[PathBuf], verbose: bool) -> Result<Vec<PathBuf>
         if root.is_file() {
             out.push(root.clone());
         } else if root.is_dir() {
-            walk_dir(root, &mut out, verbose)?;
+            walk_dir(root, &mut out)?;
         } else {
             return Err(anyhow!(
                 "error: source path does not exist: {}",
@@ -267,14 +267,14 @@ fn collect_source_files(roots: &[PathBuf], verbose: bool) -> Result<Vec<PathBuf>
     Ok(out)
 }
 
-fn walk_dir(dir: &Path, out: &mut Vec<PathBuf>, verbose: bool) -> Result<()> {
+fn walk_dir(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
     for entry in
         std::fs::read_dir(dir).with_context(|| format!("reading directory {}", dir.display()))?
     {
         let entry = entry?;
         let path = entry.path();
         if path.is_dir() {
-            walk_dir(&path, out, verbose)?;
+            walk_dir(&path, out)?;
         } else {
             out.push(path);
         }
