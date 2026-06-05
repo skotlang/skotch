@@ -338,6 +338,7 @@ fn gen_one_jvm(
         let source =
             std::fs::read_to_string(&f.input).with_context(|| format!("reading {:?}", f.input))?;
         let uses_compose = source.contains("@Composable");
+        let uses_coroutines = source.contains("kotlinx.coroutines");
         let mut cmd = Command::new(kc);
         cmd.arg(&f.input)
             .arg("-d")
@@ -362,6 +363,26 @@ fn gen_one_jvm(
                 None => {
                     eprintln!(
                         "  compose-compiler-plugin or runtime not found in ~/.gradle/caches; \
+                         skipping kotlinc reference for {}",
+                        f.dir_name
+                    );
+                    return Ok(());
+                }
+            }
+        } else if uses_coroutines {
+            // Fixtures that import kotlinx.coroutines (delay, runBlocking,
+            // launch, withContext, yield, …) need the coroutines library
+            // on the classpath for kotlinc to resolve the symbols.
+            // Without this kotlinc fails and we never write a reference
+            // norm — leaving the suspend cluster permanently uncomparable.
+            match locate_coroutines_jar() {
+                Some(jar) => {
+                    cmd.arg("-cp").arg(&jar);
+                    None
+                }
+                None => {
+                    eprintln!(
+                        "  kotlinx-coroutines-core-jvm not found in ~/.gradle/caches; \
                          skipping kotlinc reference for {}",
                         f.dir_name
                     );
@@ -430,6 +451,15 @@ fn gen_one_jvm(
                     if let Some(stdlib) = locate_kotlin_stdlib(kc) {
                         cp_arg.push(":");
                         cp_arg.push(stdlib);
+                    }
+                    // Coroutines fixtures need the coroutines JAR at
+                    // runtime too — without it `java` fails with
+                    // NoClassDefFoundError on kotlinx/coroutines/...
+                    if uses_coroutines {
+                        if let Some(jar) = locate_coroutines_jar() {
+                            cp_arg.push(":");
+                            cp_arg.push(jar);
+                        }
                     }
                     let out = Command::new(j)
                         .arg("-cp")
@@ -979,6 +1009,28 @@ fn locate_compose_assets(kotlinc: &Path) -> Option<ComposeAssets> {
         plugin_jar: plugin_path,
         runtime_classpath: runtime_classes.display().to_string(),
     })
+}
+
+/// Locate the newest `kotlinx-coroutines-core-jvm-<ver>.jar` in the
+/// user's Gradle cache. Returns the JAR path so fixture-gen can pass
+/// it to kotlinc via `-cp` when compiling sources that import
+/// `kotlinx.coroutines.*`. Returns `None` if the cache is missing or
+/// no jar is present — caller should skip the kotlinc reference for
+/// that fixture and emit a warning.
+fn locate_coroutines_jar() -> Option<PathBuf> {
+    let home = std::env::var_os("HOME").map(PathBuf::from)?;
+    let dir = home
+        .join(".gradle/caches/modules-2/files-2.1")
+        .join("org.jetbrains.kotlinx/kotlinx-coroutines-core-jvm");
+    walkdir::WalkDir::new(&dir)
+        .into_iter()
+        .flatten()
+        .filter(|e| {
+            let name = e.file_name().to_string_lossy();
+            name.starts_with("kotlinx-coroutines-core-jvm-") && name.ends_with(".jar")
+        })
+        .map(|e| e.path().to_path_buf())
+        .max() // newest version path sorts last
 }
 
 fn tempdir(label: &str) -> Result<PathBuf> {

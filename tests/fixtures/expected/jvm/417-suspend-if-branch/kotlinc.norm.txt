@@ -1,0 +1,116 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=4 max_locals=0
+    0000 aconst_null
+    0001 new Class(InputKt$main$1)
+    0004 dup
+    0005 aconst_null
+    0006 invokespecial Method(InputKt$main$1.<init>:(Lkotlin/coroutines/Continuation;)V)
+    0009 checkcast Class(kotlin/jvm/functions/Function2)
+    0012 iconst_1
+    0013 aconst_null
+    0014 invokestatic Method(kotlinx/coroutines/BuildersKt.runBlocking$default:(Lkotlin/coroutines/CoroutineContext;Lkotlin/jvm/functions/Function2;ILjava/lang/Object;)Ljava/lang/Object;)
+    0017 pop
+    0018 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
+method        pick (ZLkotlin/coroutines/Continuation;)Ljava/lang/Object; 0x0019
+  code        max_stack=5 max_locals=5
+    0000 aload_1
+    0001 instanceof Class(InputKt$pick$1)
+    0004 ifeq 36
+    0007 aload_1
+    0008 checkcast Class(InputKt$pick$1)
+    0011 astore_3
+    0012 aload_3
+    0013 getfield Field(InputKt$pick$1.label:I)
+    0016 ldc int(-2147483648)
+    0018 iand
+    0019 ifeq 36
+    0022 aload_3
+    0023 dup
+    0024 getfield Field(InputKt$pick$1.label:I)
+    0027 ldc int(-2147483648)
+    0029 isub
+    0030 putfield Field(InputKt$pick$1.label:I)
+    0033 goto 45
+    0036 new Class(InputKt$pick$1)
+    0039 dup
+    0040 aload_1
+    0041 invokespecial Method(InputKt$pick$1.<init>:(Lkotlin/coroutines/Continuation;)V)
+    0044 astore_3
+    0045 aload_3
+    0046 getfield Field(InputKt$pick$1.result:Ljava/lang/Object;)
+    0049 astore_2
+    0050 invokestatic Method(kotlin/coroutines/intrinsics/IntrinsicsKt.getCOROUTINE_SUSPENDED:()Ljava/lang/Object;)
+    0053 astore 4
+    0055 aload_3
+    0056 getfield Field(InputKt$pick$1.label:I)
+    0059 tableswitch default=176 low=0 high=2 0=84 1=118 2=160
+    0084 aload_2
+    0085 invokestatic Method(kotlin/ResultKt.throwOnFailure:(Ljava/lang/Object;)V)
+    0088 iload_0
+    0089 ifeq 134
+    0092 ldc2_w long(10)
+    0095 aload_3
+    0096 aload_3
+    0097 iload_0
+    0098 putfield Field(InputKt$pick$1.Z$0:Z)
+    0101 aload_3
+    0102 iconst_1
+    0103 putfield Field(InputKt$pick$1.label:I)
+    0106 invokestatic Method(kotlinx/coroutines/DelayKt.delay:(JLkotlin/coroutines/Continuation;)Ljava/lang/Object;)
+    0109 dup
+    0110 aload 4
+    0112 if_acmpne 128
+    0115 aload 4
+    0117 areturn
+    0118 aload_3
+    0119 getfield Field(InputKt$pick$1.Z$0:Z)
+    0122 istore_0
+    0123 aload_2
+    0124 invokestatic Method(kotlin/ResultKt.throwOnFailure:(Ljava/lang/Object;)V)
+    0127 aload_2
+    0128 pop
+    0129 iconst_1
+    0130 invokestatic Method(kotlin/coroutines/jvm/internal/Boxing.boxInt:(I)Ljava/lang/Integer;)
+    0133 areturn
+    0134 ldc2_w long(20)
+    0137 aload_3
+    0138 aload_3
+    0139 iload_0
+    0140 putfield Field(InputKt$pick$1.Z$0:Z)
+    0143 aload_3
+    0144 iconst_2
+    0145 putfield Field(InputKt$pick$1.label:I)
+    0148 invokestatic Method(kotlinx/coroutines/DelayKt.delay:(JLkotlin/coroutines/Continuation;)Ljava/lang/Object;)
+    0151 dup
+    0152 aload 4
+    0154 if_acmpne 170
+    0157 aload 4
+    0159 areturn
+    0160 aload_3
+    0161 getfield Field(InputKt$pick$1.Z$0:Z)
+    0164 istore_0
+    0165 aload_2
+    0166 invokestatic Method(kotlin/ResultKt.throwOnFailure:(Ljava/lang/Object;)V)
+    0169 aload_2
+    0170 pop
+    0171 iconst_2
+    0172 invokestatic Method(kotlin/coroutines/jvm/internal/Boxing.boxInt:(I)Ljava/lang/Integer;)
+    0175 areturn
+    0176 new Class(java/lang/IllegalStateException)
+    0179 dup
+    0180 ldc "call to 'resume' before 'invoke' with coroutine"
+    0182 invokespecial Method(java/lang/IllegalStateException.<init>:(Ljava/lang/String;)V)
+    0185 athrow
+    sub_attr  StackMapTable (42 bytes)
+  attr        Signature (2 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (9 bytes)
+class_attr    InnerClasses (18 bytes)
