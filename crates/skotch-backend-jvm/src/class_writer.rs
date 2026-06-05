@@ -10543,11 +10543,9 @@ fn emit_mir_segment(
                     .enum_entry_funcs
                     .values()
                     .any(|(ec, _)| ec == field_class);
-                let last_emitted_was_enum_entry_getstatic = code.len() >= 3
-                    && code[code.len() - 3] == 0xB2
-                    && {
-                        let idx =
-                            u16::from_be_bytes([code[code.len() - 2], code[code.len() - 1]]);
+                let last_emitted_was_enum_entry_getstatic =
+                    code.len() >= 3 && code[code.len() - 3] == 0xB2 && {
+                        let idx = u16::from_be_bytes([code[code.len() - 2], code[code.len() - 1]]);
                         cp.lookup_fieldref_parts(idx).is_some_and(|(fc, _, fd)| {
                             fc == field_class && fd == format!("L{};", field_class)
                         })
@@ -14579,18 +14577,15 @@ fn walk_block(
                     .enum_entry_funcs
                     .values()
                     .any(|(ec, _)| ec == field_class);
-                let last_emitted_was_enum_entry_getstatic = code.len() >= 3
-                    && code[code.len() - 3] == 0xB2
-                    && {
-                        let idx =
-                            u16::from_be_bytes([code[code.len() - 2], code[code.len() - 1]]);
+                let last_emitted_was_enum_entry_getstatic =
+                    code.len() >= 3 && code[code.len() - 3] == 0xB2 && {
+                        let idx = u16::from_be_bytes([code[code.len() - 2], code[code.len() - 1]]);
                         cp.lookup_fieldref_parts(idx).is_some_and(|(fc, _, fd)| {
                             fc == field_class && fd == format!("L{};", field_class)
                         })
                     };
-                let use_enum_name_shape = is_enum_class
-                    && field_name == "name"
-                    && last_emitted_was_enum_entry_getstatic;
+                let use_enum_name_shape =
+                    is_enum_class && field_name == "name" && last_emitted_was_enum_entry_getstatic;
                 let getter_name = if use_enum_name_shape {
                     "name".to_string()
                 } else {
@@ -19084,6 +19079,39 @@ fn writes_slot_at(code: &[u8], pos: usize, slot: u8) -> bool {
     false
 }
 
+/// Mirror of `writes_slot_at` for load opcodes. Returns true if the
+/// instruction at `pos` reads local variable `slot`.
+fn reads_slot_at(code: &[u8], pos: usize, slot: u8) -> bool {
+    if pos >= code.len() {
+        return false;
+    }
+    let op = code[pos];
+    // Compact loads: iload_N (0x1A..1D), lload_N (0x1E..21), fload_N
+    // (0x22..25), dload_N (0x26..29), aload_N (0x2A..2D)
+    if slot <= 3
+        && (op == 0x1A + slot
+            || op == 0x1E + slot
+            || op == 0x22 + slot
+            || op == 0x26 + slot
+            || op == 0x2A + slot)
+    {
+        return true;
+    }
+    // Generic loads 0x15..19
+    if (0x15..=0x19).contains(&op) && pos + 1 < code.len() && code[pos + 1] == slot {
+        return true;
+    }
+    // iinc 0x84 reads (and writes) the slot.
+    if op == 0x84 && pos + 1 < code.len() && code[pos + 1] == slot {
+        return true;
+    }
+    // ret 0xA9 reads the return-address slot.
+    if op == 0xA9 && pos + 1 < code.len() && code[pos + 1] == slot {
+        return true;
+    }
+    false
+}
+
 /// Drop `Box.valueOf; checkcast Box; Box.intValue` (or equivalent for other
 /// primitive types) — a complete box/unbox round-trip that's a no-op. MIR
 /// inserts these around generic calls when type information is incomplete
@@ -23295,6 +23323,32 @@ fn peephole_hoist_new_dup_around_arg(
                 .iter()
                 .any(|&b| b > region_lo && b < region_hi);
             if block_conflict {
+                i += instruction_len(code, i);
+                continue;
+            }
+            // Liveness check: the spill/reload pair is only redundant if
+            // slot N's value is dead outside the [arg_start, region_hi)
+            // region. If anything elsewhere READS slot N, the astore is
+            // load-bearing — eliding it would leave the reader seeing
+            // whatever was in slot N before, which is either stale or
+            // uninitialized (verifier error). See e2e fixture
+            // 364-var-capture-lambda: the Ref's box is stored to slot 1
+            // by the inner ctor, captured by the lambda, AND read back
+            // after the lambda runs to extract the mutated value.
+            let mut slot_read_elsewhere = false;
+            let mut k = 0;
+            while k < code.len() {
+                if k >= region_lo && k < region_hi {
+                    k += instruction_len(code, k);
+                    continue;
+                }
+                if reads_slot_at(code, k, slot_n) {
+                    slot_read_elsewhere = true;
+                    break;
+                }
+                k += instruction_len(code, k);
+            }
+            if slot_read_elsewhere {
                 i += instruction_len(code, i);
                 continue;
             }
