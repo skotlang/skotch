@@ -1,0 +1,4 @@
+name = "1247-for-loop-virtual-dispatch"
+status = "supported"
+features = ["for-in", "sealed-class", "virtual-dispatch", "generic-args"]
+reason = "Locks in for-loop element typing: when the iterable is `List<T>` with known T (via the val's declared type-args propagated through `local_generic_args`), the loop variable is typed as T and a checkcast is emitted so virtual method calls dispatch correctly."

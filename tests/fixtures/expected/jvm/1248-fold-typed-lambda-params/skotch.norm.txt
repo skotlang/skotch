@@ -1,0 +1,74 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=4 max_locals=8
+    0000 new Class(Circle)
+    0003 dup
+    0004 dconst_1
+    0005 invokespecial Method(Circle.<init>:(D)V)
+    0008 astore_0
+    0009 new Class(Square)
+    0012 dup
+    0013 ldc2_w double(2)
+    0016 invokespecial Method(Square.<init>:(D)V)
+    0019 astore_1
+    0020 iconst_2
+    0021 anewarray Class(java/lang/Object)
+    0024 astore_2
+    0025 aload_2
+    0026 iconst_0
+    0027 aload_0
+    0028 aastore
+    0029 aload_2
+    0030 iconst_1
+    0031 aload_1
+    0032 aastore
+    0033 aload_2
+    0034 invokestatic Method(kotlin/collections/CollectionsKt.listOf:([Ljava/lang/Object;)Ljava/util/List;)
+    0037 astore_3
+    0038 invokedynamic InvokeDynamic(invoke:()Lkotlin/jvm/functions/Function2;)
+    0043 astore_0
+    0044 invokedynamic InvokeDynamic(invoke:()Lkotlin/jvm/functions/Function2;)
+    0049 astore_0
+    0050 dconst_0
+    0051 invokestatic Method(java/lang/Double.valueOf:(D)Ljava/lang/Double;)
+    0054 astore_1
+    0055 aload_3
+    0056 checkcast Class(java/lang/Iterable)
+    0059 aload_1
+    0060 aload_0
+    0061 invokestatic Method(kotlin/collections/CollectionsKt.fold:(Ljava/lang/Iterable;Ljava/lang/Object;Lkotlin/jvm/functions/Function2;)Ljava/lang/Object;)
+    0064 astore 7
+    0066 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0069 aload 7
+    0071 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0074 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
+method        main$lambda$0 (Ljava/lang/Object;Ljava/lang/Object;)I 0x001A
+  code        max_stack=2 max_locals=2
+    0000 aload_0
+    0001 checkcast Class(java/lang/Integer)
+    0004 invokevirtual Method(java/lang/Integer.intValue:()I)
+    0007 aconst_null
+    0008 checkcast Class(java/lang/Integer)
+    0011 invokevirtual Method(java/lang/Integer.intValue:()I)
+    0014 iadd
+    0015 ireturn
+method        main$lambda$1 (DLShape;)D 0x001A
+  code        max_stack=4 max_locals=5
+    0000 aload_2
+    0001 ldc "s"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 aload_2
+    0007 invokevirtual Method(Shape.area:()D)
+    0010 dstore_3
+    0011 dload_0
+    0012 dload_3
+    0013 dadd
+    0014 dreturn
+class_attr    BootstrapMethods (22 bytes)

@@ -6231,9 +6231,17 @@ fn lower_stmt(
                 );
 
                 // Body: val x = iter.next(); <body stmts>
-                let element = fb.new_local(Ty::Any);
+                //
+                // When the collection's `local_generic_args` records a
+                // concrete element class (set by `val xs: List<Shape>`
+                // annotation propagation or by `listOf(...)` inference),
+                // type the loop variable as that class and emit a
+                // `checkcast` so `x.method(...)` resolves to a virtual
+                // call on the element class. Otherwise leave as Ty::Any
+                // (the erased Object from `Iterator.next()`).
+                let raw_element = fb.new_local(Ty::Any);
                 fb.push_stmt(MStmt::Assign {
-                    dest: element,
+                    dest: raw_element,
                     value: Rvalue::Call {
                         kind: CallKind::VirtualJava {
                             class_name: "java/util/Iterator".to_string(),
@@ -6243,6 +6251,28 @@ fn lower_stmt(
                         args: vec![iter_local],
                     },
                 });
+                let element_class: Option<String> = fb
+                    .mf
+                    .local_generic_args
+                    .get(&collection_local.0)
+                    .and_then(|args| args.first())
+                    .and_then(|t| match t {
+                        Ty::Class(n) if !matches!(t, Ty::Any) => Some(n.clone()),
+                        _ => None,
+                    });
+                let element = if let Some(class_name) = element_class.as_ref() {
+                    let casted = fb.new_local(Ty::Class(class_name.clone()));
+                    fb.push_stmt(MStmt::Assign {
+                        dest: casted,
+                        value: Rvalue::CheckCast {
+                            obj: raw_element,
+                            target_class: class_name.clone(),
+                        },
+                    });
+                    casted
+                } else {
+                    raw_element
+                };
                 if let Some(names) = destructure_names {
                     if is_map {
                         // Map.Entry destructuring: checkcast + getKey()/getValue()
@@ -6957,6 +6987,23 @@ fn lower_val_stmt(
     } else {
         rhs
     };
+    // Propagate the val's declared generic args (e.g. `val xs: List<Shape>`)
+    // into the side-channel `local_generic_args` map so downstream
+    // consumers (for-loops, lambda param inference on `xs.fold`/`.filter`
+    // /etc.) can recover the element type. The declared annotation wins
+    // over any inferred-from-init args (e.g. `listOf(Circle(...))` would
+    // otherwise stamp `[Circle]`); the user's annotation is the source of
+    // truth when present.
+    if let Some(tr) = &v.ty {
+        if !tr.type_args.is_empty() {
+            let resolved_args: Vec<Ty> = tr
+                .type_args
+                .iter()
+                .map(|arg_tr| resolve_type_ref(arg_tr, interner, module))
+                .collect();
+            fb.mf.local_generic_args.insert(dest.0, resolved_args);
+        }
+    }
     fb.mf.named_locals.push(dest);
     scope.push((v.name, dest));
     if v.is_var {
@@ -9130,28 +9177,51 @@ fn lower_expr(
                 // `Iterable<T>`-style methods: lambda is `(T) -> R`.
                 // `Map<K,V>`-style methods: lambda is `(Map.Entry<K,V>) -> R`
                 // (we don't yet model Map.Entry — leave as a follow-up).
-                if intrinsics::is_iterable_t_lambda_method(method_name_str.as_str()) {
-                    // Element type may be recorded in the receiver's
-                    // `Ty::Generic` args OR in the side-channel
-                    // `local_generic_args` map (used when the local's
-                    // nominal type stays as the erased class so
-                    // downstream pattern matches keep working). Prefer
-                    // the Generic form, fall back to the side channel.
-                    let element_ty = recv_ty.generic_args().first().cloned().or_else(|| {
+                // Receiver's element type T, recovered from the
+                // declared `Ty::Generic` args OR the side-channel
+                // `local_generic_args` map. Used both for single-arg HOFs
+                // (`filter { it.foo }`) and for the 2-arg fold-family
+                // overrides below.
+                let receiver_elem_ty: Option<Ty> =
+                    recv_ty.generic_args().first().cloned().or_else(|| {
                         fb.mf
                             .local_generic_args
                             .get(&recv_local.0)
                             .and_then(|args| args.first().cloned())
                     });
-                    if let Some(elem) = element_ty {
+
+                if intrinsics::is_iterable_t_lambda_method(method_name_str.as_str()) {
+                    if let Some(ref elem) = receiver_elem_ty {
                         if !matches!(elem, Ty::Any) {
-                            module.lambda_param_type = Some(elem);
+                            module.lambda_param_type = Some(elem.clone());
                         }
                     }
                 }
 
+                // Fold-family on `Iterable<T>`: lambda is `(R, T) -> R`
+                // where R is the initial accumulator's type. We need to
+                // lower the initial first so we know R, then set the
+                // multi-param override before lowering the lambda. Plain
+                // single-pass loop below handles the common case where
+                // we don't need this interleaving.
+                let is_fold_like = matches!(
+                    method_name_str.as_str(),
+                    "fold" | "foldRight" | "foldIndexed" | "foldRightIndexed"
+                ) && args.len() == 2;
+
                 let mut all_args = vec![recv_local];
-                for a in args {
+                for (arg_idx, a) in args.iter().enumerate() {
+                    if is_fold_like && arg_idx == 1 {
+                        // About to lower the lambda. all_args[1] is the
+                        // initial accumulator (lowered in the previous
+                        // iteration); use its type for R.
+                        let initial_ty = all_args
+                            .get(1)
+                            .map(|l| fb.mf.locals[l.0 as usize].clone())
+                            .unwrap_or(Ty::Any);
+                        let elem_ty = receiver_elem_ty.clone().unwrap_or(Ty::Any);
+                        module.lambda_param_types = Some(vec![initial_ty, elem_ty]);
+                    }
                     let id = lower_expr(
                         &a.expr,
                         fb,
@@ -9167,6 +9237,7 @@ fn lower_expr(
                 }
                 module.lambda_receiver_type = None; // clear after use
                 module.lambda_param_type = None; // clear after use
+                module.lambda_param_types = None; // clear after use
 
                 // ── data class copy() with default-fill ──────────
                 // `p.copy(y = 3)` fills unspecified params from receiver fields.
@@ -19950,9 +20021,21 @@ fn lower_expr(
                 } else {
                     None
                 };
+                // Multi-arg HOF override: call-site handler may have set
+                // `lambda_param_types` with the resolved type of each
+                // user-declared param (e.g. fold's `(R, T) -> R`). Each
+                // non-Any entry replaces the source annotation; Any
+                // entries leave the annotation alone. Consume once.
+                let multi_overrides: Option<Vec<Ty>> =
+                    module.lambda_param_types.take().filter(|v| !v.is_empty());
                 for (param_idx, p) in params.iter().enumerate() {
                     let ty = if param_idx == 0 && override_first_meta.is_some() {
                         override_first_meta.clone().unwrap()
+                    } else if let Some(ref overrides) = multi_overrides {
+                        match overrides.get(param_idx) {
+                            Some(t) if !matches!(t, Ty::Any) => t.clone(),
+                            _ => resolve_type(interner.resolve(p.ty.name), module),
+                        }
                     } else {
                         resolve_type(interner.resolve(p.ty.name), module)
                     };

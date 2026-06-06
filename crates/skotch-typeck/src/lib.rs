@@ -42,6 +42,7 @@ use skotch_syntax::{
     BinOp, Block, ClassDecl, Decl, EnumDecl, Expr, FunDecl, InterfaceDecl, KtFile, Stmt,
     TemplatePart, TypeRef, ValDecl,
 };
+use skotch_types::intrinsics;
 use skotch_types::{ty_from_name, Ty};
 
 /// Map well-known Kotlin source-level class names to their JVM internal names
@@ -1452,6 +1453,19 @@ impl<'a> TypeChecker<'a> {
                         if let Some(m) = self.env.lookup_method(class_name, "invoke") {
                             return m.ret.clone();
                         }
+                    }
+                    // Stdlib collection builders: `listOf(...)`, `setOf(...)`,
+                    // `mapOf(...)`, `arrayOf(...)` etc. Synthesize as the
+                    // JVM-erased collection class so a declared
+                    // `val xs: List<T> = listOf(...)` typechecks against the
+                    // declared `Ty::Class("java/util/List")` (typeck strips
+                    // generic args so element-type checking is best-effort).
+                    if let Some(builder_class) =
+                        intrinsics::fallback_collection_builder_class(&name_str)
+                    {
+                        let erased = intrinsics::jvm_builtin_class_erasure(builder_class)
+                            .unwrap_or(builder_class);
+                        return Ty::Class(erased.to_string());
                     }
                     return Ty::Any;
                 }

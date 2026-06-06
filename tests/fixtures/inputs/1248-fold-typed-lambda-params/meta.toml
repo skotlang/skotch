@@ -1,0 +1,4 @@
+name = "1248-fold-typed-lambda-params"
+status = "supported"
+features = ["fold", "lambda", "sealed-class", "lambda-param-types"]
+reason = "Locks in fold-family lambda param typing. The `(R, T) -> R` lambda's two user params get distinct types — R from the initial accumulator, T from the receiver's element type — via the new `lambda_param_types` channel on MirModule. Without this, the body's `acc + s.area()` was unboxed via Integer.intValue at runtime."

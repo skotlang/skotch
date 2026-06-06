@@ -1,0 +1,70 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=6 max_locals=15
+    0000 iconst_2
+    0001 anewarray Class(Shape)
+    0004 astore_1
+    0005 aload_1
+    0006 iconst_0
+    0007 new Class(Circle)
+    0010 dup
+    0011 dconst_1
+    0012 invokespecial Method(Circle.<init>:(D)V)
+    0015 aastore
+    0016 aload_1
+    0017 iconst_1
+    0018 new Class(Square)
+    0021 dup
+    0022 ldc2_w double(2)
+    0025 invokespecial Method(Square.<init>:(D)V)
+    0028 aastore
+    0029 aload_1
+    0030 invokestatic Method(kotlin/collections/CollectionsKt.listOf:([Ljava/lang/Object;)Ljava/util/List;)
+    0033 astore_0
+    0034 aload_0
+    0035 checkcast Class(java/lang/Iterable)
+    0038 astore_3
+    0039 dconst_0
+    0040 dstore 4
+    0042 iconst_0
+    0043 istore 6
+    0045 dload 4
+    0047 dstore 7
+    0049 aload_3
+    0050 invokeinterface InterfaceMethod(java/lang/Iterable.iterator:()Ljava/util/Iterator;)
+    0055 astore 9
+    0057 aload 9
+    0059 invokeinterface InterfaceMethod(java/util/Iterator.hasNext:()Z)
+    0064 ifeq 103
+    0067 aload 9
+    0069 invokeinterface InterfaceMethod(java/util/Iterator.next:()Ljava/lang/Object;)
+    0074 astore 10
+    0076 dload 7
+    0078 aload 10
+    0080 checkcast Class(Shape)
+    0083 astore 11
+    0085 dstore 12
+    0087 iconst_0
+    0088 istore 14
+    0090 dload 12
+    0092 aload 11
+    0094 invokevirtual Method(Shape.area:()D)
+    0097 dadd
+    0098 dstore 7
+    0100 goto 57
+    0103 dload 7
+    0105 dstore_1
+    0106 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0109 dload_1
+    0110 invokevirtual Method(java/io/PrintStream.println:(D)V)
+    0113 return
+    sub_attr  StackMapTable (26 bytes)
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
+class_attr    SourceDebugExtension (203 bytes)
+class_attr    RuntimeInvisibleAnnotations (14 bytes)

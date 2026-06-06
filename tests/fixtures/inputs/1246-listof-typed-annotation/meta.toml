@@ -1,0 +1,4 @@
+name = "1246-listof-typed-annotation"
+status = "supported"
+features = ["listOf", "sealed-class", "type-annotation"]
+reason = "Locks in typeck recognition of stdlib collection builders so a `val xs: List<T> = listOf(...)` declaration typechecks against the declared erased class instead of failing with 'expected <class>, found Any'."

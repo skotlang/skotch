@@ -915,6 +915,17 @@ pub struct MirModule {
     /// lambda arg is lowered; cleared after use.
     #[serde(skip)]
     pub lambda_param_type: Option<Ty>,
+    /// When set, the next lambda's explicit user parameters are typed
+    /// from this slice (indexed by user-param position, capture params
+    /// not counted). Used for multi-arg HOFs whose lambda shape can't
+    /// be expressed by `lambda_param_type` alone — e.g.
+    /// `Iterable<T>.fold(initial: R, op: (R, T) -> R)` needs
+    /// `[R, T]` so the lambda body sees `acc` and `s` with concrete
+    /// types and `s.area()` resolves against the element class.
+    /// Entries with `Ty::Any` fall back to the source annotation;
+    /// non-Any entries override it. Cleared after use.
+    #[serde(skip)]
+    pub lambda_param_types: Option<Vec<Ty>>,
     /// Type alias mappings: alias name → target type name.
     #[serde(default, skip_serializing_if = "rustc_hash::FxHashMap::is_empty")]
     pub type_aliases: rustc_hash::FxHashMap<String, String>,

@@ -87,14 +87,10 @@ method        main$lambda$0 (Ljava/lang/Object;Ljava/lang/Object;)I 0x001A
     0011 invokevirtual Method(java/lang/Integer.intValue:()I)
     0014 iadd
     0015 ireturn
-method        main$lambda$1 (Ljava/lang/Object;Ljava/lang/Object;)I 0x001A
+method        main$lambda$1 (II)I 0x001A
   code        max_stack=2 max_locals=2
-    0000 aload_0
-    0001 checkcast Class(java/lang/Integer)
-    0004 invokevirtual Method(java/lang/Integer.intValue:()I)
-    0007 aload_1
-    0008 checkcast Class(java/lang/Integer)
-    0011 invokevirtual Method(java/lang/Integer.intValue:()I)
-    0014 iadd
-    0015 ireturn
+    0000 iload_0
+    0001 iload_1
+    0002 iadd
+    0003 ireturn
 class_attr    BootstrapMethods (34 bytes)
