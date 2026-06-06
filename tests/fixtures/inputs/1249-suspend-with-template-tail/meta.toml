@@ -1,0 +1,4 @@
+name = "1249-suspend-with-template-tail"
+status = "supported"
+features = ["suspend", "coroutine", "runBlocking", "delay", "string-template", "makeConcatWithConstants"]
+reason = "Locks in suspend-function tail-expression emission for string-template returns. The JVM backend's suspend-segment emitter now handles `CallKind::MakeConcatWithConstants`; without this arm the tail Call was dropped and the verifier rejected the method with `Bad local variable type` at the unassigned dest slot."

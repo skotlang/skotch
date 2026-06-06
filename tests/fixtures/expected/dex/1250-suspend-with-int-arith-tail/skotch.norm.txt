@@ -1,0 +1,62 @@
+dex_version   035
+strings       24
+types         12
+methods       7
+classes       1
+
+--- strings ---
+  "<init>"
+  "I"
+  "J"
+  "LI"
+  "LIL"
+  "LInputKt$main$1;"
+  "LInputKt;"
+  "LJL"
+  "LLLIL"
+  "Ljava/lang/Integer;"
+  "Ljava/lang/Object;"
+  "Lkotlin/coroutines/CoroutineContext;"
+  "Lkotlin/coroutines/jvm/internal/Boxing;"
+  "Lkotlin/jvm/functions/Function2;"
+  "Lkotlinx/coroutines/BuildersKt;"
+  "V"
+  "VL"
+  "[Ljava/lang/String;"
+  "boxInt"
+  "delay"
+  "fetchScore"
+  "input.kt"
+  "main"
+  "runBlocking$default"
+
+--- types ---
+  I
+  J
+  LInputKt$main$1;
+  LInputKt;
+  Ljava/lang/Integer;
+  Ljava/lang/Object;
+  Lkotlin/coroutines/CoroutineContext;
+  Lkotlin/coroutines/jvm/internal/Boxing;
+  Lkotlin/jvm/functions/Function2;
+  Lkotlinx/coroutines/BuildersKt;
+  V
+  [Ljava/lang/String;
+
+--- methods ---
+  LInputKt$main$1;.<init>(Ljava/lang/Object;)V
+  LInputKt;.delay(JLjava/lang/Object;)Ljava/lang/Object;
+  LInputKt;.fetchScore(ILjava/lang/Object;)Ljava/lang/Object;
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  Lkotlin/coroutines/jvm/internal/Boxing;.boxInt(I)Ljava/lang/Integer;
+  Lkotlinx/coroutines/BuildersKt;.runBlocking$default(Lkotlin/coroutines/CoroutineContext;Lkotlin/jvm/functions/Function2;ILjava/lang/Object;)Ljava/lang/Object;
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       fetchScore(ILjava/lang/Object;)Ljava/lang/Object; flags=0x0019 regs=7 ins=2 outs=2 insns=18
+  method       main()V flags=0x0019 regs=7 ins=0 outs=4 insns=17
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4

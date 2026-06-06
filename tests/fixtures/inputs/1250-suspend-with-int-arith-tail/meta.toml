@@ -1,0 +1,4 @@
+name = "1250-suspend-with-int-arith-tail"
+status = "supported"
+features = ["suspend", "coroutine", "runBlocking", "delay", "arithmetic", "boxing"]
+reason = "Locks in suspend-function tail-expression emission for primitive arithmetic that auto-boxes (return id * 100 on a `suspend fun fetchScore(id: Int): Int`). Complements 1249 by exercising the boxed-primitive return path in addition to the makeConcatWithConstants string-template path."

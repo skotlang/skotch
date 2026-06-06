@@ -10479,6 +10479,33 @@ fn emit_mir_segment(
                     code.push(0xB6); // invokevirtual println
                     code.write_u16::<BigEndian>(println).unwrap();
                 }
+                // String-template `"prefix$x"` inside the post-resume
+                // tail of a suspend function. Without this arm the
+                // tail's MakeConcatWithConstants was dropped and the
+                // function jumped straight to its terminator, which
+                // then loaded a never-stored dest slot (the verifier
+                // rejected it as `Type top` at `aload_N`).
+                CallKind::MakeConcatWithConstants { recipe, descriptor } => {
+                    for a in args {
+                        emit_load_mir_local(code, func, local_slot, *a);
+                    }
+                    // The shared emitter wants live stack counters;
+                    // the suspend segment doesn't track stack, so we
+                    // pass throwaway counters and rely on the
+                    // function-level max_stack to already cover the
+                    // recipe's argument width.
+                    let mut throwaway_stack = 0i32;
+                    let mut throwaway_max = 0i32;
+                    emit_make_concat_with_constants(
+                        code,
+                        cp,
+                        &mut throwaway_stack,
+                        &mut throwaway_max,
+                        descriptor,
+                        recipe,
+                    );
+                    emit_store_mir_local(code, func, local_slot, *dest);
+                }
                 _ => {
                     // Unsupported call kind — skip silently rather than
                     // panicking, so the rest of the segment can still emit.

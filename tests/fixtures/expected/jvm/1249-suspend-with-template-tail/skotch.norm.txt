@@ -1,0 +1,93 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        fetchUser (ILkotlin/coroutines/Continuation;)Ljava/lang/Object; 0x0019
+  code        max_stack=5 max_locals=6
+    0000 aload_1
+    0001 instanceof Class(InputKt$fetchUser$1)
+    0004 ifeq 39
+    0007 aload_1
+    0008 checkcast Class(InputKt$fetchUser$1)
+    0011 astore 4
+    0013 aload 4
+    0015 getfield Field(InputKt$fetchUser$1.label:I)
+    0018 ldc int(-2147483648)
+    0020 iand
+    0021 ifeq 39
+    0024 aload 4
+    0026 dup
+    0027 getfield Field(InputKt$fetchUser$1.label:I)
+    0030 ldc int(-2147483648)
+    0032 isub
+    0033 putfield Field(InputKt$fetchUser$1.label:I)
+    0036 goto 49
+    0039 new Class(InputKt$fetchUser$1)
+    0042 dup
+    0043 aload_1
+    0044 invokespecial Method(InputKt$fetchUser$1.<init>:(Lkotlin/coroutines/Continuation;)V)
+    0047 astore 4
+    0049 aload 4
+    0051 getfield Field(InputKt$fetchUser$1.result:Ljava/lang/Object;)
+    0054 astore_3
+    0055 invokestatic Method(kotlin/coroutines/intrinsics/IntrinsicsKt.getCOROUTINE_SUSPENDED:()Ljava/lang/Object;)
+    0058 astore 5
+    0060 aload 4
+    0062 getfield Field(InputKt$fetchUser$1.label:I)
+    0065 tableswitch default=142 low=0 high=1 0=88 1=121
+    0088 aload_3
+    0089 invokestatic Method(kotlin/ResultKt.throwOnFailure:(Ljava/lang/Object;)V)
+    0092 ldc2_w long(20)
+    0095 aload 4
+    0097 aload 4
+    0099 iload_0
+    0100 putfield Field(InputKt$fetchUser$1.I$0:I)
+    0103 aload 4
+    0105 iconst_1
+    0106 putfield Field(InputKt$fetchUser$1.label:I)
+    0109 invokestatic Method(kotlinx/coroutines/DelayKt.delay:(JLkotlin/coroutines/Continuation;)Ljava/lang/Object;)
+    0112 dup
+    0113 aload 5
+    0115 if_acmpne 132
+    0118 aload 5
+    0120 areturn
+    0121 aload 4
+    0123 getfield Field(InputKt$fetchUser$1.I$0:I)
+    0126 istore_0
+    0127 aload_3
+    0128 invokestatic Method(kotlin/ResultKt.throwOnFailure:(Ljava/lang/Object;)V)
+    0131 aload_3
+    0132 pop
+    0133 iload_0
+    0134 invokedynamic InvokeDynamic(makeConcatWithConstants:(I)Ljava/lang/String;)
+    0139 astore_2
+    0140 aload_2
+    0141 areturn
+    0142 new Class(java/lang/IllegalStateException)
+    0145 dup
+    0146 ldc "call to 'resume' before 'invoke' with coroutine"
+    0148 invokespecial Method(java/lang/IllegalStateException.<init>:(Ljava/lang/String;)V)
+    0151 athrow
+    sub_attr  StackMapTable (38 bytes)
+  attr        Signature (2 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (9 bytes)
+method        main ()V 0x0019
+  code        max_stack=4 max_locals=0
+    0000 aconst_null
+    0001 new Class(InputKt$main$1)
+    0004 dup
+    0005 aconst_null
+    0006 invokespecial Method(InputKt$main$1.<init>:(Lkotlin/coroutines/Continuation;)V)
+    0009 checkcast Class(kotlin/jvm/functions/Function2)
+    0012 iconst_1
+    0013 aconst_null
+    0014 invokestatic Method(kotlinx/coroutines/BuildersKt.runBlocking$default:(Lkotlin/coroutines/CoroutineContext;Lkotlin/jvm/functions/Function2;ILjava/lang/Object;)Ljava/lang/Object;)
+    0017 pop
+    0018 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
+class_attr    InnerClasses (18 bytes)
+class_attr    BootstrapMethods (8 bytes)
