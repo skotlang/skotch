@@ -1,0 +1,39 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=2 max_locals=2
+    0000 new Class(Englishman)
+    0003 dup
+    0004 invokespecial Method(Englishman.<init>:()V)
+    0007 checkcast Class(FormalGreeter)
+    0010 astore_0
+    0011 aload_0
+    0012 invokeinterface InterfaceMethod(Greeter.greet:()Ljava/lang/String;)
+    0017 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0020 swap
+    0021 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0024 aload_0
+    0025 invokeinterface InterfaceMethod(FormalGreeter.salutation:()Ljava/lang/String;)
+    0030 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0033 swap
+    0034 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0037 aload_0
+    0038 invokeinterface InterfaceMethod(FormalGreeter.formal:()Ljava/lang/String;)
+    0043 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0046 swap
+    0047 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0050 aload_0
+    0051 checkcast Class(Greeter)
+    0054 astore_1
+    0055 aload_1
+    0056 invokeinterface InterfaceMethod(Greeter.greet:()Ljava/lang/String;)
+    0061 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0064 swap
+    0065 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0068 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

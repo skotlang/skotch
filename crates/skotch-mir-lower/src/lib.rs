@@ -1902,7 +1902,7 @@ pub fn lower_file(
                 let mut methods: Vec<MirFunction> = ext_class
                     .methods
                     .iter()
-                    .map(|(mname, param_tys, ret_ty)| stub_fn(mname, param_tys, ret_ty))
+                    .map(|m| stub_fn(&m.name, &m.param_tys(), &m.return_ty))
                     .collect();
                 // Synthesize the compiler-generated data class methods
                 // (`copy`, `componentN`, `equals`, `hashCode`, `toString`)
@@ -1919,11 +1919,7 @@ pub fn lower_file(
                     let ctor_param_tys_for_copy: Vec<Ty> = if ext_class.ctor_params.is_empty() {
                         ext_class.fields.iter().map(|(_, t)| t.clone()).collect()
                     } else {
-                        ext_class
-                            .ctor_params
-                            .iter()
-                            .map(|(_, t)| t.clone())
-                            .collect()
+                        ext_class.ctor_params.iter().map(|p| p.ty.clone()).collect()
                     };
                     let ctor_param_names_for_copy: Vec<String> = if ext_class.ctor_params.is_empty()
                     {
@@ -1932,7 +1928,7 @@ pub fn lower_file(
                         ext_class
                             .ctor_params
                             .iter()
-                            .map(|(n, _)| n.clone())
+                            .map(|p| p.name.clone())
                             .collect()
                     };
                     let self_ty = Ty::Class(ext_class.jvm_name.clone());
@@ -1979,11 +1975,7 @@ pub fn lower_file(
                 let ctor_param_tys: Vec<Ty> = if ext_class.ctor_params.is_empty() {
                     ext_class.fields.iter().map(|(_, t)| t.clone()).collect()
                 } else {
-                    ext_class
-                        .ctor_params
-                        .iter()
-                        .map(|(_, t)| t.clone())
-                        .collect()
+                    ext_class.ctor_params.iter().map(|p| p.ty.clone()).collect()
                 };
                 let ctor_param_names: Vec<String> = if ext_class.ctor_params.is_empty() {
                     ext_class.fields.iter().map(|(n, _)| n.clone()).collect()
@@ -1991,7 +1983,7 @@ pub fn lower_file(
                     ext_class
                         .ctor_params
                         .iter()
-                        .map(|(n, _)| n.clone())
+                        .map(|p| p.name.clone())
                         .collect()
                 };
                 let mut empty_ctor = stub_fn("<init>", &ctor_param_tys, &Ty::Unit);
@@ -1999,62 +1991,180 @@ pub fn lower_file(
                 // call site can map `Foo(name = ..., other = ...)` to the
                 // constructor's positional slots.
                 empty_ctor.param_names = ctor_param_names;
+                // Per-param defaults — drives the `$default(... I)` JVM
+                // thunk dispatch so cross-file constructors that omit
+                // defaultable args pick the right descriptor. The
+                // MirConst payload is unused at the call site (we only
+                // need the `Some(_)` bit); a Null sentinel is enough.
+                if !ext_class.ctor_params.is_empty() {
+                    let defaults: Vec<Option<MirConst>> = ext_class
+                        .ctor_params
+                        .iter()
+                        .map(|p| {
+                            if p.has_default {
+                                Some(MirConst::Null)
+                            } else {
+                                None
+                            }
+                        })
+                        .collect();
+                    empty_ctor.param_defaults = defaults;
+                }
+                // Surface secondary constructors so call sites that go
+                // through `Foo(x, y)` and resolve to a secondary `<init>`
+                // pick the right descriptor.
+                let secondary_constructors: Vec<MirFunction> = ext_class
+                    .secondary_ctors
+                    .iter()
+                    .map(|sc| {
+                        let tys: Vec<Ty> = sc.params.iter().map(|p| p.ty.clone()).collect();
+                        let names: Vec<String> = sc.params.iter().map(|p| p.name.clone()).collect();
+                        let mut m = stub_fn("<init>", &tys, &Ty::Unit);
+                        m.param_names = names;
+                        m.param_defaults = sc
+                            .params
+                            .iter()
+                            .map(|p| {
+                                if p.has_default {
+                                    Some(MirConst::Null)
+                                } else {
+                                    None
+                                }
+                            })
+                            .collect();
+                        m
+                    })
+                    .collect();
+                // FQ-resolve super_class through the cross-file class
+                // registry / import_map. The resolver records simple
+                // names; MirClass expects JVM-internal FQ names so the
+                // backend writes the correct constant pool entries.
+                let resolved_super = ext_class.super_class.as_ref().map(|sup| {
+                    if sup.contains('/') {
+                        sup.clone()
+                    } else if let Some(fq) = module.import_map.get(sup) {
+                        fq.clone()
+                    } else if let Some((fq, _, _)) = module.cross_file_classes.get(sup) {
+                        fq.clone()
+                    } else {
+                        sup.clone()
+                    }
+                });
+                let resolved_ifaces: Vec<String> = ext_class
+                    .interfaces
+                    .iter()
+                    .map(|i| {
+                        if i.contains('/') {
+                            i.clone()
+                        } else if let Some(fq) = module.import_map.get(i) {
+                            fq.clone()
+                        } else if let Some((fq, _, _)) = module.cross_file_classes.get(i) {
+                            fq.clone()
+                        } else {
+                            i.clone()
+                        }
+                    })
+                    .collect();
+                // Static enum-entry fields. Enums emit each entry as a
+                // `static final EnumName ENTRY` singleton. Stub MirClass
+                // doesn't construct them (the real class lives in another
+                // file) but consumers that walk `static_fields` to detect
+                // enum-entry name need them.
+                let static_fields: Vec<MirField> =
+                    if matches!(ext_class.kind, ExternalClassKind::Enum) {
+                        ext_class
+                            .enum_entries
+                            .iter()
+                            .map(|name| MirField {
+                                name: name.clone(),
+                                ty: Ty::Class(ext_class.jvm_name.clone()),
+                                is_jvm_field: false,
+                            })
+                            .collect()
+                    } else {
+                        Vec::new()
+                    };
+                // Annotations on the class declaration (`@Composable`,
+                // etc.) — surfaced as MirAnnotation entries so consumers
+                // can branch on them.
+                let class_annotations: Vec<skotch_mir::MirAnnotation> = ext_class
+                    .annotations
+                    .iter()
+                    .filter(|n| !is_source_retention_annotation(n.as_str()))
+                    .map(|n| {
+                        let descriptor = skotch_stdlib_registry::annotation_descriptor(n);
+                        let retention = if is_binary_retention_annotation(&descriptor) {
+                            skotch_mir::AnnotationRetention::Binary
+                        } else {
+                            skotch_mir::AnnotationRetention::Runtime
+                        };
+                        skotch_mir::MirAnnotation {
+                            descriptor,
+                            args: Vec::new(),
+                            retention,
+                        }
+                    })
+                    .collect();
                 // If this cross-file class has a companion object, also
                 // push a stub MirClass for it so the call-site companion
                 // dispatcher (`OuterClass.method(...)`) at lib.rs:7746
                 // can resolve `OuterClass$Companion.method` virtually.
-                let companion_jvm_name = if ext_class.companion_methods.is_empty() {
-                    None
-                } else {
-                    let comp_name = format!("{}$Companion", ext_class.jvm_name);
-                    let comp_methods: Vec<MirFunction> = ext_class
-                        .companion_methods
-                        .iter()
-                        .map(|(mname, param_tys, ret_ty)| stub_fn(mname, param_tys, ret_ty))
-                        .collect();
-                    let comp_ctor = stub_fn("<init>", &[], &Ty::Unit);
-                    module.classes.push(MirClass {
-                        name: comp_name.clone(),
-                        super_class: None,
-                        is_open: false,
-                        is_abstract: false,
-                        is_interface: false,
-                        interfaces: Vec::new(),
-                        fields: Vec::new(),
-                        methods: comp_methods,
-                        constructor: comp_ctor,
-                        secondary_constructors: Vec::new(),
-                        is_lambda: false,
-                        is_suspend_lambda: false,
-                        is_cross_file_stub: true,
-                        annotations: Vec::new(),
-                        has_type_params: false,
-                        is_object_singleton: true,
-                        companion_class_name: None,
-                        static_fields: Vec::new(),
-                        clinit: None,
-                    });
-                    Some(comp_name)
-                };
+                let companion_jvm_name =
+                    if !ext_class.has_companion && ext_class.companion_methods.is_empty() {
+                        None
+                    } else {
+                        let comp_name = format!("{}$Companion", ext_class.jvm_name);
+                        let comp_methods: Vec<MirFunction> = ext_class
+                            .companion_methods
+                            .iter()
+                            .map(|m| stub_fn(&m.name, &m.param_tys(), &m.return_ty))
+                            .collect();
+                        let comp_ctor = stub_fn("<init>", &[], &Ty::Unit);
+                        module.classes.push(MirClass {
+                            name: comp_name.clone(),
+                            super_class: None,
+                            is_open: false,
+                            is_abstract: false,
+                            is_interface: false,
+                            interfaces: Vec::new(),
+                            fields: Vec::new(),
+                            methods: comp_methods,
+                            constructor: comp_ctor,
+                            secondary_constructors: Vec::new(),
+                            is_lambda: false,
+                            is_suspend_lambda: false,
+                            is_cross_file_stub: true,
+                            annotations: Vec::new(),
+                            has_type_params: false,
+                            is_object_singleton: true,
+                            companion_class_name: None,
+                            static_fields: Vec::new(),
+                            clinit: None,
+                        });
+                        Some(comp_name)
+                    };
                 module.classes.push(MirClass {
                     name: ext_class.jvm_name.clone(),
-                    super_class: ext_class.super_class.clone(),
+                    super_class: resolved_super,
                     is_open: ext_class.is_open,
                     is_abstract: ext_class.is_abstract,
-                    is_interface: matches!(ext_class.kind, ExternalClassKind::Interface),
-                    interfaces: ext_class.interfaces.clone(),
+                    is_interface: matches!(
+                        ext_class.kind,
+                        ExternalClassKind::Interface | ExternalClassKind::SealedInterface
+                    ),
+                    interfaces: resolved_ifaces,
                     fields,
                     methods,
                     constructor: empty_ctor,
-                    secondary_constructors: Vec::new(),
+                    secondary_constructors,
                     is_lambda: false,
                     is_suspend_lambda: false,
                     is_cross_file_stub: true,
-                    annotations: Vec::new(),
-                    has_type_params: false,
+                    annotations: class_annotations,
+                    has_type_params: ext_class.has_type_params,
                     is_object_singleton: matches!(ext_class.kind, ExternalClassKind::Object),
                     companion_class_name: companion_jvm_name,
-                    static_fields: Vec::new(),
+                    static_fields,
                     clinit: None,
                 });
             }
@@ -2069,6 +2179,19 @@ pub fn lower_file(
                         ext.descriptor.clone(),
                         ext.return_ty.clone(),
                     ),
+                );
+                // Side-channel rich metadata for callers that need to
+                // branch on `is_inline` / `receiver_ty` / per-param
+                // defaults / annotations.
+                module.cross_file_fn_extras.insert(
+                    name.clone(),
+                    skotch_mir::CrossFileFnExtras {
+                        is_inline: ext.is_inline,
+                        receiver_ty: ext.receiver_ty.clone(),
+                        has_default: ext.has_default.clone(),
+                        is_vararg: ext.is_vararg.clone(),
+                        annotations: ext.annotations.clone(),
+                    },
                 );
             }
         }
@@ -22350,17 +22473,20 @@ fn lower_enum(
     // this
     let this_id = init_fn.new_local(Ty::Class(enum_name.clone()));
     init_fn.params.push(this_id);
-    // Super call: java/lang/Object.<init>()V
+    // Enum's <init> takes (name: String, ordinal: int, ...userParams)
+    // and must call `java/lang/Enum.<init>(Ljava/lang/String;I)V` so the
+    // JVM verifier accepts the class declaration `extends Enum`.
+    let name_param = init_fn.new_local(Ty::String);
+    init_fn.params.push(name_param);
+    let ordinal_param = init_fn.new_local(Ty::Int);
+    init_fn.params.push(ordinal_param);
     init_fn.blocks[0].stmts.push(MStmt::Assign {
         dest: this_id,
         value: Rvalue::Call {
-            kind: CallKind::Constructor("java/lang/Object".to_string()),
-            args: vec![this_id],
+            kind: CallKind::Constructor("java/lang/Enum".to_string()),
+            args: vec![this_id, name_param, ordinal_param],
         },
     });
-    // name param
-    let name_param = init_fn.new_local(Ty::String);
-    init_fn.params.push(name_param);
     init_fn.blocks[0].stmts.push(MStmt::Assign {
         dest: this_id,
         value: Rvalue::PutField {
@@ -22576,23 +22702,29 @@ fn lower_enum(
     // accessor) triggers this `<clinit>`, initializing all entries together.
     let clinit_fn = {
         let mut cb = FnBuilder::new(module.functions.len(), "<clinit>".to_string(), Ty::Unit);
-        for entry in &e.entries {
+        for (ordinal, entry) in e.entries.iter().enumerate() {
             let entry_name_str = interner.resolve(entry.name).to_string();
             let inst = cb.new_local(Ty::Class(enum_name.clone()));
             cb.push_stmt(MStmt::Assign {
                 dest: inst,
                 value: Rvalue::NewInstance(enum_name.clone()),
             });
-            // Constructor args: ["ENTRY_NAME", ...const entry args]. `inst`
-            // is intentionally omitted — NewInstance already left new+dup on
-            // the stack for the invokespecial.
+            // Constructor args: ["ENTRY_NAME", ordinal, ...const entry args].
+            // `inst` is omitted — NewInstance left new+dup on the stack for
+            // invokespecial. Ordinal comes second to match the canonical
+            // Kotlin enum <init> shape `(String name, int ordinal, ...)V`.
             let name_sid = module.intern_string(&entry_name_str);
             let name_local = cb.new_local(Ty::String);
             cb.push_stmt(MStmt::Assign {
                 dest: name_local,
                 value: Rvalue::Const(MirConst::String(name_sid)),
             });
-            let mut ctor_args = vec![name_local];
+            let ordinal_local = cb.new_local(Ty::Int);
+            cb.push_stmt(MStmt::Assign {
+                dest: ordinal_local,
+                value: Rvalue::Const(MirConst::Int(ordinal as i32)),
+            });
+            let mut ctor_args = vec![name_local, ordinal_local];
             for arg_expr in &entry.args {
                 if let Some(c) = lower_const_init(arg_expr, module) {
                     let ty = const_ty(&c);
@@ -22626,13 +22758,35 @@ fn lower_enum(
         cb.finish()
     };
 
+    // Enums implicitly extend `java/lang/Enum<EnumName>` at the JVM
+    // level (Kotlin maps `kotlin/Enum` to `java/lang/Enum`).
+    // Recording it on the MirClass means runtime reflection and
+    // generic-upper-bound queries see the correct super type.
+    let super_class = Some("java/lang/Enum".to_string());
+    // FQ-resolve user-declared interfaces (e.g. `enum class Op : Calculable`).
+    let enum_iface_names: Vec<String> = e
+        .interfaces
+        .iter()
+        .map(|s| {
+            let simple = interner.resolve(*s).to_string();
+            if simple.contains('/') {
+                simple
+            } else if let Some(fq) = module.import_map.get(&simple) {
+                fq.clone()
+            } else if let Some((fq, _, _)) = module.cross_file_classes.get(&simple) {
+                fq.clone()
+            } else {
+                simple
+            }
+        })
+        .collect();
     module.classes.push(MirClass {
         name: enum_name.clone(),
-        super_class: None,
+        super_class,
         is_open: false,
         is_abstract: false,
         is_interface: false,
-        interfaces: Vec::new(),
+        interfaces: enum_iface_names,
         fields,
         methods: class_methods,
         constructor: init_fn,
@@ -22938,12 +23092,67 @@ fn lower_object(
     };
     let this_id = init_fn.new_local(Ty::Class(obj_name.clone()));
     init_fn.params.push(this_id);
-    // Emit super.<init>() — `aload_0; invokespecial Object.<init>()V`.
+    // Emit super.<init>() — `aload_0; <args> invokespecial Super.<init>(args)V`.
+    // When the source declared a parent class with `object Foo :
+    // Parent(args)`, route through Parent's <init>(args)V. Without a
+    // parent clause, fall back to `java/lang/Object.<init>()V`.
+    let super_ctor_class = if let Some(ref sc) = o.parent_class {
+        let simple = interner.resolve(sc.name).to_string();
+        if simple.contains('/') {
+            simple
+        } else if let Some(fq) = module.import_map.get(&simple) {
+            fq.clone()
+        } else if let Some((fq, _, _)) = module.cross_file_classes.get(&simple) {
+            fq.clone()
+        } else {
+            simple
+        }
+    } else {
+        "java/lang/Object".to_string()
+    };
+    // Lower parent-ctor args using a scratch FnBuilder sharing this
+    // function's id/name, then transplant the resulting locals/blocks
+    // back into init_fn. Most cross-file `object Foo : Parent(...)`
+    // sites pass literals or already-evaluated identifiers, both of
+    // which lower cleanly into the entry block.
+    let mut super_ctor_args = vec![this_id];
+    if let Some(ref sc) = o.parent_class {
+        let mut fb = FnBuilder {
+            mf: init_fn.clone(),
+            cur_block: 0,
+            var_syms: rustc_hash::FxHashSet::default(),
+            field_local_writebacks: rustc_hash::FxHashMap::default(),
+            suspend_callable_locals: rustc_hash::FxHashSet::default(),
+            reified_types: FxHashMap::default(),
+            lambda_count: 0,
+        };
+        let mut empty_scope: Vec<(Symbol, LocalId)> = Vec::new();
+        for arg in &sc.args {
+            if let Some(local) = lower_expr(
+                &arg.expr,
+                &mut fb,
+                &mut empty_scope,
+                module,
+                name_to_func,
+                name_to_global,
+                interner,
+                diags,
+                None,
+            ) {
+                super_ctor_args.push(local);
+            }
+        }
+        init_fn = fb.mf;
+        // FnBuilder may have reset the terminator — keep it as Return.
+        if let Some(blk) = init_fn.blocks.get_mut(0) {
+            blk.terminator = Terminator::Return;
+        }
+    }
     init_fn.blocks[0].stmts.push(MStmt::Assign {
         dest: this_id,
         value: Rvalue::Call {
-            kind: CallKind::Constructor("java/lang/Object".to_string()),
-            args: vec![this_id],
+            kind: CallKind::Constructor(super_ctor_class),
+            args: super_ctor_args,
         },
     });
 
@@ -22985,14 +23194,44 @@ fn lower_object(
         mir_methods.push(fb.finish());
     }
 
+    // FQ-resolve user-declared interfaces (e.g. `object Foo : Iface`).
     let interfaces: Vec<String> = o
         .interfaces
         .iter()
-        .map(|s| interner.resolve(*s).to_string())
+        .map(|s| {
+            let simple = interner.resolve(*s).to_string();
+            if simple.contains('/') {
+                simple
+            } else if let Some(fq) = module.import_map.get(&simple) {
+                fq.clone()
+            } else if let Some((fq, _, _)) = module.cross_file_classes.get(&simple) {
+                fq.clone()
+            } else {
+                simple
+            }
+        })
         .collect();
+    // Optional parent class: `object Foo : Parent(args)`. The parser
+    // populates `parent_class`; here we FQ-resolve it the same way as
+    // interfaces. The constructor args (if any) are NOT executed
+    // here — that's a future fix; today the parent's `<init>(args)`
+    // is called from the synthesized `<init>` of the object, and we
+    // only record the super_class slot for the JVM layout.
+    let super_class = o.parent_class.as_ref().map(|sc| {
+        let simple = interner.resolve(sc.name).to_string();
+        if simple.contains('/') {
+            simple
+        } else if let Some(fq) = module.import_map.get(&simple) {
+            fq.clone()
+        } else if let Some((fq, _, _)) = module.cross_file_classes.get(&simple) {
+            fq.clone()
+        } else {
+            simple
+        }
+    });
     module.classes.push(MirClass {
         name: obj_name,
-        super_class: None,
+        super_class,
         is_open: false,
         is_abstract: false,
         is_interface: false,
@@ -25524,6 +25763,28 @@ fn lower_interface(
         needs_leading_nop: false,
         local_generic_args: rustc_hash::FxHashMap::default(),
     };
+    // FQ-resolve super-interfaces through the same import_map /
+    // cross_file_classes path the class lowerer uses, so the JVM
+    // `interfaces` table holds real FQ names rather than bare simple
+    // names. Without this, a hierarchy like `FormalGreeter : Greeter`
+    // wrote `Greeter` into the constant pool and ClassLoader failed at
+    // load time.
+    let super_iface_names: Vec<String> = iface
+        .interfaces
+        .iter()
+        .map(|s| {
+            let simple = interner.resolve(*s).to_string();
+            if simple.contains('/') {
+                simple
+            } else if let Some(fq) = module.import_map.get(&simple) {
+                fq.clone()
+            } else if let Some((fq, _, _)) = module.cross_file_classes.get(&simple) {
+                fq.clone()
+            } else {
+                simple
+            }
+        })
+        .collect();
     let class_idx = module.classes.len();
     module.classes.push(MirClass {
         name: iface_name.clone(),
@@ -25531,7 +25792,7 @@ fn lower_interface(
         is_open: true,
         is_abstract: true,
         is_interface: true,
-        interfaces: Vec::new(),
+        interfaces: super_iface_names,
         fields: Vec::new(),
         methods: stub_methods,
         constructor: dummy_init.clone(),
@@ -25919,6 +26180,135 @@ mod tests {
         // interned at module-init time even though it's never read.
         assert!(m.strings.contains(&"local".to_string()));
         assert!(m.strings.contains(&"global".to_string()));
+    }
+
+    // ─── shape-discipline tests ──────────────────────────────────────────
+    //
+    // These compile-time checks pattern-destructure `MirClass`,
+    // `ExternalClassDecl`, `MirFunction`, and friends. Whenever a new
+    // field is added to any of them, this file fails to compile —
+    // forcing whoever added the field to also update the cross-file
+    // stub builder. Without this discipline, the historical loop kept
+    // hitting "feature X works for in-file classes but silently misses
+    // for cross-file ones" bugs (sealed-class detection, secondary
+    // constructors, enum entries, companion properties, …).
+
+    /// Force a build error when a new field is added to `MirClass`.
+    /// If you find yourself patching this — update
+    /// `mir-lower/src/lib.rs` cross-file stub builder
+    /// (`module.classes.push(MirClass { ... })`) at the same time.
+    #[test]
+    #[allow(unused_variables, dead_code)]
+    fn shape_assert_mir_class_fields_populated_for_cross_file_stub() {
+        use skotch_mir::{MirClass, MirField, MirFunction};
+        fn assert_shape(c: MirClass) {
+            let MirClass {
+                name: _,
+                super_class: _,
+                is_open: _,
+                is_abstract: _,
+                is_interface: _,
+                interfaces: _,
+                fields: _,
+                methods: _,
+                constructor: _,
+                secondary_constructors: _,
+                is_lambda: _,
+                is_suspend_lambda: _,
+                is_cross_file_stub: _,
+                annotations: _,
+                has_type_params: _,
+                is_object_singleton: _,
+                companion_class_name: _,
+                static_fields: _,
+                clinit: _,
+            } = c;
+        }
+        // Reference the helper so it doesn't get dead-code-pruned.
+        let _ = assert_shape as fn(MirClass);
+        let _: Vec<MirField> = Vec::new();
+        let _: Vec<MirFunction> = Vec::new();
+    }
+
+    /// Force a build error when a new field is added to
+    /// `ExternalClassDecl`. If you find yourself patching this —
+    /// update both the `gather_declarations` helpers in
+    /// `skotch-resolve` and the cross-file stub builder in
+    /// `skotch-mir-lower` to populate the new field.
+    #[test]
+    #[allow(unused_variables, dead_code)]
+    fn shape_assert_external_class_decl_fields_populated() {
+        use skotch_resolve::ExternalClassDecl;
+        fn assert_shape(c: ExternalClassDecl) {
+            let ExternalClassDecl {
+                jvm_name: _,
+                kind: _,
+                fields: _,
+                ctor_params: _,
+                methods: _,
+                secondary_ctors: _,
+                companion_methods: _,
+                has_companion: _,
+                super_class: _,
+                interfaces: _,
+                is_open: _,
+                is_abstract: _,
+                is_inner: _,
+                enum_entries: _,
+                annotations: _,
+                has_type_params: _,
+            } = c;
+        }
+        let _ = assert_shape as fn(ExternalClassDecl);
+    }
+
+    /// Force a build error when a new field is added to
+    /// `ExternalFunDecl`. The cross-file fn registration in mir-lower
+    /// (`module.cross_file_fn_extras.insert`) must propagate every
+    /// applicable field.
+    #[test]
+    #[allow(unused_variables, dead_code)]
+    fn shape_assert_external_fun_decl_fields_populated() {
+        use skotch_resolve::ExternalFunDecl;
+        fn assert_shape(f: ExternalFunDecl) {
+            let ExternalFunDecl {
+                owner_class: _,
+                descriptor: _,
+                return_ty: _,
+                param_tys: _,
+                param_count: _,
+                is_suspend: _,
+                is_inline: _,
+                is_extension: _,
+                receiver_ty: _,
+                has_default: _,
+                is_vararg: _,
+                annotations: _,
+            } = f;
+        }
+        let _ = assert_shape as fn(ExternalFunDecl);
+    }
+
+    /// Force a build error when a new variant is added to
+    /// `ExternalClassKind`. Each kind needs explicit handling in the
+    /// `gather_declarations` arm AND in the mir-lower stub builder's
+    /// `matches!(kind, ...)` discriminators.
+    #[test]
+    #[allow(unused_variables, dead_code)]
+    fn shape_assert_external_class_kind_variants() {
+        use skotch_resolve::ExternalClassKind;
+        fn assert_exhaustive(k: ExternalClassKind) -> &'static str {
+            match k {
+                ExternalClassKind::Class => "Class",
+                ExternalClassKind::DataClass => "DataClass",
+                ExternalClassKind::Object => "Object",
+                ExternalClassKind::Enum => "Enum",
+                ExternalClassKind::Interface => "Interface",
+                ExternalClassKind::SealedClass => "SealedClass",
+                ExternalClassKind::SealedInterface => "SealedInterface",
+            }
+        }
+        let _ = assert_exhaustive as fn(ExternalClassKind) -> &'static str;
     }
 
     // ─── future stubs ────────────────────────────────────────────────────

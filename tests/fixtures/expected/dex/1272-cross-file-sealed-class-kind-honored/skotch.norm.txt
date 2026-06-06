@@ -1,0 +1,60 @@
+dex_version   035
+strings       21
+types         11
+methods       9
+classes       1
+
+--- strings ---
+  "<init>"
+  "I"
+  "LCircle;"
+  "LInputKt;"
+  "LL"
+  "LSquare;"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/String;"
+  "Ljava/lang/System;"
+  "Lkotlin/NoWhenBranchMatchedException;"
+  "V"
+  "VI"
+  "VL"
+  "[Ljava/lang/String;"
+  "area"
+  "describe"
+  "input.kt"
+  "main"
+  "out"
+  "println"
+
+--- types ---
+  I
+  LCircle;
+  LInputKt;
+  LSquare;
+  Ljava/io/PrintStream;
+  Ljava/lang/Object;
+  Ljava/lang/String;
+  Ljava/lang/System;
+  Lkotlin/NoWhenBranchMatchedException;
+  V
+  [Ljava/lang/String;
+
+--- methods ---
+  LCircle;.<init>(I)V
+  LCircle;.area()I
+  LInputKt;.describe(Ljava/lang/Object;)Ljava/lang/String;
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  LSquare;.<init>(I)V
+  LSquare;.area()I
+  Ljava/io/PrintStream;.println(Ljava/lang/String;)V
+  Lkotlin/NoWhenBranchMatchedException;.<init>()V
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       describe(Ljava/lang/Object;)Ljava/lang/String; flags=0x0019 regs=12 ins=1 outs=1 insns=31
+  method       main()V flags=0x0019 regs=7 ins=0 outs=2 insns=31
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4

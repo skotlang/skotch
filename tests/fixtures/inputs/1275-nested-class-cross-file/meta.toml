@@ -1,0 +1,4 @@
+name = "1275-nested-class-cross-file"
+status = "supported"
+features = ["nested-class"]
+reason = "Locks in audit fix #9: gather_class_recursive walks nested ClassDecls and registers each with an Outer$Nested JVM name, so cross-file callers can do `Outer.Nested(...)`."

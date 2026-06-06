@@ -1,0 +1,4 @@
+name = "1272-cross-file-sealed-class-kind-honored"
+status = "supported"
+features = ["sealed-class", "when-exhaustiveness"]
+reason = "Locks in audit fix #1: ExternalClassKind::SealedClass is constructed when c.is_sealed=true (was always Class/DataClass). Sealed-class typeck info now flows cross-file."

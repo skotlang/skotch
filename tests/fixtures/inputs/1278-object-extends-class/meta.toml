@@ -1,0 +1,4 @@
+name = "1278-object-extends-class"
+status = "supported"
+features = ["object", "object-extends-class", "polymorphism"]
+reason = "Locks in audit fix #18: ObjectDecl has parent_class, parser parses `object Foo : Parent(args)`, and the singleton IS-A the parent type."

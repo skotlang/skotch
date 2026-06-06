@@ -1,0 +1,4 @@
+name = "1273-interface-extends-interface"
+status = "supported"
+features = ["interface", "interface-inheritance", "default-method"]
+reason = "Locks in audit fix #8: parse_interface_decl honors a `: Parent` clause and InterfaceDecl carries the supertype list. Cross-file dispatch through the inheritance chain works."

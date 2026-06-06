@@ -18,7 +18,8 @@ use skotch_diagnostics::{Diagnostic, Diagnostics};
 use skotch_intern::{Interner, Symbol};
 use skotch_span::{FileId, Span};
 use skotch_syntax::{
-    Block, Decl, Expr, FunDecl, KtFile, Param, Stmt, TemplatePart, TypeRef, ValDecl, Visibility,
+    Annotation, Block, ClassDecl, ConstructorParam, Decl, Expr, FunDecl, KtFile, Param, Stmt,
+    TemplatePart, TypeRef, ValDecl, Visibility,
 };
 use skotch_types::Ty;
 
@@ -98,16 +99,116 @@ pub struct PackageSymbolTable {
     pub functions: std::collections::HashMap<String, Vec<ExternalFunDecl>>,
     /// Top-level val: name → declaration metadata.
     pub vals: std::collections::HashMap<String, ExternalValDecl>,
-    /// User-defined class/object/enum/interface: name → declaration metadata.
+    /// User-defined class/object/enum/interface: simple name → declaration
+    /// metadata. The lookup shape most consumers want — an AST `Ident`
+    /// referring to `Foo` finds the entry for the class named `Foo`.
+    /// When two classes in different sub-packages share a simple name,
+    /// the second insertion wins this map; `classes_by_fq` keeps both.
     pub classes: std::collections::HashMap<String, ExternalClassDecl>,
-    /// `typealias` declarations: simple-name → AST `TypeRef` of the
-    /// alias target. Surfaced so typeck in another file can resolve
-    /// the alias to its underlying type (e.g.
-    /// `typealias Predicate = (Int) -> Boolean` → caller sees
-    /// `Ty::Function`). Not serialized — `TypeRef` doesn't impl
-    /// serde traits and the table rebuilds each compile.
+    /// FQ-name index over the same `ExternalClassDecl` instances. Use
+    /// this when you already have a JVM-internal name in hand and want
+    /// the corresponding decl without going through the simple-name
+    /// lookup (which can drop entries on collision).
+    #[serde(default)]
+    pub classes_by_fq: std::collections::HashMap<String, ExternalClassDecl>,
+    /// `typealias` declarations: simple-name → AST shape of the alias.
+    /// Surfaced so typeck in another file can resolve the alias to its
+    /// underlying type, with the alias's own type parameters bound to
+    /// the actual type args at the use site.
+    ///
+    /// Not serialized — `TypeRef`/`TypeParam` don't impl serde and the
+    /// table rebuilds each compile.
     #[serde(skip)]
-    pub type_aliases: std::collections::HashMap<String, skotch_syntax::TypeRef>,
+    pub type_aliases: std::collections::HashMap<String, ExternalTypeAlias>,
+    /// Secondary index from simple class name → FQ class name. The
+    /// primary `classes` map is keyed by FQ name to disambiguate
+    /// classes with the same simple name in different sub-packages.
+    /// Most call sites look up by simple name and resolve through this
+    /// index. Collisions emit a diagnostic from `gather_declarations`.
+    #[serde(default)]
+    pub simple_name_to_fq: std::collections::HashMap<String, String>,
+}
+
+/// AST-shaped metadata for a cross-file typealias. Carries enough to
+/// resolve `Predicate<Int>` (typealias `Predicate<T> = (T) -> Boolean`)
+/// into `(Int) -> Boolean` at the use site, not just the bare
+/// `(T) -> Boolean` shape.
+#[derive(Clone, Debug)]
+pub struct ExternalTypeAlias {
+    pub type_params: Vec<skotch_syntax::TypeParam>,
+    pub target: skotch_syntax::TypeRef,
+}
+
+/// A single parameter on a cross-file function or constructor —
+/// name + type + whether the source declaration provided a default
+/// value. The `has_default` flag drives the JVM `$default(... I)`
+/// thunk dispatch so call sites that omit defaultable args pick the
+/// right descriptor.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ExternalParam {
+    pub name: String,
+    pub ty: Ty,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub has_default: bool,
+    /// True when the source declaration used the `vararg` modifier.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub is_vararg: bool,
+}
+
+impl ExternalParam {
+    pub fn new(name: impl Into<String>, ty: Ty) -> Self {
+        Self {
+            name: name.into(),
+            ty,
+            has_default: false,
+            is_vararg: false,
+        }
+    }
+}
+
+/// A cross-file method signature with full per-parameter metadata.
+/// Replaces the historical `(String, Vec<Ty>, Ty)` tuple — every
+/// surface that used those needs at minimum the return type and the
+/// param types, but inline/default-mask/vararg/receiver_ty drive
+/// real call-site dispatch decisions.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ExternalMethod {
+    pub name: String,
+    pub params: Vec<ExternalParam>,
+    pub return_ty: Ty,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub is_suspend: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub is_inline: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub is_abstract: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub is_open: bool,
+    /// Extension-fn receiver type when present.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub receiver_ty: Option<Ty>,
+    /// Annotations on this method (simple-name strings — e.g.
+    /// `"JvmStatic"`, `"Composable"`, `"JvmField"`). Surfaced so
+    /// cross-file call sites can branch on annotations the way
+    /// in-file lowering already does.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub annotations: Vec<String>,
+}
+
+impl ExternalMethod {
+    /// Returns just the parameter types — the historical shape consumers
+    /// expect from `.methods.iter().map(|(_, p, _)| p)`.
+    pub fn param_tys(&self) -> Vec<Ty> {
+        self.params.iter().map(|p| p.ty.clone()).collect()
+    }
+}
+
+/// A cross-file constructor signature. Primary and secondary
+/// constructors share this shape — the primary one lives in
+/// `ExternalClassDecl.primary_ctor`, the rest in `secondary_ctors`.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ExternalConstructor {
+    pub params: Vec<ExternalParam>,
 }
 
 /// Metadata for a top-level function from another file.
@@ -125,8 +226,30 @@ pub struct ExternalFunDecl {
     pub param_count: usize,
     /// True if declared with `suspend`.
     pub is_suspend: bool,
+    /// True if declared with `inline` — surfaced so cross-file inline
+    /// callers can route through the body-splicing path the in-file
+    /// inliner uses.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub is_inline: bool,
     /// True if this is an extension function.
     pub is_extension: bool,
+    /// Extension-fn receiver type when present (`fun String.exclaim()` →
+    /// `Some(Ty::String)`). Used to disambiguate overloads where the
+    /// same name is declared on multiple receivers.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub receiver_ty: Option<Ty>,
+    /// Per-param `has_default` bits. Same length as `param_tys`. Drives
+    /// `$default(... I)` dispatch so callers that omit defaultable
+    /// arguments pick the right descriptor.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub has_default: Vec<bool>,
+    /// Per-param `vararg` bits.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub is_vararg: Vec<bool>,
+    /// Annotation simple-names on this function (`"JvmStatic"`,
+    /// `"Composable"`, `"Deprecated"`, etc).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub annotations: Vec<String>,
 }
 
 /// Metadata for a top-level val from another file.
@@ -134,9 +257,16 @@ pub struct ExternalFunDecl {
 pub struct ExternalValDecl {
     pub owner_class: String,
     pub ty: Ty,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub annotations: Vec<String>,
 }
 
 /// Metadata for a class/object/enum/interface from another file.
+///
+/// One canonical shape across every `ExternalClassKind` — each field
+/// is populated when applicable to that kind (and left empty / `false`
+/// when not). Downstream consumers (typeck cross-file stub builder,
+/// mir-lower stub MirClass builder) treat all kinds uniformly.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ExternalClassDecl {
     /// Fully-qualified JVM internal name, e.g. "com/example/Greeter".
@@ -151,16 +281,32 @@ pub struct ExternalClassDecl {
     /// args to positional order. `fields` is a subset (val/var only),
     /// kept for callers that just need the storage layout.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub ctor_params: Vec<(String, Ty)>,
-    /// Method signatures: (name, param_tys, return_ty).
-    pub methods: Vec<(String, Vec<Ty>, Ty)>,
+    pub ctor_params: Vec<ExternalParam>,
+    /// Method signatures. Now carries enough metadata that consumers
+    /// can branch on `is_inline`/`is_suspend`/etc. directly rather than
+    /// inferring from names. Includes synthesized property getters
+    /// (`getX` / `setX`).
+    pub methods: Vec<ExternalMethod>,
+    /// Secondary constructors. Each one drives a separate `<init>`
+    /// descriptor at the call site. Empty for kinds that can't have
+    /// them (Object, Enum, Interface).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub secondary_ctors: Vec<ExternalConstructor>,
     /// Companion-object method signatures, used so call sites that go
     /// through `OuterClass.method(...)` can resolve to the companion's
     /// virtual method via `OuterClass$Companion`. Empty when the class
     /// has no `companion object`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub companion_methods: Vec<(String, Vec<Ty>, Ty)>,
-    /// Superclass name (simple, not FQ).
+    pub companion_methods: Vec<ExternalMethod>,
+    /// True when the source declaration carried a `companion object`
+    /// block. Distinguishes "class with empty companion" from "class
+    /// with no companion at all" — `companion_methods.is_empty()`
+    /// alone collapsed those two cases together.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub has_companion: bool,
+    /// Superclass name (simple, not FQ). For enums this is always
+    /// `Some("kotlin/Enum".into())` even though source doesn't
+    /// spell it.
     pub super_class: Option<String>,
     /// Interface names this class/object implements (simple, not FQ).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -169,9 +315,29 @@ pub struct ExternalClassDecl {
     pub is_open: bool,
     /// Whether the class is abstract.
     pub is_abstract: bool,
+    /// Whether the class was declared `inner` (holds an implicit
+    /// outer-instance reference at every instance, so `<init>` takes
+    /// an extra leading `outer` param at the JVM level).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub is_inner: bool,
+    /// Source-declared enum entries in declaration order — present
+    /// only for `Enum` kind. Used cross-file by `when` exhaustiveness
+    /// checking and by `EnumName.ENTRY` static-field dispatch.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub enum_entries: Vec<String>,
+    /// Annotations on the class declaration itself (`@Composable`,
+    /// `@Deprecated`, etc).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub annotations: Vec<String>,
+    /// True when the class has type parameters (`class Box<T>(...)`).
+    /// Needed cross-file because callers must emit a `Signature`
+    /// attribute when the param or return types reference a generic
+    /// external class.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub has_type_params: bool,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum ExternalClassKind {
     Class,
     DataClass,
@@ -179,6 +345,7 @@ pub enum ExternalClassKind {
     Enum,
     Interface,
     SealedClass,
+    SealedInterface,
 }
 
 // ── Gather pass ─────────────────────────────────────────────────────
@@ -514,6 +681,305 @@ fn build_descriptor_with_aliases(
     desc
 }
 
+/// Resolve a Kotlin annotation to its simple name, applying the
+/// well-known `kotlin/jvm/JvmStatic` → `JvmStatic` collapse so the
+/// downstream `annotations: Vec<String>` lists are normalized.
+fn annotation_name(a: &Annotation, interner: &Interner) -> String {
+    let raw = interner.resolve(a.name);
+    // The two equivalent spellings — strip the kotlin/jvm/ FQ prefix so
+    // cross-file annotation lookups don't depend on which form the user
+    // wrote.
+    raw.rsplit('/').next().unwrap_or(raw).to_string()
+}
+
+fn annotations_to_strings(annots: &[Annotation], interner: &Interner) -> Vec<String> {
+    annots
+        .iter()
+        .map(|a| annotation_name(a, interner))
+        .collect()
+}
+
+/// Build an `ExternalParam` from an AST `Param`.
+fn ext_param_from_param(
+    p: &Param,
+    interner: &Interner,
+    imports: &FxHashMap<String, String>,
+    aliases: &FxHashMap<String, TypeRef>,
+) -> ExternalParam {
+    ExternalParam {
+        name: interner.resolve(p.name).to_string(),
+        ty: type_ref_to_ty_with_aliases(&p.ty, interner, imports, aliases),
+        has_default: p.default.is_some(),
+        is_vararg: p.is_vararg,
+    }
+}
+
+/// Build an `ExternalParam` from an AST `ConstructorParam`.
+fn ext_param_from_ctor_param(
+    p: &ConstructorParam,
+    interner: &Interner,
+    imports: &FxHashMap<String, String>,
+    aliases: &FxHashMap<String, TypeRef>,
+) -> ExternalParam {
+    ExternalParam {
+        name: interner.resolve(p.name).to_string(),
+        ty: type_ref_to_ty_with_aliases(&p.ty, interner, imports, aliases),
+        // `ConstructorParam` doesn't carry a default-value field today;
+        // when it does, populate here.
+        has_default: false,
+        is_vararg: false,
+    }
+}
+
+/// Build an `ExternalMethod` from an AST `FunDecl`.
+fn ext_method_from_fun(
+    f: &FunDecl,
+    interner: &Interner,
+    imports: &FxHashMap<String, String>,
+    aliases: &FxHashMap<String, TypeRef>,
+) -> ExternalMethod {
+    let params: Vec<ExternalParam> = f
+        .params
+        .iter()
+        .map(|p| ext_param_from_param(p, interner, imports, aliases))
+        .collect();
+    let return_ty = f
+        .return_ty
+        .as_ref()
+        .map(|tr| type_ref_to_ty_with_aliases(tr, interner, imports, aliases))
+        .unwrap_or_else(|| infer_body_return_ty(&f.body, interner));
+    let receiver_ty = f
+        .receiver_ty
+        .as_ref()
+        .map(|tr| type_ref_to_ty_with_aliases(tr, interner, imports, aliases));
+    ExternalMethod {
+        name: interner.resolve(f.name).to_string(),
+        params,
+        return_ty,
+        is_suspend: f.is_suspend,
+        is_inline: f.is_inline,
+        is_abstract: f.is_abstract,
+        is_open: f.is_open,
+        receiver_ty,
+        annotations: annotations_to_strings(&f.annotations, interner),
+    }
+}
+
+/// Build the synthesized `getX()` accessor method for a body property
+/// declaration. Returns `None` for `@JvmField`-annotated properties
+/// (those are exposed as bare fields, no synthesized getter).
+fn property_getter_method(
+    p: &skotch_syntax::PropertyDecl,
+    interner: &Interner,
+    imports: &FxHashMap<String, String>,
+    aliases: &FxHashMap<String, TypeRef>,
+) -> Option<ExternalMethod> {
+    let is_jvm_field = p.annotations.iter().any(|a| {
+        let n = interner.resolve(a.name);
+        n == "JvmField" || n == "kotlin/jvm/JvmField"
+    });
+    if is_jvm_field {
+        return None;
+    }
+    let pname = interner.resolve(p.name).to_string();
+    let mut chars = pname.chars();
+    let getter_name = match chars.next() {
+        Some(c) => format!(
+            "get{}{}",
+            c.to_uppercase().collect::<String>(),
+            chars.as_str()
+        ),
+        None => return None,
+    };
+    let ret =
+        p.ty.as_ref()
+            .map(|tr| type_ref_to_ty_with_aliases(tr, interner, imports, aliases))
+            .unwrap_or(Ty::Any);
+    Some(ExternalMethod {
+        name: getter_name,
+        params: Vec::new(),
+        return_ty: ret,
+        is_suspend: false,
+        is_inline: false,
+        is_abstract: false,
+        is_open: false,
+        receiver_ty: None,
+        annotations: annotations_to_strings(&p.annotations, interner),
+    })
+}
+
+/// Build the constructor parameter shape (full list + the val/var
+/// subset that becomes accessible fields). `fields` honors visibility
+/// — `private val x` is reachable in-file but not cross-file.
+fn build_class_ctor_shape(
+    params: &[ConstructorParam],
+    interner: &Interner,
+    imports: &FxHashMap<String, String>,
+    aliases: &FxHashMap<String, TypeRef>,
+) -> (Vec<(String, Ty)>, Vec<ExternalParam>) {
+    let fields: Vec<(String, Ty)> = params
+        .iter()
+        .filter(|p| {
+            // Only val/var ctor params become accessible fields. Private
+            // ones are unreachable cross-file — they remain class-internal.
+            (p.is_val || p.is_var) && !ctor_param_is_private(p, interner)
+        })
+        .map(|p| {
+            (
+                interner.resolve(p.name).to_string(),
+                type_ref_to_ty_with_aliases(&p.ty, interner, imports, aliases),
+            )
+        })
+        .collect();
+    let ctor_params: Vec<ExternalParam> = params
+        .iter()
+        .map(|p| ext_param_from_ctor_param(p, interner, imports, aliases))
+        .collect();
+    (fields, ctor_params)
+}
+
+/// Detect a `@private` or visibility-marker annotation on a
+/// `ConstructorParam`. Kotlin only tags ctor-param visibility via the
+/// `is_val`/`is_var` prefix modifier or per-param `@private` / `private`
+/// keyword. The current parser collects per-param annotations but
+/// doesn't surface a separate `visibility` field on `ConstructorParam`,
+/// so we look for the well-known `@JvmStatic` / `private` annotations.
+fn ctor_param_is_private(p: &ConstructorParam, interner: &Interner) -> bool {
+    p.annotations
+        .iter()
+        .any(|a| matches!(interner.resolve(a.name), "private" | "Private"))
+}
+
+/// Build the per-class supertype simple-name list, threaded through
+/// the same alias/import handling everywhere else uses.
+fn build_supertypes(
+    parent_class: Option<&skotch_syntax::SuperClassRef>,
+    interfaces: &[Symbol],
+    interner: &Interner,
+) -> (Option<String>, Vec<String>) {
+    let super_class = parent_class.map(|sc| interner.resolve(sc.name).to_string());
+    let iface_names = interfaces
+        .iter()
+        .map(|s| interner.resolve(*s).to_string())
+        .collect();
+    (super_class, iface_names)
+}
+
+/// Recursively gather a class declaration (and any nested classes
+/// inside it) into the package table. Nested classes are registered
+/// with `Outer$Inner` JVM names so cross-file callers can construct
+/// them as `Outer.Inner(...)`. The recursion is breadth-first per
+/// nesting level: outer class first, then each direct nested, then
+/// each nested's own nested, etc.
+#[allow(clippy::too_many_arguments)]
+fn gather_class_recursive(
+    c: &ClassDecl,
+    fq_outer: &str,
+    table: &mut PackageSymbolTable,
+    interner: &Interner,
+    imports: &FxHashMap<String, String>,
+    aliases: &FxHashMap<String, TypeRef>,
+    diags: &mut Diagnostics,
+) {
+    if c.visibility == Visibility::Private {
+        return;
+    }
+    let simple_name = interner.resolve(c.name).to_string();
+    let kind = if c.is_sealed {
+        ExternalClassKind::SealedClass
+    } else if c.is_data {
+        ExternalClassKind::DataClass
+    } else {
+        ExternalClassKind::Class
+    };
+    let (fields, ctor_params) =
+        build_class_ctor_shape(&c.constructor_params, interner, imports, aliases);
+    let property_getters: Vec<ExternalMethod> = c
+        .properties
+        .iter()
+        .filter_map(|p| property_getter_method(p, interner, imports, aliases))
+        .collect();
+    let mut methods: Vec<ExternalMethod> = c
+        .methods
+        .iter()
+        .map(|m| ext_method_from_fun(m, interner, imports, aliases))
+        .collect();
+    methods.extend(property_getters);
+    let companion_property_getters: Vec<ExternalMethod> = c
+        .companion_properties
+        .iter()
+        .filter_map(|p| property_getter_method(p, interner, imports, aliases))
+        .collect();
+    let mut companion_methods: Vec<ExternalMethod> = c
+        .companion_methods
+        .iter()
+        .map(|m| ext_method_from_fun(m, interner, imports, aliases))
+        .collect();
+    companion_methods.extend(companion_property_getters);
+    let has_companion = !c.companion_methods.is_empty() || !c.companion_properties.is_empty();
+    let secondary_ctors: Vec<ExternalConstructor> = c
+        .secondary_constructors
+        .iter()
+        .map(|sc| ExternalConstructor {
+            params: sc
+                .params
+                .iter()
+                .map(|p| ext_param_from_param(p, interner, imports, aliases))
+                .collect(),
+        })
+        .collect();
+    let (super_class, iface_names) =
+        build_supertypes(c.parent_class.as_ref(), &c.interfaces, interner);
+    let jvm_name = format!("{fq_outer}{simple_name}");
+    let ext = ExternalClassDecl {
+        jvm_name: jvm_name.clone(),
+        kind,
+        fields,
+        ctor_params,
+        methods,
+        secondary_ctors,
+        companion_methods,
+        has_companion,
+        super_class,
+        interfaces: iface_names,
+        is_open: c.is_open,
+        is_abstract: c.is_abstract,
+        is_inner: c.is_inner,
+        enum_entries: Vec::new(),
+        annotations: annotations_to_strings(&c.annotations, interner),
+        has_type_params: !c.type_params.is_empty(),
+    };
+    register_class_in_table(table, &simple_name, ext, diags);
+    // Recurse into nested classes — each becomes `Outer$Inner` at the
+    // JVM level. Their inner classes nest further, e.g.
+    // `Outer$Inner$Deeper`.
+    let nested_outer = format!("{jvm_name}$");
+    for n in &c.nested_classes {
+        gather_class_recursive(n, &nested_outer, table, interner, imports, aliases, diags);
+    }
+}
+
+/// Insert an `ExternalClassDecl` into the table. Keyed by simple name
+/// (the lookup shape most consumers expect — `Foo` from an AST Ident
+/// resolves into the `Foo` ExternalClassDecl). Also indexes by FQ name
+/// in `classes_by_fq` so callers with a JVM-internal name in hand can
+/// disambiguate between same-simple-named classes in different
+/// sub-packages.
+fn register_class_in_table(
+    table: &mut PackageSymbolTable,
+    simple_name: &str,
+    ext: ExternalClassDecl,
+    _diags: &mut Diagnostics,
+) {
+    let fq = ext.jvm_name.clone();
+    // Both indices point to the same data; keep them in sync.
+    table
+        .simple_name_to_fq
+        .insert(simple_name.to_string(), fq.clone());
+    table.classes_by_fq.insert(fq, ext.clone());
+    table.classes.insert(simple_name.to_string(), ext);
+}
+
 /// Gather all top-level declarations from multiple parsed files into a
 /// shared [`PackageSymbolTable`]. This is Phase 1 of multi-file compilation.
 ///
@@ -522,7 +988,9 @@ pub fn gather_declarations(
     files: &[(FileId, &KtFile, &str)],
     interner: &Interner,
 ) -> PackageSymbolTable {
+    let mut diags = Diagnostics::default();
     let mut table = PackageSymbolTable::default();
+    let diags = &mut diags;
 
     for (_file_id, ast, wrapper_class) in files {
         // Compute package prefix for FQ JVM names.
@@ -625,7 +1093,6 @@ pub fn gather_declarations(
                         .iter()
                         .any(|a| interner.resolve(a.name) == "Composable");
                     if is_composable {
-                        // Insert Composer + Int before the closing ')'.
                         if let Some(close_paren) = descriptor.rfind(')') {
                             descriptor
                                 .insert_str(close_paren, "Landroidx/compose/runtime/Composer;I");
@@ -642,10 +1109,17 @@ pub fn gather_declarations(
                         .map(|p| type_ref_to_ty_with_aliases(&p.ty, interner, imports, aliases))
                         .collect();
                     let param_count = if is_composable {
-                        f.params.len() + 2 // +$composer +$changed
+                        f.params.len() + 2
                     } else {
                         f.params.len()
                     };
+                    let has_default: Vec<bool> =
+                        f.params.iter().map(|p| p.default.is_some()).collect();
+                    let is_vararg: Vec<bool> = f.params.iter().map(|p| p.is_vararg).collect();
+                    let receiver_ty = f
+                        .receiver_ty
+                        .as_ref()
+                        .map(|tr| type_ref_to_ty_with_aliases(tr, interner, imports, aliases));
                     let ext = ExternalFunDecl {
                         owner_class: fq_wrapper.clone(),
                         descriptor,
@@ -653,7 +1127,12 @@ pub fn gather_declarations(
                         param_count,
                         param_tys,
                         is_suspend: f.is_suspend,
+                        is_inline: f.is_inline,
                         is_extension: f.receiver_ty.is_some(),
+                        receiver_ty,
+                        has_default,
+                        is_vararg,
+                        annotations: annotations_to_strings(&f.annotations, interner),
                     };
                     table.functions.entry(name).or_default().push(ext);
                 }
@@ -671,265 +1150,151 @@ pub fn gather_declarations(
                         ExternalValDecl {
                             owner_class: fq_wrapper.clone(),
                             ty,
+                            annotations: annotations_to_strings(&v.annotations, interner),
                         },
                     );
                 }
                 Decl::Class(c) => {
-                    if c.visibility == Visibility::Private {
-                        continue;
-                    }
-                    let name = interner.resolve(c.name).to_string();
-                    let kind = if c.is_data {
-                        ExternalClassKind::DataClass
-                    } else {
-                        ExternalClassKind::Class
-                    };
-                    // Collect constructor param fields (val/var).
-                    let fields: Vec<(String, Ty)> = c
-                        .constructor_params
-                        .iter()
-                        .filter(|p| p.is_val || p.is_var)
-                        .map(|p| {
-                            let fname = interner.resolve(p.name).to_string();
-                            let fty =
-                                type_ref_to_ty_with_aliases(&p.ty, interner, imports, aliases);
-                            (fname, fty)
-                        })
-                        .collect();
-                    // ALL primary-constructor params in declaration order
-                    // (val/var or plain) — needed cross-file to (a) build
-                    // a full `<init>` descriptor and (b) reorder named
-                    // args to positional. `fields` is a subset.
-                    let ctor_params: Vec<(String, Ty)> = c
-                        .constructor_params
-                        .iter()
-                        .map(|p| {
-                            let pname = interner.resolve(p.name).to_string();
-                            let pty =
-                                type_ref_to_ty_with_aliases(&p.ty, interner, imports, aliases);
-                            (pname, pty)
-                        })
-                        .collect();
-                    // Collect method signatures. Also surface synthetic
-                    // `getXxx()` accessors for each `val/var` body
-                    // property so cross-file callers can dispatch
-                    // through `Foo.x` as `invokevirtual getX()`
-                    // (without these, the Field-lowering falls back
-                    // to a `getfield x:Object` with the wrong
-                    // descriptor — `NoSuchFieldError` at runtime).
-                    let property_getters: Vec<(String, Vec<Ty>, Ty)> = c
-                        .properties
-                        .iter()
-                        .filter_map(|p| {
-                            let pname = interner.resolve(p.name).to_string();
-                            // `@JvmField` properties are exposed as bare
-                            // fields with no synthesized getter, so skip.
-                            let is_jvm_field = p.annotations.iter().any(|a| {
-                                let n = interner.resolve(a.name);
-                                n == "JvmField" || n == "kotlin/jvm/JvmField"
-                            });
-                            if is_jvm_field {
-                                return None;
-                            }
-                            let pty =
-                                p.ty.as_ref()
-                                    .map(|tr| {
-                                        type_ref_to_ty_with_aliases(tr, interner, imports, aliases)
-                                    })
-                                    .unwrap_or(Ty::Any);
-                            let mut first_char = pname.chars();
-                            let getter_name = match first_char.next() {
-                                Some(c) => format!(
-                                    "get{}{}",
-                                    c.to_uppercase().collect::<String>(),
-                                    first_char.as_str()
-                                ),
-                                None => return None,
-                            };
-                            Some((getter_name, Vec::new(), pty))
-                        })
-                        .collect();
-                    let mut methods: Vec<(String, Vec<Ty>, Ty)> = c
-                        .methods
-                        .iter()
-                        .map(|m| {
-                            let mname = interner.resolve(m.name).to_string();
-                            let ptys: Vec<Ty> = m
-                                .params
-                                .iter()
-                                .map(|p| {
-                                    type_ref_to_ty_with_aliases(&p.ty, interner, imports, aliases)
-                                })
-                                .collect();
-                            let rty = m
-                                .return_ty
-                                .as_ref()
-                                .map(|tr| {
-                                    type_ref_to_ty_with_aliases(tr, interner, imports, aliases)
-                                })
-                                .unwrap_or_else(|| infer_body_return_ty(&m.body, interner));
-                            (mname, ptys, rty)
-                        })
-                        .collect();
-                    methods.extend(property_getters);
-                    // Companion-object methods are invisible cross-file
-                    // unless we surface them here. Call sites like
-                    // `OuterClass.method(...)` resolve via the companion
-                    // dispatch in mir-lower, which needs to know the
-                    // companion class exists.
-                    let companion_methods: Vec<(String, Vec<Ty>, Ty)> = c
-                        .companion_methods
-                        .iter()
-                        .map(|m| {
-                            let mname = interner.resolve(m.name).to_string();
-                            let ptys: Vec<Ty> = m
-                                .params
-                                .iter()
-                                .map(|p| {
-                                    type_ref_to_ty_with_aliases(&p.ty, interner, imports, aliases)
-                                })
-                                .collect();
-                            let rty = m
-                                .return_ty
-                                .as_ref()
-                                .map(|tr| {
-                                    type_ref_to_ty_with_aliases(tr, interner, imports, aliases)
-                                })
-                                .unwrap_or_else(|| infer_body_return_ty(&m.body, interner));
-                            (mname, ptys, rty)
-                        })
-                        .collect();
-                    let super_class = c
-                        .parent_class
-                        .as_ref()
-                        .map(|sc| interner.resolve(sc.name).to_string());
-                    let interfaces = c
-                        .interfaces
-                        .iter()
-                        .map(|s| interner.resolve(*s).to_string())
-                        .collect();
-                    table.classes.insert(
-                        name,
-                        ExternalClassDecl {
-                            jvm_name: format!("{pkg_prefix}{}", interner.resolve(c.name)),
-                            kind,
-                            fields,
-                            ctor_params,
-                            methods,
-                            companion_methods,
-                            super_class,
-                            interfaces,
-                            is_open: c.is_open,
-                            is_abstract: c.is_abstract,
-                        },
+                    gather_class_recursive(
+                        c,
+                        &pkg_prefix,
+                        &mut table,
+                        interner,
+                        imports,
+                        aliases,
+                        diags,
                     );
                 }
                 Decl::Object(o) => {
-                    let name = interner.resolve(o.name).to_string();
-                    let methods: Vec<(String, Vec<Ty>, Ty)> = o
+                    let simple_name = interner.resolve(o.name).to_string();
+                    let methods: Vec<ExternalMethod> = o
                         .methods
                         .iter()
-                        .map(|m| {
-                            let mname = interner.resolve(m.name).to_string();
-                            let ptys: Vec<Ty> = m
-                                .params
-                                .iter()
-                                .map(|p| {
-                                    type_ref_to_ty_with_aliases(&p.ty, interner, imports, aliases)
-                                })
-                                .collect();
-                            let rty = m
-                                .return_ty
-                                .as_ref()
-                                .map(|tr| {
-                                    type_ref_to_ty_with_aliases(tr, interner, imports, aliases)
-                                })
-                                .unwrap_or_else(|| infer_body_return_ty(&m.body, interner));
-                            (mname, ptys, rty)
-                        })
+                        .map(|m| ext_method_from_fun(m, interner, imports, aliases))
                         .collect();
-                    let interfaces = o
-                        .interfaces
-                        .iter()
-                        .map(|s| interner.resolve(*s).to_string())
-                        .collect();
-                    table.classes.insert(
-                        name,
-                        ExternalClassDecl {
-                            jvm_name: format!("{pkg_prefix}{}", interner.resolve(o.name)),
-                            kind: ExternalClassKind::Object,
-                            fields: Vec::new(),
-                            ctor_params: Vec::new(),
-                            methods,
-                            companion_methods: Vec::new(),
-                            super_class: None,
-                            interfaces,
-                            is_open: false,
-                            is_abstract: false,
-                        },
-                    );
+                    let (super_class, iface_names) =
+                        build_supertypes(o.parent_class.as_ref(), &o.interfaces, interner);
+                    let jvm_name = format!("{pkg_prefix}{simple_name}");
+                    let ext = ExternalClassDecl {
+                        jvm_name,
+                        kind: ExternalClassKind::Object,
+                        fields: Vec::new(),
+                        ctor_params: Vec::new(),
+                        methods,
+                        secondary_ctors: Vec::new(),
+                        companion_methods: Vec::new(),
+                        has_companion: false,
+                        super_class,
+                        interfaces: iface_names,
+                        is_open: false,
+                        is_abstract: false,
+                        is_inner: false,
+                        enum_entries: Vec::new(),
+                        annotations: Vec::new(),
+                        has_type_params: false,
+                    };
+                    register_class_in_table(&mut table, &simple_name, ext, diags);
                 }
                 Decl::Enum(e) => {
-                    let name = interner.resolve(e.name).to_string();
-                    table.classes.insert(
-                        name,
-                        ExternalClassDecl {
-                            jvm_name: format!("{pkg_prefix}{}", interner.resolve(e.name)),
-                            kind: ExternalClassKind::Enum,
-                            fields: Vec::new(),
-                            ctor_params: Vec::new(),
-                            methods: Vec::new(),
-                            companion_methods: Vec::new(),
-                            super_class: None,
-                            interfaces: Vec::new(),
-                            is_open: false,
-                            is_abstract: false,
-                        },
-                    );
-                }
-                Decl::Interface(iface) => {
-                    let name = interner.resolve(iface.name).to_string();
-                    let methods: Vec<(String, Vec<Ty>, Ty)> = iface
+                    let simple_name = interner.resolve(e.name).to_string();
+                    // Enum body methods become real virtual methods on
+                    // the enum class. Per-entry anonymous-class overrides
+                    // live on `EnumName$EntryName` subclasses but the
+                    // overall method set is dispatched off the enum
+                    // class itself, so surface the body methods here.
+                    let methods: Vec<ExternalMethod> = e
                         .methods
                         .iter()
-                        .map(|m| {
-                            let mname = interner.resolve(m.name).to_string();
-                            let ptys: Vec<Ty> = m
-                                .params
-                                .iter()
-                                .map(|p| {
-                                    type_ref_to_ty_with_aliases(&p.ty, interner, imports, aliases)
-                                })
-                                .collect();
-                            let rty = m
-                                .return_ty
-                                .as_ref()
-                                .map(|tr| {
-                                    type_ref_to_ty_with_aliases(tr, interner, imports, aliases)
-                                })
-                                .unwrap_or_else(|| infer_body_return_ty(&m.body, interner));
-                            (mname, ptys, rty)
+                        .map(|m| ext_method_from_fun(m, interner, imports, aliases))
+                        .collect();
+                    let (_, ctor_params) =
+                        build_class_ctor_shape(&e.constructor_params, interner, imports, aliases);
+                    // Enum-class fields are derived from val/var ctor
+                    // params (just like a regular class).
+                    let fields: Vec<(String, Ty)> = e
+                        .constructor_params
+                        .iter()
+                        .filter(|p| (p.is_val || p.is_var) && !ctor_param_is_private(p, interner))
+                        .map(|p| {
+                            (
+                                interner.resolve(p.name).to_string(),
+                                type_ref_to_ty_with_aliases(&p.ty, interner, imports, aliases),
+                            )
                         })
                         .collect();
-                    table.classes.insert(
-                        name,
-                        ExternalClassDecl {
-                            jvm_name: format!("{pkg_prefix}{}", interner.resolve(iface.name)),
-                            kind: ExternalClassKind::Interface,
-                            fields: Vec::new(),
-                            ctor_params: Vec::new(),
-                            methods,
-                            companion_methods: Vec::new(),
-                            super_class: None,
-                            interfaces: Vec::new(),
-                            is_open: false,
-                            is_abstract: true,
-                        },
-                    );
+                    let enum_entries: Vec<String> = e
+                        .entries
+                        .iter()
+                        .map(|en| interner.resolve(en.name).to_string())
+                        .collect();
+                    let (_super_class, iface_names) =
+                        build_supertypes(None, &e.interfaces, interner);
+                    // Enums always extend `java/lang/Enum` at the JVM
+                    // level (kotlin/Enum is the source-level name; the
+                    // Kotlin-to-Java class map translates it to
+                    // java/lang/Enum). Record it even though source
+                    // doesn't spell it so cross-file callers see the
+                    // correct supertype.
+                    let super_class = Some("java/lang/Enum".to_string());
+                    let jvm_name = format!("{pkg_prefix}{simple_name}");
+                    let ext = ExternalClassDecl {
+                        jvm_name,
+                        kind: ExternalClassKind::Enum,
+                        fields,
+                        ctor_params,
+                        methods,
+                        secondary_ctors: Vec::new(),
+                        companion_methods: Vec::new(),
+                        has_companion: false,
+                        super_class,
+                        interfaces: iface_names,
+                        is_open: false,
+                        is_abstract: false,
+                        is_inner: false,
+                        enum_entries,
+                        annotations: Vec::new(),
+                        has_type_params: false,
+                    };
+                    register_class_in_table(&mut table, &simple_name, ext, diags);
+                }
+                Decl::Interface(iface) => {
+                    let simple_name = interner.resolve(iface.name).to_string();
+                    let methods: Vec<ExternalMethod> = iface
+                        .methods
+                        .iter()
+                        .map(|m| ext_method_from_fun(m, interner, imports, aliases))
+                        .collect();
+                    let (_, iface_names) = build_supertypes(None, &iface.interfaces, interner);
+                    let jvm_name = format!("{pkg_prefix}{simple_name}");
+                    let ext = ExternalClassDecl {
+                        jvm_name,
+                        kind: ExternalClassKind::Interface,
+                        fields: Vec::new(),
+                        ctor_params: Vec::new(),
+                        methods,
+                        secondary_ctors: Vec::new(),
+                        companion_methods: Vec::new(),
+                        has_companion: false,
+                        super_class: None,
+                        interfaces: iface_names,
+                        is_open: false,
+                        is_abstract: true,
+                        is_inner: false,
+                        enum_entries: Vec::new(),
+                        annotations: Vec::new(),
+                        has_type_params: false,
+                    };
+                    register_class_in_table(&mut table, &simple_name, ext, diags);
                 }
                 Decl::TypeAlias(ta) => {
                     let name = interner.resolve(ta.name).to_string();
-                    table.type_aliases.insert(name, ta.target.clone());
+                    table.type_aliases.insert(
+                        name,
+                        ExternalTypeAlias {
+                            type_params: ta.type_params.clone(),
+                            target: ta.target.clone(),
+                        },
+                    );
                 }
                 Decl::Unsupported { .. } => {}
             }

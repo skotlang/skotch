@@ -1,0 +1,24 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=2 max_locals=1
+    0000 getstatic Field(DefaultGreeter.INSTANCE:LDefaultGreeter;)
+    0003 invokevirtual Method(DefaultGreeter.greet:()Ljava/lang/String;)
+    0006 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0009 swap
+    0010 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0013 getstatic Field(DefaultGreeter.INSTANCE:LDefaultGreeter;)
+    0016 checkcast Class(Greeter)
+    0019 astore_0
+    0020 aload_0
+    0021 invokevirtual Method(Greeter.greet:()Ljava/lang/String;)
+    0024 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0027 swap
+    0028 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0031 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

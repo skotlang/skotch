@@ -368,6 +368,81 @@ impl<'a> Parser<'a> {
         self.skip_trivia();
     }
 
+    /// Parse a simple supertype clause `: Parent(args)?, Iface1, Iface2, ...`
+    /// for declaration kinds (object/enum/interface) that don't support
+    /// interface delegation. Returns `(parent_class, interfaces)`. Both
+    /// are empty when no `:` is present. The first supertype may be a
+    /// concrete class (recognized by a trailing `(args)`); all later
+    /// supertypes are interfaces. For `interface` declarations, every
+    /// supertype is an interface — the caller passes `allow_parent_class:
+    /// false` and the parser treats a leading `Foo(...)` clause as an
+    /// error rather than silently producing a `parent_class`.
+    fn parse_simple_supertype_clause(
+        &mut self,
+        allow_parent_class: bool,
+    ) -> (Option<SuperClassRef>, Vec<Symbol>) {
+        let mut parent_class: Option<SuperClassRef> = None;
+        let mut interfaces: Vec<Symbol> = Vec::new();
+        if self.peek_kind() != TokenKind::Colon {
+            return (parent_class, interfaces);
+        }
+        self.bump(); // consume ':'
+        let mut first = true;
+        loop {
+            self.skip_trivia();
+            if self.peek_kind() != TokenKind::Ident {
+                break;
+            }
+            let name_idx = self.pos;
+            let name_span = self.peek_span();
+            self.bump();
+            let supertype_name = self.intern_ident_at(name_idx);
+            self.skip_trivia();
+            // Optional generic args — `: Comparable<Money>` etc.
+            self.skip_supertype_generic_args();
+            if first && self.peek_kind() == TokenKind::LParen {
+                if !allow_parent_class {
+                    self.diags.push(Diagnostic::error(
+                        name_span,
+                        "interfaces cannot extend a class — only other interfaces",
+                    ));
+                }
+                self.bump(); // consume '('
+                self.skip_trivia();
+                let mut args = Vec::new();
+                if self.peek_kind() != TokenKind::RParen {
+                    loop {
+                        self.skip_trivia();
+                        let expr = self.parse_expr();
+                        args.push(CallArg { name: None, expr });
+                        self.skip_trivia();
+                        if !self.eat(TokenKind::Comma) {
+                            break;
+                        }
+                    }
+                }
+                self.expect(TokenKind::RParen, ")");
+                self.skip_trivia();
+                if allow_parent_class {
+                    parent_class = Some(SuperClassRef {
+                        name: supertype_name,
+                        name_span,
+                        args,
+                    });
+                }
+            } else {
+                interfaces.push(supertype_name);
+            }
+            first = false;
+            self.skip_trivia();
+            if !self.eat(TokenKind::Comma) {
+                break;
+            }
+        }
+        self.skip_trivia();
+        (parent_class, interfaces)
+    }
+
     /// Get the string content of an Ident token at a given index.
     fn lexeme_str(&self, idx: usize) -> &str {
         match self.payload(idx) {
@@ -1138,30 +1213,11 @@ impl<'a> Parser<'a> {
         };
         self.skip_trivia();
 
-        // Optional `: Iface1, Iface2, ...` — the object becomes a
-        // subtype of each listed interface. Each interface name is
-        // a bare Ident; we skip any generic args via the same
-        // helper the class parser uses.
-        let mut interfaces: Vec<Symbol> = Vec::new();
-        if self.peek_kind() == TokenKind::Colon {
-            self.bump(); // consume ':'
-            self.skip_trivia();
-            loop {
-                self.skip_trivia();
-                if self.peek_kind() == TokenKind::Ident {
-                    let iface_idx = self.pos;
-                    self.bump();
-                    let iface_name = self.intern_ident_at(iface_idx);
-                    interfaces.push(iface_name);
-                    self.skip_trivia();
-                    self.skip_supertype_generic_args();
-                }
-                if !self.eat(TokenKind::Comma) {
-                    break;
-                }
-            }
-            self.skip_trivia();
-        }
+        // Optional supertype clause: `: Parent(args)?, Iface1, Iface2`.
+        // Kotlin allows objects to extend a class (in addition to
+        // implementing interfaces); the parent_class is the first entry
+        // when it carries a `(args)` constructor invocation.
+        let (parent_class, interfaces) = self.parse_simple_supertype_clause(true);
 
         let mut methods = Vec::new();
         if self.peek_kind() == TokenKind::LBrace {
@@ -1206,6 +1262,7 @@ impl<'a> Parser<'a> {
             name,
             name_span,
             methods,
+            parent_class,
             interfaces,
             span: kw.merge(name_span),
         }
@@ -1260,6 +1317,13 @@ impl<'a> Parser<'a> {
             self.expect(TokenKind::RParen, ")");
             self.skip_trivia();
         }
+
+        // Optional `: Iface1, Iface2` — enums can implement interfaces.
+        // The parent class slot is unused (enums always extend
+        // `kotlin/Enum` implicitly), so pass `allow_parent_class: false`
+        // — anyone writing `enum class X : Foo(...)` gets a parse error
+        // rather than silently producing the wrong supertype.
+        let (_, enum_interfaces) = self.parse_simple_supertype_clause(false);
 
         let mut entries = Vec::new();
         let mut enum_methods = Vec::new();
@@ -1373,6 +1437,7 @@ impl<'a> Parser<'a> {
             constructor_params,
             entries,
             methods: enum_methods,
+            interfaces: enum_interfaces,
             span: kw.merge(name_span),
         }
     }
@@ -1391,6 +1456,19 @@ impl<'a> Parser<'a> {
             self.interner.intern("")
         };
         self.skip_trivia();
+        // Optional generic params on the interface declaration itself
+        // (`interface Iter<T> : Source<T>`). We skip them since
+        // InterfaceDecl doesn't yet carry type params; the supertype
+        // clause needs to parse cleanly though.
+        if self.peek_kind() == TokenKind::Lt {
+            self.skip_supertype_generic_args();
+        }
+
+        // Optional `: Iface1, Iface2` — interfaces may extend other
+        // interfaces. `allow_parent_class: false` rejects a leading
+        // `: Foo(args)` clause with a diagnostic (interfaces can't
+        // extend classes in Kotlin).
+        let (_, super_interfaces) = self.parse_simple_supertype_clause(false);
 
         let mut methods = Vec::new();
         if self.peek_kind() == TokenKind::LBrace {
@@ -1442,6 +1520,7 @@ impl<'a> Parser<'a> {
             name,
             name_span,
             methods,
+            interfaces: super_interfaces,
             span: kw.merge(name_span),
         }
     }

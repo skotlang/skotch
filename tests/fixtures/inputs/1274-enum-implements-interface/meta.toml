@@ -1,0 +1,4 @@
+name = "1274-enum-implements-interface"
+status = "supported"
+features = ["enum", "interface", "when-exhaustiveness"]
+reason = "Locks in audit fix #7: EnumDecl carries an `interfaces` list. Parser accepts `enum class Op : Calculable`, and interface-typed references dispatch through enum entry instances."

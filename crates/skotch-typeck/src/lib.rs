@@ -260,10 +260,10 @@ pub fn type_check(
     // needed in Kotlin). Local file aliases win over package ones —
     // typeck just fills in the gaps from `package_symbols`.
     if let Some(pkg) = package_symbols {
-        for (name, target_tr) in &pkg.type_aliases {
+        for (name, alias) in &pkg.type_aliases {
             tc.type_aliases
                 .entry(name.clone())
-                .or_insert_with(|| target_tr.clone());
+                .or_insert_with(|| alias.target.clone());
         }
     }
 
@@ -280,9 +280,10 @@ pub fn type_check(
 
     // Register cross-file class declarations as minimal stubs so this
     // file's `val x: Sealed = Subclass(...)` typechecks against the
-    // declared annotation (and `is Subclass` patterns resolve). Without
-    // this, typeck saw `Subclass(...)` as `Ty::Any` and the assignment
-    // failed with "expected <class>, found Any".
+    // declared annotation (and `is Subclass` patterns resolve). The
+    // PackageSymbolTable is now keyed by FQ name with a simple-name
+    // index — we iterate the FQ map but register under the simple name
+    // (lookups are by simple name from the AST).
     if let Some(pkg) = package_symbols {
         for (simple_name, ext_class) in &pkg.classes {
             if tc.env.types.contains_key(simple_name) {
@@ -306,21 +307,81 @@ pub fn type_check(
                     methods: ext_class
                         .methods
                         .iter()
-                        .map(|(n, params, ret)| MethodSig {
-                            name: n.clone(),
-                            params: params.clone(),
-                            ret: ret.clone(),
+                        .map(|m| MethodSig {
+                            name: m.name.clone(),
+                            params: m.param_tys(),
+                            ret: m.return_ty.clone(),
                         })
                         .collect(),
-                    companion_methods: Vec::new(),
+                    companion_methods: ext_class
+                        .companion_methods
+                        .iter()
+                        .map(|m| MethodSig {
+                            name: m.name.clone(),
+                            params: m.param_tys(),
+                            ret: m.return_ty.clone(),
+                        })
+                        .collect(),
                     is_enum: matches!(ext_class.kind, skotch_resolve::ExternalClassKind::Enum),
-                    enum_entries: Vec::new(),
+                    enum_entries: ext_class.enum_entries.clone(),
                     is_sealed: matches!(
                         ext_class.kind,
                         skotch_resolve::ExternalClassKind::SealedClass
+                            | skotch_resolve::ExternalClassKind::SealedInterface
                     ),
                 },
             );
+        }
+        // Also record cross-file sealed subclass relationships so the
+        // `when (s: Sealed)` exhaustiveness check sees every direct
+        // subclass declared in another file. The local `sealed_subclasses`
+        // map is populated from in-file classes during register_class;
+        // here we union in the cross-file ones.
+        for ext_class in pkg.classes.values() {
+            // Self-name (simple) for child entries — derive from
+            // the FQ name (last segment after `/` and last `$` for
+            // nested classes).
+            let child_simple = ext_class
+                .jvm_name
+                .rsplit('/')
+                .next()
+                .and_then(|n| n.rsplit('$').next())
+                .unwrap_or(&ext_class.jvm_name)
+                .to_string();
+            if let Some(ref sup) = ext_class.super_class {
+                if pkg
+                    .classes
+                    .get(sup)
+                    .map(|c| {
+                        matches!(
+                            c.kind,
+                            skotch_resolve::ExternalClassKind::SealedClass
+                                | skotch_resolve::ExternalClassKind::SealedInterface
+                        )
+                    })
+                    .unwrap_or(false)
+                {
+                    tc.env
+                        .sealed_subclasses
+                        .entry(sup.clone())
+                        .or_default()
+                        .push(child_simple.clone());
+                }
+            }
+            for iface in &ext_class.interfaces {
+                if pkg
+                    .classes
+                    .get(iface)
+                    .map(|c| matches!(c.kind, skotch_resolve::ExternalClassKind::SealedInterface))
+                    .unwrap_or(false)
+                {
+                    tc.env
+                        .sealed_subclasses
+                        .entry(iface.clone())
+                        .or_default()
+                        .push(child_simple.clone());
+                }
+            }
         }
     }
 
@@ -851,6 +912,10 @@ impl<'a> TypeChecker<'a> {
             .iter()
             .map(|s| self.interner.resolve(*s).to_string())
             .collect();
+        let super_class = o
+            .parent_class
+            .as_ref()
+            .map(|sc| self.interner.resolve(sc.name).to_string());
         let methods: Vec<MethodSig> = o
             .methods
             .iter()
@@ -860,7 +925,7 @@ impl<'a> TypeChecker<'a> {
             name.clone(),
             TypeDecl {
                 name,
-                super_class: None,
+                super_class,
                 interfaces,
                 fields: Vec::new(),
                 methods,
@@ -879,12 +944,17 @@ impl<'a> TypeChecker<'a> {
             .iter()
             .map(|m| self.method_sig_from_fun(m))
             .collect();
+        let interfaces: Vec<String> = i
+            .interfaces
+            .iter()
+            .map(|s| self.interner.resolve(*s).to_string())
+            .collect();
         self.env.types.insert(
             name.clone(),
             TypeDecl {
                 name,
                 super_class: None,
-                interfaces: Vec::new(),
+                interfaces,
                 fields: Vec::new(),
                 methods,
                 companion_methods: Vec::new(),
@@ -918,14 +988,24 @@ impl<'a> TypeChecker<'a> {
                 .insert(entry_name.clone(), name.clone());
             entries.push(entry_name);
         }
+        let methods: Vec<MethodSig> = e
+            .methods
+            .iter()
+            .map(|m| self.method_sig_from_fun(m))
+            .collect();
+        let interfaces: Vec<String> = e
+            .interfaces
+            .iter()
+            .map(|s| self.interner.resolve(*s).to_string())
+            .collect();
         self.env.types.insert(
             name.clone(),
             TypeDecl {
                 name,
                 super_class: None,
-                interfaces: Vec::new(),
+                interfaces,
                 fields,
-                methods: Vec::new(),
+                methods,
                 companion_methods: Vec::new(),
                 is_enum: true,
                 enum_entries: entries,

@@ -127,6 +127,9 @@ pub struct InterfaceDecl {
     pub name_span: Span,
     /// Methods declared in the interface body (abstract by default).
     pub methods: Vec<FunDecl>,
+    /// Super-interfaces from the `interface Child : Parent1, Parent2`
+    /// declaration. Empty when no `: ...` clause is present.
+    pub interfaces: Vec<Symbol>,
     pub span: Span,
 }
 
@@ -142,6 +145,9 @@ pub struct EnumDecl {
     /// Methods declared on the enum class body (after the entries).
     /// Includes abstract methods that entries must override.
     pub methods: Vec<FunDecl>,
+    /// Implemented interfaces from the `enum class Op : Calculable`
+    /// declaration. Empty when no `: ...` clause is present.
+    pub interfaces: Vec<Symbol>,
     pub span: Span,
 }
 
@@ -161,6 +167,11 @@ pub struct ObjectDecl {
     pub name_span: Span,
     /// Methods declared in the object body.
     pub methods: Vec<FunDecl>,
+    /// Optional parent class clause: `object Foo : Parent(args)`.
+    /// Kotlin allows objects to extend a class (not just implement
+    /// interfaces); without this field the parent clause was silently
+    /// dropped at parse time.
+    pub parent_class: Option<SuperClassRef>,
     /// Implemented interfaces from the `object Foo : Iface1, Iface2`
     /// declaration. Empty when no `: ...` clause is present.
     pub interfaces: Vec<Symbol>,

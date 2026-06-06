@@ -38,6 +38,21 @@ fn is_zero_usize(v: &usize) -> bool {
     *v == 0
 }
 
+/// Side-channel metadata for cross-file top-level functions. Carries
+/// declaration-level facts the call site needs but `cross_file_fns`'s
+/// `(owner_class, descriptor, return_ty)` tuple doesn't hold:
+/// `inline`, extension receiver type, per-param default markers, and
+/// per-param vararg markers. Populated by mir-lower from
+/// [`skotch_resolve::ExternalFunDecl`] during multi-file lowering.
+#[derive(Clone, Debug, Default)]
+pub struct CrossFileFnExtras {
+    pub is_inline: bool,
+    pub receiver_ty: Option<Ty>,
+    pub has_default: Vec<bool>,
+    pub is_vararg: Vec<bool>,
+    pub annotations: Vec<String>,
+}
+
 // ── Annotations ─────────────────────────────────────────────────────────────
 
 /// An annotation carried through MIR for JVM emission.
@@ -954,6 +969,14 @@ pub struct MirModule {
     /// (owner_class, descriptor, return_ty). Skipped during serialization.
     #[serde(skip)]
     pub cross_file_fns: rustc_hash::FxHashMap<String, (String, String, skotch_types::Ty)>,
+    /// Per-cross-file-fn additional metadata. Keyed by the same name
+    /// the caller uses for `cross_file_fns`. Callers that need to know
+    /// whether the function was declared `inline`, has an extension
+    /// receiver, or has per-parameter defaults consult this side
+    /// table — keeping `cross_file_fns`'s tuple shape stable for
+    /// existing consumers. Skipped during serialization.
+    #[serde(skip)]
+    pub cross_file_fn_extras: rustc_hash::FxHashMap<String, CrossFileFnExtras>,
     /// Cross-file class declarations. Maps simple class name →
     /// (jvm_name, kind_str, is_data_class). Used for constructor calls.
     #[serde(skip)]
