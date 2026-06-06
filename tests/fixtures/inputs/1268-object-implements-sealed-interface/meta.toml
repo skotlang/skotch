@@ -1,0 +1,4 @@
+name = "1268-object-implements-sealed-interface"
+status = "supported"
+features = ["sealed-interface", "object", "polymorphism"]
+reason = "Locks in `object Foo : Iface` syntax + cross-cutting fixes: parser supertype clause on object decl, ExternalClassDecl carrying interfaces, mir-lower emitting MirClass.interfaces, and bare-Ident lowering routing same-package objects through getstatic INSTANCE rather than a null placeholder."

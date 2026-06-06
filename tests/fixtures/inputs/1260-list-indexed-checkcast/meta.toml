@@ -1,0 +1,4 @@
+name = "1260-list-indexed-checkcast"
+status = "supported"
+features = ["list", "indexed-access", "checkcast", "interface"]
+reason = "Lock in `list[i]` indexed access emitting `checkcast <ElementClass>` when the receiver's `local_generic_args` records a concrete element class. Required for `actions[0].run()` to dispatch on Action instead of Object. Function-parameter generic args now propagate via `local_generic_args` on the param's local."

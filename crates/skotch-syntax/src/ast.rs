@@ -161,6 +161,9 @@ pub struct ObjectDecl {
     pub name_span: Span,
     /// Methods declared in the object body.
     pub methods: Vec<FunDecl>,
+    /// Implemented interfaces from the `object Foo : Iface1, Iface2`
+    /// declaration. Empty when no `: ...` clause is present.
+    pub interfaces: Vec<Symbol>,
     pub span: Span,
 }
 

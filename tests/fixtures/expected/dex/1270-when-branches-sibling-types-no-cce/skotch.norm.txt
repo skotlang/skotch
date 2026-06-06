@@ -1,0 +1,71 @@
+dex_version   035
+strings       28
+types         13
+methods       10
+classes       1
+
+--- strings ---
+  "<init>"
+  "I"
+  "INSTANCE"
+  "L"
+  "LAdd;"
+  "LInputKt;"
+  "LL"
+  "LNoop;"
+  "LOp;"
+  "LSub;"
+  "LZI"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/String;"
+  "Ljava/lang/System;"
+  "V"
+  "VI"
+  "VL"
+  "Z"
+  "[Ljava/lang/String;"
+  "getV"
+  "input.kt"
+  "label"
+  "main"
+  "negate"
+  "out"
+  "pickIfElse"
+  "println"
+
+--- types ---
+  I
+  LAdd;
+  LInputKt;
+  LNoop;
+  LOp;
+  LSub;
+  Ljava/io/PrintStream;
+  Ljava/lang/Object;
+  Ljava/lang/String;
+  Ljava/lang/System;
+  V
+  Z
+  [Ljava/lang/String;
+
+--- methods ---
+  LAdd;.<init>(I)V
+  LAdd;.getV()I
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  LInputKt;.negate(Ljava/lang/Object;)Ljava/lang/Object;
+  LInputKt;.pickIfElse(ZI)Ljava/lang/Object;
+  LOp;.label()Ljava/lang/String;
+  LSub;.<init>(I)V
+  LSub;.getV()I
+  Ljava/io/PrintStream;.println(Ljava/lang/String;)V
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       main()V flags=0x0019 regs=22 ins=0 outs=2 insns=93
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4
+  method       negate(Ljava/lang/Object;)Ljava/lang/Object; flags=0x0019 regs=14 ins=1 outs=2 insns=46
+  method       pickIfElse(ZI)Ljava/lang/Object; flags=0x0019 regs=5 ins=2 outs=2 insns=14

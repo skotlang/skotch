@@ -1,0 +1,4 @@
+name = "1251-supertype-generic-args"
+status = "supported"
+features = ["generics", "supertype", "Comparable"]
+reason = "Locks in parser support for generic argument lists on supertypes (`: Comparable<Box>`). The class model doesn't yet carry supertype type args — the parser just skips the `<...>` so the rest of the declaration parses cleanly."

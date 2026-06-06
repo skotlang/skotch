@@ -1,0 +1,4 @@
+name = "1271-stub-method-no-duplicate-annot"
+status = "supported"
+features = ["interface", "if-else", "polymorphism"]
+reason = "Locks in the emit_stub_method de-duplication fix: stub methods used to append RuntimeInvisibleAnnotations / RuntimeInvisibleParameterAnnotations themselves and ALSO get them appended by the caller, producing a class that the JVM rejects with ClassFormatError at load time."

@@ -1,0 +1,4 @@
+name = "1261-custom-getter-no-field"
+status = "supported"
+features = ["custom-getter", "property", "private-var"]
+reason = "Locks in `val ... get() = ...` with no init emitting only the synthesized `getX()` accessor — no spurious backing field. Cross-file dispatch goes through the getter; field-vs-getter resolution no longer picks the (nonexistent) field with the wrong descriptor."

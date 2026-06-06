@@ -189,6 +189,41 @@ impl Ty {
         if matches!(self, Ty::Function { .. }) && matches!(other, Ty::Any) {
             return true;
         }
+        // Function-to-function compatibility. Required for assigning
+        // an unannotated lambda (`{ n -> ... }`, params inferred as
+        // `Ty::Any`) to a typed function slot like
+        // `val f: (Int) -> Boolean = { ... }`. We don't enforce
+        // contravariant param / covariant return here — the lambda
+        // body has already been checked against the source-level
+        // annotation — but we DO require the same arity and the same
+        // suspend/composable flags.
+        if let (
+            Ty::Function {
+                params: sp,
+                ret: sr,
+                is_suspend: ssusp,
+                is_composable: scomp,
+            },
+            Ty::Function {
+                params: op,
+                ret: or_,
+                is_suspend: osusp,
+                is_composable: ocomp,
+            },
+        ) = (self, other)
+        {
+            if sp.len() != op.len() || ssusp != osusp || scomp != ocomp {
+                return false;
+            }
+            for (s, o) in sp.iter().zip(op.iter()) {
+                let compatible = matches!(s, Ty::Any) || matches!(o, Ty::Any) || s == o;
+                if !compatible {
+                    return false;
+                }
+            }
+            let r_compat = matches!(**sr, Ty::Any) || matches!(**or_, Ty::Any) || **sr == **or_;
+            return r_compat;
+        }
         // Sound class subtyping via the hierarchy callback.
         if let (Ty::Class(child), Ty::Class(parent)) = (self, other) {
             return is_subclass(child, parent);

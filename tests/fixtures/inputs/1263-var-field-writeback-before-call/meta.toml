@@ -1,0 +1,4 @@
+name = "1263-var-field-writeback-before-call"
+status = "supported"
+features = ["var-field", "writeback", "method-call"]
+reason = "Locks in writeback of mutable `var` instance fields IMMEDIATELY after each assignment to the field's pre-loaded local mirror, so sibling method calls invoked later in the same body see the latest value. Without this, the method-body pre-load + end-of-body writeback pattern leaked stale data into nested calls."

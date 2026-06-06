@@ -1,0 +1,4 @@
+name = "1259-hof-multi-param-lambda-type"
+status = "supported"
+features = ["higher-order-function", "lambda", "interface", "lambda-param-types"]
+reason = "Lock in general multi-param lambda type propagation: when a HOF declares `(A, B) -> R` and is called with a lambda, both A and B types flow into the lambda body via `module.lambda_param_types`. Previously only `fold` set this; other HOFs lost the precise types and member calls on lambda params lowered to Const(null)."

@@ -1,0 +1,4 @@
+name = "1264-cross-file-sealed-typeck"
+status = "supported"
+features = ["sealed-class", "typeck", "cross-file"]
+reason = "Locks in typeck seeding from `PackageSymbolTable` for cross-file class references. `val x: Sealed = Sub(...)` typechecks against the declared sealed parent even when both classes live in different files within the same package."

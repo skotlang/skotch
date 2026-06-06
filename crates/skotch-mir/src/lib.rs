@@ -929,6 +929,15 @@ pub struct MirModule {
     /// Type alias mappings: alias name → target type name.
     #[serde(default, skip_serializing_if = "rustc_hash::FxHashMap::is_empty")]
     pub type_aliases: rustc_hash::FxHashMap<String, String>,
+    /// Function-typed typealiases — alias name → fully resolved
+    /// `Ty::Function`. Required because `type_aliases` above is just
+    /// a name→name map (the target's simple name), which for a
+    /// function-type target is only its return type's name — losing
+    /// the function-type structure. `resolve_type_ref` consults this
+    /// before falling back to the name-only resolution. Skipped
+    /// during serialization (rebuilt each compile).
+    #[serde(skip)]
+    pub function_aliases: rustc_hash::FxHashMap<String, Ty>,
     /// Import map: simple class name → JVM internal path.
     /// Built from `import` declarations and default java.lang.* imports.
     /// Used to resolve bare class names like `Random` to `java/util/Random`.

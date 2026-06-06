@@ -1,0 +1,4 @@
+name = "1269-when-is-smartcast-scope-leak"
+status = "supported"
+features = ["when-is", "smart-cast", "sealed-interface"]
+reason = "Locks in the fix for when-is branches whose bodies declare local vals: the per-branch scope must be truncated to its pre-body length, not just popped by smart_cast_entries (which drops the body's own bindings first, stranding the smart-cast in scope and corrupting the next branch's smart-cast)."

@@ -1,0 +1,60 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=3 max_locals=1
+    0000 new Class(TagA)
+    0003 dup
+    0004 invokespecial Method(TagA.<init>:()V)
+    0007 checkcast Class(Tag)
+    0010 new Class(TagB)
+    0013 dup
+    0014 invokespecial Method(TagB.<init>:()V)
+    0017 checkcast Class(Tag)
+    0020 invokedynamic InvokeDynamic(invoke:()Lkotlin/jvm/functions/Function2;)
+    0025 invokestatic Method(InputKt.pair:(LTag;LTag;Lkotlin/jvm/functions/Function2;)Ljava/lang/String;)
+    0028 astore_0
+    0029 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0032 aload_0
+    0033 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0036 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
+method        main$lambda$0 (LTag;LTag;)Ljava/lang/String; 0x001A
+  code        max_stack=2 max_locals=2
+    0000 aload_0
+    0001 ldc "a"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 aload_1
+    0007 ldc "b"
+    0009 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0012 aload_0
+    0013 invokeinterface InterfaceMethod(Tag.label:()Ljava/lang/String;)
+    0018 aload_1
+    0019 invokeinterface InterfaceMethod(Tag.label:()Ljava/lang/String;)
+    0024 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;)
+    0029 areturn
+method        pair (LTag;LTag;Lkotlin/jvm/functions/Function2;)Ljava/lang/String; 0x0019
+  code        max_stack=3 max_locals=3
+    0000 aload_0
+    0001 ldc "t1"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 aload_1
+    0007 ldc "t2"
+    0009 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0012 aload_2
+    0013 ldc "fmt"
+    0015 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0018 aload_2
+    0019 aload_0
+    0020 aload_1
+    0021 invokeinterface InterfaceMethod(kotlin/jvm/functions/Function2.invoke:(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;)
+    0026 checkcast Class(java/lang/String)
+    0029 areturn
+  attr        Signature (2 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (19 bytes)
+class_attr    BootstrapMethods (18 bytes)

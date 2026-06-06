@@ -1,0 +1,44 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=3 max_locals=3
+    0000 invokedynamic InvokeDynamic(invoke:()Lkotlin/jvm/functions/Function1;)
+    0005 astore_0
+    0006 new Class(Holder)
+    0009 dup
+    0010 aload_0
+    0011 invokespecial Method(Holder.<init>:(Lkotlin/jvm/functions/Function1;)V)
+    0014 astore_1
+    0015 aload_1
+    0016 iconst_2
+    0017 invokevirtual Method(Holder.call:(I)Z)
+    0020 istore_2
+    0021 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0024 iload_2
+    0025 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0028 aload_1
+    0029 iconst_3
+    0030 invokevirtual Method(Holder.call:(I)Z)
+    0033 istore_2
+    0034 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0037 iload_2
+    0038 invokevirtual Method(java/io/PrintStream.println:(Z)V)
+    0041 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
+method        main$lambda$0 (I)Z 0x001A
+  code        max_stack=2 max_locals=1
+    0000 iload_0
+    0001 iconst_2
+    0002 irem
+    0003 ifne 10
+    0006 iconst_1
+    0007 goto 11
+    0010 iconst_0
+    0011 ireturn
+    sub_attr  StackMapTable (5 bytes)
+class_attr    BootstrapMethods (12 bytes)

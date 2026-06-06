@@ -1,0 +1,4 @@
+name = "1266-typealias-function-type"
+status = "supported"
+features = ["typealias", "function-type", "lambda"]
+reason = "Locks in `typealias Predicate = (Int) -> Boolean` as a function type everywhere — typeck's `type_aliases` now stores the full target TypeRef and resolves recursively, mir-lower's `function_aliases` map surfaces the resolved Ty::Function for field/param types, and resolve crate's descriptor builder substitutes the alias target before emitting JVM descriptors."

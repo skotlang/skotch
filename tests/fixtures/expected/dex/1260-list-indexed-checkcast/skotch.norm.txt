@@ -1,0 +1,63 @@
+dex_version   035
+strings       25
+types         11
+methods       8
+classes       1
+
+--- strings ---
+  "<init>"
+  "I"
+  "IL"
+  "LAction;"
+  "LI"
+  "LIncAction;"
+  "LInputKt;"
+  "LL"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/System;"
+  "Ljava/util/List;"
+  "Lkotlin/collections/CollectionsKt;"
+  "V"
+  "VI"
+  "VL"
+  "[Ljava/lang/String;"
+  "first"
+  "get"
+  "input.kt"
+  "listOf"
+  "main"
+  "out"
+  "println"
+  "run"
+
+--- types ---
+  I
+  LAction;
+  LIncAction;
+  LInputKt;
+  Ljava/io/PrintStream;
+  Ljava/lang/Object;
+  Ljava/lang/System;
+  Ljava/util/List;
+  Lkotlin/collections/CollectionsKt;
+  V
+  [Ljava/lang/String;
+
+--- methods ---
+  LAction;.run()I
+  LIncAction;.<init>(I)V
+  LInputKt;.first(Ljava/lang/Object;)I
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  Ljava/io/PrintStream;.println(I)V
+  Ljava/util/List;.get(I)Ljava/lang/Object;
+  Lkotlin/collections/CollectionsKt;.listOf(Ljava/lang/Object;)Ljava/util/List;
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       first(Ljava/lang/Object;)I flags=0x0019 regs=5 ins=1 outs=2 insns=13
+  method       main()V flags=0x0019 regs=5 ins=0 outs=2 insns=20
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4

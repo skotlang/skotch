@@ -100,6 +100,14 @@ pub struct PackageSymbolTable {
     pub vals: std::collections::HashMap<String, ExternalValDecl>,
     /// User-defined class/object/enum/interface: name → declaration metadata.
     pub classes: std::collections::HashMap<String, ExternalClassDecl>,
+    /// `typealias` declarations: simple-name → AST `TypeRef` of the
+    /// alias target. Surfaced so typeck in another file can resolve
+    /// the alias to its underlying type (e.g.
+    /// `typealias Predicate = (Int) -> Boolean` → caller sees
+    /// `Ty::Function`). Not serialized — `TypeRef` doesn't impl
+    /// serde traits and the table rebuilds each compile.
+    #[serde(skip)]
+    pub type_aliases: std::collections::HashMap<String, skotch_syntax::TypeRef>,
 }
 
 /// Metadata for a top-level function from another file.
@@ -154,6 +162,9 @@ pub struct ExternalClassDecl {
     pub companion_methods: Vec<(String, Vec<Ty>, Ty)>,
     /// Superclass name (simple, not FQ).
     pub super_class: Option<String>,
+    /// Interface names this class/object implements (simple, not FQ).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub interfaces: Vec<String>,
     /// Whether the class is open.
     pub is_open: bool,
     /// Whether the class is abstract.
@@ -175,20 +186,22 @@ pub enum ExternalClassKind {
 /// Map an AST `TypeRef` name to a JVM type descriptor character/string.
 /// When `param_position` is true, `Unit` maps to `Lkotlin/Unit;` (not `V`,
 /// which is only valid as a return-type descriptor).
-fn type_ref_to_descriptor(
+fn type_ref_to_descriptor_with_aliases(
     tr: &TypeRef,
     interner: &Interner,
     imports: &FxHashMap<String, String>,
+    aliases: &FxHashMap<String, TypeRef>,
 ) -> String {
-    type_ref_to_descriptor_inner(tr, interner, false, imports)
+    type_ref_to_descriptor_inner(tr, interner, false, imports, aliases)
 }
 
-fn type_ref_to_param_descriptor(
+fn type_ref_to_param_descriptor_with_aliases(
     tr: &TypeRef,
     interner: &Interner,
     imports: &FxHashMap<String, String>,
+    aliases: &FxHashMap<String, TypeRef>,
 ) -> String {
-    type_ref_to_descriptor_inner(tr, interner, true, imports)
+    type_ref_to_descriptor_inner(tr, interner, true, imports, aliases)
 }
 
 fn type_ref_to_descriptor_inner(
@@ -196,6 +209,7 @@ fn type_ref_to_descriptor_inner(
     interner: &Interner,
     param_position: bool,
     imports: &FxHashMap<String, String>,
+    aliases: &FxHashMap<String, TypeRef>,
 ) -> String {
     // Function types: (P1, P2, ...) -> R  →  Lkotlin/jvm/functions/FunctionN;
     // `@Composable` bumps arity by 2 (Composer + Int $changed); `suspend`
@@ -208,6 +222,22 @@ fn type_ref_to_descriptor_inner(
         return format!("Lkotlin/jvm/functions/Function{arity};");
     }
     let name = interner.resolve(tr.name);
+    // Typealias substitution — `typealias Predicate = (Int) -> Boolean`
+    // expands the field/param's descriptor to FunctionN, not the
+    // return-type's name. Without this, cross-file callers built
+    // `Object` descriptors for typealias-typed slots and the JVM
+    // failed to find the constructor / method.
+    if !tr.nullable {
+        if let Some(target_tr) = aliases.get(name) {
+            return type_ref_to_descriptor_inner(
+                target_tr,
+                interner,
+                param_position,
+                imports,
+                aliases,
+            );
+        }
+    }
     if tr.nullable {
         return "Ljava/lang/Object;".to_string();
     }
@@ -257,11 +287,19 @@ fn type_ref_to_descriptor_inner(
 /// for the next composable arg and triggering d8 stack-map rejects.
 fn infer_body_return_ty(body: &skotch_syntax::Block, interner: &Interner) -> Ty {
     use skotch_syntax::{BinOp, Expr, Stmt};
-    let last_expr = body.stmts.iter().rev().find_map(|s| match s {
-        Stmt::Return { value: Some(e), .. } | Stmt::Expr(e) => Some(e),
+    // Block body with no `return value` statement returns Unit, even
+    // when the last statement is an expression — Kotlin discards the
+    // value of a trailing Stmt::Expr. Inferring as `Ty::Any` (the old
+    // behavior) made instance method calls like `inventory.add(x, y)`
+    // emit descriptors with `Ljava/lang/Object;` returns where the real
+    // method returns void — JVM threw NoSuchMethodError at the call
+    // site. Only when an explicit `return value` is present do we infer
+    // the returned expression's type.
+    let returned_expr = body.stmts.iter().rev().find_map(|s| match s {
+        Stmt::Return { value: Some(e), .. } => Some(e),
         _ => None,
     });
-    let expr = match last_expr {
+    let expr = match returned_expr {
         Some(e) => e,
         None => return Ty::Unit,
     };
@@ -365,8 +403,56 @@ fn infer_val_type_from_init(
     }
 }
 
-fn type_ref_to_ty(tr: &TypeRef, interner: &Interner, imports: &FxHashMap<String, String>) -> Ty {
+fn type_ref_to_ty_with_aliases(
+    tr: &TypeRef,
+    interner: &Interner,
+    imports: &FxHashMap<String, String>,
+    aliases: &FxHashMap<String, TypeRef>,
+) -> Ty {
+    // Function type: `(P1, ...) -> R` → `Ty::Function`. Must come
+    // before the typealias substitution and name lookups so
+    // explicit function-type TypeRefs are recognised here too.
+    if tr.func_params.is_some() {
+        let params: Vec<Ty> = tr
+            .func_params
+            .as_ref()
+            .map(|fps| {
+                fps.iter()
+                    .map(|p| type_ref_to_ty_with_aliases(p, interner, imports, aliases))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let ret_tr = TypeRef {
+            name: tr.name,
+            nullable: false,
+            func_params: None,
+            type_args: Vec::new(),
+            is_suspend: false,
+            is_composable: false,
+            has_receiver: false,
+            span: tr.span,
+        };
+        let ret = type_ref_to_ty_with_aliases(&ret_tr, interner, imports, aliases);
+        let base = Ty::Function {
+            params,
+            ret: Box::new(ret),
+            is_suspend: tr.is_suspend,
+            is_composable: tr.is_composable,
+        };
+        return if tr.nullable {
+            Ty::Nullable(Box::new(base))
+        } else {
+            base
+        };
+    }
     let name = interner.resolve(tr.name);
+    // Typealias substitution — `typealias Predicate = (Int) -> Boolean`
+    // needs the resolved Ty (Function) rather than the alias's name.
+    if !tr.nullable {
+        if let Some(target_tr) = aliases.get(name) {
+            return type_ref_to_ty_with_aliases(target_tr, interner, imports, aliases);
+        }
+    }
     let base = skotch_types::ty_from_name(name).unwrap_or_else(|| {
         // Kotlin built-in class names that map to a JVM class via
         // JavaToKotlinClassMap (`List` → `java/util/List`, `CharSequence`
@@ -398,24 +484,30 @@ fn type_ref_to_ty(tr: &TypeRef, interner: &Interner, imports: &FxHashMap<String,
     }
 }
 
-/// Build a JVM method descriptor from function parameters and return type.
-fn build_descriptor(
+fn build_descriptor_with_aliases(
     params: &[Param],
     return_ty: Option<&TypeRef>,
     receiver_ty: Option<&TypeRef>,
     interner: &Interner,
     imports: &FxHashMap<String, String>,
+    aliases: &FxHashMap<String, TypeRef>,
 ) -> String {
     let mut desc = String::from("(");
     if let Some(recv) = receiver_ty {
-        desc.push_str(&type_ref_to_param_descriptor(recv, interner, imports));
+        desc.push_str(&type_ref_to_param_descriptor_with_aliases(
+            recv, interner, imports, aliases,
+        ));
     }
     for p in params {
-        desc.push_str(&type_ref_to_param_descriptor(&p.ty, interner, imports));
+        desc.push_str(&type_ref_to_param_descriptor_with_aliases(
+            &p.ty, interner, imports, aliases,
+        ));
     }
     desc.push(')');
     if let Some(ret) = return_ty {
-        desc.push_str(&type_ref_to_descriptor(ret, interner, imports));
+        desc.push_str(&type_ref_to_descriptor_with_aliases(
+            ret, interner, imports, aliases,
+        ));
     } else {
         desc.push('V');
     }
@@ -474,21 +566,40 @@ pub fn gather_declarations(
         // Add same-package classes declared in any of the files passed in,
         // so a declaration in this file can reference a class declared
         // beside it without an explicit import.
+        let mut file_aliases: FxHashMap<String, TypeRef> = FxHashMap::default();
         for (_, other_ast, _other_wrapper) in files {
             if other_ast.package.as_ref().map(|p| &p.path) != ast.package.as_ref().map(|p| &p.path)
             {
                 continue;
             }
             for d in &other_ast.decls {
-                if let Decl::Class(c) = d {
-                    let simple = interner.resolve(c.name).to_string();
+                let simple_opt = match d {
+                    Decl::Class(c) => Some(interner.resolve(c.name).to_string()),
+                    Decl::Enum(e) => Some(interner.resolve(e.name).to_string()),
+                    Decl::Interface(i) => Some(interner.resolve(i.name).to_string()),
+                    Decl::Object(o) => Some(interner.resolve(o.name).to_string()),
+                    _ => None,
+                };
+                if let Some(simple) = simple_opt {
                     file_imports
                         .entry(simple.clone())
                         .or_insert_with(|| format!("{pkg_prefix}{simple}"));
                 }
+                // Also surface same-package typealias declarations so
+                // descriptor building can substitute the alias's
+                // target TypeRef (`typealias Predicate = (Int) -> Boolean`
+                // — used in CountingMatcher's primary ctor — must
+                // emit `LFunction1;` not `Ljava/lang/Object;`).
+                if let Decl::TypeAlias(ta) = d {
+                    let alias_name = interner.resolve(ta.name).to_string();
+                    file_aliases
+                        .entry(alias_name)
+                        .or_insert_with(|| ta.target.clone());
+                }
             }
         }
         let imports = &file_imports;
+        let aliases = &file_aliases;
 
         for decl in &ast.decls {
             match decl {
@@ -498,12 +609,13 @@ pub fn gather_declarations(
                         continue;
                     }
                     let name = interner.resolve(f.name).to_string();
-                    let mut descriptor = build_descriptor(
+                    let mut descriptor = build_descriptor_with_aliases(
                         &f.params,
                         f.return_ty.as_ref(),
                         f.receiver_ty.as_ref(),
                         interner,
                         imports,
+                        aliases,
                     );
                     // @Composable functions get $composer/$changed params added
                     // by the compose transform. Include them in the descriptor
@@ -522,12 +634,12 @@ pub fn gather_declarations(
                     let return_ty = f
                         .return_ty
                         .as_ref()
-                        .map(|tr| type_ref_to_ty(tr, interner, imports))
+                        .map(|tr| type_ref_to_ty_with_aliases(tr, interner, imports, aliases))
                         .unwrap_or(Ty::Unit);
                     let param_tys: Vec<Ty> = f
                         .params
                         .iter()
-                        .map(|p| type_ref_to_ty(&p.ty, interner, imports))
+                        .map(|p| type_ref_to_ty_with_aliases(&p.ty, interner, imports, aliases))
                         .collect();
                     let param_count = if is_composable {
                         f.params.len() + 2 // +$composer +$changed
@@ -551,7 +663,7 @@ pub fn gather_declarations(
                     }
                     let name = interner.resolve(v.name).to_string();
                     let ty = match v.ty.as_ref() {
-                        Some(tr) => type_ref_to_ty(tr, interner, imports),
+                        Some(tr) => type_ref_to_ty_with_aliases(tr, interner, imports, aliases),
                         None => infer_val_type_from_init(&v.init, interner, imports),
                     };
                     table.vals.insert(
@@ -579,7 +691,8 @@ pub fn gather_declarations(
                         .filter(|p| p.is_val || p.is_var)
                         .map(|p| {
                             let fname = interner.resolve(p.name).to_string();
-                            let fty = type_ref_to_ty(&p.ty, interner, imports);
+                            let fty =
+                                type_ref_to_ty_with_aliases(&p.ty, interner, imports, aliases);
                             (fname, fty)
                         })
                         .collect();
@@ -592,12 +705,51 @@ pub fn gather_declarations(
                         .iter()
                         .map(|p| {
                             let pname = interner.resolve(p.name).to_string();
-                            let pty = type_ref_to_ty(&p.ty, interner, imports);
+                            let pty =
+                                type_ref_to_ty_with_aliases(&p.ty, interner, imports, aliases);
                             (pname, pty)
                         })
                         .collect();
-                    // Collect method signatures.
-                    let methods: Vec<(String, Vec<Ty>, Ty)> = c
+                    // Collect method signatures. Also surface synthetic
+                    // `getXxx()` accessors for each `val/var` body
+                    // property so cross-file callers can dispatch
+                    // through `Foo.x` as `invokevirtual getX()`
+                    // (without these, the Field-lowering falls back
+                    // to a `getfield x:Object` with the wrong
+                    // descriptor — `NoSuchFieldError` at runtime).
+                    let property_getters: Vec<(String, Vec<Ty>, Ty)> = c
+                        .properties
+                        .iter()
+                        .filter_map(|p| {
+                            let pname = interner.resolve(p.name).to_string();
+                            // `@JvmField` properties are exposed as bare
+                            // fields with no synthesized getter, so skip.
+                            let is_jvm_field = p.annotations.iter().any(|a| {
+                                let n = interner.resolve(a.name);
+                                n == "JvmField" || n == "kotlin/jvm/JvmField"
+                            });
+                            if is_jvm_field {
+                                return None;
+                            }
+                            let pty =
+                                p.ty.as_ref()
+                                    .map(|tr| {
+                                        type_ref_to_ty_with_aliases(tr, interner, imports, aliases)
+                                    })
+                                    .unwrap_or(Ty::Any);
+                            let mut first_char = pname.chars();
+                            let getter_name = match first_char.next() {
+                                Some(c) => format!(
+                                    "get{}{}",
+                                    c.to_uppercase().collect::<String>(),
+                                    first_char.as_str()
+                                ),
+                                None => return None,
+                            };
+                            Some((getter_name, Vec::new(), pty))
+                        })
+                        .collect();
+                    let mut methods: Vec<(String, Vec<Ty>, Ty)> = c
                         .methods
                         .iter()
                         .map(|m| {
@@ -605,16 +757,21 @@ pub fn gather_declarations(
                             let ptys: Vec<Ty> = m
                                 .params
                                 .iter()
-                                .map(|p| type_ref_to_ty(&p.ty, interner, imports))
+                                .map(|p| {
+                                    type_ref_to_ty_with_aliases(&p.ty, interner, imports, aliases)
+                                })
                                 .collect();
                             let rty = m
                                 .return_ty
                                 .as_ref()
-                                .map(|tr| type_ref_to_ty(tr, interner, imports))
+                                .map(|tr| {
+                                    type_ref_to_ty_with_aliases(tr, interner, imports, aliases)
+                                })
                                 .unwrap_or_else(|| infer_body_return_ty(&m.body, interner));
                             (mname, ptys, rty)
                         })
                         .collect();
+                    methods.extend(property_getters);
                     // Companion-object methods are invisible cross-file
                     // unless we surface them here. Call sites like
                     // `OuterClass.method(...)` resolve via the companion
@@ -628,12 +785,16 @@ pub fn gather_declarations(
                             let ptys: Vec<Ty> = m
                                 .params
                                 .iter()
-                                .map(|p| type_ref_to_ty(&p.ty, interner, imports))
+                                .map(|p| {
+                                    type_ref_to_ty_with_aliases(&p.ty, interner, imports, aliases)
+                                })
                                 .collect();
                             let rty = m
                                 .return_ty
                                 .as_ref()
-                                .map(|tr| type_ref_to_ty(tr, interner, imports))
+                                .map(|tr| {
+                                    type_ref_to_ty_with_aliases(tr, interner, imports, aliases)
+                                })
                                 .unwrap_or_else(|| infer_body_return_ty(&m.body, interner));
                             (mname, ptys, rty)
                         })
@@ -642,6 +803,11 @@ pub fn gather_declarations(
                         .parent_class
                         .as_ref()
                         .map(|sc| interner.resolve(sc.name).to_string());
+                    let interfaces = c
+                        .interfaces
+                        .iter()
+                        .map(|s| interner.resolve(*s).to_string())
+                        .collect();
                     table.classes.insert(
                         name,
                         ExternalClassDecl {
@@ -652,6 +818,7 @@ pub fn gather_declarations(
                             methods,
                             companion_methods,
                             super_class,
+                            interfaces,
                             is_open: c.is_open,
                             is_abstract: c.is_abstract,
                         },
@@ -667,15 +834,24 @@ pub fn gather_declarations(
                             let ptys: Vec<Ty> = m
                                 .params
                                 .iter()
-                                .map(|p| type_ref_to_ty(&p.ty, interner, imports))
+                                .map(|p| {
+                                    type_ref_to_ty_with_aliases(&p.ty, interner, imports, aliases)
+                                })
                                 .collect();
                             let rty = m
                                 .return_ty
                                 .as_ref()
-                                .map(|tr| type_ref_to_ty(tr, interner, imports))
+                                .map(|tr| {
+                                    type_ref_to_ty_with_aliases(tr, interner, imports, aliases)
+                                })
                                 .unwrap_or_else(|| infer_body_return_ty(&m.body, interner));
                             (mname, ptys, rty)
                         })
+                        .collect();
+                    let interfaces = o
+                        .interfaces
+                        .iter()
+                        .map(|s| interner.resolve(*s).to_string())
                         .collect();
                     table.classes.insert(
                         name,
@@ -687,6 +863,7 @@ pub fn gather_declarations(
                             methods,
                             companion_methods: Vec::new(),
                             super_class: None,
+                            interfaces,
                             is_open: false,
                             is_abstract: false,
                         },
@@ -704,6 +881,7 @@ pub fn gather_declarations(
                             methods: Vec::new(),
                             companion_methods: Vec::new(),
                             super_class: None,
+                            interfaces: Vec::new(),
                             is_open: false,
                             is_abstract: false,
                         },
@@ -719,12 +897,16 @@ pub fn gather_declarations(
                             let ptys: Vec<Ty> = m
                                 .params
                                 .iter()
-                                .map(|p| type_ref_to_ty(&p.ty, interner, imports))
+                                .map(|p| {
+                                    type_ref_to_ty_with_aliases(&p.ty, interner, imports, aliases)
+                                })
                                 .collect();
                             let rty = m
                                 .return_ty
                                 .as_ref()
-                                .map(|tr| type_ref_to_ty(tr, interner, imports))
+                                .map(|tr| {
+                                    type_ref_to_ty_with_aliases(tr, interner, imports, aliases)
+                                })
                                 .unwrap_or_else(|| infer_body_return_ty(&m.body, interner));
                             (mname, ptys, rty)
                         })
@@ -739,12 +921,17 @@ pub fn gather_declarations(
                             methods,
                             companion_methods: Vec::new(),
                             super_class: None,
+                            interfaces: Vec::new(),
                             is_open: false,
                             is_abstract: true,
                         },
                     );
                 }
-                Decl::TypeAlias(_) | Decl::Unsupported { .. } => {}
+                Decl::TypeAlias(ta) => {
+                    let name = interner.resolve(ta.name).to_string();
+                    table.type_aliases.insert(name, ta.target.clone());
+                }
+                Decl::Unsupported { .. } => {}
             }
         }
     }

@@ -1,0 +1,66 @@
+dex_version   035
+strings       25
+types         11
+methods       11
+classes       1
+
+--- strings ---
+  "<init>"
+  "I"
+  "LEmpty;"
+  "LInputKt;"
+  "LL"
+  "LRect;"
+  "LShape;"
+  "LSquare;"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/System;"
+  "V"
+  "VI"
+  "VII"
+  "VL"
+  "[Ljava/lang/String;"
+  "area"
+  "getH"
+  "getSide"
+  "getW"
+  "grow"
+  "input.kt"
+  "main"
+  "out"
+  "println"
+
+--- types ---
+  I
+  LEmpty;
+  LInputKt;
+  LRect;
+  LShape;
+  LSquare;
+  Ljava/io/PrintStream;
+  Ljava/lang/Object;
+  Ljava/lang/System;
+  V
+  [Ljava/lang/String;
+
+--- methods ---
+  LEmpty;.<init>()V
+  LInputKt;.grow(Ljava/lang/Object;)Ljava/lang/Object;
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  LRect;.<init>(II)V
+  LRect;.getH()I
+  LRect;.getW()I
+  LShape;.area()I
+  LSquare;.<init>(I)V
+  LSquare;.getSide()I
+  Ljava/io/PrintStream;.println(I)V
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       grow(Ljava/lang/Object;)Ljava/lang/Object; flags=0x0019 regs=21 ins=1 outs=3 insns=71
+  method       main()V flags=0x0019 regs=21 ins=0 outs=3 insns=77
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4

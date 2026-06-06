@@ -1,0 +1,4 @@
+name = "1258-interface-default-method"
+status = "supported"
+features = ["interface", "default-method", "polymorphism"]
+reason = "Locks in interface with default-bodied method + concrete impls that either inherit or override it. The validator now skips the interface-constructor placeholder; the existing default-method-body-lowering path emits a real JVM `default` method that polymorphic call sites dispatch through."

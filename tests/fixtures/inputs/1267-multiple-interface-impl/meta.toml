@@ -1,0 +1,4 @@
+name = "1267-multiple-interface-impl"
+status = "supported"
+features = ["interface", "multiple-inheritance", "polymorphism"]
+reason = "Locks in `class X : Iface1, Iface2` — both interfaces in the class header, virtual dispatch works through either interface-typed reference."

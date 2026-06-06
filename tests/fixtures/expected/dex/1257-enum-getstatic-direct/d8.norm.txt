@@ -1,0 +1,158 @@
+dex_version   035
+strings       79
+types         25
+methods       18
+classes       3
+
+--- strings ---
+  ""
+  "$ENTRIES"
+  "$EnumSwitchMapping$0"
+  "$VALUES"
+  "$enum$name"
+  "$enum$ordinal"
+  "$values"
+  "()"
+  "()V"
+  "(Ljava/lang/String;I)V"
+  "<clinit>"
+  "<init>"
+  ">;"
+  "DIV"
+  "I"
+  "L"
+  "LInputKt$WhenMappings;"
+  "LInputKt;"
+  "LL"
+  "LLL"
+  "LOp;"
+  "Ldalvik/annotation/EnclosingClass;"
+  "Ldalvik/annotation/InnerClass;"
+  "Ldalvik/annotation/MemberClasses;"
+  "Ldalvik/annotation/Signature;"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Class;"
+  "Ljava/lang/Enum;"
+  "Ljava/lang/Enum<"
+  "Ljava/lang/NoSuchFieldError;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/String;"
+  "Ljava/lang/System;"
+  "Lkotlin/Metadata;"
+  "Lkotlin/NoWhenBranchMatchedException;"
+  "Lkotlin/enums/EnumEntries;"
+  "Lkotlin/enums/EnumEntries<"
+  "Lkotlin/enums/EnumEntriesKt;"
+  "Lkotlin/jvm/internal/Intrinsics;"
+  "MINUS"
+  "PLUS"
+  "TIMES"
+  "V"
+  "VL"
+  "VLI"
+  "VLL"
+  "WhenMappings"
+  "[I"
+  "[LOp;"
+  "[Ljava/lang/Enum;"
+  "[Ljava/lang/String;"
+  "accessFlags"
+  "checkNotNullParameter"
+  "clone"
+  "d1"
+  "d2"
+  "describe"
+  "div"
+  "enumEntries"
+  "getEntries"
+  "input.kt"
+  "k"
+  "main"
+  "minus"
+  "mv"
+  "name"
+  "op"
+  "ordinal"
+  "out"
+  "plus"
+  "println"
+  "times"
+  "value"
+  "valueOf"
+  "values"
+  "xi"
+  "~~D8{\"backend\":\"dex\",\"compilation-mode\":\"debug\",\"has-checksums\":false,\"min-api\":1,\"sha-1\":\"a7ad18a70460b799d0482e497c109a75bf7f91de\",\"version\":\"8.10.9-dev\"}"
+  "��\u{c}\n\u{2}\u{18}\u{2}\n\u{2}\u{10}\u{10}\n\u{2}\u{8}\u{6}\u{8}\u{86}\u{81}\u{2}\u{18}��2\u{8}\u{12}\u{4}\u{12}\u{2}0��0\u{1}B\t\u{8}\u{2}¢\u{6}\u{4}\u{8}\u{2}\u{10}\u{3}j\u{2}\u{8}\u{4}j\u{2}\u{8}\u{5}j\u{2}\u{8}\u{6}j\u{2}\u{8}\u{7}"
+  "��\u{12}\n��\n\u{2}\u{10}\u{e}\n��\n\u{2}\u{18}\u{2}\n��\n\u{2}\u{10}\u{2}\u{1a}\u{e}\u{10}��\u{1a}\u{2}0\u{1}2\u{6}\u{10}\u{2}\u{1a}\u{2}0\u{3}\u{1a}\u{6}\u{10}\u{4}\u{1a}\u{2}0\u{5}"
+
+--- types ---
+  I
+  LInputKt$WhenMappings;
+  LInputKt;
+  LOp;
+  Ldalvik/annotation/EnclosingClass;
+  Ldalvik/annotation/InnerClass;
+  Ldalvik/annotation/MemberClasses;
+  Ldalvik/annotation/Signature;
+  Ljava/io/PrintStream;
+  Ljava/lang/Class;
+  Ljava/lang/Enum;
+  Ljava/lang/NoSuchFieldError;
+  Ljava/lang/Object;
+  Ljava/lang/String;
+  Ljava/lang/System;
+  Lkotlin/Metadata;
+  Lkotlin/NoWhenBranchMatchedException;
+  Lkotlin/enums/EnumEntries;
+  Lkotlin/enums/EnumEntriesKt;
+  Lkotlin/jvm/internal/Intrinsics;
+  V
+  [I
+  [LOp;
+  [Ljava/lang/Enum;
+  [Ljava/lang/String;
+
+--- methods ---
+  LInputKt$WhenMappings;.<clinit>()V
+  LInputKt;.describe(LOp;)Ljava/lang/String;
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  LOp;.$values()[LOp;
+  LOp;.<clinit>()V
+  LOp;.<init>(Ljava/lang/String;I)V
+  LOp;.getEntries()Lkotlin/enums/EnumEntries;
+  LOp;.ordinal()I
+  LOp;.valueOf(Ljava/lang/String;)LOp;
+  LOp;.values()[LOp;
+  Ljava/io/PrintStream;.println(Ljava/lang/Object;)V
+  Ljava/lang/Enum;.<init>(Ljava/lang/String;I)V
+  Ljava/lang/Enum;.valueOf(Ljava/lang/Class;Ljava/lang/String;)Ljava/lang/Enum;
+  Ljava/lang/Object;.clone()Ljava/lang/Object;
+  Lkotlin/NoWhenBranchMatchedException;.<init>()V
+  Lkotlin/enums/EnumEntriesKt;.enumEntries([Ljava/lang/Enum;)Lkotlin/enums/EnumEntries;
+  Lkotlin/jvm/internal/Intrinsics;.checkNotNullParameter(Ljava/lang/Object;Ljava/lang/String;)V
+
+--- class[0] ---
+  descriptor   LInputKt$WhenMappings;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       <clinit>()V flags=0x10008 regs=3 ins=0 outs=1 insns=54
+
+--- class[1] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       describe(LOp;)Ljava/lang/String; flags=0x0019 regs=3 ins=1 outs=2 insns=46
+  method       main()V flags=0x0019 regs=2 ins=0 outs=2 insns=23
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4
+
+--- class[2] ---
+  descriptor   LOp;
+  super        Ljava/lang/Enum;
+  source_file  input.kt
+  method       $values()[LOp; flags=0x101A regs=3 ins=0 outs=0 insns=24
+  method       <clinit>()V flags=0x10008 regs=3 ins=0 outs=3 insns=57
+  method       <init>(Ljava/lang/String;I)V flags=0x10002 regs=3 ins=3 outs=3 insns=4
+  method       getEntries()Lkotlin/enums/EnumEntries; flags=0x0009 regs=1 ins=0 outs=0 insns=3
+  method       valueOf(Ljava/lang/String;)LOp; flags=0x0009 regs=2 ins=1 outs=2 insns=9
+  method       values()[LOp; flags=0x0009 regs=1 ins=0 outs=1 insns=9

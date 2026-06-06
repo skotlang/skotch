@@ -346,6 +346,28 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// Skip a generic argument list on a supertype identifier, e.g.
+    /// `: Comparable<Money>` or `: Map<String, List<Int>>`. The class
+    /// model doesn't carry supertype type args yet — this just consumes
+    /// the tokens so the rest of the class header parses cleanly. Safe
+    /// no-op when no `<` is present.
+    fn skip_supertype_generic_args(&mut self) {
+        if self.peek_kind() != TokenKind::Lt {
+            return;
+        }
+        self.bump(); // consume `<`
+        let mut depth = 1u32;
+        while depth > 0 && self.peek_kind() != TokenKind::Eof {
+            match self.peek_kind() {
+                TokenKind::Lt => depth += 1,
+                TokenKind::Gt => depth -= 1,
+                _ => {}
+            }
+            self.bump();
+        }
+        self.skip_trivia();
+    }
+
     /// Get the string content of an Ident token at a given index.
     fn lexeme_str(&self, idx: usize) -> &str {
         match self.payload(idx) {
@@ -753,6 +775,11 @@ impl<'a> Parser<'a> {
                 self.bump();
                 let parent_name = self.intern_ident_at(parent_name_idx);
                 self.skip_trivia();
+                // Skip a parameterized supertype's generic args, e.g.
+                // `: Comparable<Money>` or `: Map<String, Int>`. The
+                // class model doesn't yet carry supertype type args;
+                // this just keeps the rest of the source parseable.
+                self.skip_supertype_generic_args();
                 if self.peek_kind() == TokenKind::LParen {
                     // Superclass with constructor call: Name(args)
                     self.bump();
@@ -799,6 +826,8 @@ impl<'a> Parser<'a> {
                         self.bump();
                         let iface_name = self.intern_ident_at(iface_idx);
                         self.skip_trivia();
+                        // Same generic-args skip as the first supertype.
+                        self.skip_supertype_generic_args();
                         // Check for delegation: `Interface by param`
                         if self.peek_kind() == TokenKind::Ident && self.lexeme_str(self.pos) == "by"
                         {
@@ -1109,6 +1138,31 @@ impl<'a> Parser<'a> {
         };
         self.skip_trivia();
 
+        // Optional `: Iface1, Iface2, ...` — the object becomes a
+        // subtype of each listed interface. Each interface name is
+        // a bare Ident; we skip any generic args via the same
+        // helper the class parser uses.
+        let mut interfaces: Vec<Symbol> = Vec::new();
+        if self.peek_kind() == TokenKind::Colon {
+            self.bump(); // consume ':'
+            self.skip_trivia();
+            loop {
+                self.skip_trivia();
+                if self.peek_kind() == TokenKind::Ident {
+                    let iface_idx = self.pos;
+                    self.bump();
+                    let iface_name = self.intern_ident_at(iface_idx);
+                    interfaces.push(iface_name);
+                    self.skip_trivia();
+                    self.skip_supertype_generic_args();
+                }
+                if !self.eat(TokenKind::Comma) {
+                    break;
+                }
+            }
+            self.skip_trivia();
+        }
+
         let mut methods = Vec::new();
         if self.peek_kind() == TokenKind::LBrace {
             self.bump();
@@ -1152,6 +1206,7 @@ impl<'a> Parser<'a> {
             name,
             name_span,
             methods,
+            interfaces,
             span: kw.merge(name_span),
         }
     }

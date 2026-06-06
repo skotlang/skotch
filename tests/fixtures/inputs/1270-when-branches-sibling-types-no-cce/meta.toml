@@ -1,0 +1,4 @@
+name = "1270-when-branches-sibling-types-no-cce"
+status = "supported"
+features = ["when-is", "if-else", "sealed-interface", "polymorphism"]
+reason = "Locks in the result-slot widening fix for when AND if-else expressions: when later branches produce a sibling reference type, the merge slot widens to Ty::Any so the backend never emits a sibling-to-sibling checkcast at the assignment — previously the second-iteration of a state-machine loop crashed with ClassCastException."

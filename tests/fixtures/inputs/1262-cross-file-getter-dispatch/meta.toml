@@ -1,0 +1,4 @@
+name = "1262-cross-file-getter-dispatch"
+status = "supported"
+features = ["property", "getter", "field-access"]
+reason = "Locks in `Foo.prop` dispatching through the synthesized getter when `prop` is a property (val/var) on `Foo`. Resolve crate now adds `getProp()` to the cross-file methods list; mir-lower Field-lowering finds it and emits `invokevirtual getProp()`."

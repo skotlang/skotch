@@ -473,6 +473,46 @@ fn jvm_type_string_for_ty(ty: &Ty) -> String {
 
 /// Resolve a type name to a `Ty`, checking built-in types first, then
 /// Resolve a full TypeRef to a Ty, handling function types and nullable.
+/// Resolve a `catch (e: T)` source-level type name to the JVM internal
+/// class name written into the exception-handler table. Order of
+/// precedence:
+///   1. Known stdlib exceptions (`Exception` → `java/lang/Exception`,
+///      `NoSuchElementException` → `java/util/...`, etc.) via
+///      `intrinsics::catch_type_to_jvm`'s table — but only the named
+///      mapping, NOT its `java/lang/Foo` fallback for unknown names.
+///   2. The current module's user-defined classes / cross-file stubs
+///      and import map — so `catch (e: CalcError)` resolves to the
+///      module-local `CalcError`, not the (nonexistent)
+///      `java/lang/CalcError` that the bare `intrinsics::catch_type_to_jvm`
+///      defaults to.
+///   3. Bare `name.contains('/')` (already-qualified) passes through.
+///   4. Last resort: `intrinsics::catch_type_to_jvm` for everything else
+///      (preserves the existing `java/lang/<Name>` behaviour for
+///      unmapped stdlib-style names).
+fn resolve_catch_type_jvm(name: &str, module: &MirModule) -> String {
+    // Stdlib exception names route through the central table.
+    if let Some(jvm) = intrinsics::kotlin_exception_class(name) {
+        return jvm.to_string();
+    }
+    // Already qualified — pass through.
+    if name.contains('/') {
+        return name.to_string();
+    }
+    // User-defined class in this module (covers same-file and cross-
+    // file stub classes both stored by simple OR full JVM name).
+    if module.classes.iter().any(|c| c.name == name) {
+        return name.to_string();
+    }
+    // Import alias → fully qualified JVM name.
+    if let Some(fq) = module.import_map.get(name) {
+        return fq.clone();
+    }
+    // Fall back to the existing behaviour for everything else (mostly
+    // preserves the `java/lang/<Name>` default for unmapped stdlib-ish
+    // names; user classes have already been handled above).
+    intrinsics::catch_type_to_jvm(name)
+}
+
 fn resolve_type_ref(tr: &skotch_syntax::TypeRef, interner: &Interner, module: &MirModule) -> Ty {
     if let Some(ref fparams) = tr.func_params {
         // Function type: (P1, P2, ...) -> R
@@ -493,7 +533,21 @@ fn resolve_type_ref(tr: &skotch_syntax::TypeRef, interner: &Interner, module: &M
             base
         }
     } else {
-        let base = resolve_type(interner.resolve(tr.name), module);
+        // Function-typed typealiases — `typealias Predicate = (Int) -> Boolean`
+        // — must resolve to `Ty::Function`, not the return type alone.
+        // `module.type_aliases` only stores name→name (the alias target's
+        // simple name, which is just the return type for function-type
+        // targets), so look up the structured form via the side table.
+        let name = interner.resolve(tr.name);
+        if let Some(fn_ty) = module.function_aliases.get(name) {
+            let base = fn_ty.clone();
+            return if tr.nullable {
+                Ty::Nullable(Box::new(base))
+            } else {
+                base
+            };
+        }
+        let base = resolve_type(name, module);
         if tr.nullable {
             Ty::Nullable(Box::new(base))
         } else {
@@ -1146,7 +1200,19 @@ pub fn lower_file(
         if let Decl::TypeAlias(ta) = decl {
             let alias_name = interner.resolve(ta.name).to_string();
             let target_name = interner.resolve(ta.target.name).to_string();
-            module.type_aliases.insert(alias_name, target_name);
+            module.type_aliases.insert(alias_name.clone(), target_name);
+            // If the alias's target is a function type (e.g.
+            // `typealias Predicate = (Int) -> Boolean`), also store
+            // the fully resolved `Ty::Function` in
+            // `module.function_aliases` so `resolve_type_ref` can
+            // surface it (the name-only `type_aliases` collapses to
+            // the return type's name and loses the function shape).
+            if ta.target.func_params.is_some() {
+                let resolved = resolve_type_ref(&ta.target, interner, &module);
+                if matches!(resolved, Ty::Function { .. } | Ty::Nullable(_)) {
+                    module.function_aliases.insert(alias_name, resolved);
+                }
+            }
         }
     }
 
@@ -1233,15 +1299,21 @@ pub fn lower_file(
                 (0..placeholder_param_count as u32).map(LocalId).collect();
             // Populate the placeholder param types from the typechecker so
             // recursive calls see the real param types (not `Any`) and skip
-            // autoboxing primitive arguments.
+            // autoboxing primitive arguments. `tf.param_tys` mirrors the
+            // signature exactly — for extensions it INCLUDES the receiver
+            // as `param_tys[0]` (see `signature_for_fun` in skotch-typeck),
+            // so we copy by direct index, no offset. Previously this code
+            // double-shifted by `receiver_offset`, leaving slot 0 as
+            // `Ty::Any` for extensions and shadowing instance fields when
+            // the extension name collided with a field name on a different
+            // class (`fun Int.cents()` + `data class Money(val cents)` →
+            // `money.cents` resolved to the extension call).
             let mut placeholder_locals: Vec<Ty> = vec![Ty::Any; placeholder_param_count];
             if !f.is_suspend {
-                let receiver_offset = if f.receiver_ty.is_some() { 1 } else { 0 };
                 if let Some(tf) = typed.functions.get(fn_pass1_idx) {
                     for (i, ty) in tf.param_tys.iter().enumerate() {
-                        let pos = receiver_offset + i;
-                        if pos < placeholder_locals.len() {
-                            placeholder_locals[pos] = ty.clone();
+                        if i < placeholder_locals.len() {
+                            placeholder_locals[i] = ty.clone();
                         }
                     }
                 }
@@ -1764,6 +1836,17 @@ pub fn lower_file(
                     is_data,
                 ),
             );
+            // Surface cross-file enum class names so the field-access
+            // path that recognizes `EnumClass.ENTRY` as a static-entry
+            // accessor fires for enums defined in a different file
+            // within the same package. Without this, `Op.PLUS` from
+            // Main.kt fell through to instance-field access with a
+            // null receiver because `module.enum_names` only contained
+            // enums declared in the file currently being lowered.
+            if matches!(ext_class.kind, ExternalClassKind::Enum) {
+                module.enum_names.insert(name.clone());
+                module.enum_names.insert(ext_class.jvm_name.clone());
+            }
 
             // Only add a stub MirClass if one with this name doesn't
             // already exist (the class might be defined in this file too).
@@ -1959,7 +2042,7 @@ pub fn lower_file(
                     is_open: ext_class.is_open,
                     is_abstract: ext_class.is_abstract,
                     is_interface: matches!(ext_class.kind, ExternalClassKind::Interface),
-                    interfaces: Vec::new(),
+                    interfaces: ext_class.interfaces.clone(),
                     fields,
                     methods,
                     constructor: empty_ctor,
@@ -1969,7 +2052,7 @@ pub fn lower_file(
                     is_cross_file_stub: true,
                     annotations: Vec::new(),
                     has_type_params: false,
-                    is_object_singleton: false,
+                    is_object_singleton: matches!(ext_class.kind, ExternalClassKind::Object),
                     companion_class_name: companion_jvm_name,
                     static_fields: Vec::new(),
                     clinit: None,
@@ -4086,6 +4169,13 @@ struct FnBuilder {
     cur_block: u32,
     /// Symbols declared as `var` (mutable) in this function scope.
     var_syms: rustc_hash::FxHashSet<Symbol>,
+    /// Locals that mirror a mutable instance field. Assigning to such
+    /// a local must also `putfield` the underlying field — otherwise
+    /// nested method calls re-read the field and see the stale value
+    /// the pre-load loop captured at method entry. The tuple is
+    /// `(receiver_local, class_name, field_name)` so the writeback can
+    /// be emitted without re-resolving anything.
+    field_local_writebacks: rustc_hash::FxHashMap<u32, (LocalId, String, String)>,
     /// MIR locals that correspond to suspend-typed function
     /// parameters (e.g. `block: suspend () -> String`). When such a
     /// local is invoked as a callable, the MIR lowerer must append the
@@ -4138,6 +4228,7 @@ impl FnBuilder {
             mf,
             cur_block: 0,
             var_syms: rustc_hash::FxHashSet::default(),
+            field_local_writebacks: rustc_hash::FxHashMap::default(),
             suspend_callable_locals: rustc_hash::FxHashSet::default(),
             reified_types: FxHashMap::default(),
             lambda_count: 0,
@@ -5125,6 +5216,19 @@ fn lower_function(
         fb.mf.params.push(id);
         if let Some(fn_params) = preserved_fn_params {
             fb.mf.local_generic_args.insert(id.0, fn_params);
+        } else if !p.ty.type_args.is_empty() {
+            // Generic param like `steps: List<Step>` — propagate the
+            // type args via local_generic_args so for-loops + indexed
+            // access on the param can recover the element type and
+            // emit checkcasts. Mirrors the class-method pre-loop at
+            // ~line 23645; without it, `steps[i].apply(...)` lowered
+            // to a Const(null) on an Any receiver.
+            let arg_tys: Vec<Ty> =
+                p.ty.type_args
+                    .iter()
+                    .map(|tr| resolve_type_ref(tr, interner, module))
+                    .collect();
+            fb.mf.local_generic_args.insert(id.0, arg_tys);
         }
         // Record suspend-typed callable parameters so that
         // when they're invoked the MIR lowerer threads the continuation.
@@ -5551,6 +5655,24 @@ fn lower_stmt(
                             dest,
                             value: Rvalue::Local(rhs),
                         });
+                        // If `dest` is a pre-loaded mirror of a mutable
+                        // instance field, also putfield the underlying
+                        // field so nested method calls see the new
+                        // value. The end-of-method writeback is then
+                        // redundant for this field but harmless.
+                        if let Some((recv, cls, fname)) =
+                            fb.field_local_writebacks.get(&dest.0).cloned()
+                        {
+                            fb.push_stmt(MStmt::Assign {
+                                dest,
+                                value: Rvalue::PutField {
+                                    receiver: recv,
+                                    class_name: cls,
+                                    field_name: fname,
+                                    value: dest,
+                                },
+                            });
+                        }
                     }
                 }
             }
@@ -6618,9 +6740,14 @@ fn lower_stmt(
                     }
                 }
 
-                // Record exception handler.
+                // Record exception handler. Resolve the catch type
+                // through the module's known user classes first so a
+                // user-defined `class CalcError : RuntimeException(...)`
+                // catches as `CalcError`, not the (nonexistent)
+                // `java/lang/CalcError` fallback that
+                // `catch_type_to_jvm` defaults to for unknown names.
                 let jvm_catch_type =
-                    catch_type.map(|sym| intrinsics::catch_type_to_jvm(interner.resolve(sym)));
+                    catch_type.map(|sym| resolve_catch_type_jvm(interner.resolve(sym), module));
 
                 fb.mf.exception_handlers.push(ExceptionHandler {
                     try_start_block: try_block,
@@ -6682,7 +6809,7 @@ fn lower_stmt(
                     }
                     // Map declared type name to FQN for exception table.
                     let jvm_extra_type =
-                        intrinsics::catch_type_to_jvm(interner.resolve(*extra_type));
+                        resolve_catch_type_jvm(interner.resolve(*extra_type), module);
                     fb.mf.exception_handlers.push(ExceptionHandler {
                         try_start_block: try_block,
                         try_end_block: catch_block,
@@ -7185,6 +7312,112 @@ fn try_const_fold_template(
     Some(out)
 }
 
+/// Best-effort type peek for an expression WITHOUT lowering it (no MIR
+/// stmts emitted, no scope/module mutation). Used by the field-vs-
+/// extension precedence check: we need the receiver's type to compare
+/// with the extension function's declared receiver type, but we don't
+/// want to lower the receiver twice. Returns `None` when the shape
+/// isn't statically derivable here — caller should fall back to its
+/// permissive default (treat as compatible).
+fn lower_expr_preview_ty(
+    e: &Expr,
+    fb: &FnBuilder,
+    scope: &[(Symbol, LocalId)],
+    module: &MirModule,
+    name_to_func: &FxHashMap<Symbol, FuncId>,
+    interner: &Interner,
+) -> Option<Ty> {
+    match e {
+        Expr::Ident(sym, _) => {
+            if let Some((_, lid)) = scope.iter().rev().find(|(s, _)| s == sym) {
+                return fb.mf.locals.get(lid.0 as usize).cloned();
+            }
+            let name = interner.resolve(*sym);
+            if module.classes.iter().any(|c| c.name == name) {
+                return Some(Ty::Class(name.to_string()));
+            }
+            None
+        }
+        Expr::IntLit(..) => Some(Ty::Int),
+        Expr::LongLit(..) => Some(Ty::Long),
+        Expr::FloatLit(..) => Some(Ty::Float),
+        Expr::DoubleLit(..) => Some(Ty::Double),
+        Expr::BoolLit(..) => Some(Ty::Bool),
+        Expr::CharLit(..) => Some(Ty::Char),
+        Expr::StringLit(..) | Expr::StringTemplate(..) => Some(Ty::String),
+        Expr::Paren(inner, _) => {
+            lower_expr_preview_ty(inner, fb, scope, module, name_to_func, interner)
+        }
+        // Constructor call `Foo(...)` or top-level function call:
+        // peek through to the return type so chains like
+        // `Foo(x).y` know the receiver of `.y` is Foo.
+        Expr::Call { callee, .. } => match callee.as_ref() {
+            Expr::Ident(callee_sym, _) => {
+                let callee_name = interner.resolve(*callee_sym);
+                if module.classes.iter().any(|c| c.name == callee_name) {
+                    return Some(Ty::Class(callee_name.to_string()));
+                }
+                if let Some(fid) = name_to_func.get(callee_sym) {
+                    return module
+                        .functions
+                        .get(fid.0 as usize)
+                        .map(|f| f.return_ty.clone());
+                }
+                None
+            }
+            // Method call on a receiver: peek through to the declared
+            // return type. First try the receiver's class methods;
+            // fall back to top-level extension functions registered in
+            // `name_to_func` (the typical case for primitive receivers
+            // like `30.cents()` where `cents` is `fun Int.cents()`).
+            Expr::Field {
+                receiver: mrecv,
+                name: mname,
+                ..
+            } => {
+                let recv_ty =
+                    lower_expr_preview_ty(mrecv, fb, scope, module, name_to_func, interner);
+                let mstr = interner.resolve(*mname);
+                if let Some(Ty::Class(ref recv_class)) = recv_ty {
+                    let method_ret = module
+                        .classes
+                        .iter()
+                        .find(|c| &c.name == recv_class)
+                        .and_then(|c| c.methods.iter().find(|m| m.name == mstr))
+                        .map(|m| m.return_ty.clone());
+                    if method_ret.is_some() {
+                        return method_ret;
+                    }
+                }
+                if let Some(fid) = name_to_func.get(mname) {
+                    return module
+                        .functions
+                        .get(fid.0 as usize)
+                        .map(|f| f.return_ty.clone());
+                }
+                None
+            }
+            _ => None,
+        },
+        Expr::Field { receiver, name, .. } => {
+            let recv_ty =
+                lower_expr_preview_ty(receiver, fb, scope, module, name_to_func, interner)?;
+            let recv_class = match &recv_ty {
+                Ty::Class(c) => c.clone(),
+                _ => return None,
+            };
+            let field_name = interner.resolve(*name);
+            module
+                .classes
+                .iter()
+                .find(|c| c.name == recv_class)
+                .and_then(|c| c.fields.iter().find(|f| f.name == field_name))
+                .map(|f| f.ty.clone())
+        }
+        _ => None,
+    }
+}
+
 /// Lower an expression and return the local that holds its value.
 /// Returns `None` if lowering hit an unsupported construct.
 #[allow(clippy::too_many_arguments)]
@@ -7429,6 +7662,25 @@ fn lower_expr(
                         value: Rvalue::GetStaticField {
                             class_name: jvm_class.clone(),
                             field_name: "Companion".to_string(),
+                            descriptor: desc,
+                        },
+                    });
+                    Some(dest)
+                } else if module
+                    .classes
+                    .iter()
+                    .any(|c| c.name == *jvm_class && c.is_object_singleton)
+                {
+                    // Cross-file Kotlin `object Foo` defined in the same
+                    // package but a different file: emit
+                    // `getstatic Foo.INSTANCE:LFoo;`.
+                    let desc = format!("L{};", jvm_class);
+                    let dest = fb.new_local(Ty::Class(jvm_class.clone()));
+                    fb.push_stmt(MStmt::Assign {
+                        dest,
+                        value: Rvalue::GetStaticField {
+                            class_name: jvm_class.clone(),
+                            field_name: "INSTANCE".to_string(),
                             descriptor: desc,
                         },
                     });
@@ -8446,6 +8698,25 @@ fn lower_expr(
                                 let blk_term = &fb.mf.blocks[fb.cur_block as usize].terminator;
                                 let dead = matches!(blk_term, Terminator::Throw(_));
                                 if !dead {
+                                    // Widen the result's declared type if
+                                    // the else-branch produces a sibling
+                                    // class. Otherwise the backend inserts
+                                    // a `checkcast` from the else value
+                                    // into the then-branch's class — fine
+                                    // for upcasts but a runtime
+                                    // ClassCastException when the two
+                                    // branches return unrelated subtypes
+                                    // (e.g. `if (c) Stopped(...) else
+                                    // Running(...)` over a sealed
+                                    // interface).
+                                    let val_ty = fb.mf.locals[val.0 as usize].clone();
+                                    let cur = fb.mf.locals[result.0 as usize].clone();
+                                    let narrow = matches!(cur, Ty::Class(_))
+                                        && matches!(val_ty, Ty::Class(_))
+                                        && cur != val_ty;
+                                    if narrow {
+                                        fb.mf.locals[result.0 as usize] = Ty::Any;
+                                    }
                                     fb.push_stmt(MStmt::Assign {
                                         dest: result,
                                         value: Rvalue::Local(val),
@@ -8755,6 +9026,64 @@ fn lower_expr(
                         },
                     });
                     return Some(dest);
+                }
+
+                // Cross-file extension function dispatch:
+                // `30.cents()` where `cents` is a top-level
+                // `fun Int.cents(): Money` declared in another file in
+                // the same package. Same-file extensions match in the
+                // `name_to_func` branch above; cross-file ones are
+                // registered in `cross_file_fns` and need their own
+                // resolution path. We detect "extension shape" by
+                // comparing the descriptor's param count to the user-
+                // arg count — exactly one extra param means the receiver
+                // is being threaded through as the implicit first arg.
+                let method_name_str_xfile = interner.resolve(method_name).to_string();
+                if let Some((owner, desc, ret_ty)) =
+                    module.cross_file_fns.get(&method_name_str_xfile).cloned()
+                {
+                    let param_count = skotch_classinfo::count_descriptor_params_pub(&desc);
+                    if param_count == args.len() + 1 {
+                        let recv_local = lower_expr(
+                            receiver,
+                            fb,
+                            scope,
+                            module,
+                            name_to_func,
+                            name_to_global,
+                            interner,
+                            diags,
+                            loop_ctx,
+                        )?;
+                        let mut arg_locals = vec![recv_local];
+                        for a in args {
+                            let id = lower_expr(
+                                &a.expr,
+                                fb,
+                                scope,
+                                module,
+                                name_to_func,
+                                name_to_global,
+                                interner,
+                                diags,
+                                loop_ctx,
+                            )?;
+                            arg_locals.push(id);
+                        }
+                        let dest = fb.new_local(ret_ty);
+                        fb.push_stmt(MStmt::Assign {
+                            dest,
+                            value: Rvalue::Call {
+                                kind: CallKind::StaticJava {
+                                    class_name: owner,
+                                    method_name: method_name_str_xfile,
+                                    descriptor: desc,
+                                },
+                                args: arg_locals,
+                            },
+                        });
+                        return Some(dest);
+                    }
                 }
 
                 // Check if the receiver is a known Java class name for static calls.
@@ -13134,6 +13463,17 @@ fn lower_expr(
                     if let Some(fparams) = recovered {
                         if fparams.len() == 1 {
                             module.lambda_param_type = Some(fparams[0].clone());
+                        } else if fparams.len() > 1 && fparams.iter().any(|t| !matches!(t, Ty::Any))
+                        {
+                            // Multi-arg lambda — propagate every declared
+                            // param type via the lambda_param_types
+                            // channel so the lambda body sees concrete
+                            // receivers (e.g. `runPipeline(..., onEach:
+                            // (Int, Step) -> Unit) { value, step -> ... }`
+                            // — `step.describe()` needs step typed as
+                            // Step, not Any, or the call lowers to
+                            // Const(null)).
+                            module.lambda_param_types = Some(fparams.clone());
                         }
                     }
                 }
@@ -13170,6 +13510,7 @@ fn lower_expr(
             // Clear lambda param/receiver-type channels in case the lambda
             // arg took a non-metafactory path that didn't consume them.
             module.lambda_param_type = None;
+            module.lambda_param_types = None;
             module.lambda_receiver_type = None;
 
             // Reorder named arguments to match parameter order.
@@ -17622,6 +17963,7 @@ fn lower_expr(
                 // subject variable to that type in the branch body scope.
                 // e.g. `when (obj) { is String -> obj.length }` — obj is
                 // narrowed to String inside the branch.
+                let scope_len_before_body = scope.len();
                 let smart_cast_entries = if let Expr::IsCheck {
                     expr: checked_expr,
                     type_name,
@@ -17733,15 +18075,40 @@ fn lower_expr(
                     )
                 };
 
-                // Pop smart-cast scope entries.
-                for _ in 0..smart_cast_entries {
-                    scope.pop();
-                }
+                // Restore scope to its pre-body state. This pops both the
+                // smart-cast entry (pushed before the body) AND any locals
+                // bound inside the branch body (e.g. `val n = ...`).
+                // Popping `smart_cast_entries` alone would leave the
+                // smart-cast in scope and accidentally drop the body's
+                // own bindings, polluting later branches with stale
+                // narrowed-type locals (#386).
+                let _ = smart_cast_entries;
+                scope.truncate(scope_len_before_body);
 
                 if let Some(val) = body_val {
+                    let val_ty = fb.mf.locals[val.0 as usize].clone();
                     if i == 0 {
-                        let ty = fb.mf.locals[val.0 as usize].clone();
-                        fb.mf.locals[result.0 as usize] = ty;
+                        fb.mf.locals[result.0 as usize] = val_ty.clone();
+                    } else {
+                        // Lift the result's type to a common ancestor when
+                        // later branches produce a different reference
+                        // type than the first one. Without this the merge
+                        // block's slot stays narrowed to the first branch's
+                        // type and the backend inserts a `checkcast` from
+                        // every subsequent branch into that type — fine for
+                        // upcasts (Sub → Super) but a runtime
+                        // `ClassCastException` when sibling branches return
+                        // unrelated subclasses (e.g. a `when` over a sealed
+                        // interface whose first branch is `Running` and a
+                        // later branch returns `Idle`). Widening to `Any`
+                        // tells the JVM emitter to drop the cast.
+                        let cur = fb.mf.locals[result.0 as usize].clone();
+                        let narrow = matches!(cur, Ty::Class(_))
+                            && matches!(val_ty, Ty::Class(_))
+                            && cur != val_ty;
+                        if narrow {
+                            fb.mf.locals[result.0 as usize] = Ty::Any;
+                        }
                     }
                     fb.push_stmt(MStmt::Assign {
                         dest: result,
@@ -18015,9 +18382,24 @@ fn lower_expr(
                 }
                 Ty::Class(cn) if cn.contains("ArrayList") || cn.contains("List") => {
                     // List[index] → invokeinterface java/util/List.get(I)Object
-                    let dest = fb.new_local(Ty::Any);
+                    // If the receiver's local_generic_args records a
+                    // concrete element class, type the dest as that
+                    // class and emit a checkcast so member access on
+                    // the result (`list[i].method(...)`) resolves
+                    // virtually instead of falling through to Ty::Any
+                    // (which lowers to Const(null) downstream).
+                    let element_class: Option<String> = fb
+                        .mf
+                        .local_generic_args
+                        .get(&arr.0)
+                        .and_then(|args| args.first())
+                        .and_then(|t| match t {
+                            Ty::Class(n) => Some(n.clone()),
+                            _ => None,
+                        });
+                    let raw = fb.new_local(Ty::Any);
                     fb.push_stmt(MStmt::Assign {
-                        dest,
+                        dest: raw,
                         value: Rvalue::Call {
                             kind: CallKind::VirtualJava {
                                 class_name: "java/util/List".to_string(),
@@ -18027,7 +18409,19 @@ fn lower_expr(
                             args: vec![arr, idx],
                         },
                     });
-                    Some(dest)
+                    if let Some(class_name) = element_class {
+                        let casted = fb.new_local(Ty::Class(class_name.clone()));
+                        fb.push_stmt(MStmt::Assign {
+                            dest: casted,
+                            value: Rvalue::CheckCast {
+                                obj: raw,
+                                target_class: class_name,
+                            },
+                        });
+                        Some(casted)
+                    } else {
+                        Some(raw)
+                    }
                 }
                 Ty::Class(cn) if cn.contains("Map") => {
                     // Map[key] → invokeinterface java/util/Map.get(Object)Object
@@ -18476,6 +18870,16 @@ fn lower_expr(
                     .any(|n| n.rsplit('/').next() == Some(recv_str.as_str()));
                 if is_enum_simple || is_enum_fq {
                     let field_str = interner.resolve(*name).to_string();
+                    // Resolve to the FQ class name (cross-file enums
+                    // are stored by simple OR full JVM name in
+                    // `enum_names`; prefer the full one for the
+                    // getstatic descriptor).
+                    let enum_jvm = module
+                        .enum_names
+                        .iter()
+                        .find(|n| n.rsplit('/').next() == Some(recv_str.as_str()))
+                        .cloned()
+                        .unwrap_or_else(|| recv_str.clone());
                     let qualified = format!("{recv_str}${field_str}");
                     let qualified_sym = interner.intern(&qualified);
                     if let Some(&fid) = name_to_func.get(&qualified_sym) {
@@ -18490,6 +18894,25 @@ fn lower_expr(
                         });
                         return Some(dest);
                     }
+                    // No same-file accessor — this is a cross-file
+                    // enum entry. Emit `getstatic EnumClass.ENTRY`
+                    // directly with the proper `LEnumClass;` descriptor.
+                    // Mirrors kotlinc's emission for any enum entry
+                    // access: enum entries are public static final
+                    // fields, not methods. Before this fallthrough,
+                    // `Op.PLUS` from Main.kt (where Op is declared in
+                    // Op.kt) lowered to a null-receiver instance
+                    // field-load with descriptor Object.
+                    let dest = fb.new_local(Ty::Class(enum_jvm.clone()));
+                    fb.push_stmt(MStmt::Assign {
+                        dest,
+                        value: Rvalue::GetStaticField {
+                            class_name: enum_jvm.clone(),
+                            field_name: field_str.clone(),
+                            descriptor: format!("L{};", enum_jvm),
+                        },
+                    });
+                    return Some(dest);
                 }
             }
 
@@ -18511,28 +18934,56 @@ fn lower_expr(
                     return Some(dest);
                 }
                 if params_len == 1 {
-                    // Extension property: lower receiver, call with it.
-                    if let Some(recv_local) = lower_expr(
-                        receiver,
-                        fb,
-                        scope,
-                        module,
-                        name_to_func,
-                        name_to_global,
-                        interner,
-                        diags,
-                        loop_ctx,
-                    ) {
-                        let dest = fb.new_local(ret_ty);
-                        fb.push_stmt(MStmt::Assign {
-                            dest,
-                            value: Rvalue::Call {
-                                kind: CallKind::Static(fid),
-                                args: vec![recv_local],
-                            },
-                        });
-                        return Some(dest);
+                    // Extension property: only treat it as such when the
+                    // extension's declared receiver type matches the actual
+                    // receiver type. Without this guard, an extension like
+                    // `fun Int.cents(): Money` shadowed an instance field
+                    // `Money.cents` — `someMoney.cents` resolved to the
+                    // extension call, corrupting downstream methods that
+                    // mention `other.cents` to compute a Long via
+                    // `cents(otherMoney)`. The has_type_flow_issues check in
+                    // the JVM backend then stubbed the whole containing
+                    // method.
+                    let ext_recv_ty = module.functions[fid.0 as usize]
+                        .locals
+                        .get(module.functions[fid.0 as usize].params[0].0 as usize)
+                        .cloned()
+                        .unwrap_or(Ty::Any);
+                    let actual_recv_ty_opt =
+                        lower_expr_preview_ty(receiver, fb, scope, module, name_to_func, interner);
+                    let receiver_types_compatible = match (&ext_recv_ty, &actual_recv_ty_opt) {
+                        // Unknown actual receiver — fall back to old
+                        // behavior (treat as extension).
+                        (_, None) => true,
+                        (Ty::Any, _) | (_, Some(Ty::Any)) | (_, Some(Ty::Error)) => true,
+                        (Ty::Class(ext_c), Some(Ty::Class(act_c))) => ext_c == act_c,
+                        (a, Some(b)) => a == b,
+                    };
+                    let _ = (&ext_recv_ty, &actual_recv_ty_opt);
+                    if receiver_types_compatible {
+                        if let Some(recv_local) = lower_expr(
+                            receiver,
+                            fb,
+                            scope,
+                            module,
+                            name_to_func,
+                            name_to_global,
+                            interner,
+                            diags,
+                            loop_ctx,
+                        ) {
+                            let dest = fb.new_local(ret_ty);
+                            fb.push_stmt(MStmt::Assign {
+                                dest,
+                                value: Rvalue::Call {
+                                    kind: CallKind::Static(fid),
+                                    args: vec![recv_local],
+                                },
+                            });
+                            return Some(dest);
+                        }
                     }
+                    // Otherwise fall through to field/getter resolution.
                 }
             }
 
@@ -19248,7 +19699,7 @@ fn lower_expr(
 
                 // Exception handler entry.
                 let jvm_catch_type =
-                    catch_type.map(|sym| intrinsics::catch_type_to_jvm(interner.resolve(sym)));
+                    catch_type.map(|sym| resolve_catch_type_jvm(interner.resolve(sym), module));
 
                 fb.mf.exception_handlers.push(ExceptionHandler {
                     try_start_block: try_block,
@@ -22534,13 +22985,18 @@ fn lower_object(
         mir_methods.push(fb.finish());
     }
 
+    let interfaces: Vec<String> = o
+        .interfaces
+        .iter()
+        .map(|s| interner.resolve(*s).to_string())
+        .collect();
     module.classes.push(MirClass {
         name: obj_name,
         super_class: None,
         is_open: false,
         is_abstract: false,
         is_interface: false,
-        interfaces: Vec::new(),
+        interfaces,
         fields: Vec::new(),
         methods: mir_methods,
         constructor: init_fn,
@@ -22621,11 +23077,20 @@ fn lower_class(
             let n = interner.resolve(a.name);
             n == "JvmField" || n == "kotlin/jvm/JvmField"
         });
-        fields.push(MirField {
-            name: interner.resolve(prop.name).to_string(),
-            ty,
-            is_jvm_field,
-        });
+        // A `val` with an explicit getter and no initializer has no
+        // backing field — the getter computes the value on each call.
+        // Previously this added a spurious field that downstream code
+        // (cross-class field-vs-getter dispatch) preferred over the
+        // synthesized getter, lowering `obj.prop` to a `getfield` with
+        // the wrong descriptor.
+        let needs_backing_field = prop.is_var || prop.init.is_some() || prop.getter.is_none();
+        if needs_backing_field {
+            fields.push(MirField {
+                name: interner.resolve(prop.name).to_string(),
+                ty,
+                is_jvm_field,
+            });
+        }
     }
 
     // Build the <init> constructor.
@@ -22689,6 +23154,20 @@ fn lower_class(
             .as_ref()
             .map(|sc| {
                 let simple = interner.resolve(sc.name).to_string();
+                // Same resolution order as the class header's super_class
+                // (see ~line 23236): stdlib exception/builtin names first,
+                // then the import map, then the bare simple name. Without
+                // this, the super-ctor methodref used the short
+                // `RuntimeException` while the class header correctly used
+                // `java/lang/RuntimeException` — verifier rejected the
+                // `<init>` because the methodref pointed at a class that
+                // wasn't actually the super.
+                if let Some(fq) = intrinsics::kotlin_exception_class(&simple) {
+                    return fq.to_string();
+                }
+                if let Some(fq) = intrinsics::kotlin_to_jvm_class(&simple) {
+                    return fq.to_string();
+                }
                 module.import_map.get(&simple).cloned().unwrap_or(simple)
             })
             .unwrap_or_else(|| "java/lang/Object".to_string());
@@ -22953,6 +23432,18 @@ fn lower_class(
 
     let super_class = c.parent_class.as_ref().map(|sc| {
         let simple = interner.resolve(sc.name).to_string();
+        // Stdlib exception names (`RuntimeException`, `Exception`, etc.)
+        // are auto-imported in Kotlin and resolve to their `java/lang/`
+        // FQN. Without this check, `class X : RuntimeException(msg)`
+        // emits the class with `super_class: RuntimeException` (no
+        // package), and the JVM resolves it relative to the unnamed
+        // package — NoClassDefFoundError at load time.
+        if let Some(fq) = intrinsics::kotlin_exception_class(&simple) {
+            return fq.to_string();
+        }
+        if let Some(fq) = intrinsics::kotlin_to_jvm_class(&simple) {
+            return fq.to_string();
+        }
         module.import_map.get(&simple).cloned().unwrap_or(simple)
     });
 
@@ -23358,6 +23849,27 @@ fn lower_class(
         // Load fields into locals so they're accessible by name in the method body.
         // Track field→local mapping for writeback after the body.
         // Also load inherited fields from superclasses (read-only).
+        //
+        // For `var` fields, register a side-channel writeback entry on
+        // the FnBuilder so any in-body assignment to the field-local
+        // also emits a `putfield` immediately. Without that, nested
+        // method calls invoked between the local-store and the
+        // end-of-method writeback re-read the field and observe the
+        // stale value the pre-load captured at method entry — observable
+        // as `_count += 1; broadcast()` notifying observers with the
+        // pre-increment count.
+        let var_field_names: rustc_hash::FxHashSet<String> = c
+            .constructor_params
+            .iter()
+            .filter(|p| p.is_var)
+            .map(|p| interner.resolve(p.name).to_string())
+            .chain(
+                c.properties
+                    .iter()
+                    .filter(|p| p.is_var)
+                    .map(|p| interner.resolve(p.name).to_string()),
+            )
+            .collect();
         let mut field_locals: Vec<(String, LocalId)> = Vec::new();
         for field in &fields {
             let field_sym = interner.intern(&field.name);
@@ -23370,6 +23882,46 @@ fn lower_class(
                     field_name: field.name.clone(),
                 },
             });
+            // Propagate the source-level type_args from the property /
+            // ctor-param declaration so member access on the field (e.g.
+            // `observers[i].onChange(...)`) can recover the element
+            // type and emit a checkcast. Without this, `MutableList<X>`
+            // fields erase to `Ty::Class("java/util/List")` and indexed
+            // access falls through to Ty::Any → Const(null).
+            let src_type_args: Vec<Ty> = c
+                .properties
+                .iter()
+                .find(|p| interner.resolve(p.name) == field.name)
+                .and_then(|p| p.ty.as_ref())
+                .map(|tr| {
+                    tr.type_args
+                        .iter()
+                        .map(|arg_tr| resolve_type_ref(arg_tr, interner, module))
+                        .collect::<Vec<Ty>>()
+                })
+                .or_else(|| {
+                    c.constructor_params
+                        .iter()
+                        .find(|p| interner.resolve(p.name) == field.name)
+                        .map(|p| {
+                            p.ty.type_args
+                                .iter()
+                                .map(|arg_tr| resolve_type_ref(arg_tr, interner, module))
+                                .collect::<Vec<Ty>>()
+                        })
+                })
+                .unwrap_or_default();
+            if !src_type_args.is_empty() {
+                fb.mf
+                    .local_generic_args
+                    .insert(field_local.0, src_type_args);
+            }
+            if var_field_names.contains(&field.name) {
+                fb.field_local_writebacks.insert(
+                    field_local.0,
+                    (this_local, class_name.clone(), field.name.clone()),
+                );
+            }
             scope.push((field_sym, field_local));
             field_locals.push((field.name.clone(), field_local));
         }
@@ -24064,23 +24616,19 @@ fn lower_class(
         }
     }
 
-    // Lower companion object properties as static fields.
-    // Each companion property becomes a field on the class and is
-    // registered as a top-level global constant for ClassName.propName access.
+    // Lower companion object properties: register const-folded values
+    // as globals so `ClassName.PROP` resolves at use sites. The actual
+    // field declaration lives on the Companion class (see the companion
+    // emission earlier in this function); the outer class's instance
+    // field list must NOT include them — adding them there caused the
+    // data-class auto-gen (componentN/copy/equals/hashCode/toString) to
+    // treat them as primary-constructor fields, corrupting `copy`'s
+    // descriptor and inflating every user-defined `op(other: Self)` to
+    // `op(Self, Self)` (the `Self` prefix is the spurious extra field's
+    // shadow). For non-const inits (`val ZERO: Money = Money(0L)`) we
+    // emit nothing here yet — the Companion's getter falls back to
+    // `null` until proper clinit-based initialization lands.
     for prop in &c.companion_properties {
-        let prop_name = interner.resolve(prop.name).to_string();
-        let prop_ty = prop
-            .ty
-            .as_ref()
-            .map(|tr| resolve_type(interner.resolve(tr.name), module))
-            .unwrap_or(Ty::Error);
-        // Add as a field on the class.
-        fields.push(MirField {
-            name: prop_name.clone(),
-            ty: prop_ty.clone(),
-            is_jvm_field: false,
-        });
-        // If there's an initializer, register as a global constant.
         if let Some(init) = &prop.init {
             let const_val = match init {
                 Expr::IntLit(v, _) => Some(MirConst::Int(*v as i32)),

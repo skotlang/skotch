@@ -1,0 +1,120 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=3 max_locals=2
+    0000 new Class(Add)
+    0003 dup
+    0004 iconst_3
+    0005 invokespecial Method(Add.<init>:(I)V)
+    0008 checkcast Class(Op)
+    0011 astore_0
+    0012 new Class(Sub)
+    0015 dup
+    0016 bipush 7
+    0018 invokespecial Method(Sub.<init>:(I)V)
+    0021 checkcast Class(Op)
+    0024 astore_1
+    0025 aload_0
+    0026 invokestatic Method(InputKt.negate:(LOp;)LOp;)
+    0029 invokeinterface InterfaceMethod(Op.label:()Ljava/lang/String;)
+    0034 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0037 swap
+    0038 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0041 aload_1
+    0042 invokestatic Method(InputKt.negate:(LOp;)LOp;)
+    0045 invokeinterface InterfaceMethod(Op.label:()Ljava/lang/String;)
+    0050 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0053 swap
+    0054 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0057 getstatic Field(Noop.INSTANCE:LNoop;)
+    0060 checkcast Class(Op)
+    0063 invokestatic Method(InputKt.negate:(LOp;)LOp;)
+    0066 invokeinterface InterfaceMethod(Op.label:()Ljava/lang/String;)
+    0071 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0074 swap
+    0075 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0078 iconst_1
+    0079 bipush 9
+    0081 invokestatic Method(InputKt.pickIfElse:(ZI)LOp;)
+    0084 invokeinterface InterfaceMethod(Op.label:()Ljava/lang/String;)
+    0089 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0092 swap
+    0093 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0096 iconst_0
+    0097 bipush 9
+    0099 invokestatic Method(InputKt.pickIfElse:(ZI)LOp;)
+    0102 invokeinterface InterfaceMethod(Op.label:()Ljava/lang/String;)
+    0107 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0110 swap
+    0111 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0114 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
+method        negate (LOp;)LOp; 0x0019
+  code        max_stack=3 max_locals=5
+    0000 aload_0
+    0001 ldc "o"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 aload_0
+    0007 astore_1
+    0008 aload_1
+    0009 instanceof Class(Add)
+    0012 ifeq 35
+    0015 aload_0
+    0016 checkcast Class(Add)
+    0019 invokevirtual Method(Add.getV:()I)
+    0022 istore_2
+    0023 new Class(Sub)
+    0026 dup
+    0027 iload_2
+    0028 invokespecial Method(Sub.<init>:(I)V)
+    0031 astore_3
+    0032 goto 80
+    0035 aload_1
+    0036 instanceof Class(Sub)
+    0039 ifeq 64
+    0042 aload_0
+    0043 checkcast Class(Sub)
+    0046 invokevirtual Method(Sub.getV:()I)
+    0049 istore 4
+    0051 new Class(Add)
+    0054 dup
+    0055 iload 4
+    0057 invokespecial Method(Add.<init>:(I)V)
+    0060 astore_3
+    0061 goto 80
+    0064 aload_1
+    0065 instanceof Class(Noop)
+    0068 ifeq 78
+    0071 getstatic Field(Noop.INSTANCE:LNoop;)
+    0074 astore_3
+    0075 goto 80
+    0078 aconst_null
+    0079 astore_3
+    0080 aload_3
+    0081 checkcast Class(Op)
+    0084 areturn
+    sub_attr  StackMapTable (17 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)
+method        pickIfElse (ZI)LOp; 0x0019
+  code        max_stack=3 max_locals=3
+    0000 iload_0
+    0001 ifeq 16
+    0004 new Class(Add)
+    0007 dup
+    0008 iload_1
+    0009 invokespecial Method(Add.<init>:(I)V)
+    0012 astore_2
+    0013 goto 20
+    0016 getstatic Field(Noop.INSTANCE:LNoop;)
+    0019 astore_2
+    0020 aload_2
+    0021 checkcast Class(Op)
+    0024 areturn
+    sub_attr  StackMapTable (9 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)

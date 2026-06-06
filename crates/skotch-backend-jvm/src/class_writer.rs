@@ -1349,6 +1349,10 @@ pub fn compile_module(module: &MirModule, _interner: &Interner) -> Vec<(String, 
 }
 
 fn compile_class(class_name: &str, module: &MirModule) -> Vec<u8> {
+    // Stash module pointer so descriptor-validation helpers
+    // (has_short_class_in_descriptor) can recognize unnamed-package
+    // user classes; same purpose as in compile_user_class.
+    EMIT_MODULE.with(|cell| *cell.borrow_mut() = Some(module as *const MirModule));
     let mut cp = ConstantPool::new();
     let this_class_idx = cp.class(class_name);
     let super_class_idx = cp.class("java/lang/Object");
@@ -1657,6 +1661,13 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
             .secondary_constructors
             .iter()
             .any(|sec| sec.params.len().saturating_sub(1) == primary_param_count);
+
+    // Stash the module pointer so descriptor-validation helpers
+    // (has_short_class_in_descriptor) can recognize unnamed-package
+    // user classes in this module instead of flagging them as
+    // non-FQ and stubbing the containing method. The pointer is
+    // valid for the duration of compile_user_class; cleared below.
+    EMIT_MODULE.with(|cell| *cell.borrow_mut() = Some(module as *const MirModule));
 
     // Compile methods. (First pass — outputs are discarded below in
     // favor of a fresh constant-pool rebuild; we only run this to
@@ -3000,6 +3011,11 @@ fn emit_user_method(
     code_attr_name_idx: u16,
     is_init: bool,
 ) -> Vec<u8> {
+    // Re-stash the module pointer (emit_method_body clears it at the
+    // end of each method) so the has_null_stubs_why descriptor
+    // validator can recognize unnamed-package user classes via
+    // has_short_class_in_descriptor.
+    EMIT_MODULE.with(|cell| *cell.borrow_mut() = Some(module as *const MirModule));
     // For compose-bumped lambda invoke methods, skip the stub check —
     // the typed invoke + bridge pattern ensures valid bytecode.
     let is_compose_lambda_invoke =
@@ -3872,6 +3888,21 @@ fn emit_method_body(
                     code.write_u16::<BigEndian>(fr).unwrap();
                     bump(&mut stack, &mut max_stack, 1);
                     code.push(0xB0); // areturn
+                    continue;
+                }
+                // Unit-returning function with `Terminator::ReturnValue`
+                // — typical for a body whose tail is `when (x) { ... }`
+                // discarded as a statement, or `f(...); g(...)` where
+                // the last expression's value is dropped. The JVM
+                // descriptor is `()V`, so emit a plain `return`
+                // without loading anything. Previously this fell
+                // through to `areturn` (the `_ =>` arm of the
+                // return-opcode match below) and the verifier
+                // rejected the method as "operand stack underflow"
+                // because `load_local` for a Unit local pushes
+                // nothing.
+                if matches!(func.return_ty, Ty::Unit) {
+                    code.push(0xB1); // return
                     continue;
                 }
                 load_local(
@@ -6075,6 +6106,18 @@ fn has_null_stubs_inner(func: &MirFunction, report: bool) -> bool {
 /// A valid descriptor class reference is `L<path/with/slashes>;`.
 /// An invalid one is `LFoo;` (no slashes = short name, d8 can't resolve).
 fn has_short_class_in_descriptor(desc: &str) -> bool {
+    // Resolve user-class names (unnamed-package user types like `Op`)
+    // through `EMIT_MODULE` so they don't get flagged as "non-FQ". A
+    // bare class name `LFoo;` is only suspicious when nothing in the
+    // current module declares `Foo`.
+    let user_class_names: std::collections::HashSet<String> = EMIT_MODULE
+        .with(|cell| *cell.borrow())
+        .map(|mod_ptr| {
+            let module = unsafe { &*mod_ptr };
+            module.classes.iter().map(|c| c.name.clone()).collect()
+        })
+        .unwrap_or_default();
+
     let mut i = 0;
     let bytes = desc.as_bytes();
     while i < bytes.len() {
@@ -6087,7 +6130,8 @@ fn has_short_class_in_descriptor(desc: &str) -> bool {
                 .unwrap_or(bytes.len());
             let class_name = &desc[start..end];
             // Valid class names contain '/'. Short names without '/' are invalid
-            // UNLESS they're known primitives wrappers or kotlin types that d8 can resolve.
+            // UNLESS they're known primitives wrappers or kotlin types that d8 can resolve,
+            // or user-declared classes in the unnamed package.
             if !class_name.contains('/')
                 && !class_name.is_empty()
                 && class_name.as_bytes()[0].is_ascii_uppercase()
@@ -6095,6 +6139,7 @@ fn has_short_class_in_descriptor(desc: &str) -> bool {
                     class_name,
                     "Object" | "String" | "Integer" | "Boolean" | "Long" | "Double" | "Float"
                 )
+                && !user_class_names.contains(class_name)
             {
                 return true;
             }
@@ -6449,8 +6494,12 @@ fn emit_stub_method(
     blob.write_u16::<BigEndian>(0).unwrap(); // exception_table_length
     blob.write_u16::<BigEndian>(0).unwrap(); // attributes_count (no StackMapTable needed for trivial bodies)
 
-    // Append annotation attributes if present.
-    append_method_annotations(&mut blob, func, cp, module);
+    // NOTE: callers of `emit_method` invoke `append_method_annotations`
+    // themselves on the returned blob — do NOT append here or stub
+    // methods end up with duplicate RuntimeInvisibleAnnotations /
+    // RuntimeInvisibleParameterAnnotations attributes (which the JVM
+    // class-file format forbids → ClassFormatError at load time).
+    let _ = (cp, module);
 
     blob
 }
@@ -6462,6 +6511,9 @@ fn emit_method(
     cp: &mut ConstantPool,
     code_attr_name_idx: u16,
 ) -> Vec<u8> {
+    // Re-stash module pointer for has_short_class_in_descriptor —
+    // same reason as in emit_user_method.
+    EMIT_MODULE.with(|cell| *cell.borrow_mut() = Some(module as *const MirModule));
     // If the function has unresolved calls (null stubs from MIR lowering),
     // emit a safe stub body that simply returns the default value for the
     // return type. This produces valid bytecode that d8 always accepts.

@@ -1,0 +1,4 @@
+name = "1254-block-body-returns-unit"
+status = "supported"
+features = ["block-body", "return-type-inference", "mutable-list", "method-call"]
+reason = "Locks in `infer_body_return_ty` returning Unit for block-bodied functions with no explicit `return value` statement. The trailing Stmt::Expr's value is discarded in Kotlin; treating it as the return type produced `Ljava/lang/Object;` descriptors for void methods, which then failed cross-file dispatch with `NoSuchMethodError`."

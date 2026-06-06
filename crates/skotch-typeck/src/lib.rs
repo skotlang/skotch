@@ -39,8 +39,8 @@ use skotch_diagnostics::{Diagnostic, Diagnostics};
 use skotch_intern::{Interner, Symbol};
 use skotch_resolve::{DefId, ResolvedFile};
 use skotch_syntax::{
-    BinOp, Block, ClassDecl, Decl, EnumDecl, Expr, FunDecl, InterfaceDecl, KtFile, Stmt,
-    TemplatePart, TypeRef, ValDecl,
+    BinOp, Block, ClassDecl, Decl, EnumDecl, Expr, FunDecl, InterfaceDecl, KtFile, ObjectDecl,
+    Stmt, TemplatePart, TypeRef, ValDecl,
 };
 use skotch_types::intrinsics;
 use skotch_types::{ty_from_name, Ty};
@@ -232,7 +232,7 @@ pub fn type_check(
     resolved: &ResolvedFile,
     interner: &mut Interner,
     diags: &mut Diagnostics,
-    _package_symbols: Option<&skotch_resolve::PackageSymbolTable>,
+    package_symbols: Option<&skotch_resolve::PackageSymbolTable>,
 ) -> TypedFile {
     let mut tc = TypeChecker {
         interner,
@@ -245,11 +245,25 @@ pub fn type_check(
     };
 
     // ── Collect type aliases ───────────────────────────────────────────
+    // Store the full target `TypeRef` rather than just its name —
+    // function-type aliases (`typealias Predicate = (Int) -> Boolean`)
+    // need their `func_params` preserved so `resolve_type_ref` can
+    // surface them as `Ty::Function` rather than collapsing to the
+    // return type's name.
     for decl in &file.decls {
         if let Decl::TypeAlias(ta) = decl {
             let alias_name = tc.interner.resolve(ta.name).to_string();
-            let target_name = tc.interner.resolve(ta.target.name).to_string();
-            tc.type_aliases.insert(alias_name, target_name);
+            tc.type_aliases.insert(alias_name, ta.target.clone());
+        }
+    }
+    // Cross-file typealiases in the same package (no explicit import
+    // needed in Kotlin). Local file aliases win over package ones —
+    // typeck just fills in the gaps from `package_symbols`.
+    if let Some(pkg) = package_symbols {
+        for (name, target_tr) in &pkg.type_aliases {
+            tc.type_aliases
+                .entry(name.clone())
+                .or_insert_with(|| target_tr.clone());
         }
     }
 
@@ -259,7 +273,54 @@ pub fn type_check(
             Decl::Class(c) => tc.register_class(c),
             Decl::Interface(i) => tc.register_interface(i),
             Decl::Enum(e) => tc.register_enum(e),
+            Decl::Object(o) => tc.register_object(o),
             _ => {}
+        }
+    }
+
+    // Register cross-file class declarations as minimal stubs so this
+    // file's `val x: Sealed = Subclass(...)` typechecks against the
+    // declared annotation (and `is Subclass` patterns resolve). Without
+    // this, typeck saw `Subclass(...)` as `Ty::Any` and the assignment
+    // failed with "expected <class>, found Any".
+    if let Some(pkg) = package_symbols {
+        for (simple_name, ext_class) in &pkg.classes {
+            if tc.env.types.contains_key(simple_name) {
+                continue;
+            }
+            let parent = ext_class.super_class.clone();
+            tc.env.types.insert(
+                simple_name.clone(),
+                TypeDecl {
+                    name: simple_name.clone(),
+                    super_class: parent,
+                    interfaces: ext_class.interfaces.clone(),
+                    fields: ext_class
+                        .fields
+                        .iter()
+                        .map(|(n, t)| FieldSig {
+                            name: n.clone(),
+                            ty: t.clone(),
+                        })
+                        .collect(),
+                    methods: ext_class
+                        .methods
+                        .iter()
+                        .map(|(n, params, ret)| MethodSig {
+                            name: n.clone(),
+                            params: params.clone(),
+                            ret: ret.clone(),
+                        })
+                        .collect(),
+                    companion_methods: Vec::new(),
+                    is_enum: matches!(ext_class.kind, skotch_resolve::ExternalClassKind::Enum),
+                    enum_entries: Vec::new(),
+                    is_sealed: matches!(
+                        ext_class.kind,
+                        skotch_resolve::ExternalClassKind::SealedClass
+                    ),
+                },
+            );
         }
     }
 
@@ -696,7 +757,7 @@ struct TypeChecker<'a> {
     /// Type parameter names currently in scope (e.g. "T", "R").
     type_params: Vec<String>,
     /// Type alias mappings: alias name → target type name.
-    type_aliases: FxHashMap<String, String>,
+    type_aliases: FxHashMap<String, TypeRef>,
 }
 
 impl<'a> TypeChecker<'a> {
@@ -779,6 +840,34 @@ impl<'a> TypeChecker<'a> {
                 is_enum: false,
                 enum_entries: Vec::new(),
                 is_sealed: c.is_sealed,
+            },
+        );
+    }
+
+    fn register_object(&mut self, o: &ObjectDecl) {
+        let name = self.interner.resolve(o.name).to_string();
+        let interfaces: Vec<String> = o
+            .interfaces
+            .iter()
+            .map(|s| self.interner.resolve(*s).to_string())
+            .collect();
+        let methods: Vec<MethodSig> = o
+            .methods
+            .iter()
+            .map(|m| self.method_sig_from_fun(m))
+            .collect();
+        self.env.types.insert(
+            name.clone(),
+            TypeDecl {
+                name,
+                super_class: None,
+                interfaces,
+                fields: Vec::new(),
+                methods,
+                companion_methods: Vec::new(),
+                is_enum: false,
+                enum_entries: Vec::new(),
+                is_sealed: false,
             },
         );
     }
@@ -884,12 +973,19 @@ impl<'a> TypeChecker<'a> {
             };
         }
         let raw_name = self.interner.resolve(tr.name).to_string();
-        // Resolve type aliases.
-        let name = if let Some(target) = self.type_aliases.get(&raw_name) {
-            target.clone()
-        } else {
-            raw_name
-        };
+        // Resolve type aliases by recursing on the full target TypeRef.
+        // This preserves function-type aliases (`typealias Predicate =
+        // (Int) -> Boolean` → `Ty::Function { ... }`) and generic
+        // aliases. Plain name-only aliases (`typealias Id = Int`) still
+        // resolve correctly via the recursion.
+        if let Some(target_tr) = self.type_aliases.get(&raw_name).cloned() {
+            let mut resolved = self.resolve_type_ref(&target_tr);
+            if tr.nullable && !matches!(resolved, Ty::Nullable(_) | Ty::Error) {
+                resolved = Ty::Nullable(Box::new(resolved));
+            }
+            return resolved;
+        }
+        let name = raw_name;
         // Map well-known Kotlin collection/stdlib type names to their
         // fully-qualified JVM internal names so descriptors use the
         // correct class path (e.g. `Ljava/util/List;` not `LList;`).

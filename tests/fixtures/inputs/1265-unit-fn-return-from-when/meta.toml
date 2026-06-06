@@ -1,0 +1,4 @@
+name = "1265-unit-fn-return-from-when"
+status = "supported"
+features = ["unit-return", "when-expression", "return-terminator"]
+reason = "Locks in Unit-returning functions emitting `return` (0xB1) instead of `areturn` (0xB0) when the MIR ends in `Terminator::ReturnValue(local)`. Unit locals push nothing onto the stack at runtime — the old areturn path triggered verifier `Operand stack underflow`."

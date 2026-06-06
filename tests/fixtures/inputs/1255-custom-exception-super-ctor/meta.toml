@@ -1,0 +1,4 @@
+name = "1255-custom-exception-super-ctor"
+status = "supported"
+features = ["custom-exception", "try-catch", "super-constructor", "kotlin-builtin"]
+reason = "Locks in FQ resolution for stdlib-exception supertypes. The class header AND the super-ctor methodref both resolve `RuntimeException` to `java/lang/RuntimeException` via `intrinsics::kotlin_exception_class`. Also exercises the module-aware catch-type resolution (a user-defined `CalcError` catches as `CalcError`, not the obsolete `java/lang/CalcError` fallback)."

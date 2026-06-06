@@ -1,0 +1,4 @@
+name = "1257-enum-getstatic-direct"
+status = "supported"
+features = ["enum", "getstatic", "when-expression"]
+reason = "Lock in enum entry access via direct `getstatic <Enum>.<ENTRY>:L<Enum>;` when the same-file accessor function isn't registered. Required for cross-file enum references; the Field-lowering path now falls through to a `GetStaticField` after the `name_to_func` accessor lookup misses."

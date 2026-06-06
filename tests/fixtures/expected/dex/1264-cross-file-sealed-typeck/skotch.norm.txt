@@ -1,0 +1,67 @@
+dex_version   035
+strings       27
+types         12
+methods       10
+classes       1
+
+--- strings ---
+  "<init>"
+  "D"
+  "L"
+  "LCircle;"
+  "LD"
+  "LInputKt;"
+  "LL"
+  "LShape;"
+  "LSquare;"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/String;"
+  "Ljava/lang/StringBuilder;"
+  "Ljava/lang/System;"
+  "V"
+  "VD"
+  "VL"
+  "[Ljava/lang/String;"
+  "a area = "
+  "append"
+  "area"
+  "b area = "
+  "input.kt"
+  "main"
+  "out"
+  "println"
+  "toString"
+
+--- types ---
+  D
+  LCircle;
+  LInputKt;
+  LShape;
+  LSquare;
+  Ljava/io/PrintStream;
+  Ljava/lang/Object;
+  Ljava/lang/String;
+  Ljava/lang/StringBuilder;
+  Ljava/lang/System;
+  V
+  [Ljava/lang/String;
+
+--- methods ---
+  LCircle;.<init>(D)V
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  LShape;.area()D
+  LSquare;.<init>(D)V
+  Ljava/io/PrintStream;.println(Ljava/lang/String;)V
+  Ljava/lang/StringBuilder;.<init>()V
+  Ljava/lang/StringBuilder;.append(D)Ljava/lang/StringBuilder;
+  Ljava/lang/StringBuilder;.append(Ljava/lang/String;)Ljava/lang/StringBuilder;
+  Ljava/lang/StringBuilder;.toString()Ljava/lang/String;
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       main()V flags=0x0019 regs=12 ins=0 outs=2 insns=83
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4

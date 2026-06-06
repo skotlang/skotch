@@ -1,0 +1,4 @@
+name = "1256-object-singleton-method"
+status = "supported"
+features = ["object-singleton", "method-dispatch"]
+reason = "Lock in `Foo.bar(...)` dispatch on an `object Foo` singleton. The same-file case already worked; the cross-file path needed the cross-file stub to set `is_object_singleton = true` based on the resolve crate's `ExternalClassKind::Object` marker."

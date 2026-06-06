@@ -304,12 +304,16 @@ fn validate_class(class: &MirClass, module: &MirModule, errors: &mut Vec<MirErro
         });
     }
 
-    // Validate constructor.
-    validate_class_method(&class.constructor, module, &class.name, errors);
+    // Interfaces have no instance constructor on the JVM — the
+    // `class.constructor` slot is a placeholder for `lower_interface`
+    // bookkeeping and never emitted. Skip its block-presence check.
+    if !class.is_interface {
+        validate_class_method(&class.constructor, module, &class.name, errors);
 
-    // Validate secondary constructors.
-    for sec in &class.secondary_constructors {
-        validate_class_method(sec, module, &class.name, errors);
+        // Validate secondary constructors.
+        for sec in &class.secondary_constructors {
+            validate_class_method(sec, module, &class.name, errors);
+        }
     }
 
     // Validate instance methods.

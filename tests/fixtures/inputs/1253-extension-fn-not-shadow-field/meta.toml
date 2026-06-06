@@ -1,0 +1,4 @@
+name = "1253-extension-fn-not-shadow-field"
+status = "supported"
+features = ["extension-function", "data-class", "field-access"]
+reason = "Locks in the field-vs-extension-function precedence: when `fun Int.cents(): Money` and `data class Money(val cents: Long)` coexist, `someMoney.cents` resolves to the instance field, not the (type-mismatched) extension. Two related skotch fixes: (1) mir-lower's per-fn placeholder_locals now preserves the receiver type for extension functions, and (2) Field lowering checks receiver-type compatibility before treating a name match as an extension call."
