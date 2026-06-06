@@ -884,7 +884,20 @@ pub struct MirModule {
     pub wrapper_class: String,
     pub functions: Vec<MirFunction>,
     /// User-defined classes.
+    ///
+    /// Multiple entries may share a name when a real MirClass from
+    /// this file co-exists with a cross-file stub for the same JVM
+    /// name (the stub is registered from `package_symbols` before the
+    /// owning file is lowered). For lookups, prefer
+    /// [`MirModule::find_class`] and friends — they consult the
+    /// name→indices index and handle the prefer-non-stub semantics.
     pub classes: Vec<MirClass>,
+    /// Name → indices into `classes`. Maintained by
+    /// [`MirModule::push_class`]; callers that mutate `classes`
+    /// directly (rare) must call [`MirModule::rebuild_class_index`]
+    /// afterward. Skipped during serialization — rebuilt on load.
+    #[serde(skip)]
+    pub classes_by_name: rustc_hash::FxHashMap<String, Vec<u32>>,
     /// Insertion-order stable string pool. Backends iterate this in
     /// order to lay out their constant pool / string id table.
     pub strings: Vec<String>,
@@ -1033,9 +1046,103 @@ impl MirModule {
     /// `name.contains("$Lambda$")` substring check now that lambda
     /// classes follow kotlinc's `<wrapper>$<fn>$<idx>` naming.
     pub fn is_lambda_class(&self, name: &str) -> bool {
-        self.classes
+        self.classes_with_name(name)
+            .any(|c| c.is_lambda || c.is_suspend_lambda)
+    }
+
+    /// Push a class and keep `classes_by_name` in sync. Prefer this
+    /// over `module.classes.push(c)` so the name index stays valid.
+    pub fn push_class(&mut self, class: MirClass) {
+        let idx = self.classes.len() as u32;
+        let name = class.name.clone();
+        self.classes.push(class);
+        self.classes_by_name.entry(name).or_default().push(idx);
+    }
+
+    /// Rebuild `classes_by_name` from scratch. Used after batch
+    /// mutations to `classes` that bypassed [`push_class`], and after
+    /// deserialization (where the index isn't persisted).
+    pub fn rebuild_class_index(&mut self) {
+        self.classes_by_name.clear();
+        for (i, c) in self.classes.iter().enumerate() {
+            self.classes_by_name
+                .entry(c.name.clone())
+                .or_default()
+                .push(i as u32);
+        }
+    }
+
+    /// Return all `MirClass` entries matching `name`. Multiple matches
+    /// happen when a cross-file stub coexists with the real class.
+    pub fn classes_with_name<'a>(
+        &'a self,
+        name: &'a str,
+    ) -> impl Iterator<Item = &'a MirClass> + 'a {
+        let indices = self.classes_by_name.get(name);
+        indices
+            .into_iter()
+            .flat_map(|v| v.iter())
+            .map(move |&i| &self.classes[i as usize])
+    }
+
+    /// First-class match for `name`, or `None`. Prefers a non-stub
+    /// entry when both a real class and a cross-file stub exist for
+    /// the same JVM name.
+    pub fn find_class(&self, name: &str) -> Option<&MirClass> {
+        let indices = self.classes_by_name.get(name)?;
+        // Two-pass: non-stub first, else first stub. Cheap because
+        // `indices.len() <= 2` in practice (real + stub).
+        indices
             .iter()
-            .any(|c| c.name == name && (c.is_lambda || c.is_suspend_lambda))
+            .map(|&i| &self.classes[i as usize])
+            .find(|c| !c.is_cross_file_stub)
+            .or_else(|| indices.first().map(|&i| &self.classes[i as usize]))
+    }
+
+    /// Mutable counterpart to `find_class`. Same prefer-non-stub
+    /// semantics.
+    pub fn find_class_mut(&mut self, name: &str) -> Option<&mut MirClass> {
+        let indices = self.classes_by_name.get(name)?.clone();
+        let preferred = indices
+            .iter()
+            .copied()
+            .find(|&i| !self.classes[i as usize].is_cross_file_stub);
+        let idx = preferred.or_else(|| indices.first().copied())?;
+        Some(&mut self.classes[idx as usize])
+    }
+
+    /// Does ANY class entry match this name? O(1) common-case check
+    /// when the caller only needs existence (very common in dispatch
+    /// path predicates).
+    pub fn has_class(&self, name: &str) -> bool {
+        self.classes_by_name.contains_key(name)
+    }
+
+    /// Resolve a simple class name to its FQ JVM-internal name by
+    /// consulting (in priority order): the name itself if it already
+    /// contains `/` (assumed FQ), the file's import map, the
+    /// cross-file class registry, and finally the simple name as a
+    /// fallback. Centralizes the resolution chain that lower_class /
+    /// lower_object / lower_enum / lower_interface and the cross-file
+    /// stub builder used to inline at 6+ sites.
+    pub fn fq_resolve(&self, simple: &str) -> String {
+        if simple.contains('/') {
+            return simple.to_string();
+        }
+        if let Some(fq) = self.import_map.get(simple) {
+            return fq.clone();
+        }
+        if let Some((fq, _, _)) = self.cross_file_classes.get(simple) {
+            return fq.clone();
+        }
+        simple.to_string()
+    }
+
+    /// Same as [`fq_resolve`] but takes an `Option<&str>` and returns
+    /// `Option<String>`. Convenient for resolving optional super_class
+    /// slots without wrapping in `map`.
+    pub fn fq_resolve_opt<S: AsRef<str>>(&self, simple: Option<S>) -> Option<String> {
+        simple.map(|s| self.fq_resolve(s.as_ref()))
     }
 }
 

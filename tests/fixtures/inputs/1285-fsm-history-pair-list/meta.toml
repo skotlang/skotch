@@ -1,0 +1,4 @@
+name = "1285-fsm-history-pair-list"
+status = "supported"
+features = ["enum", "pair-stdlib", "mutable-list", "nested-when", "var-field-write", "method-dispatch"]
+reason = "Locks in skotch-examples/15-state-machine-and-history: enum + var-field + MutableList<Pair<Light, Event>> + nested when + cross-method dispatch through a method that constructs a fresh receiver of the same class."

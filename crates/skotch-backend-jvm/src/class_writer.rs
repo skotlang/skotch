@@ -1525,7 +1525,7 @@ fn compile_class(class_name: &str, module: &MirModule) -> Vec<u8> {
                 .chars()
                 .next()
                 .is_some_and(|ch| ch.is_ascii_digit());
-            if !is_anonymous && !module.classes.iter().any(|c2| c2.name == outer) {
+            if !is_anonymous && !module.has_class(outer) {
                 return None;
             }
             if !seen_inner.insert(inner_idx) {
@@ -3457,14 +3457,11 @@ fn emit_method_body(
     // use of each candidate — the assignment is dead code if no longer
     // emitted, and the use textually substitutes the constant.
     let inlinable = compute_inlinable_constants(func);
-    INLINABLE_CONSTS.with(|cell| *cell.borrow_mut() = inlinable);
     let inlinable_getstatic = compute_inlinable_getstatic(func);
-    INLINABLE_GETSTATIC.with(|cell| *cell.borrow_mut() = inlinable_getstatic);
 
     // Compute write-once-never-read locals so the call handlers can emit
     // `pop` / `pop2` instead of an unused `store`.
     let unused = compute_unused_locals(func);
-    UNUSED_LOCALS.with(|cell| *cell.borrow_mut() = unused);
 
     // Build a map of named locals whose only assignment is a literal
     // constant. The comparison-folding path uses this to recognize
@@ -3492,7 +3489,14 @@ fn emit_method_body(
         }
         out
     };
-    NAMED_CONST_INITS.with(|cell| *cell.borrow_mut() = named_const_inits);
+    setup_emit_state(
+        inlinable,
+        Some(inlinable_getstatic),
+        unused,
+        Some(named_const_inits),
+        cp as *mut ConstantPool,
+        module as *const MirModule,
+    );
 
     // Compute reachable blocks — skip emitting dead blocks that follow
     // throw/return-terminated branches to avoid VerifyError from missing
@@ -3554,11 +3558,6 @@ fn emit_method_body(
     if func.needs_leading_nop {
         code.push(0x00); // nop
     }
-
-    // Stash CP / module pointers so `load_local` can emit CP-backed
-    // inline constants without threading them through every callsite.
-    EMIT_CP.with(|cell| *cell.borrow_mut() = Some(cp as *mut ConstantPool));
-    EMIT_MODULE.with(|cell| *cell.borrow_mut() = Some(module as *const MirModule));
 
     // Empty suspend Unit body: just `getstatic Unit.INSTANCE; areturn`.
     // The MIR has `_t = null; ReturnValue(_t)` for an empty Unit suspend
@@ -5765,12 +5764,7 @@ fn emit_method_body(
         .unwrap();
     method.write_all(&code_attr).unwrap();
     // Clear inlinable-constants table for the next function.
-    INLINABLE_CONSTS.with(|cell| cell.borrow_mut().clear());
-    INLINABLE_GETSTATIC.with(|cell| cell.borrow_mut().clear());
-    UNUSED_LOCALS.with(|cell| cell.borrow_mut().clear());
-    NAMED_CONST_INITS.with(|cell| cell.borrow_mut().clear());
-    EMIT_CP.with(|cell| *cell.borrow_mut() = None);
-    EMIT_MODULE.with(|cell| *cell.borrow_mut() = None);
+    reset_emit_state();
     method
 }
 
@@ -7266,15 +7260,14 @@ fn emit_composable_method(
                 1
             };
         }
-        let inlinable = compute_inlinable_constants(func);
-        INLINABLE_CONSTS.with(|cell| *cell.borrow_mut() = inlinable);
-        let inlinable_getstatic = compute_inlinable_getstatic(func);
-        INLINABLE_GETSTATIC.with(|cell| *cell.borrow_mut() = inlinable_getstatic);
-        let unused = compute_unused_locals(func);
-        UNUSED_LOCALS.with(|cell| *cell.borrow_mut() = unused);
-        NAMED_CONST_INITS.with(|cell| cell.borrow_mut().clear());
-        EMIT_CP.with(|cell| *cell.borrow_mut() = Some(cp as *mut ConstantPool));
-        EMIT_MODULE.with(|cell| *cell.borrow_mut() = Some(module as *const MirModule));
+        setup_emit_state(
+            compute_inlinable_constants(func),
+            Some(compute_inlinable_getstatic(func)),
+            compute_unused_locals(func),
+            None,
+            cp as *mut ConstantPool,
+            module as *const MirModule,
+        );
         let mut stack: i32 = 0;
         let mut cmp_targets: Vec<CmpBranchTarget> = Vec::new();
         walk_block(
@@ -7292,12 +7285,7 @@ fn emit_composable_method(
             &mut cmp_targets,
         );
         body_max_locals_u8 = body_max_locals_u8.max(next_slot);
-        INLINABLE_CONSTS.with(|cell| cell.borrow_mut().clear());
-        INLINABLE_GETSTATIC.with(|cell| cell.borrow_mut().clear());
-        UNUSED_LOCALS.with(|cell| cell.borrow_mut().clear());
-        NAMED_CONST_INITS.with(|cell| cell.borrow_mut().clear());
-        EMIT_CP.with(|cell| *cell.borrow_mut() = None);
-        EMIT_MODULE.with(|cell| *cell.borrow_mut() = None);
+        reset_emit_state();
     }
     // L_end target — start of endRestartGroup bytecode. Same as
     // l_body_offset for the empty-body case; differs after body bytes.
@@ -8430,12 +8418,20 @@ fn emit_multi_suspend_state_machine_method(
     // and shifting the dispatcher slots away from kotlinc's positions.
     let inlinable = compute_inlinable_constants(func);
     let unused = compute_unused_locals(func);
-    INLINABLE_CONSTS.with(|cell| *cell.borrow_mut() = inlinable.clone());
-    UNUSED_LOCALS.with(|cell| *cell.borrow_mut() = unused.clone());
     // Stash cp + module pointers so `emit_load_mir_local` can reach
     // them when materializing inline string / large-numeric consts.
-    EMIT_CP.with(|cell| *cell.borrow_mut() = Some(cp as *mut ConstantPool));
-    EMIT_MODULE.with(|cell| *cell.borrow_mut() = Some(module as *const MirModule));
+    // No inlinable_getstatic / named_const_inits for the state-machine
+    // emitter — single-use getstatics aren't an idiom inside a coroutine
+    // body, and named-const-init folding doesn't apply across suspend
+    // points.
+    setup_emit_state(
+        inlinable.clone(),
+        None,
+        unused.clone(),
+        None,
+        cp as *mut ConstantPool,
+        module as *const MirModule,
+    );
 
     // ── Slot layout. ────────────────────────────────────────────────
     //
@@ -9974,6 +9970,10 @@ fn emit_multi_suspend_state_machine_method(
         .write_u32::<BigEndian>(code_attr.len() as u32)
         .unwrap();
     method.write_all(&code_attr).unwrap();
+    // Pair the setup_emit_state above so per-method state doesn't leak
+    // into the next method-emission cycle (latent bug pre-consolidation:
+    // this function set thread-locals but never cleared them).
+    reset_emit_state();
     return method;
 
     // ── Inner helpers (closures would borrow-check awkwardly). ─────
@@ -10590,11 +10590,7 @@ fn emit_mir_segment(
                 // (skip cross-file stubs whose field types erase to Any).
                 // Falls back to the dest local's type when the field
                 // isn't declared on the resolved class.
-                let owning_class = module
-                    .classes
-                    .iter()
-                    .filter(|c| &c.name == field_class)
-                    .min_by_key(|c| c.is_cross_file_stub as u8);
+                let owning_class = module.find_class(field_class);
                 let declared_ty = owning_class
                     .and_then(|c| c.fields.iter().find(|f| &f.name == field_name))
                     .map(|f| f.ty.clone());
@@ -14686,11 +14682,7 @@ fn walk_block(
                 //
                 // Prefer the real MirClass over a cross-file stub when
                 // both exist — see the PutField path above for why.
-                let owning_class = module
-                    .classes
-                    .iter()
-                    .filter(|c| &c.name == field_class)
-                    .min_by_key(|c| c.is_cross_file_stub as u8);
+                let owning_class = module.find_class(field_class);
                 let declared_ty = owning_class
                     .and_then(|c| c.fields.iter().find(|f| &f.name == field_name))
                     .map(|f| f.ty.clone());
@@ -14819,10 +14811,7 @@ fn walk_block(
                 // and erase to `Ty::Any`. This is the field-descriptor
                 // drift behind VerifyError on synthesized getters.
                 let declared_ty = module
-                    .classes
-                    .iter()
-                    .filter(|c| &c.name == class_name)
-                    .min_by_key(|c| c.is_cross_file_stub as u8)
+                    .find_class(class_name)
                     .and_then(|c| c.fields.iter().find(|f| &f.name == field_name))
                     .map(|f| f.ty.clone());
                 let effective_ty = declared_ty.as_ref().unwrap_or(value_ty);
@@ -15767,10 +15756,7 @@ fn walk_block(
                         // emitted descriptor `(Ljava/lang/Object;...)V` instead of
                         // matching the real constructor's typed signature.
                         let ctor_params: Vec<Ty> = module
-                            .classes
-                            .iter()
-                            .filter(|c| c.name == *class_name)
-                            .min_by_key(|c| c.is_cross_file_stub as u8)
+                            .find_class(class_name)
                             .map(|c| {
                                 // Try primary constructor first.
                                 let primary_count = c.constructor.params.len().saturating_sub(1);
@@ -16800,6 +16786,41 @@ thread_local! {
     /// SAFETY: only valid while emission is in progress for one method.
     static EMIT_CP: RefCell<Option<*mut ConstantPool>> = const { RefCell::new(None) };
     static EMIT_MODULE: RefCell<Option<*const MirModule>> = const { RefCell::new(None) };
+}
+
+/// Initialise all six per-method emission slots in one call. Pass
+/// `None` for the optional inlinable_getstatic / named_const_inits
+/// maps to clear them — useful for callers (e.g. the multi-suspend
+/// state-machine emitter) that don't compute one or both.
+///
+/// Pair every call with `reset_emit_state()` at the matching teardown
+/// point so per-method state never leaks to the next method.
+fn setup_emit_state(
+    inlinable: FxHashMap<u32, MirConst>,
+    inlinable_getstatic: Option<FxHashMap<u32, (String, String, String)>>,
+    unused: FxHashSet<u32>,
+    named_const_inits: Option<FxHashMap<u32, MirConst>>,
+    cp: *mut ConstantPool,
+    module: *const MirModule,
+) {
+    INLINABLE_CONSTS.with(|cell| *cell.borrow_mut() = inlinable);
+    INLINABLE_GETSTATIC.with(|cell| *cell.borrow_mut() = inlinable_getstatic.unwrap_or_default());
+    UNUSED_LOCALS.with(|cell| *cell.borrow_mut() = unused);
+    NAMED_CONST_INITS.with(|cell| *cell.borrow_mut() = named_const_inits.unwrap_or_default());
+    EMIT_CP.with(|cell| *cell.borrow_mut() = Some(cp));
+    EMIT_MODULE.with(|cell| *cell.borrow_mut() = Some(module));
+}
+
+/// Clear every emission-state slot. Idempotent — safe to call from
+/// the `Drop` side of an explicit RAII guard as well as inline at the
+/// end of a method-emission scope.
+fn reset_emit_state() {
+    INLINABLE_CONSTS.with(|cell| cell.borrow_mut().clear());
+    INLINABLE_GETSTATIC.with(|cell| cell.borrow_mut().clear());
+    UNUSED_LOCALS.with(|cell| cell.borrow_mut().clear());
+    NAMED_CONST_INITS.with(|cell| cell.borrow_mut().clear());
+    EMIT_CP.with(|cell| *cell.borrow_mut() = None);
+    EMIT_MODULE.with(|cell| *cell.borrow_mut() = None);
 }
 
 /// Locals that are the receiver of two or more consecutive `componentN()`

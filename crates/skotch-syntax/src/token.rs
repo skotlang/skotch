@@ -220,6 +220,38 @@ impl TokenKind {
         )
     }
 
+    /// Returns true if this token is a Kotlin *soft* keyword — one that
+    /// can also appear as an identifier in identifier positions (e.g.
+    /// `val data: Int`, `fun open() { … }`). Hard keywords (`fun`, `val`,
+    /// `if`, …) return false here even though `is_keyword()` would say
+    /// true. The parser uses this when reading a name in a position
+    /// where only the modifier interpretation is grammatically valid
+    /// — after `val`/`var`, after `fun`, in argument labels, etc.
+    pub fn is_soft_keyword(self) -> bool {
+        matches!(
+            self,
+            TokenKind::KwOpen
+                | TokenKind::KwOverride
+                | TokenKind::KwAbstract
+                | TokenKind::KwPrivate
+                | TokenKind::KwProtected
+                | TokenKind::KwInternal
+                | TokenKind::KwEnum
+                | TokenKind::KwSealed
+                | TokenKind::KwData
+                | TokenKind::KwConst
+                | TokenKind::KwLateinit
+                | TokenKind::KwSuspend
+                | TokenKind::KwInit
+                | TokenKind::KwInfix
+                | TokenKind::KwInline
+                | TokenKind::KwOperator
+                | TokenKind::KwVararg
+                | TokenKind::KwConstructor
+                | TokenKind::KwTailrec
+        )
+    }
+
     /// Return the source text for keyword tokens (e.g. `KwData` → `"data"`).
     /// Returns `None` for non-keyword tokens.
     pub fn keyword_text(&self) -> Option<&'static str> {

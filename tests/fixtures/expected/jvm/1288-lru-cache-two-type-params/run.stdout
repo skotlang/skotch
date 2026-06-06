@@ -1,0 +1,8 @@
+initial fill: keys=[a, b, c] size=3
+get(a) = 1
+after get(a): keys=[b, c, a] size=3
+after put(d): keys=[c, a, d] size=3
+get(b) (evicted) = null
+get(d) = 4
+after put(a=99): keys=[c, d, a] size=3
+get(a) = 99

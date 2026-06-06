@@ -1,0 +1,13 @@
+now: GREEN
+now: YELLOW
+now: RED
+now: GREEN
+now: YELLOW
+trace:
+0: RED --TICK-->
+1: GREEN --TICK-->
+2: YELLOW --EMERGENCY-->
+3: RED --TICK-->
+4: GREEN --TICK-->
+rewound to step 2: YELLOW
+rewound to step 4: GREEN

@@ -40,6 +40,11 @@ use std::sync::Mutex;
 
 use skotch_types::intrinsics;
 
+mod annotations;
+mod const_fold;
+mod descriptors;
+mod free_vars;
+
 thread_local! {
     /// Hint set by `lower_val_stmt` while lowering the right-hand side
     /// of a `val name = ...` so an `Expr::ObjectExpr` knows the target
@@ -132,293 +137,11 @@ pub fn is_jvm_interface(class_name: &str) -> bool {
     skotch_stdlib_registry::is_jvm_interface(class_name)
 }
 
-/// Convert a `Ty` to its JVM descriptor string fragment (for building
-/// method descriptors in the MIR lowerer).
-/// Map a `Ty` to a JVM descriptor string for use in parameter positions.
-/// `Unit` maps to `Lkotlin/Unit;` (not `V`, which is only valid as return type).
-/// Parse the return type out of a JVM method descriptor like
-/// `(Landroid/os/Bundle;)V` → `Ty::Unit` or `(I)Z` → `Ty::Bool`. Reference
-/// types collapse to `Ty::Any` (callers that need the concrete class can
-/// re-parse) — this helper is for picking up Composer-less call-site
-/// return types from classinfo.
-fn ty_from_descriptor_return(desc: &str) -> Ty {
-    let ret = desc.rsplit(')').next().unwrap_or("V");
-    let mut chars = ret.chars();
-    match chars.next() {
-        Some('V') => Ty::Unit,
-        Some('Z') => Ty::Bool,
-        Some('B') => Ty::Byte,
-        Some('S') => Ty::Short,
-        Some('C') => Ty::Char,
-        Some('I') => Ty::Int,
-        Some('J') => Ty::Long,
-        Some('F') => Ty::Float,
-        Some('D') => Ty::Double,
-        Some('L') => {
-            // L<name>;
-            let inner: String = chars.take_while(|&c| c != ';').collect();
-            if inner.is_empty() {
-                Ty::Any
-            } else {
-                Ty::Class(inner)
-            }
-        }
-        Some('[') => Ty::Any, // arrays — caller can refine
-        _ => Ty::Any,
-    }
-}
-
-/// Parse a JVM method descriptor and return the 0-based index of the
-/// `Landroidx/compose/runtime/Composer;` parameter. Used to fill in the
-/// `$composer` slot at the correct position when patching composable
-/// call sites — the simple "second-from-last" heuristic places the
-/// Composer wrong when the descriptor ends with a trailing `$default`
-/// mask (e.g. `(DrawerValue, Function1, Composer, I, I)`).
-fn composer_position_in_descriptor(desc: &str) -> Option<usize> {
-    let inside = desc.strip_prefix('(').and_then(|s| s.split_once(')'))?.0;
-    let mut idx = 0usize;
-    let mut chars = inside.chars();
-    while let Some(c) = chars.next() {
-        match c {
-            'L' => {
-                let mut name = String::new();
-                for cc in chars.by_ref() {
-                    if cc == ';' {
-                        break;
-                    }
-                    name.push(cc);
-                }
-                if name == "androidx/compose/runtime/Composer" {
-                    return Some(idx);
-                }
-                idx += 1;
-            }
-            '[' => continue,
-            'B' | 'C' | 'D' | 'F' | 'I' | 'J' | 'S' | 'Z' => idx += 1,
-            _ => continue,
-        }
-    }
-    None
-}
-
-/// If the last param of a JVM method descriptor is an object array
-/// (`[Lsome/Class;`), return the JVM internal name of the element class
-/// (e.g. `kotlin/Pair`). Used to detect vararg slots so individually-
-/// passed args at the call site can be packed into a fresh array.
-fn vararg_element_class(desc: &str) -> Option<String> {
-    let inside = desc.strip_prefix('(').and_then(|s| s.split_once(')'))?.0;
-    // Walk to find the LAST param.
-    let mut last_kind: Option<String> = None;
-    let mut chars = inside.chars().peekable();
-    while let Some(c) = chars.next() {
-        match c {
-            'L' => {
-                let mut name = String::from("L");
-                for cc in chars.by_ref() {
-                    name.push(cc);
-                    if cc == ';' {
-                        break;
-                    }
-                }
-                last_kind = Some(name);
-            }
-            '[' => {
-                let mut s = String::from("[");
-                while let Some(&nc) = chars.peek() {
-                    if nc == '[' {
-                        s.push('[');
-                        chars.next();
-                    } else {
-                        break;
-                    }
-                }
-                if let Some(&nc) = chars.peek() {
-                    if nc == 'L' {
-                        chars.next();
-                        s.push('L');
-                        for cc in chars.by_ref() {
-                            s.push(cc);
-                            if cc == ';' {
-                                break;
-                            }
-                        }
-                    } else {
-                        s.push(chars.next().unwrap());
-                    }
-                }
-                last_kind = Some(s);
-            }
-            'B' | 'C' | 'D' | 'F' | 'I' | 'J' | 'S' | 'Z' => {
-                last_kind = Some(c.to_string());
-            }
-            _ => continue,
-        }
-    }
-    let last = last_kind?;
-    // Need exactly `[L<name>;` shape — single-dim object array.
-    let stripped = last.strip_prefix("[L")?.strip_suffix(';')?;
-    if stripped.contains('[') {
-        return None;
-    }
-    Some(stripped.to_string())
-}
-
-/// Parse a JVM method descriptor and return the sequence of param Ty values,
-/// one per param slot. Used to pad composable call args with correctly
-/// typed placeholders (e.g. Int(0) for `$changed`/`$default`, not null).
-fn param_tys_from_descriptor(desc: &str) -> Vec<Ty> {
-    let inside = match desc.strip_prefix('(').and_then(|s| s.split_once(')')) {
-        Some((i, _)) => i,
-        None => return Vec::new(),
-    };
-    let mut out = Vec::new();
-    let mut chars = inside.chars();
-    while let Some(c) = chars.next() {
-        match c {
-            'L' => {
-                let mut name = String::new();
-                for cc in chars.by_ref() {
-                    if cc == ';' {
-                        break;
-                    }
-                    name.push(cc);
-                }
-                out.push(if name == "java/lang/String" {
-                    Ty::String
-                } else {
-                    Ty::Class(name)
-                });
-            }
-            '[' => {
-                let mut depth = 1usize;
-                while let Some(cc) = chars.next() {
-                    if cc == '[' {
-                        depth += 1;
-                    } else if cc == 'L' {
-                        for ccc in chars.by_ref() {
-                            if ccc == ';' {
-                                break;
-                            }
-                        }
-                        break;
-                    } else {
-                        break;
-                    }
-                }
-                let _ = depth;
-                out.push(Ty::Any);
-            }
-            'Z' => out.push(Ty::Bool),
-            'B' => out.push(Ty::Byte),
-            'S' => out.push(Ty::Short),
-            'C' => out.push(Ty::Char),
-            'I' => out.push(Ty::Int),
-            'J' => out.push(Ty::Long),
-            'F' => out.push(Ty::Float),
-            'D' => out.push(Ty::Double),
-            _ => continue,
-        }
-    }
-    out
-}
-
-/// Look up the best method descriptor for a composable function call.
-/// Prefers overloads whose descriptor contains "Composer" (composable),
-/// trying various param counts to account for default parameters.
-fn lookup_composable_descriptor(
-    class_path: &str,
-    method_name: &str,
-    user_arg_count: usize,
-) -> Option<String> {
-    // Try a range of param counts: the composable overload has at least
-    // user_args + 2 ($composer + $changed), potentially more with
-    // default params ($default bitmask) and the default params themselves.
-    for extra in &[2, 3, 4, 5, 6, 7, 8] {
-        if let Some(d) = skotch_classinfo::lookup_method_descriptor(
-            class_path,
-            method_name,
-            user_arg_count + extra,
-        ) {
-            if d.contains("Composer") {
-                return Some(d);
-            }
-        }
-    }
-    // No composable overload found — try exact match first.
-    if let Some(d) =
-        skotch_classinfo::lookup_method_descriptor(class_path, method_name, user_arg_count)
-    {
-        return Some(d);
-    }
-    // Then try non-composable overloads with extra params — this catches
-    // Kotlin defaults like `mutableStateOf(value, policy = null)` whose
-    // descriptor has user_args + 1 params but the user only provided
-    // the value. The caller's per-slot padding will fill missing
-    // reference args with null and primitives with 0 based on the
-    // descriptor's character at each slot.
-    for extra in &[1usize, 2, 3, 4] {
-        if let Some(d) = skotch_classinfo::lookup_method_descriptor(
-            class_path,
-            method_name,
-            user_arg_count + extra,
-        ) {
-            return Some(d);
-        }
-    }
-    None
-}
-
-/// Parse a JVM method descriptor into a vec of per-slot "kind" characters:
-/// 'I' for int-shaped primitives, 'J' for long, 'F' for float, 'D' for double,
-/// 'L' for reference types (including arrays). Returns one entry per
-/// parameter slot. Used by call-site arg-padding to pick the right default
-/// value (0 for primitives, null for refs).
-fn parse_descriptor_param_chars(desc: &str) -> Vec<char> {
-    let inner = desc
-        .strip_prefix('(')
-        .and_then(|s| s.split(')').next())
-        .unwrap_or("");
-    let mut out = Vec::new();
-    let mut chars = inner.chars().peekable();
-    while let Some(c) = chars.next() {
-        match c {
-            'B' | 'C' | 'I' | 'S' | 'Z' => out.push('I'),
-            'J' => out.push('J'),
-            'F' => out.push('F'),
-            'D' => out.push('D'),
-            'L' => {
-                for sc in chars.by_ref() {
-                    if sc == ';' {
-                        break;
-                    }
-                }
-                out.push('L');
-            }
-            '[' => {
-                // Array: skip the element descriptor entirely (including any nested L...;)
-                while let Some(&sc) = chars.peek() {
-                    if sc == '[' {
-                        chars.next();
-                    } else {
-                        break;
-                    }
-                }
-                if let Some(elem) = chars.next() {
-                    if elem == 'L' {
-                        for sc in chars.by_ref() {
-                            if sc == ';' {
-                                break;
-                            }
-                        }
-                    }
-                }
-                out.push('L');
-            }
-            _ => {}
-        }
-    }
-    out
-}
+// JVM-descriptor inspection helpers moved to `descriptors.rs`.
+use crate::descriptors::{
+    composer_position_in_descriptor, lookup_composable_descriptor, param_tys_from_descriptor,
+    parse_descriptor_param_chars, ty_from_descriptor_return, vararg_element_class,
+};
 
 fn jvm_type_string_for_ty(ty: &Ty) -> String {
     match ty {
@@ -500,7 +223,7 @@ fn resolve_catch_type_jvm(name: &str, module: &MirModule) -> String {
     }
     // User-defined class in this module (covers same-file and cross-
     // file stub classes both stored by simple OR full JVM name).
-    if module.classes.iter().any(|c| c.name == name) {
+    if module.has_class(name) {
         return name.to_string();
     }
     // Import alias → fully qualified JVM name.
@@ -617,7 +340,7 @@ fn resolve_type(name: &str, module: &MirModule) -> Ty {
         return Ty::Class(fq);
     }
     // User-defined class or interface.
-    if module.classes.iter().any(|c| c.name == resolved_name) {
+    if module.has_class(resolved_name) {
         let fq = fq_class_name(resolved_name, module);
         return Ty::Class(fq);
     }
@@ -746,128 +469,8 @@ fn stdlib_function_interface(arity: usize) -> String {
 /// matches kotlinc's behavior for built-in source-only annotations like
 /// `@Suppress`, `@SinceKotlin`, etc. Note that `@Deprecated` IS emitted
 /// (as both a JVM `Deprecated` attribute and a `RuntimeVisibleAnnotations`).
-fn is_source_retention_annotation(name: &str) -> bool {
-    matches!(
-        name,
-        "Suppress"
-            | "SinceKotlin"
-            | "OptIn"
-            | "RequiresOptIn"
-            | "SubclassOptInRequired"
-            | "BuilderInference"
-            | "Experimental"
-            | "kotlin/Suppress"
-            | "kotlin/SinceKotlin"
-            | "kotlin/OptIn"
-            | "kotlin/RequiresOptIn"
-            | "kotlin/BuilderInference"
-            | "kotlin/Experimental"
-    )
-}
-
-fn lower_annotations(
-    annotations: &[skotch_syntax::Annotation],
-    interner: &Interner,
-    import_map: Option<&FxHashMap<String, String>>,
-) -> Vec<skotch_mir::MirAnnotation> {
-    annotations
-        .iter()
-        .filter(|a| !is_source_retention_annotation(interner.resolve(a.name)))
-        .map(|a| {
-            let name = interner.resolve(a.name);
-            // First try the well-known annotation registry (JvmStatic, etc.).
-            let mut descriptor = skotch_stdlib_registry::annotation_descriptor(name);
-            // If the registry returned a simple-name descriptor (no package),
-            // try to resolve via the file's import_map. E.g. `import
-            // org.junit.jupiter.api.Test` maps "Test" → "org/junit/jupiter/api/Test",
-            // giving descriptor "Lorg/junit/jupiter/api/Test;".
-            if !descriptor.contains('/') {
-                if let Some(map) = import_map {
-                    if let Some(jvm_path) = map.get(name) {
-                        descriptor = format!("L{jvm_path};");
-                    }
-                }
-            }
-            let args: Vec<skotch_mir::MirAnnotationArg> = a
-                .args
-                .iter()
-                .enumerate()
-                .map(|(i, arg)| {
-                    let arg_name = format!("value{i}");
-                    let value = match arg {
-                        skotch_syntax::AnnotationArg::StringLit(s) => {
-                            skotch_mir::MirAnnotationValue::String(s.clone())
-                        }
-                        skotch_syntax::AnnotationArg::IntLit(v) => {
-                            skotch_mir::MirAnnotationValue::Int(*v as i32)
-                        }
-                        skotch_syntax::AnnotationArg::BoolLit(v) => {
-                            skotch_mir::MirAnnotationValue::Bool(*v)
-                        }
-                        skotch_syntax::AnnotationArg::Ident(sym) => {
-                            skotch_mir::MirAnnotationValue::String(
-                                interner.resolve(*sym).to_string(),
-                            )
-                        }
-                        skotch_syntax::AnnotationArg::QualifiedName(parts) => {
-                            let joined: Vec<&str> =
-                                parts.iter().map(|s| interner.resolve(*s)).collect();
-                            skotch_mir::MirAnnotationValue::String(joined.join("."))
-                        }
-                        skotch_syntax::AnnotationArg::Array(items) => {
-                            let arr: Vec<skotch_mir::MirAnnotationValue> = items
-                                .iter()
-                                .map(|item| match item {
-                                    skotch_syntax::AnnotationArg::StringLit(s) => {
-                                        skotch_mir::MirAnnotationValue::String(s.clone())
-                                    }
-                                    _ => skotch_mir::MirAnnotationValue::String(String::new()),
-                                })
-                                .collect();
-                            skotch_mir::MirAnnotationValue::Array(arr)
-                        }
-                    };
-                    skotch_mir::MirAnnotationArg {
-                        name: if a.args.len() == 1 {
-                            "value".to_string()
-                        } else {
-                            arg_name
-                        },
-                        value,
-                    }
-                })
-                .collect();
-            // Default to Runtime, but flip to Binary for annotations
-            // declared with @Retention(AnnotationRetention.BINARY) by
-            // common stdlib / Compose / Kotlin types. kotlinc emits
-            // these via RuntimeInvisibleAnnotations; matching the
-            // retention keeps the attribute placement byte-identical.
-            let retention = if is_binary_retention_annotation(&descriptor) {
-                skotch_mir::AnnotationRetention::Binary
-            } else {
-                skotch_mir::AnnotationRetention::Runtime
-            };
-            skotch_mir::MirAnnotation {
-                descriptor,
-                args,
-                retention,
-            }
-        })
-        .collect()
-}
-
-fn is_binary_retention_annotation(descriptor: &str) -> bool {
-    // Common @Composable / Kotlin compiler-plugin annotations whose
-    // canonical declaration uses `@Retention(AnnotationRetention.BINARY)`.
-    matches!(
-        descriptor,
-        "Landroidx/compose/runtime/Composable;"
-            | "Landroidx/compose/runtime/ReadOnlyComposable;"
-            | "Landroidx/compose/runtime/Stable;"
-            | "Landroidx/compose/runtime/Immutable;"
-            | "Landroidx/compose/runtime/NonRestartableComposable;"
-    )
-}
+// Annotation lowering moved to `annotations.rs`.
+use crate::annotations::{annotations_from_names, lower_annotations};
 
 /// Look up a Kotlin extension function compiled as a static method in
 /// a `*Kt` facade class. Data is in the `skotch-stdlib-registry` crate.
@@ -1850,7 +1453,7 @@ pub fn lower_file(
 
             // Only add a stub MirClass if one with this name doesn't
             // already exist (the class might be defined in this file too).
-            let already_exists = module.classes.iter().any(|c| c.name == ext_class.jvm_name);
+            let already_exists = module.has_class(&ext_class.jvm_name);
             if !already_exists {
                 use skotch_mir::{BasicBlock, FuncId, MirClass, MirField, MirFunction, Terminator};
                 let fields: Vec<MirField> = ext_class
@@ -1927,24 +1530,7 @@ pub fn lower_file(
                                 f.param_receiver_types.push((pi, recv.clone()));
                             }
                         }
-                        f.annotations = m
-                            .annotations
-                            .iter()
-                            .filter(|n| !is_source_retention_annotation(n.as_str()))
-                            .map(|n| {
-                                let descriptor = skotch_stdlib_registry::annotation_descriptor(n);
-                                let retention = if is_binary_retention_annotation(&descriptor) {
-                                    skotch_mir::AnnotationRetention::Binary
-                                } else {
-                                    skotch_mir::AnnotationRetention::Runtime
-                                };
-                                skotch_mir::MirAnnotation {
-                                    descriptor,
-                                    args: Vec::new(),
-                                    retention,
-                                }
-                            })
-                            .collect();
+                        f.annotations = annotations_from_names(&m.annotations);
                         f
                     })
                     .collect();
@@ -2083,31 +1669,11 @@ pub fn lower_file(
                 // registry / import_map. The resolver records simple
                 // names; MirClass expects JVM-internal FQ names so the
                 // backend writes the correct constant pool entries.
-                let resolved_super = ext_class.super_class.as_ref().map(|sup| {
-                    if sup.contains('/') {
-                        sup.clone()
-                    } else if let Some(fq) = module.import_map.get(sup) {
-                        fq.clone()
-                    } else if let Some((fq, _, _)) = module.cross_file_classes.get(sup) {
-                        fq.clone()
-                    } else {
-                        sup.clone()
-                    }
-                });
+                let resolved_super = module.fq_resolve_opt(ext_class.super_class.as_deref());
                 let resolved_ifaces: Vec<String> = ext_class
                     .interfaces
                     .iter()
-                    .map(|i| {
-                        if i.contains('/') {
-                            i.clone()
-                        } else if let Some(fq) = module.import_map.get(i) {
-                            fq.clone()
-                        } else if let Some((fq, _, _)) = module.cross_file_classes.get(i) {
-                            fq.clone()
-                        } else {
-                            i.clone()
-                        }
-                    })
+                    .map(|i| module.fq_resolve(i))
                     .collect();
                 // Static enum-entry fields. Enums emit each entry as a
                 // `static final EnumName ENTRY` singleton. Stub MirClass
@@ -2131,99 +1697,63 @@ pub fn lower_file(
                 // Annotations on the class declaration (`@Composable`,
                 // etc.) — surfaced as MirAnnotation entries so consumers
                 // can branch on them.
-                let class_annotations: Vec<skotch_mir::MirAnnotation> = ext_class
-                    .annotations
-                    .iter()
-                    .filter(|n| !is_source_retention_annotation(n.as_str()))
-                    .map(|n| {
-                        let descriptor = skotch_stdlib_registry::annotation_descriptor(n);
-                        let retention = if is_binary_retention_annotation(&descriptor) {
-                            skotch_mir::AnnotationRetention::Binary
-                        } else {
-                            skotch_mir::AnnotationRetention::Runtime
-                        };
-                        skotch_mir::MirAnnotation {
-                            descriptor,
-                            args: Vec::new(),
-                            retention,
-                        }
-                    })
-                    .collect();
+                let class_annotations = annotations_from_names(&ext_class.annotations);
                 // If this cross-file class has a companion object, also
                 // push a stub MirClass for it so the call-site companion
                 // dispatcher (`OuterClass.method(...)`) at lib.rs:7746
                 // can resolve `OuterClass$Companion.method` virtually.
-                let companion_jvm_name = if !ext_class.has_companion
-                    && ext_class.companion_methods.is_empty()
-                {
-                    None
-                } else {
-                    let comp_name = format!("{}$Companion", ext_class.jvm_name);
-                    let comp_methods: Vec<MirFunction> = ext_class
-                        .companion_methods
-                        .iter()
-                        .map(|m| {
-                            let mut f = stub_fn(&m.name, &m.param_tys(), &m.return_ty);
-                            f.is_suspend = m.is_suspend;
-                            f.is_inline = m.is_inline;
-                            f.is_abstract = m.is_abstract;
-                            // Same lambda-with-receiver plumbing as the
-                            // outer-class methods above — needed for
-                            // companion-side factories like
-                            // `Tree.of("root") { child(...) }` whose
-                            // `init` param is a lambda-with-receiver.
-                            for (pi, p) in m.params.iter().enumerate() {
-                                if let Some(recv) = &p.receiver_class {
-                                    f.param_receiver_types.push((pi, recv.clone()));
-                                }
-                            }
-                            f.annotations = m
-                                .annotations
-                                .iter()
-                                .filter(|n| !is_source_retention_annotation(n.as_str()))
-                                .map(|n| {
-                                    let descriptor =
-                                        skotch_stdlib_registry::annotation_descriptor(n);
-                                    let retention = if is_binary_retention_annotation(&descriptor) {
-                                        skotch_mir::AnnotationRetention::Binary
-                                    } else {
-                                        skotch_mir::AnnotationRetention::Runtime
-                                    };
-                                    skotch_mir::MirAnnotation {
-                                        descriptor,
-                                        args: Vec::new(),
-                                        retention,
+                let companion_jvm_name =
+                    if !ext_class.has_companion && ext_class.companion_methods.is_empty() {
+                        None
+                    } else {
+                        let comp_name = format!("{}$Companion", ext_class.jvm_name);
+                        let comp_methods: Vec<MirFunction> = ext_class
+                            .companion_methods
+                            .iter()
+                            .map(|m| {
+                                let mut f = stub_fn(&m.name, &m.param_tys(), &m.return_ty);
+                                f.is_suspend = m.is_suspend;
+                                f.is_inline = m.is_inline;
+                                f.is_abstract = m.is_abstract;
+                                // Same lambda-with-receiver plumbing as the
+                                // outer-class methods above — needed for
+                                // companion-side factories like
+                                // `Tree.of("root") { child(...) }` whose
+                                // `init` param is a lambda-with-receiver.
+                                for (pi, p) in m.params.iter().enumerate() {
+                                    if let Some(recv) = &p.receiver_class {
+                                        f.param_receiver_types.push((pi, recv.clone()));
                                     }
-                                })
-                                .collect();
-                            f
-                        })
-                        .collect();
-                    let comp_ctor = stub_fn("<init>", &[], &Ty::Unit);
-                    module.classes.push(MirClass {
-                        name: comp_name.clone(),
-                        super_class: None,
-                        is_open: false,
-                        is_abstract: false,
-                        is_interface: false,
-                        interfaces: Vec::new(),
-                        fields: Vec::new(),
-                        methods: comp_methods,
-                        constructor: comp_ctor,
-                        secondary_constructors: Vec::new(),
-                        is_lambda: false,
-                        is_suspend_lambda: false,
-                        is_cross_file_stub: true,
-                        annotations: Vec::new(),
-                        has_type_params: false,
-                        is_object_singleton: true,
-                        companion_class_name: None,
-                        static_fields: Vec::new(),
-                        clinit: None,
-                    });
-                    Some(comp_name)
-                };
-                module.classes.push(MirClass {
+                                }
+                                f.annotations = annotations_from_names(&m.annotations);
+                                f
+                            })
+                            .collect();
+                        let comp_ctor = stub_fn("<init>", &[], &Ty::Unit);
+                        module.push_class(MirClass {
+                            name: comp_name.clone(),
+                            super_class: None,
+                            is_open: false,
+                            is_abstract: false,
+                            is_interface: false,
+                            interfaces: Vec::new(),
+                            fields: Vec::new(),
+                            methods: comp_methods,
+                            constructor: comp_ctor,
+                            secondary_constructors: Vec::new(),
+                            is_lambda: false,
+                            is_suspend_lambda: false,
+                            is_cross_file_stub: true,
+                            annotations: Vec::new(),
+                            has_type_params: false,
+                            is_object_singleton: true,
+                            companion_class_name: None,
+                            static_fields: Vec::new(),
+                            clinit: None,
+                        });
+                        Some(comp_name)
+                    };
+                module.push_class(MirClass {
                     name: ext_class.jvm_name.clone(),
                     super_class: resolved_super,
                     is_open: ext_class.is_open,
@@ -3692,7 +3222,7 @@ fn body_has_unresolved_unqualified_call(
             return true;
         }
         let name_str = interner.resolve(name);
-        if module.classes.iter().any(|c| c.name == name_str) {
+        if module.has_class(name_str) {
             return true;
         }
         false
@@ -3836,413 +3366,8 @@ fn body_has_unresolved_unqualified_call(
 
 /// Collect free variables in a lambda body: names that are referenced
 /// but not defined as lambda parameters or known top-level functions.
-fn collect_free_vars(
-    body: &skotch_syntax::Block,
-    param_names: &[Symbol],
-    outer_scope: &[(Symbol, LocalId)],
-    fb: &FnBuilder,
-    _interner: &Interner,
-) -> Vec<(Symbol, LocalId, Ty)> {
-    let mut free = Vec::new();
-    let mut seen = rustc_hash::FxHashSet::default();
-    collect_free_in_block(body, param_names, outer_scope, fb, &mut free, &mut seen);
-    free
-}
-
-/// Check whether a block references a given identifier (Symbol) anywhere
-/// in its expression positions. Used to detect when a lambda body uses
-/// the implicit `it` parameter, so the lowering can add the invoke
-/// method param even when the surrounding caller-arity heuristic
-/// doesn't predict it.
-fn body_references_ident(body: &skotch_syntax::Block, target: Symbol) -> bool {
-    let mut found = false;
-    scan_block_for_ident(body, target, &mut found);
-    found
-}
-
-fn scan_block_for_ident(block: &skotch_syntax::Block, target: Symbol, found: &mut bool) {
-    for stmt in &block.stmts {
-        if *found {
-            return;
-        }
-        match stmt {
-            skotch_syntax::Stmt::Expr(e) | skotch_syntax::Stmt::Return { value: Some(e), .. } => {
-                scan_expr_for_ident(e, target, found);
-            }
-            skotch_syntax::Stmt::Val(v) => {
-                scan_expr_for_ident(&v.init, target, found);
-            }
-            skotch_syntax::Stmt::Assign { value, .. } => {
-                scan_expr_for_ident(value, target, found);
-            }
-            _ => {}
-        }
-    }
-}
-
-fn scan_expr_for_ident(e: &skotch_syntax::Expr, target: Symbol, found: &mut bool) {
-    if *found {
-        return;
-    }
-    use skotch_syntax::Expr;
-    match e {
-        Expr::Ident(name, _) if *name == target => {
-            *found = true;
-        }
-        Expr::Call { callee, args, .. } => {
-            scan_expr_for_ident(callee, target, found);
-            for a in args {
-                scan_expr_for_ident(&a.expr, target, found);
-            }
-        }
-        Expr::Binary { lhs, rhs, .. } => {
-            scan_expr_for_ident(lhs, target, found);
-            scan_expr_for_ident(rhs, target, found);
-        }
-        Expr::Unary { operand, .. } => scan_expr_for_ident(operand, target, found),
-        Expr::Field { receiver, .. } | Expr::SafeCall { receiver, .. } => {
-            scan_expr_for_ident(receiver, target, found);
-        }
-        Expr::Index {
-            receiver, index, ..
-        } => {
-            scan_expr_for_ident(receiver, target, found);
-            scan_expr_for_ident(index, target, found);
-        }
-        Expr::If {
-            cond,
-            then_block,
-            else_block,
-            ..
-        } => {
-            scan_expr_for_ident(cond, target, found);
-            scan_block_for_ident(then_block, target, found);
-            if let Some(eb) = else_block {
-                scan_block_for_ident(eb, target, found);
-            }
-        }
-        Expr::When {
-            subject,
-            branches,
-            else_body,
-            ..
-        } => {
-            scan_expr_for_ident(subject, target, found);
-            for br in branches {
-                scan_expr_for_ident(&br.pattern, target, found);
-                if let Some(re) = &br.range_end {
-                    scan_expr_for_ident(re, target, found);
-                }
-                scan_expr_for_ident(&br.body, target, found);
-            }
-            if let Some(eb) = else_body {
-                scan_expr_for_ident(eb, target, found);
-            }
-        }
-        _ => {}
-    }
-}
-
-/// Detect whether a lambda body has unqualified method calls (or property
-/// accesses) that resolve to members of the enclosing class. Used to
-/// decide if the lambda needs to capture outer `this` so those calls
-/// can dispatch via the captured field instead of using the lambda's
-/// own `this`.
-fn body_needs_outer_this(
-    body: &skotch_syntax::Block,
-    outer_class_name: &str,
-    module: &MirModule,
-    interner: &mut Interner,
-) -> bool {
-    let mut method_syms: rustc_hash::FxHashSet<Symbol> = rustc_hash::FxHashSet::default();
-    // Walk the class plus its superclass chain and implemented interfaces
-    // so that calls to inherited extension methods (e.g. `dp.roundToPx()`
-    // on `Density`-extension inherited by a `MyDensity : Density` outer
-    // class) are detected.
-    let mut to_visit: Vec<String> = vec![outer_class_name.to_string()];
-    let mut visited: rustc_hash::FxHashSet<String> = rustc_hash::FxHashSet::default();
-    while let Some(cn) = to_visit.pop() {
-        if !visited.insert(cn.clone()) {
-            continue;
-        }
-        if let Some(cls) = module.classes.iter().find(|c| c.name == cn) {
-            for m in &cls.methods {
-                method_syms.insert(interner.intern(&m.name));
-            }
-            for iname in &cls.interfaces {
-                to_visit.push(iname.clone());
-            }
-            if let Some(sc) = &cls.super_class {
-                to_visit.push(sc.clone());
-            }
-        }
-    }
-    if method_syms.is_empty() {
-        return false;
-    }
-    let mut found = false;
-    scan_block_for_outer_calls(body, &method_syms, &mut found);
-    found
-}
-
-fn scan_block_for_outer_calls(
-    block: &skotch_syntax::Block,
-    method_syms: &rustc_hash::FxHashSet<Symbol>,
-    found: &mut bool,
-) {
-    for stmt in &block.stmts {
-        if *found {
-            return;
-        }
-        match stmt {
-            skotch_syntax::Stmt::Expr(e) | skotch_syntax::Stmt::Return { value: Some(e), .. } => {
-                scan_expr_for_outer_calls(e, method_syms, found);
-            }
-            skotch_syntax::Stmt::Val(v) => {
-                scan_expr_for_outer_calls(&v.init, method_syms, found);
-            }
-            skotch_syntax::Stmt::Assign { value, .. } => {
-                scan_expr_for_outer_calls(value, method_syms, found);
-            }
-            _ => {}
-        }
-    }
-}
-
-fn scan_expr_for_outer_calls(
-    e: &skotch_syntax::Expr,
-    method_syms: &rustc_hash::FxHashSet<Symbol>,
-    found: &mut bool,
-) {
-    if *found {
-        return;
-    }
-    use skotch_syntax::Expr;
-    match e {
-        Expr::Call { callee, args, .. } => {
-            if let Expr::Ident(name, _) = callee.as_ref() {
-                if method_syms.contains(name) {
-                    *found = true;
-                    return;
-                }
-            }
-            // Receiver dot-call form: `dp.roundToPx()`. If `roundToPx` is
-            // an extension method on the outer `this`'s class (which is
-            // what method_syms reflects), kotlinc lowers this as
-            // `outer.roundToPx(dp)`, requiring the lambda to capture
-            // the outer `this`.
-            if let Expr::Field { name, .. } = callee.as_ref() {
-                if method_syms.contains(name) {
-                    *found = true;
-                    return;
-                }
-            }
-            scan_expr_for_outer_calls(callee, method_syms, found);
-            for a in args {
-                scan_expr_for_outer_calls(&a.expr, method_syms, found);
-            }
-        }
-        Expr::Binary { lhs, rhs, .. } => {
-            scan_expr_for_outer_calls(lhs, method_syms, found);
-            scan_expr_for_outer_calls(rhs, method_syms, found);
-        }
-        Expr::Unary { operand, .. } => scan_expr_for_outer_calls(operand, method_syms, found),
-        Expr::Field { receiver, .. } | Expr::SafeCall { receiver, .. } => {
-            scan_expr_for_outer_calls(receiver, method_syms, found);
-        }
-        Expr::Index {
-            receiver, index, ..
-        } => {
-            scan_expr_for_outer_calls(receiver, method_syms, found);
-            scan_expr_for_outer_calls(index, method_syms, found);
-        }
-        Expr::If {
-            cond,
-            then_block,
-            else_block,
-            ..
-        } => {
-            scan_expr_for_outer_calls(cond, method_syms, found);
-            scan_block_for_outer_calls(then_block, method_syms, found);
-            if let Some(eb) = else_block {
-                scan_block_for_outer_calls(eb, method_syms, found);
-            }
-        }
-        _ => {}
-    }
-}
-
-fn collect_free_in_block(
-    block: &skotch_syntax::Block,
-    param_names: &[Symbol],
-    outer_scope: &[(Symbol, LocalId)],
-    fb: &FnBuilder,
-    free: &mut Vec<(Symbol, LocalId, Ty)>,
-    seen: &mut rustc_hash::FxHashSet<Symbol>,
-) {
-    for stmt in &block.stmts {
-        match stmt {
-            Stmt::Expr(e) | Stmt::Return { value: Some(e), .. } => {
-                collect_free_in_expr(e, param_names, outer_scope, fb, free, seen);
-            }
-            Stmt::Val(v) => {
-                collect_free_in_expr(&v.init, param_names, outer_scope, fb, free, seen);
-            }
-            Stmt::Assign { value, .. } => {
-                collect_free_in_expr(value, param_names, outer_scope, fb, free, seen);
-            }
-            Stmt::IndexAssign {
-                receiver,
-                index,
-                value,
-                ..
-            } => {
-                collect_free_in_expr(receiver, param_names, outer_scope, fb, free, seen);
-                collect_free_in_expr(index, param_names, outer_scope, fb, free, seen);
-                collect_free_in_expr(value, param_names, outer_scope, fb, free, seen);
-            }
-            _ => {}
-        }
-    }
-}
-
-fn collect_free_in_expr(
-    e: &Expr,
-    param_names: &[Symbol],
-    outer_scope: &[(Symbol, LocalId)],
-    fb: &FnBuilder,
-    free: &mut Vec<(Symbol, LocalId, Ty)>,
-    seen: &mut rustc_hash::FxHashSet<Symbol>,
-) {
-    match e {
-        Expr::Ident(name, _) if !param_names.contains(name) && !seen.contains(name) => {
-            if let Some((_, local_id)) = outer_scope.iter().rev().find(|(s, _)| s == name) {
-                let ty = fb.mf.locals[local_id.0 as usize].clone();
-                free.push((*name, *local_id, ty));
-                seen.insert(*name);
-            }
-        }
-        Expr::Binary { lhs, rhs, .. } => {
-            collect_free_in_expr(lhs, param_names, outer_scope, fb, free, seen);
-            collect_free_in_expr(rhs, param_names, outer_scope, fb, free, seen);
-        }
-        Expr::Unary { operand, .. } => {
-            collect_free_in_expr(operand, param_names, outer_scope, fb, free, seen);
-        }
-        Expr::Call { callee, args, .. } => {
-            collect_free_in_expr(callee, param_names, outer_scope, fb, free, seen);
-            for a in args {
-                collect_free_in_expr(&a.expr, param_names, outer_scope, fb, free, seen);
-            }
-        }
-        Expr::Field { receiver, .. } | Expr::SafeCall { receiver, .. } => {
-            collect_free_in_expr(receiver, param_names, outer_scope, fb, free, seen);
-        }
-        Expr::Index {
-            receiver, index, ..
-        } => {
-            collect_free_in_expr(receiver, param_names, outer_scope, fb, free, seen);
-            collect_free_in_expr(index, param_names, outer_scope, fb, free, seen);
-        }
-        Expr::If {
-            cond,
-            then_block,
-            else_block,
-            ..
-        } => {
-            collect_free_in_expr(cond, param_names, outer_scope, fb, free, seen);
-            collect_free_in_block(then_block, param_names, outer_scope, fb, free, seen);
-            if let Some(eb) = else_block {
-                collect_free_in_block(eb, param_names, outer_scope, fb, free, seen);
-            }
-        }
-        Expr::StringTemplate(parts, _) => {
-            for p in parts {
-                match p {
-                    skotch_syntax::TemplatePart::Expr(inner) => {
-                        collect_free_in_expr(inner, param_names, outer_scope, fb, free, seen);
-                    }
-                    skotch_syntax::TemplatePart::IdentRef(sym, _)
-                        if !param_names.contains(sym) && !seen.contains(sym) =>
-                    {
-                        if let Some((_, local_id)) =
-                            outer_scope.iter().rev().find(|(s, _)| s == sym)
-                        {
-                            let ty = fb.mf.locals[local_id.0 as usize].clone();
-                            free.push((*sym, *local_id, ty));
-                            seen.insert(*sym);
-                        }
-                    }
-                    _ => {}
-                }
-            }
-        }
-        Expr::Paren(inner, _)
-        | Expr::NotNullAssert { expr: inner, .. }
-        | Expr::IsCheck { expr: inner, .. }
-        | Expr::AsCast { expr: inner, .. }
-        | Expr::Throw { expr: inner, .. } => {
-            collect_free_in_expr(inner, param_names, outer_scope, fb, free, seen);
-        }
-        Expr::ElvisOp { lhs, rhs, .. } => {
-            collect_free_in_expr(lhs, param_names, outer_scope, fb, free, seen);
-            collect_free_in_expr(rhs, param_names, outer_scope, fb, free, seen);
-        }
-        Expr::When {
-            subject,
-            branches,
-            else_body,
-            ..
-        } => {
-            collect_free_in_expr(subject, param_names, outer_scope, fb, free, seen);
-            for br in branches {
-                collect_free_in_expr(&br.pattern, param_names, outer_scope, fb, free, seen);
-                if let Some(re) = &br.range_end {
-                    collect_free_in_expr(re, param_names, outer_scope, fb, free, seen);
-                }
-                collect_free_in_expr(&br.body, param_names, outer_scope, fb, free, seen);
-            }
-            if let Some(eb) = else_body {
-                collect_free_in_expr(eb, param_names, outer_scope, fb, free, seen);
-            }
-        }
-        Expr::Try {
-            body,
-            catch_body,
-            extra_catches,
-            finally_body,
-            ..
-        } => {
-            collect_free_in_block(body, param_names, outer_scope, fb, free, seen);
-            if let Some(cb) = catch_body {
-                collect_free_in_block(cb, param_names, outer_scope, fb, free, seen);
-            }
-            for (_, _, eb) in extra_catches {
-                collect_free_in_block(eb, param_names, outer_scope, fb, free, seen);
-            }
-            if let Some(fb_blk) = finally_body {
-                collect_free_in_block(fb_blk, param_names, outer_scope, fb, free, seen);
-            }
-        }
-        Expr::Lambda {
-            params: inner_params,
-            body: inner_body,
-            ..
-        } => {
-            // A nested lambda may reference variables from the enclosing
-            // scope.  We must recurse into its body so that those
-            // references are surfaced as free variables of the *outer*
-            // lambda.  The nested lambda's own parameters shadow outer
-            // names, so extend `param_names` with them before recursing.
-            let mut extended_params: Vec<Symbol> = param_names.to_vec();
-            for p in inner_params {
-                extended_params.push(p.name);
-            }
-            collect_free_in_block(inner_body, &extended_params, outer_scope, fb, free, seen);
-        }
-        _ => {}
-    }
-}
+// Free-variable + outer-this analysis moved to `free_vars.rs`.
+use crate::free_vars::{body_needs_outer_this, body_references_ident, collect_free_vars};
 
 /// Mirror of `skotch-resolve`'s `infer_val_type_from_init`, but consulting
 /// `file.imports` directly (the module-level `import_map` isn't built yet
@@ -4359,6 +3484,65 @@ fn const_ty(c: &MirConst) -> Ty {
         MirConst::Double(_) => Ty::Double,
         MirConst::Null => Ty::Nullable(Box::new(Ty::Any)),
         MirConst::String(_) => Ty::String,
+    }
+}
+
+/// Append `putfield this.<field>` writebacks for each pre-loaded
+/// field local that has been re-assigned in the function body. Used
+/// by both the regular-method lowering and the secondary-constructor
+/// body lowering, which previously each ran their own copy of this
+/// logic — the secondary-ctor copy was missing the var-skip guard
+/// (see project_example14_dsl_landed memory) and would clobber any
+/// var mutations performed by methods called from a secondary ctor.
+///
+/// Algorithm:
+///   1. Walk every statement; flag each field-local as "written"
+///      when its sole assignment is NOT the initial `GetField`
+///      load placed at method entry.
+///   2. For each field-local: emit `putfield`, but
+///      - skip `var` fields the body didn't write (would clobber a
+///        nested call's mutation with the pre-method snapshot);
+///      - always emit for `val` fields (they can't change, so the
+///        writeback is a no-op the JVM optimizer can erase).
+fn writeback_field_locals(
+    fb: &mut FnBuilder,
+    field_locals: &[(String, LocalId)],
+    var_field_names: &rustc_hash::FxHashSet<&str>,
+    this_local: LocalId,
+    class_name: &str,
+) {
+    let mut written: rustc_hash::FxHashSet<u32> = rustc_hash::FxHashSet::default();
+    for block in &fb.mf.blocks {
+        for stmt in &block.stmts {
+            let MStmt::Assign { dest, value } = stmt;
+            if let Some((field_name_for_local, _)) =
+                field_locals.iter().find(|(_, l)| l.0 == dest.0)
+            {
+                let is_initial_load = matches!(
+                    value,
+                    Rvalue::GetField { receiver, field_name: fname, .. }
+                        if *receiver == this_local && fname == field_name_for_local
+                );
+                if !is_initial_load {
+                    written.insert(dest.0);
+                }
+            }
+        }
+    }
+    for (field_name, field_local) in field_locals {
+        let is_var = var_field_names.contains(field_name.as_str());
+        if is_var && !written.contains(&field_local.0) {
+            continue;
+        }
+        fb.push_stmt(MStmt::Assign {
+            dest: this_local, // dummy dest — PutField has no result
+            value: Rvalue::PutField {
+                receiver: this_local,
+                class_name: class_name.to_string(),
+                field_name: field_name.clone(),
+                value: *field_local,
+            },
+        });
     }
 }
 
@@ -4526,7 +3710,7 @@ fn extract_suspend_state_machine(
     let mut idx = 1usize;
     let cont_name = loop {
         let candidate = format!("{wrapper_class}${fn_name}${idx}");
-        if !module.classes.iter().any(|c| c.name == candidate) {
+        if !module.has_class(&candidate) {
             break candidate;
         }
         idx += 1;
@@ -6692,7 +5876,7 @@ fn lower_stmt(
             // Collect free variables in the local function body.
             let param_names: Vec<Symbol> = f.params.iter().map(|p| p.name).collect();
             let free_vars: Vec<(Symbol, LocalId, Ty)> =
-                collect_free_vars(&f.body, &param_names, scope, fb, interner);
+                collect_free_vars(&f.body, &param_names, scope, &fb.mf.locals, interner);
             let captures = free_vars;
 
             // Push placeholder and register in name_to_func BEFORE lowering
@@ -7344,176 +6528,8 @@ fn lower_val_stmt(
 
 /// Try to evaluate an integer constant expression at compile time.
 /// Handles integer literals and nested binary arithmetic on integers.
-fn try_eval_int(e: &Expr) -> Option<i32> {
-    match e {
-        Expr::IntLit(v, _) => Some(*v as i32),
-        Expr::Binary { op, lhs, rhs, .. } => {
-            let l = try_eval_int(lhs)?;
-            let r = try_eval_int(rhs)?;
-            match op {
-                BinOp::Add => Some(l.wrapping_add(r)),
-                BinOp::Sub => Some(l.wrapping_sub(r)),
-                BinOp::Mul => Some(l.wrapping_mul(r)),
-                BinOp::Div if r != 0 => Some(l.wrapping_div(r)),
-                BinOp::Mod if r != 0 => Some(l.wrapping_rem(r)),
-                _ => None,
-            }
-        }
-        Expr::Unary {
-            op: skotch_syntax::UnaryOp::Neg,
-            operand,
-            ..
-        } => {
-            let v = try_eval_int(operand)?;
-            Some(v.wrapping_neg())
-        }
-        Expr::Paren(inner, _) => try_eval_int(inner),
-        _ => None,
-    }
-}
-
-/// Try to constant-fold a binary expression with Int operands.
-fn try_const_fold_int(lhs: &Expr, rhs: &Expr, op: &BinOp) -> Option<i32> {
-    if !matches!(
-        op,
-        BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Mod
-    ) {
-        return None;
-    }
-    let l = try_eval_int(lhs)?;
-    let r = try_eval_int(rhs)?;
-    match op {
-        BinOp::Add => Some(l.wrapping_add(r)),
-        BinOp::Sub => Some(l.wrapping_sub(r)),
-        BinOp::Mul => Some(l.wrapping_mul(r)),
-        BinOp::Div if r != 0 => Some(l.wrapping_div(r)),
-        BinOp::Mod if r != 0 => Some(l.wrapping_rem(r)),
-        _ => None,
-    }
-}
-
-/// Try to evaluate a long constant expression at compile time.
-fn try_eval_long(e: &Expr) -> Option<i64> {
-    match e {
-        Expr::LongLit(v, _) => Some(*v),
-        Expr::Binary { op, lhs, rhs, .. } => {
-            let l = try_eval_long(lhs)?;
-            let r = try_eval_long(rhs)?;
-            match op {
-                BinOp::Add => Some(l.wrapping_add(r)),
-                BinOp::Sub => Some(l.wrapping_sub(r)),
-                BinOp::Mul => Some(l.wrapping_mul(r)),
-                BinOp::Div if r != 0 => Some(l.wrapping_div(r)),
-                BinOp::Mod if r != 0 => Some(l.wrapping_rem(r)),
-                _ => None,
-            }
-        }
-        Expr::Paren(inner, _) => try_eval_long(inner),
-        _ => None,
-    }
-}
-
-/// Try to constant-fold a binary expression with Long operands.
-fn try_const_fold_long(lhs: &Expr, rhs: &Expr, op: &BinOp) -> Option<i64> {
-    if !matches!(
-        op,
-        BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Mod
-    ) {
-        return None;
-    }
-    // Only fold if at least one operand is a Long literal (otherwise it's an Int expression)
-    let has_long = matches!(lhs, Expr::LongLit(..)) || matches!(rhs, Expr::LongLit(..));
-    if !has_long {
-        return None;
-    }
-    let l = try_eval_long(lhs)?;
-    let r = try_eval_long(rhs)?;
-    match op {
-        BinOp::Add => Some(l.wrapping_add(r)),
-        BinOp::Sub => Some(l.wrapping_sub(r)),
-        BinOp::Mul => Some(l.wrapping_mul(r)),
-        BinOp::Div if r != 0 => Some(l.wrapping_div(r)),
-        BinOp::Mod if r != 0 => Some(l.wrapping_rem(r)),
-        _ => None,
-    }
-}
-
-/// Try to evaluate an expression as a compile-time string constant.
-/// Returns the string value if the expression is a constant string,
-/// or a string representation of a constant int/long/double/bool.
-fn try_eval_string(e: &Expr) -> Option<String> {
-    match e {
-        Expr::StringLit(s, _) => Some(s.clone()),
-        Expr::IntLit(v, _) => Some(v.to_string()),
-        Expr::LongLit(v, _) => Some(v.to_string()),
-        Expr::DoubleLit(v, _) => Some(format_double_kotlin(*v)),
-        Expr::BoolLit(v, _) => Some(v.to_string()),
-        Expr::Paren(inner, _) => try_eval_string(inner),
-        Expr::Binary { op, lhs, rhs, .. } => {
-            // Allow folding of `intExpr + intExpr` etc. inside templates.
-            if let Some(v) = try_eval_int(e) {
-                return Some(v.to_string());
-            }
-            if let Some(v) = try_eval_long(e) {
-                return Some(v.to_string());
-            }
-            // String concatenation via +
-            if matches!(op, BinOp::Add) {
-                let l = try_eval_string(lhs)?;
-                let r = try_eval_string(rhs)?;
-                return Some(format!("{l}{r}"));
-            }
-            None
-        }
-        Expr::Unary { .. } => {
-            if let Some(v) = try_eval_int(e) {
-                return Some(v.to_string());
-            }
-            None
-        }
-        _ => None,
-    }
-}
-
-/// Format a double the way Kotlin's `toString()` does (e.g., `1.0` not `1`).
-fn format_double_kotlin(v: f64) -> String {
-    if v.is_nan() {
-        return "NaN".to_string();
-    }
-    if v.is_infinite() {
-        return if v > 0.0 {
-            "Infinity".to_string()
-        } else {
-            "-Infinity".to_string()
-        };
-    }
-    if v == v.trunc() && v.abs() < 1e16 {
-        // Integer-valued double: kotlin toString prints "1.0"
-        return format!("{v:.1}");
-    }
-    format!("{v}")
-}
-
-/// Try to evaluate a string template at compile time. Returns the
-/// concatenated string if every part is a compile-time constant.
-fn try_const_fold_template(
-    parts: &[skotch_syntax::TemplatePart],
-    _interner: &Interner,
-) -> Option<String> {
-    let mut out = String::new();
-    for p in parts {
-        match p {
-            skotch_syntax::TemplatePart::Text(s, _) => out.push_str(s),
-            skotch_syntax::TemplatePart::Expr(e) => {
-                let s = try_eval_string(e)?;
-                out.push_str(&s);
-            }
-            // Ident references aren't compile-time constants in general.
-            skotch_syntax::TemplatePart::IdentRef(..) => return None,
-        }
-    }
-    Some(out)
-}
+// Constant-folding helpers moved to `const_fold.rs`.
+use crate::const_fold::{try_const_fold_int, try_const_fold_long, try_const_fold_template};
 
 /// Best-effort type peek for an expression WITHOUT lowering it (no MIR
 /// stmts emitted, no scope/module mutation). Used by the field-vs-
@@ -7536,7 +6552,7 @@ fn lower_expr_preview_ty(
                 return fb.mf.locals.get(lid.0 as usize).cloned();
             }
             let name = interner.resolve(*sym);
-            if module.classes.iter().any(|c| c.name == name) {
+            if module.has_class(name) {
                 return Some(Ty::Class(name.to_string()));
             }
             None
@@ -7557,7 +6573,7 @@ fn lower_expr_preview_ty(
         Expr::Call { callee, .. } => match callee.as_ref() {
             Expr::Ident(callee_sym, _) => {
                 let callee_name = interner.resolve(*callee_sym);
-                if module.classes.iter().any(|c| c.name == callee_name) {
+                if module.has_class(callee_name) {
                     return Some(Ty::Class(callee_name.to_string()));
                 }
                 if let Some(fid) = name_to_func.get(callee_sym) {
@@ -7932,7 +6948,7 @@ fn lower_expr(
                 // singleton; for a class with a `companion object`, the
                 // bare class name evaluates to its Companion singleton.
                 // Both are static fields on the (outer) class.
-                if let Some(cls) = module.classes.iter().find(|c| c.name == name_str) {
+                if let Some(cls) = module.find_class(name_str) {
                     if cls.is_object_singleton {
                         let desc = format!("L{};", cls.name);
                         let dest = fb.new_local(Ty::Class(cls.name.clone()));
@@ -8076,7 +7092,7 @@ fn lower_expr(
                             let type_str = interner.resolve(*type_name);
                             let narrowed_ty =
                                 skotch_types::ty_from_name(type_str).unwrap_or_else(|| {
-                                    if module.classes.iter().any(|c| c.name == type_str) {
+                                    if module.has_class(type_str) {
                                         Ty::Class(type_str.to_string())
                                     } else {
                                         Ty::Any
@@ -8300,7 +7316,7 @@ fn lower_expr(
                     let mut found: Option<(String, Ty)> = None;
                     let mut search = Some(class_name.clone());
                     while let Some(ref cname) = search {
-                        if let Some(cls) = module.classes.iter().find(|c| &c.name == cname) {
+                        if let Some(cls) = module.find_class(cname) {
                             if let Some(m) = cls.methods.iter().find(|m| m.name == method_name) {
                                 found = Some((cname.clone(), m.return_ty.clone()));
                                 break;
@@ -8749,7 +7765,7 @@ fn lower_expr(
                     let type_str = interner.resolve(type_name);
                     let narrowed_ty = skotch_types::ty_from_name(type_str).unwrap_or_else(|| {
                         // Check same-file user classes first…
-                        if module.classes.iter().any(|c| c.name == type_str) {
+                        if module.has_class(type_str) {
                             Ty::Class(type_str.to_string())
                         }
                         // …then file-level imports (parser strips the
@@ -9087,7 +8103,7 @@ fn lower_expr(
                         let mut search = Some(obj_cls.name.clone());
                         let mut found: Option<(String, Ty)> = None;
                         while let Some(ref cname) = search {
-                            if let Some(cls) = module.classes.iter().find(|c| &c.name == cname) {
+                            if let Some(cls) = module.find_class(cname) {
                                 if let Some(m) = cls.methods.iter().find(|m| m.name == method_str) {
                                     // Dispatch against the object's own
                                     // type (recv_name) — invokevirtual
@@ -9163,7 +8179,7 @@ fn lower_expr(
                         })
                         .and_then(|outer| {
                             let comp_name = outer.companion_class_name.clone().unwrap();
-                            let comp = module.classes.iter().find(|c| c.name == comp_name)?;
+                            let comp = module.find_class(&comp_name)?;
                             let m = comp.methods.iter().find(|m| m.name == method_str)?;
                             // NOTE: kotlinc emits `getstatic Companion;
                             // invokevirtual Companion.method` even when
@@ -9486,7 +8502,7 @@ fn lower_expr(
                             .find(|c| {
                                 c.name == cls_name && c.methods.iter().any(|m| m.name == method_str)
                             })
-                            .or_else(|| module.classes.iter().find(|c| c.name == cls_name));
+                            .or_else(|| module.find_class(&cls_name));
                         if let Some(cls) = enum_cls_with_method {
                             if let Some(m) = cls.methods.iter().find(|m| m.name == method_str) {
                                 let ret_ty = m.return_ty.clone();
@@ -9539,7 +8555,7 @@ fn lower_expr(
                 if let Some(qname) = extract_qualified_name(receiver, interner) {
                     let method_str = interner.resolve(method_name).to_string();
                     let nested_class_name = format!("{}${}", qname, method_str);
-                    let is_nested = module.classes.iter().any(|c| c.name == nested_class_name);
+                    let is_nested = module.has_class(&nested_class_name);
                     if is_nested {
                         let mut arg_locals = Vec::new();
                         for a in args {
@@ -9584,8 +8600,7 @@ fn lower_expr(
                             let recv_ty = fb.mf.locals[recv_local.0 as usize].clone();
                             if let Ty::Class(ref outer_class) = recv_ty {
                                 let inner_class_name = format!("{}${}", outer_class, method_str);
-                                let is_inner =
-                                    module.classes.iter().any(|c| c.name == inner_class_name);
+                                let is_inner = module.has_class(&inner_class_name);
                                 if is_inner {
                                     let mut arg_locals = vec![*recv_local]; // outer ref
                                     for a in args {
@@ -9704,16 +8719,14 @@ fn lower_expr(
                                 .and_then(|(_, this_local)| {
                                     let this_ty = &fb.mf.locals[this_local.0 as usize];
                                     if let Ty::Class(cn) = this_ty {
-                                        let cls = module.classes.iter().find(|c| &c.name == cn)?;
+                                        let cls = module.find_class(cn)?;
                                         let parent = cls.super_class.as_ref()?.clone();
                                         let mname = interner.resolve(method_name).to_string();
                                         let mut ret_ty = Ty::Unit;
                                         let mut found = false;
                                         let mut search = Some(parent.clone());
                                         while let Some(ref cname) = search {
-                                            if let Some(pcls) =
-                                                module.classes.iter().find(|c| &c.name == cname)
-                                            {
+                                            if let Some(pcls) = module.find_class(cname) {
                                                 if let Some(m) =
                                                     pcls.methods.iter().find(|m| m.name == mname)
                                                 {
@@ -11398,8 +10411,7 @@ fn lower_expr(
                                     instance_arg_count,
                                 )
                             {
-                                let is_user_class =
-                                    module.classes.iter().any(|c| c.name == jvm_class);
+                                let is_user_class = module.has_class(jvm_class);
                                 let dispatch_class = if is_user_class && found_class != jvm_class {
                                     jvm_class.to_string()
                                 } else {
@@ -11500,7 +10512,7 @@ fn lower_expr(
                                 if !visited.insert(cn.clone()) {
                                     continue;
                                 }
-                                if let Some(cls) = module.classes.iter().find(|c| c.name == cn) {
+                                if let Some(cls) = module.find_class(&cn) {
                                     for m in &cls.methods {
                                         if m.name != method_name_str || m.params.len() < 2 {
                                             continue;
@@ -11566,7 +10578,7 @@ fn lower_expr(
                     let mut found_param_types: Vec<Ty> = Vec::new();
                     let mut search = Some(class_name.clone());
                     'outer: while let Some(ref cname) = search {
-                        if let Some(cls) = module.classes.iter().find(|c| &c.name == cname) {
+                        if let Some(cls) = module.find_class(cname) {
                             if let Some(m) = cls.methods.iter().find(|m| m.name == method_name_str)
                             {
                                 return_ty = m.return_ty.clone();
@@ -11592,8 +10604,7 @@ fn lower_expr(
                             }
                             // Search implemented interfaces.
                             for iname in &cls.interfaces {
-                                if let Some(icls) = module.classes.iter().find(|c| &c.name == iname)
-                                {
+                                if let Some(icls) = module.find_class(iname) {
                                     if let Some(m) =
                                         icls.methods.iter().find(|m| m.name == method_name_str)
                                     {
@@ -11963,6 +10974,60 @@ fn lower_expr(
                         });
                         return Some(dest);
                     } else {
+                        // Autobox primitive args going into generic-erased
+                        // parameter slots. `LruCache.put(key: K, value: V)`
+                        // gets descriptor `(Object, Object)` after erasure,
+                        // so a call site like `cache.put("a", 1)` passes
+                        // an unboxed `int` into an `Object` slot — the JVM
+                        // verifier rejects it. The same fix already exists
+                        // on the Map.put intrinsic path above (line ~9537),
+                        // but the user-method virtual dispatch landed here
+                        // bypasses that. `found_param_types[i]` is the
+                        // declared (pre-erasure) type of arg i; primitives
+                        // need boxing whenever the slot erases to Object.
+                        for (i, param_ty) in found_param_types.iter().enumerate() {
+                            if matches!(
+                                param_ty,
+                                Ty::Any | Ty::Class(_) | Ty::Nullable(_) | Ty::Generic { .. }
+                            ) && i + 1 < all_args.len()
+                            {
+                                let arg_local = all_args[i + 1];
+                                let arg_ty = fb.mf.locals[arg_local.0 as usize].clone();
+                                if matches!(
+                                    arg_ty,
+                                    Ty::Int
+                                        | Ty::Long
+                                        | Ty::Float
+                                        | Ty::Double
+                                        | Ty::Bool
+                                        | Ty::Byte
+                                        | Ty::Short
+                                        | Ty::Char
+                                ) {
+                                    // Only box when the param type actually
+                                    // erases to Object — Ty::Class("Int")
+                                    // for a `param: Int` slot stays unboxed.
+                                    let erases_to_object = match param_ty {
+                                        Ty::Any | Ty::Generic { .. } => true,
+                                        Ty::Class(cn) => {
+                                            // K/V type-param names typically
+                                            // resolve to themselves as Class
+                                            // names (single char, no slash).
+                                            !cn.contains('/')
+                                                && cn.len() <= 2
+                                                && cn.chars().all(|c| c.is_ascii_uppercase())
+                                        }
+                                        Ty::Nullable(inner) => {
+                                            matches!(inner.as_ref(), Ty::Any | Ty::Generic { .. })
+                                        }
+                                        _ => false,
+                                    };
+                                    if erases_to_object {
+                                        all_args[i + 1] = mir_autobox(fb, arg_local, &arg_ty);
+                                    }
+                                }
+                            }
+                        }
                         (
                             CallKind::Virtual {
                                 class_name: class_name.clone(),
@@ -12536,7 +11601,7 @@ fn lower_expr(
             };
 
             // ─── Check for constructor call (class instantiation) ────
-            let is_class = module.classes.iter().any(|c| c.name == callee_str);
+            let is_class = module.has_class(&callee_str);
             if is_class {
                 // Use the fully-qualified JVM name for the class.
                 let fq_name = fq_class_name(&callee_str, module);
@@ -13751,7 +12816,7 @@ fn lower_expr(
                         let (cls, m) = match cls_with {
                             Some(pair) => pair,
                             None => {
-                                let cls = module.classes.iter().find(|c| &c.name == cname)?;
+                                let cls = module.find_class(cname)?;
                                 let m = cls.methods.iter().find(|m| m.name == callee_str);
                                 match m {
                                     Some(m) => (cls, m),
@@ -15271,10 +14336,7 @@ fn lower_expr(
             }
 
             // `Pair(a, b)` — new kotlin/Pair(boxed_a, boxed_b).
-            if callee_str == "Pair"
-                && arg_locals.len() == 2
-                && !module.classes.iter().any(|c| c.name == "Pair")
-            {
+            if callee_str == "Pair" && arg_locals.len() == 2 && !module.has_class("Pair") {
                 let a_ty = fb.mf.locals[arg_locals[0].0 as usize].clone();
                 let b_ty = fb.mf.locals[arg_locals[1].0 as usize].clone();
                 let a_boxed = mir_autobox(fb, arg_locals[0], &a_ty);
@@ -15298,10 +14360,7 @@ fn lower_expr(
             }
 
             // `Triple(a, b, c)` — new kotlin/Triple(boxed_a, boxed_b, boxed_c).
-            if callee_str == "Triple"
-                && arg_locals.len() == 3
-                && !module.classes.iter().any(|c| c.name == "Triple")
-            {
+            if callee_str == "Triple" && arg_locals.len() == 3 && !module.has_class("Triple") {
                 let a_ty = fb.mf.locals[arg_locals[0].0 as usize].clone();
                 let b_ty = fb.mf.locals[arg_locals[1].0 as usize].clone();
                 let c_ty = fb.mf.locals[arg_locals[2].0 as usize].clone();
@@ -16185,7 +15244,7 @@ fn lower_expr(
                         // Look up in this class, superclasses, and interfaces.
                         let mut search_class = Some(class_name.clone());
                         'search: while let Some(ref cname) = search_class {
-                            let found = module.classes.iter().find(|c| &c.name == cname);
+                            let found = module.find_class(cname);
                             if let Some(cls) = found {
                                 if cls.methods.iter().any(|m| m.name == callee_str) {
                                     arg_locals.insert(0, *this_local);
@@ -16206,9 +15265,7 @@ fn lower_expr(
                                 }
                                 // Search interfaces.
                                 for iname in &cls.interfaces {
-                                    if let Some(icls) =
-                                        module.classes.iter().find(|c| &c.name == iname)
-                                    {
+                                    if let Some(icls) = module.find_class(iname) {
                                         if let Some(m) =
                                             icls.methods.iter().find(|m| m.name == callee_str)
                                         {
@@ -17301,7 +16358,7 @@ fn lower_expr(
                         // `tid_class_name` correctly finds the Companion
                         // class's sibling methods.
                         let current_class = if let Some(cn) = &tid_class_name {
-                            module.classes.iter().find(|c| &c.name == cn).or_else(|| {
+                            module.find_class(cn).or_else(|| {
                                 if in_lambda {
                                     None
                                 } else {
@@ -17444,7 +16501,7 @@ fn lower_expr(
                                     ) {
                                         outer_desc = Some((outer_class_name.clone(), d));
                                     } else if let Some(outer_cls) =
-                                        module.classes.iter().find(|c| c.name == outer_class_name)
+                                        module.find_class(&outer_class_name)
                                     {
                                         if outer_cls.methods.iter().any(|m| m.name == callee_str) {
                                             let mut d = String::from("(");
@@ -17565,7 +16622,7 @@ fn lower_expr(
                     let mut ret = Ty::Unit;
                     let mut search = Some(class_name.clone());
                     while let Some(ref cname) = search {
-                        if let Some(cls) = module.classes.iter().find(|c| &c.name == cname) {
+                        if let Some(cls) = module.find_class(cname) {
                             if let Some(m) = cls.methods.iter().find(|m| &m.name == method_name) {
                                 ret = m.return_ty.clone();
                                 break;
@@ -18397,7 +17454,7 @@ fn lower_expr(
                         let type_str = interner.resolve(*type_name);
                         let narrowed_ty =
                             skotch_types::ty_from_name(type_str).unwrap_or_else(|| {
-                                if module.classes.iter().any(|c| c.name == type_str) {
+                                if module.has_class(type_str) {
                                     Ty::Class(type_str.to_string())
                                 } else {
                                     Ty::Any
@@ -19106,7 +18163,7 @@ fn lower_expr(
                     .find(|c| c.name == recv_str && c.companion_class_name.is_some())
                     .and_then(|outer| {
                         let cn = outer.companion_class_name.clone().unwrap();
-                        let comp = module.classes.iter().find(|c| c.name == cn)?;
+                        let comp = module.find_class(&cn)?;
                         let m = comp.methods.iter().find(|m| m.name == getter_name)?;
                         Some((outer.name.clone(), cn, m.return_ty.clone()))
                     });
@@ -19138,7 +18195,7 @@ fn lower_expr(
             if let Expr::Ident(recv_sym, _) = receiver.as_ref() {
                 let recv_str = interner.resolve(*recv_sym).to_string();
                 let field_str = interner.resolve(*name).to_string();
-                let is_class = module.classes.iter().any(|c| c.name == recv_str);
+                let is_class = module.has_class(&recv_str);
                 if is_class {
                     let companion_sym = interner.intern(&field_str);
                     if let Some(constant) = name_to_global.get(&companion_sym).cloned() {
@@ -19443,7 +18500,7 @@ fn lower_expr(
                     let mut field_ty = Ty::Any;
                     let mut search = Some(class_name.clone());
                     while let Some(ref cname) = search {
-                        if let Some(cls) = module.classes.iter().find(|c| &c.name == cname) {
+                        if let Some(cls) = module.find_class(cname) {
                             if let Some(f) = cls.fields.iter().find(|f| f.name == field_name) {
                                 declaring_class = cname.clone();
                                 field_ty = f.ty.clone();
@@ -19462,7 +18519,7 @@ fn lower_expr(
                     // getter at runtime.
                     let getter_name =
                         format!("get{}{}", &field_name[..1].to_uppercase(), &field_name[1..]);
-                    if let Some(cls) = module.classes.iter().find(|c| c.name == declaring_class) {
+                    if let Some(cls) = module.find_class(&declaring_class) {
                         if let Some(getter) = cls.methods.iter().find(|m| m.name == getter_name) {
                             let ret_ty = getter.return_ty.clone();
                             let dest = fb.new_local(ret_ty);
@@ -19629,97 +18686,64 @@ fn lower_expr(
                         });
                         return Some(dest);
                     }
-                    // Pair .first / .second → invoke getFirst() / getSecond()
-                    // Only for kotlin/Pair, NOT user-defined classes named *Pair*.
-                    if declaring_class == "kotlin/Pair" {
-                        let (getter, desc) = match field_name.as_str() {
-                            "first" => ("getFirst", "()Ljava/lang/Object;"),
-                            "second" => ("getSecond", "()Ljava/lang/Object;"),
-                            _ => ("", ""),
-                        };
-                        if !getter.is_empty() {
-                            let dest = fb.new_local(Ty::Any);
-                            fb.push_stmt(MStmt::Assign {
-                                dest,
-                                value: Rvalue::Call {
-                                    kind: CallKind::VirtualJava {
-                                        class_name: "kotlin/Pair".to_string(),
-                                        method_name: getter.to_string(),
-                                        descriptor: desc.to_string(),
-                                    },
-                                    args: vec![recv_local],
-                                },
-                            });
-                            return Some(dest);
-                        }
-                    }
-                    // Triple .first / .second / .third → getFirst/getSecond/getThird
-                    if declaring_class.contains("Triple") || declaring_class == "kotlin/Triple" {
-                        let (getter, desc) = match field_name.as_str() {
-                            "first" => ("getFirst", "()Ljava/lang/Object;"),
-                            "second" => ("getSecond", "()Ljava/lang/Object;"),
-                            "third" => ("getThird", "()Ljava/lang/Object;"),
-                            _ => ("", ""),
-                        };
-                        if !getter.is_empty() {
-                            let dest = fb.new_local(Ty::Any);
-                            fb.push_stmt(MStmt::Assign {
-                                dest,
-                                value: Rvalue::Call {
-                                    kind: CallKind::VirtualJava {
-                                        class_name: "kotlin/Triple".to_string(),
-                                        method_name: getter.to_string(),
-                                        descriptor: desc.to_string(),
-                                    },
-                                    args: vec![recv_local],
-                                },
-                            });
-                            return Some(dest);
-                        }
-                    }
-                    // IntRange .first / .last → getFirst() / getLast()
-                    if declaring_class.contains("IntRange") {
-                        let range_prop: Option<(&str, &str)> = match field_name.as_str() {
-                            "first" => Some(("getFirst", "()I")),
-                            "last" => Some(("getLast", "()I")),
-                            _ => None,
-                        };
-                        if let Some((getter, desc)) = range_prop {
-                            let dest = fb.new_local(Ty::Int);
-                            fb.push_stmt(MStmt::Assign {
-                                dest,
-                                value: Rvalue::Call {
-                                    kind: CallKind::VirtualJava {
-                                        class_name: "kotlin/ranges/IntRange".to_string(),
-                                        method_name: getter.to_string(),
-                                        descriptor: desc.to_string(),
-                                    },
-                                    args: vec![recv_local],
-                                },
-                            });
-                            return Some(dest);
-                        }
-                    }
-                    // Exception .message → Throwable.getMessage()
-                    // Handles all JVM exception types (they all inherit from Throwable).
-                    if field_name == "message"
-                        && (declaring_class.contains("Exception")
-                            || declaring_class.contains("Error")
-                            || declaring_class.contains("Throwable"))
+                    // Property accessors for well-known stdlib classes
+                    // (`Pair.first`, `Triple.third`, `IntRange.last`, …).
+                    // The registry knows the JVM getter name + descriptor
+                    // + return type per (class, field). For Triple, the
+                    // older heuristic matched any name containing
+                    // "Triple"; the registry uses exact class match —
+                    // user-defined classes named `MyTriple` are no longer
+                    // accidentally routed through `kotlin/Triple` getters.
+                    let owner_for_accessor: Option<&str> = if declaring_class == "kotlin/Pair"
+                        || declaring_class == "kotlin/Triple"
+                        || declaring_class == "kotlin/ranges/IntRange"
                     {
-                        let dest = fb.new_local(Ty::String);
-                        fb.push_stmt(MStmt::Assign {
-                            dest,
-                            value: Rvalue::Call {
-                                kind: CallKind::VirtualJava {
-                                    class_name: "java/lang/Throwable".to_string(),
-                                    method_name: "getMessage".to_string(),
-                                    descriptor: "()Ljava/lang/String;".to_string(),
+                        Some(declaring_class.as_str())
+                    } else {
+                        None
+                    };
+                    if let Some(owner) = owner_for_accessor {
+                        if let Some(acc) = skotch_stdlib_registry::lookup_stdlib_property_accessor(
+                            owner,
+                            &field_name,
+                        ) {
+                            let dest = fb.new_local((acc.return_ty)());
+                            fb.push_stmt(MStmt::Assign {
+                                dest,
+                                value: Rvalue::Call {
+                                    kind: CallKind::VirtualJava {
+                                        class_name: acc.class.to_string(),
+                                        method_name: acc.getter.to_string(),
+                                        descriptor: acc.descriptor.to_string(),
+                                    },
+                                    args: vec![recv_local],
                                 },
-                                args: vec![recv_local],
-                            },
-                        });
-                        return Some(dest);
+                            });
+                            return Some(dest);
+                        }
+                    }
+                    // Exception .message / .cause routes through Throwable.
+                    // The registry knows the getter shape; the throwable-
+                    // subclass heuristic recognises the JVM hierarchy.
+                    if skotch_stdlib_registry::is_throwable_subclass(&declaring_class) {
+                        if let Some(acc) = skotch_stdlib_registry::lookup_stdlib_property_accessor(
+                            "java/lang/Throwable",
+                            &field_name,
+                        ) {
+                            let dest = fb.new_local((acc.return_ty)());
+                            fb.push_stmt(MStmt::Assign {
+                                dest,
+                                value: Rvalue::Call {
+                                    kind: CallKind::VirtualJava {
+                                        class_name: acc.class.to_string(),
+                                        method_name: acc.getter.to_string(),
+                                        descriptor: acc.descriptor.to_string(),
+                                    },
+                                    args: vec![recv_local],
+                                },
+                            });
+                            return Some(dest);
+                        }
                     }
                     // External class companion-property access: e.g.
                     // `Color.White` lowers to
@@ -20306,7 +19330,7 @@ fn lower_expr(
                 let mut field_ty = Ty::Any;
                 let mut search = Some(class_name.clone());
                 while let Some(ref cname) = search {
-                    if let Some(cls) = module.classes.iter().find(|c| &c.name == cname) {
+                    if let Some(cls) = module.find_class(cname) {
                         if let Some(f) = cls.fields.iter().find(|f| f.name == field_name) {
                             declaring_class = cname.clone();
                             field_ty = f.ty.clone();
@@ -20546,7 +19570,7 @@ fn lower_expr(
             // `Ljava/lang/Object;` and breaks `<init>` lookups at runtime.
             let imported_fq = module.import_map.get(type_str).cloned();
             let target_ty = skotch_types::ty_from_name(type_str).unwrap_or_else(|| {
-                if module.classes.iter().any(|c| c.name == type_str) {
+                if module.has_class(type_str) {
                     Ty::Class(type_str.to_string())
                 } else if let Some(fq) = &imported_fq {
                     Ty::Class(fq.clone())
@@ -20710,7 +19734,7 @@ fn lower_expr(
             // ── Capture analysis ────────────────────────────────────
             let param_names: Vec<Symbol> = params.iter().map(|p| p.name).collect();
             let mut free_vars: Vec<(Symbol, LocalId, Ty)> =
-                collect_free_vars(body, &param_names, scope, fb, interner);
+                collect_free_vars(body, &param_names, scope, &fb.mf.locals, interner);
 
             // Auto-capture outer `this` when the body has unqualified
             // method calls that resolve to methods on the enclosing
@@ -21166,7 +20190,7 @@ fn lower_expr(
                     },
                 });
 
-                module.classes.push(MirClass {
+                module.push_class(MirClass {
                     name: ref_class_name.clone(),
                     super_class: None,
                     is_open: false,
@@ -21259,11 +20283,11 @@ fn lower_expr(
                     "{}${}${}",
                     module.wrapper_class, enclosing_fn_for_name, fb.lambda_count
                 );
-                if !module.classes.iter().any(|c| c.name == candidate) {
+                if !module.has_class(&candidate) {
                     break candidate;
                 }
             };
-            module.classes.push(MirClass {
+            module.push_class(MirClass {
                 name: lambda_class_name.clone(),
                 super_class: None,
                 is_open: false,
@@ -22173,7 +21197,7 @@ fn lower_expr(
                 },
             });
 
-            module.classes.push(MirClass {
+            module.push_class(MirClass {
                 name: obj_class_name.clone(),
                 super_class,
                 is_open: false,
@@ -23272,20 +22296,9 @@ fn lower_enum(
     let enum_iface_names: Vec<String> = e
         .interfaces
         .iter()
-        .map(|s| {
-            let simple = interner.resolve(*s).to_string();
-            if simple.contains('/') {
-                simple
-            } else if let Some(fq) = module.import_map.get(&simple) {
-                fq.clone()
-            } else if let Some((fq, _, _)) = module.cross_file_classes.get(&simple) {
-                fq.clone()
-            } else {
-                simple
-            }
-        })
+        .map(|s| module.fq_resolve(interner.resolve(*s)))
         .collect();
-    module.classes.push(MirClass {
+    module.push_class(MirClass {
         name: enum_name.clone(),
         super_class,
         is_open: false,
@@ -23602,16 +22615,7 @@ fn lower_object(
     // Parent(args)`, route through Parent's <init>(args)V. Without a
     // parent clause, fall back to `java/lang/Object.<init>()V`.
     let super_ctor_class = if let Some(ref sc) = o.parent_class {
-        let simple = interner.resolve(sc.name).to_string();
-        if simple.contains('/') {
-            simple
-        } else if let Some(fq) = module.import_map.get(&simple) {
-            fq.clone()
-        } else if let Some((fq, _, _)) = module.cross_file_classes.get(&simple) {
-            fq.clone()
-        } else {
-            simple
-        }
+        module.fq_resolve(interner.resolve(sc.name))
     } else {
         "java/lang/Object".to_string()
     };
@@ -23703,18 +22707,7 @@ fn lower_object(
     let interfaces: Vec<String> = o
         .interfaces
         .iter()
-        .map(|s| {
-            let simple = interner.resolve(*s).to_string();
-            if simple.contains('/') {
-                simple
-            } else if let Some(fq) = module.import_map.get(&simple) {
-                fq.clone()
-            } else if let Some((fq, _, _)) = module.cross_file_classes.get(&simple) {
-                fq.clone()
-            } else {
-                simple
-            }
-        })
+        .map(|s| module.fq_resolve(interner.resolve(*s)))
         .collect();
     // Optional parent class: `object Foo : Parent(args)`. The parser
     // populates `parent_class`; here we FQ-resolve it the same way as
@@ -23722,19 +22715,11 @@ fn lower_object(
     // here — that's a future fix; today the parent's `<init>(args)`
     // is called from the synthesized `<init>` of the object, and we
     // only record the super_class slot for the JVM layout.
-    let super_class = o.parent_class.as_ref().map(|sc| {
-        let simple = interner.resolve(sc.name).to_string();
-        if simple.contains('/') {
-            simple
-        } else if let Some(fq) = module.import_map.get(&simple) {
-            fq.clone()
-        } else if let Some((fq, _, _)) = module.cross_file_classes.get(&simple) {
-            fq.clone()
-        } else {
-            simple
-        }
-    });
-    module.classes.push(MirClass {
+    let super_class = o
+        .parent_class
+        .as_ref()
+        .map(|sc| module.fq_resolve(interner.resolve(sc.name)));
+    module.push_class(MirClass {
         name: obj_name,
         super_class,
         is_open: false,
@@ -24056,7 +23041,7 @@ fn lower_class(
     // (otherwise the receiver is typed `Any` and the call can't resolve). The
     // slot is replaced with the fully-lowered class further below.
     let class_idx = module.classes.len();
-    module.classes.push(MirClass {
+    module.push_class(MirClass {
         name: class_name.clone(),
         super_class: None,
         is_open: c.is_open,
@@ -24243,18 +23228,7 @@ fn lower_class(
     let iface_names: Vec<String> = c
         .interfaces
         .iter()
-        .map(|s| {
-            let simple = interner.resolve(*s).to_string();
-            if simple.contains('/') {
-                simple
-            } else if let Some(fq) = module.import_map.get(&simple) {
-                fq.clone()
-            } else if let Some((fq, _, _)) = module.cross_file_classes.get(&simple) {
-                fq.clone()
-            } else {
-                simple
-            }
-        })
+        .map(|s| module.fq_resolve(interner.resolve(*s)))
         .collect();
     // Replace the fields-only reservation pushed before the property-init
     // loop with the stub that now also carries the constructor + stub methods.
@@ -24485,6 +23459,22 @@ fn lower_class(
             mir_methods.push(fb.finish());
         }
     }
+    // Mutable-field set. Hoisted out of the methods + secondary-ctor
+    // loops so both writeback sites can consult the same set without
+    // recomputing it per method.
+    let var_field_names: rustc_hash::FxHashSet<String> = c
+        .constructor_params
+        .iter()
+        .filter(|p| p.is_var)
+        .map(|p| interner.resolve(p.name).to_string())
+        .chain(
+            c.properties
+                .iter()
+                .filter(|p| p.is_var)
+                .map(|p| interner.resolve(p.name).to_string()),
+        )
+        .collect();
+
     for method in &c.methods {
         let method_name = interner.resolve(method.name).to_string();
         let declared_ret = method
@@ -24532,7 +23522,7 @@ fn lower_class(
             // Also bind any field/property on the extension receiver class
             // so a bare `value` in the body resolves to `$receiver.value`.
             if let Ty::Class(ext_class_name) = &ext_recv_ty {
-                if let Some(ext_cls) = module.classes.iter().find(|c| &c.name == ext_class_name) {
+                if let Some(ext_cls) = module.find_class(ext_class_name) {
                     for field in &ext_cls.fields {
                         let field_sym = interner.intern(&field.name);
                         let field_local = fb.new_local(field.ty.clone());
@@ -24615,19 +23605,8 @@ fn lower_class(
         // end-of-method writeback re-read the field and observe the
         // stale value the pre-load captured at method entry — observable
         // as `_count += 1; broadcast()` notifying observers with the
-        // pre-increment count.
-        let var_field_names: rustc_hash::FxHashSet<String> = c
-            .constructor_params
-            .iter()
-            .filter(|p| p.is_var)
-            .map(|p| interner.resolve(p.name).to_string())
-            .chain(
-                c.properties
-                    .iter()
-                    .filter(|p| p.is_var)
-                    .map(|p| interner.resolve(p.name).to_string()),
-            )
-            .collect();
+        // pre-increment count. The `var_field_names` set is hoisted
+        // above the methods loop.
         let mut field_locals: Vec<(String, LocalId)> = Vec::new();
         for field in &fields {
             let field_sym = interner.intern(&field.name);
@@ -24687,7 +23666,7 @@ fn lower_class(
         {
             let mut parent = super_class.clone();
             while let Some(ref pname) = parent {
-                if let Some(pcls) = module.classes.iter().find(|c| &c.name == pname) {
+                if let Some(pcls) = module.find_class(pname) {
                     for pf in &pcls.fields {
                         // Skip if already shadowed by this class's field.
                         if fields.iter().any(|f| f.name == pf.name) {
@@ -24770,56 +23749,19 @@ fn lower_class(
         }
 
         // Write back field locals to the object so mutations like
-        // `count = count + 1` persist. Skip fields that the body never
-        // assigned to AND that are `var` (mutable) — for those, the
-        // local mirror is a STALE snapshot of the field's pre-method
-        // value; if a nested method call mutated the field via
-        // putfield, our writeback would clobber it back to the stale
-        // value (root cause of the "Tree.child silently undoes
-        // Tree.appendChild" bug). Writing back unmodified `val`
-        // fields is fine (they can't change) and matches the existing
-        // behavior, so the optimizer's existing dead-store elimination
-        // can handle it.
+        // `count = count + 1` persist. The helper skips `var` fields
+        // the body never wrote (would clobber a nested call's mutation
+        // with the pre-method snapshot — root cause of the "Tree.child
+        // silently undoes Tree.appendChild" bug).
         let var_field_set: rustc_hash::FxHashSet<&str> =
             var_field_names.iter().map(|s| s.as_str()).collect();
-        let mut written_field_locals: rustc_hash::FxHashSet<u32> = rustc_hash::FxHashSet::default();
-        for block in &fb.mf.blocks {
-            for stmt in &block.stmts {
-                let MStmt::Assign { dest, value } = stmt;
-                if let Some((field_name_for_local, _)) =
-                    field_locals.iter().find(|(_, l)| l.0 == dest.0)
-                {
-                    let is_initial_load = matches!(
-                        value,
-                        Rvalue::GetField { receiver, field_name: fname, .. }
-                            if *receiver == this_local && fname == field_name_for_local
-                    );
-                    if !is_initial_load {
-                        written_field_locals.insert(dest.0);
-                    }
-                }
-            }
-        }
-        for (field_name, field_local) in &field_locals {
-            let is_var = var_field_set.contains(field_name.as_str());
-            // For `var` fields: writeback only if the body actually
-            // wrote to the local (would-clobber risk otherwise).
-            // For `val` fields: always writeback — they can't change,
-            // so the writeback is a redundant no-op the JVM optimizer
-            // can remove without risk.
-            if is_var && !written_field_locals.contains(&field_local.0) {
-                continue;
-            }
-            fb.push_stmt(MStmt::Assign {
-                dest: this_local, // dummy dest
-                value: Rvalue::PutField {
-                    receiver: this_local,
-                    class_name: class_name.clone(),
-                    field_name: field_name.clone(),
-                    value: *field_local,
-                },
-            });
-        }
+        writeback_field_locals(
+            &mut fb,
+            &field_locals,
+            &var_field_set,
+            this_local,
+            &class_name,
+        );
 
         // Suspend methods — autobox primitive returns and
         // convert bare Return → return null (same as top-level suspend fns).
@@ -25347,7 +24289,7 @@ fn lower_class(
         // Clear the side-channel — the Companion is about to land in
         // `module.classes`, so future call sites use the real class.
         module.pending_companion_methods = None;
-        module.classes.push(MirClass {
+        module.push_class(MirClass {
             name: companion_cls.clone(),
             super_class: None,
             is_open: false,
@@ -26088,18 +25030,18 @@ fn lower_class(
                     None,
                 );
             }
-            // Write back fields to the object.
-            for (field_name, field_local) in &field_locals {
-                fb.push_stmt(MStmt::Assign {
-                    dest: sec_this, // dummy dest
-                    value: Rvalue::PutField {
-                        receiver: sec_this,
-                        class_name: class_name.clone(),
-                        field_name: field_name.clone(),
-                        value: *field_local,
-                    },
-                });
-            }
+            // Write back fields. The shared helper guards against the
+            // var-clobber bug — relevant here because a secondary ctor's
+            // body can call instance methods that mutate `var` fields.
+            let var_field_set: rustc_hash::FxHashSet<&str> =
+                var_field_names.iter().map(|s| s.as_str()).collect();
+            writeback_field_locals(
+                &mut fb,
+                &field_locals,
+                &var_field_set,
+                sec_this,
+                &class_name,
+            );
             sec_fn.locals = fb.mf.locals;
             sec_fn.blocks = fb.mf.blocks;
             if let Some(last) = sec_fn.blocks.last_mut() {
@@ -26362,21 +25304,10 @@ fn lower_interface(
     let super_iface_names: Vec<String> = iface
         .interfaces
         .iter()
-        .map(|s| {
-            let simple = interner.resolve(*s).to_string();
-            if simple.contains('/') {
-                simple
-            } else if let Some(fq) = module.import_map.get(&simple) {
-                fq.clone()
-            } else if let Some((fq, _, _)) = module.cross_file_classes.get(&simple) {
-                fq.clone()
-            } else {
-                simple
-            }
-        })
+        .map(|s| module.fq_resolve(interner.resolve(*s)))
         .collect();
     let class_idx = module.classes.len();
-    module.classes.push(MirClass {
+    module.push_class(MirClass {
         name: iface_name.clone(),
         super_class: None,
         is_open: true,
@@ -26474,8 +25405,7 @@ fn lower_interface(
                 let ext_recv_sym = interner.intern(&format!("$this${}", method_name));
                 scope.push((ext_recv_sym, ext_recv_local));
                 if let Ty::Class(ext_class_name) = &ext_recv_ty {
-                    if let Some(ext_cls) = module.classes.iter().find(|c| &c.name == ext_class_name)
-                    {
+                    if let Some(ext_cls) = module.find_class(ext_class_name) {
                         for field in &ext_cls.fields {
                             let field_sym = interner.intern(&field.name);
                             let field_local = fb.new_local(field.ty.clone());
@@ -26786,7 +25716,7 @@ mod tests {
     /// Force a build error when a new field is added to `MirClass`.
     /// If you find yourself patching this — update
     /// `mir-lower/src/lib.rs` cross-file stub builder
-    /// (`module.classes.push(MirClass { ... })`) at the same time.
+    /// (`module.push_class(MirClass { ... })`) at the same time.
     #[test]
     #[allow(unused_variables, dead_code)]
     fn shape_assert_mir_class_fields_populated_for_cross_file_stub() {

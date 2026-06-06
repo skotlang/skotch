@@ -1,0 +1,4 @@
+name = "1287-generic-method-autobox-int-arg"
+status = "supported"
+features = ["generics", "autobox", "user-method-dispatch"]
+reason = "Locks in mir-lower fix: user-method virtual dispatch now autoboxes primitive args going into parameter slots that erase to Object (T/K/V type parameters)."

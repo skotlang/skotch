@@ -159,6 +159,128 @@ pub static STDLIB_EXTENSIONS: &[StdlibExtension] = &[
     StdlibExtension { receiver: "", method: "joinToString", facade_class: "kotlin/collections/CollectionsKt", jvm_method: "joinToString$default", descriptor: "(Ljava/lang/Iterable;Ljava/lang/CharSequence;Ljava/lang/CharSequence;Ljava/lang/CharSequence;ILjava/lang/CharSequence;Lkotlin/jvm/functions/Function1;ILjava/lang/Object;)Ljava/lang/String;", return_ty: ty_string },
 ];
 
+// ─── Stdlib property accessors (Pair.first → getFirst(), etc.) ─────────────
+
+/// Maps a property-style field access (`.first`/`.second`/etc.) on a
+/// well-known stdlib class to the matching JVM getter method and its
+/// descriptor. Used by mir-lower's Field-expression dispatcher.
+pub struct StdlibPropertyAccessor {
+    /// Owning JVM-internal class name (exact match).
+    pub class: &'static str,
+    /// Source-level field name (`first`, `last`, `message`).
+    pub field: &'static str,
+    /// JVM getter method to invoke.
+    pub getter: &'static str,
+    /// Getter's JVM descriptor.
+    pub descriptor: &'static str,
+    /// Getter's return type — for the lowered local.
+    pub return_ty: fn() -> Ty,
+}
+
+fn ty_object() -> Ty {
+    Ty::Any
+}
+fn ty_int_simple() -> Ty {
+    Ty::Int
+}
+/// Property-accessor variant — returns the singleton `Ty::String` so
+/// downstream pattern-matches (concat-dispatch, `.toString()` short-
+/// circuit, etc.) still recognise it. Distinct from `ty_string` (which
+/// returns `Ty::Class("java/lang/String")` for the extension-fn table).
+fn ty_string_simple() -> Ty {
+    Ty::String
+}
+
+#[allow(non_upper_case_globals)]
+const STDLIB_PROPERTY_ACCESSORS: &[StdlibPropertyAccessor] = &[
+    // kotlin.Pair
+    StdlibPropertyAccessor {
+        class: "kotlin/Pair",
+        field: "first",
+        getter: "getFirst",
+        descriptor: "()Ljava/lang/Object;",
+        return_ty: ty_object,
+    },
+    StdlibPropertyAccessor {
+        class: "kotlin/Pair",
+        field: "second",
+        getter: "getSecond",
+        descriptor: "()Ljava/lang/Object;",
+        return_ty: ty_object,
+    },
+    // kotlin.Triple
+    StdlibPropertyAccessor {
+        class: "kotlin/Triple",
+        field: "first",
+        getter: "getFirst",
+        descriptor: "()Ljava/lang/Object;",
+        return_ty: ty_object,
+    },
+    StdlibPropertyAccessor {
+        class: "kotlin/Triple",
+        field: "second",
+        getter: "getSecond",
+        descriptor: "()Ljava/lang/Object;",
+        return_ty: ty_object,
+    },
+    StdlibPropertyAccessor {
+        class: "kotlin/Triple",
+        field: "third",
+        getter: "getThird",
+        descriptor: "()Ljava/lang/Object;",
+        return_ty: ty_object,
+    },
+    // IntRange (closed-range over primitive int)
+    StdlibPropertyAccessor {
+        class: "kotlin/ranges/IntRange",
+        field: "first",
+        getter: "getFirst",
+        descriptor: "()I",
+        return_ty: ty_int_simple,
+    },
+    StdlibPropertyAccessor {
+        class: "kotlin/ranges/IntRange",
+        field: "last",
+        getter: "getLast",
+        descriptor: "()I",
+        return_ty: ty_int_simple,
+    },
+    StdlibPropertyAccessor {
+        class: "kotlin/ranges/IntRange",
+        field: "step",
+        getter: "getStep",
+        descriptor: "()I",
+        return_ty: ty_int_simple,
+    },
+    // Throwable / Exception family — `.message` and `.cause`
+    StdlibPropertyAccessor {
+        class: "java/lang/Throwable",
+        field: "message",
+        getter: "getMessage",
+        descriptor: "()Ljava/lang/String;",
+        return_ty: ty_string_simple,
+    },
+];
+
+/// Look up a stdlib property accessor by exact owning-class match.
+/// For Throwable subclasses, the caller should pass `"java/lang/Throwable"`
+/// after recognising the type via [`is_throwable_subclass`].
+pub fn lookup_stdlib_property_accessor(
+    class: &str,
+    field: &str,
+) -> Option<&'static StdlibPropertyAccessor> {
+    STDLIB_PROPERTY_ACCESSORS
+        .iter()
+        .find(|p| p.class == class && p.field == field)
+}
+
+/// Recognise a JVM-internal name as a throwable hierarchy member.
+/// The mir-lower's Field dispatcher uses this to route `.message`
+/// through `Throwable.getMessage()` for any subclass.
+pub fn is_throwable_subclass(class: &str) -> bool {
+    class.contains("Exception") || class.contains("Error") || class.contains("Throwable")
+}
+
 /// Look up a stdlib extension function by receiver type and method name.
 pub fn lookup_stdlib_extension(
     receiver_ty: &str,

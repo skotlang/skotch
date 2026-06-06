@@ -1532,7 +1532,11 @@ impl<'a> Parser<'a> {
         self.skip_trivia();
         let name_idx = self.pos;
         let name_span = self.peek_span();
-        let name = if self.peek_kind() == TokenKind::Ident {
+        let name = if self.peek_kind() == TokenKind::Ident || self.peek_kind().is_soft_keyword() {
+            // Soft keywords (`data`, `open`, `init`, …) are legal
+            // identifiers when they appear in identifier positions like
+            // `val data: Int = 0`. `intern_ident_at` falls back to
+            // `keyword_text()` when the token isn't a plain Ident.
             self.bump();
             self.intern_ident_at(name_idx)
         } else {

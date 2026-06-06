@@ -1,0 +1,4 @@
+name = "1286-property-name-data-soft-keyword"
+status = "supported"
+features = ["parser", "soft-keyword", "property-name"]
+reason = "Locks in parser fix: `val data: Int`, `val operator: String`, `val init: Int` — soft keywords used as property names. Pre-fix the parser ate `data`/`operator`/`init` as modifiers, gave the PropertyDecl an empty name, and mir-lower panicked when synthesizing the accessor name."

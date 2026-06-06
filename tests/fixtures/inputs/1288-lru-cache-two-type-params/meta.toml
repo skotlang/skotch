@@ -1,0 +1,4 @@
+name = "1288-lru-cache-two-type-params"
+status = "supported"
+features = ["generics", "mutable-map", "mutable-list", "user-method-dispatch", "autobox", "nullable-return"]
+reason = "End-to-end lock-in for skotch-examples/16-lru-cache: generic LruCache<K, V> with MutableMap<K, V> + parallel MutableList<K>, get/put bump-and-evict, primitive-V autoboxing through user-method dispatch."
