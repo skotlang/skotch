@@ -1,0 +1,21 @@
+# Linker/AR config for cross-compiling skotch to Android.
+#
+# Picked up automatically by cargo when building with
+# `--target aarch64-linux-android`. The clang wrapper is the
+# canonical entry point — it forwards to the NDK's lld and links
+# against the right Android sysroot. API level 21 is the floor
+# (matches the lowest minSdk skotch currently emits for in the DEX
+# backend's class.dex container).
+#
+# Resolution: bare tool names are looked up on PATH at build time —
+# put the NDK's `toolchains/llvm/prebuilt/<host>/bin` directory on
+# PATH before invoking cargo. On macOS with Homebrew NDK that's:
+#   /opt/homebrew/share/android-ndk/toolchains/llvm/prebuilt/darwin-x86_64/bin
+# On Linux CI with `nttld/setup-ndk` that's:
+#   ${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin
+#
+# To override the linker explicitly, set
+# CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER in the environment.
+[target.aarch64-linux-android]
+linker = "aarch64-linux-android21-clang"
+ar = "llvm-ar"

@@ -38,6 +38,13 @@ use std::path::PathBuf;
 /// Relative paths under JAVA_HOME where libjvm is known to live,
 /// in probe order. The first match wins.
 fn candidate_suffixes() -> Vec<&'static str> {
+    // `mut` is technically unused on targets where none of the
+    // cfg-guarded `push` calls below fire (notably Android, whose
+    // target_os is `android` rather than `linux`, so the Linux
+    // branch is excluded). The CLI is still useful on Android for
+    // the in-process backends (JVM-classfile and DEX emit) even
+    // though native libjvm loading isn't supported there.
+    #[allow(unused_mut)]
     let mut v = Vec::new();
 
     #[cfg(target_os = "macos")]

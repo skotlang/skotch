@@ -95,3 +95,58 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --workspace --release
+
+  android-build:
+    name: cross-build (aarch64-linux-android)
+    runs-on: ubuntu-latest
+    # Pure cross-compile sanity check: build the skotch CLI for
+    # Android in both debug and release modes. We don't run anything —
+    # this only verifies the binary links and the transitive crate
+    # graph stays Android-compatible.
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Rust toolchain + Android target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - name: Put pre-installed NDK toolchain on PATH
+        # GitHub-hosted ubuntu runners ship the Android NDK; the path
+        # is exposed via the ANDROID_NDK_HOME env var. `.cargo/config.toml`
+        # references `aarch64-linux-android21-clang` and `llvm-ar` by
+        # bare name — both live under the NDK's
+        # `toolchains/llvm/prebuilt/linux-x86_64/bin` directory. Adding
+        # it to PATH (rather than CARGO_TARGET_..._LINKER) lets the
+        # checked-in config.toml stay portable across hosts.
+        run: |
+          set -euo pipefail
+          : "${ANDROID_NDK_HOME:?ANDROID_NDK_HOME is not set on this runner}"
+          echo "Using ANDROID_NDK_HOME=${ANDROID_NDK_HOME}"
+          echo "${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin" >> "$GITHUB_PATH"
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: android-${{ runner.os }}
+
+      - name: cargo build (debug, aarch64-linux-android)
+        run: cargo build --target aarch64-linux-android -p skotch-cli
+
+      - name: cargo build (release, aarch64-linux-android)
+        run: cargo build --release --target aarch64-linux-android -p skotch-cli
+
+      - name: Verify Android ELF artifacts
+        # Sanity-check the file shape so a future build regression
+        # (e.g. linker producing a non-PIE binary, missing the
+        # Android dynamic linker, or producing a wrong ELF class)
+        # surfaces here rather than at deploy time.
+        run: |
+          set -euo pipefail
+          for variant in debug release; do
+            bin="target/aarch64-linux-android/${variant}/skotch"
+            echo "--- ${bin} ---"
+            test -f "$bin"
+            file "$bin"
+            file "$bin" | grep -q "ELF 64-bit LSB pie executable, ARM aarch64"
+            file "$bin" | grep -q "interpreter /system/bin/linker64"
+          done
