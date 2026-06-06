@@ -1,0 +1,4 @@
+name = "1282-lambda-with-receiver-companion-factory"
+status = "supported"
+features = ["lambda-with-receiver", "companion", "dsl-builder"]
+reason = "Locks in the cross-file companion-method receiver-type plumbing: ExternalParam.receiver_class flows through the cross-file stub to the call site, lambda's invoke gets the right Function1<Receiver, Unit> arity, and bare-name methods inside the lambda resolve via implicit `this`."

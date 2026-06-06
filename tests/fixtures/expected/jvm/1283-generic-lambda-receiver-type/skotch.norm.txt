@@ -1,0 +1,47 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        build (Lkotlin/jvm/functions/Function1;Ljava/lang/Object;)LBox; 0x0019
+  code        max_stack=3 max_locals=3
+    0000 aload_0
+    0001 ldc "init"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 new Class(Box)
+    0009 dup
+    0010 aload_1
+    0011 invokespecial Method(Box.<init>:(Ljava/lang/Object;)V)
+    0014 astore_2
+    0015 aload_0
+    0016 aload_2
+    0017 invokeinterface InterfaceMethod(kotlin/jvm/functions/Function1.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0022 pop
+    0023 aload_2
+    0024 areturn
+  attr        Signature (2 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (9 bytes)
+method        main ()V 0x0019
+  code        max_stack=2 max_locals=2
+    0000 new Class(InputKt$main$1)
+    0003 dup
+    0004 invokespecial Method(InputKt$main$1.<init>:()V)
+    0007 iconst_0
+    0008 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0011 astore_0
+    0012 checkcast Class(kotlin/jvm/functions/Function1)
+    0015 aload_0
+    0016 invokestatic Method(InputKt.build:(Lkotlin/jvm/functions/Function1;Ljava/lang/Object;)LBox;)
+    0019 astore_1
+    0020 aload_1
+    0021 invokevirtual Method(Box.getSum:()I)
+    0024 istore_0
+    0025 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0028 iload_0
+    0029 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0032 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
+class_attr    InnerClasses (10 bytes)

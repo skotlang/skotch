@@ -1,0 +1,152 @@
+dex_version   035
+strings       69
+types         20
+methods       18
+classes       4
+
+--- strings ---
+  ""
+  "$r8$lambda$gtMjpyFq-IZ0J5vG9tAMPwnQbxc"
+  "$this$build"
+  "("
+  "()I"
+  "()V"
+  "(I)V"
+  "-"
+  "<clinit>"
+  "<init>"
+  "<set-?>"
+  ">;)"
+  "Companion"
+  "D8$$SyntheticClass"
+  "I"
+  "INSTANCE"
+  "LBox$Companion;"
+  "LBox;"
+  "LInputKt$$ExternalSyntheticLambda0;"
+  "LInputKt;"
+  "LL"
+  "Ldalvik/annotation/EnclosingClass;"
+  "Ldalvik/annotation/InnerClass;"
+  "Ldalvik/annotation/MemberClasses;"
+  "Ldalvik/annotation/Signature;"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/String;"
+  "Ljava/lang/System;"
+  "Lkotlin/ExtensionFunctionType;"
+  "Lkotlin/Function1;"
+  "Lkotlin/Metadata;"
+  "Lkotlin/Unit;"
+  "Lkotlin/jvm/functions/Function1;"
+  "Lkotlin/jvm/functions/Function1<"
+  "Lkotlin/jvm/internal/DefaultConstructorMarker;"
+  "Lkotlin/jvm/internal/Intrinsics;"
+  "V"
+  "VI"
+  "VL"
+  "VLL"
+  "[Ljava/lang/String;"
+  "accessFlags"
+  "add"
+  "b"
+  "build"
+  "checkNotNullParameter"
+  "d1"
+  "d2"
+  "getSum"
+  "init"
+  "input.kt"
+  "invoke"
+  "k"
+  "main"
+  "main$lambda$0"
+  "mv"
+  "name"
+  "out"
+  "println"
+  "setSum"
+  "sum"
+  "value"
+  "x"
+  "xi"
+  "~~D8{\"backend\":\"dex\",\"compilation-mode\":\"debug\",\"has-checksums\":false,\"min-api\":1,\"sha-1\":\"a7ad18a70460b799d0482e497c109a75bf7f91de\",\"version\":\"8.10.9-dev\"}"
+  "��\u{6}\n��\n\u{2}\u{10}\u{2}\u{1a}\u{6}\u{10}��\u{1a}\u{2}0\u{1}"
+  "��\u{1c}\n\u{2}\u{18}\u{2}\n\u{2}\u{10}��\n\u{2}\u{8}\u{3}\n\u{2}\u{10}\u{8}\n\u{2}\u{8}\u{5}\n\u{2}\u{10}\u{2}\n\u{2}\u{8}\u{2}\u{18}�� \r2\u{2}0\u{1}:\u{1}\rB\u{7}¢\u{6}\u{4}\u{8}\u{2}\u{10}\u{3}J\u{e}\u{10}\n\u{1a}\u{2}0\u{b}2\u{6}\u{10}\u{c}\u{1a}\u{2}0\u{5}R\u{1a}\u{10}\u{4}\u{1a}\u{2}0\u{5}X\u{86}\u{e}¢\u{6}\u{e}\n��\u{1a}\u{4}\u{8}\u{6}\u{10}\u{7}\"\u{4}\u{8}\u{8}\u{10}\t"
+  "��\u{1e}\n\u{2}\u{18}\u{2}\n\u{2}\u{10}��\n\u{2}\u{8}\u{3}\n\u{2}\u{18}\u{2}\n��\n\u{2}\u{18}\u{2}\n\u{2}\u{10}\u{2}\n\u{2}\u{18}\u{2}\u{8}\u{86}\u{3}\u{18}��2\u{2}0\u{1}B\t\u{8}\u{2}¢\u{6}\u{4}\u{8}\u{2}\u{10}\u{3}J\u{1f}\u{10}\u{4}\u{1a}\u{2}0\u{5}2\u{17}\u{10}\u{6}\u{1a}\u{13}\u{12}\u{4}\u{12}\u{2}0\u{5}\u{12}\u{4}\u{12}\u{2}0\u{8}0\u{7}¢\u{6}\u{2}\u{8}\t"
+
+--- types ---
+  I
+  LBox$Companion;
+  LBox;
+  LInputKt$$ExternalSyntheticLambda0;
+  LInputKt;
+  Ldalvik/annotation/EnclosingClass;
+  Ldalvik/annotation/InnerClass;
+  Ldalvik/annotation/MemberClasses;
+  Ldalvik/annotation/Signature;
+  Ljava/io/PrintStream;
+  Ljava/lang/Object;
+  Ljava/lang/String;
+  Ljava/lang/System;
+  Lkotlin/Metadata;
+  Lkotlin/Unit;
+  Lkotlin/jvm/functions/Function1;
+  Lkotlin/jvm/internal/DefaultConstructorMarker;
+  Lkotlin/jvm/internal/Intrinsics;
+  V
+  [Ljava/lang/String;
+
+--- methods ---
+  LBox$Companion;.<init>()V
+  LBox$Companion;.<init>(Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+  LBox$Companion;.build(Lkotlin/jvm/functions/Function1;)LBox;
+  LBox;.<clinit>()V
+  LBox;.<init>()V
+  LBox;.add(I)V
+  LBox;.getSum()I
+  LBox;.setSum(I)V
+  LInputKt$$ExternalSyntheticLambda0;.<init>()V
+  LInputKt$$ExternalSyntheticLambda0;.invoke(Ljava/lang/Object;)Ljava/lang/Object;
+  LInputKt;.$r8$lambda$gtMjpyFq-IZ0J5vG9tAMPwnQbxc(LBox;)Lkotlin/Unit;
+  LInputKt;.main$lambda$0(LBox;)Lkotlin/Unit;
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  Ljava/io/PrintStream;.println(I)V
+  Ljava/lang/Object;.<init>()V
+  Lkotlin/jvm/functions/Function1;.invoke(Ljava/lang/Object;)Ljava/lang/Object;
+  Lkotlin/jvm/internal/Intrinsics;.checkNotNullParameter(Ljava/lang/Object;Ljava/lang/String;)V
+
+--- class[0] ---
+  descriptor   LBox$Companion;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       <init>()V flags=0x10002 regs=1 ins=1 outs=1 insns=4
+  method       <init>(Lkotlin/jvm/internal/DefaultConstructorMarker;)V flags=0x11001 regs=2 ins=2 outs=1 insns=4
+  method       build(Lkotlin/jvm/functions/Function1;)LBox; flags=0x0011 regs=3 ins=2 outs=2 insns=14
+
+--- class[1] ---
+  descriptor   LBox;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       <clinit>()V flags=0x10008 regs=2 ins=0 outs=2 insns=9
+  method       <init>()V flags=0x10001 regs=1 ins=1 outs=1 insns=4
+  method       add(I)V flags=0x0011 regs=3 ins=2 outs=0 insns=6
+  method       getSum()I flags=0x0011 regs=2 ins=1 outs=0 insns=3
+  method       setSum(I)V flags=0x0011 regs=2 ins=2 outs=0 insns=3
+
+--- class[2] ---
+  descriptor   LInputKt$$ExternalSyntheticLambda0;
+  super        Ljava/lang/Object;
+  source_file  D8$$SyntheticClass
+  method       <init>()V flags=0x11001 regs=1 ins=1 outs=1 insns=4
+  method       invoke(Ljava/lang/Object;)Ljava/lang/Object; flags=0x0011 regs=2 ins=2 outs=1 insns=7
+
+--- class[3] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       $r8$lambda$gtMjpyFq-IZ0J5vG9tAMPwnQbxc(LBox;)Lkotlin/Unit; flags=0x1009 regs=1 ins=1 outs=1 insns=5
+  method       main()V flags=0x0019 regs=3 ins=0 outs=2 insns=21
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4
+  method       main$lambda$0(LBox;)Lkotlin/Unit; flags=0x001A regs=2 ins=1 outs=2 insns=20

@@ -1,0 +1,4 @@
+name = "1284-var-field-stale-writeback"
+status = "supported"
+features = ["var-field", "method-dispatch"]
+reason = "Locks in the conditional end-of-method writeback fix: `var` fields are written back only when the body assigned to them directly; otherwise a nested call's putfield to the same field would be clobbered by the stale snapshot."

@@ -1915,6 +1915,18 @@ pub fn lower_file(
                         f.is_suspend = m.is_suspend;
                         f.is_inline = m.is_inline;
                         f.is_abstract = m.is_abstract;
+                        // Propagate lambda-with-receiver param metadata so
+                        // cross-file call sites can plumb the receiver type
+                        // into the lambda's invoke method body. Without
+                        // this, `Tree.of("root") { child(...) }` for a
+                        // Tree defined in another file resolves `child`
+                        // against an untyped `this` and falls through to
+                        // the unresolved-call path.
+                        for (pi, p) in m.params.iter().enumerate() {
+                            if let Some(recv) = &p.receiver_class {
+                                f.param_receiver_types.push((pi, recv.clone()));
+                            }
+                        }
                         f.annotations = m
                             .annotations
                             .iter()
@@ -2155,6 +2167,16 @@ pub fn lower_file(
                             f.is_suspend = m.is_suspend;
                             f.is_inline = m.is_inline;
                             f.is_abstract = m.is_abstract;
+                            // Same lambda-with-receiver plumbing as the
+                            // outer-class methods above — needed for
+                            // companion-side factories like
+                            // `Tree.of("root") { child(...) }` whose
+                            // `init` param is a lambda-with-receiver.
+                            for (pi, p) in m.params.iter().enumerate() {
+                                if let Some(recv) = &p.receiver_class {
+                                    f.param_receiver_types.push((pi, recv.clone()));
+                                }
+                            }
                             f.annotations = m
                                 .annotations
                                 .iter()
@@ -9162,8 +9184,41 @@ fn lower_expr(
                                 descriptor: format!("L{};", comp_name),
                             },
                         });
+                        // Look up the target method's param_receiver_types
+                        // so a lambda-with-receiver param (e.g.
+                        // `init: Tree<T>.() -> Unit` on a companion's
+                        // `of(...)` factory) gets its receiver type
+                        // plumbed into the lambda's invoke method. Without
+                        // this, `Tree.of("x") { child(...) }` fails to
+                        // resolve `child` inside the lambda body.
+                        // PackageSymbolTable registers every class — including
+                        // this file's own — as a cross-file stub. The stub
+                        // has empty `param_receiver_types` because the
+                        // stub-builder synthesizes parameter types but not
+                        // the receiver-type metadata. Prefer the entry
+                        // that actually carries the metadata for the method.
+                        let param_recv_types: Vec<(usize, String)> = module
+                            .classes
+                            .iter()
+                            .filter(|c| c.name == comp_name)
+                            .find_map(|c| {
+                                c.methods
+                                    .iter()
+                                    .find(|m| {
+                                        m.name == method_str && !m.param_receiver_types.is_empty()
+                                    })
+                                    .map(|m| m.param_receiver_types.clone())
+                            })
+                            .unwrap_or_default();
                         let mut arg_locals = vec![instance_local];
-                        for a in args {
+                        for (arg_idx, a) in args.iter().enumerate() {
+                            if let Some((_, recv_ty)) =
+                                param_recv_types.iter().find(|(idx, _)| *idx == arg_idx)
+                            {
+                                if matches!(&a.expr, Expr::Lambda { .. }) {
+                                    module.lambda_receiver_type = Some(recv_ty.clone());
+                                }
+                            }
                             let id = lower_expr(
                                 &a.expr,
                                 fb,
@@ -9177,6 +9232,7 @@ fn lower_expr(
                             )?;
                             arg_locals.push(id);
                         }
+                        module.lambda_receiver_type = None; // clear after the call
                         let dest = fb.new_local(ret_ty);
                         fb.push_stmt(MStmt::Assign {
                             dest,
@@ -13646,12 +13702,85 @@ fn lower_expr(
             let mut named_pairs: Vec<(Option<Symbol>, LocalId)> = Vec::new();
             // Look up param_receiver_types for the target function so
             // we can set lambda_receiver_type before lowering lambda args.
+            //
+            // For bare-Ident callees that aren't in `name_to_func`
+            // (e.g. inside a lambda-with-receiver body where `child(...)`
+            // resolves to `this.child(...)`), fall back to the implicit-
+            // `this` method lookup so the inner lambda also gets its
+            // receiver type plumbed in. Without this, nested
+            // DSL-builder calls produce inner lambdas typed as Function0
+            // when they should be Function1<Receiver, _>, and the
+            // surrounding call fails at runtime with
+            // IncompatibleClassChangeError.
             let param_recv_types: Vec<(usize, String)> = name_to_func
                 .get(&callee_name)
                 .map(|fid| {
                     module.functions[fid.0 as usize]
                         .param_receiver_types
                         .clone()
+                })
+                .or_else(|| {
+                    let this_sym = interner.intern("this");
+                    let this_info = scope.iter().rev().find(|(s, _)| *s == this_sym)?;
+                    let this_ty = fb.mf.locals[this_info.1 .0 as usize].clone();
+                    let class_name = match this_ty {
+                        Ty::Class(n) => n,
+                        _ => return None,
+                    };
+                    let mut search = Some(class_name);
+                    while let Some(ref cname) = search {
+                        // PackageSymbolTable can register the same JVM name
+                        // twice — once as the real MirClass (from the file
+                        // that owns it) and once as a cross-file stub.
+                        // Prefer the entry that actually carries metadata
+                        // for the method.
+                        let cls_with =
+                            module
+                                .classes
+                                .iter()
+                                .filter(|c| &c.name == cname)
+                                .find_map(|c| {
+                                    c.methods
+                                        .iter()
+                                        .find(|m| {
+                                            m.name == callee_str
+                                                && !m.param_receiver_types.is_empty()
+                                        })
+                                        .map(|m| (c, m))
+                                });
+                        let (cls, m) = match cls_with {
+                            Some(pair) => pair,
+                            None => {
+                                let cls = module.classes.iter().find(|c| &c.name == cname)?;
+                                let m = cls.methods.iter().find(|m| m.name == callee_str);
+                                match m {
+                                    Some(m) => (cls, m),
+                                    None => {
+                                        search = cls.super_class.clone();
+                                        continue;
+                                    }
+                                }
+                            }
+                        };
+                        // `cls` participates in the next-iteration search
+                        // fallthrough below. Keep it bound by name.
+                        let _ = cls;
+                        // `param_receiver_types` is indexed by
+                        // AST-level position (excluding `this`) at the
+                        // recording sites — same shape the call site's
+                        // `arg_idx` uses — so pass it through unchanged.
+                        return Some(
+                            m.param_receiver_types
+                                .iter()
+                                .map(|(idx, ty)| (*idx, ty.clone()))
+                                .collect(),
+                        );
+                        #[allow(unreachable_code)]
+                        {
+                            search = cls.super_class.clone();
+                        }
+                    }
+                    None
                 })
                 .unwrap_or_default();
             // Get the parameter types of the target so we can expand
@@ -13680,6 +13809,9 @@ fn lower_expr(
             for (arg_idx, a) in args.iter().enumerate() {
                 // If this arg position has a receiver type and the arg
                 // is a lambda, set the receiver type flag.
+                let is_receiver_lambda_arg =
+                    param_recv_types.iter().any(|(idx, _)| *idx == arg_idx)
+                        && matches!(&a.expr, Expr::Lambda { .. });
                 if let Some((_, recv_ty)) = param_recv_types.iter().find(|(idx, _)| *idx == arg_idx)
                 {
                     if matches!(&a.expr, Expr::Lambda { .. }) {
@@ -13697,7 +13829,14 @@ fn lower_expr(
                 // slot, propagate `T` so the lambda helper's invoke descriptor
                 // uses the primitive/concrete type (matches kotlinc; otherwise
                 // we'd erase to Object and emit an unbox in the helper body).
-                if matches!(&a.expr, Expr::Lambda { .. }) {
+                //
+                // Skip when the lambda already has a receiver type set —
+                // the receiver IS the lambda's only param, and setting
+                // both flags adds a phantom `it` to the invoke signature,
+                // bumping the interface from Function1 to Function2 and
+                // breaking the JVM verifier on `(Box, Object)V` shapes
+                // that should have been `(Box)V`.
+                if matches!(&a.expr, Expr::Lambda { .. }) && !is_receiver_lambda_arg {
                     // First try the structured `Ty::Function` form. If the
                     // callee's param was erased to
                     // `kotlin/jvm/functions/FunctionN` at decl-lowering
@@ -24414,7 +24553,7 @@ fn lower_class(
         // Add explicit parameters. Use resolve_type_ref so function-typed
         // params (e.g. `block: () -> Unit`) resolve to Ty::Function rather
         // than Ty::Unit (which is the bare return type's name).
-        for p in &method.params {
+        for (pi, p) in method.params.iter().enumerate() {
             let ty = resolve_type_ref(&p.ty, interner, module);
             let id = fb.new_local(ty);
             fb.mf.params.push(id);
@@ -24430,6 +24569,20 @@ fn lower_class(
                         .map(|tr| resolve_type_ref(tr, interner, module))
                         .collect();
                 fb.mf.local_generic_args.insert(id.0, arg_tys);
+            }
+            // Lambda-with-receiver param (e.g. `init: Tree<T>.() -> Unit`
+            // on `fun child(value: T, init: Tree<T>.() -> Unit)`) needs
+            // its receiver type plumbed to the call site so the lambda's
+            // invoke method binds `this` to the receiver. Indexed by
+            // AST-level position (excluding the implicit `this`) so the
+            // call site can compare directly against `arg_idx`.
+            if p.ty.has_receiver {
+                if let Some(fparams) = p.ty.func_params.as_ref() {
+                    if let Some(recv) = fparams.first() {
+                        let recv_name = interner.resolve(recv.name).to_string();
+                        fb.mf.param_receiver_types.push((pi, recv_name));
+                    }
+                }
             }
         }
 
@@ -24616,9 +24769,47 @@ fn lower_class(
             );
         }
 
-        // Write back all field locals to the object. This ensures that
-        // mutations like `count = count + 1` persist after the method returns.
+        // Write back field locals to the object so mutations like
+        // `count = count + 1` persist. Skip fields that the body never
+        // assigned to AND that are `var` (mutable) — for those, the
+        // local mirror is a STALE snapshot of the field's pre-method
+        // value; if a nested method call mutated the field via
+        // putfield, our writeback would clobber it back to the stale
+        // value (root cause of the "Tree.child silently undoes
+        // Tree.appendChild" bug). Writing back unmodified `val`
+        // fields is fine (they can't change) and matches the existing
+        // behavior, so the optimizer's existing dead-store elimination
+        // can handle it.
+        let var_field_set: rustc_hash::FxHashSet<&str> =
+            var_field_names.iter().map(|s| s.as_str()).collect();
+        let mut written_field_locals: rustc_hash::FxHashSet<u32> = rustc_hash::FxHashSet::default();
+        for block in &fb.mf.blocks {
+            for stmt in &block.stmts {
+                let MStmt::Assign { dest, value } = stmt;
+                if let Some((field_name_for_local, _)) =
+                    field_locals.iter().find(|(_, l)| l.0 == dest.0)
+                {
+                    let is_initial_load = matches!(
+                        value,
+                        Rvalue::GetField { receiver, field_name: fname, .. }
+                            if *receiver == this_local && fname == field_name_for_local
+                    );
+                    if !is_initial_load {
+                        written_field_locals.insert(dest.0);
+                    }
+                }
+            }
+        }
         for (field_name, field_local) in &field_locals {
+            let is_var = var_field_set.contains(field_name.as_str());
+            // For `var` fields: writeback only if the body actually
+            // wrote to the local (would-clobber risk otherwise).
+            // For `val` fields: always writeback — they can't change,
+            // so the writeback is a redundant no-op the JVM optimizer
+            // can remove without risk.
+            if is_var && !written_field_locals.contains(&field_local.0) {
+                continue;
+            }
             fb.push_stmt(MStmt::Assign {
                 dest: this_local, // dummy dest
                 value: Rvalue::PutField {
@@ -25041,11 +25232,44 @@ fn lower_class(
             // `mir-lower:15577` and reach the Companion class's methods.
             let this_sym = interner.intern("this");
             let mut scope: Vec<(Symbol, LocalId)> = vec![(this_sym, this_local)];
-            for p in &method.params {
-                let ty = resolve_type(interner.resolve(p.ty.name), module);
+            for (pi, p) in method.params.iter().enumerate() {
+                // Function-typed params (`init: Tree<T>.() -> Unit`) need to
+                // erase to `kotlin/jvm/functions/FunctionN` for the JVM
+                // descriptor; `resolve_type` only sees the param's
+                // `name` field, which for function types is the RETURN
+                // type's name (`Unit` here). Detect the function-type
+                // shape from `func_params` first and emit the right
+                // erased interface — otherwise the descriptor comes out
+                // `(LObject;LUnit;)LTree;` instead of
+                // `(LObject;LFunction1;)LTree;` and runtime
+                // `NoSuchMethodError`s fire at every call site.
+                let ty = if p.ty.func_params.is_some() {
+                    let arity = p.ty.func_params.as_ref().map(|fp| fp.len()).unwrap_or(0);
+                    Ty::Class(format!("kotlin/jvm/functions/Function{arity}"))
+                } else {
+                    resolve_type(interner.resolve(p.ty.name), module)
+                };
                 let id = fb.new_local(ty);
                 fb.mf.params.push(id);
                 scope.push((p.name, id));
+                // Record lambda-with-receiver params (`init: Tree<T>.() -> Unit`)
+                // so call sites can plumb the receiver type into the
+                // lambda's invoke method body. Without this, bare-name
+                // calls inside the lambda (`child(...)` / `leaf(...)`)
+                // fail to resolve because `this` isn't typed as the
+                // receiver class.
+                if p.ty.has_receiver {
+                    if let Some(ref fparams) = p.ty.func_params {
+                        if !fparams.is_empty() {
+                            let recv_name = interner.resolve(fparams[0].name).to_string();
+                            // +1 because companion-method param indices on
+                            // the MirFunction start at 1 (param 0 is the
+                            // implicit `this`/Companion receiver), but call
+                            // sites count from 0 over user-visible args.
+                            fb.mf.param_receiver_types.push((pi, recv_name));
+                        }
+                    }
+                }
             }
             for s in &method.body.stmts {
                 lower_stmt(

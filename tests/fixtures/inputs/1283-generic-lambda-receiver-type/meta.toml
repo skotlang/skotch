@@ -1,0 +1,4 @@
+name = "1283-generic-lambda-receiver-type"
+status = "supported"
+features = ["lambda-with-receiver", "generics", "dsl-builder"]
+reason = "Locks in parser support for `Tree<T>.() -> Unit` (lambda-with-receiver on a generic type) AND the implicit-this method dispatcher's lookup of receiver-typed method params for in-file class methods."

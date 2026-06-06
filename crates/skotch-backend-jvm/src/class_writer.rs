@@ -13647,6 +13647,18 @@ fn walk_block(
         if matches!(value, Rvalue::Local(_)) && is_unused_local(*dest) {
             continue;
         }
+        // Field-cache reads (`field_local = GetField { this }`) that the
+        // body never observes are pure too — kotlinc just doesn't read
+        // the field. Without skipping the whole assign, the `getfield`
+        // gets emitted but the astore is elided (the dest is unused),
+        // leaving the field value lingering on the operand stack and
+        // corrupting downstream arithmetic (fixture 97-operator-plus
+        // regressed from `Vec2(x=4,y=6)` to `Vec2(x=5,y=5)` exactly
+        // this way: the field-x read pushed onto the stack and the
+        // *next* arithmetic op picked it up as a phantom rhs).
+        if matches!(value, Rvalue::GetField { .. }) && is_unused_local(*dest) {
+            continue;
+        }
         // `Rvalue::GetStaticField` assigns where the destination is in
         // `INLINABLE_GETSTATIC` are inlined at use sites (kotlinc emits
         // `getstatic` at each read instead of materializing to a slot).
@@ -14290,6 +14302,55 @@ fn walk_block(
                                     block_idx,
                                 });
                             }
+                            store_local(code, stack, slots, next_slot, *dest, &func.locals);
+                            continue;
+                        }
+
+                        // Reference-vs-null comparison: `nullable_ref == null`
+                        // / `nullable_ref != null` must compile to
+                        // `if_acmp{eq,ne}` rather than
+                        // `Object.equals(null)` — invoking equals on a
+                        // null receiver throws NPE at runtime. The
+                        // INLINABLE_CONSTS lookup tells us whether the
+                        // rhs is a compile-time `null` literal; the lhs
+                        // can be any reference type (including
+                        // `Ty::Class(_)`, which the path below would
+                        // otherwise route through `Object.equals(...)`).
+                        let rhs_is_null_lit = INLINABLE_CONSTS
+                            .with(|cell| matches!(cell.borrow().get(&rhs.0), Some(MirConst::Null)));
+                        if rhs_is_null_lit
+                            && matches!(op, MBinOp::CmpEq | MBinOp::CmpNe)
+                            && matches!(
+                                lhs_ty,
+                                Ty::Class(_) | Ty::Nullable(_) | Ty::String | Ty::Any
+                            )
+                        {
+                            let branch_op = if *op == MBinOp::CmpEq {
+                                0xA6 // if_acmpne — pops both, branches when NOT equal → push 0
+                            } else {
+                                0xA5 // if_acmpeq — branches when EQUAL → push 0
+                            };
+                            let cmp_start = code.len();
+                            code.push(branch_op);
+                            code.write_i16::<BigEndian>(7).unwrap();
+                            bump(stack, max_stack, -2);
+                            code.push(0x04); // iconst_1 (TRUE — fall-through)
+                            bump(stack, max_stack, 1);
+                            code.push(0xA7); // goto L_end
+                            code.write_i16::<BigEndian>(4).unwrap();
+                            code.push(0x03); // iconst_0 (FALSE — branch target)
+                            cmp_targets.push(CmpBranchTarget {
+                                offset: cmp_start + 7,
+                                stack_count: 0,
+                                cmp_start,
+                                block_idx,
+                            });
+                            cmp_targets.push(CmpBranchTarget {
+                                offset: cmp_start + 8,
+                                stack_count: 1,
+                                cmp_start,
+                                block_idx,
+                            });
                             store_local(code, stack, slots, next_slot, *dest, &func.locals);
                             continue;
                         }

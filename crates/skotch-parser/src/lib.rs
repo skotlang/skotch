@@ -2163,6 +2163,55 @@ impl<'a> Parser<'a> {
             Vec::new()
         };
 
+        // Receiver function type with generic receiver: `Tree<T>.() -> R`.
+        // The bare `Type.()` form was handled above before the type-args
+        // block; this is the post-generic equivalent. Both shapes encode
+        // the receiver as `func_params[0]` and set `has_receiver = true`.
+        if self.peek_kind() == TokenKind::Dot && self.peek_kind_at(1) == TokenKind::LParen {
+            self.bump(); // consume `.`
+            self.bump(); // consume `(`
+            self.skip_trivia();
+            let mut param_types = Vec::new();
+            if self.peek_kind() != TokenKind::RParen {
+                loop {
+                    self.skip_trivia();
+                    param_types.push(self.parse_type_ref());
+                    self.skip_trivia();
+                    if !self.eat(TokenKind::Comma) {
+                        break;
+                    }
+                }
+            }
+            self.expect(TokenKind::RParen, ")");
+            self.skip_trivia();
+            self.expect(TokenKind::Arrow, "->");
+            self.skip_trivia();
+            let ret = self.parse_type_ref();
+            let end = ret.span;
+            let receiver_type = TypeRef {
+                name,
+                nullable: false,
+                func_params: None,
+                type_args,
+                is_suspend: false,
+                is_composable: false,
+                has_receiver: false,
+                span,
+            };
+            let mut all_params = vec![receiver_type];
+            all_params.extend(param_types);
+            return TypeRef {
+                name: ret.name,
+                nullable: false,
+                func_params: Some(all_params),
+                type_args: Vec::new(),
+                is_suspend: false,
+                is_composable: false,
+                has_receiver: true,
+                span: span.merge(end),
+            };
+        }
+
         let mut end = span;
         let nullable = if self.peek_kind() == TokenKind::Question {
             end = self.peek_span();

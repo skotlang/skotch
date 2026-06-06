@@ -153,6 +153,14 @@ pub struct ExternalParam {
     /// True when the source declaration used the `vararg` modifier.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub is_vararg: bool,
+    /// When the param type is a lambda-with-receiver (`Foo.() -> R`),
+    /// this is the simple receiver class name (`Foo`). Used by the
+    /// cross-file call-site dispatcher to set
+    /// `MirModule::lambda_receiver_type` before lowering the lambda
+    /// arg, so the lambda body's bare-name method calls
+    /// (`add(1)` / `child(...)`) resolve as `this.add(1)`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub receiver_class: Option<String>,
 }
 
 impl ExternalParam {
@@ -162,6 +170,7 @@ impl ExternalParam {
             ty,
             has_default: false,
             is_vararg: false,
+            receiver_class: None,
         }
     }
 }
@@ -715,11 +724,20 @@ fn ext_param_from_param(
     imports: &FxHashMap<String, String>,
     aliases: &FxHashMap<String, TypeRef>,
 ) -> ExternalParam {
+    let receiver_class = if p.ty.has_receiver {
+        p.ty.func_params
+            .as_ref()
+            .and_then(|fps| fps.first())
+            .map(|recv| interner.resolve(recv.name).to_string())
+    } else {
+        None
+    };
     ExternalParam {
         name: interner.resolve(p.name).to_string(),
         ty: type_ref_to_ty_with_aliases(&p.ty, interner, imports, aliases),
         has_default: p.default.is_some(),
         is_vararg: p.is_vararg,
+        receiver_class,
     }
 }
 
@@ -737,6 +755,7 @@ fn ext_param_from_ctor_param(
         // when it does, populate here.
         has_default: false,
         is_vararg: false,
+        receiver_class: None,
     }
 }
 
