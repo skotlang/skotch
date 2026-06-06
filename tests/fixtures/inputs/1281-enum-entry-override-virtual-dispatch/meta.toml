@@ -1,0 +1,4 @@
+name = "1281-enum-entry-override-virtual-dispatch"
+status = "supported"
+features = ["enum", "interface", "per-entry-override"]
+reason = "Locks in the virtual-dispatch fix: per-entry enum overrides now land as real virtual methods on the enum class so interface-typed call sites resolve through invokeinterface."

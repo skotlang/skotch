@@ -1,0 +1,4 @@
+name = "1280-secondary-ctor-cross-file-stub"
+status = "supported"
+features = ["secondary-constructor", "class"]
+reason = "Locks in audit fix #2: secondary ctor metadata is plumbed through ExternalClassDecl.secondary_ctors and MirClass.secondary_constructors so the backend's arity-based dispatcher matches the right `<init>` descriptor for each call shape."

@@ -1,24 +1,29 @@
-// Regression for audit finding #7: enums can implement interfaces.
-// Previously EnumDecl had no `interfaces` field — the parser silently
-// dropped `enum class Op : Calculable`. Now the AST carries the
-// interface list and the JVM class file lists the interface in its
-// `interfaces` table.
-//
-// The interface's method has a default body so per-entry overrides
-// (which skotch doesn't lower as anonymous-class subclasses today)
-// aren't needed — the test isolates the audit fix from that
-// separate gap.
+// Regression for audit finding #7: enums can implement interfaces,
+// per-entry overrides land as virtual methods on the enum class,
+// AND chained `EnumName.ENTRY.method(args)` resolves to the
+// per-entry virtual dispatcher (was returning null because the
+// dispatch_name lookup only handled abstract-on-enum-body methods).
 interface Calculable {
-    fun apply(a: Int, b: Int): Int = a + b
+    fun apply(a: Int, b: Int): Int
 }
 
 enum class Op : Calculable {
-    PLUS, MINUS;
+    PLUS {
+        override fun apply(a: Int, b: Int): Int = a + b
+    },
+    TIMES {
+        override fun apply(a: Int, b: Int): Int = a * b
+    };
 }
 
 fun main() {
+    // Through an interface-typed reference.
     val plus: Calculable = Op.PLUS
-    val minus: Calculable = Op.MINUS
+    val times: Calculable = Op.TIMES
     println(plus.apply(2, 3))
-    println(minus.apply(7, 4))
+    println(times.apply(5, 6))
+    // Chained direct-on-entry call — used to drop to a null
+    // placeholder before the virtual-dispatcher fallback landed.
+    println(Op.PLUS.apply(10, 20))
+    println(Op.TIMES.apply(4, 8))
 }

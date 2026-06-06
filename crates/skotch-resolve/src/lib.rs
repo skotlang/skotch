@@ -335,6 +335,15 @@ pub struct ExternalClassDecl {
     /// external class.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub has_type_params: bool,
+    /// True when the source declaration carries one or more `init { }`
+    /// blocks. The blocks themselves are not surfaced cross-file (the
+    /// constructor body lives in the producing file), but downstream
+    /// purity / side-effect analyses need to know the `<init>` is not
+    /// a pure field assignment so they don't accidentally treat the
+    /// class as `data`-class-equivalent for short-circuit equality or
+    /// similar reasoning.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub has_init_blocks: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -892,6 +901,21 @@ fn gather_class_recursive(
     } else {
         ExternalClassKind::Class
     };
+    let jvm_name_pre = format!("{fq_outer}{simple_name}");
+    // Per-class imports overlay: includes nested classes so a body
+    // method's return or param type that names a sibling nested class
+    // (`fun makeNested(): Nested = ...`) resolves to `Outer$Nested`
+    // rather than collapsing to Any. Without this, the cross-file
+    // method descriptor would be `(I)Ljava/lang/Object;` while the
+    // real bytecode is `(I)LOuter$Nested;` and the runtime fails with
+    // NoSuchMethodError.
+    let mut class_imports = imports.clone();
+    for n in &c.nested_classes {
+        let nested_simple = interner.resolve(n.name).to_string();
+        let nested_jvm = format!("{jvm_name_pre}${nested_simple}");
+        class_imports.entry(nested_simple).or_insert(nested_jvm);
+    }
+    let imports = &class_imports;
     let (fields, ctor_params) =
         build_class_ctor_shape(&c.constructor_params, interner, imports, aliases);
     let property_getters: Vec<ExternalMethod> = c
@@ -930,7 +954,7 @@ fn gather_class_recursive(
         .collect();
     let (super_class, iface_names) =
         build_supertypes(c.parent_class.as_ref(), &c.interfaces, interner);
-    let jvm_name = format!("{fq_outer}{simple_name}");
+    let jvm_name = jvm_name_pre;
     let ext = ExternalClassDecl {
         jvm_name: jvm_name.clone(),
         kind,
@@ -948,6 +972,7 @@ fn gather_class_recursive(
         enum_entries: Vec::new(),
         annotations: annotations_to_strings(&c.annotations, interner),
         has_type_params: !c.type_params.is_empty(),
+        has_init_blocks: !c.init_blocks.is_empty(),
     };
     register_class_in_table(table, &simple_name, ext, diags);
     // Recurse into nested classes — each becomes `Outer$Inner` at the
@@ -1192,6 +1217,7 @@ pub fn gather_declarations(
                         enum_entries: Vec::new(),
                         annotations: Vec::new(),
                         has_type_params: false,
+                        has_init_blocks: false,
                     };
                     register_class_in_table(&mut table, &simple_name, ext, diags);
                 }
@@ -1254,6 +1280,7 @@ pub fn gather_declarations(
                         enum_entries,
                         annotations: Vec::new(),
                         has_type_params: false,
+                        has_init_blocks: false,
                     };
                     register_class_in_table(&mut table, &simple_name, ext, diags);
                 }
@@ -1283,6 +1310,7 @@ pub fn gather_declarations(
                         enum_entries: Vec::new(),
                         annotations: Vec::new(),
                         has_type_params: false,
+                        has_init_blocks: false,
                     };
                     register_class_in_table(&mut table, &simple_name, ext, diags);
                 }

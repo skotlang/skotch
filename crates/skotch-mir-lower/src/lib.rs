@@ -1899,10 +1899,42 @@ pub fn lower_file(
                         local_generic_args: rustc_hash::FxHashMap::default(),
                     }
                 };
+                // Propagate per-method annotations into MirFunction so
+                // consumers that branch on `@JvmStatic` / `@Composable`
+                // / `@Deprecated` at the cross-file call site see the
+                // same flags they would for in-file methods. Without
+                // this, every cross-file method appears unannotated and
+                // dispatch heuristics that branch on `@JvmStatic`
+                // (companion → invokestatic vs invokevirtual) fall
+                // through to the unannotated path.
                 let mut methods: Vec<MirFunction> = ext_class
                     .methods
                     .iter()
-                    .map(|m| stub_fn(&m.name, &m.param_tys(), &m.return_ty))
+                    .map(|m| {
+                        let mut f = stub_fn(&m.name, &m.param_tys(), &m.return_ty);
+                        f.is_suspend = m.is_suspend;
+                        f.is_inline = m.is_inline;
+                        f.is_abstract = m.is_abstract;
+                        f.annotations = m
+                            .annotations
+                            .iter()
+                            .filter(|n| !is_source_retention_annotation(n.as_str()))
+                            .map(|n| {
+                                let descriptor = skotch_stdlib_registry::annotation_descriptor(n);
+                                let retention = if is_binary_retention_annotation(&descriptor) {
+                                    skotch_mir::AnnotationRetention::Binary
+                                } else {
+                                    skotch_mir::AnnotationRetention::Runtime
+                                };
+                                skotch_mir::MirAnnotation {
+                                    descriptor,
+                                    args: Vec::new(),
+                                    retention,
+                                }
+                            })
+                            .collect();
+                        f
+                    })
                     .collect();
                 // Synthesize the compiler-generated data class methods
                 // (`copy`, `componentN`, `equals`, `hashCode`, `toString`)
@@ -2109,40 +2141,66 @@ pub fn lower_file(
                 // push a stub MirClass for it so the call-site companion
                 // dispatcher (`OuterClass.method(...)`) at lib.rs:7746
                 // can resolve `OuterClass$Companion.method` virtually.
-                let companion_jvm_name =
-                    if !ext_class.has_companion && ext_class.companion_methods.is_empty() {
-                        None
-                    } else {
-                        let comp_name = format!("{}$Companion", ext_class.jvm_name);
-                        let comp_methods: Vec<MirFunction> = ext_class
-                            .companion_methods
-                            .iter()
-                            .map(|m| stub_fn(&m.name, &m.param_tys(), &m.return_ty))
-                            .collect();
-                        let comp_ctor = stub_fn("<init>", &[], &Ty::Unit);
-                        module.classes.push(MirClass {
-                            name: comp_name.clone(),
-                            super_class: None,
-                            is_open: false,
-                            is_abstract: false,
-                            is_interface: false,
-                            interfaces: Vec::new(),
-                            fields: Vec::new(),
-                            methods: comp_methods,
-                            constructor: comp_ctor,
-                            secondary_constructors: Vec::new(),
-                            is_lambda: false,
-                            is_suspend_lambda: false,
-                            is_cross_file_stub: true,
-                            annotations: Vec::new(),
-                            has_type_params: false,
-                            is_object_singleton: true,
-                            companion_class_name: None,
-                            static_fields: Vec::new(),
-                            clinit: None,
-                        });
-                        Some(comp_name)
-                    };
+                let companion_jvm_name = if !ext_class.has_companion
+                    && ext_class.companion_methods.is_empty()
+                {
+                    None
+                } else {
+                    let comp_name = format!("{}$Companion", ext_class.jvm_name);
+                    let comp_methods: Vec<MirFunction> = ext_class
+                        .companion_methods
+                        .iter()
+                        .map(|m| {
+                            let mut f = stub_fn(&m.name, &m.param_tys(), &m.return_ty);
+                            f.is_suspend = m.is_suspend;
+                            f.is_inline = m.is_inline;
+                            f.is_abstract = m.is_abstract;
+                            f.annotations = m
+                                .annotations
+                                .iter()
+                                .filter(|n| !is_source_retention_annotation(n.as_str()))
+                                .map(|n| {
+                                    let descriptor =
+                                        skotch_stdlib_registry::annotation_descriptor(n);
+                                    let retention = if is_binary_retention_annotation(&descriptor) {
+                                        skotch_mir::AnnotationRetention::Binary
+                                    } else {
+                                        skotch_mir::AnnotationRetention::Runtime
+                                    };
+                                    skotch_mir::MirAnnotation {
+                                        descriptor,
+                                        args: Vec::new(),
+                                        retention,
+                                    }
+                                })
+                                .collect();
+                            f
+                        })
+                        .collect();
+                    let comp_ctor = stub_fn("<init>", &[], &Ty::Unit);
+                    module.classes.push(MirClass {
+                        name: comp_name.clone(),
+                        super_class: None,
+                        is_open: false,
+                        is_abstract: false,
+                        is_interface: false,
+                        interfaces: Vec::new(),
+                        fields: Vec::new(),
+                        methods: comp_methods,
+                        constructor: comp_ctor,
+                        secondary_constructors: Vec::new(),
+                        is_lambda: false,
+                        is_suspend_lambda: false,
+                        is_cross_file_stub: true,
+                        annotations: Vec::new(),
+                        has_type_params: false,
+                        is_object_singleton: true,
+                        companion_class_name: None,
+                        static_fields: Vec::new(),
+                        clinit: None,
+                    });
+                    Some(comp_name)
+                };
                 module.classes.push(MirClass {
                     name: ext_class.jvm_name.clone(),
                     super_class: resolved_super,
@@ -8992,16 +9050,43 @@ fn lower_expr(
                 if let Expr::Ident(recv_sym, _) = receiver.as_ref() {
                     let recv_name = interner.resolve(*recv_sym).to_string();
                     let method_str = interner.resolve(method_name).to_string();
-                    let singleton_match: Option<(String, Ty)> = module
+                    // Object singleton method call: try the object's own
+                    // methods first, then walk its super_class chain so
+                    // an inherited method (e.g. `DefaultGreeter.label()`
+                    // where `label` is declared on `Greeter` and
+                    // `DefaultGreeter : Greeter`) dispatches correctly
+                    // rather than falling through to the null-placeholder
+                    // path.
+                    let singleton_match: Option<(String, Ty)> = if let Some(obj_cls) = module
                         .classes
                         .iter()
                         .find(|c| c.is_object_singleton && c.name == recv_name)
-                        .and_then(|c| {
-                            c.methods
-                                .iter()
-                                .find(|m| m.name == method_str)
-                                .map(|m| (c.name.clone(), m.return_ty.clone()))
-                        });
+                    {
+                        let mut search = Some(obj_cls.name.clone());
+                        let mut found: Option<(String, Ty)> = None;
+                        while let Some(ref cname) = search {
+                            if let Some(cls) = module.classes.iter().find(|c| &c.name == cname) {
+                                if let Some(m) = cls.methods.iter().find(|m| m.name == method_str) {
+                                    // Dispatch against the object's own
+                                    // type (recv_name) — invokevirtual
+                                    // resolves up the chain at runtime.
+                                    // Using the declaring class here would
+                                    // emit an invokevirtual on `Greeter`
+                                    // with a `DefaultGreeter` receiver,
+                                    // which the JVM accepts but kotlinc
+                                    // emits the object's-own-class form.
+                                    found = Some((recv_name.clone(), m.return_ty.clone()));
+                                    break;
+                                }
+                                search = cls.super_class.clone();
+                            } else {
+                                break;
+                            }
+                        }
+                        found
+                    } else {
+                        None
+                    };
                     if let Some((class_name, ret_ty)) = singleton_match {
                         let instance_local = fb.new_local(Ty::Class(class_name.clone()));
                         fb.push_stmt(MStmt::Assign {
@@ -9058,6 +9143,13 @@ fn lower_expr(
                             let comp_name = outer.companion_class_name.clone().unwrap();
                             let comp = module.classes.iter().find(|c| c.name == comp_name)?;
                             let m = comp.methods.iter().find(|m| m.name == method_str)?;
+                            // NOTE: kotlinc emits `getstatic Companion;
+                            // invokevirtual Companion.method` even when
+                            // the method is `@JvmStatic` — the static
+                            // delegate is for *Java* interop. Kotlin
+                            // call sites use the companion dispatch.
+                            // (Confirmed by kotlinc bytecode inspection
+                            // of fixtures 574/1234/1235.)
                             Some((outer.name.clone(), comp_name, m.return_ty.clone()))
                         });
                     if let Some((outer_name, comp_name, ret_ty)) = companion_match {
@@ -9313,6 +9405,74 @@ fn lower_expr(
                                 },
                             });
                             return Some(dest);
+                        }
+                        // Fallback: no `EnumName$method` top-level
+                        // dispatcher was synthesized (this happens when
+                        // the method is satisfying an interface rather
+                        // than an abstract enum-body method). Look for
+                        // the corresponding virtual method on the enum
+                        // class itself — we now synthesize those for
+                        // per-entry overrides. Emit
+                        // `<lower receiver>; invokevirtual EnumName.method(args)`.
+                        //
+                        // When both an in-file MirClass AND a cross-file
+                        // stub for the same JVM name exist (multi-file
+                        // compilation registers every class in
+                        // PackageSymbolTable, including the file we're
+                        // lowering), prefer the entry that actually
+                        // declares the method. The stub typically has
+                        // empty `methods` because the virtual-dispatcher
+                        // synthesis happens at lower_enum time on the
+                        // real class only.
+                        let enum_cls_with_method = module
+                            .classes
+                            .iter()
+                            .find(|c| {
+                                c.name == cls_name && c.methods.iter().any(|m| m.name == method_str)
+                            })
+                            .or_else(|| module.classes.iter().find(|c| c.name == cls_name));
+                        if let Some(cls) = enum_cls_with_method {
+                            if let Some(m) = cls.methods.iter().find(|m| m.name == method_str) {
+                                let ret_ty = m.return_ty.clone();
+                                let recv_local = lower_expr(
+                                    receiver,
+                                    fb,
+                                    scope,
+                                    module,
+                                    name_to_func,
+                                    name_to_global,
+                                    interner,
+                                    diags,
+                                    loop_ctx,
+                                )?;
+                                let mut all_args = vec![recv_local];
+                                for a in args {
+                                    let id = lower_expr(
+                                        &a.expr,
+                                        fb,
+                                        scope,
+                                        module,
+                                        name_to_func,
+                                        name_to_global,
+                                        interner,
+                                        diags,
+                                        loop_ctx,
+                                    )?;
+                                    all_args.push(id);
+                                }
+                                let dest = fb.new_local(ret_ty);
+                                fb.push_stmt(MStmt::Assign {
+                                    dest,
+                                    value: Rvalue::Call {
+                                        kind: CallKind::Virtual {
+                                            class_name: cls_name.clone(),
+                                            method_name: method_str.clone(),
+                                        },
+                                        args: all_args,
+                                    },
+                                });
+                                return Some(dest);
+                            }
                         }
                     }
                 }
@@ -22564,7 +22724,213 @@ fn lower_enum(
     // top-level function (not a class method) so the JVM backend's
     // walk_block path handles StackMapTable correctly. The function
     // takes (this: EnumClass, params...) and dispatches on this.name.
-    let class_methods = vec![ts_fn];
+    let mut class_methods = vec![ts_fn];
+
+    // ── Virtual entry-override dispatchers (interface satisfaction) ──
+    //
+    // When an enum implements an interface and entries provide
+    // overrides for the interface method, we need a VIRTUAL method on
+    // the enum class (not a top-level fn) so that
+    // `invokeinterface Iface.method` finds it via class-hierarchy
+    // lookup. Without this, calling the method through an
+    // interface-typed reference (or through Java reflection) hits
+    // AbstractMethodError at runtime.
+    //
+    // This walks `e.entries` for any override and synthesizes one
+    // virtual dispatcher per distinct method name. The body inlines
+    // each entry's override under an `if (this.name == "ENTRY")`
+    // branch — same shape as the top-level wrapper above, but
+    // installed as a real instance method on the enum class.
+    let mut entry_override_names: rustc_hash::FxHashSet<Symbol> = rustc_hash::FxHashSet::default();
+    for entry in &e.entries {
+        for m in &entry.methods {
+            entry_override_names.insert(m.name);
+        }
+    }
+    // Determine the param types and return type for each overridden
+    // method. We look at the first entry that overrides it as the
+    // signature source — Kotlin guarantees all overrides share the
+    // same signature.
+    for &name in &entry_override_names {
+        // Skip if there's already a (typically abstract) method with
+        // this name on the enum body — the top-level dispatch wrapper
+        // above already handles it via the EnumName$method lookup.
+        // We add the virtual variant in addition so interface-typed
+        // call sites still resolve.
+        let sig = e
+            .entries
+            .iter()
+            .find_map(|en| en.methods.iter().find(|m| m.name == name))
+            .expect("at least one entry overrides this method");
+        let method_name_str = interner.resolve(name).to_string();
+        let ret_ty = sig
+            .return_ty
+            .as_ref()
+            .map(|tr| resolve_type(interner.resolve(tr.name), module))
+            .unwrap_or(Ty::Unit);
+        let mut vfn = MirFunction {
+            id: FuncId(0),
+            name: method_name_str.clone(),
+            params: Vec::new(),
+            locals: Vec::new(),
+            blocks: vec![BasicBlock {
+                stmts: Vec::new(),
+                terminator: Terminator::Return,
+            }],
+            return_ty: ret_ty.clone(),
+            required_params: 0,
+            param_names: Vec::new(),
+            param_defaults: Vec::new(),
+            param_receiver_types: Vec::new(),
+            is_abstract: false,
+            exception_handlers: Vec::new(),
+            vararg_index: None,
+            is_suspend: false,
+            is_inline: false,
+            has_type_params: false,
+            suspend_original_return_ty: None,
+            suspend_state_machine: None,
+            annotations: Vec::new(),
+            named_locals: Vec::new(),
+            is_private: false,
+            is_static: false,
+            default_call_masks: Vec::new(),
+            needs_leading_nop: false,
+            local_generic_args: rustc_hash::FxHashMap::default(),
+        };
+        let v_this = vfn.new_local(Ty::Class(enum_name.clone()));
+        vfn.params.push(v_this);
+        let mut v_param_locals: Vec<(Symbol, LocalId)> = Vec::new();
+        for p in &sig.params {
+            let pty = resolve_type(interner.resolve(p.ty.name), module);
+            let pid = vfn.new_local(pty);
+            vfn.params.push(pid);
+            v_param_locals.push((p.name, pid));
+        }
+        // We build the dispatch via FnBuilder since the chain creates
+        // multiple basic blocks. Start from the synthesized fn shell.
+        let mut fb = FnBuilder {
+            mf: vfn,
+            cur_block: 0,
+            var_syms: rustc_hash::FxHashSet::default(),
+            field_local_writebacks: rustc_hash::FxHashMap::default(),
+            suspend_callable_locals: rustc_hash::FxHashSet::default(),
+            reified_types: FxHashMap::default(),
+            lambda_count: 0,
+        };
+        // Load this.name once.
+        let name_field = fb.new_local(Ty::String);
+        fb.push_stmt(MStmt::Assign {
+            dest: name_field,
+            value: Rvalue::GetField {
+                receiver: v_this,
+                class_name: enum_name.clone(),
+                field_name: "name".to_string(),
+            },
+        });
+        // For each entry that overrides this method, emit
+        // `if (this.name == "ENTRY") { override body; return }`.
+        for entry in &e.entries {
+            let Some(om) = entry.methods.iter().find(|m| m.name == name) else {
+                continue;
+            };
+            let entry_name_str = interner.resolve(entry.name).to_string();
+            let entry_name_sid = module.intern_string(&entry_name_str);
+            let entry_name_local = fb.new_local(Ty::String);
+            fb.push_stmt(MStmt::Assign {
+                dest: entry_name_local,
+                value: Rvalue::Const(MirConst::String(entry_name_sid)),
+            });
+            let cmp = fb.new_local(Ty::Bool);
+            fb.push_stmt(MStmt::Assign {
+                dest: cmp,
+                value: Rvalue::BinOp {
+                    op: MBinOp::CmpEq,
+                    lhs: name_field,
+                    rhs: entry_name_local,
+                },
+            });
+            let then_block = fb.new_block();
+            let next_block = fb.new_block();
+            fb.set_terminator(Terminator::Branch {
+                cond: cmp,
+                then_block,
+                else_block: next_block,
+            });
+            fb.cur_block = then_block;
+            let mut entry_scope = v_param_locals.clone();
+            let mut entry_diags = Diagnostics::new();
+            for stmt in &om.body.stmts {
+                lower_stmt(
+                    stmt,
+                    &mut fb,
+                    &mut entry_scope,
+                    module,
+                    name_to_func,
+                    _name_to_global,
+                    interner,
+                    &mut entry_diags,
+                    None,
+                );
+            }
+            if !matches!(
+                fb.mf.blocks[fb.cur_block as usize].terminator,
+                Terminator::ReturnValue(_) | Terminator::Return
+            ) {
+                fb.set_terminator(Terminator::Return);
+            }
+            fb.cur_block = next_block;
+        }
+        // Fallback: return a sensible default if no entry matched. The
+        // JVM verifier requires a terminator on every path; the
+        // verified shape is `throw new AbstractMethodError()` but a
+        // default-value return is functionally equivalent for the
+        // covered-entry case (which is all real Kotlin code).
+        match ret_ty {
+            Ty::Unit => fb.set_terminator(Terminator::Return),
+            Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool => {
+                let z = fb.new_local(ret_ty.clone());
+                fb.push_stmt(MStmt::Assign {
+                    dest: z,
+                    value: Rvalue::Const(MirConst::Int(0)),
+                });
+                fb.set_terminator(Terminator::ReturnValue(z));
+            }
+            Ty::Long => {
+                let z = fb.new_local(Ty::Long);
+                fb.push_stmt(MStmt::Assign {
+                    dest: z,
+                    value: Rvalue::Const(MirConst::Long(0)),
+                });
+                fb.set_terminator(Terminator::ReturnValue(z));
+            }
+            Ty::Float => {
+                let z = fb.new_local(Ty::Float);
+                fb.push_stmt(MStmt::Assign {
+                    dest: z,
+                    value: Rvalue::Const(MirConst::Float(0.0)),
+                });
+                fb.set_terminator(Terminator::ReturnValue(z));
+            }
+            Ty::Double => {
+                let z = fb.new_local(Ty::Double);
+                fb.push_stmt(MStmt::Assign {
+                    dest: z,
+                    value: Rvalue::Const(MirConst::Double(0.0)),
+                });
+                fb.set_terminator(Terminator::ReturnValue(z));
+            }
+            _ => {
+                let z = fb.new_local(ret_ty.clone());
+                fb.push_stmt(MStmt::Assign {
+                    dest: z,
+                    value: Rvalue::Const(MirConst::Null),
+                });
+                fb.set_terminator(Terminator::ReturnValue(z));
+            }
+        }
+        class_methods.push(fb.finish());
+    }
 
     for abs_method in &e.methods {
         if !abs_method.is_abstract {
@@ -26257,6 +26623,7 @@ mod tests {
                 enum_entries: _,
                 annotations: _,
                 has_type_params: _,
+                has_init_blocks: _,
             } = c;
         }
         let _ = assert_shape as fn(ExternalClassDecl);

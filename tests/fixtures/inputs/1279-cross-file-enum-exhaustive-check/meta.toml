@@ -1,0 +1,4 @@
+name = "1279-cross-file-enum-exhaustive-check"
+status = "supported"
+features = ["enum", "when-exhaustiveness"]
+reason = "Locks in audit fix #5/#21: cross-file ExternalClassDecl.enum_entries flows into TypeDecl.enum_entries so `when (e: ExternalEnum)` exhaustiveness fires correctly."

@@ -1,17 +1,15 @@
 dex_version   035
-strings       79
+strings       77
 types         24
-methods       18
+methods       20
 classes       5
 
 --- strings ---
   ""
   "$ENTRIES"
   "$VALUES"
-  "$default$apply"
   "$enum$name"
   "$enum$ordinal"
-  "$this"
   "$values"
   "()"
   "()V"
@@ -19,17 +17,15 @@ classes       5
   "<clinit>"
   "<init>"
   ">;"
-  "DefaultImpls"
   "I"
   "III"
-  "ILII"
   "L"
-  "LCalculable$-CC;"
-  "LCalculable$DefaultImpls;"
   "LCalculable;"
   "LInputKt;"
   "LL"
   "LLL"
+  "LOp$PLUS;"
+  "LOp$TIMES;"
   "LOp;"
   "Ldalvik/annotation/EnclosingClass;"
   "Ldalvik/annotation/InnerClass;"
@@ -37,7 +33,6 @@ classes       5
   "Ldalvik/annotation/Signature;"
   "Ljava/io/PrintStream;"
   "Ljava/lang/Class;"
-  "Ljava/lang/Deprecated;"
   "Ljava/lang/Enum;"
   "Ljava/lang/Enum<"
   "Ljava/lang/Object;"
@@ -47,18 +42,20 @@ classes       5
   "Lkotlin/enums/EnumEntries;"
   "Lkotlin/enums/EnumEntries<"
   "Lkotlin/enums/EnumEntriesKt;"
-  "MINUS"
+  "Lkotlin/jvm/internal/DefaultConstructorMarker;"
+  "Op.PLUS"
+  "Op.TIMES"
   "PLUS"
+  "TIMES"
   "V"
   "VI"
   "VL"
   "VLI"
+  "VLIL"
   "[LOp;"
   "[Ljava/lang/Enum;"
   "[Ljava/lang/String;"
-  "_this"
   "a"
-  "access$apply$jd"
   "accessFlags"
   "apply"
   "b"
@@ -70,12 +67,12 @@ classes       5
   "input.kt"
   "k"
   "main"
-  "minus"
   "mv"
   "name"
   "out"
   "plus"
   "println"
+  "times"
   "value"
   "valueOf"
   "values"
@@ -83,14 +80,15 @@ classes       5
   "~~D8{\"backend\":\"dex\",\"compilation-mode\":\"debug\",\"has-checksums\":false,\"min-api\":1,\"sha-1\":\"a7ad18a70460b799d0482e497c109a75bf7f91de\",\"version\":\"8.10.9-dev\"}"
   "��\u{6}\n��\n\u{2}\u{10}\u{2}\u{1a}\u{6}\u{10}��\u{1a}\u{2}0\u{1}"
   "��\u{10}\n\u{2}\u{18}\u{2}\n\u{2}\u{18}\u{2}\n\u{2}\u{10}\u{10}\n\u{2}\u{8}\u{4}\u{8}\u{86}\u{81}\u{2}\u{18}��2\u{2}0\u{1}2\u{8}\u{12}\u{4}\u{12}\u{2}0��0\u{2}B\t\u{8}\u{2}¢\u{6}\u{4}\u{8}\u{3}\u{10}\u{4}j\u{2}\u{8}\u{5}j\u{2}\u{8}\u{6}"
-  "��\u{12}\n\u{2}\u{18}\u{2}\n\u{2}\u{10}��\n��\n\u{2}\u{10}\u{8}\n\u{2}\u{8}\u{2}\u{8}f\u{18}��2\u{2}0\u{1}J\u{18}\u{10}\u{2}\u{1a}\u{2}0\u{3}2\u{6}\u{10}\u{4}\u{1a}\u{2}0\u{3}2\u{6}\u{10}\u{5}\u{1a}\u{2}0\u{3}H\u{16}À\u{6}\u{3}"
+  "��\u{12}\n\u{2}\u{18}\u{2}\n\u{2}\u{10}��\n��\n\u{2}\u{10}\u{8}\n\u{2}\u{8}\u{2}\u{8}f\u{18}��2\u{2}0\u{1}J\u{18}\u{10}\u{2}\u{1a}\u{2}0\u{3}2\u{6}\u{10}\u{4}\u{1a}\u{2}0\u{3}2\u{6}\u{10}\u{5}\u{1a}\u{2}0\u{3}H&À\u{6}\u{3}"
+  "��\u{13}\n��\n\u{2}\u{18}\u{2}\n��\n\u{2}\u{10}\u{8}\n\u{2}\u{8}\u{2}*\u{1}��\u{8}Ê\u{1}\u{18}��2\u{2}0\u{1}J\u{18}\u{10}\u{2}\u{1a}\u{2}0\u{3}2\u{6}\u{10}\u{4}\u{1a}\u{2}0\u{3}2\u{6}\u{10}\u{5}\u{1a}\u{2}0\u{3}H\u{16}"
 
 --- types ---
   I
-  LCalculable$-CC;
-  LCalculable$DefaultImpls;
   LCalculable;
   LInputKt;
+  LOp$PLUS;
+  LOp$TIMES;
   LOp;
   Ldalvik/annotation/EnclosingClass;
   Ldalvik/annotation/InnerClass;
@@ -98,7 +96,6 @@ classes       5
   Ldalvik/annotation/Signature;
   Ljava/io/PrintStream;
   Ljava/lang/Class;
-  Ljava/lang/Deprecated;
   Ljava/lang/Enum;
   Ljava/lang/Object;
   Ljava/lang/String;
@@ -106,21 +103,24 @@ classes       5
   Lkotlin/Metadata;
   Lkotlin/enums/EnumEntries;
   Lkotlin/enums/EnumEntriesKt;
+  Lkotlin/jvm/internal/DefaultConstructorMarker;
   V
   [LOp;
   [Ljava/lang/Enum;
   [Ljava/lang/String;
 
 --- methods ---
-  LCalculable$-CC;.$default$apply(LCalculable;II)I
-  LCalculable$-CC;.access$apply$jd(LCalculable;II)I
-  LCalculable$DefaultImpls;.apply(LCalculable;II)I
   LCalculable;.apply(II)I
   LInputKt;.main()V
   LInputKt;.main([Ljava/lang/String;)V
+  LOp$PLUS;.<init>(Ljava/lang/String;I)V
+  LOp$PLUS;.apply(II)I
+  LOp$TIMES;.<init>(Ljava/lang/String;I)V
+  LOp$TIMES;.apply(II)I
   LOp;.$values()[LOp;
   LOp;.<clinit>()V
   LOp;.<init>(Ljava/lang/String;I)V
+  LOp;.<init>(Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
   LOp;.apply(II)I
   LOp;.getEntries()Lkotlin/enums/EnumEntries;
   LOp;.valueOf(Ljava/lang/String;)LOp;
@@ -132,39 +132,40 @@ classes       5
   Lkotlin/enums/EnumEntriesKt;.enumEntries([Ljava/lang/Enum;)Lkotlin/enums/EnumEntries;
 
 --- class[0] ---
-  descriptor   LCalculable$-CC;
-  super        Ljava/lang/Object;
-  source_file  input.kt
-  method       $default$apply(LCalculable;II)I flags=0x0009 regs=4 ins=3 outs=0 insns=3
-  method       access$apply$jd(LCalculable;II)I flags=0x1009 regs=4 ins=3 outs=3 insns=5
-
---- class[1] ---
-  descriptor   LCalculable$DefaultImpls;
-  super        Ljava/lang/Object;
-  source_file  input.kt
-  method       apply(LCalculable;II)I flags=0x0009 regs=4 ins=3 outs=3 insns=5
-
---- class[2] ---
   descriptor   LCalculable;
   super        Ljava/lang/Object;
   source_file  input.kt
   method       apply(II)I flags=0x0401 regs=0 ins=0 outs=0 insns=0
 
---- class[3] ---
+--- class[1] ---
   descriptor   LInputKt;
   super        Ljava/lang/Object;
   source_file  input.kt
-  method       main()V flags=0x0019 regs=4 ins=0 outs=3 insns=31
+  method       main()V flags=0x0019 regs=5 ins=0 outs=3 insns=60
   method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4
 
---- class[4] ---
+--- class[2] ---
   descriptor   LOp;
   super        Ljava/lang/Enum;
   source_file  input.kt
   method       $values()[LOp; flags=0x101A regs=3 ins=0 outs=0 insns=14
   method       <clinit>()V flags=0x10008 regs=3 ins=0 outs=3 insns=37
   method       <init>(Ljava/lang/String;I)V flags=0x10002 regs=3 ins=3 outs=3 insns=4
-  method       apply(II)I flags=0x0041 regs=4 ins=3 outs=3 insns=5
+  method       <init>(Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V flags=0x11001 regs=4 ins=4 outs=3 insns=4
   method       getEntries()Lkotlin/enums/EnumEntries; flags=0x0009 regs=1 ins=0 outs=0 insns=3
   method       valueOf(Ljava/lang/String;)LOp; flags=0x0009 regs=2 ins=1 outs=2 insns=9
   method       values()[LOp; flags=0x0009 regs=1 ins=0 outs=1 insns=9
+
+--- class[3] ---
+  descriptor   LOp$PLUS;
+  super        LOp;
+  source_file  input.kt
+  method       <init>(Ljava/lang/String;I)V flags=0x10000 regs=4 ins=3 outs=4 insns=5
+  method       apply(II)I flags=0x0001 regs=4 ins=3 outs=0 insns=3
+
+--- class[4] ---
+  descriptor   LOp$TIMES;
+  super        LOp;
+  source_file  input.kt
+  method       <init>(Ljava/lang/String;I)V flags=0x10000 regs=4 ins=3 outs=4 insns=5
+  method       apply(II)I flags=0x0001 regs=4 ins=3 outs=0 insns=3
