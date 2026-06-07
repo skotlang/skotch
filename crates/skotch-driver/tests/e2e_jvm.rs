@@ -159,8 +159,17 @@ fn run_e2e_jvm_test() {
             }
         }
 
-        // Run under java.
+        // Run under java. Force UTF-8 stdout/stderr so Windows runners
+        // (whose default console code page mangles `→` / `²` / etc. to
+        // `?`) don't diverge from the run.stdout fixtures, which are
+        // committed as UTF-8.
+        //   -Dfile.encoding=UTF-8     — default Charset (JDK 17+)
+        //   -Dstdout.encoding=UTF-8   — PrintStream encoding (JDK 18+,
+        //   -Dstderr.encoding=UTF-8     ignored on older JDKs)
         let out = Command::new(&java)
+            .arg("-Dfile.encoding=UTF-8")
+            .arg("-Dstdout.encoding=UTF-8")
+            .arg("-Dstderr.encoding=UTF-8")
             .arg("-cp")
             .arg(&cp_str)
             .arg("InputKt")
