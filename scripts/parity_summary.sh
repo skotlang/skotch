@@ -9,9 +9,12 @@
 #   scripts/parity_summary.sh <bench.tsv>
 #
 # Environment:
-#   DIFFS_DIR    where per-failure diff files live  (default: <tsv-dir>/diffs)
-#   KOTLIN_TAG   Kotlin version label for the heading (default: empty)
-#   DIFF_LINES   max lines per diff snippet         (default: 80)
+#   DIFFS_DIR     where per-failure diff files live  (default: <tsv-dir>/diffs)
+#   KOTLIN_TAG    Kotlin version label for the heading (default: empty)
+#   DIFF_LINES    max lines per diff snippet         (default: 80)
+#   REPO_URL      repo URL for example links         (default: skotlang/skotch)
+#   REPO_REF      git ref for example links          (default: main)
+#   KOTLINC_RUNS  if set + >1, annotate timings as "best of N"
 
 set -eu
 set -o pipefail
@@ -20,6 +23,9 @@ TSV="${1:?usage: $0 <bench.tsv>}"
 DIFFS_DIR="${DIFFS_DIR:-$(dirname "$TSV")/diffs}"
 KOTLIN_TAG="${KOTLIN_TAG:-}"
 DIFF_LINES="${DIFF_LINES:-80}"
+REPO_URL="${REPO_URL:-https://github.com/skotlang/skotch}"
+REPO_REF="${REPO_REF:-main}"
+KOTLINC_RUNS="${KOTLINC_RUNS:-1}"
 
 heading="### Parity bench"
 if [[ -n "$KOTLIN_TAG" ]]; then
@@ -74,7 +80,10 @@ while IFS=$'\t' read -r name status kc_ms sk_ms; do
         fi
     fi
 
-    rows+=("| $idx | \`$rest\` | $icon $status | ${kc_ms} ms | ${sk_ms} ms | $ratio |")
+    # Link the example name to its source folder on GitHub so reviewers
+    # can jump straight from the summary table to the Kotlin source.
+    name_link="$REPO_URL/tree/$REPO_REF/parity/$name/"
+    rows+=("| $idx | [\`$rest\`]($name_link) | $icon $status | ${kc_ms} ms | ${sk_ms} ms | $ratio |")
 done < "$TSV"
 
 # Totals line up top — the most important info should land above the
@@ -95,6 +104,11 @@ echo "**Result:** ${passed}/${total} pass · fail-diff: ${fail_diff} · fail-com
 echo ""
 echo "**Mean skotch speedup over kotlinc (passing examples):** ${mean_ratio}"
 echo "**Slowest passing example:** ${worst_ratio}"
+if [[ "$KOTLINC_RUNS" -gt 1 ]]; then
+    echo ""
+    echo "_kotlinc timings are best-of-${KOTLINC_RUNS} (warmup runs discarded);_"
+    echo "_skotch is a native binary with no JVM startup, single run._"
+fi
 echo ""
 echo "| # | Example | Status | kotlinc | skotch | ratio |"
 echo "|---|---|---|---|---|---|"

@@ -15306,19 +15306,19 @@ fn walk_block(
                         }
                     }
                     let descriptor = jvm_descriptor(target);
-                    // If we're inside a lambda class but the target is a
-                    // top-level function, use the module's main class name
-                    // (e.g. "InputKt") instead of the lambda class name.
-                    let effective_class = if module.is_lambda_class(class_name) {
-                        // For kotlinc-style names (`InputKt$main$1`), the
-                        // wrapper is the prefix up to the first `$`.
-                        class_name
-                            .find('$')
-                            .map(|pos| &class_name[..pos])
-                            .unwrap_or(class_name)
-                    } else {
-                        class_name
-                    };
+                    // `CallKind::Static(target_id)` targets a function in
+                    // `module.functions` — exclusively top-level fns and
+                    // synthetic helpers, all of which are emitted into
+                    // `module.wrapper_class` (e.g. `InputKt`). Using the
+                    // current `class_name` here (which may be a user class
+                    // like `Triangle` for a method body, or a lambda class
+                    // like `InputKt$main$1`) would emit `invokestatic
+                    // Triangle.sqrt:(D)D` and crash at runtime with
+                    // NoSuchMethodError when the top-level `sqrt` actually
+                    // lives on `InputKt`. @JvmStatic companion delegates
+                    // live on the outer class as MirMethods, not in
+                    // module.functions, so they don't reach this arm.
+                    let effective_class = module.wrapper_class.as_str();
                     // Default-arg dispatch: route through `name$default`
                     // when MIR-lower flagged this call as taking defaults.
                     // The synthetic descriptor takes the original args

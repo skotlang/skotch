@@ -1,0 +1,4 @@
+name = "1320-top-level-fn-called-from-class-method"
+status = "supported"
+features = ["class", "top-level-fn", "invokestatic-owner"]
+reason = "Lock-in for parity/34-shape-hierarchy: a class method calling a top-level free function (`fun halve(d): Double` defined at file scope, called from `C.ratio()`) used to emit `invokestatic C.halve(D)D` — the JVM call-site code path used the current class being emitted as the owner instead of the wrapper class. Result: `NoSuchMethodError: 'double C.halve(double)'` at runtime. Fix: route `CallKind::Static(target_id)` through `module.wrapper_class` since all entries in `module.functions` are top-level fns/synthetic helpers that live on the wrapper class. @JvmStatic companion delegates live in user-class `MirMethod` lists, not `module.functions`, so they're unaffected."

@@ -8,8 +8,11 @@
 #   scripts/parity_bench.sh
 #
 # Environment:
-#   OUT_DIR  output directory  (default: <repo>/_bench)
-#   OUT_TSV  TSV path          (default: $OUT_DIR/parity_bench.tsv)
+#   OUT_DIR        output directory  (default: <repo>/_bench)
+#   OUT_TSV        TSV path          (default: $OUT_DIR/parity_bench.tsv)
+#   KOTLINC_RUNS   number of kotlinc runs per example, take the min
+#                  (default: 3 — JVM startup + JIT warmup easily double
+#                  the first-run timing; min-of-N gives a fair number)
 
 set -u
 set -o pipefail
@@ -26,6 +29,11 @@ source "$PARITY_DIR/_shared/common.sh"
 OUT_DIR="${OUT_DIR:-$REPO_ROOT/_bench}"
 OUT_TSV="${OUT_TSV:-$OUT_DIR/parity_bench.tsv}"
 DIFFS_DIR="$OUT_DIR/diffs"
+KOTLINC_RUNS="${KOTLINC_RUNS:-3}"
+if ! [[ "$KOTLINC_RUNS" =~ ^[1-9][0-9]*$ ]]; then
+    echo "ERROR: KOTLINC_RUNS must be a positive integer, got '$KOTLINC_RUNS'" >&2
+    exit 2
+fi
 mkdir -p "$DIFFS_DIR"
 
 TMP_KC_ERR="$(mktemp -t bench_kc_err.XXXXXX)"
@@ -40,20 +48,37 @@ shopt -s nullglob
 for dir in "$PARITY_DIR"/[0-9][0-9]-*/; do
     name="$(basename "${dir%/}")"
 
-    # Run both compilers. `set +e` so a single failure doesn't abort
-    # the whole bench loop.
+    # Run kotlinc $KOTLINC_RUNS times and keep the minimum compile
+    # time. JVM startup + class loading + JIT warmup add a multi-hundred-
+    # ms tax to the first run that's gone by the second; min-of-N
+    # measures steady-state cost instead of cold-start.
+    #
+    # We keep the LAST run's stdout/stderr for status classification
+    # (each run wipes the output dir and compiles fresh, so a successful
+    # run's stdout is deterministic).
+    kc_rc=0
+    kc_ms=0
     set +e
-    kc_out=$(run_with_kotlinc "$dir" 2>"$TMP_KC_ERR"); kc_rc=$?
-    sk_out=$(run_with_skotch  "$dir" 2>"$TMP_SK_ERR"); sk_rc=$?
+    for ((run = 1; run <= KOTLINC_RUNS; run++)); do
+        kc_out=$(run_with_kotlinc "$dir" 2>"$TMP_KC_ERR"); kc_rc=$?
+        run_ms=$(grep -oE '^kotlinc compile: [0-9]+ ms' "$TMP_KC_ERR" \
+            | tail -1 | grep -oE '[0-9]+' | head -1)
+        run_ms="${run_ms:-0}"
+        # Adopt the first non-zero timing, then keep only smaller ones.
+        if [[ $kc_ms -eq 0 ]] || ([[ $run_ms -gt 0 ]] && [[ $run_ms -lt $kc_ms ]]); then
+            kc_ms=$run_ms
+        fi
+        # If the first run failed, don't waste time on retries — kotlinc
+        # failures are deterministic (compile error in the source).
+        if [[ $kc_rc -ne 0 ]]; then
+            break
+        fi
+    done
+    sk_out=$(run_with_skotch "$dir" 2>"$TMP_SK_ERR"); sk_rc=$?
     set -e
 
-    # Pull the timing lines back out of stderr. Defaults to 0 when
-    # absent so the TSV stays well-formed even on compile failure.
-    kc_ms=$(grep -oE '^kotlinc compile: [0-9]+ ms' "$TMP_KC_ERR" \
-        | tail -1 | grep -oE '[0-9]+' | head -1)
     sk_ms=$(grep -oE '^skotch  compile: [0-9]+ ms' "$TMP_SK_ERR" \
         | tail -1 | grep -oE '[0-9]+' | head -1)
-    : "${kc_ms:=0}"
     : "${sk_ms:=0}"
 
     # Status taxonomy:

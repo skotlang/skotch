@@ -220,11 +220,18 @@ jobs:
       - name: Run parity bench
         # Always succeeds; per-example failures land in the TSV and
         # diffs/ directory, which the summary + artifact pick up.
+        # KOTLINC_RUNS=3 → kotlinc compiles each example three times,
+        # min wins. Filters out JVM cold-start + JIT-warmup tax that
+        # otherwise doubles the first-run timing.
+        env:
+          KOTLINC_RUNS: '3'
         run: ./scripts/parity_bench.sh
 
       - name: Publish markdown summary
         env:
           KOTLIN_TAG: ${{ matrix.kotlin }}
+          KOTLINC_RUNS: '3'
+          REPO_REF: ${{ github.sha }}
         run: |
           ./scripts/parity_summary.sh _bench/parity_bench.tsv \
             >> "$GITHUB_STEP_SUMMARY"
