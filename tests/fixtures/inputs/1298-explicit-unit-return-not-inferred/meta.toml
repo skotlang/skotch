@@ -1,0 +1,4 @@
+name = "1298-explicit-unit-return-not-inferred"
+status = "supported"
+features = ["return-type-inference", "unit", "class-method"]
+reason = "Locks in mir-lower fix: explicit `fun foo(): Unit { … }` annotations are respected instead of being overridden by body-based inference (which previously promoted `Unit` to `Int` when the last block ended with `ReturnValue(int_local)` like `pc++`)."

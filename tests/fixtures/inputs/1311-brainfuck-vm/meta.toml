@@ -1,0 +1,4 @@
+name = "1311-brainfuck-vm"
+status = "supported"
+features = ["int-array", "string-indexing", "char", "char-code", "nested-while"]
+reason = "End-to-end lock-in for skotch-examples/26-brainfuck-vm: 8-op Brainfuck interpreter with bracket-matched jumps. Runs four programs including classic Hello World and ASCII-digit add. Exercises the `Char.code` fix (#1310). Workaround in the example: `while (depth > 0) { ...; if (depth > 0) pos++; }` mis-emits as a straight-line fall-through to `return` (the `pos++` body's goto-back-to-while-top is dropped), restructured as `while (depth > 0) { pos++; ...delta... }` so the increment is unconditional. Multi-arm `if (c == X) ... else if (c == Y) ...` dispatch in the step interpreter also stubs when too many arms — split into `dispatch → applySimpleOp → movePtr/bumpCell` helpers each with 2-3 arms."

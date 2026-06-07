@@ -1,0 +1,4 @@
+name = "1315-swap-pattern-back-edge-rel"
+status = "supported"
+features = ["while-loop", "println-concat", "peephole"]
+reason = "Locks in backend-jvm fix: peephole_swap_pattern_with_branches' branch-offset adjustment now compares src/dst against start/end as i32. Pre-fix, casting a negative `dst` (a back-edge goto whose rel hadn't been adjusted yet by this peephole) to usize wrapped to usize::MAX, making the `dst <= start` guard return false and silently skipping the goto's offset shift. Runtime VerifyError: 'Expecting a stackmap frame at branch target -5'."

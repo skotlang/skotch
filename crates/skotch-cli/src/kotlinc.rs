@@ -129,8 +129,16 @@ pub fn run(raw_args: &[String]) -> Result<()> {
         return Err(anyhow!("error: no .kt files found in the given paths"));
     }
 
+    let timing_enabled = std::env::var("SKOTCH_TIMING").is_ok();
+    let mut t_lex_parse_ms: u128 = 0;
+    let mut t_gather_ms: u128 = 0;
+    let mut t_compile_ast_ms: u128 = 0;
+    let mut t_compose_ms: u128 = 0;
+    let mut t_backend_ms: u128 = 0;
+
     let mut parsed: Vec<(skotch_span::FileId, skotch_syntax::KtFile, String)> = Vec::new();
     for path in &source_files {
+        let t0 = std::time::Instant::now();
         let text =
             std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
         let file_id = sm.add(path.clone(), text.clone());
@@ -138,6 +146,7 @@ pub fn run(raw_args: &[String]) -> Result<()> {
         let ast = parse_file(&lexed, &mut interner, &mut diags);
         let wrapper = wrapper_class_for(path);
         parsed.push((file_id, ast, wrapper));
+        t_lex_parse_ms += t0.elapsed().as_millis();
     }
 
     // Gather declarations into a shared symbol table so cross-file refs
@@ -146,10 +155,13 @@ pub fn run(raw_args: &[String]) -> Result<()> {
         .iter()
         .map(|(fid, ast, wc)| (*fid, ast, wc.as_str()))
         .collect();
+    let t_gather = std::time::Instant::now();
     let combined_symbols: PackageSymbolTable = gather_declarations(&refs, &interner);
+    t_gather_ms += t_gather.elapsed().as_millis();
 
     let mut all_classes: Vec<(String, Vec<u8>)> = Vec::new();
     for (_fid, ast, wrapper) in &parsed {
+        let t_ast = std::time::Instant::now();
         let mut mir = compile_ast(
             ast,
             wrapper,
@@ -157,11 +169,24 @@ pub fn run(raw_args: &[String]) -> Result<()> {
             &mut diags,
             Some(&combined_symbols),
         );
+        t_compile_ast_ms += t_ast.elapsed().as_millis();
         if skotch_compose::has_composables(&mir) {
+            let t_co = std::time::Instant::now();
             skotch_compose::compose_transform(&mut mir);
+            t_compose_ms += t_co.elapsed().as_millis();
         }
+        let t_be = std::time::Instant::now();
         let file_classes = skotch_backend_jvm::compile_module(&mir, &interner);
+        t_backend_ms += t_be.elapsed().as_millis();
         all_classes.extend(file_classes);
+    }
+
+    if timing_enabled {
+        eprintln!(
+            "skotch-timing: lex+parse={t_lex_parse_ms}ms gather={t_gather_ms}ms \
+             compile_ast={t_compile_ast_ms}ms compose={t_compose_ms}ms \
+             backend={t_backend_ms}ms"
+        );
     }
 
     if diags.has_errors() {

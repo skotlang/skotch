@@ -1,0 +1,39 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=2 max_locals=2
+    0000 invokedynamic InvokeDynamic(invoke:()Lkotlin/jvm/functions/Function0;)
+    0005 invokestatic Method(InputKt.rememberLocal:(Lkotlin/jvm/functions/Function0;)Ljava/lang/Object;)
+    0008 checkcast Class(Box)
+    0011 astore_0
+    0012 aload_0
+    0013 invokevirtual Method(Box.getValue:()I)
+    0016 istore_1
+    0017 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0020 iload_1
+    0021 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0024 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
+method        main$lambda$0 ()LBox; 0x001A
+  code        max_stack=3 max_locals=0
+    0000 new Class(Box)
+    0003 dup
+    0004 bipush 42
+    0006 invokespecial Method(Box.<init>:(I)V)
+    0009 areturn
+method        rememberLocal (Lkotlin/jvm/functions/Function0;)Ljava/lang/Object; 0x0019
+  code        max_stack=2 max_locals=1
+    0000 aload_0
+    0001 ldc "calc"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 aload_0
+    0007 invokeinterface InterfaceMethod(kotlin/jvm/functions/Function0.invoke:()Ljava/lang/Object;)
+    0012 areturn
+  attr        Signature (2 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)
+class_attr    BootstrapMethods (12 bytes)

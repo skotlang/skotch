@@ -1,0 +1,4 @@
+name = "1304-calculator-parser"
+status = "supported"
+features = ["sealed-class", "when-is", "recursive-descent", "string-indexing", "mutable-list"]
+reason = "End-to-end lock-in for skotch-examples/21-calculator-parser: lexer + recursive-descent parser + AST evaluator for an arithmetic grammar with operator precedence. Tokens and AST are both sealed-class hierarchies; the parser threads a cursor through `ParseResult(expr, next)` return values to avoid var-field staleness in class methods (worked around — the class-with-var-pos shape triggered private-method stubbing). 11 expressions each round-trip from source through tokenize → parse → show + eval byte-identical to kotlinc."

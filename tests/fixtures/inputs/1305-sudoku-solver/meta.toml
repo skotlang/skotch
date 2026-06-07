@@ -1,0 +1,4 @@
+name = "1305-sudoku-solver"
+status = "supported"
+features = ["int-array", "recursion", "backtracking", "stringbuilder", "loop"]
+reason = "End-to-end lock-in for skotch-examples/22-sudoku-solver: recursive backtracking Sudoku solver over a flat 81-cell IntArray with row/column/3x3 box constraints. Exercises nested while loops, in-place mutation across recursive calls (set + unset on failure), and StringBuilder pretty-printing. Both easy and medium puzzles solve to the same answer as kotlinc."

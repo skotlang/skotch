@@ -1,0 +1,43 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=3 max_locals=1
+    0000 new Class(Box)
+    0003 dup
+    0004 invokespecial Method(Box.<init>:()V)
+    0007 astore_0
+    0008 aload_0
+    0009 ldc "x"
+    0011 iconst_1
+    0012 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0015 invokevirtual Method(Box.put:(Ljava/lang/Object;Ljava/lang/Object;)V)
+    0018 aload_0
+    0019 ldc "y"
+    0021 iconst_2
+    0022 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0025 invokevirtual Method(Box.put:(Ljava/lang/Object;Ljava/lang/Object;)V)
+    0028 aload_0
+    0029 ldc "x"
+    0031 invokevirtual Method(Box.get:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0034 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0037 swap
+    0038 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0041 aload_0
+    0042 ldc "y"
+    0044 invokevirtual Method(Box.get:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0047 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0050 swap
+    0051 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0054 aload_0
+    0055 ldc "z"
+    0057 invokevirtual Method(Box.get:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0060 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0063 swap
+    0064 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0067 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

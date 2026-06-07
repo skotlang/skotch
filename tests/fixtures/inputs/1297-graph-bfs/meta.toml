@@ -1,0 +1,4 @@
+name = "1297-graph-bfs"
+status = "supported"
+features = ["generics", "mutable-map", "mutable-list", "mutable-set", "checkcast", "bfs"]
+reason = "End-to-end lock-in for skotch-examples/18-graph-bfs-traversal: Graph<V> with MutableMap<V, MutableList<V>> adjacency, MutableSet<V> visited tracking, MutableList<V> queue with removeAt(0), recursive BFS traversal."

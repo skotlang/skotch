@@ -97,28 +97,31 @@ jobs:
       - run: cargo test --workspace --release
 
   android-build:
-    name: cross-build (aarch64-linux-android)
+    name: cross-build (aarch64 + x86_64 Android)
     runs-on: ubuntu-latest
     # Pure cross-compile sanity check: build the skotch CLI for
-    # Android in both debug and release modes. We don't run anything —
-    # this only verifies the binary links and the transitive crate
-    # graph stays Android-compatible.
+    # Android in both debug and release modes, for both aarch64
+    # (physical devices) and x86_64 (the standard emulator image
+    # architecture). We don't run anything — this only verifies the
+    # binaries link and the transitive crate graph stays Android-
+    # compatible on both ABIs.
     steps:
       - uses: actions/checkout@v6
 
-      - name: Install Rust toolchain + Android target
+      - name: Install Rust toolchain + Android targets
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-linux-android
+          targets: aarch64-linux-android, x86_64-linux-android
 
       - name: Put pre-installed NDK toolchain on PATH
         # GitHub-hosted ubuntu runners ship the Android NDK; the path
         # is exposed via the ANDROID_NDK_HOME env var. `.cargo/config.toml`
-        # references `aarch64-linux-android21-clang` and `llvm-ar` by
-        # bare name — both live under the NDK's
-        # `toolchains/llvm/prebuilt/linux-x86_64/bin` directory. Adding
-        # it to PATH (rather than CARGO_TARGET_..._LINKER) lets the
-        # checked-in config.toml stay portable across hosts.
+        # references `aarch64-linux-android21-clang` /
+        # `x86_64-linux-android21-clang` and `llvm-ar` by bare name —
+        # all live under the NDK's
+        # `toolchains/llvm/prebuilt/linux-x86_64/bin` directory.
+        # Adding it to PATH (rather than CARGO_TARGET_..._LINKER) lets
+        # the checked-in config.toml stay portable across hosts.
         run: |
           set -euo pipefail
           : "${ANDROID_NDK_HOME:?ANDROID_NDK_HOME is not set on this runner}"
@@ -135,6 +138,12 @@ jobs:
       - name: cargo build (release, aarch64-linux-android)
         run: cargo build --release --target aarch64-linux-android -p skotch-cli
 
+      - name: cargo build (debug, x86_64-linux-android)
+        run: cargo build --target x86_64-linux-android -p skotch-cli
+
+      - name: cargo build (release, x86_64-linux-android)
+        run: cargo build --release --target x86_64-linux-android -p skotch-cli
+
       - name: Verify Android ELF artifacts
         # Sanity-check the file shape so a future build regression
         # (e.g. linker producing a non-PIE binary, missing the
@@ -143,10 +152,17 @@ jobs:
         run: |
           set -euo pipefail
           for variant in debug release; do
-            bin="target/aarch64-linux-android/${variant}/skotch"
-            echo "--- ${bin} ---"
-            test -f "$bin"
-            file "$bin"
-            file "$bin" | grep -q "ELF 64-bit LSB pie executable, ARM aarch64"
-            file "$bin" | grep -q "interpreter /system/bin/linker64"
+            arm_bin="target/aarch64-linux-android/${variant}/skotch"
+            echo "--- ${arm_bin} ---"
+            test -f "$arm_bin"
+            file "$arm_bin"
+            file "$arm_bin" | grep -q "ELF 64-bit LSB pie executable, ARM aarch64"
+            file "$arm_bin" | grep -q "interpreter /system/bin/linker64"
+
+            x86_bin="target/x86_64-linux-android/${variant}/skotch"
+            echo "--- ${x86_bin} ---"
+            test -f "$x86_bin"
+            file "$x86_bin"
+            file "$x86_bin" | grep -q "ELF 64-bit LSB pie executable, x86-64"
+            file "$x86_bin" | grep -q "interpreter /system/bin/linker64"
           done

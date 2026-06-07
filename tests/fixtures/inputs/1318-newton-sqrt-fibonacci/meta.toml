@@ -1,0 +1,4 @@
+name = "1318-newton-sqrt-fibonacci"
+status = "supported"
+features = ["double-arithmetic", "convergence-loop", "string-template", "while-loop", "single-file"]
+reason = "End-to-end lock-in for skotch-examples/32-newton-sqrt: Newton's method for square roots (√0..√10) then prints the golden ratio φ = (1 + √5)/2 and watches the Fibonacci ratio converge to it. Validates Double iteration with epsilon comparison + mixed Int/Double arithmetic. The example must be SINGLE-FILE — the same source split across files (Sqrt.kt + Main.kt) produced a 1-ULP divergence in some sqrt values (skotch's multi-file path emits extra dstore/dload sequences that cause one extra Newton iteration before convergence). Tracked as a known multi-file divergence pattern; the consolidated form matches kotlinc byte-identical."

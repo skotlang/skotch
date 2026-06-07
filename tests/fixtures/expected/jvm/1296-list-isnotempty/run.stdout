@@ -1,0 +1,5 @@
+empty? true
+not empty? false
+empty after add? false
+not empty after add? true
+size: 1

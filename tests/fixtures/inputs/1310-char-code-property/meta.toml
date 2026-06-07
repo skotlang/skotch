@@ -1,0 +1,4 @@
+name = "1310-char-code-property"
+status = "supported"
+features = ["char", "int-array", "stdlib-property"]
+reason = "Locks in mir-lower fix: `Char.code` is rewritten to `Char.toInt()` (matching kotlinc's `inline val Char.code: Int = this.toInt()`). Pre-fix `ch.code` fell through to a Const(Null) placeholder and stored into an IntArray triggered VerifyError 'Type [I is not assignable to reference type'. Also extended `lower_expr_preview_ty` to peek through `Expr::Index` (String[i] → Char, IntArray[i] → Int, etc.) so chained `input[k].code` is recognized."

@@ -25,7 +25,7 @@ method        classify (I)Ljava/lang/String; 0x0019
     sub_attr  StackMapTable (9 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
 method        main ()V 0x0019
-  code        max_stack=4 max_locals=6
+  code        max_stack=4 max_locals=7
     0000 new Class(Student)
     0003 dup
     0004 ldc "Alice"
@@ -67,14 +67,25 @@ method        main ()V 0x0019
     0066 astore 5
     0068 aload 5
     0070 invokeinterface InterfaceMethod(java/util/Iterator.hasNext:()Z)
-    0075 ifeq 89
+    0075 ifeq 118
     0078 aload 5
     0080 invokeinterface InterfaceMethod(java/util/Iterator.next:()Ljava/lang/Object;)
-    0085 pop
-    0086 goto 68
-    0089 return
+    0085 checkcast Class(Student)
+    0088 astore 6
+    0090 aload 6
+    0092 invokevirtual Method(Student.getName:()Ljava/lang/String;)
+    0095 aload 6
+    0097 invokevirtual Method(Student.getGrade:()I)
+    0100 invokestatic Method(InputKt.classify:(I)Ljava/lang/String;)
+    0103 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;)
+    0108 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0111 swap
+    0112 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0115 goto 68
+    0118 return
     sub_attr  StackMapTable (28 bytes)
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
+class_attr    BootstrapMethods (8 bytes)

@@ -1,0 +1,4 @@
+name = "1296-list-isnotempty"
+status = "supported"
+features = ["list", "isnotempty", "isempty", "size", "dispatch"]
+reason = "Locks in List intrinsic dispatch: isEmpty, isNotEmpty, size now route to the correct java/util/List.{isEmpty,size} JVM signatures, with isNotEmpty emitting !isEmpty() inline via CmpEq."

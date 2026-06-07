@@ -1,7 +1,7 @@
 dex_version   035
-strings       30
+strings       29
 types         11
-methods       11
+methods       10
 classes       1
 
 --- strings ---
@@ -32,7 +32,6 @@ classes       1
   "it"
   "main"
   "main$lambda$0"
-  "main$lambda$1"
   "out"
   "println"
 
@@ -52,7 +51,6 @@ classes       1
 --- methods ---
   LInputKt;.describe(Ljava/lang/Object;)Ljava/lang/String;
   LInputKt;.main$lambda$0(Ljava/lang/Object;)Ljava/lang/String;
-  LInputKt;.main$lambda$1(Ljava/lang/Object;)Ljava/lang/String;
   LInputKt;.main()V
   LInputKt;.main([Ljava/lang/String;)V
   LUser;.<init>(Ljava/lang/String;I)V
@@ -67,7 +65,6 @@ classes       1
   super        Ljava/lang/Object;
   source_file  input.kt
   method       describe(Ljava/lang/Object;)Ljava/lang/String; flags=0x0019 regs=4 ins=1 outs=1 insns=9
-  method       main()V flags=0x0019 regs=8 ins=0 outs=3 insns=20
+  method       main()V flags=0x0019 regs=7 ins=0 outs=3 insns=20
   method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4
-  method       main$lambda$0(Ljava/lang/Object;)Ljava/lang/String; flags=0x0019 regs=2 ins=1 outs=1 insns=5
-  method       main$lambda$1(Ljava/lang/Object;)Ljava/lang/String; flags=0x0019 regs=3 ins=1 outs=2 insns=10
+  method       main$lambda$0(Ljava/lang/Object;)Ljava/lang/String; flags=0x0019 regs=3 ins=1 outs=2 insns=10

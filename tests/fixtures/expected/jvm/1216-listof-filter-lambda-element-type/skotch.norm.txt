@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=4 max_locals=8
+  code        max_stack=4 max_locals=7
     0000 new Class(Message)
     0003 dup
     0004 ldc "me"
@@ -42,29 +42,23 @@ method        main ()V 0x0019
     0057 astore 4
     0059 invokedynamic InvokeDynamic(invoke:()Lkotlin/jvm/functions/Function1;)
     0064 astore_0
-    0065 invokedynamic InvokeDynamic(invoke:()Lkotlin/jvm/functions/Function1;)
-    0070 astore_0
-    0071 aload 4
-    0073 checkcast Class(java/lang/Iterable)
-    0076 aload_0
-    0077 invokestatic Method(kotlin/collections/CollectionsKt.filter:(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Ljava/util/List;)
-    0080 astore 7
-    0082 aload 7
-    0084 invokeinterface InterfaceMethod(java/util/List.size:()I)
-    0089 istore_0
-    0090 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0093 iload_0
-    0094 invokevirtual Method(java/io/PrintStream.println:(I)V)
-    0097 return
+    0065 aload 4
+    0067 checkcast Class(java/lang/Iterable)
+    0070 aload_0
+    0071 invokestatic Method(kotlin/collections/CollectionsKt.filter:(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Ljava/util/List;)
+    0074 astore 6
+    0076 aload 6
+    0078 invokeinterface InterfaceMethod(java/util/List.size:()I)
+    0083 istore_0
+    0084 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0087 iload_0
+    0088 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0091 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
-method        main$lambda$0 (Ljava/lang/Object;)Lkotlin/Unit; 0x001A
-  code        max_stack=1 max_locals=1
-    0000 getstatic Field(kotlin/Unit.INSTANCE:Lkotlin/Unit;)
-    0003 areturn
-method        main$lambda$1 (LMessage;)Z 0x001A
+method        main$lambda$0 (LMessage;)Z 0x001A
   code        max_stack=2 max_locals=1
     0000 aload_0
     0001 ldc "it"
@@ -74,4 +68,4 @@ method        main$lambda$1 (LMessage;)Z 0x001A
     0010 ldc "me"
     0012 invokestatic Method(kotlin/jvm/internal/Intrinsics.areEqual:(Ljava/lang/Object;Ljava/lang/Object;)Z)
     0015 ireturn
-class_attr    BootstrapMethods (22 bytes)
+class_attr    BootstrapMethods (12 bytes)

@@ -1,0 +1,4 @@
+name = "1289-stringbuilder-param-fq-resolve"
+status = "supported"
+features = ["fq-resolution", "java-stdlib", "param-type"]
+reason = "Locks in mir-lower fix: function param `sb: StringBuilder` now FQ-resolves to `java/lang/StringBuilder` via `well_known_class_name`, avoiding `NoClassDefFoundError: StringBuilder` at the call site."

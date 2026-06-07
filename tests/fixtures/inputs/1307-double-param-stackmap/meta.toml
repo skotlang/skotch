@@ -1,0 +1,4 @@
+name = "1307-double-param-stackmap"
+status = "supported"
+features = ["double-arithmetic", "wide-param-slots", "stackmap", "while-loop"]
+reason = "Locks in backend-jvm fix: live-slot dataflow now uses the wide-aware `initial_param_slots` (Double/Long params count for 2 slots each) when seeding block 0's inherited live set, instead of `func.params.len()` which silently undercounted and produced 'Bad local variable type / Type top not assignable to integer' VerifyError at the first SMT frame that needed the later Int/long param."

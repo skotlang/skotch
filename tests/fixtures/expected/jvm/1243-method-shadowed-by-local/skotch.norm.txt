@@ -3,7 +3,7 @@ this_class    InputKt
 super_class   java/lang/Object
 access_flags  0x0031
 method        main ()V 0x0019
-  code        max_stack=3 max_locals=11
+  code        max_stack=3 max_locals=10
     0000 iconst_5
     0001 anewarray Class(java/lang/Object)
     0004 astore_0
@@ -47,50 +47,38 @@ method        main ()V 0x0019
     0054 astore 6
     0056 invokedynamic InvokeDynamic(invoke:()Lkotlin/jvm/functions/Function2;)
     0061 astore_0
-    0062 invokedynamic InvokeDynamic(invoke:()Lkotlin/jvm/functions/Function2;)
-    0067 astore_0
-    0068 iconst_0
-    0069 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
-    0072 astore_1
-    0073 aload 6
-    0075 checkcast Class(java/lang/Iterable)
-    0078 aload_1
-    0079 aload_0
-    0080 invokestatic Method(kotlin/collections/CollectionsKt.fold:(Ljava/lang/Iterable;Ljava/lang/Object;Lkotlin/jvm/functions/Function2;)Ljava/lang/Object;)
-    0083 astore 10
-    0085 aload 10
-    0087 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/Object;)Ljava/lang/String;)
-    0092 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0095 swap
-    0096 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0099 aload 6
-    0101 checkcast Class(java/lang/Iterable)
-    0104 invokestatic Method(kotlin/collections/CollectionsKt.sumOfInt:(Ljava/lang/Iterable;)I)
-    0107 istore_2
-    0108 iload_2
-    0109 invokedynamic InvokeDynamic(makeConcatWithConstants:(I)Ljava/lang/String;)
-    0114 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
-    0117 swap
-    0118 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
-    0121 return
+    0062 iconst_0
+    0063 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0066 astore_1
+    0067 aload 6
+    0069 checkcast Class(java/lang/Iterable)
+    0072 aload_1
+    0073 aload_0
+    0074 invokestatic Method(kotlin/collections/CollectionsKt.fold:(Ljava/lang/Iterable;Ljava/lang/Object;Lkotlin/jvm/functions/Function2;)Ljava/lang/Object;)
+    0077 astore 9
+    0079 aload 9
+    0081 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/Object;)Ljava/lang/String;)
+    0086 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0089 swap
+    0090 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0093 aload 6
+    0095 checkcast Class(java/lang/Iterable)
+    0098 invokestatic Method(kotlin/collections/CollectionsKt.sumOfInt:(Ljava/lang/Iterable;)I)
+    0101 istore_2
+    0102 iload_2
+    0103 invokedynamic InvokeDynamic(makeConcatWithConstants:(I)Ljava/lang/String;)
+    0108 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0111 swap
+    0112 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0115 return
 method        main ([Ljava/lang/String;)V 0x1009
   code        max_stack=0 max_locals=1
     0000 invokestatic Method(InputKt.main:()V)
     0003 return
-method        main$lambda$0 (Ljava/lang/Object;Ljava/lang/Object;)I 0x001A
-  code        max_stack=2 max_locals=2
-    0000 aload_0
-    0001 checkcast Class(java/lang/Integer)
-    0004 invokevirtual Method(java/lang/Integer.intValue:()I)
-    0007 aload_1
-    0008 checkcast Class(java/lang/Integer)
-    0011 invokevirtual Method(java/lang/Integer.intValue:()I)
-    0014 iadd
-    0015 ireturn
-method        main$lambda$1 (II)I 0x001A
+method        main$lambda$0 (II)I 0x001A
   code        max_stack=2 max_locals=2
     0000 iload_0
     0001 iload_1
     0002 iadd
     0003 ireturn
-class_attr    BootstrapMethods (34 bytes)
+class_attr    BootstrapMethods (24 bytes)

@@ -1,0 +1,4 @@
+name = "1301-generic-class-method-return-unbox"
+status = "supported"
+features = ["generics", "checkcast", "unboxing", "class-method"]
+reason = "Locks in mir-lower fix: calling `Box<T>.unwrap()` (whose source return type is the type parameter T) now substitutes T with the receiver's local_generic_args[0] and emits a checkcast (refs) or checkcast Boxed + invokevirtual unbox (primitives), so the dest local is typed concretely instead of falling through as `Ty::Any` and dropping subsequent usage."

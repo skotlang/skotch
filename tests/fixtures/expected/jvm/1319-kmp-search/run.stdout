@@ -1,0 +1,10 @@
+"ABABCD" in "ABABCABABCD" => 5
+"AAA" in "AAAAAAAA" => 0 1 2 3 4 5
+"abra" in "abracadabra" => 0 7
+"ss" in "mississippi" => 2 5
+"issi" in "mississippi" => 1 4
+"fox" in "the quick brown fox" => 16
+"xyz" in "hello world" => (no matches)
+"aaab" in "aaaaab" => 2
+"AAAAA" in "AAAAAA" => 0 1
+"anything" in "" => (no matches)

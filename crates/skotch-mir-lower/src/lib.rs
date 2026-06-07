@@ -60,14 +60,14 @@ thread_local! {
 // Kotlin stdlib, and dependency JARs on the CLASSPATH. Both static and
 // instance method lookups share this registry.
 
-static CLASS_REGISTRY: Mutex<Option<HashMap<String, skotch_classinfo::ClassInfo>>> =
+static CLASS_REGISTRY: Mutex<Option<HashMap<String, std::sync::Arc<skotch_classinfo::ClassInfo>>>> =
     Mutex::new(None);
 
 fn with_registry<R>(
-    f: impl FnOnce(&mut HashMap<String, skotch_classinfo::ClassInfo>) -> R,
+    f: impl FnOnce(&mut HashMap<String, std::sync::Arc<skotch_classinfo::ClassInfo>>) -> R,
 ) -> Option<R> {
     let mut guard = CLASS_REGISTRY.lock().ok()?;
-    let reg = guard.get_or_insert_with(skotch_classinfo::build_jdk_registry);
+    let reg = guard.get_or_insert_with(HashMap::new);
     Some(f(reg))
 }
 
@@ -76,9 +76,9 @@ fn with_registry<R>(
 pub fn preload_registry_jars(jars: &[std::path::PathBuf]) {
     let scanned = skotch_classinfo::scan_jars(jars);
     if let Ok(mut guard) = CLASS_REGISTRY.lock() {
-        let reg = guard.get_or_insert_with(skotch_classinfo::build_jdk_registry);
+        let reg = guard.get_or_insert_with(HashMap::new);
         for (k, v) in scanned {
-            reg.entry(k).or_insert(v);
+            reg.entry(k).or_insert_with(|| std::sync::Arc::new(v));
         }
     }
     // Also seed the shared classpath cache used by `lookup_method_descriptor`
@@ -447,6 +447,38 @@ fn well_known_class_name(name: &str) -> Option<&'static str> {
         "Iterator" => Some("java/util/Iterator"),
         "Pair" => Some("kotlin/Pair"),
         "Triple" => Some("kotlin/Triple"),
+        // Common java.lang.* unqualified type names that show up as
+        // function parameter / property types in idiomatic Kotlin
+        // (`fun prettyInto(sb: StringBuilder, …)`). Without these the
+        // descriptor encodes `LStringBuilder;` and the verifier hits
+        // `NoClassDefFoundError: StringBuilder` at the first call site.
+        "StringBuilder" => Some("java/lang/StringBuilder"),
+        "StringBuffer" => Some("java/lang/StringBuffer"),
+        "Object" => Some("java/lang/Object"),
+        "Number" => Some("java/lang/Number"),
+        "Throwable" => Some("java/lang/Throwable"),
+        "Exception" => Some("java/lang/Exception"),
+        "RuntimeException" => Some("java/lang/RuntimeException"),
+        "Error" => Some("java/lang/Error"),
+        "IllegalStateException" => Some("java/lang/IllegalStateException"),
+        "IllegalArgumentException" => Some("java/lang/IllegalArgumentException"),
+        "NullPointerException" => Some("java/lang/NullPointerException"),
+        "NumberFormatException" => Some("java/lang/NumberFormatException"),
+        "ClassCastException" => Some("java/lang/ClassCastException"),
+        "IndexOutOfBoundsException" => Some("java/lang/IndexOutOfBoundsException"),
+        "ArrayIndexOutOfBoundsException" => Some("java/lang/ArrayIndexOutOfBoundsException"),
+        "UnsupportedOperationException" => Some("java/lang/UnsupportedOperationException"),
+        "ArithmeticException" => Some("java/lang/ArithmeticException"),
+        "Comparable" => Some("java/lang/Comparable"),
+        "Class" => Some("java/lang/Class"),
+        // NOTE: do NOT add `Iterable` here. The Iterable mapping is
+        // intentionally absent: some stdlib HOF dispatchers match
+        // "receiver could be Iterable" loosely, and adding Iterable
+        // here flipped `inner.sum()` on a user `Inner` class to
+        // `CollectionsKt.sumOfInt(Iterable)` with a spurious
+        // checkcast to Iterable. Same with `Enum` — adding it
+        // accidentally re-routed enum-class lookups through the
+        // java/lang/Enum stdlib path instead of the user enum.
         _ => None,
     }
 }
@@ -4523,18 +4555,40 @@ fn lower_function(
         // simple names to FQ so producer and caller agree on the
         // descriptor. (Caller side already FQ-resolves via the import
         // map in skotch-resolve.)
+        // Upgrade unqualified `Ty::Class("Foo")` from typeck to a
+        // fully-qualified JVM internal name. Two sources, in priority
+        // order: the file's `import_map` (for `import x.y.Foo`-style
+        // user imports), then the `well_known_class_name` table for
+        // implicit java.lang.* / kotlin.* names. Without the second
+        // fallback, a param typed `sb: StringBuilder` got descriptor
+        // `LStringBuilder;` and the verifier raised
+        // `NoClassDefFoundError: StringBuilder` at the call site.
+        // Skip the well-known-name lookup when a USER class of the same
+        // name already exists in the module — user `Item` shouldn't
+        // remap to `java/lang/Item` (which doesn't exist), and more
+        // realistically a user class named `String` or `Comparable`
+        // should win over the well-known mapping.
+        let fq_or_known = |n: &str| -> Option<String> {
+            if let Some(fq) = module.import_map.get(n) {
+                return Some(fq.clone());
+            }
+            if module.has_class(n) {
+                return None; // leave as Ty::Class(simple) for user classes
+            }
+            well_known_class_name(n).map(|s| s.to_string())
+        };
         let ty = match ty {
             Ty::Class(name) if !name.contains('/') => {
-                if let Some(fq) = module.import_map.get(&name) {
-                    Ty::Class(fq.clone())
+                if let Some(fq) = fq_or_known(&name) {
+                    Ty::Class(fq)
                 } else {
                     Ty::Class(name)
                 }
             }
             Ty::Nullable(inner) => match *inner {
                 Ty::Class(name) if !name.contains('/') => {
-                    if let Some(fq) = module.import_map.get(&name) {
-                        Ty::Nullable(Box::new(Ty::Class(fq.clone())))
+                    if let Some(fq) = fq_or_known(&name) {
+                        Ty::Nullable(Box::new(Ty::Class(fq)))
                     } else {
                         Ty::Nullable(Box::new(Ty::Class(name)))
                     }
@@ -5127,6 +5181,57 @@ fn lower_stmt(
                                     method_name: "set".to_string(),
                                 },
                                 args: vec![a, i, v],
+                            },
+                        });
+                    }
+                } else if let Ty::Class(ref cn) = arr_ty {
+                    // Stdlib collection dispatch: indexed assignment on
+                    // a Map or List is NOT array-store. Without this,
+                    // `map[key] = value` emits `aastore` and the JVM
+                    // verifier rejects with "Bad type on operand stack".
+                    if cn.contains("Map") {
+                        let idx_ty = fb.mf.locals[i.0 as usize].clone();
+                        let val_ty = fb.mf.locals[v.0 as usize].clone();
+                        let boxed_key = mir_autobox(fb, i, &idx_ty);
+                        let boxed_val = mir_autobox(fb, v, &val_ty);
+                        let dest = fb.new_local(Ty::Any);
+                        fb.push_stmt(MStmt::Assign {
+                            dest,
+                            value: Rvalue::Call {
+                                kind: CallKind::VirtualJava {
+                                    class_name: "java/util/Map".to_string(),
+                                    method_name: "put".to_string(),
+                                    descriptor:
+                                        "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;"
+                                            .to_string(),
+                                },
+                                args: vec![a, boxed_key, boxed_val],
+                            },
+                        });
+                    } else if cn.contains("List") {
+                        let val_ty = fb.mf.locals[v.0 as usize].clone();
+                        let boxed_val = mir_autobox(fb, v, &val_ty);
+                        let dest = fb.new_local(Ty::Any);
+                        fb.push_stmt(MStmt::Assign {
+                            dest,
+                            value: Rvalue::Call {
+                                kind: CallKind::VirtualJava {
+                                    class_name: "java/util/List".to_string(),
+                                    method_name: "set".to_string(),
+                                    descriptor: "(ILjava/lang/Object;)Ljava/lang/Object;"
+                                        .to_string(),
+                                },
+                                args: vec![a, i, boxed_val],
+                            },
+                        });
+                    } else {
+                        let dest = fb.new_local(Ty::Unit);
+                        fb.push_stmt(MStmt::Assign {
+                            dest,
+                            value: Rvalue::ArrayStore {
+                                array: a,
+                                index: i,
+                                value: v,
                             },
                         });
                     }
@@ -6632,6 +6737,22 @@ fn lower_expr_preview_ty(
                 .find(|c| c.name == recv_class)
                 .and_then(|c| c.fields.iter().find(|f| f.name == field_name))
                 .map(|f| f.ty.clone())
+        }
+        // Indexed access: peek through `recv[idx]` to the element type
+        // so callers like the `.code` rewrite can detect `str[i]` as a
+        // Char receiver. Mirrors the dispatch in `Expr::Index` lowering.
+        Expr::Index { receiver, .. } => {
+            let recv_ty =
+                lower_expr_preview_ty(receiver, fb, scope, module, name_to_func, interner)?;
+            match recv_ty {
+                Ty::String => Some(Ty::Char),
+                Ty::IntArray => Some(Ty::Int),
+                Ty::LongArray => Some(Ty::Long),
+                Ty::DoubleArray => Some(Ty::Double),
+                Ty::BooleanArray => Some(Ty::Bool),
+                Ty::ByteArray => Some(Ty::Byte),
+                _ => None,
+            }
         }
         _ => None,
     }
@@ -9449,6 +9570,48 @@ fn lower_expr(
                             ("get", 1) => {
                                 Some(("java/util/List", "get", "(I)Ljava/lang/Object;", Ty::Any))
                             }
+                            ("size", 0) => Some(("java/util/List", "size", "()I", Ty::Int)),
+                            ("isEmpty", 0) => Some(("java/util/List", "isEmpty", "()Z", Ty::Bool)),
+                            ("isNotEmpty", 0) => {
+                                // Kotlin extension function — kotlinc inlines
+                                // `list.isNotEmpty()` as `!list.isEmpty()`.
+                                // Emit three MIR stmts: isEmpty() → empty;
+                                // const 0 → zero; CmpEq(empty, zero) →
+                                // result. Bool shares the int slot, so
+                                // `empty == 0` is exactly `!empty` and the
+                                // backend lowers it as the inverse-branch
+                                // sequence kotlinc emits. Short-circuit with
+                                // a direct return rather than feeding the
+                                // single-Call dispatch table below.
+                                let recv = all_args[0];
+                                let empty = fb.new_local(Ty::Bool);
+                                fb.push_stmt(MStmt::Assign {
+                                    dest: empty,
+                                    value: Rvalue::Call {
+                                        kind: CallKind::VirtualJava {
+                                            class_name: "java/util/List".to_string(),
+                                            method_name: "isEmpty".to_string(),
+                                            descriptor: "()Z".to_string(),
+                                        },
+                                        args: vec![recv],
+                                    },
+                                });
+                                let zero = fb.new_local(Ty::Bool);
+                                fb.push_stmt(MStmt::Assign {
+                                    dest: zero,
+                                    value: Rvalue::Const(MirConst::Bool(false)),
+                                });
+                                let dest = fb.new_local(Ty::Bool);
+                                fb.push_stmt(MStmt::Assign {
+                                    dest,
+                                    value: Rvalue::BinOp {
+                                        op: MBinOp::CmpEq,
+                                        lhs: empty,
+                                        rhs: zero,
+                                    },
+                                });
+                                return Some(dest);
+                            }
                             ("contains", 1) => {
                                 let arg = all_args[1];
                                 let arg_ty = fb.mf.locals[arg.0 as usize].clone();
@@ -9565,9 +9728,34 @@ fn lower_expr(
                             _ => None,
                         };
                     if let Some((jvm_class, jvm_method, descriptor, ret_ty)) = map_method {
-                        let dest = fb.new_local(ret_ty);
+                        // For `Map.get(k)`, the JVM return is `Object`
+                        // (V is erased). If the receiver has a known
+                        // value type via `local_generic_args` — e.g.
+                        // `MutableMap<String, MutableList<String>>` —
+                        // propagate it to the result local and emit a
+                        // `checkcast` so subsequent method calls on the
+                        // result dispatch correctly. Without this,
+                        // `edges.get(k).add(v)` lowered `.add` against
+                        // `Ty::Any` and silently dropped the call.
+                        let value_class: Option<String> = if method_name_str == "get" {
+                            fb.mf
+                                .local_generic_args
+                                .get(&recv_local.0)
+                                .and_then(|args| args.get(1).cloned())
+                                .and_then(|v_ty| match v_ty {
+                                    Ty::Class(cn) => Some(cn),
+                                    Ty::Generic { base, .. } => match *base {
+                                        Ty::Class(cn) => Some(cn),
+                                        _ => None,
+                                    },
+                                    _ => None,
+                                })
+                        } else {
+                            None
+                        };
+                        let raw = fb.new_local(ret_ty);
                         fb.push_stmt(MStmt::Assign {
-                            dest,
+                            dest: raw,
                             value: Rvalue::Call {
                                 kind: CallKind::VirtualJava {
                                     class_name: jvm_class.to_string(),
@@ -9577,7 +9765,33 @@ fn lower_expr(
                                 args: all_args,
                             },
                         });
-                        return Some(dest);
+                        if let Some(cls) = value_class {
+                            let casted = fb.new_local(Ty::Class(cls.clone()));
+                            fb.push_stmt(MStmt::Assign {
+                                dest: casted,
+                                value: Rvalue::CheckCast {
+                                    obj: raw,
+                                    target_class: cls,
+                                },
+                            });
+                            // Also propagate any nested generic args
+                            // (e.g. `MutableList<String>` inside the
+                            // map's value type) so further `.get(i)`
+                            // on the casted list keeps the element
+                            // type.
+                            if let Some(Ty::Generic { args: nested, .. }) = fb
+                                .mf
+                                .local_generic_args
+                                .get(&recv_local.0)
+                                .and_then(|args| args.get(1).cloned())
+                            {
+                                if !nested.is_empty() {
+                                    fb.mf.local_generic_args.insert(casted.0, nested);
+                                }
+                            }
+                            return Some(casted);
+                        }
+                        return Some(raw);
                     }
                 }
 
@@ -11190,7 +11404,7 @@ fn lower_expr(
                     });
                     return Some(dest);
                 };
-                let dest = fb.new_local(dest_ty);
+                let dest = fb.new_local(dest_ty.clone());
                 fb.push_stmt(MStmt::Assign {
                     dest,
                     value: Rvalue::Call {
@@ -11198,6 +11412,140 @@ fn lower_expr(
                         args: all_args,
                     },
                 });
+                // Generic-return substitution: when the receiver is an
+                // instance of a user-defined generic class
+                // (`MinHeap<Pair<Int,Int>>.pop()`), the method's declared
+                // return type was the class's type parameter `T` (erased to
+                // `Ty::Any` in MIR). Substitute via the receiver's
+                // `local_generic_args` so subsequent `item.first`/`item[i]`
+                // accesses see the concrete type instead of falling through
+                // to `Const(Null)`.
+                //
+                // Refs: emit `CheckCast` and return the casted local.
+                // Primitives: emit a `checkcast Boxed + invokevirtual
+                // boxedValue` unbox sequence as VirtualJava calls.
+                if matches!(dest_ty, Ty::Any) {
+                    if let Ty::Class(cls_name) = &recv_ty {
+                        let cls_owner = cls_name.clone();
+                        let is_generic_class = module
+                            .classes
+                            .iter()
+                            .find(|c| c.name == cls_owner)
+                            .map(|c| c.has_type_params)
+                            .unwrap_or(false);
+                        if is_generic_class {
+                            if let Some(first_arg) = fb
+                                .mf
+                                .local_generic_args
+                                .get(&recv_local.0)
+                                .and_then(|args| args.first())
+                                .cloned()
+                            {
+                                match first_arg {
+                                    Ty::Class(target_class) => {
+                                        let casted = fb.new_local(Ty::Class(target_class.clone()));
+                                        fb.push_stmt(MStmt::Assign {
+                                            dest: casted,
+                                            value: Rvalue::CheckCast {
+                                                obj: dest,
+                                                target_class,
+                                            },
+                                        });
+                                        return Some(casted);
+                                    }
+                                    Ty::String => {
+                                        let casted = fb.new_local(Ty::String);
+                                        fb.push_stmt(MStmt::Assign {
+                                            dest: casted,
+                                            value: Rvalue::CheckCast {
+                                                obj: dest,
+                                                target_class: "java/lang/String".to_string(),
+                                            },
+                                        });
+                                        return Some(casted);
+                                    }
+                                    Ty::Int
+                                    | Ty::Long
+                                    | Ty::Double
+                                    | Ty::Float
+                                    | Ty::Bool
+                                    | Ty::Byte
+                                    | Ty::Short
+                                    | Ty::Char => {
+                                        let (box_class, unbox_method, unbox_desc, prim_ty) =
+                                            match first_arg {
+                                                Ty::Int => (
+                                                    "java/lang/Integer",
+                                                    "intValue",
+                                                    "()I",
+                                                    Ty::Int,
+                                                ),
+                                                Ty::Long => {
+                                                    ("java/lang/Long", "longValue", "()J", Ty::Long)
+                                                }
+                                                Ty::Double => (
+                                                    "java/lang/Double",
+                                                    "doubleValue",
+                                                    "()D",
+                                                    Ty::Double,
+                                                ),
+                                                Ty::Float => (
+                                                    "java/lang/Float",
+                                                    "floatValue",
+                                                    "()F",
+                                                    Ty::Float,
+                                                ),
+                                                Ty::Bool => (
+                                                    "java/lang/Boolean",
+                                                    "booleanValue",
+                                                    "()Z",
+                                                    Ty::Bool,
+                                                ),
+                                                Ty::Byte => {
+                                                    ("java/lang/Byte", "byteValue", "()B", Ty::Byte)
+                                                }
+                                                Ty::Short => (
+                                                    "java/lang/Short",
+                                                    "shortValue",
+                                                    "()S",
+                                                    Ty::Short,
+                                                ),
+                                                Ty::Char => (
+                                                    "java/lang/Character",
+                                                    "charValue",
+                                                    "()C",
+                                                    Ty::Char,
+                                                ),
+                                                _ => unreachable!(),
+                                            };
+                                        let casted = fb.new_local(Ty::Class(box_class.to_string()));
+                                        fb.push_stmt(MStmt::Assign {
+                                            dest: casted,
+                                            value: Rvalue::CheckCast {
+                                                obj: dest,
+                                                target_class: box_class.to_string(),
+                                            },
+                                        });
+                                        let unboxed = fb.new_local(prim_ty);
+                                        fb.push_stmt(MStmt::Assign {
+                                            dest: unboxed,
+                                            value: Rvalue::Call {
+                                                kind: CallKind::VirtualJava {
+                                                    class_name: box_class.to_string(),
+                                                    method_name: unbox_method.to_string(),
+                                                    descriptor: unbox_desc.to_string(),
+                                                },
+                                                args: vec![casted],
+                                            },
+                                        });
+                                        return Some(unboxed);
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        }
+                    }
+                }
                 return Some(dest);
             }
 
@@ -18280,6 +18628,46 @@ fn lower_expr(
                 }
             }
 
+            // `Char.code` — Kotlin stdlib's `inline val Char.code: Int
+            //   get() = this.toInt()`. Without this rewrite, `ch.code`
+            // falls through to the unresolved-field path and emits a
+            // `Const(Null)` placeholder — silently corrupting code like
+            // `intArr[i] = ch.code` (where the null gets `aastore`'d
+            // into an IntArray slot and the verifier rejects).
+            {
+                let field_str = interner.resolve(*name);
+                if field_str == "code" {
+                    let recv_peek =
+                        lower_expr_preview_ty(receiver, fb, scope, module, name_to_func, interner);
+                    if matches!(recv_peek, Some(Ty::Char)) {
+                        let to_int_sym = interner.intern("toInt");
+                        let synth = skotch_syntax::Expr::Call {
+                            callee: Box::new(skotch_syntax::Expr::Field {
+                                receiver: receiver.clone(),
+                                name: to_int_sym,
+                                span: *span,
+                            }),
+                            args: Vec::new(),
+                            type_args: Vec::new(),
+                            span: *span,
+                        };
+                        if let Some(synth_local) = lower_expr(
+                            &synth,
+                            fb,
+                            scope,
+                            module,
+                            name_to_func,
+                            name_to_global,
+                            interner,
+                            diags,
+                            loop_ctx,
+                        ) {
+                            return Some(synth_local);
+                        }
+                    }
+                }
+            }
+
             // Compose UI numeric → unit-value extension properties:
             //   `32.dp`   → Dp(32.toFloat())   — erased to float
             //   `32.sp`   → TextUnit(...)      — also float-erased
@@ -21552,16 +21940,25 @@ fn overload_score(descriptor: &str, arg_types: &[Ty]) -> i32 {
             (Some(Ty::Long), "J") => 3,
             (Some(Ty::Double), "D") | (Some(Ty::Double), "F") => 3,
             (Some(Ty::Bool), "Z") => 3,
+            (Some(Ty::Char), "C") => 3,
+            (Some(Ty::Byte), "B") => 3,
+            (Some(Ty::Short), "S") => 3,
             (Some(Ty::String), "Ljava/lang/String;") => 3,
-            (Some(Ty::Int), "J") => 2, // int widens to long (preferred)
-            (Some(Ty::Int), "D") | (Some(Ty::Int), "F") => 1, // int widens to double/float (less preferred)
-            (Some(Ty::Long), "D") => 1,                       // long widens to double
+            (Some(Ty::Int), "J") => 2,
+            (Some(Ty::Int), "D") | (Some(Ty::Int), "F") => 1,
+            (Some(Ty::Long), "D") => 1,
+            (Some(Ty::Char), "I") => 2,
+            (Some(Ty::Byte), "I") => 2,
+            (Some(Ty::Short), "I") => 2,
             (Some(Ty::String), "Ljava/lang/Object;") => 2,
-            (Some(Ty::Int), "Ljava/lang/Object;") => 1, // autobox
+            (Some(Ty::Int), "Ljava/lang/Object;") => 1,
             (Some(Ty::Long), "Ljava/lang/Object;") => 1,
             (Some(Ty::Bool), "Ljava/lang/Object;") => 1,
             (Some(Ty::Double), "Ljava/lang/Object;") => 1,
-            (_, "Ljava/lang/Object;") => 1, // Object accepts anything
+            (Some(Ty::Char), "Ljava/lang/Object;") => 1,
+            (Some(Ty::Byte), "Ljava/lang/Object;") => 1,
+            (Some(Ty::Short), "Ljava/lang/Object;") => 1,
+            (_, "Ljava/lang/Object;") => 1,
             _ => 0,
         };
     }
@@ -21650,7 +22047,32 @@ fn try_java_static_call(
         .cloned()
         .unwrap_or_else(|| class_name.clone());
 
-    // Lower arguments first so we can use their types for overload resolution.
+    // Quick reject WITHOUT lowering args: if the class/method combo has
+    // no candidate at any arg-count, this dispatch path doesn't apply.
+    // Lowering args eagerly here had a nasty side-effect — each arg's
+    // `lower_expr` would emit a real Call statement into the current
+    // block, and when this dispatch failed and the caller fell through
+    // to the regular instance-method path, the args got lowered AGAIN,
+    // producing two `Call f()` statements where there should be one
+    // (`items.add(makeValue())` would invoke `makeValue` twice). The
+    // untyped probe (passing `&[]` for arg_types) loads the class
+    // once via the same cache path the typed lookup uses.
+    //
+    // SKIP when the receiver is a user class in the current module —
+    // its accessor methods aren't visible to classinfo (only to the
+    // MIR class table), and a Java-static probe on `Item.getCount`
+    // would spuriously match nothing on Item but accidentally route
+    // past the regular class-method dispatch when something else.
+    // The `has_class` check stops the probe entirely, keeping
+    // user-class-method dispatch on the right code path.
+    if !module.has_class(&class_name)
+        && !module.has_class(&resolved_class)
+        && lookup_java_static_typed(&resolved_class, &method_str, args.len(), &[]).is_none()
+    {
+        return None;
+    }
+
+    // Lower arguments now that we know we'll use them.
     let mut arg_locals = Vec::new();
     for a in args {
         let id = lower_expr(
@@ -23477,6 +23899,7 @@ fn lower_class(
 
     for method in &c.methods {
         let method_name = interner.resolve(method.name).to_string();
+        let has_explicit_return_ty = method.return_ty.is_some();
         let declared_ret = method
             .return_ty
             .as_ref()
@@ -23812,6 +24235,53 @@ fn lower_class(
             }
         }
 
+        // Var-field cache invalidation after method calls. Pre-loading
+        // `this.field` into a method-local turns `field` references
+        // into cheap iload — but only safely for `val` (immutable)
+        // fields. For `var` fields, a nested method call can mutate
+        // the field via `putfield`, after which the cached local is
+        // stale. After each Call statement, re-load every var-field's
+        // cached mirror via GetField. The end-of-method writeback
+        // already exists to keep the field in sync at exit.
+        if !fb.field_local_writebacks.is_empty() {
+            let writebacks: Vec<(u32, LocalId, String, String)> = fb
+                .field_local_writebacks
+                .iter()
+                .map(|(local_id, (recv, cls, field))| {
+                    (*local_id, *recv, cls.clone(), field.clone())
+                })
+                .collect();
+            let writeback_dest_set: rustc_hash::FxHashSet<u32> =
+                writebacks.iter().map(|(id, _, _, _)| *id).collect();
+            for block in fb.mf.blocks.iter_mut() {
+                let original = std::mem::take(&mut block.stmts);
+                let mut rebuilt: Vec<MStmt> = Vec::with_capacity(original.len());
+                for stmt in original {
+                    let is_real_call = match &stmt {
+                        MStmt::Assign {
+                            value: Rvalue::Call { .. },
+                            dest,
+                        } => !writeback_dest_set.contains(&dest.0),
+                        _ => false,
+                    };
+                    rebuilt.push(stmt);
+                    if is_real_call {
+                        for (field_local_id, recv, cls, field) in &writebacks {
+                            rebuilt.push(MStmt::Assign {
+                                dest: LocalId(*field_local_id),
+                                value: Rvalue::GetField {
+                                    receiver: *recv,
+                                    class_name: cls.clone(),
+                                    field_name: field.clone(),
+                                },
+                            });
+                        }
+                    }
+                }
+                block.stmts = rebuilt;
+            }
+        }
+
         // Extract state machine for suspend methods.
         if method.is_suspend {
             let sm_result =
@@ -23837,8 +24307,15 @@ fn lower_class(
         finished.is_abstract = method.is_abstract;
         finished.annotations =
             lower_annotations(&method.annotations, interner, Some(&module.import_map));
-        // Infer return type from body if not explicitly annotated.
-        if !method.is_suspend && finished.return_ty == Ty::Unit {
+        // Infer return type from body ONLY when the source-level
+        // declaration omitted the `: Type` annotation. Otherwise an
+        // explicit `fun foo(): Unit { … }` whose last block happens
+        // to end in `ReturnValue(local_of_some_type)` gets its return
+        // type silently rewritten — observed on a Vm.run() whose
+        // `pc++` final block had `Terminator::ReturnValue(pc)` and
+        // got promoted to `fun run(): Int`, breaking call sites
+        // expecting `void Vm.run()`.
+        if !method.is_suspend && !has_explicit_return_ty && finished.return_ty == Ty::Unit {
             if let Some(last_block) = finished.blocks.last() {
                 if let Terminator::ReturnValue(ret_local) = &last_block.terminator {
                     let inferred = finished.locals[ret_local.0 as usize].clone();

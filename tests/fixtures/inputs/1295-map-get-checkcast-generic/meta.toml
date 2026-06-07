@@ -1,0 +1,4 @@
+name = "1295-map-get-checkcast-generic"
+status = "supported"
+features = ["map-get", "generic-erasure", "checkcast", "local-generic-args"]
+reason = "Locks in mir-lower fix: Map.get(k) now propagates the receiver's V type from local_generic_args[1] and emits a CheckCast so subsequent method calls on the result dispatch correctly. Without this, `edges.get(from)!!.add(to)` silently dropped the .add call."

@@ -1,0 +1,486 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        describe (LJsonValue;)Ljava/lang/String; 0x0019
+  code        max_stack=2 max_locals=2
+    0000 aload_0
+    0001 ldc "v"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 aload_0
+    0007 astore_1
+    0008 aload_1
+    0009 instanceof Class(JsonNull)
+    0012 ifeq 20
+    0015 ldc "null"
+    0017 goto 118
+    0020 aload_1
+    0021 instanceof Class(JsonBool)
+    0024 ifeq 32
+    0027 ldc "bool"
+    0029 goto 118
+    0032 aload_1
+    0033 instanceof Class(JsonNum)
+    0036 ifeq 44
+    0039 ldc "num"
+    0041 goto 118
+    0044 aload_1
+    0045 instanceof Class(JsonStr)
+    0048 ifeq 56
+    0051 ldc "str"
+    0053 goto 118
+    0056 aload_1
+    0057 instanceof Class(JsonArr)
+    0060 ifeq 83
+    0063 aload_0
+    0064 checkcast Class(JsonArr)
+    0067 invokevirtual Method(JsonArr.getItems:()Ljava/util/List;)
+    0070 invokeinterface InterfaceMethod(java/util/List.size:()I)
+    0075 invokedynamic InvokeDynamic(makeConcatWithConstants:(I)Ljava/lang/String;)
+    0080 goto 118
+    0083 aload_1
+    0084 instanceof Class(JsonObj)
+    0087 ifeq 110
+    0090 aload_0
+    0091 checkcast Class(JsonObj)
+    0094 invokevirtual Method(JsonObj.getKeys:()Ljava/util/List;)
+    0097 invokeinterface InterfaceMethod(java/util/List.size:()I)
+    0102 invokedynamic InvokeDynamic(makeConcatWithConstants:(I)Ljava/lang/String;)
+    0107 goto 118
+    0110 new Class(kotlin/NoWhenBranchMatchedException)
+    0113 dup
+    0114 invokespecial Method(kotlin/NoWhenBranchMatchedException.<init>:()V)
+    0117 athrow
+    0118 areturn
+    sub_attr  StackMapTable (17 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)
+method        escapeString (Ljava/lang/String;)Ljava/lang/String; 0x0019
+  code        max_stack=3 max_locals=5
+    0000 aload_0
+    0001 ldc "s"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 new Class(java/lang/StringBuilder)
+    0009 dup
+    0010 invokespecial Method(java/lang/StringBuilder.<init>:()V)
+    0013 astore_1
+    0014 aload_1
+    0015 bipush 34
+    0017 invokevirtual Method(java/lang/StringBuilder.append:(C)Ljava/lang/StringBuilder;)
+    0020 pop
+    0021 iconst_0
+    0022 istore_2
+    0023 aload_0
+    0024 invokevirtual Method(java/lang/String.length:()I)
+    0027 istore_3
+    0028 iload_2
+    0029 iload_3
+    0030 if_icmpge 43
+    0033 aload_0
+    0034 iload_2
+    0035 invokevirtual Method(java/lang/String.charAt:(I)C)
+    0038 istore 4
+    0040 goto 61
+    0043 aload_1
+    0044 bipush 34
+    0046 invokevirtual Method(java/lang/StringBuilder.append:(C)Ljava/lang/StringBuilder;)
+    0049 pop
+    0050 aload_1
+    0051 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
+    0054 dup
+    0055 ldc "toString(...)"
+    0057 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullExpressionValue:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0060 areturn
+    0061 iload 4
+    0063 bipush 34
+    0065 if_icmpne 78
+    0068 aload_1
+    0069 ldc "\""
+    0071 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0074 pop
+    0075 goto 153
+    0078 iload 4
+    0080 bipush 92
+    0082 if_icmpne 95
+    0085 aload_1
+    0086 ldc "\\"
+    0088 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0091 pop
+    0092 goto 153
+    0095 iload 4
+    0097 bipush 10
+    0099 if_icmpne 112
+    0102 aload_1
+    0103 ldc "\n"
+    0105 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0108 pop
+    0109 goto 153
+    0112 iload 4
+    0114 bipush 9
+    0116 if_icmpne 129
+    0119 aload_1
+    0120 ldc "\t"
+    0122 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0125 pop
+    0126 goto 153
+    0129 iload 4
+    0131 bipush 13
+    0133 if_icmpne 146
+    0136 aload_1
+    0137 ldc "\r"
+    0139 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0142 pop
+    0143 goto 153
+    0146 aload_1
+    0147 iload 4
+    0149 invokevirtual Method(java/lang/StringBuilder.append:(C)Ljava/lang/StringBuilder;)
+    0152 pop
+    0153 iinc 2 1
+    0156 goto 23
+    sub_attr  StackMapTable (23 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)
+method        indent (Ljava/lang/StringBuilder;I)V 0x0019
+  code        max_stack=2 max_locals=3
+    0000 aload_0
+    0001 ldc "sb"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 iconst_0
+    0007 istore_2
+    0008 iload_2
+    0009 iload_1
+    0010 if_icmpge 26
+    0013 aload_0
+    0014 ldc "  "
+    0016 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0019 pop
+    0020 iinc 2 1
+    0023 goto 8
+    0026 return
+    sub_attr  StackMapTable (7 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (9 bytes)
+method        main ()V 0x0019
+  code        max_stack=2 max_locals=3
+    0000 ldc "{"name":"Ada","langs":["Kotlin","Rust","Swift"],"active":true,"manager":null}"
+    0002 astore_0
+    0003 aload_0
+    0004 invokestatic Method(InputKt.parseJson:(Ljava/lang/String;)LJsonValue;)
+    0007 astore_1
+    0008 aload_1
+    0009 invokestatic Method(InputKt.describe:(LJsonValue;)Ljava/lang/String;)
+    0012 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;)
+    0017 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0020 swap
+    0021 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0024 aload_1
+    0025 checkcast Class(JsonObj)
+    0028 astore_2
+    0029 aload_2
+    0030 invokevirtual Method(JsonObj.getKeys:()Ljava/util/List;)
+    0033 invokeinterface InterfaceMethod(java/util/List.size:()I)
+    0038 invokedynamic InvokeDynamic(makeConcatWithConstants:(I)Ljava/lang/String;)
+    0043 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0046 swap
+    0047 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0050 ldc "--- round-trip ---"
+    0052 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0055 swap
+    0056 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0059 aload_1
+    0060 invokestatic Method(InputKt.pretty:(LJsonValue;)Ljava/lang/String;)
+    0063 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0066 swap
+    0067 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0070 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
+method        parseJson (Ljava/lang/String;)LJsonValue; 0x0019
+  code        max_stack=3 max_locals=3
+    0000 aload_0
+    0001 ldc "src"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 new Class(Parser)
+    0009 dup
+    0010 aload_0
+    0011 invokespecial Method(Parser.<init>:(Ljava/lang/String;)V)
+    0014 astore_1
+    0015 aload_1
+    0016 invokevirtual Method(Parser.parseValue:()LJsonValue;)
+    0019 astore_2
+    0020 aload_1
+    0021 invokevirtual Method(Parser.skipWs:()V)
+    0024 aload_2
+    0025 areturn
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)
+method        pretty (LJsonValue;)Ljava/lang/String; 0x0019
+  code        max_stack=3 max_locals=2
+    0000 aload_0
+    0001 ldc "v"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 new Class(java/lang/StringBuilder)
+    0009 dup
+    0010 invokespecial Method(java/lang/StringBuilder.<init>:()V)
+    0013 astore_1
+    0014 aload_0
+    0015 aload_1
+    0016 iconst_0
+    0017 invokestatic Method(InputKt.prettyInto:(LJsonValue;Ljava/lang/StringBuilder;I)V)
+    0020 aload_1
+    0021 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
+    0024 dup
+    0025 ldc "toString(...)"
+    0027 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullExpressionValue:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0030 areturn
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)
+method        prettyInto (LJsonValue;Ljava/lang/StringBuilder;I)V 0x0019
+  code        max_stack=3 max_locals=27
+    0000 aload_0
+    0001 ldc "v"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 aload_1
+    0007 ldc "sb"
+    0009 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0012 aload_0
+    0013 astore_3
+    0014 aload_3
+    0015 instanceof Class(JsonNull)
+    0018 ifeq 31
+    0021 aload_1
+    0022 ldc "null"
+    0024 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0027 pop
+    0028 goto 140
+    0031 aload_3
+    0032 instanceof Class(JsonBool)
+    0035 ifeq 51
+    0038 aload_0
+    0039 checkcast Class(JsonBool)
+    0042 invokevirtual Method(JsonBool.getValue:()Z)
+    0045 ifeq 148
+    0048 goto 141
+    0051 aload_3
+    0052 instanceof Class(JsonNum)
+    0055 ifeq 67
+    0058 aload_1
+    0059 aconst_null
+    0060 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/Object;)Ljava/lang/StringBuilder;)
+    0063 pop
+    0064 goto 140
+    0067 aload_3
+    0068 instanceof Class(JsonStr)
+    0071 ifeq 92
+    0074 aload_1
+    0075 aload_0
+    0076 checkcast Class(JsonStr)
+    0079 invokevirtual Method(JsonStr.getValue:()Ljava/lang/String;)
+    0082 invokestatic Method(InputKt.escapeString:(Ljava/lang/String;)Ljava/lang/String;)
+    0085 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0088 pop
+    0089 goto 140
+    0092 aload_3
+    0093 instanceof Class(JsonArr)
+    0096 ifeq 112
+    0099 aload_0
+    0100 checkcast Class(JsonArr)
+    0103 astore 4
+    0105 aconst_null
+    0106 ifnull 170
+    0109 goto 162
+    0112 aload_3
+    0113 instanceof Class(JsonObj)
+    0116 ifeq 132
+    0119 aload_0
+    0120 checkcast Class(JsonObj)
+    0123 astore 5
+    0125 aconst_null
+    0126 ifnull 317
+    0129 goto 309
+    0132 new Class(kotlin/NoWhenBranchMatchedException)
+    0135 dup
+    0136 invokespecial Method(kotlin/NoWhenBranchMatchedException.<init>:()V)
+    0139 athrow
+    0140 return
+    0141 ldc "true"
+    0143 astore 6
+    0145 goto 152
+    0148 ldc "false"
+    0150 astore 6
+    0152 aload_1
+    0153 aload 6
+    0155 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0158 pop
+    0159 goto 140
+    0162 aload_1
+    0163 ldc "[]"
+    0165 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0168 pop
+    0169 return
+    0170 aload_1
+    0171 ldc "[
+"
+    0173 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0176 pop
+    0177 iconst_0
+    0178 istore 7
+    0180 iload 7
+    0182 istore 8
+    0184 aload 4
+    0186 invokevirtual Method(JsonArr.getItems:()Ljava/util/List;)
+    0189 invokeinterface InterfaceMethod(java/util/List.size:()I)
+    0194 istore 9
+    0196 iload 8
+    0198 iload 9
+    0200 if_icmpge 276
+    0203 aload_1
+    0204 iload_2
+    0205 iconst_1
+    0206 iadd
+    0207 invokestatic Method(InputKt.indent:(Ljava/lang/StringBuilder;I)V)
+    0210 aload 4
+    0212 invokevirtual Method(JsonArr.getItems:()Ljava/util/List;)
+    0215 astore 10
+    0217 iload 7
+    0219 istore 11
+    0221 aload 10
+    0223 iload 11
+    0225 invokeinterface InterfaceMethod(java/util/List.get:(I)Ljava/lang/Object;)
+    0230 astore 12
+    0232 iload_2
+    0233 iconst_1
+    0234 iadd
+    0235 istore 13
+    0237 aload 12
+    0239 checkcast Class(JsonValue)
+    0242 aload_1
+    0243 iload 13
+    0245 invokestatic Method(InputKt.prettyInto:(LJsonValue;Ljava/lang/StringBuilder;I)V)
+    0248 iload 7
+    0250 iconst_1
+    0251 iadd
+    0252 istore 14
+    0254 aload 4
+    0256 invokevirtual Method(JsonArr.getItems:()Ljava/util/List;)
+    0259 invokeinterface InterfaceMethod(java/util/List.size:()I)
+    0264 istore 15
+    0266 iload 14
+    0268 iload 15
+    0270 if_icmpge 296
+    0273 goto 289
+    0276 aload_1
+    0277 iload_2
+    0278 invokestatic Method(InputKt.indent:(Ljava/lang/StringBuilder;I)V)
+    0281 aload_1
+    0282 ldc "]"
+    0284 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0287 pop
+    0288 return
+    0289 aload_1
+    0290 ldc ","
+    0292 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0295 pop
+    0296 aload_1
+    0297 ldc "
+"
+    0299 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0302 pop
+    0303 iinc 7 1
+    0306 goto 180
+    0309 aload_1
+    0310 ldc "{}"
+    0312 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0315 pop
+    0316 return
+    0317 aload_1
+    0318 ldc "{
+"
+    0320 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0323 pop
+    0324 iconst_0
+    0325 istore 16
+    0327 iload 16
+    0329 istore 17
+    0331 aload 5
+    0333 invokevirtual Method(JsonObj.getKeys:()Ljava/util/List;)
+    0336 invokeinterface InterfaceMethod(java/util/List.size:()I)
+    0341 istore 18
+    0343 iload 17
+    0345 iload 18
+    0347 if_icmpge 461
+    0350 aload_1
+    0351 iload_2
+    0352 iconst_1
+    0353 iadd
+    0354 invokestatic Method(InputKt.indent:(Ljava/lang/StringBuilder;I)V)
+    0357 aload 5
+    0359 invokevirtual Method(JsonObj.getKeys:()Ljava/util/List;)
+    0362 astore 19
+    0364 iload 16
+    0366 istore 20
+    0368 aload_1
+    0369 aload 19
+    0371 iload 20
+    0373 invokeinterface InterfaceMethod(java/util/List.get:(I)Ljava/lang/Object;)
+    0378 checkcast Class(java/lang/String)
+    0381 invokestatic Method(InputKt.escapeString:(Ljava/lang/String;)Ljava/lang/String;)
+    0384 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0387 pop
+    0388 aload_1
+    0389 ldc ": "
+    0391 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0394 pop
+    0395 aload 5
+    0397 invokevirtual Method(JsonObj.getValues:()Ljava/util/List;)
+    0400 astore 21
+    0402 iload 16
+    0404 istore 22
+    0406 aload 21
+    0408 iload 22
+    0410 invokeinterface InterfaceMethod(java/util/List.get:(I)Ljava/lang/Object;)
+    0415 astore 23
+    0417 iload_2
+    0418 iconst_1
+    0419 iadd
+    0420 istore 24
+    0422 aload 23
+    0424 checkcast Class(JsonValue)
+    0427 aload_1
+    0428 iload 24
+    0430 invokestatic Method(InputKt.prettyInto:(LJsonValue;Ljava/lang/StringBuilder;I)V)
+    0433 iload 16
+    0435 iconst_1
+    0436 iadd
+    0437 istore 25
+    0439 aload 5
+    0441 invokevirtual Method(JsonObj.getKeys:()Ljava/util/List;)
+    0444 invokeinterface InterfaceMethod(java/util/List.size:()I)
+    0449 istore 26
+    0451 iload 25
+    0453 iload 26
+    0455 if_icmpge 481
+    0458 goto 474
+    0461 aload_1
+    0462 iload_2
+    0463 invokestatic Method(InputKt.indent:(Ljava/lang/StringBuilder;I)V)
+    0466 aload_1
+    0467 ldc "}"
+    0469 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0472 pop
+    0473 return
+    0474 aload_1
+    0475 ldc ","
+    0477 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0480 pop
+    0481 aload_1
+    0482 ldc "
+"
+    0484 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0487 pop
+    0488 iinc 16 1
+    0491 goto 327
+    sub_attr  StackMapTable (200 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (15 bytes)
+class_attr    BootstrapMethods (26 bytes)

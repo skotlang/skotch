@@ -1,7 +1,7 @@
 dex_version   035
-strings       43
-types         17
-methods       11
+strings       40
+types         16
+methods       10
 classes       1
 
 --- strings ---
@@ -10,7 +10,6 @@ classes       1
   "Hi back"
   "How are you?"
   "I"
-  "INSTANCE"
   "L"
   "LInputKt;"
   "LL"
@@ -22,7 +21,6 @@ classes       1
   "Ljava/lang/String;"
   "Ljava/lang/System;"
   "Ljava/util/List;"
-  "Lkotlin/Unit;"
   "Lkotlin/collections/CollectionsKt;"
   "Lkotlin/jvm/functions/Function1;"
   "Lkotlin/jvm/internal/Intrinsics;"
@@ -42,7 +40,6 @@ classes       1
   "listOf"
   "main"
   "main$lambda$0"
-  "main$lambda$1"
   "me"
   "out"
   "println"
@@ -59,7 +56,6 @@ classes       1
   Ljava/lang/String;
   Ljava/lang/System;
   Ljava/util/List;
-  Lkotlin/Unit;
   Lkotlin/collections/CollectionsKt;
   Lkotlin/jvm/functions/Function1;
   Lkotlin/jvm/internal/Intrinsics;
@@ -69,8 +65,7 @@ classes       1
   [Ljava/lang/String;
 
 --- methods ---
-  LInputKt;.main$lambda$0(Ljava/lang/Object;)Ljava/lang/Object;
-  LInputKt;.main$lambda$1(Ljava/lang/Object;)Z
+  LInputKt;.main$lambda$0(Ljava/lang/Object;)Z
   LInputKt;.main()V
   LInputKt;.main([Ljava/lang/String;)V
   LMessage;.<init>(Ljava/lang/String;Ljava/lang/String;)V
@@ -85,7 +80,6 @@ classes       1
   descriptor   LInputKt;
   super        Ljava/lang/Object;
   source_file  input.kt
-  method       main()V flags=0x0019 regs=20 ins=0 outs=3 insns=49
+  method       main()V flags=0x0019 regs=19 ins=0 outs=3 insns=49
   method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4
-  method       main$lambda$0(Ljava/lang/Object;)Ljava/lang/Object; flags=0x0019 regs=2 ins=1 outs=0 insns=3
-  method       main$lambda$1(Ljava/lang/Object;)Z flags=0x0019 regs=5 ins=1 outs=2 insns=16
+  method       main$lambda$0(Ljava/lang/Object;)Z flags=0x0019 regs=5 ins=1 outs=2 insns=16

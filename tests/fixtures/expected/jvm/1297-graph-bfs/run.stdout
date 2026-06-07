@@ -1,0 +1,4 @@
+BFS from A: A, B, C, D, E
+BFS from E: E, C, D, A, B
+directed BFS from A: A, B, C, D, E
+directed BFS from D: D, E

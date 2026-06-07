@@ -1,0 +1,101 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=3 max_locals=5
+    0000 new Class(Machine)
+    0003 dup
+    0004 getstatic Field(Light.RED:LLight;)
+    0007 invokespecial Method(Machine.<init>:(LLight;)V)
+    0010 astore_0
+    0011 iconst_5
+    0012 anewarray Class(Event)
+    0015 astore_2
+    0016 aload_2
+    0017 iconst_0
+    0018 getstatic Field(Event.TICK:LEvent;)
+    0021 aastore
+    0022 aload_2
+    0023 iconst_1
+    0024 getstatic Field(Event.TICK:LEvent;)
+    0027 aastore
+    0028 aload_2
+    0029 iconst_2
+    0030 getstatic Field(Event.EMERGENCY:LEvent;)
+    0033 aastore
+    0034 aload_2
+    0035 iconst_3
+    0036 getstatic Field(Event.TICK:LEvent;)
+    0039 aastore
+    0040 aload_2
+    0041 iconst_4
+    0042 getstatic Field(Event.TICK:LEvent;)
+    0045 aastore
+    0046 aload_2
+    0047 invokestatic Method(kotlin/collections/CollectionsKt.listOf:([Ljava/lang/Object;)Ljava/util/List;)
+    0050 astore_1
+    0051 aload_1
+    0052 invokeinterface InterfaceMethod(java/util/List.iterator:()Ljava/util/Iterator;)
+    0057 astore_2
+    0058 aload_2
+    0059 invokeinterface InterfaceMethod(java/util/Iterator.hasNext:()Z)
+    0064 ifeq 101
+    0067 aload_2
+    0068 invokeinterface InterfaceMethod(java/util/Iterator.next:()Ljava/lang/Object;)
+    0073 checkcast Class(Event)
+    0076 astore_3
+    0077 aload_0
+    0078 aload_3
+    0079 invokevirtual Method(Machine.handle:(LEvent;)LLight;)
+    0082 astore 4
+    0084 aload 4
+    0086 invokedynamic InvokeDynamic(makeConcatWithConstants:(LLight;)Ljava/lang/String;)
+    0091 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0094 swap
+    0095 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0098 goto 58
+    0101 ldc "trace:"
+    0103 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0106 swap
+    0107 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0110 aload_0
+    0111 invokevirtual Method(Machine.trace:()Ljava/util/List;)
+    0114 invokeinterface InterfaceMethod(java/util/List.iterator:()Ljava/util/Iterator;)
+    0119 astore_2
+    0120 aload_2
+    0121 invokeinterface InterfaceMethod(java/util/Iterator.hasNext:()Z)
+    0126 ifeq 149
+    0129 aload_2
+    0130 invokeinterface InterfaceMethod(java/util/Iterator.next:()Ljava/lang/Object;)
+    0135 checkcast Class(java/lang/String)
+    0138 astore_3
+    0139 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0142 aload_3
+    0143 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0146 goto 120
+    0149 aload_0
+    0150 iconst_2
+    0151 invokevirtual Method(Machine.replay:(I)LLight;)
+    0154 astore_2
+    0155 aload_2
+    0156 invokedynamic InvokeDynamic(makeConcatWithConstants:(LLight;)Ljava/lang/String;)
+    0161 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0164 swap
+    0165 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0168 aload_0
+    0169 iconst_4
+    0170 invokevirtual Method(Machine.replay:(I)LLight;)
+    0173 astore_3
+    0174 aload_3
+    0175 invokedynamic InvokeDynamic(makeConcatWithConstants:(LLight;)Ljava/lang/String;)
+    0180 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0183 swap
+    0184 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0187 return
+    sub_attr  StackMapTable (17 bytes)
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
+class_attr    BootstrapMethods (20 bytes)

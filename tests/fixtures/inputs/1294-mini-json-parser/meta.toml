@@ -1,0 +1,4 @@
+name = "1294-mini-json-parser"
+status = "supported"
+features = ["sealed-class", "recursive-descent", "stringbuilder", "var-field", "parallel-lists"]
+reason = "End-to-end lock-in for skotch-examples/17-json-parser-printer: sealed JsonValue hierarchy + recursive-descent parser with `var pos` cursor + StringBuilder pretty-printer. Exercises all 5 bug-fixes from this iter (FQ-resolve StringBuilder, while-true var-update, no double-eval, char-overload, var-field post-pass)."

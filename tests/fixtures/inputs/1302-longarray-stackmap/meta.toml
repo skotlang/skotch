@@ -1,0 +1,4 @@
+name = "1302-longarray-stackmap"
+status = "supported"
+features = ["long-array", "boolean-array", "stackmap", "loop"]
+reason = "Locks in backend-jvm fix: StackMapTable now emits the correct verification_type_info for `Ty::LongArray` ([J), `Ty::DoubleArray` ([D), `Ty::BooleanArray` ([Z), and `Ty::ByteArray` ([B) locals instead of falling through to Integer, which the verifier rejected when a backward goto hit a frame with the array type."

@@ -98,8 +98,26 @@ pub fn compile_ast(
     diags: &mut Diagnostics,
     package_symbols: Option<&skotch_resolve::PackageSymbolTable>,
 ) -> skotch_mir::MirModule {
+    let timing = std::env::var("SKOTCH_TIMING").is_ok();
+    let t0 = if timing {
+        Some(std::time::Instant::now())
+    } else {
+        None
+    };
     let resolved = resolve_file(ast, interner, diags, package_symbols);
+    let t_resolve = t0.map(|t| t.elapsed().as_millis()).unwrap_or(0);
+    let t1 = if timing {
+        Some(std::time::Instant::now())
+    } else {
+        None
+    };
     let typed = type_check(ast, &resolved, interner, diags, package_symbols);
+    let t_typeck = t1.map(|t| t.elapsed().as_millis()).unwrap_or(0);
+    let t2 = if timing {
+        Some(std::time::Instant::now())
+    } else {
+        None
+    };
     let mir = lower_file(
         ast,
         &resolved,
@@ -109,7 +127,20 @@ pub fn compile_ast(
         wrapper_class,
         package_symbols,
     );
+    let t_lower = t2.map(|t| t.elapsed().as_millis()).unwrap_or(0);
+    let t3 = if timing {
+        Some(std::time::Instant::now())
+    } else {
+        None
+    };
     validate_mir(&mir, diags);
+    let t_validate = t3.map(|t| t.elapsed().as_millis()).unwrap_or(0);
+    if timing {
+        eprintln!(
+            "skotch-timing/compile_ast: resolve={t_resolve}ms typeck={t_typeck}ms \
+             lower={t_lower}ms validate={t_validate}ms"
+        );
+    }
     mir
 }
 

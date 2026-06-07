@@ -454,6 +454,16 @@ fn type_ref_to_descriptor_inner(
             // `Object` callers vs `DrawerState` declaration.)
             if let Some(fq) = imports.get(name) {
                 format!("L{fq};")
+            } else if let Some(jvm) = skotch_types::intrinsics::kotlin_to_jvm_class(name) {
+                // Kotlin builtin names (`MutableMap`, `MutableList`, …)
+                // erase to their `java/util/*` JVM equivalents at the
+                // descriptor boundary — mirrors the same lookup in
+                // `type_ref_to_ty_with_aliases`. Without this, a
+                // `fun foo(): MutableMap<K, V>` cross-file callee gets
+                // descriptor `()Ljava/lang/Object;` on the caller side
+                // but `()Ljava/util/Map;` on the callee — runtime
+                // NoSuchMethodError.
+                format!("L{jvm};")
             } else {
                 "Ljava/lang/Object;".to_string()
             }

@@ -1,0 +1,4 @@
+name = "1319-kmp-search"
+status = "supported"
+features = ["int-array", "char-comparison", "string-indexing", "while-loop", "function-reuse"]
+reason = "End-to-end lock-in for skotch-examples/33-kmp-search: Knuth-Morris-Pratt string matching. The failure-function preprocess and the scan loop share the same `advanceQ(pattern, q, c, f)` helper, which itself reads `f` self-referentially as the failure array is filled. Validates 10 pattern/text pairs byte-identical to kotlinc."

@@ -104,7 +104,6 @@
 1087-suspend-class-prop
 1088-suspend-class-method
 1089-composable-inline-bool-and-content
-109-inner-class
 1090-composable-inline-empty-2int
 1091-suspend-tail-call-int-arg
 1092-suspend-tail-call-two-args
@@ -643,8 +642,6 @@
 849-composable-inline-bool-only
 850-composable-inline-long-only
 851-suspend-float-cond
-852-suspend-double-multiple
-853-suspend-long-with-arg
 854-suspend-int-conditional-args
 855-suspend-string-conditional-args
 856-suspend-bool-from-int
@@ -670,8 +667,6 @@
 876-composable-inline-content-only
 877-composable-inline-mixed-content
 88-smart-cast-is
-880-suspend-double-cond-args
-881-suspend-long-cond-args
 882-suspend-float-cond-args
 883-suspend-int-arr-args
 884-suspend-no-args-string-empty

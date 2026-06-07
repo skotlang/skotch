@@ -1,0 +1,13 @@
+top-level: obj{4}
+object entry count: 4
+--- round-trip ---
+{
+  "name": "Ada",
+  "langs": [
+    "Kotlin",
+    "Rust",
+    "Swift"
+  ],
+  "active": true,
+  "manager": null
+}

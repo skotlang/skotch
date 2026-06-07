@@ -1,12 +1,12 @@
 dex_version   035
-strings       27
+strings       26
 types         13
-methods       8
+methods       7
 classes       1
 
 --- strings ---
   "I"
-  "ILL"
+  "III"
   "LI"
   "LInputKt;"
   "LL"
@@ -25,7 +25,6 @@ classes       1
   "[Ljava/lang/String;"
   "fold"
   "input.kt"
-  "intValue"
   "listOf"
   "main"
   "main$lambda$0"
@@ -49,11 +48,10 @@ classes       1
   [Ljava/lang/String;
 
 --- methods ---
-  LInputKt;.main$lambda$0(Ljava/lang/Object;Ljava/lang/Object;)I
+  LInputKt;.main$lambda$0(II)I
   LInputKt;.main()V
   LInputKt;.main([Ljava/lang/String;)V
   Ljava/io/PrintStream;.println(Ljava/lang/Object;)V
-  Ljava/lang/Integer;.intValue()I
   Ljava/lang/Integer;.valueOf(I)Ljava/lang/Integer;
   Lkotlin/collections/CollectionsKt;.fold(Ljava/lang/Iterable;Ljava/lang/Object;Lkotlin/jvm/functions/Function2;)Ljava/lang/Object;
   Lkotlin/collections/CollectionsKt;.listOf([Ljava/lang/Object;)Ljava/util/List;
@@ -64,4 +62,4 @@ classes       1
   source_file  input.kt
   method       main()V flags=0x0019 regs=23 ins=0 outs=3 insns=52
   method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4
-  method       main$lambda$0(Ljava/lang/Object;Ljava/lang/Object;)I flags=0x0019 regs=5 ins=2 outs=1 insns=11
+  method       main$lambda$0(II)I flags=0x0019 regs=3 ins=2 outs=0 insns=3

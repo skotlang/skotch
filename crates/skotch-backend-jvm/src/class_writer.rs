@@ -5051,6 +5051,81 @@ fn emit_method_body(
     // The fixed-point iteration narrows this to the correct set.
     let mut live_at_end: Vec<Vec<bool>> = vec![vec![true; max_slots]; func.blocks.len()];
     let mut inherited_per_block: Vec<Vec<bool>> = vec![vec![false; max_slots]; func.blocks.len()];
+
+    // Compute reachability from entry. Unreachable blocks (e.g. the
+    // exit block of `while (true) { … }` whose only "exit" is `return`)
+    // still have Goto/Branch terminators pointing at successors — those
+    // edges shouldn't poison successors' live-slot sets, because no
+    // execution ever flows through the unreachable block. Without this
+    // filter, an unreachable predecessor's live_at_end = all-false
+    // intersects with reachable predecessors to claim slot 0 (`this`)
+    // is uninitialised at the join point, producing a `full_frame`
+    // with `Top` for slot 0 and a `VerifyError: Bad local variable
+    // type` at the next `aload_0`.
+    let n_blocks = func.blocks.len();
+    let mut reachable = vec![false; n_blocks];
+    if n_blocks > 0 {
+        reachable[0] = true;
+        let mut stk = vec![0usize];
+        while let Some(b) = stk.pop() {
+            match &func.blocks[b].terminator {
+                Terminator::Goto(t) => {
+                    let t = *t as usize;
+                    if t < n_blocks && !reachable[t] {
+                        reachable[t] = true;
+                        stk.push(t);
+                    }
+                }
+                Terminator::Branch {
+                    then_block,
+                    else_block,
+                    ..
+                } => {
+                    for &nb in &[*then_block as usize, *else_block as usize] {
+                        if nb < n_blocks && !reachable[nb] {
+                            reachable[nb] = true;
+                            stk.push(nb);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        for eh in &func.exception_handlers {
+            if (eh.try_start_block as usize) < n_blocks
+                && reachable[eh.try_start_block as usize]
+                && !reachable[eh.handler_block as usize]
+            {
+                reachable[eh.handler_block as usize] = true;
+                stk.push(eh.handler_block as usize);
+            }
+        }
+        while let Some(b) = stk.pop() {
+            match &func.blocks[b].terminator {
+                Terminator::Goto(t) => {
+                    let t = *t as usize;
+                    if t < n_blocks && !reachable[t] {
+                        reachable[t] = true;
+                        stk.push(t);
+                    }
+                }
+                Terminator::Branch {
+                    then_block,
+                    else_block,
+                    ..
+                } => {
+                    for &nb in &[*then_block as usize, *else_block as usize] {
+                        if nb < n_blocks && !reachable[nb] {
+                            reachable[nb] = true;
+                            stk.push(nb);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
     // Iterate until convergence — bumped from 4 to 16 because deeply nested
     // loops + when-as-val + cmp-fusion can take longer to propagate dead slot
     // information from peephole-emptied stores back through back-edges.
@@ -5060,6 +5135,10 @@ fn emit_method_body(
             let mut inherited = vec![true; max_slots];
             let mut has_pred = false;
             for (pi, pblk) in func.blocks.iter().enumerate() {
+                if !reachable[pi] {
+                    // Unreachable preds don't flow into successors.
+                    continue;
+                }
                 let is_pred = match &pblk.terminator {
                     Terminator::Branch {
                         then_block,
@@ -5119,8 +5198,15 @@ fn emit_method_body(
                 }
             }
             if !has_pred && bi == 0 {
+                // Block 0 with no predecessors: the initial-live JVM slots
+                // are the function's parameter slots. Use the WIDE-AWARE
+                // count — `func.params.len()` undercounts when any param
+                // is Double/Long (each takes 2 slots), which silently
+                // dropped later params from the live set and produced a
+                // `Bad local variable type` VerifyError at the first
+                // SMT frame that needs them.
                 for (s, val) in inherited.iter_mut().enumerate() {
-                    *val = s < (initial_locals_count as usize);
+                    *val = s < (initial_param_slots as usize);
                 }
             } else if !has_pred {
                 inherited = vec![false; max_slots];
@@ -5494,7 +5580,7 @@ fn emit_method_body(
                     .iter()
                     .rposition(|&live| live)
                     .map(|i| (i + 1) as u16)
-                    .unwrap_or(initial_locals_count);
+                    .unwrap_or(initial_param_slots as u16);
 
                 // Build the per-local verification entries for THIS frame.
                 let mut cur_locals_verif: Vec<Vec<u8>> = Vec::new();
@@ -5779,8 +5865,9 @@ fn has_null_stubs(func: &MirFunction) -> bool {
 /// Diagnostic version: prints the reason when a function is stubbed.
 #[allow(dead_code)]
 fn has_null_stubs_why(func: &MirFunction, class_name: &str) -> bool {
-    let result = has_null_stubs_inner(func, true);
-    if result {
+    let report = std::env::var("SKOTCH_DUMP_STUBS").is_ok();
+    let result = has_null_stubs_inner(func, report);
+    if result && report {
         eprintln!("  STUB: {class_name}.{}", func.name);
     }
     result
@@ -6288,6 +6375,67 @@ fn has_use_before_def(func: &MirFunction) -> bool {
             _ => {}
         }
     }
+    // Compute reachability from entry. Unreachable preds shouldn't
+    // contribute to the intersection — they never actually flow into
+    // the block, so their (empty) entry_defs would falsely shrink it.
+    let mut reachable = vec![false; n];
+    reachable[0] = true;
+    let mut stk = vec![0usize];
+    while let Some(b) = stk.pop() {
+        match &func.blocks[b].terminator {
+            Terminator::Goto(t) => {
+                let t = *t as usize;
+                if !reachable[t] {
+                    reachable[t] = true;
+                    stk.push(t);
+                }
+            }
+            Terminator::Branch {
+                then_block,
+                else_block,
+                ..
+            } => {
+                for &nb in &[*then_block as usize, *else_block as usize] {
+                    if !reachable[nb] {
+                        reachable[nb] = true;
+                        stk.push(nb);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    for eh in &func.exception_handlers {
+        if reachable[eh.try_start_block as usize] && !reachable[eh.handler_block as usize] {
+            reachable[eh.handler_block as usize] = true;
+            stk.push(eh.handler_block as usize);
+        }
+    }
+    while let Some(b) = stk.pop() {
+        match &func.blocks[b].terminator {
+            Terminator::Goto(t) => {
+                let t = *t as usize;
+                if !reachable[t] {
+                    reachable[t] = true;
+                    stk.push(t);
+                }
+            }
+            Terminator::Branch {
+                then_block,
+                else_block,
+                ..
+            } => {
+                for &nb in &[*then_block as usize, *else_block as usize] {
+                    if !reachable[nb] {
+                        reachable[nb] = true;
+                        stk.push(nb);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
     // entry_defs[i] = set of LocalIds guaranteed defined on entry.
     // Initialize all blocks to "all locals defined" (top of intersection
     // lattice), then refine to fixpoint. Entry block starts with just
@@ -6305,18 +6453,23 @@ fn has_use_before_def(func: &MirFunction) -> bool {
             if i == 0 {
                 continue;
             }
-            if preds[i].is_empty() {
-                // Unreachable block; treat as no defs. (Conservative)
-                let empty: rustc_hash::FxHashSet<u32> = Default::default();
-                if entry_defs[i] != empty {
-                    entry_defs[i] = empty;
-                    changed = true;
-                }
+            if !reachable[i] {
+                // Unreachable block; entry_defs irrelevant. Leave at
+                // top-of-lattice so it doesn't poison downstream blocks
+                // that we might erroneously trace through it.
                 continue;
             }
-            // Intersection of all predecessors' exit defs.
+            // Intersection of all REACHABLE predecessors' exit defs.
+            // Skipping unreachable preds matters: their entry_defs is
+            // {} (top would over-define but empty under-defines), and
+            // including them would falsely intersect a reachable
+            // block's locals down to {} — produces spurious
+            // use-before-def diagnoses on the live path.
             let mut new_entry: Option<rustc_hash::FxHashSet<u32>> = None;
             for &p in &preds[i] {
+                if !reachable[p] {
+                    continue;
+                }
                 let exit: rustc_hash::FxHashSet<u32> = entry_defs[p]
                     .iter()
                     .chain(defs_in_block[p].iter())
@@ -6334,9 +6487,17 @@ fn has_use_before_def(func: &MirFunction) -> bool {
             }
         }
     }
-    // Now check each block's reads.
+    // Now check each block's reads. Unreachable blocks are skipped —
+    // they accumulate end-of-method writebacks (e.g. var-field
+    // putfields appended after a `while (true) { … }` whose only exit
+    // is `return`) and those reads aren't real verifier hazards
+    // because the backend's own reachability pass skips emitting
+    // bytecode for unreachable blocks.
     let mut reads: Vec<u32> = Vec::new();
     for (i, b) in func.blocks.iter().enumerate() {
+        if !reachable[i] {
+            continue;
+        }
         let mut defined: rustc_hash::FxHashSet<u32> = entry_defs[i].clone();
         for stmt in &b.stmts {
             let Stmt::Assign { dest, value } = stmt;
@@ -6410,7 +6571,27 @@ fn emit_stub_method(
     access_flags: u16,
     module: &MirModule,
 ) -> Vec<u8> {
-    let descriptor = jvm_descriptor(func);
+    // For instance methods (no ACC_STATIC), skip the implicit `this`
+    // at params[0] when building the descriptor — the JVM expects an
+    // instance method's descriptor to list only explicit user params.
+    // `jvm_descriptor` includes every entry of `func.params`, which is
+    // correct for static functions but wrong here. Without this skip,
+    // a stubbed instance method gets a descriptor like
+    // `(LFoo;)V` instead of `()V`, and call sites resolving via the
+    // real `()V` descriptor crash with `NoSuchMethodError`.
+    let is_instance = access_flags & ACC_STATIC == 0 && !func.is_static;
+    let descriptor = if is_instance && !func.params.is_empty() {
+        let mut d = String::from("(");
+        for &p in func.params.iter().skip(1) {
+            let ty = &func.locals[p.0 as usize];
+            d.push_str(&jvm_param_type_string(ty));
+        }
+        d.push(')');
+        d.push_str(&jvm_type_string(&func.return_ty));
+        d
+    } else {
+        jvm_descriptor(func)
+    };
     let name_idx = cp.utf8(&func.name);
     let descriptor_idx = cp.utf8(&descriptor);
 
@@ -25797,6 +25978,12 @@ fn peephole_swap_pattern_with_branches(
         code.splice(start..start + old_len, replacement);
         // Adjust branch instructions: any 2-byte branch whose source/target
         // straddles the splice region needs its relative offset shifted.
+        // Compares are done in i32 — casting `dst` to usize wraps when
+        // `dst` is negative (e.g. an unpatched back-edge whose recorded
+        // `rel` was stale before the splice), which silently fails the
+        // adjustment.
+        let start_i = start as i32;
+        let after_i = (start + new_len) as i32;
         let mut j = 0;
         while j < code.len() {
             let op = code[j];
@@ -25805,9 +25992,9 @@ fn peephole_swap_pattern_with_branches(
                     let rel = i16::from_be_bytes([code[j + 1], code[j + 2]]) as i32;
                     let src = j as i32;
                     let dst = src + rel;
-                    let new_rel = if (src as usize) < start && (dst as usize) >= start + new_len {
+                    let new_rel = if src < start_i && dst >= after_i {
                         rel - shrink as i32
-                    } else if (src as usize) >= start + new_len && (dst as usize) <= start {
+                    } else if src >= after_i && dst <= start_i {
                         rel + shrink as i32
                     } else {
                         rel
@@ -25827,9 +26014,9 @@ fn peephole_swap_pattern_with_branches(
                         i32::from_be_bytes([code[j + 1], code[j + 2], code[j + 3], code[j + 4]]);
                     let src = j as i32;
                     let dst = src + rel;
-                    let new_rel = if (src as usize) < start && (dst as usize) >= start + new_len {
+                    let new_rel = if src < start_i && dst >= after_i {
                         rel - shrink as i32
-                    } else if (src as usize) >= start + new_len && (dst as usize) <= start {
+                    } else if src >= after_i && dst <= start_i {
                         rel + shrink as i32
                     } else {
                         rel
@@ -27955,7 +28142,15 @@ fn write_slot_verif_with_code(
             Ty::Long => Some('J'),
             Ty::Float => Some('F'),
             Ty::Double => Some('D'),
-            Ty::String | Ty::Class(_) | Ty::IntArray | Ty::Nullable(_) | Ty::Any => Some('A'),
+            Ty::String
+            | Ty::Class(_)
+            | Ty::IntArray
+            | Ty::LongArray
+            | Ty::DoubleArray
+            | Ty::BooleanArray
+            | Ty::ByteArray
+            | Ty::Nullable(_)
+            | Ty::Any => Some('A'),
             _ => None,
         });
     // Compute the bytecode-walk-derived type kind at this frame offset.
@@ -28167,6 +28362,26 @@ fn write_slot_verif(
                 Ty::IntArray => {
                     out.push(7); // Object_variable_info
                     let idx = cp.class("[I");
+                    out.write_u16::<BigEndian>(idx).unwrap();
+                }
+                Ty::LongArray => {
+                    out.push(7); // Object_variable_info
+                    let idx = cp.class("[J");
+                    out.write_u16::<BigEndian>(idx).unwrap();
+                }
+                Ty::DoubleArray => {
+                    out.push(7); // Object_variable_info
+                    let idx = cp.class("[D");
+                    out.write_u16::<BigEndian>(idx).unwrap();
+                }
+                Ty::BooleanArray => {
+                    out.push(7); // Object_variable_info
+                    let idx = cp.class("[Z");
+                    out.write_u16::<BigEndian>(idx).unwrap();
+                }
+                Ty::ByteArray => {
+                    out.push(7); // Object_variable_info
+                    let idx = cp.class("[B");
                     out.write_u16::<BigEndian>(idx).unwrap();
                 }
                 Ty::Nullable(inner) => {

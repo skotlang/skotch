@@ -1,0 +1,4 @@
+name = "1293-var-field-stale-after-call"
+status = "supported"
+features = ["var-field", "cache-invalidation", "post-pass"]
+reason = "Locks in mir-lower post-pass that re-loads var-field caches after each Call MIR statement. Without it, `parseStringLit` reads `pos` from a stale local that `expect('\"')` had advanced via putfield."

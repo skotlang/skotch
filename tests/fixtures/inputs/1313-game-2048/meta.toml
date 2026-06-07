@@ -1,0 +1,4 @@
+name = "1313-game-2048"
+status = "supported"
+features = ["int-array", "compose-rotation", "string-concat", "nested-while"]
+reason = "End-to-end lock-in for skotch-examples/28-game-2048: 4x4 sliding/merging board logic (the core of the 2048 puzzle game). Implements all 4 directions via `slideLeft` + transpose/reverse composition. Per-row compact-merge-compact pipeline with the merge body extracted into a 2-line `stepMerge` helper so the inner while-loop stays a single helper call."

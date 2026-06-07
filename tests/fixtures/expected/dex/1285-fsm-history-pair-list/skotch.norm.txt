@@ -1,0 +1,125 @@
+dex_version   035
+strings       52
+types         19
+methods       27
+classes       1
+
+--- strings ---
+  "<init>"
+  "EMERGENCY"
+  "Event$valueOf"
+  "Event$values"
+  "GREEN"
+  "I"
+  "L"
+  "LEvent;"
+  "LI"
+  "LInputKt;"
+  "LL"
+  "LLight;"
+  "LMachine;"
+  "Light$valueOf"
+  "Light$values"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Iterable;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/String;"
+  "Ljava/lang/StringBuilder;"
+  "Ljava/lang/System;"
+  "Ljava/util/ArrayList;"
+  "Ljava/util/Iterator;"
+  "Ljava/util/List;"
+  "Lkotlin/collections/CollectionsKt;"
+  "RED"
+  "TICK"
+  "V"
+  "VL"
+  "YELLOW"
+  "Z"
+  "ZL"
+  "[Ljava/lang/Object;"
+  "[Ljava/lang/String;"
+  "add"
+  "append"
+  "handle"
+  "hasNext"
+  "input.kt"
+  "iterator"
+  "listOf"
+  "main"
+  "next"
+  "now: "
+  "out"
+  "println"
+  "replay"
+  "rewound to step 2: "
+  "rewound to step 4: "
+  "toString"
+  "trace"
+  "trace:"
+
+--- types ---
+  I
+  LEvent;
+  LInputKt;
+  LLight;
+  LMachine;
+  Ljava/io/PrintStream;
+  Ljava/lang/Iterable;
+  Ljava/lang/Object;
+  Ljava/lang/String;
+  Ljava/lang/StringBuilder;
+  Ljava/lang/System;
+  Ljava/util/ArrayList;
+  Ljava/util/Iterator;
+  Ljava/util/List;
+  Lkotlin/collections/CollectionsKt;
+  V
+  Z
+  [Ljava/lang/Object;
+  [Ljava/lang/String;
+
+--- methods ---
+  LInputKt;.EMERGENCY()Ljava/lang/Object;
+  LInputKt;.Event$valueOf(Ljava/lang/String;)Ljava/lang/Object;
+  LInputKt;.Event$values()Ljava/lang/Object;
+  LInputKt;.GREEN()Ljava/lang/Object;
+  LInputKt;.Light$valueOf(Ljava/lang/String;)Ljava/lang/Object;
+  LInputKt;.Light$values()Ljava/lang/Object;
+  LInputKt;.RED()Ljava/lang/Object;
+  LInputKt;.TICK()Ljava/lang/Object;
+  LInputKt;.YELLOW()Ljava/lang/Object;
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  LMachine;.<init>(Ljava/lang/Object;)V
+  LMachine;.handle(Ljava/lang/Object;)Ljava/lang/Object;
+  LMachine;.replay(I)Ljava/lang/Object;
+  LMachine;.trace()Ljava/lang/Object;
+  Ljava/io/PrintStream;.println(Ljava/lang/Object;)V
+  Ljava/io/PrintStream;.println(Ljava/lang/String;)V
+  Ljava/lang/Iterable;.iterator()Ljava/util/Iterator;
+  Ljava/lang/StringBuilder;.<init>()V
+  Ljava/lang/StringBuilder;.append(Ljava/lang/Object;)Ljava/lang/StringBuilder;
+  Ljava/lang/StringBuilder;.append(Ljava/lang/String;)Ljava/lang/StringBuilder;
+  Ljava/lang/StringBuilder;.toString()Ljava/lang/String;
+  Ljava/util/ArrayList;.<init>()V
+  Ljava/util/ArrayList;.add(Ljava/lang/Object;)Z
+  Ljava/util/Iterator;.hasNext()Z
+  Ljava/util/Iterator;.next()Ljava/lang/Object;
+  Lkotlin/collections/CollectionsKt;.listOf([Ljava/lang/Object;)Ljava/util/List;
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       EMERGENCY()Ljava/lang/Object; flags=0x0019 regs=1 ins=0 outs=0 insns=3
+  method       Event$valueOf(Ljava/lang/String;)Ljava/lang/Object; flags=0x0019 regs=8 ins=1 outs=0 insns=32
+  method       Event$values()Ljava/lang/Object; flags=0x0019 regs=5 ins=0 outs=2 insns=22
+  method       GREEN()Ljava/lang/Object; flags=0x0019 regs=1 ins=0 outs=0 insns=3
+  method       Light$valueOf(Ljava/lang/String;)Ljava/lang/Object; flags=0x0019 regs=11 ins=1 outs=0 insns=45
+  method       Light$values()Ljava/lang/Object; flags=0x0019 regs=7 ins=0 outs=2 insns=30
+  method       RED()Ljava/lang/Object; flags=0x0019 regs=1 ins=0 outs=0 insns=3
+  method       TICK()Ljava/lang/Object; flags=0x0019 regs=1 ins=0 outs=0 insns=3
+  method       YELLOW()Ljava/lang/Object; flags=0x0019 regs=1 ins=0 outs=0 insns=3
+  method       main()V flags=0x0019 regs=34 ins=0 outs=2 insns=179
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4

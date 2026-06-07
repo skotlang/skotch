@@ -1,0 +1,4 @@
+name = "1292-char-stringbuilder-append"
+status = "supported"
+features = ["overload-resolution", "char", "stringbuilder"]
+reason = "Locks in `overload_score` fix: Char arg now picks the (C) overload of StringBuilder.append, not the (Object) one — avoids `VerifyError: Type integer is not assignable to 'java/lang/Object'`."

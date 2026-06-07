@@ -12,13 +12,53 @@ pub mod kotlin_metadata;
 use std::collections::HashMap;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 /// Process-wide cache of `(class_path → Option<ClassInfo>)` lookups so
 /// `lookup_method_descriptor` doesn't re-open every JAR in CLASSPATH on
 /// every call. Populated lazily on first miss and on `preload_*` calls.
 /// `None` marks a known-absent class so we don't repeatedly re-scan.
 static CLASSPATH_CACHE: Mutex<Option<HashMap<String, Option<ClassInfo>>>> = Mutex::new(None);
+
+/// Process-wide cache of open ZIP archives keyed by absolute path. The
+/// underlying `ZipArchive::new` call parses the entire central directory
+/// (10s of MB for `java.base.jmod`), and a single MIR-lower run does
+/// hundreds of class lookups — keeping each archive parsed once shaves
+/// hundreds of ms off the cold compile path. The `File` handles stay
+/// open for the life of the process; the OS reclaims them at exit.
+static ARCHIVE_CACHE: Mutex<Option<HashMap<PathBuf, zip::ZipArchive<std::fs::File>>>> =
+    Mutex::new(None);
+
+/// Open `entry_path` from `archive_path`, reusing a previously-parsed
+/// `ZipArchive` central directory when available. The caller must accept
+/// that the returned bytes are owned (a copy of the entry contents) —
+/// passing a borrowed `ZipFile` back out would require either GAT-style
+/// lifetimes or a closure-based API; copying the entry bytes is cheaper
+/// than the central-directory reparse it avoids.
+fn read_archive_entry(archive_path: &Path, entry_path: &str) -> io::Result<Vec<u8>> {
+    let mut guard = ARCHIVE_CACHE
+        .lock()
+        .map_err(|_| io::Error::other("ARCHIVE_CACHE mutex poisoned"))?;
+    let cache = guard.get_or_insert_with(HashMap::new);
+    if !cache.contains_key(archive_path) {
+        let file = std::fs::File::open(archive_path)?;
+        let archive = zip::ZipArchive::new(file)
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+        cache.insert(archive_path.to_path_buf(), archive);
+    }
+    let archive = cache
+        .get_mut(archive_path)
+        .expect("just inserted if missing");
+    let mut entry = archive.by_name(entry_path).map_err(|_| {
+        io::Error::new(
+            io::ErrorKind::NotFound,
+            format!("{entry_path} not in {}", archive_path.display()),
+        )
+    })?;
+    let mut bytes = Vec::with_capacity(entry.size() as usize);
+    entry.read_to_end(&mut bytes)?;
+    Ok(bytes)
+}
 
 /// Process-wide memo of [`load_jdk_class`] results (`class_path →
 /// Option<ClassInfo>`). The underlying search opens `java.base.jmod`, then
@@ -29,7 +69,7 @@ static CLASSPATH_CACHE: Mutex<Option<HashMap<String, Option<ClassInfo>>>> = Mute
 /// futile search repeated per call. This made JetChat-scale builds take 10+
 /// minutes. Caching both hits and misses (the classpath is fixed for a build)
 /// bounds the search to once per distinct `class_path`.
-static JDK_CLASS_CACHE: Mutex<Option<HashMap<String, Option<ClassInfo>>>> = Mutex::new(None);
+static JDK_CLASS_CACHE: Mutex<Option<HashMap<String, Option<Arc<ClassInfo>>>>> = Mutex::new(None);
 
 /// Pre-populate the classpath cache from a set of JAR paths. Idempotent —
 /// existing entries aren't overwritten. Call this once per project build
@@ -54,9 +94,12 @@ fn cached_class_lookup(class_path: &str) -> Option<ClassInfo> {
             }
         }
     }
-    // Slow path: scan CLASSPATH once, populate cache.
+    // Slow path: scan CLASSPATH once, populate cache. Uses the shared
+    // archive cache so repeated lookups against the same JAR don't
+    // re-parse its central directory.
     let cp = std::env::var("CLASSPATH").unwrap_or_default();
     let sep = if cfg!(windows) { ';' } else { ':' };
+    let entry_name = format!("{class_path}.class");
     let mut found: Option<ClassInfo> = None;
     for jar_path in cp.split(sep) {
         if jar_path.is_empty() {
@@ -66,18 +109,10 @@ fn cached_class_lookup(class_path: &str) -> Option<ClassInfo> {
         if !path.exists() {
             continue;
         }
-        if let Ok(file) = std::fs::File::open(path) {
-            if let Ok(mut archive) = zip::ZipArchive::new(file) {
-                let entry_name = format!("{class_path}.class");
-                if let Ok(mut entry) = archive.by_name(&entry_name) {
-                    let mut bytes = Vec::new();
-                    if std::io::Read::read_to_end(&mut entry, &mut bytes).is_ok() {
-                        if let Ok(ci) = parse_class(&bytes) {
-                            found = Some(ci);
-                            break;
-                        }
-                    }
-                }
+        if let Ok(bytes) = read_archive_entry(path, &entry_name) {
+            if let Ok(ci) = parse_class(&bytes) {
+                found = Some(ci);
+                break;
             }
         }
     }
@@ -934,7 +969,12 @@ fn collect_strings(items: Vec<ElementValue>) -> Vec<String> {
 
 /// Load a class from the JDK's jmod files. Searches java.base first,
 /// then all other jmod files in the jmods/ directory.
-pub fn load_jdk_class(class_path: &str) -> io::Result<ClassInfo> {
+///
+/// The result is held behind an `Arc` so cache hits are a cheap pointer
+/// clone — `ClassInfo` carries a few hundred owned `String`s for the
+/// constant-pool / methods / fields tables, and a deep clone per hit
+/// added millions of allocations to a typical compile.
+pub fn load_jdk_class(class_path: &str) -> io::Result<Arc<ClassInfo>> {
     // Memoize: the search below is expensive and MIR-lowering calls it
     // thousands of times for the same handful of classes (and repeats the
     // entire futile search for never-found Compose/AndroidX classes). The
@@ -944,7 +984,7 @@ pub fn load_jdk_class(class_path: &str) -> io::Result<ClassInfo> {
         if let Some(cache) = guard.as_ref() {
             if let Some(slot) = cache.get(class_path) {
                 return match slot {
-                    Some(ci) => Ok(ci.clone()),
+                    Some(ci) => Ok(Arc::clone(ci)),
                     None => Err(io::Error::new(
                         io::ErrorKind::NotFound,
                         "class not found (cached miss)",
@@ -953,7 +993,24 @@ pub fn load_jdk_class(class_path: &str) -> io::Result<ClassInfo> {
             }
         }
     }
-    let result = load_jdk_class_uncached(class_path);
+    // Cheap reject for single-letter / lowercase-led last segments
+    // that can't possibly be valid Java class names. The earlier
+    // version of this check also rejected ANY unqualified PascalCase
+    // name not on a hand-rolled allow-list (`Object`, `String`,
+    // `StringBuilder`, …) — but that locked out unqualified user
+    // class names (`Item`, `LruCache`) that some lookup paths still
+    // pass raw. A user-class lookup of `Item` is rare and fast (the
+    // miss is cached after the first walk); the false-rejection
+    // of `Item.count` field lookups was a real bug. Keep only the
+    // single-letter / non-PascalCase rejection — that covers the
+    // common `java/lang/l` / bare `T` leaks without misfiring.
+    if is_obviously_not_a_class(class_path) {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "name looks like a type parameter or local variable",
+        ));
+    }
+    let result = load_jdk_class_uncached(class_path).map(Arc::new);
     if let Ok(mut guard) = JDK_CLASS_CACHE.lock() {
         let cache = guard.get_or_insert_with(HashMap::new);
         cache.insert(class_path.to_string(), result.as_ref().ok().cloned());
@@ -961,67 +1018,102 @@ pub fn load_jdk_class(class_path: &str) -> io::Result<ClassInfo> {
     result
 }
 
+fn is_obviously_not_a_class(class_path: &str) -> bool {
+    let last_segment = class_path.rsplit('/').next().unwrap_or(class_path);
+    // Empty or single-character last segment — `java/lang/l`, bare `T`, …
+    if last_segment.len() <= 1 {
+        return true;
+    }
+    // First char of the last segment must be an uppercase ASCII letter or
+    // a digit (some JVM-internal names start with `$`/digits, but those
+    // also won't be reached by our prepend-java/lang path). Lowercase or
+    // symbolic — almost certainly a typo / local-var leak.
+    let Some(first) = last_segment.chars().next() else {
+        return true;
+    };
+    if !first.is_ascii_uppercase() && first != '$' {
+        return true;
+    }
+    false
+}
+
 fn load_jdk_class_uncached(class_path: &str) -> io::Result<ClassInfo> {
-    let jdk_home = find_jdk_home()?;
-    let jmods_dir = jdk_home.join("jmods");
-    if !jmods_dir.exists() {
-        return Err(io::Error::new(
-            io::ErrorKind::NotFound,
-            "jmods directory not found",
-        ));
-    }
     let entry_path = format!("classes/{class_path}.class");
+    let jar_entry = format!("{class_path}.class");
+    load_jdk_class_uncached_inner(class_path, &entry_path, &jar_entry)
+}
 
-    // Try java.base.jmod first (most common classes).
-    let base_jmod = jmods_dir.join("java.base.jmod");
-    if base_jmod.exists() {
-        if let Ok(info) = load_class_from_jmod(&base_jmod, &entry_path) {
-            return Ok(info);
-        }
-    }
+fn load_jdk_class_uncached_inner(
+    class_path: &str,
+    entry_path: &str,
+    jar_entry: &str,
+) -> io::Result<ClassInfo> {
+    // Path-prefix routing: `kotlin/*` and `kotlinx/*` only live in the
+    // Kotlin stdlib JARs, never in the JDK. Walking every jmod first
+    // (28 archives × by_name probe) added ~50 ms per first-time
+    // kotlin/Pair / kotlin/collections/* lookup. Same shape in reverse:
+    // `java/*` and `javax/*` only live in the JDK, not in Kotlin JARs.
+    let probably_kotlin = class_path.starts_with("kotlin/") || class_path.starts_with("kotlinx/");
+    let probably_jdk = class_path.starts_with("java/") || class_path.starts_with("javax/");
 
-    // Search all other jmod files.
-    if let Ok(entries) = std::fs::read_dir(&jmods_dir) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.extension().and_then(|e| e.to_str()) == Some("jmod") {
-                if let Ok(info) = load_class_from_jmod(&path, &entry_path) {
+    if !probably_kotlin {
+        let jdk_home = find_jdk_home()?;
+        let jmods_dir = jdk_home.join("jmods");
+        if jmods_dir.exists() {
+            // Try java.base.jmod first (most common classes).
+            let base_jmod = jmods_dir.join("java.base.jmod");
+            if base_jmod.exists() {
+                if let Ok(info) = load_class_from_jmod(&base_jmod, entry_path) {
                     return Ok(info);
+                }
+            }
+
+            // Search all other jmod files.
+            if let Ok(entries) = std::fs::read_dir(&jmods_dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if path.extension().and_then(|e| e.to_str()) == Some("jmod") {
+                        if let Ok(info) = load_class_from_jmod(&path, entry_path) {
+                            return Ok(info);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Also check CLASSPATH for directories and JARs.
+        if let Ok(cp) = std::env::var("CLASSPATH") {
+            let sep = if cfg!(windows) { ';' } else { ':' };
+            for entry in cp.split(sep) {
+                let p = Path::new(entry);
+                if p.is_dir() {
+                    let class_file = p.join(format!("{class_path}.class"));
+                    if class_file.exists() {
+                        let bytes = std::fs::read(&class_file)?;
+                        return parse_class(&bytes);
+                    }
+                } else if p.extension().and_then(|e| e.to_str()) == Some("jar") && p.exists() {
+                    if let Ok(info) = load_class_from_jar(p, jar_entry) {
+                        return Ok(info);
+                    }
                 }
             }
         }
     }
 
-    // Also check CLASSPATH for directories and JARs.
-    if let Ok(cp) = std::env::var("CLASSPATH") {
-        let sep = if cfg!(windows) { ';' } else { ':' };
-        for entry in cp.split(sep) {
-            let p = Path::new(entry);
-            if p.is_dir() {
-                let class_file = p.join(format!("{class_path}.class"));
-                if class_file.exists() {
-                    let bytes = std::fs::read(&class_file)?;
-                    return parse_class(&bytes);
-                }
-            } else if p.extension().and_then(|e| e.to_str()) == Some("jar") && p.exists() {
-                if let Ok(info) = load_class_from_jar(p, &format!("{class_path}.class")) {
-                    return Ok(info);
-                }
-            }
-        }
-    }
-
-    // Search Kotlin stdlib JARs.
-    if let Ok(kotlin_libs) = find_kotlin_lib_dir() {
-        for jar_name in &[
-            "kotlin-stdlib.jar",
-            "kotlin-stdlib-jdk8.jar",
-            "kotlin-stdlib-jdk7.jar",
-        ] {
-            let jar = kotlin_libs.join(jar_name);
-            if jar.exists() {
-                if let Ok(info) = load_class_from_jar(&jar, &format!("{class_path}.class")) {
-                    return Ok(info);
+    // Search Kotlin stdlib JARs (skipped for `java/*` paths).
+    if !probably_jdk {
+        if let Ok(kotlin_libs) = find_kotlin_lib_dir() {
+            for jar_name in &[
+                "kotlin-stdlib.jar",
+                "kotlin-stdlib-jdk8.jar",
+                "kotlin-stdlib-jdk7.jar",
+            ] {
+                let jar = kotlin_libs.join(jar_name);
+                if jar.exists() {
+                    if let Ok(info) = load_class_from_jar(&jar, jar_entry) {
+                        return Ok(info);
+                    }
                 }
             }
         }
@@ -1110,26 +1202,12 @@ pub fn find_kotlin_lib_dir() -> io::Result<PathBuf> {
 }
 
 fn load_class_from_jmod(jmod_path: &Path, entry_path: &str) -> io::Result<ClassInfo> {
-    let file = std::fs::File::open(jmod_path)?;
-    let mut archive =
-        zip::ZipArchive::new(file).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-    let mut entry = archive.by_name(entry_path).map_err(|_| {
-        io::Error::new(io::ErrorKind::NotFound, format!("{entry_path} not in jmod"))
-    })?;
-    let mut bytes = Vec::new();
-    entry.read_to_end(&mut bytes)?;
+    let bytes = read_archive_entry(jmod_path, entry_path)?;
     parse_class(&bytes)
 }
 
 fn load_class_from_jar(jar_path: &Path, entry_path: &str) -> io::Result<ClassInfo> {
-    let file = std::fs::File::open(jar_path)?;
-    let mut archive =
-        zip::ZipArchive::new(file).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-    let mut entry = archive
-        .by_name(entry_path)
-        .map_err(|_| io::Error::new(io::ErrorKind::NotFound, format!("{entry_path} not in jar")))?;
-    let mut bytes = Vec::new();
-    entry.read_to_end(&mut bytes)?;
+    let bytes = read_archive_entry(jar_path, entry_path)?;
     parse_class(&bytes)
 }
 
@@ -1413,64 +1491,14 @@ fn parse_descriptor_params(desc: &str) -> Vec<String> {
     params
 }
 
+/// Returns an empty registry. Individual classes are loaded
+/// on-demand via the `JDK_CLASS_CACHE` / `ARCHIVE_CACHE` pair on the
+/// first `load_jdk_class(name)` call — no need to eagerly parse 26
+/// classes (~70 ms cold) when a typical compile only references a
+/// few. Kept as a function so callers that pass `build_jdk_registry`
+/// to `get_or_insert_with` keep working unchanged.
 pub fn build_jdk_registry() -> HashMap<String, ClassInfo> {
-    let mut reg = HashMap::new();
-    let classes = [
-        "java/lang/System",
-        "java/lang/Math",
-        "java/lang/Integer",
-        "java/lang/Long",
-        "java/lang/Double",
-        "java/lang/Boolean",
-        "java/lang/String",
-        "java/lang/Thread",
-        "java/lang/Runtime",
-        "java/lang/Object",
-        "java/lang/StringBuilder",
-        "java/util/Arrays",
-    ];
-    for class_path in &classes {
-        if let Ok(info) = load_jdk_class(class_path) {
-            let simple = class_path
-                .rsplit('/')
-                .next()
-                .unwrap_or(class_path)
-                .to_string();
-            reg.insert(simple, info.clone());
-            reg.insert(class_path.to_string(), info);
-        }
-    }
-
-    // Pre-load common Kotlin stdlib classes.
-    let kotlin_classes = [
-        "kotlin/text/StringsKt",
-        "kotlin/text/StringsKt__StringsKt",
-        "kotlin/text/StringsKt__StringsJVMKt",
-        "kotlin/text/StringsKt__StringNumberConversionsJVMKt",
-        "kotlin/text/StringsKt__StringNumberConversionsKt",
-        "kotlin/collections/CollectionsKt",
-        "kotlin/collections/CollectionsKt__CollectionsKt",
-        "kotlin/collections/CollectionsKt__CollectionsJVMKt",
-        "kotlin/collections/ArraysKt",
-        "kotlin/ranges/RangesKt",
-        "kotlin/comparisons/ComparisonsKt",
-        "kotlin/io/ConsoleKt",
-        "kotlin/math/MathKt",
-        "kotlin/math/MathKt__MathJVMKt",
-    ];
-    for class_path in &kotlin_classes {
-        if let Ok(info) = load_jdk_class(class_path) {
-            let simple = class_path
-                .rsplit('/')
-                .next()
-                .unwrap_or(class_path)
-                .to_string();
-            reg.insert(simple, info.clone());
-            reg.insert(class_path.to_string(), info);
-        }
-    }
-
-    reg
+    HashMap::new()
 }
 
 /// Find the JDK home directory.

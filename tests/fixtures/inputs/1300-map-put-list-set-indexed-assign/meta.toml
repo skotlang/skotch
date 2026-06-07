@@ -1,0 +1,4 @@
+name = "1300-map-put-list-set-indexed-assign"
+status = "supported"
+features = ["mutable-map", "mutable-list", "indexed-assignment"]
+reason = "Locks in mir-lower fix: `map[k] = v` and `list[i] = v` now dispatch to `Map.put` / `List.set` respectively (with autoboxing of the key/value) instead of emitting `aastore`, which the verifier rejected as 'Bad type on operand stack' against `java/util/Map` / `java/util/List` receivers."

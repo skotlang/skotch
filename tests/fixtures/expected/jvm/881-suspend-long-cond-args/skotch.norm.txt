@@ -11,7 +11,7 @@ method        pick (JJZLkotlin/coroutines/Continuation;)Ljava/lang/Object; 0x001
     0009 lload_2
     0010 invokestatic Method(kotlin/coroutines/jvm/internal/Boxing.boxLong:(J)Ljava/lang/Long;)
     0013 areturn
-    sub_attr  StackMapTable (5 bytes)
+    sub_attr  StackMapTable (11 bytes)
   attr        Signature (2 bytes)
   attr        RuntimeInvisibleAnnotations (6 bytes)
   attr        RuntimeInvisibleParameterAnnotations (13 bytes)

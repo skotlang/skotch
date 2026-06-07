@@ -1,0 +1,72 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=5 max_locals=6
+    0000 new Class(Counter)
+    0003 dup
+    0004 iconst_0
+    0005 iconst_1
+    0006 aconst_null
+    0007 invokespecial Method(Counter.<init>:(IILkotlin/jvm/internal/DefaultConstructorMarker;)V)
+    0010 astore_0
+    0011 iconst_3
+    0012 istore_1
+    0013 iconst_0
+    0014 istore_2
+    0015 iload_2
+    0016 iload_1
+    0017 if_icmpge 36
+    0020 iload_2
+    0021 istore_3
+    0022 iconst_0
+    0023 istore 4
+    0025 aload_0
+    0026 invokevirtual Method(Counter.bump:()I)
+    0029 pop
+    0030 iinc 2 1
+    0033 goto 15
+    0036 aload_0
+    0037 invokevirtual Method(Counter.value:()I)
+    0040 istore_1
+    0041 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0044 iload_1
+    0045 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0048 new Class(Counter)
+    0051 dup
+    0052 iconst_0
+    0053 iconst_1
+    0054 aconst_null
+    0055 invokespecial Method(Counter.<init>:(IILkotlin/jvm/internal/DefaultConstructorMarker;)V)
+    0058 astore_1
+    0059 bipush 7
+    0061 istore_2
+    0062 iconst_0
+    0063 istore_3
+    0064 iload_3
+    0065 iload_2
+    0066 if_icmpge 86
+    0069 iload_3
+    0070 istore 4
+    0072 iconst_0
+    0073 istore 5
+    0075 aload_1
+    0076 invokevirtual Method(Counter.bump:()I)
+    0079 pop
+    0080 iinc 3 1
+    0083 goto 64
+    0086 aload_1
+    0087 invokevirtual Method(Counter.value:()I)
+    0090 istore_2
+    0091 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0094 iload_2
+    0095 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0098 return
+    sub_attr  StackMapTable (27 bytes)
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
+class_attr    SourceDebugExtension (116 bytes)
+class_attr    RuntimeInvisibleAnnotations (14 bytes)

@@ -1,0 +1,4 @@
+name = "1316-n-queens-backtracking"
+status = "supported"
+features = ["int-array", "recursion", "backtracking", "while-loop", "println-concat"]
+reason = "End-to-end lock-in for skotch-examples/30-n-queens: backtracking N-queens solver enumerating solution counts for N=1..9. The main loop's println uses string-concat which triggered #1315 (swap_pattern_with_branches' usize-cast bug). Validates the fix end-to-end alongside the recursive backtracking with shared IntArray counter."

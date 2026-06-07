@@ -1,0 +1,57 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=4 max_locals=4
+    0000 new Class(kotlin/ranges/IntRange)
+    0003 dup
+    0004 iconst_1
+    0005 iconst_5
+    0006 invokespecial Method(kotlin/ranges/IntRange.<init>:(II)V)
+    0009 astore_0
+    0010 iconst_0
+    0011 istore_1
+    0012 aload_0
+    0013 invokevirtual Method(kotlin/ranges/IntRange.getFirst:()I)
+    0016 istore_2
+    0017 aload_0
+    0018 invokevirtual Method(kotlin/ranges/IntRange.getLast:()I)
+    0021 istore_3
+    0022 iload_2
+    0023 iload_3
+    0024 if_icmpgt 42
+    0027 iload_1
+    0028 iload_2
+    0029 iadd
+    0030 istore_1
+    0031 iload_2
+    0032 iload_3
+    0033 if_icmpeq 42
+    0036 iinc 2 1
+    0039 goto 27
+    0042 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0045 iload_1
+    0046 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0049 iconst_0
+    0050 istore_2
+    0051 bipush 10
+    0053 istore_3
+    0054 iload_3
+    0055 bipush 13
+    0057 if_icmpge 70
+    0060 iload_2
+    0061 iload_3
+    0062 iadd
+    0063 istore_2
+    0064 iinc 3 1
+    0067 goto 54
+    0070 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0073 iload_2
+    0074 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0077 return
+    sub_attr  StackMapTable (18 bytes)
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

@@ -1,0 +1,4 @@
+name = "1299-stack-vm-sealed-when"
+status = "supported"
+features = ["sealed-class", "when-is", "mutable-list", "var-field", "loop"]
+reason = "End-to-end lock-in for skotch-examples/19-stack-bytecode-vm: sealed `Instr` hierarchy with mixed object + class variants, when-is dispatch in a while loop that mutates a var-field pc, three programs (countdown, arithmetic, swap) all producing kotlinc-identical stdout."
