@@ -1,19 +1,7 @@
 # skotch
 
 A Rust toolchain that replaces the Kotlin compiler, Gradle, and Android SDK
-build tools with a single CLI. Compiles Kotlin 2 sources to five targets:
-
-| Target | Output | Pipeline |
-|---|---|---|
-| JVM | `.class` (Java 17, v61) | MIR → JVM bytecode |
-| DEX | `.dex` (Dalvik v035) | MIR → DEX bytecode |
-| klib | `.klib` (zip with serialized IR) | MIR → JSON IR → zip |
-| LLVM IR | `.ll` (textual LLVM 19+) | MIR → klib → LLVM IR |
-| Native | host executable | MIR → klib → LLVM IR → clang |
-
-The shipping binary has no dependency on `kotlinc`, `javac`, `d8`, `gradle`,
-`aapt2`, or `apksigner`. `clang` is the only external tool invoked, for the
-native link step.
+build tools with a single CLI.
 
 ## Installation
 
@@ -103,74 +91,6 @@ outputs and the expected stdout are committed under
 differences (CP ordering, debug attrs, kotlin metadata, target triples) so
 two compilers can be diffed without false positives.
 
-## Kotlin language support
-
-Coverage is broad: 397/398 supported e2e fixtures compile and run with the
-expected stdout. The compiler handles classes (regular, data, enum, sealed,
-inner, nested, object, companion, abstract), interfaces with default
-methods, generics with variance and reified params, lambdas with closure
-capture, scope functions, smart casts, sealed-when exhaustiveness, suspend
-functions, and a substantial portion of the Kotlin stdlib.
-
-### Implemented
-
-| Feature | Notes |
-|---|---|
-| Top-level `fun` | Default params, named args, expression body, varargs, infix |
-| Extension functions/properties | `fun Int.isEven()`, method chaining |
-| Local functions | Including recursive |
-| Classes | Primary + secondary constructors, `init` blocks, `var`/`val` fields, visibility modifiers (parsed; not enforced), `open`/`abstract` |
-| Data classes | Auto `toString`/`equals`/`hashCode`/`copy`/`componentN` |
-| Enum classes | Entries, `.name`, constructor params, `values()`, `valueOf(String)`, when matching, abstract methods per entry |
-| Sealed classes/interfaces | Exhaustive when + `is` patterns, smart-cast narrowing |
-| Object declarations | `object X { fun y() }` as static methods |
-| Companion objects | `ClassName.method()` dispatch |
-| Inner/nested classes | `inner class` with `this$0`, `class Outer { class Nested }` |
-| `@JvmField` / `@JvmStatic` | Field-only emission; companion static delegate |
-| Inheritance | `open class`, `override fun`, `super` calls, 3-level chains, inherited fields |
-| Interfaces | Abstract + default methods, `invokeinterface`, multi-implementation |
-| Property getters/setters | Custom `get()`/`set(v) { field = v }` with backing-field keyword |
-| Property delegation | `val x by lazy { … }` (eager-init in ctor); `val x by viewModels()` |
-| Interface delegation | `class X : Base by b` auto-forwards |
-| Operator overloading | `operator fun plus/invoke/compareTo/get/set/contains` |
-| Variables | `val`, `var`, `lateinit var`, `const val` |
-| Numeric types | Int, Long, Double, Float, Byte, Short, Char — full arithmetic, conversions |
-| Literals | Decimal/hex/binary/underscored integers; `L`/`f` suffixes; scientific notation |
-| String | Templates `"$x"` / `"${expr}"`, raw `"""…"""`, 20+ methods (length, uppercase, substring, contains, …) |
-| Nullable types | `T?`, elvis `?:`, safe call `?.`, non-null `!!`, smart-cast narrowing |
-| Generics | Functions/classes, upper bounds, `in`/`out` variance, star projection, type erasure, reified `T` in inline fns |
-| Type aliases | `typealias Name = Type` |
-| Control flow | `if`/`else`, `when` (with/without subject, ranges, comma patterns), `for` over ranges and collections, `while`, `do-while`, `break`/`continue`, labeled returns |
-| Exceptions | `try`/`catch`/`finally`, `throw`, full JVM exception tables, `e.message`, `try` as expression |
-| Lambdas | Closure capture (val + var with Ref boxing), trailing lambda, `it`, nested lambdas, LambdaMetafactory dispatch |
-| Function types | `(Int) -> String`, receiver types, erased to Object on JVM |
-| Higher-order functions | Synthetic `$FunctionN` interfaces, autoboxing |
-| Function references | `::name` and `Class::method` desugar to lambdas |
-| SAM conversions | `Interface { lambda }` → anonymous object |
-| Scope functions | `let`, `also`, `run`, `apply`, `with`, `repeat` as MIR intrinsics |
-| Destructuring | `val (a, b) = pair`, `for ((k, v) in map)` |
-| Collections | `listOf`, `mutableListOf`, `mapOf`, `setOf`, real `kotlin.Pair`, `to` infix; `.map`/`.filter`/`.fold`/`.forEach`/… via real stdlib |
-| Ranges | `..`, `until`, `downTo`, `step`, `in`/`!in` |
-| Coroutines (suspend) | `suspend fun`, `runBlocking`, `launch`, `async`/`await`, `delay`, `withContext`/`withTimeout`, structured concurrency. CPS state-machine extraction; ~58% byte-parity vs kotlinc |
-| Compose `@Composable` | `$composer`/`$changed` injection, restart-scope lambdas, skip-optimization, `remember { }` return-type propagation, state holders |
-| Annotations | `@Suppress`, `@Deprecated`, `@field:JvmField`, `@JvmStatic`, `@Composable` |
-| Java interop | Real `.class` parsing from JDK jmods + CLASSPATH; deferred resolution; clear errors |
-| kotlin-stdlib | `kotlin-stdlib.jar` on JVM classpath; stdlib calls dispatch to real implementations |
-| Packages | `package com.example` → `com/example/InputKt.class` |
-| `kotlin.math` | `abs`, `sqrt`, `ceil`, `floor`, `round`, `pow`, `sin`, `cos`, `tan`, `log`, `exp` → `java.lang.Math` |
-| LSP | Real-time diagnostics, semantic tokens, hover, go-to-definition, completions |
-
-### Partial / known gaps
-
-| Feature | Gap |
-|---|---|
-| Coroutines parity | 393/673 fixtures byte-identical with kotlinc; runtime behavior correct |
-| Compose group keys | Hashes differ from kotlinc's compose plugin; runtime works |
-| Generic upper-bound erasure | Missing call-site coercion for `Box<Int>.get() → int` unbox |
-| JetChat (Compose Android app) | Launches and reaches NavActivity with no crashes; `MaterialTheme.colorScheme` dispatch picks wrong stub arity → UI renders blank |
-| `tailrec` | Parsed; optimization deferred |
-| Bit-shift infix | `shl`/`shr`/`and`/`or`/`xor` |
-
 ## Running the tests
 
 ```sh
@@ -200,3 +120,31 @@ xtask auto-locates `d8` under `$ANDROID_HOME/build-tools/<latest>/` (or
 `$ANDROID_SDK_ROOT`), falls back to `PATH`. `kotlin-stdlib.jar` is located
 next to `kotlinc`. Missing tools log a warning and skip their slice rather
 than failing.
+
+## Running the parity benchmarks
+
+`parity/` holds growing end-to-end Kotlin programs (hello-world through
+graph/parser/interpreter examples). Each one is compiled by both `skotch`
+and `kotlinc`, then run on the JVM; the bench records compile time for both
+and verifies the stdouts are byte-identical.
+
+```sh
+cargo build --release -p skotch-cli      # build the release skotch binary
+./scripts/parity_bench.sh                # run every parity/NN-* example
+./scripts/parity_summary.sh _bench/parity_bench.tsv   # render markdown table
+```
+
+`parity_bench.sh` writes `_bench/parity_bench.tsv` (one row per example:
+`name`, `status`, `kotlinc_ms`, `skotch_ms`) and per-failure triage files
+under `_bench/diffs/`. The script always exits 0 — failures are data, not
+errors. `parity_summary.sh` reads the TSV and prints a markdown summary
+with the mean speedup ratio plus inline diffs for any non-passing example;
+CI pipes it into `$GITHUB_STEP_SUMMARY`.
+
+You can also run a single example directly:
+
+```sh
+parity/01-hello-world/run_both.sh        # run both compilers, diff stdouts
+parity/01-hello-world/run_skotch.sh      # skotch only
+parity/01-hello-world/run_kotlinc.sh     # kotlinc only
+```

@@ -1,4 +1,4 @@
 name = "1303-priority-queue-heap"
 status = "supported"
 features = ["generics", "lambda", "int-array", "mutable-list", "checkcast", "unboxing", "loop"]
-reason = "End-to-end lock-in for skotch-examples/20-priority-queue-heap: generic `MinHeap<T>` with a function-typed comparator parameter, used for three demos — heap-sort N ints, top-K largest elements, and a 3-way merge of sorted IntArrays via packed-int encoding. Exercises the generic-return checkcast/unbox path (`MinHeap<Int>.pop(): T` substitutes T → Int) and the MutableList<T> indexed-assignment fix."
+reason = "End-to-end lock-in for parity/20-priority-queue-heap: generic `MinHeap<T>` with a function-typed comparator parameter, used for three demos — heap-sort N ints, top-K largest elements, and a 3-way merge of sorted IntArrays via packed-int encoding. Exercises the generic-return checkcast/unbox path (`MinHeap<Int>.pop(): T` substitutes T → Int) and the MutableList<T> indexed-assignment fix."

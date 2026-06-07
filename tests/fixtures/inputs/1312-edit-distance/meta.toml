@@ -1,4 +1,4 @@
 name = "1312-edit-distance"
 status = "supported"
 features = ["int-array", "string-indexing", "nested-while", "dp"]
-reason = "End-to-end lock-in for skotch-examples/27-edit-distance: Levenshtein edit distance via bottom-up DP on a flat IntArray indexed `[i * stride + j]`. Per-cell logic extracted into `cellValue(...)` helper so the inner-loop body is a single unconditional `dp[...] = cellValue(...)`. Validates 9 string pairs byte-identical to kotlinc."
+reason = "End-to-end lock-in for parity/27-edit-distance: Levenshtein edit distance via bottom-up DP on a flat IntArray indexed `[i * stride + j]`. Per-cell logic extracted into `cellValue(...)` helper so the inner-loop body is a single unconditional `dp[...] = cellValue(...)`. Validates 9 string pairs byte-identical to kotlinc."

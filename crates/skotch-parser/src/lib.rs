@@ -4838,7 +4838,7 @@ mod tests {
     // These pin down the parse_infix_call path so the lookahead heuristic
     // that used to skip `..` when the next-next token was `)` or `->`
     // can never come back. Each call site that broke in
-    // skotch-examples/02-vars-and-control-flow is covered.
+    // parity/02-vars-and-control-flow is covered.
 
     fn parses_clean(src: &str) {
         let (_file, d) = parse(src);
@@ -4855,7 +4855,7 @@ mod tests {
 
     #[test]
     fn parenthesised_range_with_call_chain() {
-        // The original failure site from skotch-examples 02:
+        // The original failure site from parity 02:
         //   val first = (1..20).firstOrNull { it % 7 == 0 }
         parses_clean("fun main() { val x = (1..20).firstOrNull { it % 7 == 0 } }");
     }

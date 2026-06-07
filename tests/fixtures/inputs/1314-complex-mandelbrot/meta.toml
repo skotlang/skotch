@@ -1,4 +1,4 @@
 name = "1314-complex-mandelbrot"
 status = "supported"
 features = ["class", "operator-overload", "double-arithmetic", "method-chaining", "wide-param-slots"]
-reason = "End-to-end lock-in for skotch-examples/29-complex-numbers: immutable Complex class with operator-overloaded plus/minus/times + Mandelbrot escape rendered via Complex arithmetic. The classic `z = z*z + c` desugars to `z.times(z).plus(c)` — a 2-call chain through user-defined operators returning fresh Complex instances. Exercises class methods receiving Double params (already covered by #1307 wide-aware live-slot fix)."
+reason = "End-to-end lock-in for parity/29-complex-numbers: immutable Complex class with operator-overloaded plus/minus/times + Mandelbrot escape rendered via Complex arithmetic. The classic `z = z*z + c` desugars to `z.times(z).plus(c)` — a 2-call chain through user-defined operators returning fresh Complex instances. Exercises class methods receiving Double params (already covered by #1307 wide-aware live-slot fix)."

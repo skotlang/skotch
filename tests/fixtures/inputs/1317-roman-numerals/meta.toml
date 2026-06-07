@@ -1,4 +1,4 @@
 name = "1317-roman-numerals"
 status = "supported"
 features = ["int-array", "stringbuilder", "char-dispatch", "string-template", "while-loop"]
-reason = "End-to-end lock-in for skotch-examples/31-roman-numerals: round-trip Int → Roman string → Int over 24 test values. Uses a parallel IntArray + symbol-by-index dispatch, char-keyed reverse lookup with if-else chain, and string-template `\"$n => $r => $back\"` inside a while-loop body (which exercises the println-concat back-edge offset fix from #1315)."
+reason = "End-to-end lock-in for parity/31-roman-numerals: round-trip Int → Roman string → Int over 24 test values. Uses a parallel IntArray + symbol-by-index dispatch, char-keyed reverse lookup with if-else chain, and string-template `\"$n => $r => $back\"` inside a while-loop body (which exercises the println-concat back-edge offset fix from #1315)."

@@ -33,6 +33,12 @@ tests/fixtures/expected/native/*/skotch.ll
 # `dist` builds release artifacts under `target/distrib/`.
 target/distrib/
 
+# ─── Parity bench output ─────────────────────────────────────────────────
+# scripts/parity_bench.sh writes its TSV + per-failure diffs here.
+# In CI this is captured as an artifact; locally it's regenerated on
+# each run.
+/_bench/
+
 # ─── Local environment ───────────────────────────────────────────────────
 .envrc
 .env

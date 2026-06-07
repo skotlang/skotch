@@ -1,4 +1,4 @@
 name = "1308-mandelbrot-ascii"
 status = "supported"
 features = ["double-arithmetic", "wide-param-slots", "stringbuilder", "char", "nested-while"]
-reason = "End-to-end lock-in for skotch-examples/24-mandelbrot-ascii: Mandelbrot set rendered to ASCII (60x20, 50 escape iterations). Exercises tight Double-arithmetic loop inside a 2D pixel sweep, with Double param slots (`escapeIterations(x0: Double, y0: Double, maxIter: Int)`) that triggered the wide-aware live-slot fix locked in by #1307."
+reason = "End-to-end lock-in for parity/24-mandelbrot-ascii: Mandelbrot set rendered to ASCII (60x20, 50 escape iterations). Exercises tight Double-arithmetic loop inside a 2D pixel sweep, with Double param slots (`escapeIterations(x0: Double, y0: Double, maxIter: Int)`) that triggered the wide-aware live-slot fix locked in by #1307."

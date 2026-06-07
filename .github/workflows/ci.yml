@@ -166,3 +166,72 @@ jobs:
             file "$x86_bin" | grep -q "ELF 64-bit LSB pie executable, x86-64"
             file "$x86_bin" | grep -q "interpreter /system/bin/linker64"
           done
+
+  parity-bench:
+    name: parity bench (kotlinc ${{ matrix.kotlin }})
+    runs-on: ubuntu-latest
+    # End-to-end parity + benchmark: build the skotch release CLI,
+    # then run every parity/NN-* example against the matrix-pinned
+    # kotlinc version. Per-example status (pass / fail-diff /
+    # fail-compile) and skotch-vs-kotlinc timings are aggregated into
+    # a markdown summary; failure diff snippets are inlined and the
+    # full TSV is uploaded as an artifact.
+    #
+    # NOT gated on the unit-test jobs — parity is informational and we
+    # want it on every run even if a unit test broke.
+    #
+    # The Kotlin version is a single-entry matrix today; add more
+    # versions later to flag regressions against multiple kotlincs
+    # (e.g. on a release-tagged kotlinc bump). Each version is one
+    # parallel job.
+    strategy:
+      fail-fast: false
+      matrix:
+        kotlin: ['2.4.0']
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Install kotlinc ${{ matrix.kotlin }}
+        run: |
+          set -euo pipefail
+          ver="${{ matrix.kotlin }}"
+          curl -sSL \
+            "https://github.com/JetBrains/kotlin/releases/download/v${ver}/kotlin-compiler-${ver}.zip" \
+            -o /tmp/kotlinc.zip
+          unzip -q /tmp/kotlinc.zip -d "$HOME"
+          echo "$HOME/kotlinc/bin" >> "$GITHUB_PATH"
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          # Keyed on kotlin version so multi-matrix runs share the
+          # rust cache (cargo build output is independent of kotlinc).
+          key: parity-bench
+
+      - name: Build skotch (release)
+        run: cargo build --release -p skotch-cli
+
+      - name: Run parity bench
+        # Always succeeds; per-example failures land in the TSV and
+        # diffs/ directory, which the summary + artifact pick up.
+        run: ./scripts/parity_bench.sh
+
+      - name: Publish markdown summary
+        env:
+          KOTLIN_TAG: ${{ matrix.kotlin }}
+        run: |
+          ./scripts/parity_summary.sh _bench/parity_bench.tsv \
+            >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload bench artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: parity-bench-kotlinc-${{ matrix.kotlin }}
+          path: _bench/
+          retention-days: 90
