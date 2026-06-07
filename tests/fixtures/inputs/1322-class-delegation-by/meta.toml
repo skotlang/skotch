@@ -1,0 +1,4 @@
+name = "1322-class-delegation-by"
+status = "supported"
+features = ["interface", "class-delegation", "override", "by-delegate", "decorator"]
+reason = "Lock-in for parity/36-class-delegation. Class delegation (`class B(inner: I) : I by inner`) generates a synthetic field for `inner` plus auto-emitted forwarder methods for each interface method NOT overridden by the class. LoudGreeter overrides `greet()` (override wins, no forwarder emitted) but inherits `farewell()` via the delegate (synthesized forwarder calls inner.farewell()). QuietGreeter overrides nothing — both methods auto-forwarded. Validates the override-vs-forwarder selection logic, the synthetic field for non-val ctor param, and the per-interface-method forwarder emission. Stacked-delegation case (LoudGreeter(QuietGreeter(formal))) confirms multi-level forwarding chains."
