@@ -2,7 +2,11 @@
 # skotch — Milestone Roadmap
 # ============================================================================
 #
-# PHILOSOPHY: 100% Kotlin language support first, then tooling.
+# PHILOSOPHY:
+#   1. 100% Kotlin language support first, then tooling.
+#   2. Byte-identical output with kotlinc on every supported feature —
+#      not just runtime equivalence. Real Kotlin programs (`parity/`)
+#      must compile to bytecode that diffs cleanly against kotlinc 2.4.
 #
 # Every feature must:
 #   1. Compile to JVM bytecode (.class) and run correctly
@@ -13,40 +17,42 @@
 #   6. Be exercised by the LSP server (diagnostics, hover)
 #   7. Have e2e test fixtures with golden outputs
 #   8. Pass cargo clippy + cargo fmt + cargo test
+#   9. Where a kotlinc reference exists, match it byte-for-byte and be
+#      tracked in tests/fixtures/kotlinc_parity_baseline.txt (regression
+#      floor — any byte divergence on a baseline fixture fails CI).
 #
 # No feature may be marked "completed" if it only works on a happy path.
 # Every claimed feature must survive adversarial edge-case testing.
 #
 # ── Dependency graph ─────────────────────────────────────────────────────
 #
-#   v0.1–v0.9   (Foundation through Coroutines) — COMPLETED
+#   v0.1–v0.9   (Foundation through Coroutines)         — COMPLETED
 #       ↓
-#   v0.10 (Classes: nested/inner, enums, sealed)       — nearly done (1 feature left)
+#   v0.10–v0.15 (Classes, expressions, type system,     — COMPLETED
+#                multi-file, annotations, stdlib)
 #       ↓
-#   v0.11 (Advanced functions + expressions)            — nearly done (1 feature left)
+#   v0.20 (Build system + dependency resolution)        — COMPLETED
 #       ↓
-#   v0.12 (Type system: inference, bounds, Char type)
+#   v0.25 (Build Server Protocol)                       — COMPLETED
 #       ↓
-#   v0.13 (Multi-file, packages, imports)               ← HARD GATE for everything below
+#   v0.30 (Android resources + APK)                     — COMPLETED
 #       ↓
-#   v0.14 (Annotations and Java interop)                ← needed for Android APIs
+#   v0.40 (Compose compiler plugin)                     — COMPLETED (infra),
+#                                                         JetChat UI blank
 #       ↓
-#   v0.15 (Stdlib completeness + inline functions)
+#   v0.50 (kotlinc byte-parity + parity examples loop)  ← CURRENT FOCUS
 #       ↓
-#   v0.20 (Build system + dependency resolution)
-#       ↓
-#   v0.25 (Build Server Protocol)
-#       ↓
-#   v0.30 (Android resources + APK)
-#       ↓
-#   v0.40 (Compose compiler plugin)
-#       ↓
-#   v1.0  (Compose Samples integration)
+#   v1.0  (Compose Samples integration — REVISED:       — paused
+#          deferred behind parity-loop completion)
 #
 #   Cross-cutting policy (NOT a separate milestone):
 #     DEX parity — every feature landing on JVM must also pass DEX.
-#     Currently 345/368 JVM fixtures also pass DEX. Gaps are fixed
+#     Currently 1034/1062 JVM fixtures also pass DEX. Gaps are fixed
 #     incrementally, not in a big-bang milestone.
+#
+#     kotlinc byte parity — 776 fixtures are byte-identical to
+#     kotlinc 2.4.0 output (kotlinc_parity_baseline ratchet test).
+#     Any commit that drops a fixture from this set fails CI.
 #
 # ============================================================================
 
@@ -54,19 +60,25 @@ project:
   name: skotch
   tagline: "Streamlined Kotlin Optimized Toolchain"
   repository: https://github.com/skotlang/skotch
-  current_version: "0.40.0"      # v0.1-v0.40 completed; 3/6 Compose samples produce APKs
+  current_version: "0.50.0"      # v0.1–v0.40 completed; parity loop in progress
   target_version: "1.0.0"
   target_description: >
-    Build every Official Jetpack Compose Sample using only `skotch build`,
-    producing debug APKs that install and launch on an Android emulator.
-    No external tools (kotlinc, aapt2, d8, AGP, Gradle) required.
+    Compile every Kotlin program in `parity/NN-*/` to bytecode that is
+    byte-identical to kotlinc 2.4.0 output, with skotch outpacing kotlinc
+    by a >50× wall-clock margin on every example. Then resume the Compose
+    Samples track for Android UI parity.
   codebase_stats:
-    rust_lines: 48600
-    crates: 36
-    active_fixtures: 381
-    stub_fixtures: 28
-    jvm_e2e_fixtures: 372
-    dex_e2e_fixtures: 349
+    # Last refreshed 2026-06-07.
+    rust_lines: 107403
+    crates: 38
+    active_fixtures: 1068
+    stub_fixtures: 0           # all stubs eliminated
+    jvm_e2e_fixtures: 1062
+    dex_e2e_fixtures: 1034
+    kotlinc_byte_parity_baseline: 776  # tests/fixtures/kotlinc_parity_baseline.txt
+    kotlinc_byte_parity_aspirational: 70
+    parity_examples: 34        # parity/01-hello-world through parity/34-shape-hierarchy
+    measured_kotlinc_speedup: "~100× on small programs (parity bench)"
 
 # ============================================================================
 # COMPLETED MILESTONES (v0.1.0 – v0.5.0)
@@ -1572,10 +1584,12 @@ milestones:
         completed: true
         description: "src/main/resources/ files included in output JAR."
       - name: "AAR handling"
+        completed: true
         description: >
           Extract classes.jar + res/ from .aar files. Add classes.jar to
           compilation classpath. Forward res/ to the resource pipeline.
-          Needed for all AndroidX/Material3 dependencies.
+          Needed for all AndroidX/Material3 dependencies. Landed alongside
+          the JetChat assembly work.
 
 # ============================================================================
 # v0.25.0 — Build Server Protocol (BSP)
@@ -1799,17 +1813,153 @@ milestones:
         mitigation: "Target a specific Compose BOM version; pin the API surface"
 
 # ============================================================================
-# v1.0.0 — Compose Samples Integration
+# v0.50.0 — kotlinc Byte-Parity + Parity Examples Loop  ← CURRENT FOCUS
 # ============================================================================
-# The finish line: build every Official Jetpack Compose Sample using only
-# `skotch build`. This exercises the entire stack: language, type system,
-# multi-file compilation, dependency resolution, resource compilation,
-# DEX emission, Compose transform, and APK assembly.
+# After v0.40.0 (Compose plugin), the JetChat sample exposed deep gaps:
+# composable body emission left the UI blank, suspend/state-machine code
+# diverged from kotlinc in ways that broke Compose runtime invariants, and
+# field-chain collapse + named-arg reorder bugs surfaced together. Rather
+# than fix these blind, the project pivoted to a parity-first regime:
+#
+#   1. Hand-author one new `parity/NN-*/` example per loop iteration,
+#      starting trivial (hello-world) and escalating in idiom coverage
+#      (Mandelbrot, regex matcher, brainfuck, KMP search, 2048, …).
+#   2. For each example, compare skotch's bytecode against kotlinc 2.4.0
+#      byte-for-byte. Diverge ⇒ root-cause + fix in the compiler.
+#   3. Every fix lands with: a regression fixture (tests/fixtures/), an
+#      entry in tests/fixtures/kotlinc_parity_baseline.txt, full
+#      cargo test + clippy + fmt, and updated DEX/JVM goldens.
+#   4. CI runs ./scripts/parity_bench.sh on every PR — kotlinc vs skotch,
+#      best-of-N kotlinc warmup, ratio summary in $GITHUB_STEP_SUMMARY.
+#
+# RESULTS SO FAR (2026-06-07):
+#   - 34 parity examples landed, all byte-identical to kotlinc.
+#   - 776 fixtures on the kotlinc parity ratchet (regression floor).
+#   - 70 aspirational kotlinc parity targets (high-leverage idioms).
+#   - Measured ~100× kotlinc speedup on small programs (warmup-adjusted).
+#   - 9+ substantive compiler fixes per recent example (see MEMORY.md
+#     entries project_example*_landed.md for the per-example fix lists).
+#
+# KEY COMPILER FIXES SINCE v0.40.0 (selected):
+#   - #354/359/362: lambda typed-invoke bridge, inline-fn body splice,
+#     companion bare-Ident lowering
+#   - #361/365/374: cycle detection on top-level vals, when exhaustiveness
+#     for enums + sealed classes
+#   - #366/367/375: @JvmStatic companion delegates, requireNotNull
+#     narrowing, @JvmField field-only emission
+#   - #377/378/379: clinit access flags, lambda helper ACC_PRIVATE,
+#     primitive descriptor propagation
+#   - #381/382/383: float/double cmp inverted branch, listOf typed array
+#     allocation, JetChat d8 lambda visibility heuristic
+#   - #1307/1315/1320: wide-aware initial-live slots for SMT dataflow,
+#     swap-pattern back-edge offset, static-call wrapper_class owner
+# ============================================================================
+
+  - version: "0.50.0"
+    title: "kotlinc Byte-Parity + Parity Examples Loop"
+    status: in_progress
+    depends_on: ["0.40.0"]
+    description: >
+      Drive kotlinc byte-identity through hand-authored Kotlin programs
+      of escalating complexity. Each parity/ example surfaces real gaps;
+      fixes land with fixture coverage + a regression-floor ratchet test.
+
+    features:
+      - name: "Parity examples loop (parity/NN-*/)"
+        completed: false
+        description: >
+          34 examples landed (hello-world → shape-hierarchy). Each ships
+          with run_kotlinc.sh, run_skotch.sh, and a byte-diff harness.
+          Goal: 50+ examples covering every common Kotlin idiom. Recent
+          adds include 2048 board, edit-distance DP, complex+Mandelbrot,
+          N-queens, Roman numerals, Newton sqrt, KMP search, shape
+          hierarchy.
+
+      - name: "kotlinc_parity_baseline ratchet test"
+        completed: true
+        description: >
+          tests/fixtures/kotlinc_parity_baseline.txt enumerates the 776
+          fixtures known to be byte-identical with kotlinc. Any commit
+          that drops a fixture from this set fails CI. Aspirational set
+          (70 fixtures) tracks high-leverage idioms not yet at parity.
+
+      - name: "Parity bench in CI (parity-bench job)"
+        completed: true
+        description: >
+          .github/workflows/ci.yml `parity-bench` job runs every parity/
+          example under both kotlinc and skotch, publishes a markdown
+          summary to $GITHUB_STEP_SUMMARY (per-example status, kotlinc vs
+          skotch ms, speedup ratio, byte-diff snippets on failure), and
+          uploads a 90-day artifact. kotlinc is run best-of-N (default 3)
+          to discard JVM cold-start/JIT warmup. Each example name links
+          to its source folder on GitHub for one-click reviewer triage.
+
+      - name: "Cross-file canonical-shape audit"
+        completed: true
+        description: >
+          ExternalClassDecl/Fun grew to carry every applicable AST field
+          uniformly across Class/Object/Enum/Interface/SealedClass/
+          SealedInterface. Shape-assertion tests prevent future drift.
+          Unblocked Examples 13–20's cross-file consumer scenarios.
+          See memory: project_external_class_canonical_shape.
+
+      - name: "Compile-speed parity (~100× kotlinc)"
+        completed: true
+        description: >
+          Phase 3 perf work: persistent ZIP archive cache, lazy JDK
+          registry, type-param/unqualified-name lookup rejection, path-
+          prefix kotlin/-vs-java/ routing, Arc-shared ClassInfo. skotch
+          parity examples ran 1.7s → 27ms (~95–100× kotlinc speedup,
+          warmup-adjusted). See memory: project_phase3_compile_perf.
+
+      - name: "Suspend byte-parity session"
+        completed: false
+        description: >
+          8-hour focused pass landed 393/673 suspend fixtures at byte
+          parity with kotlinc. Restructured suspend emit + elvis verifier
+          fix. 4 known-diverging fixtures documented with root causes.
+          See memory: project_suspend_parity_session.
+
+      - name: "Generic-arg propagation through resolve_type_ref"
+        completed: false
+        description: >
+          KNOWN GAP: `resolve_type_ref` produces flat `Ty::Class` for
+          parameterized types, losing nested type_args. Breaks
+          `MutableMap<K, MutableList<V>>`-shaped patterns. Fix shape
+          known; infrastructure for one-level `Map.get` propagation
+          already exists. Blocks Dijkstra-style nested-collection
+          examples. See memory: project_generic_arg_propagation_gap.
+
+    risks:
+      - description: "Parity loop is open-ended — could run indefinitely"
+        mitigation: >
+          Target 50 examples + 1000+ baseline fixtures, then graduate to
+          v1.0.0 (Compose Samples) with the parity infrastructure proven.
+      - description: "Byte parity sometimes requires matching kotlinc bugs"
+        mitigation: >
+          Document each intentional non-match in the per-fixture meta.toml
+          with a `reason` field explaining why divergence is correct.
+
+# ============================================================================
+# v1.0.0 — Compose Samples Integration  (paused — resumes after v0.50)
+# ============================================================================
+# Original v1.0 goal was building every Official Jetpack Compose Sample.
+# This is paused. JetChat exposed deep gaps (blank Compose UI, composable
+# body emission divergences, lambda visibility traps post-d8 desugar) that
+# were better fixed under the v0.50 parity-loop discipline. The parity
+# work has already retired several JetChat blockers (lambda helper access
+# flags, d8 cross-class visibility, clinit flags, value-class shape).
+#
+# When v0.50 graduates, this milestone resumes with:
+#   - Composable body emission for external @Composable calls (#358)
+#   - Multi-target Compose Sample APK builds (Jetchat, JetNews, Jetsnack,
+#     Jetcaster, Reply, JetLagged)
+#   - Each APK installs + launches + renders main screen on emulator.
 
   - version: "1.0.0"
     title: "Compose Samples Integration"
-    status: in_progress
-    depends_on: ["0.40.0"]
+    status: paused
+    depends_on: ["0.50.0"]
     description: >
       End-to-end validation: build every Compose Sample with skotch alone.
       Based on analysis of 340+ source files across 6 Compose samples
@@ -1896,31 +2046,54 @@ milestones:
           @Composable () -> Unit now parses. Annotation args distinguished
           from function type params via -> lookahead.
       - name: "AAR dependency extraction"
+        completed: true
         description: >
           Download .aar files from Maven/Google repos, extract classes.jar
-          for classpath. Required for all AndroidX/Compose/Material3 deps.
+          for classpath. Landed alongside JetChat work.
       - name: "Property delegation (by keyword)"
+        completed: true
         description: >
-          Parse val x by expr as delegation. Handle remember { },
-          mutableStateOf(), viewModels(), lazy { } delegation patterns.
+          val x by remember { }, by lazy { }, by Delegate(...) all parsed
+          and lowered. getValue/setValue dispatched.
       - name: "data class .copy() generation"
+        completed: true
         description: >
-          Auto-generate copy() method for data classes with default params.
+          copy() generated with default-fill; cross-file `p.copy(y=10)`
+          resolves through synthesized methods on cross-file stub classes.
       - name: "Companion object member access"
+        completed: true
         description: >
-          Resolve Foo.bar as Foo.Companion.bar when bar is a companion member.
+          Foo.bar resolves as Foo.Companion.bar. Bare-Ident lowering (#360)
+          handles same-file + imported class/object refs with getstatic
+          INSTANCE/Companion.
       - name: "Enum.entries and Enum.values()"
+        completed: true
         description: >
-          Generate synthetic entries property and values() method for enums.
+          Enum singletons + per-entry getstatic accessors; entries+values()
+          synthesized. See memory: project_enum_singletons,
+          project_enum_entry_inline_getstatic.
       - name: "Extension function types"
+        completed: true
         description: >
-          Parse and lower (T.() -> R) receiver function types.
+          (T.() -> R) parses and lowers; lambda-with-receiver landed
+          in v0.12.5; arbitrary `T<X>.() -> R` lands via parity
+          example 14 (DSL tree).
+
+      # ── Remaining v1.0.0 work (resumes after v0.50) ───────────────
+      - name: "Composable body emission for external @Composable calls (#358)"
+        completed: false
+        description: >
+          ROOT CAUSE of JetChat blank UI: external @Composable calls
+          (Text/Icon/Surface/Scaffold) fail to lower in mir-lower → body
+          dropped. Fix lives on the parity branch; needs external
+          @Composable call lowering, not a backend fix.
 
     release_criteria:
       - "skotch build succeeds for: Jetchat, JetNews, Jetsnack, Jetcaster, Reply, JetLagged"
       - "Each debug APK installs on Android emulator (API 33+)"
-      - "Each app launches to main screen without crashes"
+      - "Each app launches to main screen AND renders the UI"
       - "No external tools invoked (no kotlinc, aapt2, d8, AGP, Gradle)"
+      - "All parity/ examples remain byte-identical with kotlinc (no regressions)"
 
     # ── What's NOT in v1.0 (deferred to v2.0+) ──
     # - R8/ProGuard code shrinking and optimization
