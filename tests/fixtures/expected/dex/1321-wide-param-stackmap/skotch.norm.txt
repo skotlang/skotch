@@ -1,0 +1,46 @@
+dex_version   035
+strings       15
+types         8
+methods       4
+classes       1
+
+--- strings ---
+  "I"
+  "J"
+  "JJIJJ"
+  "LInputKt;"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/System;"
+  "V"
+  "VL"
+  "[Ljava/lang/String;"
+  "input.kt"
+  "main"
+  "out"
+  "powMod"
+  "println"
+
+--- types ---
+  I
+  J
+  LInputKt;
+  Ljava/io/PrintStream;
+  Ljava/lang/Object;
+  Ljava/lang/System;
+  V
+  [Ljava/lang/String;
+
+--- methods ---
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  LInputKt;.powMod(JIJJ)J
+  Ljava/io/PrintStream;.println(Ljava/lang/Object;)V
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       main()V flags=0x0019 regs=6 ins=0 outs=4 insns=27
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4
+  method       powMod(JIJJ)J flags=0x0019 regs=13 ins=4 outs=4 insns=23

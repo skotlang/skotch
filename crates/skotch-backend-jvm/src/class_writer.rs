@@ -4954,6 +4954,16 @@ fn emit_method_body(
     //
     // The initial frame is: locals = [String[] for main, or params],
     // stack = [].
+    //
+    // NOTE: this is the JVM SLOT count, wide-aware (Long/Double take
+    // two slots each). Using `func.params.len()` would undercount and
+    // truncate the prev_locals_verif initialization loop early — a
+    // function with descriptor `(JIJJ)J` (4 params, 7 slots) had its
+    // initial frame written as 3 entries instead of 4, and any
+    // `append_frame` on top would then claim a phantom local at the
+    // first un-written slot. Verifier rejected with "Inconsistent
+    // stackmap frames at branch target N: locals[7] is not assignable
+    // to long" — surfaced by parity/35-tailrec-arithmetic's `powMod`.
     let initial_locals_count: u16 = match &kind {
         MethodKind::Static => {
             if func.name == "main" && func.params.is_empty() {
@@ -4961,10 +4971,10 @@ fn emit_method_body(
             } else if func.name == "main" {
                 1 // main(args: Array<String>) has String[] at slot 0
             } else {
-                func.params.len() as u16
+                initial_param_slots as u16
             }
         }
-        MethodKind::Instance => func.params.len() as u16,
+        MethodKind::Instance => initial_param_slots as u16,
     };
     let max_slots = next_slot as usize;
 

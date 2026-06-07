@@ -1,0 +1,4 @@
+name = "1321-wide-param-stackmap"
+status = "supported"
+features = ["long", "static-fn", "stackmap-table", "early-return"]
+reason = "Lock-in for parity/35-tailrec-arithmetic. A function whose param descriptor mixes Long and Int (e.g. `(JIJJ)J`, 4 params spanning 7 JVM slots) plus an early-return branch used to emit an inconsistent StackMapTable: the implicit entry frame was initialized with `s < initial_locals_count` where `initial_locals_count = func.params.len()` (= 4, not the wide-aware slot count = 7). The wide-traversal loop stopped after 3 entries, missing the 4th param. A later same-locals delta then claimed `+1 Long` over the missing entry, the verifier reconstructed `5 entries from descriptor + 1 = 6 entries` while the actual JVM frame had only 4 entries, and VerifyError fired. Fix: route `initial_locals_count` through `initial_param_slots` (already wide-aware), matching what the verifier reconstructs from the descriptor."

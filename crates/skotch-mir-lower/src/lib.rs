@@ -15780,6 +15780,11 @@ fn lower_expr(
                     // lambda to the correct (final user-param) slot and
                     // forward $composer/$changed.
                     let desc_param_count = skotch_classinfo::count_descriptor_params_pub(&desc);
+                    // Hoisted out of the padding block below so the
+                    // post-padding "route through $default" decision can
+                    // read them without recomputation.
+                    let composer_abs_pos = composer_position_in_descriptor(&desc);
+                    let mut default_mask: u64 = 0;
                     if arg_locals.len() < desc_param_count {
                         let composer_sym = interner.intern("$composer");
                         let changed_sym = interner.intern("$changed");
@@ -15793,9 +15798,7 @@ fn lower_expr(
                             .rev()
                             .find(|(s, _)| *s == changed_sym)
                             .map(|(_, id)| *id);
-                        let composer_abs_pos = composer_position_in_descriptor(&desc);
                         let desc_param_tys = param_tys_from_descriptor(&desc);
-                        let mut default_mask: u64 = 0;
                         let default_slot_idx = composer_abs_pos.map(|p| p + 2);
                         // Trailing-lambda re-positioning.
                         if let Some(composer_pos) = composer_abs_pos {
@@ -15944,21 +15947,69 @@ fn lower_expr(
                             }
                         }
                     }
-                    // The actual JVM method name may be mangled
-                    // (`Font-wCLgNak` for source-level `Font`) when the
-                    // return type is a value class. Query for the real
-                    // name so the invokestatic targets a real method.
-                    let actual_method_name = skotch_classinfo::lookup_method_name_and_descriptor(
-                        &owner,
-                        callee_str,
-                        arg_locals.len(),
-                    )
-                    .map(|(n, _)| n)
-                    .unwrap_or_else(|| callee_str.to_string());
-                    CallKind::StaticJava {
-                        class_name: owner,
-                        method_name: actual_method_name,
-                        descriptor: desc,
+                    // Non-Composable cross-file call with at least one
+                    // defaulted param missing: route through the
+                    // `name$default(args..., mask, marker)` synthetic
+                    // wrapper so kotlinc's `lconst_1` / `iconst_5` /
+                    // etc. for the actual default value is materialized
+                    // — not the type's zero value the padding loop above
+                    // produced. Without this, `powMod(2L, 30, 1e9+7L)`
+                    // (which defaults `acc: Long = 1L`) was emitted as
+                    // `invokestatic powMod(JIJJ)J` with `lconst_0` for
+                    // acc → caller saw `0L` instead of `1L`. Cross-file
+                    // surfaced by parity/35-tailrec-arithmetic.
+                    let extras = module.cross_file_fn_extras.get(callee_str).cloned();
+                    let has_any_default = extras
+                        .as_ref()
+                        .map(|e| e.has_default.iter().any(|d| *d))
+                        .unwrap_or(false);
+                    if composer_abs_pos.is_none() && default_mask != 0 && has_any_default {
+                        // Append mask + marker to arg_locals.
+                        let mask_local = fb.new_local(Ty::Int);
+                        fb.push_stmt(MStmt::Assign {
+                            dest: mask_local,
+                            value: Rvalue::Const(MirConst::Int(default_mask as i32)),
+                        });
+                        arg_locals.push(mask_local);
+                        let marker_local = fb.new_local(Ty::Any);
+                        fb.push_stmt(MStmt::Assign {
+                            dest: marker_local,
+                            value: Rvalue::Const(MirConst::Null),
+                        });
+                        arg_locals.push(marker_local);
+                        // Rewrite descriptor: insert `ILjava/lang/Object;`
+                        // before the trailing return type.
+                        // `desc` looks like `(JIJJ)J`; we want
+                        // `(JIJJILjava/lang/Object;)J`.
+                        let default_desc = if let Some(close) = desc.rfind(')') {
+                            let (params, ret) = desc.split_at(close);
+                            format!("{params}ILjava/lang/Object;{ret}")
+                        } else {
+                            desc.clone()
+                        };
+                        CallKind::StaticJava {
+                            class_name: owner,
+                            method_name: format!("{callee_str}$default"),
+                            descriptor: default_desc,
+                        }
+                    } else {
+                        // The actual JVM method name may be mangled
+                        // (`Font-wCLgNak` for source-level `Font`) when the
+                        // return type is a value class. Query for the real
+                        // name so the invokestatic targets a real method.
+                        let actual_method_name =
+                            skotch_classinfo::lookup_method_name_and_descriptor(
+                                &owner,
+                                callee_str,
+                                arg_locals.len(),
+                            )
+                            .map(|(n, _)| n)
+                            .unwrap_or_else(|| callee_str.to_string());
+                        CallKind::StaticJava {
+                            class_name: owner,
+                            method_name: actual_method_name,
+                            descriptor: desc,
+                        }
                     }
                 } else if let Some((class_path, method_name)) =
                     module.static_method_imports.get(callee_str).cloned()

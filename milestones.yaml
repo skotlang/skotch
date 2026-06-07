@@ -50,7 +50,7 @@
 #     Currently 1034/1062 JVM fixtures also pass DEX. Gaps are fixed
 #     incrementally, not in a big-bang milestone.
 #
-#     kotlinc byte parity — 776 fixtures are byte-identical to
+#     kotlinc byte parity — 812 fixtures are byte-identical to
 #     kotlinc 2.4.0 output (kotlinc_parity_baseline ratchet test).
 #     Any commit that drops a fixture from this set fails CI.
 #
@@ -71,13 +71,13 @@ project:
     # Last refreshed 2026-06-07.
     rust_lines: 107403
     crates: 38
-    active_fixtures: 1068
+    active_fixtures: 1069
     stub_fixtures: 0           # all stubs eliminated
-    jvm_e2e_fixtures: 1062
-    dex_e2e_fixtures: 1034
-    kotlinc_byte_parity_baseline: 776  # tests/fixtures/kotlinc_parity_baseline.txt
+    jvm_e2e_fixtures: 1063
+    dex_e2e_fixtures: 1034     # DEX coverage may grow after 1321 lands; not yet confirmed
+    kotlinc_byte_parity_baseline: 812  # tests/fixtures/kotlinc_parity_baseline.txt
     kotlinc_byte_parity_aspirational: 70
-    parity_examples: 34        # parity/01-hello-world through parity/34-shape-hierarchy
+    parity_examples: 35        # parity/01-hello-world through parity/35-tailrec-arithmetic
     measured_kotlinc_speedup: "~100× on small programs (parity bench)"
 
 # ============================================================================
@@ -1929,6 +1929,22 @@ milestones:
           known; infrastructure for one-level `Map.get` propagation
           already exists. Blocks Dijkstra-style nested-collection
           examples. See memory: project_generic_arg_propagation_gap.
+
+      - name: "Tail-call optimization for `tailrec` functions"
+        completed: false
+        description: >
+          KNOWN GAP: skotch parses `tailrec` but never sets `is_tailrec`
+          on FunDecl/MirFunction. Recursive self-calls compile to normal
+          `invokestatic` instead of kotlinc's `goto entry` rewrite. Deep
+          accumulator-style recursion (e.g. `sumTo(100_000)`) overflows
+          the JVM thread stack on skotch but completes instantly on
+          kotlinc. Fix: plumb `is_tailrec` through AST → MIR; in
+          mir-lower (or as a JVM-backend post-pass), detect a tail-
+          position self-call followed by `ReturnValue`/`Return`, replace
+          the call+return pair with `store args to param slots; goto
+          block 0`. Surfaced by parity/35-tailrec-arithmetic, which
+          had to lower its stress depth from 100_000 to 2_000 to fit
+          the JVM stack without TCO.
 
     risks:
       - description: "Parity loop is open-ended — could run indefinitely"
