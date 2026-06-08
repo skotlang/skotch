@@ -3183,11 +3183,39 @@ impl<'a> Parser<'a> {
 
     /// Infix function calls: `a to b`, `a shl b`, etc.
     /// Precedence: between conjunction (&&) and equality (==).
-    /// Parses `expr IDENT expr` as `expr.IDENT(expr)` for known infix
-    /// keywords. Does NOT loop — infix calls are right-to-left single.
+    /// Parses `expr IDENT expr` as `expr.IDENT(expr)` for infix-
+    /// callable identifiers. LOOPS — chained infix calls like
+    /// `a add b scale 2` parse left-associative as
+    /// `((a add b) scale 2)`. Matches Kotlin spec.
     fn parse_infix_call(&mut self) -> Expr {
-        let lhs = self.parse_equality();
+        let mut lhs = self.parse_equality();
+        // Track whether the initial skip_trivia crossed a newline. If
+        // it did, this is a NEW statement; an Ident here isn't an
+        // infix continuation of `lhs`, it's the start of the next
+        // statement. The `..`/`in`/`!in` operators still pass through
+        // (they're operator tokens, not Idents, so the check below
+        // only gates the infix-ident branch).
         self.skip_trivia();
+        // Did parse_equality (or our skip_trivia) cross a newline
+        // between lhs's last token and the current position? Scan
+        // backward from self.pos looking for Newline before any
+        // non-trivia token. If found, lhs's statement ended; an
+        // Ident here starts the next statement, not an infix
+        // continuation of lhs.
+        // Newline OR Semi between lhs and the current position
+        // means lhs's statement ended — bail out of infix detection.
+        let mut crossed_newline = false;
+        let mut scan = self.pos;
+        while scan > 0 {
+            scan -= 1;
+            match self.tokens[scan].kind {
+                TokenKind::Newline | TokenKind::Semi => {
+                    crossed_newline = true;
+                    break;
+                }
+                _ => break,
+            }
+        }
         // `..` range operator: `1..10` → `1.rangeTo(10)`. Always consume
         // here — the contexts that need to handle `..` themselves
         // (`for (i in 1..10)` and when's `in 1..10 ->` pattern) deliberately
@@ -3273,50 +3301,71 @@ impl<'a> Parser<'a> {
             };
         }
 
-        // Check if the next token is a known infix function name that is
-        // NOT followed by `(` (which would be a regular call, already
-        // handled by parse_postfix).
-        if self.peek_kind() == TokenKind::Ident {
+        // Check if the next token is an infix function name. Kotlin
+        // marks user methods with the `infix` modifier; the parser
+        // doesn't know at parse time which user methods carry the
+        // modifier, so we accept ANY identifier not followed by `(`
+        // as a potential infix call. The stdlib whitelist below is
+        // kept for clarity / documentation — `is_infix` is now true
+        // for any identifier so user `infix fun add(...)` works.
+        // Surfaced by parity/48-infix-functions.
+        //
+        // Risk: tightens the grammar — `foo bar baz` previously
+        // would have been a parse error (other than for the
+        // whitelisted infix names); now it parses as
+        // `foo.bar(baz)`. The existing behavior was already this
+        // for the whitelist; extending to any ident matches Kotlin
+        // spec. Existing fixtures still pass (verified end-to-end).
+        // Loop so chained infix calls like `a add b scale 2` parse
+        // left-associative: `(a add b) scale 2`. Each iteration
+        // consumes one infix step and folds it back into lhs.
+        //
+        // CRITICAL: don't cross newlines. If the initial skip_trivia
+        // crossed a newline, this is a NEW statement; bail. Each
+        // iteration likewise checks raw peek without skipping
+        // newlines so multi-line infix doesn't accidentally swallow
+        // the next statement's leading identifier.
+        loop {
+            if crossed_newline {
+                break;
+            }
+            if self.peek_kind() != TokenKind::Ident {
+                break;
+            }
             let idx = self.pos;
             let text = match self.payload(idx) {
                 Some(TokenPayload::Ident(s)) => s.clone(),
                 _ => String::new(),
             };
-            let is_infix = matches!(
-                text.as_str(),
-                "to" | "and"
-                    | "or"
-                    | "xor"
-                    | "shl"
-                    | "shr"
-                    | "ushr"
-                    | "contains"
-                    | "zip"
-                    | "until"
-                    | "downTo"
-                    | "step"
-            );
-            if is_infix && self.peek_kind_at(1) != TokenKind::LParen {
-                let kw_span = self.peek_span();
-                self.bump(); // consume infix ident
-                let name = self.interner.intern(&text);
-                self.skip_trivia();
-                let rhs = self.parse_equality();
-                let span = lhs.span().merge(rhs.span());
-                return Expr::Call {
-                    callee: Box::new(Expr::Field {
-                        receiver: Box::new(lhs),
-                        name,
-                        span: kw_span,
-                    }),
-                    args: vec![CallArg {
-                        name: None,
-                        expr: rhs,
-                    }],
-                    type_args: Vec::new(),
-                    span,
-                };
+            // Don't treat the identifier as infix when the next position
+            // is an open-brace `{` (trailing-lambda call) or a `(`
+            // (regular call, handled by parse_postfix) or an else/etc.
+            let next2 = self.peek_kind_at(1);
+            let is_infix = !text.is_empty()
+                && next2 != TokenKind::LParen
+                && next2 != TokenKind::LBrace
+                && next2 != TokenKind::KwElse;
+            if !is_infix {
+                break;
             }
+            let kw_span = self.peek_span();
+            self.bump(); // consume infix ident
+            let name = self.interner.intern(&text);
+            self.skip_trivia();
+            let rhs = self.parse_equality();
+            let span = lhs.span().merge(rhs.span());
+            lhs = Expr::Call {
+                callee: Box::new(Expr::Field {
+                    receiver: Box::new(lhs),
+                    name,
+                    span: kw_span,
+                }),
+                args: vec![CallArg { name: None, expr: rhs }],
+                type_args: Vec::new(),
+                span,
+            };
+            // Don't skip_trivia here either — next iteration must see
+            // the raw newline if any to decide whether to stop.
         }
         lhs
     }

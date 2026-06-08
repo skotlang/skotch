@@ -703,7 +703,7 @@ impl<'a> Lexer<'a> {
 
     /// Scan a triple-quoted raw string `"""...***"""`.
     ///
-    /// Raw strings are simpler than regular strings:
+    /// Raw strings differ from regular strings in:
     ///
     /// - **No escape interpretation.** A backslash is a literal
     ///   backslash; `\n` is the two characters `\` and `n`, not a
@@ -711,26 +711,23 @@ impl<'a> Lexer<'a> {
     /// - **Newlines are allowed** in the body. Regular strings reject
     ///   newlines as a syntax error; raw strings preserve them
     ///   verbatim.
-    /// - **No `$` interpolation in PR scope.** Kotlin's spec allows
-    ///   `$ident` and `${expr}` inside raw strings, but no current
-    ///   fixture exercises that. The `$` character is preserved as-is
-    ///   here. A future PR can add interpolation by mirroring the
-    ///   regular-string code path.
+    /// - **`$ident` and `${expr}` interpolation IS supported** (matches
+    ///   Kotlin spec). Added to support the common
+    ///   `"""...$name...""".trimIndent()` idiom — surfaced by
+    ///   parity/47-raw-strings. Mirrors the regular-string $-handling
+    ///   at scan_string:~644.
     /// - **The terminator is exactly `"""`.** The first `"""`
     ///   sequence ends the literal. (Kotlin's "longest match" rule
-    ///   for trailing quotes is also out of scope; if a future
-    ///   fixture needs `""""..."""` we'll revisit.)
+    ///   for trailing quotes is also out of scope.)
     ///
-    /// Emits the same `StringStart` / `StringChunk` / `StringEnd`
-    /// shape as regular strings so the parser doesn't need a separate
-    /// path. The whole content is a single `StringChunk` because raw
-    /// strings have no interpolation in PR scope.
+    /// Emits the same `StringStart` / `StringChunk` / `StringIdentRef`
+    /// / `StringExprStart` / `StringEnd` shape as regular strings.
     fn scan_raw_string(&mut self) {
         let open = self.pos;
         self.pos += 3; // consume opening """
         self.emit(TokenKind::StringStart, open, self.pos, None);
 
-        let chunk_start = self.pos;
+        let mut chunk_start = self.pos;
         let mut chunk = String::new();
 
         loop {
@@ -759,9 +756,49 @@ impl<'a> Lexer<'a> {
                 return;
             };
 
+            if b == b'$' {
+                if !chunk.is_empty() {
+                    self.emit(
+                        TokenKind::StringChunk,
+                        chunk_start,
+                        self.pos,
+                        Some(TokenPayload::StringChunk(std::mem::take(&mut chunk))),
+                    );
+                }
+                let dollar = self.pos;
+                self.pos += 1;
+                if self.peek() == Some(b'{') {
+                    self.pos += 1;
+                    self.emit(TokenKind::StringExprStart, dollar, self.pos, None);
+                    self.scan_interpolated_expr();
+                } else if matches!(self.peek(), Some(b) if b.is_ascii_alphabetic() || b == b'_') {
+                    let id_start = self.pos;
+                    while let Some(b) = self.peek() {
+                        if b.is_ascii_alphanumeric() || b == b'_' {
+                            self.pos += 1;
+                        } else {
+                            break;
+                        }
+                    }
+                    let text = std::str::from_utf8(&self.bytes[id_start..self.pos])
+                        .expect("ASCII ident")
+                        .to_string();
+                    self.emit(
+                        TokenKind::StringIdentRef,
+                        dollar,
+                        self.pos,
+                        Some(TokenPayload::StringIdentRef(text)),
+                    );
+                } else {
+                    // Lone `$` — treat as literal.
+                    chunk.push('$');
+                }
+                chunk_start = self.pos;
+                continue;
+            }
+
             // Append the next UTF-8 character verbatim. Newlines,
-            // backslashes, dollar signs, and lone quotes all pass
-            // through unchanged.
+            // backslashes, and lone quotes all pass through unchanged.
             let ch_len = utf8_char_len(b);
             let end = (self.pos + ch_len).min(self.bytes.len());
             let s = std::str::from_utf8(&self.bytes[self.pos..end]).expect("valid UTF-8 in source");

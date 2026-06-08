@@ -71,13 +71,13 @@ project:
     # Last refreshed 2026-06-07.
     rust_lines: 107403
     crates: 38
-    active_fixtures: 1080
+    active_fixtures: 1081
     stub_fixtures: 0           # all stubs eliminated
-    jvm_e2e_fixtures: 1074
-    dex_e2e_fixtures: 1045     # 1321..1332 added DEX golden
+    jvm_e2e_fixtures: 1075
+    dex_e2e_fixtures: 1046     # 1321..1333 added DEX golden
     kotlinc_byte_parity_baseline: 818  # tests/fixtures/kotlinc_parity_baseline.txt
     kotlinc_byte_parity_aspirational: 70
-    parity_examples: 46        # parity/01-hello-world through parity/46-companion-factory
+    parity_examples: 47        # parity/01-hello-world through parity/47-raw-strings
     measured_kotlinc_speedup: "~100× on small programs (parity bench)"
 
 # ============================================================================

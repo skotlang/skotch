@@ -1,0 +1,4 @@
+name = "1333-raw-string-interpolation"
+status = "supported"
+features = ["raw-string", "string-interpolation", "trimIndent", "lexer"]
+reason = "Lock-in for parity/47-raw-strings. Triple-quoted `\"\"\"...\"\"\"` raw strings need to support `$ident` and `${expr}` interpolation per the Kotlin spec, just like single-quoted strings. Pre-fix the raw-string scanner at lexer/lib.rs:~728 treated `$` as a literal character (the comment said `No $ interpolation in PR scope`). Fix mirrors the single-quoted scan_string $-handling: emit current chunk, then handle `${...}` via scan_interpolated_expr, `$ident` via StringIdentRef, or literal `$`. Newlines and backslashes still pass through verbatim — raw-string semantics preserved (`\\n` stays as backslash+n, not a newline)."
