@@ -222,6 +222,76 @@ run_main() {
     java -cp "$cp" MainKt
 }
 
+# --- bytecode similarity ------------------------------------------------
+#
+# `disasm_dir DIR` walks every `*.class` file under DIR (sorted by
+# relative path for stability), runs the host `javap -p -c` on the lot,
+# and pipes through a normalizer that rewrites constant-pool indices
+# (`#NNN`) to a single placeholder. Constant-pool slot numbers differ
+# trivially between any two compilers — even one that's otherwise
+# byte-identical — and dominate the diff if you don't strip them.
+#
+# `class_similarity_pct KC_DIR SK_DIR` produces an integer 0..100
+# describing how close the two disassemblies are. 100 = every line
+# matched, 0 = every line differed. The metric is line-level on the
+# concatenated, normalized output: total = kc_lines + sk_lines;
+# changed = count of `<`/`>` lines in `diff`; pct = 100 * (total -
+# changed) / total. When both sides are empty we print `—`.
+
+disasm_dir() {
+    local dir="$1"
+    if [[ ! -d "$dir" ]]; then return 0; fi
+    # Build a sorted list of class files using portable bash. `find -print0`
+    # + `sort -z` keeps NUL-delimited records so paths with spaces survive.
+    local files=()
+    while IFS= read -r -d '' f; do
+        files+=("$dir/$f")
+    done < <(cd "$dir" && find . -type f -name '*.class' -print0 | sort -z)
+    if [[ ${#files[@]} -eq 0 ]]; then return 0; fi
+    # javap accepts multiple .class files in one invocation and emits
+    # them concatenated; with a sorted input list both compilers'
+    # outputs traverse classes in the same order, so the resulting
+    # diff measures actual code differences, not file-system traversal
+    # noise. The `#N` strip is the single normalization step — it
+    # makes the metric tolerant to constant-pool reordering, which is
+    # the most common false-positive divergence.
+    javap -p -c "${files[@]}" 2>/dev/null | sed -E 's/#[0-9]+/#X/g'
+}
+
+class_similarity_pct() {
+    local kc_dir="$1"
+    local sk_dir="$2"
+    local kc_tmp sk_tmp
+    kc_tmp=$(mktemp -t class_sim_kc.XXXXXX)
+    sk_tmp=$(mktemp -t class_sim_sk.XXXXXX)
+    # `trap` is a per-shell-environment property; we're running inside
+    # a subshell that the calling `$(…)` substitution sets up, so just
+    # add a manual cleanup at the end.
+    disasm_dir "$kc_dir" > "$kc_tmp"
+    disasm_dir "$sk_dir" > "$sk_tmp"
+    local kc_lines sk_lines
+    kc_lines=$(wc -l < "$kc_tmp" | tr -d ' ')
+    sk_lines=$(wc -l < "$sk_tmp" | tr -d ' ')
+    local total=$(( kc_lines + sk_lines ))
+    if [[ $total -eq 0 ]]; then
+        rm -f "$kc_tmp" "$sk_tmp"
+        echo "—"
+        return 0
+    fi
+    # `diff` default output prefixes every changed line with `<` or `>`;
+    # hunk markers (`Nc`, `Na`, `Nd`) start with digits, so the simple
+    # `^[<>]` filter is enough and skips the noise without false hits.
+    local changed
+    changed=$(diff "$kc_tmp" "$sk_tmp" | grep -cE '^[<>]' || true)
+    rm -f "$kc_tmp" "$sk_tmp"
+    # Pct rounded to nearest int. Bash truncates toward zero, so add
+    # half the divisor before dividing to round.
+    local pct=$(( (100 * (total - changed) + (total / 2)) / total ))
+    if [[ $pct -lt 0 ]]; then pct=0; fi
+    if [[ $pct -gt 100 ]]; then pct=100; fi
+    echo "$pct"
+}
+
 # --- project mode (external git checkout) -------------------------------
 #
 # An example directory enters "project mode" by providing a `project.sh`

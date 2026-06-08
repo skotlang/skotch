@@ -40,7 +40,7 @@ TMP_KC_ERR="$(mktemp -t bench_kc_err.XXXXXX)"
 TMP_SK_ERR="$(mktemp -t bench_sk_err.XXXXXX)"
 trap 'rm -f "$TMP_KC_ERR" "$TMP_SK_ERR"' EXIT
 
-printf 'name\tstatus\tkotlinc_ms\tskotch_ms\n' > "$OUT_TSV"
+printf 'name\tstatus\tkotlinc_ms\tskotch_ms\tsimilarity\n' > "$OUT_TSV"
 
 # Iterate parity examples in two passes so the natural numeric
 # ordering survives — bash globs sort lexicographically, which would
@@ -125,11 +125,30 @@ for dir in "${parity_dirs[@]}"; do
         } > "$diff_file"
     fi
 
-    printf '%s\t%s\t%s\t%s\n' "$name" "$status" "$kc_ms" "$sk_ms" >> "$OUT_TSV"
+    # Class-file similarity: javap-disassemble every .class on both
+    # sides and run a line-level diff. Project-mode examples carry
+    # their interesting bytecode in `.out-<tool>-lib/` (the compiled
+    # external project); standalone examples carry everything in
+    # `.out-<tool>/`. Either way the comparison is between matching
+    # slots, so the percentage answers the question "how byte-similar
+    # is skotch's output to kotlinc's, ignoring constant-pool
+    # reordering?".
+    if [[ -f "$dir/project.sh" ]]; then
+        kc_class_dir="$dir/.out-kotlinc-lib"
+        sk_class_dir="$dir/.out-skotch-lib"
+    else
+        kc_class_dir="$dir/.out-kotlinc"
+        sk_class_dir="$dir/.out-skotch"
+    fi
+    similarity=$(class_similarity_pct "$kc_class_dir" "$sk_class_dir")
+    : "${similarity:=—}"
+
+    printf '%s\t%s\t%s\t%s\t%s\n' \
+        "$name" "$status" "$kc_ms" "$sk_ms" "$similarity" >> "$OUT_TSV"
 
     # Live progress to stderr (CI step log) so the run isn't silent.
-    printf '  %-12s %-40s  kotlinc=%6s ms  skotch=%6s ms\n' \
-        "$status" "$name" "$kc_ms" "$sk_ms" >&2
+    printf '  %-12s %-40s  kotlinc=%6s ms  skotch=%6s ms  sim=%4s%%\n' \
+        "$status" "$name" "$kc_ms" "$sk_ms" "$similarity" >&2
 done
 
 echo "wrote $OUT_TSV" >&2

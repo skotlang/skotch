@@ -42,11 +42,16 @@ sum_ratio_x100=0
 ratio_count=0
 worst_ratio_x100=999999
 worst_name=""
+sum_sim=0
+sim_count=0
 
 # Buffer the rows so we can emit totals first, then the table.
 rows=()
 
-while IFS=$'\t' read -r name status kc_ms sk_ms; do
+# Older bench TSVs only had 4 columns; tolerate a missing similarity
+# field so this script keeps reading historical artifacts cleanly.
+# `read` will just leave `sim` empty in that case.
+while IFS=$'\t' read -r name status kc_ms sk_ms sim; do
     [[ "$name" == "name" ]] && continue
     total=$(( total + 1 ))
     # Example name shape is `NN-rest` (2-digit slot) or `NNN-rest`
@@ -82,10 +87,20 @@ while IFS=$'\t' read -r name status kc_ms sk_ms; do
         fi
     fi
 
+    # Similarity is an integer 0..100 from parity_bench.sh, or `—` when
+    # one side had no class output to disassemble (e.g. compile crashed
+    # before emitting anything). Numeric values feed the mean below.
+    sim_cell="—"
+    if [[ -n "${sim:-}" && "$sim" =~ ^[0-9]+$ ]]; then
+        sim_cell="${sim}%"
+        sum_sim=$(( sum_sim + sim ))
+        sim_count=$(( sim_count + 1 ))
+    fi
+
     # Link the example name to its source folder on GitHub so reviewers
     # can jump straight from the summary table to the Kotlin source.
     name_link="$REPO_URL/tree/$REPO_REF/parity/$name/"
-    rows+=("| $idx | [\`$rest\`]($name_link) | $icon $status | ${kc_ms} ms | ${sk_ms} ms | $ratio |")
+    rows+=("| $idx | [\`$rest\`]($name_link) | $icon $status | ${kc_ms} ms | ${sk_ms} ms | $ratio | $sim_cell |")
 done < "$TSV"
 
 # Totals line up top — the most important info should land above the
@@ -102,18 +117,31 @@ if [[ $ratio_count -gt 0 ]]; then
     worst_ratio=$(printf '%d.%02d× (%s)' "$wwhole" "$wcents" "$worst_name")
 fi
 
+mean_sim="—"
+if [[ $sim_count -gt 0 ]]; then
+    mean_sim=$(printf '%d%%' $(( sum_sim / sim_count )))
+fi
+
 echo "**Result:** ${passed}/${total} pass · fail-diff: ${fail_diff} · fail-compile: ${fail_compile}"
 echo ""
 echo "**Mean skotch speedup over kotlinc (passing examples):** ${mean_ratio}"
 echo "**Slowest passing example:** ${worst_ratio}"
+echo "**Mean class-file similarity (javap diff, ignoring constant-pool indices):** ${mean_sim}"
 if [[ "$KOTLINC_RUNS" -gt 1 ]]; then
     echo ""
     echo "_kotlinc timings are best-of-${KOTLINC_RUNS} (warmup runs discarded);_"
     echo "_skotch is a native binary with no JVM startup, single run._"
 fi
 echo ""
-echo "| # | Example | Status | kotlinc | skotch | ratio |"
-echo "|---|---|---|---|---|---|"
+cat <<'NOTE'
+_Similarity is computed from `javap -p -c` disassembly of every
+compiled `.class` file on both sides (constant-pool indices stripped
+so reordering doesn't register as divergence); 100% means
+byte-identical, 0% means every line differed._
+NOTE
+echo ""
+echo "| # | Example | Status | kotlinc | skotch | ratio | similarity |"
+echo "|---|---|---|---|---|---|---|"
 printf '%s\n' "${rows[@]}"
 
 # Inline diff snippets for any failure, each behind a <details>. The

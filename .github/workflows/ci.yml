@@ -240,13 +240,13 @@ jobs:
         # target repository on demand inside the harness. `git` is
         # preinstalled on ubuntu-latest, so no setup step is needed.
         env:
-          KOTLINC_RUNS: '3'
+          KOTLINC_RUNS: '1'
         run: ./scripts/parity_bench.sh
 
       - name: Publish markdown summary
         env:
           KOTLIN_TAG: ${{ matrix.kotlin }}
-          KOTLINC_RUNS: '3'
+          KOTLINC_RUNS: '1'
           REPO_REF: ${{ github.sha }}
         run: |
           ./scripts/parity_summary.sh _bench/parity_bench.tsv \
