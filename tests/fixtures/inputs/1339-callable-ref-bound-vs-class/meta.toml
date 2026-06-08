@@ -1,0 +1,4 @@
+name = "1339-callable-ref-bound-vs-class"
+status = "supported"
+features = ["callable-ref", "bound-instance-ref", "zero-arg-method"]
+reason = "Lock-in for parity/52. Bound-instance ref `c::inc` (zero-arg method) targeting a `() -> Unit` slot now correctly shrinks the parser's default 1-param lambda to zero params. Pre-fix the call site emitted Function1, the slot expected Function0, runtime ClassCastException. Fix removes the over-restrictive `expected_arity == 1` short-circuit guarded by a comment block noting all 3 arity-shape cases."

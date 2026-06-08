@@ -71,13 +71,13 @@ project:
     # Last refreshed 2026-06-08.
     rust_lines: 107403
     crates: 38
-    active_fixtures: 1086
+    active_fixtures: 1087
     stub_fixtures: 0           # all stubs eliminated
-    jvm_e2e_fixtures: 1080
-    dex_e2e_fixtures: 1051     # 1321..1338 added DEX golden
+    jvm_e2e_fixtures: 1081
+    dex_e2e_fixtures: 1052     # 1321..1339 added DEX golden
     kotlinc_byte_parity_baseline: 820  # tests/fixtures/kotlinc_parity_baseline.txt
     kotlinc_byte_parity_aspirational: 70
-    parity_examples: 51        # parity/01-hello-world through parity/51-html-dsl-builder (49 + 50 + 51 are fail-skotch gap probes)
+    parity_examples: 52        # parity/01-hello-world through parity/52-reified-and-bound-refs (49 + 50 + 51 + 52 are fail-skotch gap probes)
     measured_kotlinc_speedup: "~100× on small programs (parity bench)"
 
 # ============================================================================
@@ -2169,6 +2169,56 @@ milestones:
           real return types from PackageSymbolTable (currently lost), or
           have the implicit-this resolver fall back to classpath lookup
           when the in-file stub matches but has no body.
+
+      - name: "Reified type parameters: `is T` erases to `is Any` / NoClassDefFoundError"
+        completed: false
+        description: >
+          KNOWN GAP — surfaced by parity/52-reified-and-bound-refs.
+          `inline fun <reified T>` should substitute `T` at the call
+          site (kotlinc inlines the body and rewrites `is T`,
+          `T::class`, `T::class.java`). Pre-fix `is T` survives into
+          the bytecode literally, producing `instanceof T` which
+          fails class loading with `NoClassDefFoundError: T` at
+          runtime. Fix shape: the inline-fn substitution pass at
+          mir-lower:~362 needs to walk the callee body, find every
+          `is T` / `T::class` / `as T` against a reified type param,
+          and rewrite the type ref to the call-site's actual type
+          argument. Affects every JSON deserializer, type-safe
+          builder, and Java-interop bridge in real Kotlin code.
+
+      - name: "Class-member callable refs (`String::length`) — wrong receiver shape"
+        completed: false
+        description: >
+          KNOWN GAP — surfaced by parity/52. Parser at
+          parser.rs:~3887 desugars EVERY `::` form to a 1-arg lambda
+          `{ $ref_arg -> lhs.member($ref_arg) }`. For class-member
+          refs (`String::length`) the desugar inverts the receiver:
+          should be `{ s -> s.length }` (instance access on the
+          single param) but emits `{ s -> String.length(s) }`
+          (call on a non-existent static). Runtime: silent null
+          return or wrong dispatch. Fix shape: keep `::` as an
+          `Expr::CallableRef` AST variant through resolve; at
+          mir-lower time inspect lhs's resolved kind — class name
+          vs value binding — and pick the correct lambda shape.
+          Bound-instance variant with zero-arg method LANDED in
+          iter 52 (fixture 1339) for the same-file case via
+          maybe_expand_callable_ref's arity-0 path; cross-file
+          remains broken because param_tys can't be recovered.
+
+      - name: "Cross-file param_tys for callable-ref adapter"
+        completed: false
+        description: >
+          KNOWN GAP — surfaced by parity/52. When a call site
+          targets a fn defined in another file (`applyTimes` defined
+          in BoundRefs.kt, called from Main.kt), name_to_func.get()
+          returns None and param_tys stays empty. The
+          maybe_expand_callable_ref adapter at mir-lower:~13491
+          never runs, so the parser's default 1-param callable-ref
+          lambda survives even when the target slot expects a
+          different arity. Same-file works after iter-52 fix. Fix
+          shape: when name_to_func misses, fall back to
+          PackageSymbolTable / cross_file_fns lookup to recover the
+          target's param types.
 
       - name: "Custom property delegate via KProperty treated as `by lazy`"
         completed: false

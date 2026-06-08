@@ -3034,6 +3034,18 @@ fn maybe_expand_callable_ref(
         Ty::Nullable(inner) => return maybe_expand_callable_ref(arg, inner, interner),
         _ => return None,
     };
+    // Pre-expand handles three arity-shape mismatches between the
+    // parser's `obj::method` desugar (always 1-param lambda calling
+    // `obj.method($ref_arg)`) and the target slot:
+    //   - expected_arity == 1: parser already produced the right shape.
+    //   - expected_arity == 0: BOUND-INSTANCE ref to a zero-arg method
+    //     (`counter::inc` for `applyTimes(n, () -> Unit)`) — shrink
+    //     the lambda to zero params and drop the spurious arg.
+    //   - expected_arity > 1: callable-ref to an N-arg fn — fan the
+    //     synthesized `$ref_arg` out to `$ref_arg, $ref_arg2, …`.
+    // Previously the `== 1` early-out also fell through to expansion
+    // for the 0 case, producing the wrong shape and a runtime
+    // `Function1 cannot be cast to Function0`.
     if expected_arity == 1 {
         return None;
     }
@@ -26724,3 +26736,4 @@ mod tests {
     // TODO: lower_string_template        — once Concat intrinsic lands
     // TODO: lower_local_var_reassign     — `var x = 1; x = 2`
 }
+// touch Mon Jun  8 09:18:08 EDT 2026
