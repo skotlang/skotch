@@ -1,2 +1,9 @@
 .out-kotlinc/
 .out-skotch/
+.out-kotlinc-lib/
+.out-skotch-lib/
+# Project-mode parity examples (parity/[0-9][0-9][0-9]-*) clone an
+# external repository on demand into a .checkout/<ref>/ slot. The
+# checkout is gigabytes of source code we never want to commit — CI
+# re-clones it dynamically on every run.
+.checkout/

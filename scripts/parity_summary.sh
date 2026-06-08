@@ -49,9 +49,11 @@ rows=()
 while IFS=$'\t' read -r name status kc_ms sk_ms; do
     [[ "$name" == "name" ]] && continue
     total=$(( total + 1 ))
-    # Example name shape is NN-rest-of-name; split for a cleaner table.
-    idx="${name:0:2}"
-    rest="${name:3}"
+    # Example name shape is `NN-rest` (2-digit slot) or `NNN-rest`
+    # (3-digit project-mode slot). Split on the first `-` so the
+    # numeric prefix doesn't get truncated for 100+ entries.
+    idx="${name%%-*}"
+    rest="${name#*-}"
 
     case "$status" in
         pass)         icon="✅"; passed=$(( passed + 1 ));;

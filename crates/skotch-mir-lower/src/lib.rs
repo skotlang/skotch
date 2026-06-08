@@ -2817,16 +2817,25 @@ fn emit_throw_new(
         // use it directly.
         let msg_ty = fb.mf.locals[msg_local.0 as usize].clone();
         let msg = if is_lambda_or_function_ty(&msg_ty, module) {
+            // The message lambda may be typed as Ty::Class(LambdaN) or
+            // Ty::Function {...}. For function types, the JVM-level
+            // receiver is the erased `kotlin/jvm/functions/FunctionN`
+            // interface — invokeinterface on that resolves to the
+            // synthesized lambda's invoke().
+            let class_name = match &msg_ty {
+                Ty::Class(n) => n.clone(),
+                Ty::Function { params, .. } => {
+                    let arity = params.len();
+                    format!("kotlin/jvm/functions/Function{arity}")
+                }
+                _ => "java/lang/Object".to_string(),
+            };
             let result = fb.new_local(Ty::Any);
             fb.push_stmt(MStmt::Assign {
                 dest: result,
                 value: Rvalue::Call {
                     kind: CallKind::Virtual {
-                        class_name: if let Ty::Class(n) = &msg_ty {
-                            n.clone()
-                        } else {
-                            unreachable!()
-                        },
+                        class_name,
                         method_name: "invoke".to_string(),
                     },
                     args: vec![msg_local],

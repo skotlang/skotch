@@ -222,10 +222,287 @@ run_main() {
     java -cp "$cp" MainKt
 }
 
+# --- project mode (external git checkout) -------------------------------
+#
+# An example directory enters "project mode" by providing a `project.sh`
+# file that declares which external repository to clone and which Kotlin
+# files in that checkout to compile. The example's own `Main.kt` is then
+# compiled separately against the compiled project's class files and
+# linked at runtime, so we can confirm — by actually running — that at
+# least a minimal subset of the project's public surface loads and is
+# callable.
+#
+# A project.sh script MUST set:
+#   PROJECT_REPO       full git URL (https or ssh)
+#   PROJECT_REF        tag or branch name to check out
+#   PROJECT_KT_FIND    shell command (string) that, when executed from
+#                      the project checkout root, prints one .kt path
+#                      per line — typically a `find` invocation
+# It MAY set:
+#   PROJECT_CLASSPATH  extra classpath entries (colon-separated) that
+#                      should be passed to the compiler when building
+#                      the project — useful for projects with optional
+#                      runtime dependencies the bundled stdlib doesn't
+#                      cover.
+
+# Path to where this example's external project checkout lives. We keep
+# it under the example dir so it's discoverable from a glance at the
+# folder, and gitignore takes care of not committing it.
+project_checkout_dir() {
+    local dir="$1"
+    local ref="$2"
+    echo "$dir/.checkout/$ref"
+}
+
+# Source a project.sh if present and return 0; return 1 otherwise. After
+# this call, the caller can check whether `${PROJECT_REPO:-}` is set to
+# know whether the example is in project mode.
+load_project_config() {
+    local dir="$1"
+    # Reset every variable a previous example may have set so we don't
+    # leak config between examples when running the parity bench.
+    unset PROJECT_REPO PROJECT_REF PROJECT_KT_FIND PROJECT_CLASSPATH
+    if [[ ! -f "$dir/project.sh" ]]; then
+        return 1
+    fi
+    # shellcheck source=/dev/null
+    source "$dir/project.sh"
+    if [[ -z "${PROJECT_REPO:-}" || -z "${PROJECT_REF:-}" || -z "${PROJECT_KT_FIND:-}" ]]; then
+        echo "ERROR: $dir/project.sh must set PROJECT_REPO, PROJECT_REF, PROJECT_KT_FIND" >&2
+        return 2
+    fi
+    return 0
+}
+
+# Ensure the configured repo is cloned at the requested ref under the
+# example dir's `.checkout/<ref>/` slot. Idempotent: if the slot already
+# has a checkout for that ref, we trust it (callers can `rm -rf` to
+# force a refetch). Stamps a `.ref` marker so we can detect mismatched
+# left-over checkouts and rebuild them.
+ensure_project_checkout() {
+    local dir="$1"
+    local repo="$2"
+    local ref="$3"
+    local target
+    target=$(project_checkout_dir "$dir" "$ref")
+    local marker="$target/.skotch-project-ref"
+    if [[ -d "$target/.git" && -f "$marker" && "$(cat "$marker")" == "$ref" ]]; then
+        return 0
+    fi
+    # Stale or absent — rebuild from scratch. Using --depth 1 + a single
+    # branch fetch keeps the network/disk footprint small (clikt at
+    # 5.1.0 is ~3 MB shallow vs ~40 MB full).
+    rm -rf "$target"
+    mkdir -p "$target"
+    echo "── cloning $repo @ $ref → $target ──" >&2
+    git clone --depth 1 --branch "$ref" "$repo" "$target" >&2
+    printf '%s\n' "$ref" > "$marker"
+}
+
+# Run PROJECT_KT_FIND from inside the project checkout and emit one
+# absolute .kt path per line on stdout. The shell snippet runs via
+# `bash -c`, so it can use `find … -name '*.kt'`, multiple commands
+# joined with `;`, etc.
+list_project_kt_files() {
+    local checkout="$1"
+    local find_cmd="$2"
+    (cd "$checkout" && eval "$find_cmd") | while IFS= read -r p; do
+        if [[ "$p" = /* ]]; then
+            echo "$p"
+        else
+            echo "$checkout/$p"
+        fi
+    done
+}
+
+# Compile a project's .kt files into lib_dir using either `kotlinc` or
+# the skotch CLI. The two implementations share enough scaffolding that
+# they live in one helper parameterized by tool. Sets the corresponding
+# LAST_*_MS timing slot, returns the underlying compiler's exit code.
+compile_project_with() {
+    local tool="$1"        # "kotlinc" or "skotch"
+    local dir="$2"         # example dir (parity/100-clikt)
+    local lib_dir="$3"     # output dir for compiled project classes
+    rm -rf "$lib_dir"
+    mkdir -p "$lib_dir"
+    ensure_project_checkout "$dir" "$PROJECT_REPO" "$PROJECT_REF"
+    local checkout
+    checkout=$(project_checkout_dir "$dir" "$PROJECT_REF")
+    local kt_args=()
+    while IFS= read -r line; do
+        kt_args+=("$line")
+    done < <(list_project_kt_files "$checkout" "$PROJECT_KT_FIND")
+    if [[ ${#kt_args[@]} -eq 0 ]]; then
+        echo "ERROR: PROJECT_KT_FIND produced no files (checkout=$checkout)" >&2
+        return 2
+    fi
+    # Optional extra classpath the project itself depends on. The
+    # bundled kotlin-stdlib / kotlinx-coroutines from the host kotlinc
+    # are always added; PROJECT_CLASSPATH is for everything else.
+    local cp_args=()
+    local cp_parts=()
+    local coroutines
+    if coroutines=$(find_kotlinx_coroutines); then
+        cp_parts+=("$coroutines")
+    fi
+    if [[ -n "${PROJECT_CLASSPATH:-}" ]]; then
+        cp_parts+=("$PROJECT_CLASSPATH")
+    fi
+    if [[ ${#cp_parts[@]} -gt 0 ]]; then
+        local joined=""
+        local p
+        for p in "${cp_parts[@]}"; do
+            if [[ -z "$joined" ]]; then joined="$p"; else joined="$joined:$p"; fi
+        done
+        cp_args=(-classpath "$joined")
+    fi
+    case "$tool" in
+        kotlinc)
+            local kotlinc
+            if ! kotlinc=$(find_kotlinc); then
+                echo "ERROR: kotlinc not found on PATH" >&2; return 1
+            fi
+            time_cmd "$kotlinc" "${cp_args[@]}" "${kt_args[@]}" -d "$lib_dir"
+            local rc=$?
+            LAST_KOTLINC_MS=$TIMED_MS
+            return $rc
+            ;;
+        skotch)
+            if [[ ! -x "$SKOTCH_BIN" ]]; then
+                echo "ERROR: skotch binary not found at $SKOTCH_BIN" >&2
+                echo "  build with: cargo build --release" >&2
+                return 1
+            fi
+            # skotch's kotlinc subcommand accepts -classpath the same
+            # way the real kotlinc does, even when the underlying
+            # implementation may or may not consume every entry.
+            time_cmd "$SKOTCH_BIN" kotlinc "${cp_args[@]}" -d "$lib_dir" "${kt_args[@]}"
+            local rc=$?
+            LAST_SKOTCH_MS=$TIMED_MS
+            return $rc
+            ;;
+        *)
+            echo "ERROR: compile_project_with: unknown tool '$tool'" >&2
+            return 2
+            ;;
+    esac
+}
+
+# Compile the example's own Main.kt (and any sibling .kt) against the
+# already-compiled project library. We always use kotlinc for this step
+# because the goal of project mode is to verify that the PROJECT'S
+# compiled output is consumable; the example's own Main.kt is just a
+# smoke test, and using kotlinc to build it keeps the harness focused
+# on the project-compile result rather than on Main.kt's own quirks.
+compile_main_against_lib() {
+    local dir="$1"
+    local out_dir="$2"
+    local lib_dir="$3"
+    rm -rf "$out_dir"
+    mkdir -p "$out_dir"
+    local kotlinc
+    if ! kotlinc=$(find_kotlinc); then
+        echo "ERROR: kotlinc not found on PATH" >&2; return 1
+    fi
+    local kt_args=()
+    while IFS= read -r line; do
+        kt_args+=("$line")
+    done < <(list_kt_files "$dir")
+    if [[ ${#kt_args[@]} -eq 0 ]]; then
+        echo "ERROR: project example has no .kt files alongside project.sh" >&2
+        return 2
+    fi
+    local cp_parts=("$lib_dir")
+    local coroutines
+    if coroutines=$(find_kotlinx_coroutines); then
+        cp_parts+=("$coroutines")
+    fi
+    if [[ -n "${PROJECT_CLASSPATH:-}" ]]; then
+        cp_parts+=("$PROJECT_CLASSPATH")
+    fi
+    local joined=""
+    local p
+    for p in "${cp_parts[@]}"; do
+        if [[ -z "$joined" ]]; then joined="$p"; else joined="$joined:$p"; fi
+    done
+    "$kotlinc" -classpath "$joined" "${kt_args[@]}" -d "$out_dir"
+}
+
+# Build the runtime classpath for a project-mode example: stdlib +
+# coroutines (from the regular runtime_classpath helper) plus the
+# compiled project library and any PROJECT_CLASSPATH entries.
+project_runtime_classpath() {
+    local out_dir="$1"
+    local lib_dir="$2"
+    local cp
+    cp=$(runtime_classpath "$out_dir")
+    cp="$cp:$lib_dir"
+    if [[ -n "${PROJECT_CLASSPATH:-}" ]]; then
+        cp="$cp:$PROJECT_CLASSPATH"
+    fi
+    echo "$cp"
+}
+
+# Drive a single compiler through a project-mode example: compile the
+# project library, then compile the example's Main.kt against that
+# library, then run it. Any step that fails short-circuits with that
+# step's exit code so callers can attribute the failure correctly.
+run_project_with() {
+    local tool="$1"
+    local dir="$2"
+    # Keep the project library output OUTSIDE the Main.kt output dir so
+    # the latter's pre-compile wipe doesn't also nuke the compiled
+    # project we just spent seconds (or minutes) building. They live as
+    # peers under .out-<tool>-lib and .out-<tool>.
+    local lib_dir="$dir/.out-$tool-lib"
+    local out_dir="$dir/.out-$tool"
+    # Stay bash-3.2 compatible (macOS' default shell) — no `${var^^}`
+    # uppercasing, no `${!indirect}` lookup in tight cases. A switch
+    # statement is more explicit anyway.
+    local ms_label
+    case "$tool" in
+        kotlinc)
+            echo "── kotlinc (project mode) ──" >&2
+            ms_label="kotlinc compile"
+            ;;
+        skotch)
+            echo "── skotch (project mode) ──" >&2
+            ms_label="skotch  compile"
+            ;;
+        *) echo "ERROR: run_project_with: unknown tool '$tool'" >&2; return 2 ;;
+    esac
+    local rc=0
+    compile_project_with "$tool" "$dir" "$lib_dir" >&2 || rc=$?
+    local ms=0
+    case "$tool" in
+        kotlinc) ms="$LAST_KOTLINC_MS" ;;
+        skotch)  ms="$LAST_SKOTCH_MS"  ;;
+    esac
+    echo "${ms_label}: ${ms} ms" >&2
+    if [[ $rc -ne 0 ]]; then
+        return 1
+    fi
+    # The Main.kt compile is kotlinc-only (see comment on
+    # compile_main_against_lib) so its time is not attributed to skotch.
+    # If THIS step fails when running under skotch, we still attribute
+    # the failure to skotch because the cause is the project library
+    # being incomplete / missing types.
+    if ! compile_main_against_lib "$dir" "$out_dir" "$lib_dir" >&2; then
+        return 2
+    fi
+    local cp
+    cp=$(project_runtime_classpath "$out_dir" "$lib_dir")
+    java -cp "$cp" MainKt
+}
+
 # --- top-level entry points ---------------------------------------------
 
 run_with_kotlinc() {
     local dir="$1"
+    if load_project_config "$dir"; then
+        run_project_with kotlinc "$dir"
+        return
+    fi
     local out_dir="$dir/.out-kotlinc"
     echo "── kotlinc ──" >&2
     compile_with_kotlinc "$dir" "$out_dir" >&2
@@ -235,6 +512,10 @@ run_with_kotlinc() {
 
 run_with_skotch() {
     local dir="$1"
+    if load_project_config "$dir"; then
+        run_project_with skotch "$dir"
+        return
+    fi
     local out_dir="$dir/.out-skotch"
     echo "── skotch ──" >&2
     compile_with_skotch "$dir" "$out_dir" >&2

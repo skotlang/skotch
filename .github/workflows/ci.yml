@@ -217,12 +217,28 @@ jobs:
       - name: Build skotch (release)
         run: cargo build --release -p skotch-cli
 
+      # Cache the external repo clones that parity/[0-9][0-9][0-9]-*/
+      # examples pull down via their project.sh declarations. The cache
+      # key includes every project.sh on disk, so a tag/repo bump in any
+      # project.sh invalidates the cache and triggers a fresh checkout.
+      # Without this, every CI run re-clones each project (1s for clikt
+      # 5.1.0 — small, but it adds up across matrix entries).
+      - name: Cache parity project checkouts
+        uses: actions/cache@v4
+        with:
+          path: parity/*/.checkout
+          key: parity-projects-${{ hashFiles('parity/[0-9][0-9][0-9]-*/project.sh') }}
+
       - name: Run parity bench
         # Always succeeds; per-example failures land in the TSV and
         # diffs/ directory, which the summary + artifact pick up.
         # KOTLINC_RUNS=3 → kotlinc compiles each example three times,
         # min wins. Filters out JVM cold-start + JIT-warmup tax that
         # otherwise doubles the first-run timing.
+        #
+        # Project-mode examples (parity/[0-9][0-9][0-9]-*) clone their
+        # target repository on demand inside the harness. `git` is
+        # preinstalled on ubuntu-latest, so no setup step is needed.
         env:
           KOTLINC_RUNS: '3'
         run: ./scripts/parity_bench.sh

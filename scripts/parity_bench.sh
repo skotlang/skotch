@@ -42,10 +42,15 @@ trap 'rm -f "$TMP_KC_ERR" "$TMP_SK_ERR"' EXIT
 
 printf 'name\tstatus\tkotlinc_ms\tskotch_ms\n' > "$OUT_TSV"
 
-# Iterate parity/[0-9][0-9]-* directories, sorted (the leading two
-# digits give natural ordering).
+# Iterate parity examples in two passes so the natural numeric
+# ordering survives — bash globs sort lexicographically, which would
+# otherwise put `100-` before `02-`. The 2-digit slots (00–99) hold
+# the standalone code examples; the 3-digit slots (100+) hold
+# "project mode" examples that clone an external repository and
+# compile the project itself.
 shopt -s nullglob
-for dir in "$PARITY_DIR"/[0-9][0-9]-*/; do
+parity_dirs=("$PARITY_DIR"/[0-9][0-9]-*/ "$PARITY_DIR"/[0-9][0-9][0-9]-*/)
+for dir in "${parity_dirs[@]}"; do
     name="$(basename "${dir%/}")"
 
     # Run kotlinc $KOTLINC_RUNS times and keep the minimum compile

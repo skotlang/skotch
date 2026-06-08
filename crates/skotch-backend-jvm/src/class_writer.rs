@@ -10574,7 +10574,6 @@ fn emit_mir_segment(
                         emit_load_mir_local(code, func, local_slot, *a);
                     }
                     let dest_ty = &func.locals[dest.0 as usize];
-                    eprintln!("DBG BE CallKind::Virtual class={class_name} method={method_name} dest_ty={dest_ty:?} dest.0={}", dest.0);
                     let ret_desc = if method_name == "invoke"
                         && (module.is_lambda_class(class_name)
                             || class_name.starts_with("kotlin/jvm/functions/Function"))
