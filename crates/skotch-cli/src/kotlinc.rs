@@ -311,6 +311,32 @@ fn walk_dir(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
 /// options (e.g. `-classpath`) which `clap` cannot model without
 /// surprising every other subcommand, so this is bespoke.
 fn parse_args(raw: &[String]) -> Result<KotlincOptions> {
+    // kotlinc accepts both `-opt-in foo` (space-separated) and
+    // `-opt-in=foo` (equals form). Multi-platform-flavored build
+    // scripts (e.g. kotlin-result, kotlin-result, every Gradle-driven
+    // project) emit the equals form. Normalize by splitting any
+    // `-flag=value` token into two tokens before the per-flag match
+    // below, so each arm keeps reading values via the standard
+    // `raw.get(i + 1)` lookahead path.
+    //
+    // Caveat: `-Xflag=value` is kotlinc's wire format for advanced
+    // flags (e.g. `-Xjsr305=strict`). Don't split those — the
+    // advanced-flag arm matches on the full `-X…` token.
+    let raw: Vec<String> = {
+        let mut out: Vec<String> = Vec::with_capacity(raw.len());
+        for a in raw {
+            if a.starts_with('-') && !a.starts_with("-X") && !a.starts_with("-P") {
+                if let Some((lhs, rhs)) = a.split_once('=') {
+                    out.push(lhs.to_string());
+                    out.push(rhs.to_string());
+                    continue;
+                }
+            }
+            out.push(a.clone());
+        }
+        out
+    };
+    let raw = raw.as_slice();
     let mut opts = KotlincOptions::default();
     let mut i = 0;
     while i < raw.len() {

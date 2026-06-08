@@ -319,7 +319,13 @@ class_similarity_pct() {
 # compiling, so the script can fetch Maven JARs, generate sources, run
 # code-gen, etc. The function is expected to extend PROJECT_CLASSPATH
 # in place (and treat its work as idempotent — the function is called
-# every parity run, including the cached-checkout case).
+# every parity run, including the cached-checkout case). It may also
+# populate PROJECT_EXTRA_ARGS, a bash array of additional flags the
+# project needs the compiler to receive (e.g. `-opt-in=…`,
+# `-Xmulti-platform`, `-Xfragment-sources=common:<file>` per file for
+# multiplatform projects). These args are forwarded verbatim to BOTH
+# kotlinc and skotch so the parity bench keeps comparing apples to
+# apples.
 
 # Path to where this example's external project checkout lives. We keep
 # it under the example dir so it's discoverable from a glance at the
@@ -338,6 +344,12 @@ load_project_config() {
     # Reset every variable a previous example may have set so we don't
     # leak config between examples when running the parity bench.
     unset PROJECT_REPO PROJECT_REF PROJECT_KT_FIND PROJECT_CLASSPATH
+    # PROJECT_EXTRA_ARGS is the per-project escape hatch for additional
+    # compiler flags: opt-ins, `-Xmulti-platform`, fragment-source
+    # mappings, `-Xreturn-value-checker=full`, etc. A multiplatform
+    # project (e.g. parity/102-result) writes one `-Xfragment-sources`
+    # entry per file into this array from its `project_prepare` hook.
+    PROJECT_EXTRA_ARGS=()
     # Also un-define a previous example's `project_prepare` hook so a
     # missing definition on the next example doesn't silently inherit
     # someone else's. `unset -f` is a no-op if the function isn't
@@ -444,13 +456,30 @@ compile_project_with() {
         done
         cp_args=(-classpath "$joined")
     fi
+    # PROJECT_EXTRA_ARGS may be empty or unset. Under `set -u`, both
+    # `${PROJECT_EXTRA_ARGS[@]}` and `${#PROJECT_EXTRA_ARGS[@]}` blow up
+    # on an unset name, so guard with `declare -p` first. The `:-0`
+    # default form doesn't apply to length expansions.
+    local extra_args=()
+    if declare -p PROJECT_EXTRA_ARGS >/dev/null 2>&1; then
+        if [[ ${#PROJECT_EXTRA_ARGS[@]} -gt 0 ]]; then
+            extra_args=("${PROJECT_EXTRA_ARGS[@]}")
+        fi
+    fi
+    # Bash 3.2 + `set -u` treats `${empty_array[@]}` as unbound. The
+    # `[@]+` indirection sidesteps that — it expands to the array only
+    # when the name is set, and to nothing otherwise. Apply to both
+    # `cp_args` and `extra_args` (either may legitimately be empty).
     case "$tool" in
         kotlinc)
             local kotlinc
             if ! kotlinc=$(find_kotlinc); then
                 echo "ERROR: kotlinc not found on PATH" >&2; return 1
             fi
-            time_cmd "$kotlinc" "${cp_args[@]}" "${kt_args[@]}" -d "$lib_dir"
+            time_cmd "$kotlinc" \
+                ${cp_args[@]+"${cp_args[@]}"} \
+                ${extra_args[@]+"${extra_args[@]}"} \
+                "${kt_args[@]}" -d "$lib_dir"
             local rc=$?
             LAST_KOTLINC_MS=$TIMED_MS
             return $rc
@@ -463,8 +492,15 @@ compile_project_with() {
             fi
             # skotch's kotlinc subcommand accepts -classpath the same
             # way the real kotlinc does, even when the underlying
-            # implementation may or may not consume every entry.
-            time_cmd "$SKOTCH_BIN" kotlinc "${cp_args[@]}" -d "$lib_dir" "${kt_args[@]}"
+            # implementation may or may not consume every entry. Pass
+            # PROJECT_EXTRA_ARGS through too — skotch's CLI warns on
+            # advanced (`-X`) flags it doesn't understand and accepts
+            # known warn-only flags, so parity stays meaningful when a
+            # project requires opt-ins that skotch has yet to honor.
+            time_cmd "$SKOTCH_BIN" kotlinc \
+                ${cp_args[@]+"${cp_args[@]}"} \
+                ${extra_args[@]+"${extra_args[@]}"} \
+                -d "$lib_dir" "${kt_args[@]}"
             local rc=$?
             LAST_SKOTCH_MS=$TIMED_MS
             return $rc
