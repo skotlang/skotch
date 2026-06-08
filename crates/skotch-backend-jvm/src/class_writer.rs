@@ -4294,8 +4294,15 @@ fn emit_method_body(
         // bytecode. Eliding `istore_X; iload_X` pairs can leave a value
         // sitting on the stack at points the emission tracker never
         // observed, raising the true max stack depth above what was
-        // recorded.
-        let recomputed = recompute_max_stack_from_code(&code, cp);
+        // recorded. Seed exception-handler entry offsets with stack=1
+        // (the JVM pushes the thrown exception there) so try-finally
+        // cleanup paths get their stack contribution counted.
+        let handler_starts: Vec<usize> = func
+            .exception_handlers
+            .iter()
+            .filter_map(|eh| block_offsets.get(eh.handler_block as usize).copied())
+            .collect();
+        let recomputed = recompute_max_stack_from_code_with_handlers(&code, cp, &handler_starts);
         if recomputed > max_stack {
             max_stack = recomputed;
         }
@@ -4420,7 +4427,13 @@ fn emit_method_body(
         peephole_uppercase_to_locale_root(&mut code, &mut cmp_targets, &mut [], &mut [], cp);
         // Recompute max_stack after intra-block peepholes (mirrors the
         // no_branches path).
-        let recomputed = recompute_max_stack_from_code(&code, cp);
+        let handler_starts_recomp: Vec<usize> = func
+            .exception_handlers
+            .iter()
+            .filter_map(|eh| block_offsets.get(eh.handler_block as usize).copied())
+            .collect();
+        let recomputed =
+            recompute_max_stack_from_code_with_handlers(&code, cp, &handler_starts_recomp);
         if recomputed > max_stack {
             max_stack = recomputed;
         }
@@ -4836,8 +4849,17 @@ fn emit_method_body(
             // linearly and can over-count when a comparison's iconst_1/iconst_0
             // materialization is later fused, leaving a tighter stack. The
             // dataflow recompute observes only the final bytecode and gives the
-            // true peak.
-            max_stack = recompute_max_stack_from_code(&code, cp);
+            // true peak. Seed exception-handler entries with stack=1.
+            let handler_starts_authoritative: Vec<usize> = func
+                .exception_handlers
+                .iter()
+                .filter_map(|eh| block_offsets.get(eh.handler_block as usize).copied())
+                .collect();
+            max_stack = recompute_max_stack_from_code_with_handlers(
+                &code,
+                cp,
+                &handler_starts_authoritative,
+            );
         }
     }
 
@@ -17613,6 +17635,22 @@ fn actual_max_locals(code: &[u8]) -> u16 {
 /// and/or branch target). This correctly handles if-then-else where two
 /// paths converge with the same depth on entry.
 fn recompute_max_stack_from_code(code: &[u8], cp: &ConstantPool) -> i32 {
+    recompute_max_stack_from_code_with_handlers(code, cp, &[])
+}
+
+/// Same dataflow as `recompute_max_stack_from_code` but seeds exception
+/// handler entry offsets with stack=1 (the JVM pushes the thrown
+/// exception onto the operand stack at handler entry). Without this,
+/// try-finally bodies whose cleanup pushed onto the stack peaked above
+/// the try-body's max (e.g. `println("cleanup")` = ldc+getstatic = 2)
+/// were not visited by the dataflow → `max_stack` stayed at the try-
+/// body's peak (often 1) → JVM verifier rejected with "Operand stack
+/// overflow". Surfaced by parity/44-try-finally.
+fn recompute_max_stack_from_code_with_handlers(
+    code: &[u8],
+    cp: &ConstantPool,
+    handler_starts: &[usize],
+) -> i32 {
     if code.is_empty() {
         return 0;
     }
@@ -17620,6 +17658,15 @@ fn recompute_max_stack_from_code(code: &[u8], cp: &ConstantPool) -> i32 {
     depth_in[0] = Some(0);
     let mut max_stack: i32 = 0;
     let mut work: Vec<usize> = vec![0];
+    for &h in handler_starts {
+        if h < code.len() && depth_in[h].is_none() {
+            depth_in[h] = Some(1);
+            work.push(h);
+            if 1 > max_stack {
+                max_stack = 1;
+            }
+        }
+    }
     while let Some(off) = work.pop() {
         if off >= code.len() {
             continue;

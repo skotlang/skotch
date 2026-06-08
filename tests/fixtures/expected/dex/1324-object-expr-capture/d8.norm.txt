@@ -1,0 +1,133 @@
+dex_version   035
+strings       59
+types         16
+methods       14
+classes       5
+
+--- strings ---
+  ""
+  " — done"
+  "$k"
+  "$suffix"
+  "$tag"
+  "<init>"
+  "I"
+  "III"
+  "InputKt$main$op$1"
+  "InputKt$main$producer$1"
+  "L"
+  "LBinaryOp;"
+  "LInputKt$main$op$1;"
+  "LInputKt$main$producer$1;"
+  "LInputKt;"
+  "LL"
+  "LProducer;"
+  "Ldalvik/annotation/EnclosingMethod;"
+  "Ldalvik/annotation/InnerClass;"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/String;"
+  "Ljava/lang/StringBuilder;"
+  "Ljava/lang/System;"
+  "Lkotlin/Metadata;"
+  "V"
+  "VI"
+  "VL"
+  "VLL"
+  "[Ljava/lang/String;"
+  "[ok]"
+  "a"
+  "accessFlags"
+  "append"
+  "apply"
+  "b"
+  "d1"
+  "d2"
+  "input.kt"
+  "k"
+  "main"
+  "mv"
+  "name"
+  "op"
+  "out"
+  "println"
+  "produce"
+  "producer"
+  "suffix"
+  "tag"
+  "toString"
+  "value"
+  "xi"
+  "~~D8{\"backend\":\"dex\",\"compilation-mode\":\"debug\",\"has-checksums\":false,\"min-api\":1,\"sha-1\":\"a7ad18a70460b799d0482e497c109a75bf7f91de\",\"version\":\"8.10.9-dev\"}"
+  "��\u{6}\n��\n\u{2}\u{10}\u{2}\u{1a}\u{6}\u{10}��\u{1a}\u{2}0\u{1}"
+  "��\u{e}\n\u{2}\u{18}\u{2}\n\u{2}\u{10}��\n��\n\u{2}\u{10}\u{e}\u{8}f\u{18}��2\u{2}0\u{1}J\u{8}\u{10}\u{2}\u{1a}\u{2}0\u{3}H&À\u{6}\u{3}"
+  "��\u{f}\n��\n\u{2}\u{18}\u{2}\n��\n\u{2}\u{10}\u{e}*\u{1}��\u{8}\n\u{18}��2\u{2}0\u{1}J\u{8}\u{10}\u{2}\u{1a}\u{2}0\u{3}H\u{16}"
+  "��\u{12}\n\u{2}\u{18}\u{2}\n\u{2}\u{10}��\n��\n\u{2}\u{10}\u{8}\n\u{2}\u{8}\u{2}\u{8}f\u{18}��2\u{2}0\u{1}J\u{18}\u{10}\u{2}\u{1a}\u{2}0\u{3}2\u{6}\u{10}\u{4}\u{1a}\u{2}0\u{3}2\u{6}\u{10}\u{5}\u{1a}\u{2}0\u{3}H&À\u{6}\u{3}"
+  "��\u{13}\n��\n\u{2}\u{18}\u{2}\n��\n\u{2}\u{10}\u{8}\n\u{2}\u{8}\u{2}*\u{1}��\u{8}\n\u{18}��2\u{2}0\u{1}J\u{18}\u{10}\u{2}\u{1a}\u{2}0\u{3}2\u{6}\u{10}\u{4}\u{1a}\u{2}0\u{3}2\u{6}\u{10}\u{5}\u{1a}\u{2}0\u{3}H\u{16}"
+
+--- types ---
+  I
+  LBinaryOp;
+  LInputKt$main$op$1;
+  LInputKt$main$producer$1;
+  LInputKt;
+  LProducer;
+  Ldalvik/annotation/EnclosingMethod;
+  Ldalvik/annotation/InnerClass;
+  Ljava/io/PrintStream;
+  Ljava/lang/Object;
+  Ljava/lang/String;
+  Ljava/lang/StringBuilder;
+  Ljava/lang/System;
+  Lkotlin/Metadata;
+  V
+  [Ljava/lang/String;
+
+--- methods ---
+  LBinaryOp;.apply(II)I
+  LInputKt$main$op$1;.<init>(I)V
+  LInputKt$main$op$1;.apply(II)I
+  LInputKt$main$producer$1;.<init>(Ljava/lang/String;Ljava/lang/String;)V
+  LInputKt$main$producer$1;.produce()Ljava/lang/String;
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  LProducer;.produce()Ljava/lang/String;
+  Ljava/io/PrintStream;.println(I)V
+  Ljava/io/PrintStream;.println(Ljava/lang/Object;)V
+  Ljava/lang/Object;.<init>()V
+  Ljava/lang/StringBuilder;.<init>()V
+  Ljava/lang/StringBuilder;.append(Ljava/lang/String;)Ljava/lang/StringBuilder;
+  Ljava/lang/StringBuilder;.toString()Ljava/lang/String;
+
+--- class[0] ---
+  descriptor   LBinaryOp;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       apply(II)I flags=0x0401 regs=0 ins=0 outs=0 insns=0
+
+--- class[1] ---
+  descriptor   LInputKt$main$op$1;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       <init>(I)V flags=0x10000 regs=2 ins=2 outs=1 insns=6
+  method       apply(II)I flags=0x0001 regs=5 ins=3 outs=0 insns=6
+
+--- class[2] ---
+  descriptor   LProducer;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       produce()Ljava/lang/String; flags=0x0401 regs=0 ins=0 outs=0 insns=0
+
+--- class[3] ---
+  descriptor   LInputKt$main$producer$1;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       <init>(Ljava/lang/String;Ljava/lang/String;)V flags=0x10000 regs=3 ins=3 outs=1 insns=8
+  method       produce()Ljava/lang/String; flags=0x0001 regs=4 ins=1 outs=2 insns=22
+
+--- class[4] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       main()V flags=0x0019 regs=7 ins=0 outs=3 insns=37
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4

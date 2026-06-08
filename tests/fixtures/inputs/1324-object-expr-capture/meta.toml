@@ -1,0 +1,4 @@
+name = "1324-object-expr-capture"
+status = "supported"
+features = ["object-expr", "anonymous-class", "closure-capture", "interface-impl"]
+reason = "Lock-in for parity/38-object-expr-capture. Anonymous `object : I { ... }` expression that captures local vals (String for refs, Int for primitives) from main(). Pre-fix: synthesized anonymous class had no fields, ctor took no args, method body lookups returned null/0. Fix at mir-lower:~21574 collects free vars across all method bodies, adds capture fields to the class, threads captures through the constructor (super() then putfield), and emits a per-method GetField prelude so body references to capture names resolve correctly. Works for both ref captures (String → tag, suffix) and primitive captures (Int → k). Open follow-up: object expressions with super-class ctor args (`object : Animal(species) { ... }`) — parser doesn't handle the args inside the `LParen` branch at parser.rs:~4187 (immediately expects RParen)."

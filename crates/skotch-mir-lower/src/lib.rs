@@ -5773,11 +5773,55 @@ fn lower_stmt(
                 let is_map = matches!(&collection_ty, Ty::Class(cn)
                     if cn.contains("Map"));
 
+                // Detect user class with `operator fun iterator()`. Kotlin's
+                // for-loop desugars to invocations of the user-defined
+                // iterator + its hasNext/next methods, NOT the
+                // java/lang/Iterable interface. Without this branch, a
+                // `for (x in Range2(1,5))` where Range2 isn't Iterable but
+                // has `operator fun iterator()` crashed with
+                // `IncompatibleClassChangeError: Range2 does not implement
+                // java.lang.Iterable`. Surfaced by parity/40-custom-iterator.
+                let user_iter: Option<(String, String, Ty)> = if let Ty::Class(cn) = &collection_ty
+                {
+                    module.find_class(cn).and_then(|cls| {
+                        cls.methods.iter().find(|m| m.name == "iterator").map(|m| {
+                            let ret_class = match &m.return_ty {
+                                Ty::Class(n) => n.clone(),
+                                _ => "java/util/Iterator".to_string(),
+                            };
+                            (cn.clone(), ret_class, m.return_ty.clone())
+                        })
+                    })
+                } else {
+                    None
+                };
+
                 // Collection iteration via iterator()
                 //   val iter = collection.iterator()
                 //   while (iter.hasNext()) { val x = iter.next(); body }
-                let iter_local = fb.new_local(Ty::Class("java/util/Iterator".to_string()));
-                if is_map && destructure_names.is_some() {
+                let iter_ty = if let Some((_, ref iter_class, _)) = user_iter {
+                    Ty::Class(iter_class.clone())
+                } else {
+                    Ty::Class("java/util/Iterator".to_string())
+                };
+                let iter_local = fb.new_local(iter_ty.clone());
+                if let Some((coll_class, iter_class, _ret_ty)) = user_iter.clone() {
+                    // User class with `operator fun iterator()`. Emit
+                    // invokevirtual <CollClass>.iterator() returning the
+                    // user's iterator class.
+                    let iter_desc = format!("()L{};", iter_class);
+                    fb.push_stmt(MStmt::Assign {
+                        dest: iter_local,
+                        value: Rvalue::Call {
+                            kind: CallKind::VirtualJava {
+                                class_name: coll_class,
+                                method_name: "iterator".to_string(),
+                                descriptor: iter_desc,
+                            },
+                            args: vec![collection_local],
+                        },
+                    });
+                } else if is_map && destructure_names.is_some() {
                     // Map destructuring: map.entrySet().iterator()
                     let entry_set = fb.new_local(Ty::Class("java/util/Set".to_string()));
                     fb.push_stmt(MStmt::Assign {
@@ -5822,13 +5866,23 @@ fn lower_stmt(
 
                 fb.terminate_and_switch(Terminator::Goto(cond_block), cond_block);
 
-                // Condition: iter.hasNext()
+                // Condition: iter.hasNext(). For user-class iterators,
+                // dispatch through the user iterator class so the method
+                // exists on the receiver.
                 let has_next = fb.new_local(Ty::Bool);
+                let (hasnext_class, next_class) = if let Some((_, ref iter_class, _)) = user_iter {
+                    (iter_class.clone(), iter_class.clone())
+                } else {
+                    (
+                        "java/util/Iterator".to_string(),
+                        "java/util/Iterator".to_string(),
+                    )
+                };
                 fb.push_stmt(MStmt::Assign {
                     dest: has_next,
                     value: Rvalue::Call {
                         kind: CallKind::VirtualJava {
-                            class_name: "java/util/Iterator".to_string(),
+                            class_name: hasnext_class,
                             method_name: "hasNext".to_string(),
                             descriptor: "()Z".to_string(),
                         },
@@ -5853,18 +5907,40 @@ fn lower_stmt(
                 // `checkcast` so `x.method(...)` resolves to a virtual
                 // call on the element class. Otherwise leave as Ty::Any
                 // (the erased Object from `Iterator.next()`).
-                let raw_element = fb.new_local(Ty::Any);
+                // For user-class iterators, next()'s return type may be a
+                // primitive (e.g. `operator fun next(): Int`). Look up the
+                // return type from the iterator class and use the matching
+                // descriptor + Ty for the result local.
+                let (next_desc, next_ret_ty, raw_element_ty): (String, Ty, Ty) =
+                    if let Some((_, ref iter_class, _)) = user_iter {
+                        let info = module.find_class(iter_class).and_then(|cls| {
+                            cls.methods
+                                .iter()
+                                .find(|m| m.name == "next")
+                                .map(|m| m.return_ty.clone())
+                        });
+                        if let Some(ret_ty) = info {
+                            let desc = format!("(){}", jvm_type_string_for_ty(&ret_ty));
+                            (desc, ret_ty.clone(), ret_ty)
+                        } else {
+                            ("()Ljava/lang/Object;".to_string(), Ty::Any, Ty::Any)
+                        }
+                    } else {
+                        ("()Ljava/lang/Object;".to_string(), Ty::Any, Ty::Any)
+                    };
+                let raw_element = fb.new_local(raw_element_ty);
                 fb.push_stmt(MStmt::Assign {
                     dest: raw_element,
                     value: Rvalue::Call {
                         kind: CallKind::VirtualJava {
-                            class_name: "java/util/Iterator".to_string(),
+                            class_name: next_class,
                             method_name: "next".to_string(),
-                            descriptor: "()Ljava/lang/Object;".to_string(),
+                            descriptor: next_desc,
                         },
                         args: vec![iter_local],
                     },
                 });
+                let _ = next_ret_ty;
                 let element_class: Option<String> = fb
                     .mf
                     .local_generic_args
@@ -5985,10 +6061,24 @@ fn lower_stmt(
             let captures = free_vars;
 
             // Push placeholder and register in name_to_func BEFORE lowering
-            // so recursive calls from inside the body can resolve.
+            // so recursive calls from inside the body can resolve. The
+            // placeholder's `param_names` MUST be populated NOW: the
+            // recursive-call code path at lib.rs:~15517 reads the target
+            // function's `param_names` to look up each capture by its
+            // source-level name. The body is lowered THIS frame, so if
+            // we leave names empty here, the recursive call's lookup
+            // returns an empty list and falls through to the zero-value
+            // placeholder branch — captures don't get forwarded.
             let total_params = captures.len() + f.params.len();
             let placeholder_params: Vec<LocalId> = (0..total_params as u32).map(LocalId).collect();
             let placeholder_locals: Vec<Ty> = vec![Ty::Any; total_params];
+            let mut placeholder_param_names: Vec<String> = Vec::with_capacity(total_params);
+            for (sym, _, _) in &captures {
+                placeholder_param_names.push(interner.resolve(*sym).to_string());
+            }
+            for p in &f.params {
+                placeholder_param_names.push(interner.resolve(p.name).to_string());
+            }
             module.functions.push(MirFunction {
                 id: FuncId(fn_idx as u32),
                 name: fn_name.clone(),
@@ -5997,7 +6087,7 @@ fn lower_stmt(
                 blocks: Vec::new(),
                 return_ty: return_ty.clone(),
                 required_params: 0,
-                param_names: Vec::new(),
+                param_names: placeholder_param_names,
                 param_defaults: Vec::new(),
                 param_receiver_types: Vec::new(),
                 is_abstract: false,
@@ -6022,11 +6112,20 @@ fn lower_stmt(
             let mut inner_fb = FnBuilder::new(fn_idx, fn_name.clone(), return_ty.clone());
             inner_fb.mf.is_private = true;
 
-            // Add capture params first.
+            // Add capture params first. Record names in `param_names` so the
+            // call-site capture forwarder (lib.rs:~15541) can look up the
+            // matching outer local by capture's source-level name — both
+            // from the outer scope (initial call) and from inner_scope
+            // (recursive self-call inside the local fn body, where the
+            // capture names re-resolve to the local fn's own param locals).
             let mut inner_scope: Vec<(Symbol, LocalId)> = Vec::new();
             for (sym, _, ty) in &captures {
                 let pid = inner_fb.new_local(ty.clone());
                 inner_fb.mf.params.push(pid);
+                inner_fb
+                    .mf
+                    .param_names
+                    .push(interner.resolve(*sym).to_string());
                 inner_scope.push((*sym, pid));
             }
 
@@ -6035,6 +6134,10 @@ fn lower_stmt(
                 let ty = resolve_type_ref(&p.ty, interner, module);
                 let pid = inner_fb.new_local(ty);
                 inner_fb.mf.params.push(pid);
+                inner_fb
+                    .mf
+                    .param_names
+                    .push(interner.resolve(p.name).to_string());
                 inner_scope.push((p.name, pid));
             }
 
@@ -9538,8 +9641,35 @@ fn lower_expr(
                     }
                 }
 
+                // Compute once: does the receiver USER class have a member
+                // with this method name? Stdlib intrinsic dispatches below
+                // (List/Map/Set/etc.) use substring matches like
+                // `cn.contains("Set")` that wrongly fire on user class
+                // names like `IntSet`, `WordList`, `BitMap`. When the user
+                // class defines the method directly, prefer it.
+                // Surfaced by parity/42-in-operator's IntSet.contains.
+                let user_class_has_intrinsic = if let Ty::Class(cn) = &recv_ty {
+                    let mut search = Some(cn.clone());
+                    let mut found = false;
+                    while let Some(ref name) = search {
+                        if let Some(cls) = module.find_class(name) {
+                            if cls.methods.iter().any(|m| m.name == method_name_str) {
+                                found = true;
+                                break;
+                            }
+                            search = cls.super_class.clone();
+                        } else {
+                            break;
+                        }
+                    }
+                    found
+                } else {
+                    false
+                };
+
                 // ── MutableList .add() / .remove() / .removeAt() / .clear() ───
-                if matches!(&recv_ty, Ty::Class(cn) if cn.contains("ArrayList") || cn.contains("List"))
+                if !user_class_has_intrinsic
+                    && matches!(&recv_ty, Ty::Class(cn) if cn.contains("ArrayList") || cn.contains("List"))
                 {
                     let list_method: Option<(&str, &str, &str, Ty)> =
                         match (method_name_str.as_str(), args.len()) {
@@ -9658,7 +9788,9 @@ fn lower_expr(
                 }
 
                 // ── Map .containsKey() / .get() / .put() / .remove() ───
-                if matches!(&recv_ty, Ty::Class(cn) if cn.contains("Map")) {
+                if !user_class_has_intrinsic
+                    && matches!(&recv_ty, Ty::Class(cn) if cn.contains("Map"))
+                {
                     let map_method: Option<(&str, &str, &str, Ty)> =
                         match (method_name_str.as_str(), args.len()) {
                             ("containsKey", 1) => {
@@ -9796,7 +9928,9 @@ fn lower_expr(
                 }
 
                 // ── Set .contains() / .add() / .remove() / .isEmpty() ───
-                if matches!(&recv_ty, Ty::Class(cn) if cn.contains("Set")) {
+                if !user_class_has_intrinsic
+                    && matches!(&recv_ty, Ty::Class(cn) if cn.contains("Set"))
+                {
                     let set_method: Option<(&str, &str, &str, Ty)> =
                         match (method_name_str.as_str(), args.len()) {
                             ("contains", 1) => {
@@ -9870,7 +10004,34 @@ fn lower_expr(
                 // static methods in `*Kt` facade classes. The receiver
                 // becomes the first argument and lambdas must implement
                 // `kotlin/jvm/functions/FunctionN`.
-                {
+                //
+                // GUARD: if the receiver is a USER class that defines this
+                // method directly (or via inheritance), prefer the user
+                // method over the stdlib extension. Without this, a
+                // `class Box<T>` with `fun <R> map(f: (T) -> R): Box<R>`
+                // was dispatched to `CollectionsKt.map` (Iterable
+                // extension), producing `checkcast Iterable` and
+                // ClassCastException at runtime. Surfaced by
+                // parity/39-generic-monad's Box.map / Box.flatMap.
+                let user_class_has_method = if let Ty::Class(cn) = &recv_ty {
+                    let mut search = Some(cn.clone());
+                    let mut found = false;
+                    while let Some(ref name) = search {
+                        if let Some(cls) = module.find_class(name) {
+                            if cls.methods.iter().any(|m| m.name == method_name_str) {
+                                found = true;
+                                break;
+                            }
+                            search = cls.super_class.clone();
+                        } else {
+                            break;
+                        }
+                    }
+                    found
+                } else {
+                    false
+                };
+                if !user_class_has_method {
                     let recv_ty_str = match &recv_ty {
                         Ty::Class(cn) => cn.as_str(),
                         Ty::String => "java/lang/String",
@@ -11165,15 +11326,27 @@ fn lower_expr(
                             },
                         });
                         return Some(dest);
-                    } else if let Some((fc, fm, fd, rt)) =
-                        dynamic_stdlib_extension(class_name.as_str(), &method_name_str)
+                    } else if !user_class_has_method
+                        && dynamic_stdlib_extension(class_name.as_str(), &method_name_str).is_some()
                     {
+                        let (fc, fm, fd, rt) =
+                            dynamic_stdlib_extension(class_name.as_str(), &method_name_str)
+                                .unwrap();
                         // `recv.ext(args)` where `ext` is a stdlib/dep-jar
                         // extension fn on the concrete receiver class, not a
                         // member — e.g. `MutableStateFlow.asStateFlow()` →
                         // `invokestatic FlowKt.asStateFlow(MutableStateFlow)`.
                         // Without this the bare `Virtual` fallback below emits
                         // a bogus `invokevirtual <Class>.<ext>()V`.
+                        //
+                        // Guarded by !user_class_has_method because
+                        // `dynamic_stdlib_extension`'s receiver-fallback at
+                        // free_vars.rs:~560 tries "Iterable"/"Object" candidates
+                        // for unknown classes — so a user `class Box<T>` with
+                        // `fun <R> map(f)` would match `CollectionsKt.map
+                        // (Iterable, Function1)`, route to the wrong method,
+                        // and crash at runtime with ClassCastException.
+                        // Surfaced by parity/39-generic-monad's Box.map.
                         let dest = fb.new_local(rt);
                         fb.push_stmt(MStmt::Assign {
                             dest,
@@ -15523,7 +15696,8 @@ fn lower_expr(
                 let target_param_count = target.params.len();
                 let is_suspend_target = target.is_suspend;
                 if !is_suspend_target && target_param_count > arg_locals.len() {
-                    let fn_name = &module.functions[fid.0 as usize].name;
+                    let target_fn = &module.functions[fid.0 as usize];
+                    let fn_name = &target_fn.name;
                     let capture_count = target_param_count - arg_locals.len();
                     // Only treat the missing slots as captures when at
                     // least one matching $capture$ binding exists in
@@ -15542,7 +15716,17 @@ fn lower_expr(
                         let n = interner.resolve(*sym);
                         n.starts_with(&format!("$capture${fn_name}$"))
                     });
-                    if has_captures_in_scope {
+                    // ALSO accept "we're INSIDE the local fn itself,
+                    // calling ourselves recursively". In that case the
+                    // outer-scope $capture$ keys aren't in inner_scope
+                    // — the captures resolve to the local fn's own
+                    // leading params (by name), which we look up by
+                    // capture name below.
+                    let target_param_names = target_fn.param_names.clone();
+                    let inside_local_fn_self_call = !has_captures_in_scope
+                        && fb.mf.name == *fn_name
+                        && target_param_names.len() >= capture_count;
+                    if has_captures_in_scope || inside_local_fn_self_call {
                         let mut capture_args = Vec::new();
                         for ci in 0..capture_count {
                             let capture_ty = module.functions[fid.0 as usize]
@@ -15550,12 +15734,17 @@ fn lower_expr(
                                 .get(ci)
                                 .cloned()
                                 .unwrap_or(Ty::Error);
-                            let found = scope.iter().rev().find(|(sym, _)| {
-                                let n = interner.resolve(*sym);
-                                n.starts_with(&format!("$capture${fn_name}$"))
+                            // Look up by the capture's source-level name.
+                            // Falls back to the latest matching $capture$
+                            // entry if param_names is empty (older callers
+                            // that didn't populate names yet).
+                            let cap_name = target_param_names.get(ci).cloned();
+                            let found = cap_name.as_ref().and_then(|name| {
+                                let sym = interner.intern(name);
+                                scope.iter().rev().find(|(s, _)| *s == sym).map(|(_, l)| *l)
                             });
-                            if let Some((_, lid)) = found {
-                                capture_args.push(*lid);
+                            if let Some(lid) = found {
+                                capture_args.push(lid);
                             } else {
                                 let init = match &capture_ty {
                                     Ty::Int | Ty::Byte | Ty::Short | Ty::Char => {
@@ -21528,6 +21717,30 @@ fn lower_expr(
                 format!("{wrapper}${enclosing_fn}${obj_idx}")
             };
 
+            // Collect free vars across ALL method bodies — those become
+            // captured fields on the synthesized anonymous class. Without
+            // this, references to an enclosing-scope `prefix` inside
+            // `override fun produce() = prefix` resolved to nothing and
+            // ran as `aconst_null; areturn` (prints `null`).
+            let mut captures: Vec<(Symbol, LocalId, Ty)> = Vec::new();
+            let mut seen_cap: rustc_hash::FxHashSet<Symbol> = rustc_hash::FxHashSet::default();
+            for method in methods {
+                let method_param_names: Vec<Symbol> =
+                    method.params.iter().map(|p| p.name).collect();
+                let frees = collect_free_vars(
+                    &method.body,
+                    &method_param_names,
+                    scope,
+                    &fb.mf.locals,
+                    interner,
+                );
+                for (sym, lid, ty) in frees {
+                    if seen_cap.insert(sym) {
+                        captures.push((sym, lid, ty));
+                    }
+                }
+            }
+
             // Lower each method.
             let mut mir_methods = Vec::new();
             for method in methods {
@@ -21545,6 +21758,21 @@ fn lower_expr(
                 let this_local = mfb.new_local(Ty::Class(obj_class_name.clone()));
                 mfb.mf.params.push(this_local);
                 let mut mscope: Vec<(Symbol, LocalId)> = Vec::new();
+                // Prelude: GetField each capture from `this` into a local,
+                // push (capture_name, local) onto mscope so body references
+                // resolve to the field-loaded local.
+                for (cap_sym, _outer_lid, cap_ty) in &captures {
+                    let cap_local = mfb.new_local(cap_ty.clone());
+                    mfb.push_stmt(MStmt::Assign {
+                        dest: cap_local,
+                        value: Rvalue::GetField {
+                            receiver: this_local,
+                            class_name: obj_class_name.clone(),
+                            field_name: interner.resolve(*cap_sym).to_string(),
+                        },
+                    });
+                    mscope.push((*cap_sym, cap_local));
+                }
                 for p in &method.params {
                     let ty = resolve_type(interner.resolve(p.ty.name), module);
                     let pid = mfb.new_local(ty);
@@ -21623,6 +21851,14 @@ fn lower_expr(
             };
             let init_this = init_fn.new_local(Ty::Class(obj_class_name.clone()));
             init_fn.params.push(init_this);
+            // Add capture params to constructor, in declaration order.
+            // They become fields stored at init time.
+            let mut init_cap_params: Vec<(Symbol, LocalId, Ty)> = Vec::new();
+            for (cap_sym, _outer_lid, cap_ty) in &captures {
+                let pid = init_fn.new_local(cap_ty.clone());
+                init_fn.params.push(pid);
+                init_cap_params.push((*cap_sym, pid, cap_ty.clone()));
+            }
             let super_ctor = if is_iface {
                 "java/lang/Object".to_string()
             } else {
@@ -21635,6 +21871,28 @@ fn lower_expr(
                     args: vec![init_this],
                 },
             });
+            // After super(): putfield each capture into the matching field.
+            for (cap_sym, pid, _cap_ty) in &init_cap_params {
+                init_fn.blocks[0].stmts.push(MStmt::Assign {
+                    dest: init_this,
+                    value: Rvalue::PutField {
+                        receiver: init_this,
+                        class_name: obj_class_name.clone(),
+                        field_name: interner.resolve(*cap_sym).to_string(),
+                        value: *pid,
+                    },
+                });
+            }
+
+            // Build field list from captures.
+            let cap_fields: Vec<MirField> = captures
+                .iter()
+                .map(|(sym, _, ty)| MirField {
+                    name: interner.resolve(*sym).to_string(),
+                    ty: ty.clone(),
+                    is_jvm_field: false,
+                })
+                .collect();
 
             module.push_class(MirClass {
                 name: obj_class_name.clone(),
@@ -21643,7 +21901,7 @@ fn lower_expr(
                 is_abstract: false,
                 is_interface: false,
                 interfaces: ifaces,
-                fields: Vec::new(),
+                fields: cap_fields,
                 methods: mir_methods,
                 constructor: init_fn,
                 secondary_constructors: Vec::new(),
@@ -21666,11 +21924,16 @@ fn lower_expr(
                 dest: inst,
                 value: Rvalue::NewInstance(obj_class_name.clone()),
             });
+            // Constructor args: captures threaded from outer scope.
+            let ctor_args: Vec<LocalId> = captures
+                .iter()
+                .map(|(_, outer_lid, _)| *outer_lid)
+                .collect();
             fb.push_stmt(MStmt::Assign {
                 dest: inst,
                 value: Rvalue::Call {
                     kind: CallKind::Constructor(obj_class_name),
-                    args: vec![],
+                    args: ctor_args,
                 },
             });
             let _ = super_name;
@@ -25658,6 +25921,71 @@ fn lower_class(
                 fb.set_terminator(Terminator::ReturnValue(result_local));
             }
 
+            mir_methods.push(fb.finish());
+        }
+    }
+
+    // Synthesize Comparable<T>.compareTo(Object) bridge when the class
+    // implements Comparable with a specialized type param. JVM's
+    // java/lang/Comparable requires `int compareTo(Object)` (erased
+    // generic), but a user impl `override fun compareTo(other: Person)
+    // = ...` only generates `compareTo(Person)`. Without the bridge,
+    // CollectionsKt.sorted() (which dispatches through Comparable)
+    // throws AbstractMethodError at runtime. The bridge:
+    //   public int compareTo(Object o) { return compareTo((Person) o); }
+    // Surfaced by parity/41-comparable-sort.
+    let implements_comparable = iface_names
+        .iter()
+        .any(|n| n == "java/lang/Comparable" || n == "Comparable");
+    if implements_comparable {
+        let has_typed_compareto = mir_methods.iter().any(|m| {
+            m.name == "compareTo"
+                && m.params.len() == 2
+                && !matches!(m.locals.get(m.params[1].0 as usize), Some(Ty::Any))
+        });
+        let already_has_erased = mir_methods.iter().any(|m| {
+            m.name == "compareTo"
+                && m.params.len() == 2
+                && matches!(m.locals.get(m.params[1].0 as usize), Some(Ty::Any))
+        });
+        if has_typed_compareto && !already_has_erased {
+            let typed_param_ty = mir_methods
+                .iter()
+                .find(|m| m.name == "compareTo" && m.params.len() == 2)
+                .and_then(|m| m.locals.get(m.params[1].0 as usize).cloned())
+                .unwrap_or(Ty::Any);
+            let fn_idx = module.functions.len() + mir_methods.len();
+            let mut fb = FnBuilder::new(fn_idx, "compareTo".to_string(), Ty::Int);
+            let this_local = fb.new_local(Ty::Class(class_name.clone()));
+            fb.mf.params.push(this_local);
+            let obj_param = fb.new_local(Ty::Any);
+            fb.mf.params.push(obj_param);
+            // Cast the Object arg to the typed param.
+            let typed_class = match &typed_param_ty {
+                Ty::Class(n) => n.clone(),
+                _ => class_name.clone(),
+            };
+            let cast_local = fb.new_local(typed_param_ty.clone());
+            fb.push_stmt(MStmt::Assign {
+                dest: cast_local,
+                value: Rvalue::CheckCast {
+                    obj: obj_param,
+                    target_class: typed_class.clone(),
+                },
+            });
+            // Forward to the typed compareTo.
+            let result = fb.new_local(Ty::Int);
+            fb.push_stmt(MStmt::Assign {
+                dest: result,
+                value: Rvalue::Call {
+                    kind: CallKind::Virtual {
+                        class_name: class_name.clone(),
+                        method_name: "compareTo".to_string(),
+                    },
+                    args: vec![this_local, cast_local],
+                },
+            });
+            fb.set_terminator(Terminator::ReturnValue(result));
             mir_methods.push(fb.finish());
         }
     }

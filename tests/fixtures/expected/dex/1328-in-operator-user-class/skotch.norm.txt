@@ -1,0 +1,61 @@
+dex_version   035
+strings       24
+types         10
+methods       9
+classes       1
+
+--- strings ---
+  "<init>"
+  "I"
+  "L"
+  "LInputKt;"
+  "LIntSet;"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/System;"
+  "Ljava/util/List;"
+  "V"
+  "VI"
+  "VL"
+  "VZ"
+  "Z"
+  "ZI"
+  "[Ljava/lang/String;"
+  "add"
+  "contains"
+  "getItems"
+  "input.kt"
+  "main"
+  "out"
+  "println"
+  "size"
+
+--- types ---
+  I
+  LInputKt;
+  LIntSet;
+  Ljava/io/PrintStream;
+  Ljava/lang/Object;
+  Ljava/lang/System;
+  Ljava/util/List;
+  V
+  Z
+  [Ljava/lang/String;
+
+--- methods ---
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  LIntSet;.<init>()V
+  LIntSet;.add(I)V
+  LIntSet;.contains(I)Z
+  LIntSet;.getItems()Ljava/lang/Object;
+  Ljava/io/PrintStream;.println(I)V
+  Ljava/io/PrintStream;.println(Z)V
+  Ljava/util/List;.size()I
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       main()V flags=0x0019 regs=18 ins=0 outs=2 insns=70
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4

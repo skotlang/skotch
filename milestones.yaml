@@ -50,7 +50,7 @@
 #     Currently 1034/1062 JVM fixtures also pass DEX. Gaps are fixed
 #     incrementally, not in a big-bang milestone.
 #
-#     kotlinc byte parity — 812 fixtures are byte-identical to
+#     kotlinc byte parity — 816 fixtures are byte-identical to
 #     kotlinc 2.4.0 output (kotlinc_parity_baseline ratchet test).
 #     Any commit that drops a fixture from this set fails CI.
 #
@@ -71,13 +71,13 @@ project:
     # Last refreshed 2026-06-07.
     rust_lines: 107403
     crates: 38
-    active_fixtures: 1069
+    active_fixtures: 1078
     stub_fixtures: 0           # all stubs eliminated
-    jvm_e2e_fixtures: 1063
-    dex_e2e_fixtures: 1034     # DEX coverage may grow after 1321 lands; not yet confirmed
-    kotlinc_byte_parity_baseline: 812  # tests/fixtures/kotlinc_parity_baseline.txt
+    jvm_e2e_fixtures: 1072
+    dex_e2e_fixtures: 1043     # 1321..1330 added DEX golden
+    kotlinc_byte_parity_baseline: 816  # tests/fixtures/kotlinc_parity_baseline.txt
     kotlinc_byte_parity_aspirational: 70
-    parity_examples: 35        # parity/01-hello-world through parity/35-tailrec-arithmetic
+    parity_examples: 44        # parity/01-hello-world through parity/44-exception-handling
     measured_kotlinc_speedup: "~100× on small programs (parity bench)"
 
 # ============================================================================
@@ -1945,6 +1945,143 @@ milestones:
           block 0`. Surfaced by parity/35-tailrec-arithmetic, which
           had to lower its stress depth from 100_000 to 2_000 to fit
           the JVM stack without TCO.
+
+      - name: "var-capture Ref boxing for local functions and lambdas"
+        completed: false
+        description: >
+          KNOWN GAP: when a local function or lambda captures a `var`
+          from the enclosing scope (e.g. `var total = 0; fun step() {
+          total += k }`), kotlinc wraps the var in a `kotlin/jvm/
+          internal/Ref$IntRef` (or LongRef/ObjectRef) so the closure
+          can mutate the box and outer code sees the change. skotch
+          captures the SNAPSHOT value at closure-creation time — each
+          recursive call has its own copy, mutations are lost. Affects
+          accumulator-style local helpers + observer-callback patterns.
+          Workaround in parity/37-local-functions: thread accumulator
+          through an explicit param. Fix: detect var-capture in
+          collect_free_vars, emit Ref.IntRef-style boxing at the
+          declaration site, redirect all reads/writes through the
+          .element field.
+
+      - name: "Object expressions with super-class constructor args"
+        completed: false
+        description: >
+          KNOWN GAP: `object : Animal(species) { override fun
+          sound() = voice }` — the parser at parser.rs:~4187 handles
+          the `LParen` after the super type by immediately expecting
+          `RParen`, so any args inside fail to parse. The body
+          `override fun ...` then trips downstream as
+          "unresolved identifier override". Empty-args case
+          (`object : Animal()`) works; interface-only case
+          (`object : Iface { ... }`) works. Fix: parse a comma-
+          separated expression list between LParen/RParen, store on
+          `Expr::ObjectExpr` as `super_args: Vec<Expr>`, then at
+          lowering time pass them to the super constructor call.
+          Documented while landing parity/38-object-expr-capture
+          (which uses interface-only patterns to dodge this gap).
+
+      - name: "try-finally early-return runs finally before returning"
+        completed: false
+        description: >
+          KNOWN GAP: `try { return X } finally { cleanup }` in skotch
+          jumps directly to the return WITHOUT running the finally
+          block. kotlinc spills the return value to a local, runs
+          finally, then loads + returns. Workaround in parity/44:
+          assign to a local in the try, return AFTER the finally.
+          Surfaced by parity/44-exception-handling.
+
+      - name: "try-catch-finally with var-mutation in try body silently stubs"
+        completed: false
+        description: >
+          KNOWN GAP: a function shaped `var result = -1; try { result
+          = body() } catch (e) { result = -999 } finally { cleanup() };
+          return result` was silently stubbed (emitted `iconst_0;
+          ireturn`) when body() involved a cross-file call. Probable
+          mir-lower fallback when the lowering can't handle the
+          var-assignment-in-try-with-catch shape. Workaround in
+          parity/44: inline the try-catch at call sites. Surfaced by
+          parity/44-exception-handling.
+
+      - name: "Negative literals in multi-value when branches"
+        completed: false
+        description: >
+          KNOWN GAP: `when (n) { -1, 1 -> "edge" }` doesn't parse —
+          skotch's when-branch reader treats `-1` as unary-minus +
+          literal rather than a single value. Positive multi-value
+          works (`1, 2, 3 -> "small"`); range expressions handle
+          negatives at the constructor args (`in -99..-2`). Workaround
+          in parity/44: drop the negative entry or use `in -1..-1`.
+          Surfaced by parity/44-exception-handling.
+
+      - name: "Elvis-then-return parser support (`x ?: return null`)"
+        completed: false
+        description: >
+          KNOWN GAP: `val h = head ?: return null` is a common Kotlin
+          early-return idiom. skotch's parse_elvis at parser.rs:~3059
+          calls parse_disjunction for the RHS, which doesn't accept
+          `return` (return is a Stmt, not an Expr). Need either
+          Expr::Return AST variant or special-case Elvis-then-return
+          desugaring at the parser level. Workaround in parity/43:
+          rewrite as `val h = head; if (h == null) return null`.
+          Surfaced by parity/43-linked-list.
+
+      - name: "Smart-cast nullable-Int auto-unbox in arithmetic"
+        completed: false
+        description: >
+          KNOWN GAP: `var x: Int? = ...; if (x != null) sum + x` —
+          inside the smart-cast scope `x` should be `Int` (unboxed),
+          but skotch emits `iadd` with Integer (Object) on stack →
+          VerifyError. Smart cast happens at the type level but the
+          unbox isn't emitted at use sites within the cast scope.
+          Workaround in parity/43: explicit `val taken = obj.pop();
+          if (taken != null) { sum = sum + taken }` — even this hits
+          the bug in loop-condition form. Surfaced by parity/43.
+
+      - name: "`val r = current; current = ...; return r` val-aliasing in classes"
+        completed: false
+        description: >
+          KNOWN GAP: a class's `val r = self.field; self.field = new;
+          return r` pattern (e.g. classic post-increment) aliases `r`
+          to the field's slot — when the field gets the new value, `r`
+          also sees it. Skotch's var-field cache reuses the same local
+          slot for both `r` and the recomputed field expression, so
+          the "snapshot" semantics are lost and `r` reflects the
+          post-mutation value. Originally noted in
+          [[project_jetchat_field_chain_collapse]] and re-surfaced by
+          parity/40-custom-iterator's Range2Iter.next() (worked
+          around by computing `current - 1` instead of using `val
+          r = current`). Fix: the val-init RHS should commit to a
+          freshly-allocated local that isn't reused by the subsequent
+          field write — currently val-decl + field-assign share the
+          slot.
+
+      - name: "Generic class methods with lambda params + cross-file primitive autobox"
+        completed: false
+        description: >
+          KNOWN GAP — two related issues surfaced together by an
+          early version of parity/39-generic-monad:
+          (1) Generic-class methods with lambda params (`class Box<T>
+          { fun <R> map(f: (T) -> R) }`) — call-site lambda doesn't
+          implement `kotlin/jvm/functions/Function1`, so the JVM
+          throws `IncompatibleClassChangeError` when Box.map invokes
+          `f.invoke(...)`. The lambda metafactory emits a Function0/
+          FunctionN class but the generic class method expects the
+          interface. Fix: when lowering a lambda for a generic-class
+          method param, propagate the Function1<A, R> interface
+          requirement to the metafactory.
+          (2) Cross-file generic top-level fn (`fun <A, B> pair(a: A,
+          b: B): Box<A, B>`) called with a primitive arg — the call
+          site emits `bipush 42; invokestatic pair(LObject;LObject)`
+          without autoboxing the Int to Integer. VerifyError. Fix:
+          when calling a cross-file fn whose descriptor uses Object
+          slots, autobox primitives in the call site. The same-file
+          path at lib.rs:~11280 already does this; cross-file at
+          lib.rs:~15604 needs the equivalent guard.
+          Workaround in parity/39: use reference-only types in `pair`
+          calls and skip lambda-method probes. Lock-in fixture 1325
+          covers the user-class-method-vs-stdlib-extension dispatch
+          fix that landed in this iteration (the routing bug exposed
+          by Counter.forEach/map mis-dispatching to CollectionsKt).
 
     risks:
       - description: "Parity loop is open-ended — could run indefinitely"

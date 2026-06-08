@@ -1,0 +1,74 @@
+dex_version   035
+strings       32
+types         11
+methods       11
+classes       1
+
+--- strings ---
+  "<init>"
+  "C"
+  "CI"
+  "I"
+  "L"
+  "LC"
+  "LI"
+  "LInputKt;"
+  "LL"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Integer;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/String;"
+  "Ljava/lang/StringBuilder;"
+  "Ljava/lang/System;"
+  "V"
+  "VL"
+  "VLLI"
+  "[Ljava/lang/String;"
+  "append"
+  "charAt"
+  "hello"
+  "input.kt"
+  "kotlin"
+  "length"
+  "main"
+  "out"
+  "println"
+  "reverse"
+  "reverse$helper"
+  "toString"
+  "valueOf"
+
+--- types ---
+  C
+  I
+  LInputKt;
+  Ljava/io/PrintStream;
+  Ljava/lang/Integer;
+  Ljava/lang/Object;
+  Ljava/lang/String;
+  Ljava/lang/StringBuilder;
+  Ljava/lang/System;
+  V
+  [Ljava/lang/String;
+
+--- methods ---
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  LInputKt;.reverse$helper(Ljava/lang/Object;Ljava/lang/String;I)V
+  LInputKt;.reverse(Ljava/lang/String;)Ljava/lang/String;
+  Ljava/io/PrintStream;.println(Ljava/lang/String;)V
+  Ljava/lang/Integer;.valueOf(I)Ljava/lang/Integer;
+  Ljava/lang/String;.charAt(I)C
+  Ljava/lang/String;.length()I
+  Ljava/lang/StringBuilder;.<init>()V
+  Ljava/lang/StringBuilder;.append(C)Ljava/lang/StringBuilder;
+  Ljava/lang/StringBuilder;.toString()Ljava/lang/String;
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       main()V flags=0x0019 regs=5 ins=0 outs=2 insns=23
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4
+  method       reverse(Ljava/lang/String;)Ljava/lang/String; flags=0x0019 regs=6 ins=1 outs=3 insns=20
+  method       reverse$helper(Ljava/lang/Object;Ljava/lang/String;I)V flags=0x0019 regs=12 ins=3 outs=3 insns=30

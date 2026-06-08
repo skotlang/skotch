@@ -1,0 +1,4 @@
+name = "1330-try-finally-max-stack"
+status = "supported"
+features = ["try-finally", "max-stack", "exception-handler", "dataflow"]
+reason = "Lock-in for the max_stack handler-aware fix surfaced by parity/44-exception-handling. Pre-fix `recompute_max_stack_from_code` only walked successors from offset 0 + branches; exception-handler entry blocks were never visited so their stack contribution was missed. With a try-body peak of 1 and a finally that pushes 2 (println = ldc + getstatic), the recomputed max stayed at 1 → `VerifyError: Operand stack overflow`. Fix adds `recompute_max_stack_from_code_with_handlers` that seeds handler entry offsets with `depth_in[h] = Some(1)` (the JVM pushes the thrown exception onto the stack at handler entry) and adds them to the dataflow work queue. All three main-path recompute callers (~4298, ~4431, ~4849) updated."

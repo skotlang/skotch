@@ -1,0 +1,4 @@
+name = "1326-custom-iterator-for-loop"
+status = "supported"
+features = ["for-loop", "operator-iterator", "duck-typed-iteration", "custom-iterator"]
+reason = "Lock-in for parity/40-custom-iterator. User class with `operator fun iterator()` returning a non-java.util.Iterator class. Pre-fix: skotch's ForIn lowering at mir-lower:~5772 always emitted `invokevirtual java/lang/Iterable.iterator()` → IncompatibleClassChangeError when receiver wasn't Iterable. Fix detects user classes with the iterator() member, dispatches through the user method, recovers the returned iterator class's hasNext/next from MIR + the next() return type so primitive returns get the correct descriptor. Tests both Int return (Range2Iter.next(): Int) and primitive accumulator-style iteration."

@@ -184,7 +184,11 @@
 130-when-no-subject
 131-do-while
 1320-top-level-fn-called-from-class-method
+1325-user-method-vs-stdlib-extension
+1328-in-operator-user-class
+1329-linked-list-generic-node
 133-string-int-concat
+1330-try-finally-max-stack
 134-string-template-val
 135-string-template-return
 138-fibonacci-display

@@ -1,0 +1,4 @@
+name = "1329-linked-list-generic-node"
+status = "supported"
+features = ["generic-class", "self-reference", "nullable-property", "linked-list", "smart-cast"]
+reason = "Lock-in for parity/43-linked-list. Generic class `Node<T>` with self-referential `next: Node<T>?` + LinkedList<T> wrapper exercising push/pop/size over String elements. Validates that skotch correctly handles: generic class with one type-param and a self-referencing nullable property, var-property mutation through method chain (head = Node(value, head)), nullable smart-cast in early-return, while-loop walking a nullable chain. Surfaces but works around three v0.50 gaps: Elvis-then-return parser limitation, val-aliasing in `val h = field; field = h.next; return h.value` pattern (read result BEFORE mutation), and nullable-Int auto-unbox in arithmetic. No new compiler fixes this iteration — the test exercises the existing infrastructure and documents the gaps as workaround patterns."

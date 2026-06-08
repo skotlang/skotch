@@ -1,0 +1,4 @@
+name = "1327-comparable-bridge-method"
+status = "supported"
+features = ["comparable", "generic-interface", "bridge-method", "sorting"]
+reason = "Lock-in for parity/41-comparable-sort. User class implementing `Comparable<Person>` needs both the user-defined `compareTo(Person)` AND a synthetic `compareTo(Object)` bridge that downcasts and forwards — java/lang/Comparable's abstract method is the erased `compareTo(Object)`. Fix at mir-lower:~25898 detects implements-Comparable + presence of a typed compareTo(X) override, synthesizes a MirMethod for compareTo(Object) that checkcasts Object → X and forwards to the typed method. Pre-fix: sorted() crashed with AbstractMethodError because the bridge was missing."

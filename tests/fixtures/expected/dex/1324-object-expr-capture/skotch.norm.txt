@@ -1,0 +1,60 @@
+dex_version   035
+strings       24
+types         10
+methods       8
+classes       1
+
+--- strings ---
+  " — done"
+  "<init>"
+  "I"
+  "III"
+  "L"
+  "LInputKt$main$op$2;"
+  "LInputKt$main$producer$1;"
+  "LInputKt;"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/String;"
+  "Ljava/lang/System;"
+  "V"
+  "VI"
+  "VL"
+  "VLL"
+  "[Ljava/lang/String;"
+  "[ok]"
+  "apply"
+  "input.kt"
+  "main"
+  "out"
+  "println"
+  "produce"
+
+--- types ---
+  I
+  LInputKt$main$op$2;
+  LInputKt$main$producer$1;
+  LInputKt;
+  Ljava/io/PrintStream;
+  Ljava/lang/Object;
+  Ljava/lang/String;
+  Ljava/lang/System;
+  V
+  [Ljava/lang/String;
+
+--- methods ---
+  LInputKt$main$op$2;.<init>(I)V
+  LInputKt$main$op$2;.apply(II)I
+  LInputKt$main$producer$1;.<init>(Ljava/lang/String;Ljava/lang/String;)V
+  LInputKt$main$producer$1;.produce()Ljava/lang/String;
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  Ljava/io/PrintStream;.println(I)V
+  Ljava/io/PrintStream;.println(Ljava/lang/String;)V
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       main()V flags=0x0019 regs=10 ins=0 outs=3 insns=37
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4

@@ -1,0 +1,4 @@
+name = "1328-in-operator-user-class"
+status = "supported"
+features = ["operator-contains", "in-operator", "user-class", "name-shadowing"]
+reason = "Lock-in for parity/42-in-operator. User class IntSet has `operator fun contains` — `x in s` and `x !in s` desugar to `s.contains(x)`. Pre-fix: the class name `IntSet` triggered the mir-lower substring intrinsic match at ~9902 (`cn.contains(\"Set\")`) and routed to `java/util/Set.contains` → IncompatibleClassChangeError at runtime (IntSet doesn't implement java.util.Set). Same substring-collision pattern affected `cn.contains(\"Map\")` (matched BitMap etc.) and `cn.contains(\"List\")` (matched WordList etc.). Fix gates all three intrinsic dispatches on `!user_class_has_intrinsic` — user method wins, virtual fallback at ~11309 emits the correct invokevirtual. Mirror of the iteration-39 stdlib-extension-fallback gate at ~9927/~11232."

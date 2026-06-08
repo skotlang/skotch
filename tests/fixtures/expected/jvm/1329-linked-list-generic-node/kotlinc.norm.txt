@@ -1,0 +1,62 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=2 max_locals=2
+    0000 new Class(LinkedList)
+    0003 dup
+    0004 invokespecial Method(LinkedList.<init>:()V)
+    0007 astore_0
+    0008 aload_0
+    0009 ldc "a"
+    0011 invokevirtual Method(LinkedList.push:(Ljava/lang/Object;)V)
+    0014 aload_0
+    0015 ldc "b"
+    0017 invokevirtual Method(LinkedList.push:(Ljava/lang/Object;)V)
+    0020 aload_0
+    0021 ldc "c"
+    0023 invokevirtual Method(LinkedList.push:(Ljava/lang/Object;)V)
+    0026 aload_0
+    0027 invokevirtual Method(LinkedList.size:()I)
+    0030 istore_1
+    0031 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0034 iload_1
+    0035 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0038 aload_0
+    0039 invokevirtual Method(LinkedList.pop:()Ljava/lang/Object;)
+    0042 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0045 swap
+    0046 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0049 aload_0
+    0050 invokevirtual Method(LinkedList.pop:()Ljava/lang/Object;)
+    0053 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0056 swap
+    0057 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0060 aload_0
+    0061 invokevirtual Method(LinkedList.size:()I)
+    0064 istore_1
+    0065 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0068 iload_1
+    0069 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0072 aload_0
+    0073 invokevirtual Method(LinkedList.pop:()Ljava/lang/Object;)
+    0076 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0079 swap
+    0080 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0083 aload_0
+    0084 invokevirtual Method(LinkedList.pop:()Ljava/lang/Object;)
+    0087 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0090 swap
+    0091 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0094 aload_0
+    0095 invokevirtual Method(LinkedList.size:()I)
+    0098 istore_1
+    0099 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0102 iload_1
+    0103 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0106 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

@@ -1,0 +1,4 @@
+name = "1325-user-method-vs-stdlib-extension"
+status = "supported"
+features = ["user-class", "method-dispatch", "name-shadowing", "stdlib-extension"]
+reason = "Lock-in for parity/39-generic-monad's Counter (and Box.swap/firstOnly/secondOnly). User class with methods named like stdlib extensions (forEach, map) used to mis-dispatch to CollectionsKt.forEach/map via dynamic_stdlib_extension's Iterable/Object fallback for unknown receiver types (lib.rs:~560). Result: ClassCastException/IncompatibleClassChangeError at runtime. Fix gates dynamic_stdlib_extension at lib.rs:~11232 on `!user_class_has_method` so the user class's method definition wins — the virtual dispatch fallback at ~11309 then emits the correct invokevirtual. Also added a parallel guard at lib.rs:~9927 for the STATIC stdlib lookup path."

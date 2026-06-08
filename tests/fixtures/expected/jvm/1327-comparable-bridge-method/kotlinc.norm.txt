@@ -1,0 +1,58 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=6 max_locals=3
+    0000 iconst_3
+    0001 anewarray Class(Person)
+    0004 astore_1
+    0005 aload_1
+    0006 iconst_0
+    0007 new Class(Person)
+    0010 dup
+    0011 ldc "Carol"
+    0013 bipush 35
+    0015 invokespecial Method(Person.<init>:(Ljava/lang/String;I)V)
+    0018 aastore
+    0019 aload_1
+    0020 iconst_1
+    0021 new Class(Person)
+    0024 dup
+    0025 ldc "Alice"
+    0027 bipush 30
+    0029 invokespecial Method(Person.<init>:(Ljava/lang/String;I)V)
+    0032 aastore
+    0033 aload_1
+    0034 iconst_2
+    0035 new Class(Person)
+    0038 dup
+    0039 ldc "Bob"
+    0041 bipush 25
+    0043 invokespecial Method(Person.<init>:(Ljava/lang/String;I)V)
+    0046 aastore
+    0047 aload_1
+    0048 invokestatic Method(kotlin/collections/CollectionsKt.listOf:([Ljava/lang/Object;)Ljava/util/List;)
+    0051 astore_0
+    0052 aload_0
+    0053 checkcast Class(java/lang/Iterable)
+    0056 invokestatic Method(kotlin/collections/CollectionsKt.sorted:(Ljava/lang/Iterable;)Ljava/util/List;)
+    0059 invokeinterface InterfaceMethod(java/util/List.iterator:()Ljava/util/Iterator;)
+    0064 astore_1
+    0065 aload_1
+    0066 invokeinterface InterfaceMethod(java/util/Iterator.hasNext:()Z)
+    0071 ifeq 94
+    0074 aload_1
+    0075 invokeinterface InterfaceMethod(java/util/Iterator.next:()Ljava/lang/Object;)
+    0080 checkcast Class(Person)
+    0083 astore_2
+    0084 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0087 aload_2
+    0088 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0091 goto 65
+    0094 return
+    sub_attr  StackMapTable (12 bytes)
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
