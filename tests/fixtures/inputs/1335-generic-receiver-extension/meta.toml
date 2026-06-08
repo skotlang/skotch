@@ -1,0 +1,4 @@
+name = "1335-generic-receiver-extension"
+status = "supported"
+features = ["generic-extension-function", "type-parameter", "inline", "parser"]
+reason = "Lock-in for parity/49-functional-pipelines. Generic-receiver extension functions like `fun <T> Iterable<T>.countWhere(...)` failed to parse — the receiver-type parser at parser.rs:~1812 read the receiver ident and immediately checked for `.`, didn't allow `<...>` type args between the receiver ident and the dot. Fix reads optional `<...>` after the receiver ident with rollback on lookahead miss; star projection `<*>` desugars to `<Any>` at parse time. Surfaced by parity/49's `Iterable<T>.countWhere` and `Iterable<*>.firstOfType<T>()`."

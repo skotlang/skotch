@@ -1809,21 +1809,79 @@ impl<'a> Parser<'a> {
         let name_idx = self.pos;
         let name_span = self.peek_span();
 
-        // Check for extension function: `fun Type.name(...)`.
-        // If the next ident is followed by `.`, it's a receiver type.
+        // Check for extension function: `fun Type.name(...)`. Generic
+        // receiver types like `fun <T> Iterable<T>.foo()` are also
+        // supported — after reading the receiver ident, check for
+        // `<...>` type args, then look for the `.`. Surfaced by
+        // parity/49-functional-pipelines.
         let mut receiver_ty = None;
         let name = if self.peek_kind() == TokenKind::Ident {
             self.bump();
             let first_ident = self.intern_ident_at(name_idx);
+            // Look ahead: is this `Ident<...>` followed by a `.`?
+            // If so, parse the type args and treat as a generic
+            // receiver type.
+            let mut recv_type_args: Vec<TypeRef> = Vec::new();
+            let saved_pos = self.pos;
+            if self.peek_kind() == TokenKind::Lt {
+                self.bump(); // tentatively consume `<`
+                self.skip_trivia();
+                let mut args = Vec::new();
+                loop {
+                    self.skip_trivia();
+                    if self.peek_kind() == TokenKind::Gt
+                        || self.peek_kind() == TokenKind::Eof
+                    {
+                        break;
+                    }
+                    // Star projection `*` becomes `Any`. Kotlin's
+                    // `Iterable<*>` erases to `Iterable<Any?>` at the
+                    // JVM level — using `Any` here is close enough for
+                    // skotch's MIR (which already erases generics).
+                    if self.peek_kind() == TokenKind::Star {
+                        let star_span = self.peek_span();
+                        self.bump();
+                        let any_name = self.interner.intern("Any");
+                        args.push(TypeRef {
+                            name: any_name,
+                            nullable: false,
+                            func_params: None,
+                            type_args: Vec::new(),
+                            is_suspend: false,
+                            is_composable: false,
+                            has_receiver: false,
+                            span: star_span,
+                        });
+                    } else {
+                        args.push(self.parse_type_ref());
+                    }
+                    self.skip_trivia();
+                    if !self.eat(TokenKind::Comma) {
+                        break;
+                    }
+                }
+                self.skip_trivia();
+                if self.peek_kind() == TokenKind::Gt
+                    && self.peek_kind_at(1) == TokenKind::Dot
+                {
+                    self.bump(); // consume `>`
+                    recv_type_args = args;
+                } else {
+                    // Not a generic receiver — restore position so the
+                    // body below treats first_ident as the fn name.
+                    self.pos = saved_pos;
+                }
+            }
             if self.peek_kind() == TokenKind::Dot {
-                // Extension function: first_ident is the receiver type.
+                // Extension function: first_ident is the receiver type
+                // (possibly with type args).
                 let recv_name = first_ident;
                 let recv_span = name_span;
                 receiver_ty = Some(TypeRef {
                     name: recv_name,
                     nullable: false,
                     func_params: None,
-                    type_args: Vec::new(),
+                    type_args: recv_type_args,
                     is_suspend: false,
                     is_composable: false,
                     has_receiver: false,
@@ -3338,13 +3396,36 @@ impl<'a> Parser<'a> {
                 _ => String::new(),
             };
             // Don't treat the identifier as infix when the next position
-            // is an open-brace `{` (trailing-lambda call) or a `(`
-            // (regular call, handled by parse_postfix) or an else/etc.
+            // is something that disqualifies the Ident as an infix
+            // method name — `(` is a regular call (handled by
+            // parse_postfix), `{` is a trailing-lambda call, `else`/
+            // similar keywords aren't valid infix RHS starts, and
+            // ASSIGNMENT operators (`=`/`+=`/etc) make the Ident the
+            // LHS of an assignment statement (not an infix call). Same
+            // for `:` (val declaration type annotation: `val n: Int = ...`)
+            // and `==`/`!=` etc. (comparison binary ops where Ident is
+            // a fresh LHS, not an infix call on previous expr).
             let next2 = self.peek_kind_at(1);
             let is_infix = !text.is_empty()
-                && next2 != TokenKind::LParen
-                && next2 != TokenKind::LBrace
-                && next2 != TokenKind::KwElse;
+                && !matches!(
+                    next2,
+                    TokenKind::LParen
+                        | TokenKind::LBrace
+                        | TokenKind::KwElse
+                        | TokenKind::Eq
+                        | TokenKind::PlusEq
+                        | TokenKind::MinusEq
+                        | TokenKind::StarEq
+                        | TokenKind::SlashEq
+                        | TokenKind::PercentEq
+                        | TokenKind::Colon
+                        | TokenKind::EqEq
+                        | TokenKind::NotEq
+                        | TokenKind::Lt
+                        | TokenKind::LtEq
+                        | TokenKind::Gt
+                        | TokenKind::GtEq
+                );
             if !is_infix {
                 break;
             }
@@ -4312,10 +4393,21 @@ impl<'a> Parser<'a> {
                 span,
             }
         } else {
-            let expr = self.parse_expr();
-            let span = expr.span();
+            // Single-statement branch — could be an assignment
+            // (`if (cond) x = v`), a regular call, or any expression.
+            // Use parse_stmt so assignments parse correctly. Surfaced
+            // by parity/49-functional-pipelines.
+            let stmt = self.parse_stmt();
+            let span = match &stmt {
+                Stmt::Expr(e) => e.span(),
+                Stmt::Assign { span, .. } => *span,
+                Stmt::IndexAssign { span, .. } => *span,
+                Stmt::FieldAssign { span, .. } => *span,
+                Stmt::Return { span, .. } => *span,
+                _ => self.peek_span(),
+            };
             Block {
-                stmts: vec![Stmt::Expr(expr)],
+                stmts: vec![stmt],
                 span,
             }
         }

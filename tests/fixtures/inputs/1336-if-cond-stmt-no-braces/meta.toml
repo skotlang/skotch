@@ -1,0 +1,4 @@
+name = "1336-if-cond-stmt-no-braces"
+status = "supported"
+features = ["if-stmt", "single-stmt-branch", "assignment", "parser"]
+reason = "Lock-in for parity/49-functional-pipelines. `if (cond) n = n + 1` without braces failed because parse_branch_block at parser.rs:~4395 called parse_expr for the no-braces case, which only handles expressions — not Stmt::Assign / Stmt::IndexAssign / Stmt::FieldAssign. Fix changes the no-braces branch to call parse_stmt and unwraps the matching span based on stmt variant. Same shape failed on `if (cond) tail = null` in the Queue example."

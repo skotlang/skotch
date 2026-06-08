@@ -1,0 +1,190 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        countWhere (Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)I 0x0019
+  code        max_stack=2 max_locals=5
+    0000 aload_0
+    0001 ldc "<this>"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 aload_1
+    0007 ldc "predicate"
+    0009 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0012 iconst_0
+    0013 istore_2
+    0014 iconst_0
+    0015 istore_3
+    0016 aload_0
+    0017 invokeinterface InterfaceMethod(java/lang/Iterable.iterator:()Ljava/util/Iterator;)
+    0022 astore 4
+    0024 aload 4
+    0026 invokeinterface InterfaceMethod(java/util/Iterator.hasNext:()Z)
+    0031 ifeq 53
+    0034 aload_1
+    0035 aload 4
+    0037 invokeinterface InterfaceMethod(java/util/Iterator.next:()Ljava/lang/Object;)
+    0042 invokeinterface InterfaceMethod(kotlin/jvm/functions/Function1.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0047 ifnull 24
+    0050 iinc 3 1
+    0053 iload_3
+    0054 ireturn
+    sub_attr  StackMapTable (11 bytes)
+  attr        Signature (2 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (13 bytes)
+method        firstOrNullByPredicate (Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Ljava/lang/Object; 0x0019
+  code        max_stack=2 max_locals=4
+    0000 aload_0
+    0001 ldc "<this>"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 aload_1
+    0007 ldc "predicate"
+    0009 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0012 aload_0
+    0013 invokeinterface InterfaceMethod(java/lang/Iterable.iterator:()Ljava/util/Iterator;)
+    0018 astore_2
+    0019 aload_2
+    0020 invokeinterface InterfaceMethod(java/util/Iterator.hasNext:()Z)
+    0025 ifeq 47
+    0028 aload_2
+    0029 invokeinterface InterfaceMethod(java/util/Iterator.next:()Ljava/lang/Object;)
+    0034 astore_3
+    0035 aload_1
+    0036 aload_3
+    0037 invokeinterface InterfaceMethod(kotlin/jvm/functions/Function1.invoke:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0042 ifnull 19
+    0045 aload_3
+    0046 areturn
+    0047 aconst_null
+    0048 areturn
+    sub_attr  StackMapTable (9 bytes)
+  attr        Signature (2 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (13 bytes)
+method        main ()V 0x0019
+  code        max_stack=3 max_locals=12
+    0000 bipush 10
+    0002 anewarray Class(java/lang/Object)
+    0005 astore_0
+    0006 iconst_1
+    0007 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0010 astore_1
+    0011 aload_0
+    0012 iconst_0
+    0013 aload_1
+    0014 aastore
+    0015 iconst_2
+    0016 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0019 astore_1
+    0020 aload_0
+    0021 iconst_1
+    0022 aload_1
+    0023 aastore
+    0024 iconst_3
+    0025 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0028 astore_1
+    0029 aload_0
+    0030 iconst_2
+    0031 aload_1
+    0032 aastore
+    0033 iconst_4
+    0034 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0037 astore_1
+    0038 aload_0
+    0039 iconst_3
+    0040 aload_1
+    0041 aastore
+    0042 iconst_5
+    0043 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0046 astore_1
+    0047 aload_0
+    0048 iconst_4
+    0049 aload_1
+    0050 aastore
+    0051 bipush 6
+    0053 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0056 astore_1
+    0057 aload_0
+    0058 iconst_5
+    0059 aload_1
+    0060 aastore
+    0061 bipush 7
+    0063 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0066 astore_1
+    0067 aload_0
+    0068 bipush 6
+    0070 aload_1
+    0071 aastore
+    0072 bipush 8
+    0074 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0077 astore_1
+    0078 aload_0
+    0079 bipush 7
+    0081 aload_1
+    0082 aastore
+    0083 bipush 9
+    0085 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0088 astore_1
+    0089 aload_0
+    0090 bipush 8
+    0092 aload_1
+    0093 aastore
+    0094 bipush 10
+    0096 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0099 astore_1
+    0100 aload_0
+    0101 bipush 9
+    0103 aload_1
+    0104 aastore
+    0105 aload_0
+    0106 invokestatic Method(kotlin/collections/CollectionsKt.listOf:([Ljava/lang/Object;)Ljava/util/List;)
+    0109 astore 11
+    0111 invokedynamic InvokeDynamic(invoke:()Lkotlin/jvm/functions/Function1;)
+    0116 astore_0
+    0117 aload 11
+    0119 checkcast Class(java/lang/Iterable)
+    0122 aload_0
+    0123 invokestatic Method(InputKt.countWhere:(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)I)
+    0126 istore_0
+    0127 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0130 iload_0
+    0131 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0134 invokedynamic InvokeDynamic(invoke:()Lkotlin/jvm/functions/Function1;)
+    0139 astore_0
+    0140 aload 11
+    0142 checkcast Class(java/lang/Iterable)
+    0145 aload_0
+    0146 invokestatic Method(InputKt.firstOrNullByPredicate:(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Ljava/lang/Object;)
+    0149 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0152 swap
+    0153 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0156 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
+method        main$lambda$0 (Ljava/lang/Object;)Z 0x001A
+  code        max_stack=2 max_locals=1
+    0000 aload_0
+    0001 checkcast Class(java/lang/Integer)
+    0004 invokevirtual Method(java/lang/Integer.intValue:()I)
+    0007 iconst_2
+    0008 irem
+    0009 ifne 16
+    0012 iconst_1
+    0013 goto 17
+    0016 iconst_0
+    0017 ireturn
+    sub_attr  StackMapTable (5 bytes)
+method        main$lambda$1 (Ljava/lang/Object;)Z 0x001A
+  code        max_stack=2 max_locals=1
+    0000 aload_0
+    0001 checkcast Class(java/lang/Integer)
+    0004 invokevirtual Method(java/lang/Integer.intValue:()I)
+    0007 iconst_5
+    0008 if_icmple 15
+    0011 iconst_1
+    0012 goto 16
+    0015 iconst_0
+    0016 ireturn
+    sub_attr  StackMapTable (5 bytes)
+class_attr    BootstrapMethods (22 bytes)
