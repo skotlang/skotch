@@ -314,6 +314,12 @@ class_similarity_pct() {
 #                      the project — useful for projects with optional
 #                      runtime dependencies the bundled stdlib doesn't
 #                      cover.
+# It MAY also define a `project_prepare DIR CHECKOUT` shell function:
+# the harness calls it after the git clone completes and before
+# compiling, so the script can fetch Maven JARs, generate sources, run
+# code-gen, etc. The function is expected to extend PROJECT_CLASSPATH
+# in place (and treat its work as idempotent — the function is called
+# every parity run, including the cached-checkout case).
 
 # Path to where this example's external project checkout lives. We keep
 # it under the example dir so it's discoverable from a glance at the
@@ -332,6 +338,11 @@ load_project_config() {
     # Reset every variable a previous example may have set so we don't
     # leak config between examples when running the parity bench.
     unset PROJECT_REPO PROJECT_REF PROJECT_KT_FIND PROJECT_CLASSPATH
+    # Also un-define a previous example's `project_prepare` hook so a
+    # missing definition on the next example doesn't silently inherit
+    # someone else's. `unset -f` is a no-op if the function isn't
+    # defined, so this is safe to do unconditionally.
+    unset -f project_prepare 2>/dev/null || true
     if [[ ! -f "$dir/project.sh" ]]; then
         return 1
     fi
@@ -398,6 +409,13 @@ compile_project_with() {
     ensure_project_checkout "$dir" "$PROJECT_REPO" "$PROJECT_REF"
     local checkout
     checkout=$(project_checkout_dir "$dir" "$PROJECT_REF")
+    # Run the optional project_prepare hook (defined in project.sh) so
+    # the example can fetch JAR dependencies, run code-gen, etc., and
+    # extend PROJECT_CLASSPATH before the compile step assembles the
+    # `-classpath` argument below.
+    if declare -F project_prepare > /dev/null; then
+        project_prepare "$dir" "$checkout" >&2 || return $?
+    fi
     local kt_args=()
     while IFS= read -r line; do
         kt_args+=("$line")

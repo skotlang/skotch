@@ -193,7 +193,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
@@ -224,7 +224,7 @@ jobs:
       # Without this, every CI run re-clones each project (1s for clikt
       # 5.1.0 — small, but it adds up across matrix entries).
       - name: Cache parity project checkouts
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: parity/*/.checkout
           key: parity-projects-${{ hashFiles('parity/[0-9][0-9][0-9]-*/project.sh') }}
@@ -253,7 +253,7 @@ jobs:
             >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload bench artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: parity-bench-kotlinc-${{ matrix.kotlin }}
           path: _bench/
