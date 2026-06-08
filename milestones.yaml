@@ -50,7 +50,7 @@
 #     Currently 1034/1062 JVM fixtures also pass DEX. Gaps are fixed
 #     incrementally, not in a big-bang milestone.
 #
-#     kotlinc byte parity — 816 fixtures are byte-identical to
+#     kotlinc byte parity — 818 fixtures are byte-identical to
 #     kotlinc 2.4.0 output (kotlinc_parity_baseline ratchet test).
 #     Any commit that drops a fixture from this set fails CI.
 #
@@ -71,13 +71,13 @@ project:
     # Last refreshed 2026-06-07.
     rust_lines: 107403
     crates: 38
-    active_fixtures: 1078
+    active_fixtures: 1080
     stub_fixtures: 0           # all stubs eliminated
-    jvm_e2e_fixtures: 1072
-    dex_e2e_fixtures: 1043     # 1321..1330 added DEX golden
-    kotlinc_byte_parity_baseline: 816  # tests/fixtures/kotlinc_parity_baseline.txt
+    jvm_e2e_fixtures: 1074
+    dex_e2e_fixtures: 1045     # 1321..1332 added DEX golden
+    kotlinc_byte_parity_baseline: 818  # tests/fixtures/kotlinc_parity_baseline.txt
     kotlinc_byte_parity_aspirational: 70
-    parity_examples: 44        # parity/01-hello-world through parity/44-exception-handling
+    parity_examples: 46        # parity/01-hello-world through parity/46-companion-factory
     measured_kotlinc_speedup: "~100× on small programs (parity bench)"
 
 # ============================================================================

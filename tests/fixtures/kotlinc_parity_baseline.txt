@@ -189,6 +189,8 @@
 1329-linked-list-generic-node
 133-string-int-concat
 1330-try-finally-max-stack
+1331-multi-arg-index-operator
+1332-private-constructor-companion-factory
 134-string-template-val
 135-string-template-return
 138-fibonacci-display

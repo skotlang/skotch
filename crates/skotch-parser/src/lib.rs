@@ -784,6 +784,26 @@ impl<'a> Parser<'a> {
         let type_params = self.parse_type_params();
         self.skip_trivia();
 
+        // Optional visibility modifier + `constructor` keyword between the
+        // class name (+ type params) and the primary constructor args:
+        //   `class Color private constructor(val r: Int)`
+        // skotch ignores the visibility (visibility on the primary ctor
+        // is informational on JVM since the user-facing entry is the
+        // class constructor); the `constructor` keyword is consumed so
+        // the LParen below opens the ctor params. Surfaced by
+        // parity/46-companion-factory.
+        while matches!(
+            self.peek_kind(),
+            TokenKind::KwPrivate | TokenKind::KwProtected | TokenKind::KwInternal
+        ) {
+            self.bump();
+            self.skip_trivia();
+        }
+        if self.peek_kind() == TokenKind::KwConstructor {
+            self.bump();
+            self.skip_trivia();
+        }
+
         // Primary constructor parameters.
         let mut constructor_params = Vec::new();
         if self.peek_kind() == TokenKind::LParen {
@@ -2763,6 +2783,52 @@ impl<'a> Parser<'a> {
                             span,
                         };
                     }
+                    // m[a, b] = v desugars at parse-time to a Call to
+                    // `m.get(a, b)`. For assignment we need `m.set(a, b, v)`.
+                    // Detect the get-call shape and rewrite as a Stmt::Expr
+                    // wrapping the set call. Surfaced by parity/45-matrix.
+                    if let Expr::Call {
+                        callee,
+                        args,
+                        span: call_span,
+                        ..
+                    } = &expr
+                    {
+                        if let Expr::Field {
+                            receiver: inner_recv,
+                            name: get_name,
+                            ..
+                        } = callee.as_ref()
+                        {
+                            if self.interner.resolve(*get_name) == "get" {
+                                let start = *call_span;
+                                let recv = inner_recv.clone();
+                                let get_args = args.clone();
+                                self.bump(); // consume `=`
+                                self.skip_trivia();
+                                let rhs = self.parse_expr();
+                                let set_name = self.interner.intern("set");
+                                let span = start.merge(rhs.span());
+                                let mut set_args: Vec<CallArg> = get_args;
+                                set_args.push(CallArg {
+                                    name: None,
+                                    expr: rhs,
+                                });
+                                let set_call = Expr::Call {
+                                    callee: Box::new(Expr::Field {
+                                        receiver: recv,
+                                        name: set_name,
+                                        span: start,
+                                    }),
+                                    args: set_args,
+                                    type_args: Vec::new(),
+                                    span,
+                                };
+                                let _ = compound_op;
+                                return Stmt::Expr(set_call);
+                            }
+                        }
+                    }
                     // receiver.field = value → FieldAssign
                     if let Expr::Field {
                         receiver,
@@ -3737,19 +3803,56 @@ impl<'a> Parser<'a> {
                         };
                     }
                 }
-                // Array/collection indexing: `expr[index]`.
+                // Array/collection indexing: `expr[index]` for single
+                // index; `expr[a, b, ...]` for multi-arg desugars to
+                // `expr.get(a, b, ...)`. Kotlin's `operator fun get(...)`
+                // accepts any arity; the multi-arg form is common for
+                // `Matrix[r, c]`-style classes. Surfaced by parity/45.
                 TokenKind::LBracket => {
                     self.bump(); // consume `[`
                     self.skip_trivia();
-                    let index = self.parse_expr();
+                    let first = self.parse_expr();
                     self.skip_trivia();
+                    let mut extra: Vec<Expr> = Vec::new();
+                    while self.peek_kind() == TokenKind::Comma {
+                        self.bump();
+                        self.skip_trivia();
+                        extra.push(self.parse_expr());
+                        self.skip_trivia();
+                    }
                     let rb = self.expect(TokenKind::RBracket, "']'");
                     let span = expr.span().merge(rb);
-                    expr = Expr::Index {
-                        receiver: Box::new(expr),
-                        index: Box::new(index),
-                        span,
-                    };
+                    if extra.is_empty() {
+                        expr = Expr::Index {
+                            receiver: Box::new(expr),
+                            index: Box::new(first),
+                            span,
+                        };
+                    } else {
+                        // Desugar `r[a, b, ...]` → `r.get(a, b, ...)`.
+                        let get_name = self.interner.intern("get");
+                        let mut args: Vec<CallArg> = Vec::new();
+                        args.push(CallArg {
+                            name: None,
+                            expr: first,
+                        });
+                        for e in extra {
+                            args.push(CallArg {
+                                name: None,
+                                expr: e,
+                            });
+                        }
+                        expr = Expr::Call {
+                            callee: Box::new(Expr::Field {
+                                receiver: Box::new(expr),
+                                name: get_name,
+                                span,
+                            }),
+                            args,
+                            type_args: Vec::new(),
+                            span,
+                        };
+                    }
                 }
                 // Also handle: `f { body }` — call with ONLY a trailing lambda,
                 // no parentheses at all. Only if current expr is an identifier.

@@ -1,0 +1,4 @@
+name = "1332-private-constructor-companion-factory"
+status = "supported"
+features = ["private-constructor", "companion-object", "factory-method", "visibility-modifier"]
+reason = "Lock-in for parity/46-companion-factory. `class Color private constructor(...)` requires the parser to consume an optional visibility modifier + `constructor` keyword between the class name (+ type params) and the LParen of the primary ctor params. Pre-fix: parser went straight from `parse_type_params()` to checking LParen — `private` and `constructor` tokens trickled into the param parser as bogus input, eventually surfacing as `MIR: cross-file stub class has empty name`. Fix at parser.rs:~787 accepts `[private|protected|internal]? constructor?` between type params and LParen. Visibility is informational on JVM (class stays ACC_PUBLIC); the keyword sequence must parse so the class body is recognized."

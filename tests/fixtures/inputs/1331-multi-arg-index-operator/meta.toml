@@ -1,0 +1,4 @@
+name = "1331-multi-arg-index-operator"
+status = "supported"
+features = ["operator-get", "operator-set", "multi-arg-index", "intarray"]
+reason = "Lock-in for parity/45-matrix-operator. Kotlin's `m[r, c]` (multi-arg index) desugars to `m.get(r, c)`; `m[r, c] = v` desugars to `m.set(r, c, v)`. Pre-fix the parser at parser.rs:~3741 only accepted a single index expression in `[...]` — `m[r, c]` failed with `expected expression, found RBracket`. Fix collects comma-separated indices; for the single-arg case keeps the existing `Expr::Index` shape, for multi-arg desugars to `r.get(args)`/`r.set(args, v)` call shapes that flow through the standard call-dispatch path."
