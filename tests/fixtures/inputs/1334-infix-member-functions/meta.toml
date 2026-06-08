@@ -1,0 +1,4 @@
+name = "1334-infix-member-functions"
+status = "supported"
+features = ["infix-function", "parser", "left-associative", "chain"]
+reason = "Lock-in for parity/48-infix-functions. User-defined `infix fun` member functions now parse with infix call syntax `a method b`. Pre-fix the parser at parser.rs:~3293 had a hardcoded whitelist of stdlib infix keywords (to/and/or/xor/shl/shr/ushr/contains/zip/until/downTo/step) and rejected user-defined infix names. Fix accepts ANY Ident not followed by `(`/`{`/`else`, loops left-associatively for chains, and gates on a backward walk for Newline/Semi tokens to prevent cross-statement infix consumption (which would otherwise re-parse `val s = X(); s.setup(...)` as `X().s(...).setup(...)`)."

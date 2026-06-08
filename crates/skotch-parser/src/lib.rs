@@ -3360,7 +3360,10 @@ impl<'a> Parser<'a> {
                     name,
                     span: kw_span,
                 }),
-                args: vec![CallArg { name: None, expr: rhs }],
+                args: vec![CallArg {
+                    name: None,
+                    expr: rhs,
+                }],
                 type_args: Vec::new(),
                 span,
             };
