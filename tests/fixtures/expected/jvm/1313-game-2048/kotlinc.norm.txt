@@ -1,0 +1,556 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        cellStr (I)Ljava/lang/String; 0x0019
+  code        max_stack=3 max_locals=5
+    0000 iload_0
+    0001 ifne 7
+    0004 ldc "   ."
+    0006 areturn
+    0007 iload_0
+    0008 invokedynamic InvokeDynamic(makeConcatWithConstants:(I)Ljava/lang/String;)
+    0013 astore_1
+    0014 iconst_4
+    0015 aload_1
+    0016 invokevirtual Method(java/lang/String.length:()I)
+    0019 isub
+    0020 istore_2
+    0021 new Class(java/lang/StringBuilder)
+    0024 dup
+    0025 invokespecial Method(java/lang/StringBuilder.<init>:()V)
+    0028 astore_3
+    0029 iconst_0
+    0030 istore 4
+    0032 iload 4
+    0034 iload_2
+    0035 if_icmpge 51
+    0038 aload_3
+    0039 bipush 32
+    0041 invokevirtual Method(java/lang/StringBuilder.append:(C)Ljava/lang/StringBuilder;)
+    0044 pop
+    0045 iinc 4 1
+    0048 goto 32
+    0051 aload_3
+    0052 aload_1
+    0053 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0056 pop
+    0057 aload_3
+    0058 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
+    0061 dup
+    0062 ldc "toString(...)"
+    0064 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullExpressionValue:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0067 areturn
+    sub_attr  StackMapTable (20 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+method        formatBoard ([I)Ljava/lang/String; 0x0019
+  code        max_stack=4 max_locals=4
+    0000 aload_0
+    0001 ldc "board"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 new Class(java/lang/StringBuilder)
+    0009 dup
+    0010 invokespecial Method(java/lang/StringBuilder.<init>:()V)
+    0013 astore_1
+    0014 iconst_0
+    0015 istore_2
+    0016 iload_2
+    0017 iconst_4
+    0018 if_icmpge 69
+    0021 iconst_0
+    0022 istore_3
+    0023 iload_3
+    0024 iconst_4
+    0025 if_icmpge 56
+    0028 aload_1
+    0029 aload_0
+    0030 iload_2
+    0031 iconst_4
+    0032 imul
+    0033 iload_3
+    0034 iadd
+    0035 iaload
+    0036 invokestatic Method(InputKt.cellStr:(I)Ljava/lang/String;)
+    0039 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0042 pop
+    0043 aload_1
+    0044 bipush 32
+    0046 invokevirtual Method(java/lang/StringBuilder.append:(C)Ljava/lang/StringBuilder;)
+    0049 pop
+    0050 iinc 3 1
+    0053 goto 23
+    0056 aload_1
+    0057 bipush 10
+    0059 invokevirtual Method(java/lang/StringBuilder.append:(C)Ljava/lang/StringBuilder;)
+    0062 pop
+    0063 iinc 2 1
+    0066 goto 16
+    0069 aload_1
+    0070 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
+    0073 dup
+    0074 ldc "toString(...)"
+    0076 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullExpressionValue:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0079 areturn
+    sub_attr  StackMapTable (17 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)
+method        main ()V 0x0019
+  code        max_stack=5 max_locals=3
+    0000 iconst_4
+    0001 newarray int
+    0003 astore_1
+    0004 aload_1
+    0005 iconst_0
+    0006 iconst_2
+    0007 iastore
+    0008 aload_1
+    0009 iconst_1
+    0010 iconst_2
+    0011 iastore
+    0012 aload_1
+    0013 iconst_2
+    0014 iconst_4
+    0015 iastore
+    0016 aload_1
+    0017 iconst_3
+    0018 iconst_0
+    0019 iastore
+    0020 aload_1
+    0021 invokestatic Method(InputKt.slideRowLeft:([I)[I)
+    0024 astore_0
+    0025 aload_0
+    0026 iconst_0
+    0027 iaload
+    0028 aload_0
+    0029 iconst_1
+    0030 iaload
+    0031 aload_0
+    0032 iconst_2
+    0033 iaload
+    0034 aload_0
+    0035 iconst_3
+    0036 iaload
+    0037 invokedynamic InvokeDynamic(makeConcatWithConstants:(IIII)Ljava/lang/String;)
+    0042 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0045 swap
+    0046 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0049 bipush 16
+    0051 newarray int
+    0053 astore_2
+    0054 aload_2
+    0055 iconst_0
+    0056 iconst_2
+    0057 iastore
+    0058 aload_2
+    0059 iconst_1
+    0060 iconst_2
+    0061 iastore
+    0062 aload_2
+    0063 iconst_2
+    0064 iconst_4
+    0065 iastore
+    0066 aload_2
+    0067 iconst_3
+    0068 iconst_4
+    0069 iastore
+    0070 aload_2
+    0071 iconst_4
+    0072 iconst_0
+    0073 iastore
+    0074 aload_2
+    0075 iconst_5
+    0076 iconst_2
+    0077 iastore
+    0078 aload_2
+    0079 bipush 6
+    0081 iconst_2
+    0082 iastore
+    0083 aload_2
+    0084 bipush 7
+    0086 iconst_0
+    0087 iastore
+    0088 aload_2
+    0089 bipush 8
+    0091 iconst_4
+    0092 iastore
+    0093 aload_2
+    0094 bipush 9
+    0096 iconst_0
+    0097 iastore
+    0098 aload_2
+    0099 bipush 10
+    0101 iconst_0
+    0102 iastore
+    0103 aload_2
+    0104 bipush 11
+    0106 iconst_4
+    0107 iastore
+    0108 aload_2
+    0109 bipush 12
+    0111 iconst_2
+    0112 iastore
+    0113 aload_2
+    0114 bipush 13
+    0116 iconst_4
+    0117 iastore
+    0118 aload_2
+    0119 bipush 14
+    0121 iconst_2
+    0122 iastore
+    0123 aload_2
+    0124 bipush 15
+    0126 iconst_4
+    0127 iastore
+    0128 aload_2
+    0129 astore_1
+    0130 ldc "slideLeft"
+    0132 aload_1
+    0133 aload_1
+    0134 invokestatic Method(InputKt.slideBoardLeft:([I)[I)
+    0137 invokestatic Method(InputKt.showMove:(Ljava/lang/String;[I[I)V)
+    0140 ldc "slideRight"
+    0142 aload_1
+    0143 aload_1
+    0144 invokestatic Method(InputKt.slideBoardRight:([I)[I)
+    0147 invokestatic Method(InputKt.showMove:(Ljava/lang/String;[I[I)V)
+    0150 ldc "slideUp"
+    0152 aload_1
+    0153 aload_1
+    0154 invokestatic Method(InputKt.slideBoardUp:([I)[I)
+    0157 invokestatic Method(InputKt.showMove:(Ljava/lang/String;[I[I)V)
+    0160 ldc "slideDown"
+    0162 aload_1
+    0163 aload_1
+    0164 invokestatic Method(InputKt.slideBoardDown:([I)[I)
+    0167 invokestatic Method(InputKt.showMove:(Ljava/lang/String;[I[I)V)
+    0170 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
+method        reverseRows ([I)[I 0x0019
+  code        max_stack=6 max_locals=4
+    0000 aload_0
+    0001 ldc "board"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 bipush 16
+    0008 newarray int
+    0010 astore_1
+    0011 iconst_0
+    0012 istore_2
+    0013 iload_2
+    0014 iconst_4
+    0015 if_icmpge 53
+    0018 iconst_0
+    0019 istore_3
+    0020 iload_3
+    0021 iconst_4
+    0022 if_icmpge 47
+    0025 aload_1
+    0026 iload_2
+    0027 iconst_4
+    0028 imul
+    0029 iload_3
+    0030 iadd
+    0031 aload_0
+    0032 iload_2
+    0033 iconst_4
+    0034 imul
+    0035 iconst_3
+    0036 iload_3
+    0037 isub
+    0038 iadd
+    0039 iaload
+    0040 iastore
+    0041 iinc 3 1
+    0044 goto 20
+    0047 iinc 2 1
+    0050 goto 13
+    0053 aload_1
+    0054 areturn
+    sub_attr  StackMapTable (17 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)
+method        showMove (Ljava/lang/String;[I[I)V 0x0019
+  code        max_stack=2 max_locals=3
+    0000 aload_0
+    0001 ldc "label"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 aload_1
+    0007 ldc "before"
+    0009 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0012 aload_2
+    0013 ldc "after"
+    0015 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0018 aload_0
+    0019 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;)
+    0024 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0027 swap
+    0028 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0031 ldc "before:"
+    0033 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0036 swap
+    0037 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0040 aload_1
+    0041 invokestatic Method(InputKt.formatBoard:([I)Ljava/lang/String;)
+    0044 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0047 swap
+    0048 invokevirtual Method(java/io/PrintStream.print:(Ljava/lang/Object;)V)
+    0051 ldc "after:"
+    0053 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0056 swap
+    0057 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0060 aload_2
+    0061 invokestatic Method(InputKt.formatBoard:([I)Ljava/lang/String;)
+    0064 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0067 swap
+    0068 invokevirtual Method(java/io/PrintStream.print:(Ljava/lang/Object;)V)
+    0071 return
+  attr        RuntimeInvisibleParameterAnnotations (19 bytes)
+method        slideBoardDown ([I)[I 0x0019
+  code        max_stack=2 max_locals=1
+    0000 aload_0
+    0001 ldc "board"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 aload_0
+    0007 invokestatic Method(InputKt.transpose:([I)[I)
+    0010 invokestatic Method(InputKt.slideBoardRight:([I)[I)
+    0013 invokestatic Method(InputKt.transpose:([I)[I)
+    0016 areturn
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)
+method        slideBoardLeft ([I)[I 0x0019
+  code        max_stack=5 max_locals=6
+    0000 aload_0
+    0001 ldc "board"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 bipush 16
+    0008 newarray int
+    0010 astore_1
+    0011 iconst_4
+    0012 newarray int
+    0014 astore_2
+    0015 iconst_0
+    0016 istore_3
+    0017 iload_3
+    0018 iconst_4
+    0019 if_icmpge 89
+    0022 iconst_0
+    0023 istore 4
+    0025 iload 4
+    0027 iconst_4
+    0028 if_icmpge 49
+    0031 aload_2
+    0032 iload 4
+    0034 aload_0
+    0035 iload_3
+    0036 iconst_4
+    0037 imul
+    0038 iload 4
+    0040 iadd
+    0041 iaload
+    0042 iastore
+    0043 iinc 4 1
+    0046 goto 25
+    0049 aload_2
+    0050 invokestatic Method(InputKt.slideRowLeft:([I)[I)
+    0053 astore 5
+    0055 iconst_0
+    0056 istore 4
+    0058 iload 4
+    0060 iconst_4
+    0061 if_icmpge 83
+    0064 aload_1
+    0065 iload_3
+    0066 iconst_4
+    0067 imul
+    0068 iload 4
+    0070 iadd
+    0071 aload 5
+    0073 iload 4
+    0075 iaload
+    0076 iastore
+    0077 iinc 4 1
+    0080 goto 58
+    0083 iinc 3 1
+    0086 goto 17
+    0089 aload_1
+    0090 areturn
+    sub_attr  StackMapTable (27 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)
+method        slideBoardRight ([I)[I 0x0019
+  code        max_stack=2 max_locals=1
+    0000 aload_0
+    0001 ldc "board"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 aload_0
+    0007 invokestatic Method(InputKt.reverseRows:([I)[I)
+    0010 invokestatic Method(InputKt.slideBoardLeft:([I)[I)
+    0013 invokestatic Method(InputKt.reverseRows:([I)[I)
+    0016 areturn
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)
+method        slideBoardUp ([I)[I 0x0019
+  code        max_stack=2 max_locals=1
+    0000 aload_0
+    0001 ldc "board"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 aload_0
+    0007 invokestatic Method(InputKt.transpose:([I)[I)
+    0010 invokestatic Method(InputKt.slideBoardLeft:([I)[I)
+    0013 invokestatic Method(InputKt.transpose:([I)[I)
+    0016 areturn
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)
+method        slideRowLeft ([I)[I 0x0019
+  code        max_stack=4 max_locals=9
+    0000 aload_0
+    0001 ldc "row"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 aload_0
+    0007 arraylength
+    0008 istore_1
+    0009 iload_1
+    0010 newarray int
+    0012 astore_2
+    0013 iload_1
+    0014 newarray int
+    0016 astore_3
+    0017 iconst_0
+    0018 istore 4
+    0020 iconst_0
+    0021 istore 5
+    0023 iload 5
+    0025 iload_1
+    0026 if_icmpge 53
+    0029 aload_0
+    0030 iload 5
+    0032 iaload
+    0033 ifeq 47
+    0036 aload_2
+    0037 iload 4
+    0039 aload_0
+    0040 iload 5
+    0042 iaload
+    0043 iastore
+    0044 iinc 4 1
+    0047 iinc 5 1
+    0050 goto 23
+    0053 iconst_0
+    0054 istore 6
+    0056 iload 6
+    0058 iload 4
+    0060 iconst_1
+    0061 isub
+    0062 if_icmpge 76
+    0065 aload_2
+    0066 iload 6
+    0068 invokestatic Method(InputKt.stepMerge:([II)I)
+    0071 istore 6
+    0073 goto 56
+    0076 iconst_0
+    0077 istore 7
+    0079 iconst_0
+    0080 istore 8
+    0082 iload 8
+    0084 iload 4
+    0086 if_icmpge 113
+    0089 aload_2
+    0090 iload 8
+    0092 iaload
+    0093 ifeq 107
+    0096 aload_3
+    0097 iload 7
+    0099 aload_2
+    0100 iload 8
+    0102 iaload
+    0103 iastore
+    0104 iinc 7 1
+    0107 iinc 8 1
+    0110 goto 82
+    0113 aload_3
+    0114 areturn
+    sub_attr  StackMapTable (35 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)
+method        stepMerge ([II)I 0x0019
+  code        max_stack=4 max_locals=2
+    0000 aload_0
+    0001 ldc "compact"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 aload_0
+    0007 iload_1
+    0008 iaload
+    0009 aload_0
+    0010 iload_1
+    0011 iconst_1
+    0012 iadd
+    0013 iaload
+    0014 if_icmpne 35
+    0017 aload_0
+    0018 iload_1
+    0019 aload_0
+    0020 iload_1
+    0021 iaload
+    0022 iconst_2
+    0023 imul
+    0024 iastore
+    0025 aload_0
+    0026 iload_1
+    0027 iconst_1
+    0028 iadd
+    0029 iconst_0
+    0030 iastore
+    0031 iload_1
+    0032 iconst_2
+    0033 iadd
+    0034 ireturn
+    0035 iload_1
+    0036 iconst_1
+    0037 iadd
+    0038 ireturn
+    sub_attr  StackMapTable (3 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (9 bytes)
+method        transpose ([I)[I 0x0019
+  code        max_stack=5 max_locals=4
+    0000 aload_0
+    0001 ldc "board"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 bipush 16
+    0008 newarray int
+    0010 astore_1
+    0011 iconst_0
+    0012 istore_2
+    0013 iload_2
+    0014 iconst_4
+    0015 if_icmpge 51
+    0018 iconst_0
+    0019 istore_3
+    0020 iload_3
+    0021 iconst_4
+    0022 if_icmpge 45
+    0025 aload_1
+    0026 iload_2
+    0027 iconst_4
+    0028 imul
+    0029 iload_3
+    0030 iadd
+    0031 aload_0
+    0032 iload_3
+    0033 iconst_4
+    0034 imul
+    0035 iload_2
+    0036 iadd
+    0037 iaload
+    0038 iastore
+    0039 iinc 3 1
+    0042 goto 20
+    0045 iinc 2 1
+    0048 goto 13
+    0051 aload_1
+    0052 areturn
+    sub_attr  StackMapTable (17 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)
+class_attr    BootstrapMethods (20 bytes)

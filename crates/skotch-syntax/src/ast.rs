@@ -295,10 +295,18 @@ pub struct ClassDecl {
 #[derive(Clone, Debug)]
 pub struct SecondaryConstructor {
     pub params: Vec<Param>,
-    /// True when the constructor has an explicit `: this(args)` delegation.
+    /// True when the constructor has an explicit delegation, whether
+    /// `: this(args)` (sibling secondary constructor) or
+    /// `: super(args)` (parent class primary constructor).
     pub has_delegation: bool,
-    /// Arguments passed to the delegate constructor call (`this(args)`).
-    pub delegate_args: Vec<Expr>,
+    /// True when the delegation target is `super` rather than `this`.
+    /// Only meaningful when `has_delegation` is set.
+    pub delegate_is_super: bool,
+    /// Arguments passed to the delegate constructor call. Named args
+    /// (`bitStrength = 224, h = H`) are common in `: super(...)`
+    /// delegations on Kotlin classes with verbose primary
+    /// constructors, so the args carry their optional name.
+    pub delegate_args: Vec<CallArg>,
     /// Optional body block.
     pub body: Option<Block>,
     pub span: Span,
@@ -603,6 +611,22 @@ pub enum Expr {
         expr: Box<Expr>,
         span: Span,
     },
+    /// `name++` / `name--` (postfix) or `++name` / `--name` (prefix)
+    /// used in expression position. At statement position the parser
+    /// keeps using the simpler `Stmt::Assign { target, value: target
+    /// ± 1 }` shape — this variant is only emitted when the
+    /// increment/decrement appears inside another expression (a
+    /// named arg, a return value, the RHS of a binary op, an `if`
+    /// condition, etc.). Mir-lower spills the old value to a
+    /// temporary local, performs the assignment, and yields the
+    /// temporary for postfix; for prefix it yields the new value
+    /// directly.
+    IncDec {
+        target: Symbol,
+        is_dec: bool,
+        is_prefix: bool,
+        span: Span,
+    },
     /// `{ x: Int -> x * 2 }` — lambda expression.
     Lambda {
         params: Vec<Param>,
@@ -711,6 +735,7 @@ impl Expr {
             | Expr::IsCheck { span, .. }
             | Expr::AsCast { span, .. }
             | Expr::NotNullAssert { span, .. }
+            | Expr::IncDec { span, .. }
             | Expr::Lambda { span, .. }
             | Expr::ObjectExpr { span, .. }
             | Expr::Index { span, .. } => *span,

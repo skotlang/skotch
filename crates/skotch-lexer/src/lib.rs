@@ -78,10 +78,36 @@ impl LexedFile {
     }
 }
 
+/// Knobs that tune what the lexer emits. The FIR-compilation path uses
+/// [`LexerOptions::default()`] (whitespace + comments dropped, matching
+/// historical behavior). The SIL/CST path passes
+/// `LexerOptions { preserve_trivia: true }` so that every byte of the
+/// source becomes a token and can be reconstructed downstream.
+#[derive(Copy, Clone, Debug, Default)]
+pub struct LexerOptions {
+    /// When true, emit `Whitespace`, `LineComment`, `BlockComment`, and
+    /// `DocComment` tokens instead of silently consuming them.
+    pub preserve_trivia: bool,
+}
+
 /// Lex `source` belonging to `file`. Errors are pushed into `diags` and
 /// the lexer attempts to continue, marking failed runs with `Error`
 /// tokens. The parser stops at the first `Error` it sees.
+///
+/// Equivalent to [`lex_with`] called with `LexerOptions::default()` —
+/// kept as the canonical entry point for the FIR compilation pipeline.
 pub fn lex(file: FileId, source: &str, diags: &mut Diagnostics) -> LexedFile {
+    lex_with(file, source, diags, LexerOptions::default())
+}
+
+/// Lex `source` with explicit options. Used by the SIL/CST pipeline to
+/// request trivia preservation; FIR callers should keep using [`lex`].
+pub fn lex_with(
+    file: FileId,
+    source: &str,
+    diags: &mut Diagnostics,
+    options: LexerOptions,
+) -> LexedFile {
     let mut lx = Lexer {
         file,
         bytes: source.as_bytes(),
@@ -89,6 +115,7 @@ pub fn lex(file: FileId, source: &str, diags: &mut Diagnostics) -> LexedFile {
         tokens: Vec::new(),
         payloads: Vec::new(),
         diags,
+        options,
     };
     lx.run();
     LexedFile {
@@ -105,6 +132,7 @@ struct Lexer<'a> {
     tokens: Vec<Token>,
     payloads: Vec<Option<TokenPayload>>,
     diags: &'a mut Diagnostics,
+    options: LexerOptions,
 }
 
 impl<'a> Lexer<'a> {
@@ -118,13 +146,19 @@ impl<'a> Lexer<'a> {
     /// Lex one token. May recurse into [`scan_string`] which itself
     /// re-enters this state machine for `${ … }` interpolations.
     fn next_token(&mut self) {
-        // Skip plain whitespace (not newlines).
+        // Whitespace run (spaces, tabs, CR — not newlines). In default
+        // mode this is consumed silently; in preserve_trivia mode it
+        // becomes one `Whitespace` token per run.
+        let ws_start = self.pos;
         while let Some(b) = self.peek() {
             if b == b' ' || b == b'\t' || b == b'\r' {
                 self.pos += 1;
             } else {
                 break;
             }
+        }
+        if self.options.preserve_trivia && self.pos > ws_start {
+            self.emit(TokenKind::Whitespace, ws_start, self.pos, None);
         }
         let start = self.pos;
         let Some(b) = self.peek() else { return };
@@ -138,8 +172,9 @@ impl<'a> Lexer<'a> {
             return;
         }
 
-        // Line comment: `// ... \n`. Consume to end of line; produce no
-        // token (comments are pure trivia for the parser's purposes).
+        // Line comment: `// ... \n`. The trailing `\n` is **not** part of
+        // the comment — it stays a separate `Newline` token so the
+        // parser's newline-sensitivity logic still fires.
         if b == b'/' && self.peek_at(1) == Some(b'/') {
             while let Some(b) = self.peek() {
                 if b == b'\n' {
@@ -147,15 +182,30 @@ impl<'a> Lexer<'a> {
                 }
                 self.pos += 1;
             }
+            if self.options.preserve_trivia {
+                self.emit(TokenKind::LineComment, start, self.pos, None);
+            }
             return;
         }
 
-        // Block comment: `/* ... */`. Not nested-aware yet.
+        // Block comment: `/* ... */`. Not nested-aware yet. A `/**`
+        // (KDoc) is emitted as `DocComment`, plain `/*` as
+        // `BlockComment`. The FIR-path lexer (no preserve_trivia) drops
+        // both equally.
         if b == b'/' && self.peek_at(1) == Some(b'*') {
+            let is_doc = self.peek_at(2) == Some(b'*') && self.peek_at(3) != Some(b'/');
             self.pos += 2;
             while self.pos < self.bytes.len() {
                 if self.peek() == Some(b'*') && self.peek_at(1) == Some(b'/') {
                     self.pos += 2;
+                    if self.options.preserve_trivia {
+                        let kind = if is_doc {
+                            TokenKind::DocComment
+                        } else {
+                            TokenKind::BlockComment
+                        };
+                        self.emit(kind, start, self.pos, None);
+                    }
                     return;
                 }
                 self.pos += 1;
@@ -1241,6 +1291,136 @@ mod tests {
                 TokenKind::Eof,
             ]
         );
+    }
+
+    // ─── trivia-mode tests (SIL/CST pipeline) ────────────────────────────
+
+    fn lex_str_trivia(src: &str) -> (LexedFile, Diagnostics) {
+        let mut diags = Diagnostics::new();
+        let lf = lex_with(
+            FileId(0),
+            src,
+            &mut diags,
+            LexerOptions {
+                preserve_trivia: true,
+            },
+        );
+        (lf, diags)
+    }
+
+    fn token_spans(lf: &LexedFile) -> Vec<(TokenKind, std::ops::Range<u32>)> {
+        lf.tokens
+            .iter()
+            .map(|t| (t.kind, t.span.start..t.span.end))
+            .collect()
+    }
+
+    #[test]
+    fn trivia_default_drops_whitespace_and_comments() {
+        // The FIR-path lexer must keep its old behavior — no `Whitespace`
+        // or `*Comment` tokens — so that all 14 downstream crates see
+        // exactly the same token stream as before this refactor.
+        let (lf, d) = lex_str("// hi\nfun  foo() {} /* bye */");
+        assert!(d.is_empty(), "{:?}", d);
+        assert_eq!(
+            kinds(&lf),
+            vec![
+                TokenKind::Newline, // separates // hi from fun foo
+                TokenKind::KwFun,
+                TokenKind::Ident,
+                TokenKind::LParen,
+                TokenKind::RParen,
+                TokenKind::LBrace,
+                TokenKind::RBrace,
+                TokenKind::Eof,
+            ]
+        );
+    }
+
+    #[test]
+    fn trivia_preserve_emits_whitespace_tokens() {
+        let (lf, d) = lex_str_trivia("fun  foo() ");
+        assert!(d.is_empty(), "{:?}", d);
+        assert_eq!(
+            kinds(&lf),
+            vec![
+                TokenKind::KwFun,
+                TokenKind::Whitespace, // two spaces between fun and foo
+                TokenKind::Ident,
+                TokenKind::LParen,
+                TokenKind::RParen,
+                TokenKind::Whitespace, // trailing space
+                TokenKind::Eof,
+            ]
+        );
+    }
+
+    #[test]
+    fn trivia_preserve_emits_line_comment() {
+        let (lf, d) = lex_str_trivia("// hello\nfun x()");
+        assert!(d.is_empty(), "{:?}", d);
+        assert_eq!(
+            kinds(&lf),
+            vec![
+                TokenKind::LineComment, // "// hello"  (newline excluded)
+                TokenKind::Newline,
+                TokenKind::KwFun,
+                TokenKind::Whitespace,
+                TokenKind::Ident,
+                TokenKind::LParen,
+                TokenKind::RParen,
+                TokenKind::Eof,
+            ]
+        );
+        // The comment text must NOT include the trailing newline; that
+        // newline is a separate token to keep Kotlin's newline-sensitive
+        // grammar working unchanged.
+        let comment_span = lf.tokens[0].span;
+        assert_eq!(comment_span.end - comment_span.start, 8); // "// hello".len()
+    }
+
+    #[test]
+    fn trivia_preserve_distinguishes_block_and_doc_comment() {
+        let (lf, d) = lex_str_trivia("/* plain */ /** doc */");
+        assert!(d.is_empty(), "{:?}", d);
+        assert_eq!(
+            kinds(&lf),
+            vec![
+                TokenKind::BlockComment,
+                TokenKind::Whitespace,
+                TokenKind::DocComment,
+                TokenKind::Eof,
+            ]
+        );
+    }
+
+    #[test]
+    fn trivia_preserve_empty_doc_comment_is_block_not_doc() {
+        // `/**/` is a block comment, not a doc comment — there's no
+        // body between the `/**` and the `*/`.
+        let (lf, d) = lex_str_trivia("/**/");
+        assert!(d.is_empty(), "{:?}", d);
+        assert_eq!(kinds(&lf), vec![TokenKind::BlockComment, TokenKind::Eof]);
+    }
+
+    #[test]
+    fn trivia_preserve_roundtrips_source_bytes() {
+        // Sum of all token spans must cover the full source range with
+        // no gaps and no overlaps — this is the invariant the SIL
+        // builder relies on for byte-for-byte reconstruction.
+        let src = "// hi\n  fun foo() { /* x */ }\n";
+        let (lf, _) = lex_str_trivia(src);
+        let spans = token_spans(&lf);
+        let mut cursor = 0u32;
+        for (kind, range) in &spans {
+            if *kind == TokenKind::Eof {
+                assert_eq!(range.start as usize, src.len());
+                break;
+            }
+            assert_eq!(range.start, cursor, "gap before {:?} at {}", kind, cursor);
+            cursor = range.end;
+        }
+        assert_eq!(cursor as usize, src.len());
     }
 
     // ─── future test stubs ───────────────────────────────────────────────

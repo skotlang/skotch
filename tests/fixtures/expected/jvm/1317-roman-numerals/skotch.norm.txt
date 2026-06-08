@@ -1,0 +1,576 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        fromRoman (Ljava/lang/String;)I 0x0019
+  code        max_stack=2 max_locals=7
+    0000 aload_0
+    0001 ldc "s"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 iconst_0
+    0007 istore_1
+    0008 iconst_0
+    0009 istore_2
+    0010 iload_2
+    0011 istore_3
+    0012 aload_0
+    0013 invokevirtual Method(java/lang/String.length:()I)
+    0016 istore 4
+    0018 iload_3
+    0019 iload 4
+    0021 if_icmpge 51
+    0024 aload_0
+    0025 iload_2
+    0026 invokevirtual Method(java/lang/String.charAt:(I)C)
+    0029 invokestatic Method(InputKt.romanValue:(C)I)
+    0032 istore 5
+    0034 aload_0
+    0035 iload_2
+    0036 invokestatic Method(InputKt.nextRoman:(Ljava/lang/String;I)I)
+    0039 istore 6
+    0041 iload 5
+    0043 iload 6
+    0045 if_icmpge 61
+    0048 goto 53
+    0051 iload_1
+    0052 ireturn
+    0053 iload_1
+    0054 iload 5
+    0056 isub
+    0057 istore_1
+    0058 goto 66
+    0061 iload_1
+    0062 iload 5
+    0064 iadd
+    0065 istore_1
+    0066 iinc 2 1
+    0069 goto 10
+    sub_attr  StackMapTable (19 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)
+method        main ()V 0x0019
+  code        max_stack=3 max_locals=56
+    0000 iconst_1
+    0001 istore_0
+    0002 iconst_2
+    0003 istore_1
+    0004 iconst_3
+    0005 istore_2
+    0006 iconst_4
+    0007 istore_3
+    0008 iconst_5
+    0009 istore 4
+    0011 bipush 9
+    0013 istore 5
+    0015 bipush 10
+    0017 istore 6
+    0019 bipush 14
+    0021 istore 7
+    0023 bipush 19
+    0025 istore 8
+    0027 bipush 40
+    0029 istore 9
+    0031 bipush 50
+    0033 istore 10
+    0035 bipush 90
+    0037 istore 11
+    0039 bipush 99
+    0041 istore 12
+    0043 bipush 100
+    0045 istore 13
+    0047 sipush 400
+    0050 istore 14
+    0052 sipush 500
+    0055 istore 15
+    0057 sipush 900
+    0060 istore 16
+    0062 sipush 1000
+    0065 istore 17
+    0067 sipush 1066
+    0070 istore 18
+    0072 sipush 1492
+    0075 istore 19
+    0077 sipush 1776
+    0080 istore 20
+    0082 sipush 1949
+    0085 istore 21
+    0087 sipush 2024
+    0090 istore 22
+    0092 sipush 3999
+    0095 istore 23
+    0097 bipush 24
+    0099 newarray int
+    0101 astore 24
+    0103 iconst_0
+    0104 istore 25
+    0106 aload 24
+    0108 iload 25
+    0110 iload_0
+    0111 iastore
+    0112 iconst_1
+    0113 istore 26
+    0115 aload 24
+    0117 iload 26
+    0119 iload_1
+    0120 iastore
+    0121 iconst_2
+    0122 istore 27
+    0124 aload 24
+    0126 iload 27
+    0128 iload_2
+    0129 iastore
+    0130 iconst_3
+    0131 istore 28
+    0133 aload 24
+    0135 iload 28
+    0137 iload_3
+    0138 iastore
+    0139 iconst_4
+    0140 istore 29
+    0142 aload 24
+    0144 iload 29
+    0146 iload 4
+    0148 iastore
+    0149 iconst_5
+    0150 istore 30
+    0152 aload 24
+    0154 iload 30
+    0156 iload 5
+    0158 iastore
+    0159 bipush 6
+    0161 istore 31
+    0163 aload 24
+    0165 iload 31
+    0167 iload 6
+    0169 iastore
+    0170 bipush 7
+    0172 istore 32
+    0174 aload 24
+    0176 iload 32
+    0178 iload 7
+    0180 iastore
+    0181 bipush 8
+    0183 istore 33
+    0185 aload 24
+    0187 iload 33
+    0189 iload 8
+    0191 iastore
+    0192 bipush 9
+    0194 istore 34
+    0196 aload 24
+    0198 iload 34
+    0200 iload 9
+    0202 iastore
+    0203 bipush 10
+    0205 istore 35
+    0207 aload 24
+    0209 iload 35
+    0211 iload 10
+    0213 iastore
+    0214 bipush 11
+    0216 istore 36
+    0218 aload 24
+    0220 iload 36
+    0222 iload 11
+    0224 iastore
+    0225 bipush 12
+    0227 istore 37
+    0229 aload 24
+    0231 iload 37
+    0233 iload 12
+    0235 iastore
+    0236 bipush 13
+    0238 istore 38
+    0240 aload 24
+    0242 iload 38
+    0244 iload 13
+    0246 iastore
+    0247 bipush 14
+    0249 istore 39
+    0251 aload 24
+    0253 iload 39
+    0255 iload 14
+    0257 iastore
+    0258 bipush 15
+    0260 istore 40
+    0262 aload 24
+    0264 iload 40
+    0266 iload 15
+    0268 iastore
+    0269 bipush 16
+    0271 istore 41
+    0273 aload 24
+    0275 iload 41
+    0277 iload 16
+    0279 iastore
+    0280 bipush 17
+    0282 istore 42
+    0284 aload 24
+    0286 iload 42
+    0288 iload 17
+    0290 iastore
+    0291 bipush 18
+    0293 istore 43
+    0295 aload 24
+    0297 iload 43
+    0299 iload 18
+    0301 iastore
+    0302 bipush 19
+    0304 istore 44
+    0306 aload 24
+    0308 iload 44
+    0310 iload 19
+    0312 iastore
+    0313 bipush 20
+    0315 istore 45
+    0317 aload 24
+    0319 iload 45
+    0321 iload 20
+    0323 iastore
+    0324 bipush 21
+    0326 istore 46
+    0328 aload 24
+    0330 iload 46
+    0332 iload 21
+    0334 iastore
+    0335 bipush 22
+    0337 istore 47
+    0339 aload 24
+    0341 iload 47
+    0343 iload 22
+    0345 iastore
+    0346 bipush 23
+    0348 istore 48
+    0350 aload 24
+    0352 iload 48
+    0354 iload 23
+    0356 iastore
+    0357 iconst_0
+    0358 istore 49
+    0360 iload 49
+    0362 istore 50
+    0364 aload 24
+    0366 arraylength
+    0367 istore 51
+    0369 iload 50
+    0371 iload 51
+    0373 if_icmpge 425
+    0376 iload 49
+    0378 istore 52
+    0380 aload 24
+    0382 iload 52
+    0384 iaload
+    0385 istore 53
+    0387 iload 53
+    0389 invokestatic Method(InputKt.toRoman:(I)Ljava/lang/String;)
+    0392 astore 54
+    0394 aload 54
+    0396 invokestatic Method(InputKt.fromRoman:(Ljava/lang/String;)I)
+    0399 istore 55
+    0401 iload 53
+    0403 aload 54
+    0405 iload 55
+    0407 invokedynamic InvokeDynamic(makeConcatWithConstants:(ILjava/lang/String;I)Ljava/lang/String;)
+    0412 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0415 swap
+    0416 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0419 iinc 49 1
+    0422 goto 360
+    0425 return
+    sub_attr  StackMapTable (66 bytes)
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
+method        nextRoman (Ljava/lang/String;I)I 0x0019
+  code        max_stack=3 max_locals=4
+    0000 aload_0
+    0001 ldc "s"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 iload_1
+    0007 iconst_1
+    0008 iadd
+    0009 istore_2
+    0010 aload_0
+    0011 invokevirtual Method(java/lang/String.length:()I)
+    0014 istore_3
+    0015 iload_2
+    0016 iload_3
+    0017 if_icmplt 22
+    0020 iconst_0
+    0021 ireturn
+    0022 aload_0
+    0023 iload_1
+    0024 iconst_1
+    0025 iadd
+    0026 invokevirtual Method(java/lang/String.charAt:(I)C)
+    0029 invokestatic Method(InputKt.romanValue:(C)I)
+    0032 ireturn
+    sub_attr  StackMapTable (7 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (9 bytes)
+method        romanValue (C)I 0x0019
+  code        max_stack=2 max_locals=1
+    0000 iload_0
+    0001 bipush 77
+    0003 if_icmpne 10
+    0006 sipush 1000
+    0009 ireturn
+    0010 iload_0
+    0011 bipush 68
+    0013 if_icmpne 20
+    0016 sipush 500
+    0019 ireturn
+    0020 iload_0
+    0021 bipush 67
+    0023 if_icmpne 29
+    0026 bipush 100
+    0028 ireturn
+    0029 iload_0
+    0030 bipush 76
+    0032 if_icmpne 38
+    0035 bipush 50
+    0037 ireturn
+    0038 iload_0
+    0039 bipush 88
+    0041 if_icmpne 47
+    0044 bipush 10
+    0046 ireturn
+    0047 iload_0
+    0048 bipush 86
+    0050 if_icmpne 55
+    0053 iconst_5
+    0054 ireturn
+    0055 iconst_1
+    0056 ireturn
+    sub_attr  StackMapTable (8 bytes)
+method        symbolAt (I)Ljava/lang/String; 0x0019
+  code        max_stack=2 max_locals=1
+    0000 iload_0
+    0001 ifne 7
+    0004 ldc "M"
+    0006 areturn
+    0007 iload_0
+    0008 iconst_1
+    0009 if_icmpne 15
+    0012 ldc "CM"
+    0014 areturn
+    0015 iload_0
+    0016 iconst_2
+    0017 if_icmpne 23
+    0020 ldc "D"
+    0022 areturn
+    0023 iload_0
+    0024 iconst_3
+    0025 if_icmpne 31
+    0028 ldc "CD"
+    0030 areturn
+    0031 iload_0
+    0032 iconst_4
+    0033 if_icmpne 39
+    0036 ldc "C"
+    0038 areturn
+    0039 iload_0
+    0040 iconst_5
+    0041 if_icmpne 47
+    0044 ldc "XC"
+    0046 areturn
+    0047 iload_0
+    0048 bipush 6
+    0050 if_icmpne 56
+    0053 ldc "L"
+    0055 areturn
+    0056 iload_0
+    0057 bipush 7
+    0059 if_icmpne 65
+    0062 ldc "XL"
+    0064 areturn
+    0065 iload_0
+    0066 bipush 8
+    0068 if_icmpne 74
+    0071 ldc "X"
+    0073 areturn
+    0074 iload_0
+    0075 bipush 9
+    0077 if_icmpne 83
+    0080 ldc "IX"
+    0082 areturn
+    0083 iload_0
+    0084 bipush 10
+    0086 if_icmpne 92
+    0089 ldc "V"
+    0091 areturn
+    0092 iload_0
+    0093 bipush 11
+    0095 if_icmpne 101
+    0098 ldc "IV"
+    0100 areturn
+    0101 ldc "I"
+    0103 areturn
+    sub_attr  StackMapTable (14 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+method        toRoman (I)Ljava/lang/String; 0x0019
+  code        max_stack=3 max_locals=39
+    0000 sipush 1000
+    0003 istore_1
+    0004 sipush 900
+    0007 istore_2
+    0008 sipush 500
+    0011 istore_3
+    0012 sipush 400
+    0015 istore 4
+    0017 bipush 100
+    0019 istore 5
+    0021 bipush 90
+    0023 istore 6
+    0025 bipush 50
+    0027 istore 7
+    0029 bipush 40
+    0031 istore 8
+    0033 bipush 10
+    0035 istore 9
+    0037 bipush 9
+    0039 istore 10
+    0041 iconst_5
+    0042 istore 11
+    0044 iconst_4
+    0045 istore 12
+    0047 iconst_1
+    0048 istore 13
+    0050 bipush 13
+    0052 newarray int
+    0054 astore 14
+    0056 iconst_0
+    0057 istore 15
+    0059 aload 14
+    0061 iload 15
+    0063 iload_1
+    0064 iastore
+    0065 iconst_1
+    0066 istore 16
+    0068 aload 14
+    0070 iload 16
+    0072 iload_2
+    0073 iastore
+    0074 iconst_2
+    0075 istore 17
+    0077 aload 14
+    0079 iload 17
+    0081 iload_3
+    0082 iastore
+    0083 iconst_3
+    0084 istore 18
+    0086 aload 14
+    0088 iload 18
+    0090 iload 4
+    0092 iastore
+    0093 iconst_4
+    0094 istore 19
+    0096 aload 14
+    0098 iload 19
+    0100 iload 5
+    0102 iastore
+    0103 iconst_5
+    0104 istore 20
+    0106 aload 14
+    0108 iload 20
+    0110 iload 6
+    0112 iastore
+    0113 bipush 6
+    0115 istore 21
+    0117 aload 14
+    0119 iload 21
+    0121 iload 7
+    0123 iastore
+    0124 bipush 7
+    0126 istore 22
+    0128 aload 14
+    0130 iload 22
+    0132 iload 8
+    0134 iastore
+    0135 bipush 8
+    0137 istore 23
+    0139 aload 14
+    0141 iload 23
+    0143 iload 9
+    0145 iastore
+    0146 bipush 9
+    0148 istore 24
+    0150 aload 14
+    0152 iload 24
+    0154 iload 10
+    0156 iastore
+    0157 bipush 10
+    0159 istore 25
+    0161 aload 14
+    0163 iload 25
+    0165 iload 11
+    0167 iastore
+    0168 bipush 11
+    0170 istore 26
+    0172 aload 14
+    0174 iload 26
+    0176 iload 12
+    0178 iastore
+    0179 bipush 12
+    0181 istore 27
+    0183 aload 14
+    0185 iload 27
+    0187 iload 13
+    0189 iastore
+    0190 new Class(java/lang/StringBuilder)
+    0193 dup
+    0194 invokespecial Method(java/lang/StringBuilder.<init>:()V)
+    0197 astore 28
+    0199 iload_0
+    0200 istore 29
+    0202 iconst_0
+    0203 istore 30
+    0205 iload 30
+    0207 istore 31
+    0209 aload 14
+    0211 arraylength
+    0212 istore 32
+    0214 iload 31
+    0216 iload 32
+    0218 if_icmpge 224
+    0221 goto 236
+    0224 aload 28
+    0226 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
+    0229 dup
+    0230 ldc "toString(...)"
+    0232 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullExpressionValue:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0235 areturn
+    0236 iload 29
+    0238 istore 33
+    0240 iload 30
+    0242 istore 34
+    0244 aload 14
+    0246 iload 34
+    0248 iaload
+    0249 istore 35
+    0251 iload 33
+    0253 iload 35
+    0255 if_icmplt 295
+    0258 iload 30
+    0260 invokestatic Method(InputKt.symbolAt:(I)Ljava/lang/String;)
+    0263 aload 28
+    0265 swap
+    0266 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0269 pop
+    0270 iload 29
+    0272 istore 36
+    0274 iload 30
+    0276 istore 37
+    0278 aload 14
+    0280 iload 37
+    0282 iaload
+    0283 istore 38
+    0285 iload 36
+    0287 iload 38
+    0289 isub
+    0290 istore 29
+    0292 goto 236
+    0295 iinc 30 1
+    0298 goto 205
+    sub_attr  StackMapTable (56 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+class_attr    BootstrapMethods (8 bytes)

@@ -1,0 +1,982 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        cellAt ([III)I 0x0019
+  code        max_stack=3 max_locals=3
+    0000 aload_0
+    0001 ldc "board"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 aload_0
+    0007 iload_1
+    0008 bipush 9
+    0010 imul
+    0011 iload_2
+    0012 iadd
+    0013 iaload
+    0014 ireturn
+  attr        RuntimeInvisibleParameterAnnotations (11 bytes)
+method        easyPuzzle ()[I 0x0019
+  code        max_stack=3 max_locals=1
+    0000 bipush 81
+    0002 newarray int
+    0004 astore_0
+    0005 aload_0
+    0006 iconst_0
+    0007 iconst_5
+    0008 iastore
+    0009 aload_0
+    0010 iconst_1
+    0011 iconst_3
+    0012 iastore
+    0013 aload_0
+    0014 iconst_2
+    0015 iconst_0
+    0016 iastore
+    0017 aload_0
+    0018 iconst_3
+    0019 iconst_0
+    0020 iastore
+    0021 aload_0
+    0022 iconst_4
+    0023 bipush 7
+    0025 iastore
+    0026 aload_0
+    0027 iconst_5
+    0028 iconst_0
+    0029 iastore
+    0030 aload_0
+    0031 bipush 6
+    0033 iconst_0
+    0034 iastore
+    0035 aload_0
+    0036 bipush 7
+    0038 iconst_0
+    0039 iastore
+    0040 aload_0
+    0041 bipush 8
+    0043 iconst_0
+    0044 iastore
+    0045 aload_0
+    0046 bipush 9
+    0048 bipush 6
+    0050 iastore
+    0051 aload_0
+    0052 bipush 10
+    0054 iconst_0
+    0055 iastore
+    0056 aload_0
+    0057 bipush 11
+    0059 iconst_0
+    0060 iastore
+    0061 aload_0
+    0062 bipush 12
+    0064 iconst_1
+    0065 iastore
+    0066 aload_0
+    0067 bipush 13
+    0069 bipush 9
+    0071 iastore
+    0072 aload_0
+    0073 bipush 14
+    0075 iconst_5
+    0076 iastore
+    0077 aload_0
+    0078 bipush 15
+    0080 iconst_0
+    0081 iastore
+    0082 aload_0
+    0083 bipush 16
+    0085 iconst_0
+    0086 iastore
+    0087 aload_0
+    0088 bipush 17
+    0090 iconst_0
+    0091 iastore
+    0092 aload_0
+    0093 bipush 18
+    0095 iconst_0
+    0096 iastore
+    0097 aload_0
+    0098 bipush 19
+    0100 bipush 9
+    0102 iastore
+    0103 aload_0
+    0104 bipush 20
+    0106 bipush 8
+    0108 iastore
+    0109 aload_0
+    0110 bipush 21
+    0112 iconst_0
+    0113 iastore
+    0114 aload_0
+    0115 bipush 22
+    0117 iconst_0
+    0118 iastore
+    0119 aload_0
+    0120 bipush 23
+    0122 iconst_0
+    0123 iastore
+    0124 aload_0
+    0125 bipush 24
+    0127 iconst_0
+    0128 iastore
+    0129 aload_0
+    0130 bipush 25
+    0132 bipush 6
+    0134 iastore
+    0135 aload_0
+    0136 bipush 26
+    0138 iconst_0
+    0139 iastore
+    0140 aload_0
+    0141 bipush 27
+    0143 bipush 8
+    0145 iastore
+    0146 aload_0
+    0147 bipush 28
+    0149 iconst_0
+    0150 iastore
+    0151 aload_0
+    0152 bipush 29
+    0154 iconst_0
+    0155 iastore
+    0156 aload_0
+    0157 bipush 30
+    0159 iconst_0
+    0160 iastore
+    0161 aload_0
+    0162 bipush 31
+    0164 bipush 6
+    0166 iastore
+    0167 aload_0
+    0168 bipush 32
+    0170 iconst_0
+    0171 iastore
+    0172 aload_0
+    0173 bipush 33
+    0175 iconst_0
+    0176 iastore
+    0177 aload_0
+    0178 bipush 34
+    0180 iconst_0
+    0181 iastore
+    0182 aload_0
+    0183 bipush 35
+    0185 iconst_3
+    0186 iastore
+    0187 aload_0
+    0188 bipush 36
+    0190 iconst_4
+    0191 iastore
+    0192 aload_0
+    0193 bipush 37
+    0195 iconst_0
+    0196 iastore
+    0197 aload_0
+    0198 bipush 38
+    0200 iconst_0
+    0201 iastore
+    0202 aload_0
+    0203 bipush 39
+    0205 bipush 8
+    0207 iastore
+    0208 aload_0
+    0209 bipush 40
+    0211 iconst_0
+    0212 iastore
+    0213 aload_0
+    0214 bipush 41
+    0216 iconst_3
+    0217 iastore
+    0218 aload_0
+    0219 bipush 42
+    0221 iconst_0
+    0222 iastore
+    0223 aload_0
+    0224 bipush 43
+    0226 iconst_0
+    0227 iastore
+    0228 aload_0
+    0229 bipush 44
+    0231 iconst_1
+    0232 iastore
+    0233 aload_0
+    0234 bipush 45
+    0236 bipush 7
+    0238 iastore
+    0239 aload_0
+    0240 bipush 46
+    0242 iconst_0
+    0243 iastore
+    0244 aload_0
+    0245 bipush 47
+    0247 iconst_0
+    0248 iastore
+    0249 aload_0
+    0250 bipush 48
+    0252 iconst_0
+    0253 iastore
+    0254 aload_0
+    0255 bipush 49
+    0257 iconst_2
+    0258 iastore
+    0259 aload_0
+    0260 bipush 50
+    0262 iconst_0
+    0263 iastore
+    0264 aload_0
+    0265 bipush 51
+    0267 iconst_0
+    0268 iastore
+    0269 aload_0
+    0270 bipush 52
+    0272 iconst_0
+    0273 iastore
+    0274 aload_0
+    0275 bipush 53
+    0277 bipush 6
+    0279 iastore
+    0280 aload_0
+    0281 bipush 54
+    0283 iconst_0
+    0284 iastore
+    0285 aload_0
+    0286 bipush 55
+    0288 bipush 6
+    0290 iastore
+    0291 aload_0
+    0292 bipush 56
+    0294 iconst_0
+    0295 iastore
+    0296 aload_0
+    0297 bipush 57
+    0299 iconst_0
+    0300 iastore
+    0301 aload_0
+    0302 bipush 58
+    0304 iconst_0
+    0305 iastore
+    0306 aload_0
+    0307 bipush 59
+    0309 iconst_0
+    0310 iastore
+    0311 aload_0
+    0312 bipush 60
+    0314 iconst_2
+    0315 iastore
+    0316 aload_0
+    0317 bipush 61
+    0319 bipush 8
+    0321 iastore
+    0322 aload_0
+    0323 bipush 62
+    0325 iconst_0
+    0326 iastore
+    0327 aload_0
+    0328 bipush 63
+    0330 iconst_0
+    0331 iastore
+    0332 aload_0
+    0333 bipush 64
+    0335 iconst_0
+    0336 iastore
+    0337 aload_0
+    0338 bipush 65
+    0340 iconst_0
+    0341 iastore
+    0342 aload_0
+    0343 bipush 66
+    0345 iconst_4
+    0346 iastore
+    0347 aload_0
+    0348 bipush 67
+    0350 iconst_1
+    0351 iastore
+    0352 aload_0
+    0353 bipush 68
+    0355 bipush 9
+    0357 iastore
+    0358 aload_0
+    0359 bipush 69
+    0361 iconst_0
+    0362 iastore
+    0363 aload_0
+    0364 bipush 70
+    0366 iconst_0
+    0367 iastore
+    0368 aload_0
+    0369 bipush 71
+    0371 iconst_5
+    0372 iastore
+    0373 aload_0
+    0374 bipush 72
+    0376 iconst_0
+    0377 iastore
+    0378 aload_0
+    0379 bipush 73
+    0381 iconst_0
+    0382 iastore
+    0383 aload_0
+    0384 bipush 74
+    0386 iconst_0
+    0387 iastore
+    0388 aload_0
+    0389 bipush 75
+    0391 iconst_0
+    0392 iastore
+    0393 aload_0
+    0394 bipush 76
+    0396 bipush 8
+    0398 iastore
+    0399 aload_0
+    0400 bipush 77
+    0402 iconst_0
+    0403 iastore
+    0404 aload_0
+    0405 bipush 78
+    0407 iconst_0
+    0408 iastore
+    0409 aload_0
+    0410 bipush 79
+    0412 bipush 7
+    0414 iastore
+    0415 aload_0
+    0416 bipush 80
+    0418 bipush 9
+    0420 iastore
+    0421 aload_0
+    0422 areturn
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+method        formatBoard ([I)Ljava/lang/String; 0x0019
+  code        max_stack=3 max_locals=5
+    0000 aload_0
+    0001 ldc "board"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 new Class(java/lang/StringBuilder)
+    0009 dup
+    0010 invokespecial Method(java/lang/StringBuilder.<init>:()V)
+    0013 astore_1
+    0014 iconst_0
+    0015 istore_2
+    0016 iload_2
+    0017 bipush 9
+    0019 if_icmpge 119
+    0022 iload_2
+    0023 ifle 39
+    0026 iload_2
+    0027 iconst_3
+    0028 irem
+    0029 ifne 39
+    0032 aload_1
+    0033 ldc "------+-------+------
+"
+    0035 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0038 pop
+    0039 iconst_0
+    0040 istore_3
+    0041 iload_3
+    0042 bipush 9
+    0044 if_icmpge 106
+    0047 iload_3
+    0048 ifle 64
+    0051 iload_3
+    0052 iconst_3
+    0053 irem
+    0054 ifne 64
+    0057 aload_1
+    0058 ldc "| "
+    0060 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0063 pop
+    0064 aload_0
+    0065 iload_2
+    0066 iload_3
+    0067 invokestatic Method(InputKt.cellAt:([III)I)
+    0070 istore 4
+    0072 iload 4
+    0074 ifne 86
+    0077 aload_1
+    0078 ldc ". "
+    0080 invokevirtual Method(java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;)
+    0083 goto 99
+    0086 aload_1
+    0087 iload 4
+    0089 invokevirtual Method(java/lang/StringBuilder.append:(I)Ljava/lang/StringBuilder;)
+    0092 pop
+    0093 aload_1
+    0094 bipush 32
+    0096 invokevirtual Method(java/lang/StringBuilder.append:(C)Ljava/lang/StringBuilder;)
+    0099 pop
+    0100 iinc 3 1
+    0103 goto 41
+    0106 aload_1
+    0107 bipush 10
+    0109 invokevirtual Method(java/lang/StringBuilder.append:(C)Ljava/lang/StringBuilder;)
+    0112 pop
+    0113 iinc 2 1
+    0116 goto 16
+    0119 aload_1
+    0120 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
+    0123 dup
+    0124 ldc "toString(...)"
+    0126 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullExpressionValue:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0129 areturn
+    sub_attr  StackMapTable (29 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)
+method        isCandidateLegal ([IIII)Z 0x0019
+  code        max_stack=4 max_locals=10
+    0000 aload_0
+    0001 ldc "board"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 iconst_0
+    0007 istore 4
+    0009 iload 4
+    0011 bipush 9
+    0013 if_icmpge 35
+    0016 aload_0
+    0017 iload_1
+    0018 iload 4
+    0020 invokestatic Method(InputKt.cellAt:([III)I)
+    0023 iload_3
+    0024 if_icmpne 29
+    0027 iconst_0
+    0028 ireturn
+    0029 iinc 4 1
+    0032 goto 9
+    0035 iconst_0
+    0036 istore 5
+    0038 iload 5
+    0040 bipush 9
+    0042 if_icmpge 64
+    0045 aload_0
+    0046 iload 5
+    0048 iload_2
+    0049 invokestatic Method(InputKt.cellAt:([III)I)
+    0052 iload_3
+    0053 if_icmpne 58
+    0056 iconst_0
+    0057 ireturn
+    0058 iinc 5 1
+    0061 goto 38
+    0064 iload_1
+    0065 iconst_3
+    0066 idiv
+    0067 iconst_3
+    0068 imul
+    0069 istore 6
+    0071 iload_2
+    0072 iconst_3
+    0073 idiv
+    0074 iconst_3
+    0075 imul
+    0076 istore 7
+    0078 iconst_0
+    0079 istore 8
+    0081 iload 8
+    0083 iconst_3
+    0084 if_icmpge 128
+    0087 iconst_0
+    0088 istore 9
+    0090 iload 9
+    0092 iconst_3
+    0093 if_icmpge 122
+    0096 aload_0
+    0097 iload 6
+    0099 iload 8
+    0101 iadd
+    0102 iload 7
+    0104 iload 9
+    0106 iadd
+    0107 invokestatic Method(InputKt.cellAt:([III)I)
+    0110 iload_3
+    0111 if_icmpne 116
+    0114 iconst_0
+    0115 ireturn
+    0116 iinc 9 1
+    0119 goto 90
+    0122 iinc 8 1
+    0125 goto 81
+    0128 iconst_1
+    0129 ireturn
+    sub_attr  StackMapTable (29 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (13 bytes)
+method        main ()V 0x0019
+  code        max_stack=2 max_locals=0
+    0000 ldc "=== Easy ==="
+    0002 invokestatic Method(InputKt.easyPuzzle:()[I)
+    0005 invokestatic Method(InputKt.runPuzzle:(Ljava/lang/String;[I)V)
+    0008 ldc "=== Medium ==="
+    0010 invokestatic Method(InputKt.mediumPuzzle:()[I)
+    0013 invokestatic Method(InputKt.runPuzzle:(Ljava/lang/String;[I)V)
+    0016 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
+method        mediumPuzzle ()[I 0x0019
+  code        max_stack=3 max_locals=1
+    0000 bipush 81
+    0002 newarray int
+    0004 astore_0
+    0005 aload_0
+    0006 iconst_0
+    0007 iconst_0
+    0008 iastore
+    0009 aload_0
+    0010 iconst_1
+    0011 iconst_0
+    0012 iastore
+    0013 aload_0
+    0014 iconst_2
+    0015 iconst_0
+    0016 iastore
+    0017 aload_0
+    0018 iconst_3
+    0019 iconst_2
+    0020 iastore
+    0021 aload_0
+    0022 iconst_4
+    0023 bipush 6
+    0025 iastore
+    0026 aload_0
+    0027 iconst_5
+    0028 iconst_0
+    0029 iastore
+    0030 aload_0
+    0031 bipush 6
+    0033 bipush 7
+    0035 iastore
+    0036 aload_0
+    0037 bipush 7
+    0039 iconst_0
+    0040 iastore
+    0041 aload_0
+    0042 bipush 8
+    0044 iconst_1
+    0045 iastore
+    0046 aload_0
+    0047 bipush 9
+    0049 bipush 6
+    0051 iastore
+    0052 aload_0
+    0053 bipush 10
+    0055 bipush 8
+    0057 iastore
+    0058 aload_0
+    0059 bipush 11
+    0061 iconst_0
+    0062 iastore
+    0063 aload_0
+    0064 bipush 12
+    0066 iconst_0
+    0067 iastore
+    0068 aload_0
+    0069 bipush 13
+    0071 bipush 7
+    0073 iastore
+    0074 aload_0
+    0075 bipush 14
+    0077 iconst_0
+    0078 iastore
+    0079 aload_0
+    0080 bipush 15
+    0082 iconst_0
+    0083 iastore
+    0084 aload_0
+    0085 bipush 16
+    0087 bipush 9
+    0089 iastore
+    0090 aload_0
+    0091 bipush 17
+    0093 iconst_0
+    0094 iastore
+    0095 aload_0
+    0096 bipush 18
+    0098 iconst_1
+    0099 iastore
+    0100 aload_0
+    0101 bipush 19
+    0103 bipush 9
+    0105 iastore
+    0106 aload_0
+    0107 bipush 20
+    0109 iconst_0
+    0110 iastore
+    0111 aload_0
+    0112 bipush 21
+    0114 iconst_0
+    0115 iastore
+    0116 aload_0
+    0117 bipush 22
+    0119 iconst_0
+    0120 iastore
+    0121 aload_0
+    0122 bipush 23
+    0124 iconst_4
+    0125 iastore
+    0126 aload_0
+    0127 bipush 24
+    0129 iconst_5
+    0130 iastore
+    0131 aload_0
+    0132 bipush 25
+    0134 iconst_0
+    0135 iastore
+    0136 aload_0
+    0137 bipush 26
+    0139 iconst_0
+    0140 iastore
+    0141 aload_0
+    0142 bipush 27
+    0144 bipush 8
+    0146 iastore
+    0147 aload_0
+    0148 bipush 28
+    0150 iconst_2
+    0151 iastore
+    0152 aload_0
+    0153 bipush 29
+    0155 iconst_0
+    0156 iastore
+    0157 aload_0
+    0158 bipush 30
+    0160 iconst_1
+    0161 iastore
+    0162 aload_0
+    0163 bipush 31
+    0165 iconst_0
+    0166 iastore
+    0167 aload_0
+    0168 bipush 32
+    0170 iconst_0
+    0171 iastore
+    0172 aload_0
+    0173 bipush 33
+    0175 iconst_0
+    0176 iastore
+    0177 aload_0
+    0178 bipush 34
+    0180 iconst_4
+    0181 iastore
+    0182 aload_0
+    0183 bipush 35
+    0185 iconst_0
+    0186 iastore
+    0187 aload_0
+    0188 bipush 36
+    0190 iconst_0
+    0191 iastore
+    0192 aload_0
+    0193 bipush 37
+    0195 iconst_0
+    0196 iastore
+    0197 aload_0
+    0198 bipush 38
+    0200 iconst_4
+    0201 iastore
+    0202 aload_0
+    0203 bipush 39
+    0205 bipush 6
+    0207 iastore
+    0208 aload_0
+    0209 bipush 40
+    0211 iconst_0
+    0212 iastore
+    0213 aload_0
+    0214 bipush 41
+    0216 iconst_2
+    0217 iastore
+    0218 aload_0
+    0219 bipush 42
+    0221 bipush 9
+    0223 iastore
+    0224 aload_0
+    0225 bipush 43
+    0227 iconst_0
+    0228 iastore
+    0229 aload_0
+    0230 bipush 44
+    0232 iconst_0
+    0233 iastore
+    0234 aload_0
+    0235 bipush 45
+    0237 iconst_0
+    0238 iastore
+    0239 aload_0
+    0240 bipush 46
+    0242 iconst_5
+    0243 iastore
+    0244 aload_0
+    0245 bipush 47
+    0247 iconst_0
+    0248 iastore
+    0249 aload_0
+    0250 bipush 48
+    0252 iconst_0
+    0253 iastore
+    0254 aload_0
+    0255 bipush 49
+    0257 iconst_0
+    0258 iastore
+    0259 aload_0
+    0260 bipush 50
+    0262 iconst_3
+    0263 iastore
+    0264 aload_0
+    0265 bipush 51
+    0267 iconst_0
+    0268 iastore
+    0269 aload_0
+    0270 bipush 52
+    0272 iconst_2
+    0273 iastore
+    0274 aload_0
+    0275 bipush 53
+    0277 bipush 8
+    0279 iastore
+    0280 aload_0
+    0281 bipush 54
+    0283 iconst_0
+    0284 iastore
+    0285 aload_0
+    0286 bipush 55
+    0288 iconst_0
+    0289 iastore
+    0290 aload_0
+    0291 bipush 56
+    0293 bipush 9
+    0295 iastore
+    0296 aload_0
+    0297 bipush 57
+    0299 iconst_3
+    0300 iastore
+    0301 aload_0
+    0302 bipush 58
+    0304 iconst_0
+    0305 iastore
+    0306 aload_0
+    0307 bipush 59
+    0309 iconst_0
+    0310 iastore
+    0311 aload_0
+    0312 bipush 60
+    0314 iconst_0
+    0315 iastore
+    0316 aload_0
+    0317 bipush 61
+    0319 bipush 7
+    0321 iastore
+    0322 aload_0
+    0323 bipush 62
+    0325 iconst_4
+    0326 iastore
+    0327 aload_0
+    0328 bipush 63
+    0330 iconst_0
+    0331 iastore
+    0332 aload_0
+    0333 bipush 64
+    0335 iconst_4
+    0336 iastore
+    0337 aload_0
+    0338 bipush 65
+    0340 iconst_0
+    0341 iastore
+    0342 aload_0
+    0343 bipush 66
+    0345 iconst_0
+    0346 iastore
+    0347 aload_0
+    0348 bipush 67
+    0350 iconst_5
+    0351 iastore
+    0352 aload_0
+    0353 bipush 68
+    0355 iconst_0
+    0356 iastore
+    0357 aload_0
+    0358 bipush 69
+    0360 iconst_0
+    0361 iastore
+    0362 aload_0
+    0363 bipush 70
+    0365 iconst_3
+    0366 iastore
+    0367 aload_0
+    0368 bipush 71
+    0370 bipush 6
+    0372 iastore
+    0373 aload_0
+    0374 bipush 72
+    0376 bipush 7
+    0378 iastore
+    0379 aload_0
+    0380 bipush 73
+    0382 iconst_0
+    0383 iastore
+    0384 aload_0
+    0385 bipush 74
+    0387 iconst_3
+    0388 iastore
+    0389 aload_0
+    0390 bipush 75
+    0392 iconst_0
+    0393 iastore
+    0394 aload_0
+    0395 bipush 76
+    0397 iconst_1
+    0398 iastore
+    0399 aload_0
+    0400 bipush 77
+    0402 bipush 8
+    0404 iastore
+    0405 aload_0
+    0406 bipush 78
+    0408 iconst_0
+    0409 iastore
+    0410 aload_0
+    0411 bipush 79
+    0413 iconst_0
+    0414 iastore
+    0415 aload_0
+    0416 bipush 80
+    0418 iconst_0
+    0419 iastore
+    0420 aload_0
+    0421 areturn
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+method        nextEmpty ([I)I 0x0019
+  code        max_stack=2 max_locals=2
+    0000 aload_0
+    0001 ldc "board"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 iconst_0
+    0007 istore_1
+    0008 iload_1
+    0009 bipush 81
+    0011 if_icmpge 28
+    0014 aload_0
+    0015 iload_1
+    0016 iaload
+    0017 ifne 22
+    0020 iload_1
+    0021 ireturn
+    0022 iinc 1 1
+    0025 goto 8
+    0028 iconst_m1
+    0029 ireturn
+    sub_attr  StackMapTable (8 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)
+method        runPuzzle (Ljava/lang/String;[I)V 0x0019
+  code        max_stack=2 max_locals=3
+    0000 aload_0
+    0001 ldc "label"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 aload_1
+    0007 ldc "board"
+    0009 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0012 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0015 aload_0
+    0016 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0019 ldc "Puzzle:"
+    0021 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0024 swap
+    0025 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0028 aload_1
+    0029 invokestatic Method(InputKt.formatBoard:([I)Ljava/lang/String;)
+    0032 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0035 swap
+    0036 invokevirtual Method(java/io/PrintStream.print:(Ljava/lang/Object;)V)
+    0039 aload_1
+    0040 invokestatic Method(InputKt.solve:([I)Z)
+    0043 istore_2
+    0044 iload_2
+    0045 ifeq 71
+    0048 ldc "Solution:"
+    0050 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0053 swap
+    0054 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0057 aload_1
+    0058 invokestatic Method(InputKt.formatBoard:([I)Ljava/lang/String;)
+    0061 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0064 swap
+    0065 invokevirtual Method(java/io/PrintStream.print:(Ljava/lang/Object;)V)
+    0068 goto 80
+    0071 ldc "No solution."
+    0073 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0076 swap
+    0077 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0080 return
+    sub_attr  StackMapTable (7 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (13 bytes)
+method        setCell ([IIII)V 0x0019
+  code        max_stack=3 max_locals=4
+    0000 aload_0
+    0001 ldc "board"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 aload_0
+    0007 iload_1
+    0008 bipush 9
+    0010 imul
+    0011 iload_2
+    0012 iadd
+    0013 iload_3
+    0014 iastore
+    0015 return
+  attr        RuntimeInvisibleParameterAnnotations (13 bytes)
+method        solve ([I)Z 0x0019
+  code        max_stack=4 max_locals=5
+    0000 aload_0
+    0001 ldc "board"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 aload_0
+    0007 invokestatic Method(InputKt.nextEmpty:([I)I)
+    0010 istore_1
+    0011 iload_1
+    0012 iconst_m1
+    0013 if_icmpne 18
+    0016 iconst_1
+    0017 ireturn
+    0018 iload_1
+    0019 bipush 9
+    0021 idiv
+    0022 istore_2
+    0023 iload_1
+    0024 iload_2
+    0025 bipush 9
+    0027 imul
+    0028 isub
+    0029 istore_3
+    0030 iconst_1
+    0031 istore 4
+    0033 iload 4
+    0035 bipush 9
+    0037 if_icmpgt 81
+    0040 aload_0
+    0041 iload_2
+    0042 iload_3
+    0043 iload 4
+    0045 invokestatic Method(InputKt.isCandidateLegal:([IIII)Z)
+    0048 ifeq 75
+    0051 aload_0
+    0052 iload_2
+    0053 iload_3
+    0054 iload 4
+    0056 invokestatic Method(InputKt.setCell:([IIII)V)
+    0059 aload_0
+    0060 invokestatic Method(InputKt.solve:([I)Z)
+    0063 ifeq 68
+    0066 iconst_1
+    0067 ireturn
+    0068 aload_0
+    0069 iload_2
+    0070 iload_3
+    0071 iconst_0
+    0072 invokestatic Method(InputKt.setCell:([IIII)V)
+    0075 iinc 4 1
+    0078 goto 33
+    0081 iconst_0
+    0082 ireturn
+    sub_attr  StackMapTable (15 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)

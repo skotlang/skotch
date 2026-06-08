@@ -990,6 +990,17 @@ pub struct MirModule {
     /// existing consumers. Skipped during serialization.
     #[serde(skip)]
     pub cross_file_fn_extras: rustc_hash::FxHashMap<String, CrossFileFnExtras>,
+    /// All cross-file function overloads keyed by name. The simpler
+    /// `cross_file_fns` map collapses overloads to a single entry —
+    /// fine for unique-name top-level fns, but it loses information
+    /// for overloaded names like `internal operator fun X.get(...)`
+    /// vs `internal operator fun Y.get(...)`. Lookup sites that
+    /// distinguish between overloads (such as the index-operator
+    /// dispatcher) iterate this list and pick the entry whose
+    /// receiver type matches.
+    #[serde(skip)]
+    pub cross_file_fn_overloads:
+        rustc_hash::FxHashMap<String, Vec<(String, String, skotch_types::Ty, CrossFileFnExtras)>>,
     /// Cross-file class declarations. Maps simple class name →
     /// (jvm_name, kind_str, is_data_class). Used for constructor calls.
     #[serde(skip)]

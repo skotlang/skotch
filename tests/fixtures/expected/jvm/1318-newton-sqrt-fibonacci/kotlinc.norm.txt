@@ -1,0 +1,138 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        absD (D)D 0x0019
+  code        max_stack=4 max_locals=2
+    0000 dload_0
+    0001 dconst_0
+    0002 dcmpg
+    0003 ifge 9
+    0006 dload_0
+    0007 dneg
+    0008 dreturn
+    0009 dload_0
+    0010 dreturn
+    sub_attr  StackMapTable (3 bytes)
+method        main ()V 0x0019
+  code        max_stack=4 max_locals=9
+    0000 ldc "--- Newton's method for sqrt ---"
+    0002 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0005 swap
+    0006 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0009 iconst_0
+    0010 istore_0
+    0011 iload_0
+    0012 bipush 10
+    0014 if_icmpgt 43
+    0017 iload_0
+    0018 i2d
+    0019 invokestatic Method(InputKt.sqrt:(D)D)
+    0022 dstore_1
+    0023 iload_0
+    0024 dload_1
+    0025 invokedynamic InvokeDynamic(makeConcatWithConstants:(ID)Ljava/lang/String;)
+    0030 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0033 swap
+    0034 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0037 iinc 0 1
+    0040 goto 11
+    0043 ldc "--- Fibonacci ratio → golden ratio ---"
+    0045 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0048 swap
+    0049 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0052 dconst_1
+    0053 ldc2_w double(5)
+    0056 invokestatic Method(InputKt.sqrt:(D)D)
+    0059 dadd
+    0060 ldc2_w double(2)
+    0063 ddiv
+    0064 dstore_1
+    0065 dload_1
+    0066 invokedynamic InvokeDynamic(makeConcatWithConstants:(D)Ljava/lang/String;)
+    0071 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0074 swap
+    0075 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0078 iconst_1
+    0079 istore_3
+    0080 iconst_1
+    0081 istore 4
+    0083 iconst_0
+    0084 istore 5
+    0086 iload 5
+    0088 bipush 15
+    0090 if_icmpge 136
+    0093 iload 4
+    0095 i2d
+    0096 iload_3
+    0097 i2d
+    0098 ddiv
+    0099 dstore 6
+    0101 iload 5
+    0103 dload 6
+    0105 invokedynamic InvokeDynamic(makeConcatWithConstants:(ID)Ljava/lang/String;)
+    0110 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0113 swap
+    0114 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0117 iload_3
+    0118 iload 4
+    0120 iadd
+    0121 istore 8
+    0123 iload 4
+    0125 istore_3
+    0126 iload 8
+    0128 istore 4
+    0130 iinc 5 1
+    0133 goto 86
+    0136 return
+    sub_attr  StackMapTable (20 bytes)
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
+method        sqrt (D)D 0x0019
+  code        max_stack=6 max_locals=7
+    0000 dload_0
+    0001 dconst_0
+    0002 dcmpg
+    0003 ifne 10
+    0006 iconst_1
+    0007 goto 11
+    0010 iconst_0
+    0011 ifeq 16
+    0014 dconst_0
+    0015 dreturn
+    0016 dload_0
+    0017 ldc2_w double(2)
+    0020 ddiv
+    0021 dstore_2
+    0022 iconst_0
+    0023 istore 4
+    0025 iload 4
+    0027 bipush 50
+    0029 if_icmpge 69
+    0032 dload_2
+    0033 dload_0
+    0034 dload_2
+    0035 ddiv
+    0036 dadd
+    0037 ldc2_w double(2)
+    0040 ddiv
+    0041 dstore 5
+    0043 dload 5
+    0045 dload_2
+    0046 dsub
+    0047 invokestatic Method(InputKt.absD:(D)D)
+    0050 ldc2_w double(0.0000000001)
+    0053 dcmpg
+    0054 ifge 60
+    0057 dload 5
+    0059 dreturn
+    0060 dload 5
+    0062 dstore_2
+    0063 iinc 4 1
+    0066 goto 25
+    0069 dload_2
+    0070 dreturn
+    sub_attr  StackMapTable (18 bytes)
+class_attr    BootstrapMethods (20 bytes)

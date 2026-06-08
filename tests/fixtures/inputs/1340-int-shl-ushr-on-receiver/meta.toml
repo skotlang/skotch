@@ -1,0 +1,4 @@
+name = "1340-int-shl-ushr-on-receiver"
+status = "supported"
+features = ["int-bitwise-intrinsics", "extension-receiver-implicit-this"]
+reason = "Lock-in for parity/101-hash. `Int.shl(Int)` / `Int.ushr(Int)` (and friends: shr, and, or, xor) now route to JVM ishl/iushr/etc. opcodes via a new `$bitwise` intrinsic class the backend recognises. Implicit-this receivers in `Int.foo()`-shaped extension fns also pick up the intrinsic, including extension fns declared on a companion object."

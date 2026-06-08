@@ -1,0 +1,81 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        escapeIter (DDI)I 0x0019
+  code        max_stack=6 max_locals=12
+    0000 dconst_0
+    0001 dstore 5
+    0003 dconst_0
+    0004 dstore 7
+    0006 iconst_0
+    0007 istore 9
+    0009 iload 9
+    0011 iload 4
+    0013 if_icmpge 72
+    0016 dload 5
+    0018 dload 5
+    0020 dmul
+    0021 dload 7
+    0023 dload 7
+    0025 dmul
+    0026 dadd
+    0027 ldc2_w double(4)
+    0030 dcmpg
+    0031 ifge 72
+    0034 dload 5
+    0036 dload 5
+    0038 dmul
+    0039 dload 7
+    0041 dload 7
+    0043 dmul
+    0044 dsub
+    0045 dload_0
+    0046 dadd
+    0047 dstore 10
+    0049 ldc2_w double(2)
+    0052 dload 5
+    0054 dmul
+    0055 dload 7
+    0057 dmul
+    0058 dload_2
+    0059 dadd
+    0060 dstore 7
+    0062 dload 10
+    0064 dstore 5
+    0066 iinc 9 1
+    0069 goto 9
+    0072 iload 9
+    0074 ireturn
+    sub_attr  StackMapTable (9 bytes)
+method        main ()V 0x0019
+  code        max_stack=5 max_locals=1
+    0000 dconst_0
+    0001 dconst_0
+    0002 bipush 50
+    0004 invokestatic Method(InputKt.escapeIter:(DDI)I)
+    0007 istore_0
+    0008 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0011 iload_0
+    0012 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0015 ldc2_w double(2)
+    0018 ldc2_w double(2)
+    0021 bipush 50
+    0023 invokestatic Method(InputKt.escapeIter:(DDI)I)
+    0026 istore_0
+    0027 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0030 iload_0
+    0031 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0034 ldc2_w double(-1)
+    0037 dconst_0
+    0038 bipush 50
+    0040 invokestatic Method(InputKt.escapeIter:(DDI)I)
+    0043 istore_0
+    0044 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0047 iload_0
+    0048 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0051 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

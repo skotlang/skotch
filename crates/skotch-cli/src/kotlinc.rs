@@ -92,6 +92,12 @@ pub fn run(raw_args: &[String]) -> Result<()> {
             _ => joined,
         };
         std::env::set_var("CLASSPATH", merged);
+        // Eagerly populate the in-memory class registry from every JAR
+        // entry. The pipeline-driven build path does this too —
+        // without it, simple-name → JVM-FQ resolution in the BFS
+        // method walk falls back to per-class lazy scans that only
+        // populate the cache for entries explicitly looked up by FQ.
+        skotch_mir_lower::preload_registry_jars(&opts.classpath);
     }
 
     if opts.sources.is_empty() {

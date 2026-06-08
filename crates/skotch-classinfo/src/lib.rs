@@ -85,6 +85,31 @@ pub fn preload_classpath_cache(jars: &[PathBuf]) {
     }
 }
 
+/// Return the FQ JVM path (e.g. `org/kotlincrypto/core/digest/Digest`) of
+/// a class whose unqualified name matches `simple`. Used by mir-lower to
+/// FQ-resolve interface / superclass entries that the parser only
+/// recorded by their last segment (the import-map may not have a binding
+/// when the class is reached transitively through another parent).
+///
+/// The CLASSPATH cache is scanned by FQ name; a successful preload via
+/// [`preload_classpath_cache`] is the precondition. Returns `None` when
+/// no cache entry's last `/`-segment matches `simple`, when there are
+/// multiple matches (ambiguous), or when the preload never ran.
+pub fn find_class_jvm_name_by_simple(simple: &str) -> Option<String> {
+    let guard = CLASSPATH_CACHE.lock().ok()?;
+    let cache = guard.as_ref()?;
+    let mut found: Option<String> = None;
+    for key in cache.keys() {
+        if key.rsplit('/').next() == Some(simple) {
+            if found.is_some() {
+                return None;
+            }
+            found = Some(key.clone());
+        }
+    }
+    found
+}
+
 fn cached_class_lookup(class_path: &str) -> Option<ClassInfo> {
     // Fast path: cache hit (either Some(ci) or known-absent None).
     if let Ok(guard) = CLASSPATH_CACHE.lock() {

@@ -1,0 +1,4 @@
+name = "1342-companion-method-inherited-from-parent"
+status = "supported"
+features = ["companion-method-inheritance", "implicit-this-companion-dispatch"]
+reason = "Lock-in for parity/101-hash. The implicit-this BFS now also visits `cls.companion_class_name` when looking for a callee — Kotlin makes parent companion members accessible from subclass scope, so `helper(x)` inside `Child`'s ctor body needs to find `Parent$Companion.helper`. Backend lowering emits the canonical getstatic+invokevirtual sequence."

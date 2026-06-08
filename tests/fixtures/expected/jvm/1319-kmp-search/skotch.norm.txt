@@ -1,0 +1,312 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        advanceQ (Ljava/lang/String;IC[I)I 0x0019
+  code        max_stack=2 max_locals=8
+    0000 aload_0
+    0001 ldc "pattern"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 iload_1
+    0007 istore 4
+    0009 iload 4
+    0011 ifle 18
+    0014 iconst_1
+    0015 goto 19
+    0018 iconst_0
+    0019 istore 5
+    0021 iconst_0
+    0022 istore 6
+    0024 iload 5
+    0026 ifeq 77
+    0029 goto 60
+    0032 iload 4
+    0034 iconst_1
+    0035 isub
+    0036 istore 7
+    0038 aload_3
+    0039 iload 7
+    0041 iaload
+    0042 istore 4
+    0044 goto 9
+    0047 aload_0
+    0048 iload 4
+    0050 invokevirtual Method(java/lang/String.charAt:(I)C)
+    0053 iload_2
+    0054 if_icmpne 90
+    0057 goto 85
+    0060 aload_0
+    0061 iload 4
+    0063 invokevirtual Method(java/lang/String.charAt:(I)C)
+    0066 iload_2
+    0067 if_icmpeq 74
+    0070 iconst_1
+    0071 goto 75
+    0074 iconst_0
+    0075 istore 6
+    0077 iload 6
+    0079 ifeq 47
+    0082 goto 32
+    0085 iload 4
+    0087 iconst_1
+    0088 iadd
+    0089 ireturn
+    0090 iload 4
+    0092 ireturn
+    sub_attr  StackMapTable (22 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (13 bytes)
+method        computeFailure (Ljava/lang/String;)[I 0x0019
+  code        max_stack=4 max_locals=10
+    0000 aload_0
+    0001 ldc "pattern"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 aload_0
+    0007 invokevirtual Method(java/lang/String.length:()I)
+    0010 newarray int
+    0012 astore_1
+    0013 iconst_0
+    0014 istore_2
+    0015 iconst_1
+    0016 istore_3
+    0017 iload_3
+    0018 istore 4
+    0020 aload_0
+    0021 invokevirtual Method(java/lang/String.length:()I)
+    0024 istore 5
+    0026 iload 4
+    0028 iload 5
+    0030 if_icmpge 71
+    0033 iload_2
+    0034 istore 6
+    0036 aload_0
+    0037 iload_3
+    0038 invokevirtual Method(java/lang/String.charAt:(I)C)
+    0041 istore 7
+    0043 aload_0
+    0044 iload 6
+    0046 iload 7
+    0048 aload_1
+    0049 invokestatic Method(InputKt.advanceQ:(Ljava/lang/String;IC[I)I)
+    0052 istore_2
+    0053 iload_3
+    0054 istore 8
+    0056 iload_2
+    0057 istore 9
+    0059 aload_1
+    0060 iload 8
+    0062 iload 9
+    0064 iastore
+    0065 iinc 3 1
+    0068 goto 17
+    0071 aload_1
+    0072 areturn
+    sub_attr  StackMapTable (15 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)
+method        kmpSearch (Ljava/lang/String;Ljava/lang/String;)[I 0x0019
+  code        max_stack=4 max_locals=25
+    0000 aload_0
+    0001 ldc "text"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 aload_1
+    0007 ldc "pattern"
+    0009 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0012 aload_1
+    0013 invokevirtual Method(java/lang/String.length:()I)
+    0016 ifne 23
+    0019 iconst_0
+    0020 newarray int
+    0022 areturn
+    0023 aload_1
+    0024 invokestatic Method(InputKt.computeFailure:(Ljava/lang/String;)[I)
+    0027 astore_2
+    0028 aload_0
+    0029 invokevirtual Method(java/lang/String.length:()I)
+    0032 newarray int
+    0034 astore_3
+    0035 iconst_0
+    0036 istore 4
+    0038 iconst_0
+    0039 istore 5
+    0041 iconst_0
+    0042 istore 6
+    0044 iload 6
+    0046 istore 7
+    0048 aload_0
+    0049 invokevirtual Method(java/lang/String.length:()I)
+    0052 istore 8
+    0054 iload 7
+    0056 iload 8
+    0058 if_icmpge 104
+    0061 iload 5
+    0063 istore 9
+    0065 aload_0
+    0066 iload 6
+    0068 invokevirtual Method(java/lang/String.charAt:(I)C)
+    0071 istore 10
+    0073 aload_1
+    0074 iload 9
+    0076 iload 10
+    0078 aload_2
+    0079 invokestatic Method(InputKt.advanceQ:(Ljava/lang/String;IC[I)I)
+    0082 istore 5
+    0084 iload 5
+    0086 istore 11
+    0088 aload_1
+    0089 invokevirtual Method(java/lang/String.length:()I)
+    0092 istore 12
+    0094 iload 11
+    0096 iload 12
+    0098 if_icmpne 158
+    0101 goto 116
+    0104 iload 4
+    0106 newarray int
+    0108 astore 13
+    0110 iconst_0
+    0111 istore 14
+    0113 goto 164
+    0116 iload 4
+    0118 istore 15
+    0120 iload 6
+    0122 istore 16
+    0124 iload 5
+    0126 istore 17
+    0128 iload 16
+    0130 iload 17
+    0132 isub
+    0133 iconst_1
+    0134 iadd
+    0135 istore 18
+    0137 aload_3
+    0138 iload 15
+    0140 iload 18
+    0142 iastore
+    0143 iinc 4 1
+    0146 iload 5
+    0148 iconst_1
+    0149 isub
+    0150 istore 19
+    0152 aload_2
+    0153 iload 19
+    0155 iaload
+    0156 istore 5
+    0158 iinc 6 1
+    0161 goto 44
+    0164 iload 14
+    0166 istore 20
+    0168 iload 4
+    0170 istore 21
+    0172 iload 20
+    0174 iload 21
+    0176 if_icmpge 206
+    0179 iload 14
+    0181 istore 22
+    0183 iload 14
+    0185 istore 23
+    0187 aload_3
+    0188 iload 23
+    0190 iaload
+    0191 istore 24
+    0193 aload 13
+    0195 iload 22
+    0197 iload 24
+    0199 iastore
+    0200 iinc 14 1
+    0203 goto 164
+    0206 aload 13
+    0208 areturn
+    sub_attr  StackMapTable (130 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (13 bytes)
+method        main ()V 0x0019
+  code        max_stack=2 max_locals=0
+    0000 ldc "ABABCABABCD"
+    0002 ldc "ABABCD"
+    0004 invokestatic Method(InputKt.reportMatches:(Ljava/lang/String;Ljava/lang/String;)V)
+    0007 ldc "AAAAAAAA"
+    0009 ldc "AAA"
+    0011 invokestatic Method(InputKt.reportMatches:(Ljava/lang/String;Ljava/lang/String;)V)
+    0014 ldc "abracadabra"
+    0016 ldc "abra"
+    0018 invokestatic Method(InputKt.reportMatches:(Ljava/lang/String;Ljava/lang/String;)V)
+    0021 ldc "mississippi"
+    0023 ldc "ss"
+    0025 invokestatic Method(InputKt.reportMatches:(Ljava/lang/String;Ljava/lang/String;)V)
+    0028 ldc "mississippi"
+    0030 ldc "issi"
+    0032 invokestatic Method(InputKt.reportMatches:(Ljava/lang/String;Ljava/lang/String;)V)
+    0035 ldc "the quick brown fox"
+    0037 ldc "fox"
+    0039 invokestatic Method(InputKt.reportMatches:(Ljava/lang/String;Ljava/lang/String;)V)
+    0042 ldc "hello world"
+    0044 ldc "xyz"
+    0046 invokestatic Method(InputKt.reportMatches:(Ljava/lang/String;Ljava/lang/String;)V)
+    0049 ldc "aaaaab"
+    0051 ldc "aaab"
+    0053 invokestatic Method(InputKt.reportMatches:(Ljava/lang/String;Ljava/lang/String;)V)
+    0056 ldc "AAAAAA"
+    0058 ldc "AAAAA"
+    0060 invokestatic Method(InputKt.reportMatches:(Ljava/lang/String;Ljava/lang/String;)V)
+    0063 ldc ""
+    0065 ldc "anything"
+    0067 invokestatic Method(InputKt.reportMatches:(Ljava/lang/String;Ljava/lang/String;)V)
+    0070 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
+method        reportMatches (Ljava/lang/String;Ljava/lang/String;)V 0x0019
+  code        max_stack=2 max_locals=8
+    0000 aload_0
+    0001 ldc "text"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 aload_1
+    0007 ldc "pattern"
+    0009 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0012 aload_0
+    0013 aload_1
+    0014 invokestatic Method(InputKt.kmpSearch:(Ljava/lang/String;Ljava/lang/String;)[I)
+    0017 astore_2
+    0018 aload_1
+    0019 aload_0
+    0020 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;)
+    0025 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0028 swap
+    0029 invokevirtual Method(java/io/PrintStream.print:(Ljava/lang/Object;)V)
+    0032 aload_2
+    0033 arraylength
+    0034 ifne 47
+    0037 ldc " (no matches)"
+    0039 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0042 swap
+    0043 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0046 return
+    0047 iconst_0
+    0048 istore_3
+    0049 iload_3
+    0050 istore 4
+    0052 aload_2
+    0053 arraylength
+    0054 istore 5
+    0056 iload 4
+    0058 iload 5
+    0060 if_icmpge 95
+    0063 ldc " "
+    0065 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0068 swap
+    0069 invokevirtual Method(java/io/PrintStream.print:(Ljava/lang/Object;)V)
+    0072 iload_3
+    0073 istore 6
+    0075 aload_2
+    0076 iload 6
+    0078 iaload
+    0079 istore 7
+    0081 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0084 iload 7
+    0086 invokevirtual Method(java/io/PrintStream.print:(I)V)
+    0089 iinc 3 1
+    0092 goto 49
+    0095 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0098 invokevirtual Method(java/io/PrintStream.println:()V)
+    0101 return
+    sub_attr  StackMapTable (17 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (13 bytes)
+class_attr    BootstrapMethods (8 bytes)

@@ -148,6 +148,22 @@ pub enum TokenKind {
     /// terminators; the lexer keeps them as tokens so the parser can
     /// decide whether to consume them.
     Newline,
+    /// A run of spaces, tabs, and carriage returns. Emitted only when
+    /// the lexer is run with [`LexerOptions::preserve_trivia`] (used by
+    /// the SIL/CST pipeline). The FIR fast-path never sees these.
+    Whitespace,
+    /// A `// ... \n` line comment. Emitted only with preserve_trivia.
+    /// The trailing newline is **not** part of this token; it becomes a
+    /// separate [`TokenKind::Newline`].
+    LineComment,
+    /// A `/* ... */` block comment (not a KDoc). Emitted only with
+    /// preserve_trivia.
+    BlockComment,
+    /// A `/** ... */` KDoc comment. Emitted only with preserve_trivia.
+    /// The SIL pipeline re-parses its body into KDoc sub-events; the
+    /// FIR pipeline treats it as opaque (and the FIR lexer never emits
+    /// it in the first place).
+    DocComment,
     /// End-of-file sentinel. Always one of these at the end of the stream.
     Eof,
     /// Lexer error: malformed input. Always carries a span pointing at
@@ -158,10 +174,18 @@ pub enum TokenKind {
 impl TokenKind {
     /// Returns true for tokens that the parser should treat as ignorable
     /// when looking for "the next real token". Newlines are *not* trivia
-    /// — Kotlin's grammar is newline-sensitive — but comments and pure
-    /// whitespace would be (the lexer never produces those).
+    /// — Kotlin's grammar is newline-sensitive — but whitespace runs
+    /// and comments are. The FIR-path lexer never emits these (it
+    /// skips them in `next_token`); only the SIL-path lexer with
+    /// `preserve_trivia = true` produces them.
     pub fn is_trivia(self) -> bool {
-        false
+        matches!(
+            self,
+            TokenKind::Whitespace
+                | TokenKind::LineComment
+                | TokenKind::BlockComment
+                | TokenKind::DocComment
+        )
     }
 
     /// Returns true if this token is a Kotlin keyword (reserved or soft).

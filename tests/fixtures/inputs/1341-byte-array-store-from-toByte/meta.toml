@@ -1,0 +1,4 @@
+name = "1341-byte-array-store-from-toByte"
+status = "supported"
+features = ["bytearray-bastore", "int-toByte-intrinsic"]
+reason = "Lock-in for parity/101-hash. (1) `i.toByte()` now lowers to the `i2b` JVM opcode (was: unresolved → null placeholder). (2) `byteArr[i] = expr` array-store opcode is now picked from the array element type rather than the value's MIR type — guarantees `bastore` even when the RHS erased to Ty::Any."

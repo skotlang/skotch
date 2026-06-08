@@ -1810,6 +1810,12 @@ impl<'a> Resolver<'a> {
             | Expr::AsCast { expr, .. } => {
                 self.resolve_expr(fn_idx, expr, scope, rf);
             }
+            Expr::IncDec { target, span, .. } => {
+                // Resolve `target` the same way a bare `Ident` would
+                // — the postfix bump only fires after the read.
+                let synth = Expr::Ident(*target, *span);
+                self.resolve_expr(fn_idx, &synth, scope, rf);
+            }
             Expr::ElvisOp { lhs, rhs, .. } => {
                 self.resolve_expr(fn_idx, lhs, scope, rf);
                 self.resolve_expr(fn_idx, rhs, scope, rf);
@@ -1930,6 +1936,7 @@ impl<'a> Resolver<'a> {
             | Expr::IsCheck { .. }
             | Expr::AsCast { .. }
             | Expr::NotNullAssert { .. }
+            | Expr::IncDec { .. }
             | Expr::Lambda { .. }
             | Expr::ObjectExpr { .. }
             | Expr::Index { .. } => {}

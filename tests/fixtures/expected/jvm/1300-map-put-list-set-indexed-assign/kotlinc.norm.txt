@@ -1,0 +1,124 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=3 max_locals=3
+    0000 new Class(java/util/LinkedHashMap)
+    0003 dup
+    0004 invokespecial Method(java/util/LinkedHashMap.<init>:()V)
+    0007 checkcast Class(java/util/Map)
+    0010 astore_0
+    0011 aload_0
+    0012 iconst_1
+    0013 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0016 bipush 10
+    0018 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0021 invokeinterface InterfaceMethod(java/util/Map.put:(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;)
+    0026 pop
+    0027 aload_0
+    0028 iconst_2
+    0029 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0032 bipush 20
+    0034 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0037 invokeinterface InterfaceMethod(java/util/Map.put:(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;)
+    0042 pop
+    0043 aload_0
+    0044 iconst_3
+    0045 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0048 bipush 30
+    0050 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0053 invokeinterface InterfaceMethod(java/util/Map.put:(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;)
+    0058 pop
+    0059 aload_0
+    0060 iconst_1
+    0061 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0064 invokeinterface InterfaceMethod(java/util/Map.get:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0069 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0072 swap
+    0073 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0076 aload_0
+    0077 iconst_2
+    0078 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0081 invokeinterface InterfaceMethod(java/util/Map.get:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0086 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0089 swap
+    0090 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0093 aload_0
+    0094 iconst_3
+    0095 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0098 invokeinterface InterfaceMethod(java/util/Map.get:(Ljava/lang/Object;)Ljava/lang/Object;)
+    0103 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0106 swap
+    0107 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0110 iconst_3
+    0111 anewarray Class(java/lang/Integer)
+    0114 astore_2
+    0115 aload_2
+    0116 iconst_0
+    0117 iconst_0
+    0118 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0121 aastore
+    0122 aload_2
+    0123 iconst_1
+    0124 iconst_0
+    0125 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0128 aastore
+    0129 aload_2
+    0130 iconst_2
+    0131 iconst_0
+    0132 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0135 aastore
+    0136 aload_2
+    0137 invokestatic Method(kotlin/collections/CollectionsKt.mutableListOf:([Ljava/lang/Object;)Ljava/util/List;)
+    0140 astore_1
+    0141 aload_1
+    0142 iconst_0
+    0143 bipush 100
+    0145 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0148 invokeinterface InterfaceMethod(java/util/List.set:(ILjava/lang/Object;)Ljava/lang/Object;)
+    0153 pop
+    0154 aload_1
+    0155 iconst_1
+    0156 sipush 200
+    0159 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0162 invokeinterface InterfaceMethod(java/util/List.set:(ILjava/lang/Object;)Ljava/lang/Object;)
+    0167 pop
+    0168 aload_1
+    0169 iconst_2
+    0170 sipush 300
+    0173 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0176 invokeinterface InterfaceMethod(java/util/List.set:(ILjava/lang/Object;)Ljava/lang/Object;)
+    0181 pop
+    0182 aload_1
+    0183 iconst_0
+    0184 invokeinterface InterfaceMethod(java/util/List.get:(I)Ljava/lang/Object;)
+    0189 checkcast Class(java/lang/Number)
+    0192 invokevirtual Method(java/lang/Number.intValue:()I)
+    0195 istore_2
+    0196 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0199 iload_2
+    0200 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0203 aload_1
+    0204 iconst_1
+    0205 invokeinterface InterfaceMethod(java/util/List.get:(I)Ljava/lang/Object;)
+    0210 checkcast Class(java/lang/Number)
+    0213 invokevirtual Method(java/lang/Number.intValue:()I)
+    0216 istore_2
+    0217 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0220 iload_2
+    0221 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0224 aload_1
+    0225 iconst_2
+    0226 invokeinterface InterfaceMethod(java/util/List.get:(I)Ljava/lang/Object;)
+    0231 checkcast Class(java/lang/Number)
+    0234 invokevirtual Method(java/lang/Number.intValue:()I)
+    0237 istore_2
+    0238 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0241 iload_2
+    0242 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0245 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

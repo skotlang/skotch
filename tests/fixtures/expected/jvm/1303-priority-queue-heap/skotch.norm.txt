@@ -1,0 +1,666 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        heapSort ([I)[I 0x0019
+  code        max_stack=3 max_locals=10
+    0000 new Class(MinHeap)
+    0003 dup
+    0004 invokedynamic InvokeDynamic(invoke:()Lkotlin/jvm/functions/Function2;)
+    0009 invokespecial Method(MinHeap.<init>:(Lkotlin/jvm/functions/Function2;)V)
+    0012 astore_1
+    0013 iconst_0
+    0014 istore_2
+    0015 iload_2
+    0016 istore_3
+    0017 aload_0
+    0018 arraylength
+    0019 istore 4
+    0021 iload_3
+    0022 iload 4
+    0024 if_icmpge 47
+    0027 iload_2
+    0028 istore 5
+    0030 aload_1
+    0031 aload_0
+    0032 iload 5
+    0034 iaload
+    0035 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0038 invokevirtual Method(MinHeap.push:(Ljava/lang/Object;)V)
+    0041 iinc 2 1
+    0044 goto 15
+    0047 aload_0
+    0048 arraylength
+    0049 newarray int
+    0051 astore 6
+    0053 iconst_0
+    0054 istore 7
+    0056 aload_1
+    0057 invokevirtual Method(MinHeap.isEmpty:()Z)
+    0060 ifne 92
+    0063 iload 7
+    0065 istore 8
+    0067 aload_1
+    0068 invokevirtual Method(MinHeap.pop:()Ljava/lang/Object;)
+    0071 checkcast Class(java/lang/Integer)
+    0074 invokevirtual Method(java/lang/Integer.intValue:()I)
+    0077 istore 9
+    0079 aload 6
+    0081 iload 8
+    0083 iload 9
+    0085 iastore
+    0086 iinc 7 1
+    0089 goto 56
+    0092 aload 6
+    0094 areturn
+    sub_attr  StackMapTable (23 bytes)
+method        heapSort$lambda$0 (Ljava/lang/Object;Ljava/lang/Object;)I 0x001A
+  code        max_stack=2 max_locals=2
+    0000 aload_0
+    0001 checkcast Class(java/lang/Integer)
+    0004 invokevirtual Method(java/lang/Integer.intValue:()I)
+    0007 aload_1
+    0008 checkcast Class(java/lang/Integer)
+    0011 invokevirtual Method(java/lang/Integer.intValue:()I)
+    0014 isub
+    0015 ireturn
+method        main ()V 0x0019
+  code        max_stack=3 max_locals=31
+    0000 bipush 7
+    0002 istore_0
+    0003 iconst_2
+    0004 istore_1
+    0005 bipush 9
+    0007 istore_2
+    0008 iconst_1
+    0009 istore_3
+    0010 iconst_5
+    0011 istore 4
+    0013 iconst_3
+    0014 istore 5
+    0016 bipush 8
+    0018 istore 6
+    0020 iconst_4
+    0021 istore 7
+    0023 bipush 6
+    0025 istore 8
+    0027 bipush 9
+    0029 newarray int
+    0031 astore 9
+    0033 iconst_0
+    0034 istore 10
+    0036 aload 9
+    0038 iload 10
+    0040 iload_0
+    0041 iastore
+    0042 iconst_1
+    0043 istore 11
+    0045 aload 9
+    0047 iload 11
+    0049 iload_1
+    0050 iastore
+    0051 iconst_2
+    0052 istore 12
+    0054 aload 9
+    0056 iload 12
+    0058 iload_2
+    0059 iastore
+    0060 iconst_3
+    0061 istore 13
+    0063 aload 9
+    0065 iload 13
+    0067 iload_3
+    0068 iastore
+    0069 iconst_4
+    0070 istore 14
+    0072 aload 9
+    0074 iload 14
+    0076 iload 4
+    0078 iastore
+    0079 iconst_5
+    0080 istore 15
+    0082 aload 9
+    0084 iload 15
+    0086 iload 5
+    0088 iastore
+    0089 bipush 6
+    0091 istore 16
+    0093 aload 9
+    0095 iload 16
+    0097 iload 6
+    0099 iastore
+    0100 bipush 7
+    0102 istore 17
+    0104 aload 9
+    0106 iload 17
+    0108 iload 7
+    0110 iastore
+    0111 bipush 8
+    0113 istore 18
+    0115 aload 9
+    0117 iload 18
+    0119 iload 8
+    0121 iastore
+    0122 aload 9
+    0124 invokestatic Method(InputKt.heapSort:([I)[I)
+    0127 astore 19
+    0129 iconst_0
+    0130 istore 20
+    0132 iload 20
+    0134 istore 21
+    0136 aload 19
+    0138 arraylength
+    0139 istore 22
+    0141 iload 21
+    0143 iload 22
+    0145 if_icmpge 173
+    0148 iload 20
+    0150 istore 23
+    0152 aload 19
+    0154 iload 23
+    0156 iaload
+    0157 istore 24
+    0159 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0162 iload 24
+    0164 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0167 iinc 20 1
+    0170 goto 132
+    0173 ldc "---"
+    0175 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0178 swap
+    0179 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0182 aload 9
+    0184 iconst_3
+    0185 invokestatic Method(InputKt.topKLargest:([II)[I)
+    0188 astore 25
+    0190 iconst_0
+    0191 istore 26
+    0193 iload 26
+    0195 istore 27
+    0197 aload 25
+    0199 arraylength
+    0200 istore 28
+    0202 iload 27
+    0204 iload 28
+    0206 if_icmpge 234
+    0209 iload 26
+    0211 istore 29
+    0213 aload 25
+    0215 iload 29
+    0217 iaload
+    0218 istore 30
+    0220 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0223 iload 30
+    0225 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0228 iinc 26 1
+    0231 goto 193
+    0234 ldc "---"
+    0236 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0239 swap
+    0240 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0243 invokestatic Method(InputKt.printMerged:()V)
+    0246 return
+    sub_attr  StackMapTable (84 bytes)
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
+method        mergeThreeSortedStreams ([I[I[I)[I 0x0019
+  code        max_stack=3 max_locals=31
+    0000 new Class(MinHeap)
+    0003 dup
+    0004 invokedynamic InvokeDynamic(invoke:()Lkotlin/jvm/functions/Function2;)
+    0009 invokespecial Method(MinHeap.<init>:(Lkotlin/jvm/functions/Function2;)V)
+    0012 astore_3
+    0013 iconst_0
+    0014 istore 4
+    0016 iconst_0
+    0017 istore 5
+    0019 iconst_0
+    0020 istore 6
+    0022 aload_0
+    0023 arraylength
+    0024 ifle 46
+    0027 iconst_0
+    0028 istore 7
+    0030 aload_0
+    0031 iload 7
+    0033 iaload
+    0034 iconst_3
+    0035 imul
+    0036 iconst_0
+    0037 iadd
+    0038 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0041 aload_3
+    0042 swap
+    0043 invokevirtual Method(MinHeap.push:(Ljava/lang/Object;)V)
+    0046 aload_1
+    0047 arraylength
+    0048 ifle 70
+    0051 iconst_0
+    0052 istore 8
+    0054 aload_1
+    0055 iload 8
+    0057 iaload
+    0058 iconst_3
+    0059 imul
+    0060 iconst_1
+    0061 iadd
+    0062 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0065 aload_3
+    0066 swap
+    0067 invokevirtual Method(MinHeap.push:(Ljava/lang/Object;)V)
+    0070 aload_2
+    0071 arraylength
+    0072 ifle 94
+    0075 iconst_0
+    0076 istore 9
+    0078 aload_2
+    0079 iload 9
+    0081 iaload
+    0082 iconst_3
+    0083 imul
+    0084 iconst_2
+    0085 iadd
+    0086 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0089 aload_3
+    0090 swap
+    0091 invokevirtual Method(MinHeap.push:(Ljava/lang/Object;)V)
+    0094 aload_0
+    0095 arraylength
+    0096 istore 10
+    0098 aload_1
+    0099 arraylength
+    0100 istore 11
+    0102 iload 10
+    0104 iload 11
+    0106 iadd
+    0107 istore 12
+    0109 aload_2
+    0110 arraylength
+    0111 istore 13
+    0113 iload 12
+    0115 iload 13
+    0117 iadd
+    0118 istore 14
+    0120 iload 14
+    0122 newarray int
+    0124 astore 15
+    0126 iconst_0
+    0127 istore 16
+    0129 aload_3
+    0130 invokevirtual Method(MinHeap.isEmpty:()Z)
+    0133 ifne 189
+    0136 aload_3
+    0137 invokevirtual Method(MinHeap.pop:()Ljava/lang/Object;)
+    0140 checkcast Class(java/lang/Integer)
+    0143 invokevirtual Method(java/lang/Integer.intValue:()I)
+    0146 istore 17
+    0148 iload 17
+    0150 iconst_3
+    0151 idiv
+    0152 istore 18
+    0154 iload 18
+    0156 iconst_3
+    0157 imul
+    0158 istore 19
+    0160 iload 17
+    0162 iload 19
+    0164 isub
+    0165 istore 20
+    0167 iload 16
+    0169 istore 21
+    0171 aload 15
+    0173 iload 21
+    0175 iload 18
+    0177 iastore
+    0178 iinc 16 1
+    0181 iload 20
+    0183 ifne 230
+    0186 goto 192
+    0189 aload 15
+    0191 areturn
+    0192 iinc 4 1
+    0195 iload 4
+    0197 istore 22
+    0199 aload_0
+    0200 arraylength
+    0201 istore 23
+    0203 iload 22
+    0205 iload 23
+    0207 if_icmpge 239
+    0210 iload 4
+    0212 istore 24
+    0214 aload_0
+    0215 iload 24
+    0217 iaload
+    0218 iconst_3
+    0219 imul
+    0220 iconst_0
+    0221 iadd
+    0222 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0225 aload_3
+    0226 swap
+    0227 invokevirtual Method(MinHeap.push:(Ljava/lang/Object;)V)
+    0230 iload 20
+    0232 iconst_1
+    0233 if_icmpne 280
+    0236 goto 242
+    0239 goto 129
+    0242 iinc 5 1
+    0245 iload 5
+    0247 istore 25
+    0249 aload_1
+    0250 arraylength
+    0251 istore 26
+    0253 iload 25
+    0255 iload 26
+    0257 if_icmpge 318
+    0260 iload 5
+    0262 istore 29
+    0264 aload_1
+    0265 iload 29
+    0267 iaload
+    0268 iconst_3
+    0269 imul
+    0270 iconst_1
+    0271 iadd
+    0272 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0275 aload_3
+    0276 swap
+    0277 invokevirtual Method(MinHeap.push:(Ljava/lang/Object;)V)
+    0280 iinc 6 1
+    0283 iload 6
+    0285 istore 27
+    0287 aload_2
+    0288 arraylength
+    0289 istore 28
+    0291 iload 27
+    0293 iload 28
+    0295 if_icmpge 318
+    0298 iload 6
+    0300 istore 30
+    0302 aload_2
+    0303 iload 30
+    0305 iaload
+    0306 iconst_3
+    0307 imul
+    0308 iconst_2
+    0309 iadd
+    0310 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0313 aload_3
+    0314 swap
+    0315 invokevirtual Method(MinHeap.push:(Ljava/lang/Object;)V)
+    0318 goto 239
+    sub_attr  StackMapTable (105 bytes)
+method        mergeThreeSortedStreams$lambda$0 (Ljava/lang/Object;Ljava/lang/Object;)I 0x001A
+  code        max_stack=2 max_locals=2
+    0000 aload_0
+    0001 checkcast Class(java/lang/Integer)
+    0004 invokevirtual Method(java/lang/Integer.intValue:()I)
+    0007 aload_1
+    0008 checkcast Class(java/lang/Integer)
+    0011 invokevirtual Method(java/lang/Integer.intValue:()I)
+    0014 isub
+    0015 ireturn
+method        printMerged ()V 0x0019
+  code        max_stack=3 max_locals=33
+    0000 iconst_1
+    0001 istore_0
+    0002 iconst_4
+    0003 istore_1
+    0004 bipush 7
+    0006 istore_2
+    0007 bipush 10
+    0009 istore_3
+    0010 iconst_4
+    0011 newarray int
+    0013 astore 4
+    0015 iconst_0
+    0016 istore 5
+    0018 aload 4
+    0020 iload 5
+    0022 iload_0
+    0023 iastore
+    0024 iconst_1
+    0025 istore 6
+    0027 aload 4
+    0029 iload 6
+    0031 iload_1
+    0032 iastore
+    0033 iconst_2
+    0034 istore 7
+    0036 aload 4
+    0038 iload 7
+    0040 iload_2
+    0041 iastore
+    0042 iconst_3
+    0043 istore 8
+    0045 aload 4
+    0047 iload 8
+    0049 iload_3
+    0050 iastore
+    0051 iconst_2
+    0052 istore 9
+    0054 iconst_5
+    0055 istore 10
+    0057 bipush 8
+    0059 istore 11
+    0061 bipush 11
+    0063 istore 12
+    0065 iconst_4
+    0066 newarray int
+    0068 astore 13
+    0070 iconst_0
+    0071 istore 14
+    0073 aload 13
+    0075 iload 14
+    0077 iload 9
+    0079 iastore
+    0080 iconst_1
+    0081 istore 15
+    0083 aload 13
+    0085 iload 15
+    0087 iload 10
+    0089 iastore
+    0090 iconst_2
+    0091 istore 16
+    0093 aload 13
+    0095 iload 16
+    0097 iload 11
+    0099 iastore
+    0100 iconst_3
+    0101 istore 17
+    0103 aload 13
+    0105 iload 17
+    0107 iload 12
+    0109 iastore
+    0110 iconst_3
+    0111 istore 18
+    0113 bipush 6
+    0115 istore 19
+    0117 bipush 9
+    0119 istore 20
+    0121 bipush 12
+    0123 istore 21
+    0125 iconst_4
+    0126 newarray int
+    0128 astore 22
+    0130 iconst_0
+    0131 istore 23
+    0133 aload 22
+    0135 iload 23
+    0137 iload 18
+    0139 iastore
+    0140 iconst_1
+    0141 istore 24
+    0143 aload 22
+    0145 iload 24
+    0147 iload 19
+    0149 iastore
+    0150 iconst_2
+    0151 istore 25
+    0153 aload 22
+    0155 iload 25
+    0157 iload 20
+    0159 iastore
+    0160 iconst_3
+    0161 istore 26
+    0163 aload 22
+    0165 iload 26
+    0167 iload 21
+    0169 iastore
+    0170 aload 4
+    0172 aload 13
+    0174 aload 22
+    0176 invokestatic Method(InputKt.mergeThreeSortedStreams:([I[I[I)[I)
+    0179 astore 27
+    0181 iconst_0
+    0182 istore 28
+    0184 iload 28
+    0186 istore 29
+    0188 aload 27
+    0190 arraylength
+    0191 istore 30
+    0193 iload 29
+    0195 iload 30
+    0197 if_icmpge 225
+    0200 iload 28
+    0202 istore 31
+    0204 aload 27
+    0206 iload 31
+    0208 iaload
+    0209 istore 32
+    0211 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0214 iload 32
+    0216 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0219 iinc 28 1
+    0222 goto 184
+    0225 return
+    sub_attr  StackMapTable (51 bytes)
+method        topKLargest ([II)[I 0x0019
+  code        max_stack=3 max_locals=22
+    0000 new Class(MinHeap)
+    0003 dup
+    0004 invokedynamic InvokeDynamic(invoke:()Lkotlin/jvm/functions/Function2;)
+    0009 invokespecial Method(MinHeap.<init>:(Lkotlin/jvm/functions/Function2;)V)
+    0012 astore_2
+    0013 iconst_0
+    0014 istore_3
+    0015 iload_3
+    0016 istore 4
+    0018 aload_0
+    0019 arraylength
+    0020 istore 5
+    0022 iload 4
+    0024 iload 5
+    0026 if_icmpge 49
+    0029 iload_3
+    0030 istore 6
+    0032 aload_0
+    0033 iload 6
+    0035 iaload
+    0036 istore 7
+    0038 aload_2
+    0039 invokevirtual Method(MinHeap.size:()I)
+    0042 iload_1
+    0043 if_icmpge 75
+    0046 goto 63
+    0049 aload_2
+    0050 invokevirtual Method(MinHeap.size:()I)
+    0053 newarray int
+    0055 astore 8
+    0057 iconst_0
+    0058 istore 9
+    0060 goto 120
+    0063 aload_2
+    0064 iload 7
+    0066 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0069 invokevirtual Method(MinHeap.push:(Ljava/lang/Object;)V)
+    0072 goto 114
+    0075 aload_2
+    0076 invokevirtual Method(MinHeap.peek:()Ljava/lang/Object;)
+    0079 checkcast Class(java/lang/Integer)
+    0082 invokevirtual Method(java/lang/Integer.intValue:()I)
+    0085 istore 10
+    0087 iload 7
+    0089 iload 10
+    0091 if_icmple 114
+    0094 aload_2
+    0095 invokevirtual Method(MinHeap.pop:()Ljava/lang/Object;)
+    0098 checkcast Class(java/lang/Integer)
+    0101 invokevirtual Method(java/lang/Integer.intValue:()I)
+    0104 pop
+    0105 aload_2
+    0106 iload 7
+    0108 invokestatic Method(java/lang/Integer.valueOf:(I)Ljava/lang/Integer;)
+    0111 invokevirtual Method(MinHeap.push:(Ljava/lang/Object;)V)
+    0114 iinc 3 1
+    0117 goto 15
+    0120 aload_2
+    0121 invokevirtual Method(MinHeap.isEmpty:()Z)
+    0124 ifne 156
+    0127 iload 9
+    0129 istore 11
+    0131 aload_2
+    0132 invokevirtual Method(MinHeap.pop:()Ljava/lang/Object;)
+    0135 checkcast Class(java/lang/Integer)
+    0138 invokevirtual Method(java/lang/Integer.intValue:()I)
+    0141 istore 12
+    0143 aload 8
+    0145 iload 11
+    0147 iload 12
+    0149 iastore
+    0150 iinc 9 1
+    0153 goto 120
+    0156 aload 8
+    0158 arraylength
+    0159 newarray int
+    0161 astore 13
+    0163 iconst_0
+    0164 istore 14
+    0166 iload 14
+    0168 istore 15
+    0170 aload 8
+    0172 arraylength
+    0173 istore 16
+    0175 iload 15
+    0177 iload 16
+    0179 if_icmpge 224
+    0182 iload 14
+    0184 istore 17
+    0186 aload 8
+    0188 arraylength
+    0189 iconst_1
+    0190 isub
+    0191 istore 18
+    0193 iload 14
+    0195 istore 19
+    0197 iload 18
+    0199 iload 19
+    0201 isub
+    0202 istore 20
+    0204 aload 8
+    0206 iload 20
+    0208 iaload
+    0209 istore 21
+    0211 aload 13
+    0213 iload 17
+    0215 iload 21
+    0217 iastore
+    0218 iinc 14 1
+    0221 goto 166
+    0224 aload 13
+    0226 areturn
+    sub_attr  StackMapTable (80 bytes)
+method        topKLargest$lambda$0 (Ljava/lang/Object;Ljava/lang/Object;)I 0x001A
+  code        max_stack=2 max_locals=2
+    0000 aload_0
+    0001 checkcast Class(java/lang/Integer)
+    0004 invokevirtual Method(java/lang/Integer.intValue:()I)
+    0007 aload_1
+    0008 checkcast Class(java/lang/Integer)
+    0011 invokevirtual Method(java/lang/Integer.intValue:()I)
+    0014 isub
+    0015 ireturn
+class_attr    BootstrapMethods (32 bytes)

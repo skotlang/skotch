@@ -273,6 +273,16 @@ impl<'a> Parser<'a> {
                     self.bump(); // consume '='
                     self.skip_trivia();
                     self.parse_annotation_arg()
+                } else if self.peek_kind() == TokenKind::LParen {
+                    // Nested annotation-style call inside the args
+                    // list of an outer annotation: e.g. `@Deprecated(
+                    // "old", ReplaceWith("new", "package"))`. We
+                    // record the head name and skip the balanced
+                    // parens — the AST doesn't model nested calls,
+                    // but consuming them keeps the outer annotation
+                    // parse on the rails.
+                    self.skip_balanced(TokenKind::LParen, TokenKind::RParen);
+                    skotch_syntax::AnnotationArg::Ident(sym)
                 } else {
                     skotch_syntax::AnnotationArg::Ident(sym)
                 }
@@ -532,53 +542,72 @@ impl<'a> Parser<'a> {
             let mut is_value_class = false;
             let mut is_const = false;
             let mut visibility = Visibility::Public;
-            // Check for `annotation class` and `value class` soft keywords.
-            if self.peek_kind() == TokenKind::Ident {
-                let kw = self.lexeme_str(self.pos).to_string();
-                if kw == "annotation" && self.peek_kind_at(1) == TokenKind::KwClass {
-                    is_annotation_class = true;
+            // Unified modifier loop. Accepts Kotlin modifier keywords
+            // (KwOpen / KwAbstract / KwSealed / KwPrivate / etc.) AND
+            // the soft modifiers the lexer emits as plain Ident
+            // tokens: `public`, `final`, `annotation class`,
+            // `value class`. Modifiers may appear in any order (e.g.
+            // `internal value class Foo` or `public abstract class
+            // Bar`) — that's why this is one loop instead of three.
+            loop {
+                let kind = self.peek_kind();
+                if matches!(
+                    kind,
+                    TokenKind::KwConst
+                        | TokenKind::KwOpen
+                        | TokenKind::KwAbstract
+                        | TokenKind::KwSealed
+                        | TokenKind::KwInfix
+                        | TokenKind::KwInline
+                        | TokenKind::KwPrivate
+                        | TokenKind::KwProtected
+                        | TokenKind::KwInternal
+                        | TokenKind::KwOverride
+                        | TokenKind::KwData
+                        | TokenKind::KwEnum
+                        | TokenKind::KwOperator
+                        | TokenKind::KwSuspend
+                        | TokenKind::KwTailrec
+                ) {
+                    match kind {
+                        TokenKind::KwData => is_data = true,
+                        TokenKind::KwEnum => is_enum = true,
+                        TokenKind::KwOpen => is_open = true,
+                        TokenKind::KwAbstract => is_abstract = true,
+                        TokenKind::KwSealed => is_sealed = true,
+                        TokenKind::KwSuspend => is_suspend = true,
+                        TokenKind::KwInline => is_inline = true,
+                        TokenKind::KwConst => is_const = true,
+                        TokenKind::KwPrivate => visibility = Visibility::Private,
+                        TokenKind::KwProtected => visibility = Visibility::Protected,
+                        TokenKind::KwInternal => visibility = Visibility::Internal,
+                        _ => {}
+                    }
                     self.bump();
                     self.skip_trivia();
-                } else if kw == "value" && self.peek_kind_at(1) == TokenKind::KwClass {
-                    is_value_class = true;
-                    self.bump();
-                    self.skip_trivia();
+                    continue;
                 }
-            }
-            while matches!(
-                self.peek_kind(),
-                TokenKind::KwConst
-                    | TokenKind::KwOpen
-                    | TokenKind::KwAbstract
-                    | TokenKind::KwSealed
-                    | TokenKind::KwInfix
-                    | TokenKind::KwInline
-                    | TokenKind::KwPrivate
-                    | TokenKind::KwProtected
-                    | TokenKind::KwInternal
-                    | TokenKind::KwOverride
-                    | TokenKind::KwData
-                    | TokenKind::KwEnum
-                    | TokenKind::KwOperator
-                    | TokenKind::KwSuspend
-                    | TokenKind::KwTailrec
-            ) {
-                match self.peek_kind() {
-                    TokenKind::KwData => is_data = true,
-                    TokenKind::KwEnum => is_enum = true,
-                    TokenKind::KwOpen => is_open = true,
-                    TokenKind::KwAbstract => is_abstract = true,
-                    TokenKind::KwSealed => is_sealed = true,
-                    TokenKind::KwSuspend => is_suspend = true,
-                    TokenKind::KwInline => is_inline = true,
-                    TokenKind::KwConst => is_const = true,
-                    TokenKind::KwPrivate => visibility = Visibility::Private,
-                    TokenKind::KwProtected => visibility = Visibility::Protected,
-                    TokenKind::KwInternal => visibility = Visibility::Internal,
-                    _ => {}
+                if kind == TokenKind::Ident {
+                    let kw = self.lexeme_str(self.pos).to_string();
+                    if kw == "annotation" && self.peek_kind_at(1) == TokenKind::KwClass {
+                        is_annotation_class = true;
+                        self.bump();
+                        self.skip_trivia();
+                        continue;
+                    }
+                    if kw == "value" && self.peek_kind_at(1) == TokenKind::KwClass {
+                        is_value_class = true;
+                        self.bump();
+                        self.skip_trivia();
+                        continue;
+                    }
+                    if kw == "public" || kw == "final" {
+                        self.bump();
+                        self.skip_trivia();
+                        continue;
+                    }
                 }
-                self.bump();
-                self.skip_trivia();
+                break;
             }
             match self.peek_kind() {
                 TokenKind::KwFun => {
@@ -784,14 +813,20 @@ impl<'a> Parser<'a> {
         let type_params = self.parse_type_params();
         self.skip_trivia();
 
-        // Optional visibility modifier + `constructor` keyword between the
-        // class name (+ type params) and the primary constructor args:
+        // Optional annotations + visibility modifier + `constructor`
+        // keyword between the class name (+ type params) and the
+        // primary constructor args:
         //   `class Color private constructor(val r: Int)`
-        // skotch ignores the visibility (visibility on the primary ctor
-        // is informational on JVM since the user-facing entry is the
-        // class constructor); the `constructor` keyword is consumed so
-        // the LParen below opens the ctor params. Surfaced by
-        // parity/46-companion-factory.
+        //   `class Foo @Throws(E::class) constructor(x: T) : ...`
+        // Annotations on the primary constructor are common when the
+        // user wants to attach `@Inject`, `@Throws`, or a custom
+        // qualifier to the synthetic `<init>` method (this is the
+        // canonical place — Kotlin doesn't otherwise let you target
+        // the primary ctor by name). Skotch parses them and drops the
+        // payload — the ctor still compiles to the same bytecode
+        // regardless of annotations, since the JVM-level ctor is the
+        // class constructor.
+        let _ctor_annotations = self.parse_annotations();
         while matches!(
             self.peek_kind(),
             TokenKind::KwPrivate | TokenKind::KwProtected | TokenKind::KwInternal
@@ -799,6 +834,10 @@ impl<'a> Parser<'a> {
             self.bump();
             self.skip_trivia();
         }
+        // A second annotation block may appear AFTER the visibility
+        // modifier and before `constructor`, e.g.
+        //   `class Foo private @Inject constructor(x: T)`
+        let _ctor_annotations2 = self.parse_annotations();
         if self.peek_kind() == TokenKind::KwConstructor {
             self.bump();
             self.skip_trivia();
@@ -868,13 +907,38 @@ impl<'a> Parser<'a> {
             let parent_name_span = self.peek_span();
             if self.peek_kind() == TokenKind::Ident {
                 self.bump();
-                let parent_name = self.intern_ident_at(parent_name_idx);
+                let mut parent_name = self.intern_ident_at(parent_name_idx);
                 self.skip_trivia();
                 // Skip a parameterized supertype's generic args, e.g.
                 // `: Comparable<Money>` or `: Map<String, Int>`. The
                 // class model doesn't yet carry supertype type args;
                 // this just keeps the rest of the source parseable.
                 self.skip_supertype_generic_args();
+                // Nested supertype reference: `: Outer<T>.Inner(args)`
+                // (KotlinCrypto/hash's SHAKEDigest extends
+                // `XofFactory<A>.XofDelegate(delegate)`). Fold the
+                // dotted-name chain into a single concatenated parent
+                // name so the rest of the supertype clause parses.
+                // Class lookups still resolve on the LAST segment
+                // since that's what the JVM dispatches against.
+                while self.peek_kind() == TokenKind::Dot {
+                    self.bump();
+                    self.skip_trivia();
+                    if self.peek_kind() != TokenKind::Ident {
+                        break;
+                    }
+                    let seg_idx = self.pos;
+                    self.bump();
+                    let segment = self.intern_ident_at(seg_idx);
+                    let joined = format!(
+                        "{}.{}",
+                        self.interner.resolve(parent_name),
+                        self.interner.resolve(segment),
+                    );
+                    parent_name = self.interner.intern(&joined);
+                    self.skip_trivia();
+                    self.skip_supertype_generic_args();
+                }
                 if self.peek_kind() == TokenKind::LParen {
                     // Superclass with constructor call: Name(args)
                     self.bump();
@@ -1034,6 +1098,39 @@ impl<'a> Parser<'a> {
                             if self.peek_kind() == TokenKind::KwObject {
                                 self.bump(); // consume 'object'
                                 self.skip_trivia();
+                                // Optional supertype clause:
+                                //   `companion object : Parent(args), Iface`
+                                // KotlinCrypto/hash's SHAKE128 has a
+                                // `public companion object:
+                                // SHAKEXofFactory<SHAKE128>() { ... }`.
+                                // We don't model the companion's
+                                // supertype yet; just consume the
+                                // tokens so the body parses cleanly.
+                                if self.peek_kind() == TokenKind::Colon {
+                                    self.bump();
+                                    self.skip_trivia();
+                                    loop {
+                                        if self.peek_kind() != TokenKind::Ident {
+                                            break;
+                                        }
+                                        self.bump();
+                                        self.skip_supertype_generic_args();
+                                        // Optional constructor-call parens.
+                                        if self.peek_kind() == TokenKind::LParen {
+                                            self.skip_balanced(
+                                                TokenKind::LParen,
+                                                TokenKind::RParen,
+                                            );
+                                        }
+                                        self.skip_trivia();
+                                        // Multiple interfaces after comma.
+                                        if self.peek_kind() != TokenKind::Comma {
+                                            break;
+                                        }
+                                        self.bump();
+                                        self.skip_trivia();
+                                    }
+                                }
                                 // Parse companion object body.
                                 if self.peek_kind() == TokenKind::LBrace {
                                     self.bump();
@@ -1127,7 +1224,11 @@ impl<'a> Parser<'a> {
         let start = self.expect(TokenKind::KwConstructor, "constructor");
         self.skip_trivia();
 
-        // Parse parameter list.
+        // Parse parameter list. Kotlin allows a trailing comma after
+        // the last param (idiomatic on multi-line declarations like
+        // BLAKE2Digest's primary ctor with 16 named args), so after
+        // consuming a comma we re-check for the closing `)` before
+        // looping back into parse_param.
         let mut params = Vec::new();
         self.expect(TokenKind::LParen, "(");
         self.skip_trivia();
@@ -1139,34 +1240,89 @@ impl<'a> Parser<'a> {
                 if !self.eat(TokenKind::Comma) {
                     break;
                 }
+                self.skip_trivia();
+                if self.peek_kind() == TokenKind::RParen {
+                    break;
+                }
             }
         }
         self.expect(TokenKind::RParen, ")");
         self.skip_trivia();
 
-        // Parse optional delegation: `: this(args)`.
+        // Parse optional delegation: `: this(args)` or `: super(args)`.
+        // The two share an arg-list shape but route the call differently
+        // at MIR-lowering time — `this(...)` dispatches to a sibling
+        // secondary constructor on the same class, while `super(...)`
+        // invokes the parent's primary constructor. The `delegate_is_super`
+        // flag carries that distinction through.
         let mut delegate_args = Vec::new();
         let mut has_delegation = false;
+        let mut delegate_is_super = false;
         if self.eat(TokenKind::Colon) {
             has_delegation = true;
             self.skip_trivia();
-            // Expect `this`.
-            if self.peek_kind() == TokenKind::Ident || self.peek_kind() == TokenKind::KwConstructor
+            // Consume the delegation target keyword. `super` lexes to
+            // its own `KwSuper`; `this` lexes as a plain Ident
+            // (`KwConstructor` also gets accepted for backward
+            // compatibility with the prior implementation, though
+            // kotlinc would reject it).
+            if self.peek_kind() == TokenKind::KwSuper {
+                delegate_is_super = true;
+                self.bump();
+                self.skip_trivia();
+            } else if self.peek_kind() == TokenKind::Ident
+                || self.peek_kind() == TokenKind::KwConstructor
             {
-                // In Kotlin, `this` is a keyword-like identifier here.
-                // The lexer emits it as Ident. Consume it.
                 self.bump();
                 self.skip_trivia();
             }
-            // Parse delegate call args.
+            // Parse delegate call args. Named-arg form
+            // `name = expr` is common — the KotlinCrypto/hash
+            // codebase uses it heavily in `: super(...)` delegations
+            // (e.g. `super(bitStrength = 224, h = H)`). Detect the
+            // `Ident Eq` lookahead the same way regular call sites do.
             self.expect(TokenKind::LParen, "(");
             self.skip_trivia();
             if self.peek_kind() != TokenKind::RParen {
                 loop {
                     self.skip_trivia();
-                    delegate_args.push(self.parse_expr());
+                    let saved = self.pos;
+                    let mut named = false;
+                    if self.peek_kind() == TokenKind::Ident {
+                        let after = self.pos + 1;
+                        let next_kind = self.peek_kind_skip_trivia_at(after);
+                        if next_kind == TokenKind::Eq {
+                            named = true;
+                        }
+                    }
+                    if named {
+                        let name_idx = self.pos;
+                        self.bump();
+                        let name_sym = self.intern_ident_at(name_idx);
+                        self.skip_trivia();
+                        self.bump(); // consume '='
+                        self.skip_trivia();
+                        let value = self.parse_expr();
+                        delegate_args.push(CallArg {
+                            name: Some(name_sym),
+                            expr: value,
+                        });
+                    } else {
+                        self.pos = saved;
+                        let value = self.parse_expr();
+                        delegate_args.push(CallArg {
+                            name: None,
+                            expr: value,
+                        });
+                    }
                     self.skip_trivia();
                     if !self.eat(TokenKind::Comma) {
+                        break;
+                    }
+                    // Trailing-comma support for multi-line
+                    // `: super(\n  a = …,\n  b = …,\n)` delegations.
+                    self.skip_trivia();
+                    if self.peek_kind() == TokenKind::RParen {
                         break;
                     }
                 }
@@ -1186,6 +1342,7 @@ impl<'a> Parser<'a> {
         SecondaryConstructor {
             params,
             has_delegation,
+            delegate_is_super,
             delegate_args,
             body,
             span: start.merge(end),
@@ -2309,6 +2466,69 @@ impl<'a> Parser<'a> {
             };
         }
 
+        // Nested type reference: `Outer.Inner` or `Outer<A>.Inner`.
+        // Collapse the dotted chain into a single composite name so
+        // the TypeRef can still flow through type-resolution as one
+        // entity. Used both for return-type slots (`fun newReader():
+        // Xof<A>.Reader`) and for cast targets (`x as Outer.Inner`).
+        // The inner segment may itself carry generic args, which are
+        // currently dropped after parse — the JVM-level resolver
+        // does name matching on the suffix.
+        let mut name = name;
+        let mut type_args = type_args;
+        while self.peek_kind() == TokenKind::Dot && matches!(self.peek_kind_at(1), TokenKind::Ident)
+        {
+            self.bump(); // `.`
+            self.skip_trivia();
+            let seg_idx = self.pos;
+            self.bump(); // segment ident
+            let segment = self.intern_ident_at(seg_idx);
+            let joined = format!(
+                "{}.{}",
+                self.interner.resolve(name),
+                self.interner.resolve(segment),
+            );
+            name = self.interner.intern(&joined);
+            // Drop the OUTER's type args once we've stepped into a
+            // nested segment — `Outer<A>.Inner` ends up as the name
+            // `Outer.Inner` and the args of the INNER segment win.
+            type_args = Vec::new();
+            // Read inner-segment type args, if any.
+            if self.peek_kind() == TokenKind::Lt {
+                self.bump();
+                loop {
+                    self.skip_trivia();
+                    if self.peek_kind() == TokenKind::Gt {
+                        break;
+                    }
+                    if self.peek_kind() == TokenKind::Star {
+                        let star_span = self.peek_span();
+                        self.bump();
+                        type_args.push(TypeRef {
+                            name: self.interner.intern("*"),
+                            nullable: false,
+                            func_params: None,
+                            type_args: Vec::new(),
+                            is_suspend: false,
+                            is_composable: false,
+                            has_receiver: false,
+                            span: star_span,
+                        });
+                    } else {
+                        type_args.push(self.parse_type_ref());
+                    }
+                    self.skip_trivia();
+                    if !self.eat(TokenKind::Comma) {
+                        break;
+                    }
+                }
+                self.skip_trivia();
+                if self.peek_kind() == TokenKind::Gt {
+                    self.bump();
+                }
+            }
+        }
+
         let mut end = span;
         let nullable = if self.peek_kind() == TokenKind::Question {
             end = self.peek_span();
@@ -2679,6 +2899,15 @@ impl<'a> Parser<'a> {
 
     fn parse_stmt(&mut self) -> Stmt {
         self.skip_trivia();
+        // Local annotations: `@OptIn(Api::class)`, `@Suppress("…")`
+        // applied to the next statement (val/var/expression). We
+        // accept and drop them — skotch doesn't enforce opt-in scope
+        // and the annotations don't change codegen for ordinary
+        // statements.
+        if self.peek_kind() == TokenKind::At {
+            let _stmt_annotations = self.parse_annotations();
+            self.skip_trivia();
+        }
         // Loop labels: `label@ for (...)` or `label@ while (...)`
         // Consume the label prefix and parse the loop normally.
         // The label is stored on break@label/continue@label, not the loop itself.
@@ -2987,6 +3216,38 @@ impl<'a> Parser<'a> {
                             span: start,
                         };
                     }
+                }
+                // The expression path may have already produced an
+                // `Expr::IncDec` for `x++` / `--y` that landed in an
+                // inner context first (e.g. parse_postfix). When such
+                // a node bubbles up as a top-level statement, route
+                // it through the same `Stmt::Assign` desugar the
+                // bare-Ident form above uses — that path benefits
+                // from the well-trodden BinOp-then-store lowering
+                // (with field writeback) and avoids the IncDec arm's
+                // intermediate locals, which break the iinc peephole
+                // and shift branch offsets in tight loops (see fixture
+                // 1299's per-when-arm `pc++`).
+                if let Expr::IncDec {
+                    target,
+                    is_dec,
+                    is_prefix: _,
+                    span,
+                } = &expr
+                {
+                    let op = if *is_dec { BinOp::Sub } else { BinOp::Add };
+                    let one = Expr::IntLit(1, *span);
+                    let value = Expr::Binary {
+                        op,
+                        lhs: Box::new(Expr::Ident(*target, *span)),
+                        rhs: Box::new(one),
+                        span: *span,
+                    };
+                    return Stmt::Assign {
+                        target: *target,
+                        value,
+                        span: *span,
+                    };
                 }
                 Stmt::Expr(expr)
             }
@@ -3316,11 +3577,44 @@ impl<'a> Parser<'a> {
         }
         // `in` operator: `5 in r` → `r.contains(5)`.
         // `!in` operator: `5 !in r` → `!r.contains(5)`.
+        //
+        // In Kotlin's operator-precedence table, `..` (range) binds
+        // tighter than `in`, so the RHS of `in` may itself be a range
+        // expression (`require(x in 0..N)`). We call `parse_equality`
+        // to read the range LHS, then check for `..` and fold the
+        // upper bound in by hand — the regular `parse_infix_call`
+        // path is one level up.
+        let parse_in_rhs = |this: &mut Self| -> Expr {
+            let mut rhs = this.parse_equality();
+            this.skip_trivia();
+            if this.peek_kind() == TokenKind::DotDot {
+                let span_start = rhs.span();
+                this.bump();
+                this.skip_trivia();
+                let upper = this.parse_equality();
+                let span = span_start.merge(upper.span());
+                let name = this.interner.intern("rangeTo");
+                rhs = Expr::Call {
+                    callee: Box::new(Expr::Field {
+                        receiver: Box::new(rhs),
+                        name,
+                        span,
+                    }),
+                    args: vec![CallArg {
+                        name: None,
+                        expr: upper,
+                    }],
+                    type_args: Vec::new(),
+                    span,
+                };
+            }
+            rhs
+        };
         if self.peek_kind() == TokenKind::KwIn {
             let kw_span = self.peek_span();
             self.bump(); // consume `in`
             self.skip_trivia();
-            let rhs = self.parse_equality();
+            let rhs = parse_in_rhs(self);
             let span = lhs.span().merge(rhs.span());
             let contains_name = self.interner.intern("contains");
             // `lhs in rhs` → `rhs.contains(lhs)`
@@ -3343,7 +3637,7 @@ impl<'a> Parser<'a> {
             self.bump(); // consume `!`
             self.bump(); // consume `in`
             self.skip_trivia();
-            let rhs = self.parse_equality();
+            let rhs = parse_in_rhs(self);
             let span = lhs.span().merge(rhs.span());
             let contains_name = self.interner.intern("contains");
             // `lhs !in rhs` → `!rhs.contains(lhs)`
@@ -3413,12 +3707,33 @@ impl<'a> Parser<'a> {
             // for `:` (val declaration type annotation: `val n: Int = ...`)
             // and `==`/`!=` etc. (comparison binary ops where Ident is
             // a fresh LHS, not an infix call on previous expr).
+            //
+            // `[`, `++`, `--`, `?.`, `?` all start a fresh
+            // postfix/access chain on the Ident — they signal the
+            // start of a new statement when this iteration is one
+            // newline past the previous expression (see KotlinCrypto's
+            // BLAKE2Digest where two consecutive `v[N] = ... xor
+            // iv[M]` lines used to fold the second `v` into the
+            // first's infix chain).
+            // `LParen` is deliberately NOT a disqualifier even though
+            // `foo(x)` at the start of a statement is a regular call.
+            // By the time the infix loop runs, `lhs` has already been
+            // built by parse_equality (which goes through
+            // parse_postfix → parse_primary), so a leading `foo(x)`
+            // has already been folded into `lhs`. A trailing `Ident
+            // (RHS)` here is an infix call whose RHS is a
+            // parenthesized expression — e.g.
+            // `(b and c) or (b.inv() and d)` from KotlinCrypto/hash's
+            // MD5 round (and any user-defined infix function whose
+            // RHS happens to be parenthesised). Disqualifying LParen
+            // would mean every such call bails out with a parse
+            // error.
             let next2 = self.peek_kind_at(1);
             let is_infix = !text.is_empty()
                 && !matches!(
                     next2,
-                    TokenKind::LParen
-                        | TokenKind::LBrace
+                    TokenKind::LBrace
+                        | TokenKind::LBracket
                         | TokenKind::KwElse
                         | TokenKind::Eq
                         | TokenKind::PlusEq
@@ -3433,6 +3748,10 @@ impl<'a> Parser<'a> {
                         | TokenKind::LtEq
                         | TokenKind::Gt
                         | TokenKind::GtEq
+                        | TokenKind::PlusPlus
+                        | TokenKind::MinusMinus
+                        | TokenKind::QuestionDot
+                        | TokenKind::Question
                 );
             if !is_infix {
                 break;
@@ -3456,8 +3775,29 @@ impl<'a> Parser<'a> {
                 type_args: Vec::new(),
                 span,
             };
-            // Don't skip_trivia here either — next iteration must see
-            // the raw newline if any to decide whether to stop.
+            // parse_equality's internal `skip_trivia()` may have
+            // crossed a newline while reading `rhs` — which means the
+            // statement ended at `rhs` and the next ident we see
+            // (peek_kind below) is the start of a NEW statement, not
+            // another infix step. Re-scan the trivia just-consumed to
+            // catch that case and stop the chain.
+            let crossed = {
+                let mut i = self.pos;
+                let mut hit = false;
+                while i > 0
+                    && matches!(
+                        self.tokens.get(i - 1).map(|t| t.kind),
+                        Some(TokenKind::Newline) | Some(TokenKind::Semi)
+                    )
+                {
+                    hit = true;
+                    i -= 1;
+                }
+                hit
+            };
+            if crossed {
+                break;
+            }
         }
         lhs
     }
@@ -3527,7 +3867,12 @@ impl<'a> Parser<'a> {
                     continue;
                 }
             }
-            // `as` / `as?` type cast
+            // `as` / `as?` type cast. The cast target may carry
+            // generic args (`obj as Xof<A>`) or be a nullable type
+            // (`obj as Foo?`). The AST only stores the base type
+            // name; we still need to CONSUME the trailing
+            // `<...>`/`?` so the parser doesn't trip on them at the
+            // surrounding precedence level.
             if self.peek_kind() == TokenKind::KwAs {
                 self.bump();
                 let safe = self.eat(TokenKind::Question);
@@ -3536,6 +3881,17 @@ impl<'a> Parser<'a> {
                 let type_span = self.peek_span();
                 self.expect(TokenKind::Ident, "type name");
                 let type_name = self.intern_ident_at(idx);
+                // Skip a parameterized cast target's generic args,
+                // e.g. `as Xof<A>` or `as Map<String, Int>`. The cast
+                // AST doesn't carry type args; this keeps the rest of
+                // the source parseable. Use `skip_supertype_generic_args`
+                // which already implements the balanced-`<…>` scan.
+                self.skip_supertype_generic_args();
+                // `as Foo?` — nullable cast target. Eat the `?` so
+                // it doesn't reach the parent precedence level (where
+                // `expr ? :` would otherwise be misread as a ternary
+                // start).
+                let _ = self.eat(TokenKind::Question);
                 let span = lhs.span().merge(type_span);
                 lhs = Expr::AsCast {
                     expr: Box::new(lhs),
@@ -3633,6 +3989,38 @@ impl<'a> Parser<'a> {
                     op: UnaryOp::Not,
                     operand: Box::new(operand),
                     span,
+                }
+            }
+            // Prefix `++` / `--`. The expression's value is the
+            // NEW value of the target (after the bump), distinct
+            // from the postfix form which yields the old value.
+            // Only valid on a bare Ident at parse time — the
+            // operand path forces parse_postfix to land on
+            // `Expr::Ident`. Compound LHSes like `obj.f`,
+            // `arr[i]`, or chained calls aren't valid Kotlin
+            // postfix-bump targets either.
+            TokenKind::PlusPlus | TokenKind::MinusMinus => {
+                let is_dec = self.peek_kind() == TokenKind::MinusMinus;
+                let span_op = self.peek_span();
+                self.bump();
+                let operand = self.parse_unary();
+                let span = span_op.merge(operand.span());
+                if let Expr::Ident(name, _) = operand {
+                    Expr::IncDec {
+                        target: name,
+                        is_dec,
+                        is_prefix: true,
+                        span,
+                    }
+                } else {
+                    self.diags.push(Diagnostic::error(
+                        span,
+                        format!(
+                            "prefix `{}` requires a simple variable name",
+                            if is_dec { "--" } else { "++" }
+                        ),
+                    ));
+                    operand
                 }
             }
             _ => self.parse_postfix(),
@@ -3996,8 +4384,16 @@ impl<'a> Parser<'a> {
                     }
                 }
                 // Also handle: `f { body }` — call with ONLY a trailing lambda,
-                // no parentheses at all. Only if current expr is an identifier.
-                TokenKind::LBrace if matches!(expr, Expr::Ident(_, _) | Expr::Field { .. }) => {
+                // no parentheses at all. The guard set covers `f`,
+                // `obj.method`, AND `obj?.method` so the `?.let { … }`
+                // shape (used e.g. in `t?.let { "/$it" } ?: ""` from
+                // KotlinCrypto's Bit64Digest) parses through cleanly.
+                TokenKind::LBrace
+                    if matches!(
+                        expr,
+                        Expr::Ident(_, _) | Expr::Field { .. } | Expr::SafeCall { .. }
+                    ) =>
+                {
                     let lambda = self.parse_lambda_expr();
                     let span = expr.span().merge(lambda.span());
                     expr = Expr::Call {
@@ -4009,6 +4405,42 @@ impl<'a> Parser<'a> {
                         type_args: Vec::new(),
                         span,
                     };
+                }
+                // Postfix `++` / `--` in expression position. `name++`
+                // at statement position is intercepted earlier (it
+                // becomes `Stmt::Assign { target, value: target + 1 }`
+                // and never reaches parse_postfix). The only callers
+                // that reach this arm are nested-expression contexts
+                // like a named-arg value (`addData(index = APos++)`,
+                // KotlinCrypto's KeccakDigest), a return-value
+                // (`return n++`), or the RHS of a binary op.
+                //
+                // Postfix `++` / `--` in expression position. `name++`
+                // at statement position is intercepted earlier (it
+                // becomes `Stmt::Assign { target, value: target + 1 }`
+                // and never reaches parse_postfix). The only callers
+                // that reach this arm are nested-expression contexts
+                // like a named-arg value (`addData(index = APos++)`,
+                // KotlinCrypto's KeccakDigest), an array-index
+                // (`out[outPos++] = ...`), or the RHS of a binary
+                // op (`i + outPos++`). We only accept it on a bare
+                // `Ident` for now — `arr[i]++` would need a separate
+                // desugar that pulls the index out so it's
+                // evaluated once.
+                TokenKind::PlusPlus | TokenKind::MinusMinus
+                    if matches!(expr, Expr::Ident(_, _)) =>
+                {
+                    let is_dec = self.peek_kind() == TokenKind::MinusMinus;
+                    let op_span = self.peek_span();
+                    self.bump();
+                    if let Expr::Ident(name, name_span) = expr {
+                        expr = Expr::IncDec {
+                            target: name,
+                            is_dec,
+                            is_prefix: false,
+                            span: name_span.merge(op_span),
+                        };
+                    }
                 }
                 _ => break,
             }
@@ -4429,7 +4861,7 @@ impl<'a> Parser<'a> {
         self.skip_trivia();
         let type_idx = self.pos;
         let type_span = self.peek_span();
-        let super_type = if self.peek_kind() == TokenKind::Ident {
+        let mut super_type = if self.peek_kind() == TokenKind::Ident {
             self.bump();
             self.intern_ident_at(type_idx)
         } else {
@@ -4438,6 +4870,30 @@ impl<'a> Parser<'a> {
             self.interner.intern("")
         };
         self.skip_trivia();
+        // Generic args + dotted nested type, mirroring the class-decl
+        // supertype parser: `object : Xof<A>.Reader() {...}` is
+        // common when the parent type is a nested class on a
+        // generic outer (KotlinCrypto/hash's SHAKEDigest does this
+        // inside its `newReader` body).
+        self.skip_supertype_generic_args();
+        while self.peek_kind() == TokenKind::Dot {
+            self.bump();
+            self.skip_trivia();
+            if self.peek_kind() != TokenKind::Ident {
+                break;
+            }
+            let seg_idx = self.pos;
+            self.bump();
+            let segment = self.intern_ident_at(seg_idx);
+            let joined = format!(
+                "{}.{}",
+                self.interner.resolve(super_type),
+                self.interner.resolve(segment),
+            );
+            super_type = self.interner.intern(&joined);
+            self.skip_trivia();
+            self.skip_supertype_generic_args();
+        }
         // Optional constructor call parens: `object : Type()`
         if self.peek_kind() == TokenKind::LParen {
             self.bump();

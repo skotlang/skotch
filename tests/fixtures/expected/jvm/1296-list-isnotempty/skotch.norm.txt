@@ -1,0 +1,59 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=2 max_locals=1
+    0000 iconst_0
+    0001 anewarray Class(java/lang/Object)
+    0004 invokestatic Method(kotlin/collections/CollectionsKt.mutableListOf:([Ljava/lang/Object;)Ljava/util/List;)
+    0007 astore_0
+    0008 aload_0
+    0009 invokeinterface InterfaceMethod(java/util/List.isEmpty:()Z)
+    0014 invokedynamic InvokeDynamic(makeConcatWithConstants:(Z)Ljava/lang/String;)
+    0019 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0022 swap
+    0023 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0026 aload_0
+    0027 invokeinterface InterfaceMethod(java/util/List.isEmpty:()Z)
+    0032 ifne 39
+    0035 iconst_1
+    0036 goto 40
+    0039 iconst_0
+    0040 invokedynamic InvokeDynamic(makeConcatWithConstants:(Z)Ljava/lang/String;)
+    0045 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0048 swap
+    0049 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0052 aload_0
+    0053 ldc "hi"
+    0055 invokeinterface InterfaceMethod(java/util/List.add:(Ljava/lang/Object;)Z)
+    0060 pop
+    0061 aload_0
+    0062 invokeinterface InterfaceMethod(java/util/List.isEmpty:()Z)
+    0067 invokedynamic InvokeDynamic(makeConcatWithConstants:(Z)Ljava/lang/String;)
+    0072 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0075 swap
+    0076 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0079 aload_0
+    0080 invokeinterface InterfaceMethod(java/util/List.isEmpty:()Z)
+    0085 ifne 92
+    0088 iconst_1
+    0089 goto 93
+    0092 iconst_0
+    0093 invokedynamic InvokeDynamic(makeConcatWithConstants:(Z)Ljava/lang/String;)
+    0098 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0101 swap
+    0102 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0105 aload_0
+    0106 invokeinterface InterfaceMethod(java/util/List.size:()I)
+    0111 invokedynamic InvokeDynamic(makeConcatWithConstants:(I)Ljava/lang/String;)
+    0116 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0119 swap
+    0120 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0123 return
+    sub_attr  StackMapTable (13 bytes)
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
+class_attr    BootstrapMethods (32 bytes)

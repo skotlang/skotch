@@ -1836,6 +1836,27 @@ pub fn lower_file(
                     },
                 );
             }
+            // Preserve EVERY overload in the parallel map so per-
+            // receiver dispatch (e.g. `operator fun X.get(...)` vs
+            // `operator fun Y.get(...)`) can pick the right one.
+            let entry = module
+                .cross_file_fn_overloads
+                .entry(name.clone())
+                .or_default();
+            for ext in decls {
+                entry.push((
+                    ext.owner_class.clone(),
+                    ext.descriptor.clone(),
+                    ext.return_ty.clone(),
+                    skotch_mir::CrossFileFnExtras {
+                        is_inline: ext.is_inline,
+                        receiver_ty: ext.receiver_ty.clone(),
+                        has_default: ext.has_default.clone(),
+                        is_vararg: ext.is_vararg.clone(),
+                        annotations: ext.annotations.clone(),
+                    },
+                ));
+            }
         }
         // Top-level vals → cross_file_vals so `topLevelVal.someMethod()`
         // resolves via the wrapper class's static getter rather than
@@ -1845,6 +1866,48 @@ pub fn lower_file(
                 name.clone(),
                 (ext_val.owner_class.clone(), ext_val.ty.clone()),
             );
+        }
+        // Second pass over cross-file stub MirClasses: re-FQ-resolve
+        // any `interfaces` entry that was registered with a simple
+        // name because the `cross_file_classes` table hadn't yet seen
+        // the target when the stub was built (PackageSymbolTable
+        // iterates a HashMap so order isn't deterministic). Without
+        // this pass, KotlinCrypto/hash's KeccakDigest stub keeps
+        // `interfaces=["Digest"]` instead of `["org/kotlincrypto/core
+        // /digest/Digest"]`, and the implicit-this dispatch walks
+        // its hierarchy without resolving inherited methods.
+        // We collect updates first (to satisfy the borrow checker)
+        // then apply them in a separate scan.
+        let mut iface_fixups: Vec<(usize, Vec<String>)> = Vec::new();
+        for (idx, cls) in module.classes.iter().enumerate() {
+            if !cls.is_cross_file_stub {
+                continue;
+            }
+            let mut updated: Vec<String> = Vec::with_capacity(cls.interfaces.len());
+            let mut changed = false;
+            for iname in &cls.interfaces {
+                if iname.contains('/') {
+                    updated.push(iname.clone());
+                    continue;
+                }
+                if let Some(fq) = module.import_map.get(iname).cloned().or_else(|| {
+                    module
+                        .cross_file_classes
+                        .get(iname)
+                        .map(|(jvm, _, _)| jvm.clone())
+                }) {
+                    updated.push(fq);
+                    changed = true;
+                } else {
+                    updated.push(iname.clone());
+                }
+            }
+            if changed {
+                iface_fixups.push((idx, updated));
+            }
+        }
+        for (idx, updated) in iface_fixups {
+            module.classes[idx].interfaces = updated;
         }
     }
 
@@ -10601,6 +10664,72 @@ fn lower_expr(
                     }
                 }
 
+                // Bitwise intrinsics on Int / Long. Kotlin declares
+                // `Int.shl(Int): Int` (and friends) as stdlib member
+                // functions, but kotlinc emits a single JVM bitwise
+                // opcode instead of an invoke — there is no
+                // `kotlin/Int.class`, so a regular dispatch path would
+                // fail at descriptor lookup. Match here on
+                // `(receiver_ty, method_name)` and lower directly to
+                // the `$convert`-style intrinsic the JVM backend
+                // already understands. Single-arg shapes only — the
+                // companion zero-arg `inv()` falls into the regular
+                // conversion path below.
+                if args.len() == 1 {
+                    let opcode_name: Option<(Ty, &str)> = match (method_name_str.as_str(), &recv_ty)
+                    {
+                        ("shl", Ty::Int) => Some((Ty::Int, "ishl")),
+                        ("shr", Ty::Int) => Some((Ty::Int, "ishr")),
+                        ("ushr", Ty::Int) => Some((Ty::Int, "iushr")),
+                        ("and", Ty::Int) => Some((Ty::Int, "iand")),
+                        ("or", Ty::Int) => Some((Ty::Int, "ior")),
+                        ("xor", Ty::Int) => Some((Ty::Int, "ixor")),
+                        ("shl", Ty::Long) => Some((Ty::Long, "lshl")),
+                        ("shr", Ty::Long) => Some((Ty::Long, "lshr")),
+                        ("ushr", Ty::Long) => Some((Ty::Long, "lushr")),
+                        ("and", Ty::Long) => Some((Ty::Long, "land")),
+                        ("or", Ty::Long) => Some((Ty::Long, "lor")),
+                        ("xor", Ty::Long) => Some((Ty::Long, "lxor")),
+                        _ => None,
+                    };
+                    if let Some((ret_ty, opname)) = opcode_name {
+                        let arg_local = lower_expr(
+                            &args[0].expr,
+                            fb,
+                            scope,
+                            module,
+                            name_to_func,
+                            name_to_global,
+                            interner,
+                            diags,
+                            loop_ctx,
+                        )?;
+                        // Long shifts take an Int count on the JVM
+                        // (lshl/lshr/lushr descriptor is `(JI)J`),
+                        // but Long.and/or/xor take two Longs. Pick
+                        // the descriptor from the receiver+opcode.
+                        let desc = match opname {
+                            "ishl" | "ishr" | "iushr" | "iand" | "ior" | "ixor" => "(II)I",
+                            "lshl" | "lshr" | "lushr" => "(JI)J",
+                            "land" | "lor" | "lxor" => "(JJ)J",
+                            _ => unreachable!(),
+                        };
+                        let dest = fb.new_local(ret_ty);
+                        fb.push_stmt(MStmt::Assign {
+                            dest,
+                            value: Rvalue::Call {
+                                kind: CallKind::StaticJava {
+                                    class_name: "$bitwise".to_string(),
+                                    method_name: opname.to_string(),
+                                    descriptor: desc.to_string(),
+                                },
+                                args: vec![recv_local, arg_local],
+                            },
+                        });
+                        return Some(dest);
+                    }
+                }
+
                 // Primitive type conversion methods: toInt(), toDouble(), toLong(), toChar()
                 if args.is_empty() {
                     let conversion: Option<(Ty, &str)> = match (method_name_str.as_str(), &recv_ty)
@@ -10613,7 +10742,18 @@ fn lower_expr(
                         ("toInt", Ty::Long) => Some((Ty::Int, "l2i")),
                         ("toInt", Ty::Float) => Some((Ty::Int, "f2i")),
                         ("toInt", Ty::Char) => Some((Ty::Int, "nop")),
+                        ("toInt", Ty::Byte) => Some((Ty::Int, "nop")),
                         ("toChar", Ty::Int) => Some((Ty::Char, "i2c")),
+                        // Int/Long → Byte: kotlinc emits `i2b`. The
+                        // result is a Byte primitive — the verifier
+                        // sees it as an Int on the stack but the
+                        // sign-extended high bits are masked, so
+                        // `byteArr[i] = (0x80).toByte()` becomes
+                        // `bipush -128; bastore` without an
+                        // intermediate field.
+                        ("toByte", Ty::Int) => Some((Ty::Byte, "i2b")),
+                        ("toByte", Ty::Long) => Some((Ty::Byte, "l2b")),
+                        ("toShort", Ty::Int) => Some((Ty::Short, "i2s")),
                         ("toLong", Ty::Float) => Some((Ty::Long, "f2l")),
                         ("toDouble", Ty::Float) => Some((Ty::Double, "f2d")),
                         ("toFloat", Ty::Int) => Some((Ty::Float, "i2f")),
@@ -10678,9 +10818,12 @@ fn lower_expr(
                                 "i2l" => "(I)J",
                                 "i2c" => "(I)C",
                                 "i2f" => "(I)F",
+                                "i2b" => "(I)B",
+                                "i2s" => "(I)S",
                                 "l2i" => "(J)I",
                                 "l2d" => "(J)D",
                                 "l2f" => "(J)F",
+                                "l2b" => "(J)B",
                                 "d2i" => "(D)I",
                                 "d2l" => "(D)J",
                                 "d2f" => "(D)F",
@@ -15799,10 +15942,23 @@ fn lower_expr(
                 if let Some((_sym, this_local)) = this_info {
                     let this_ty = fb.mf.locals[this_local.0 as usize].clone();
                     if let Ty::Class(class_name) = &this_ty {
-                        // Look up in this class, superclasses, and interfaces.
-                        let mut search_class = Some(class_name.clone());
-                        'search: while let Some(ref cname) = search_class {
-                            let found = module.find_class(cname);
+                        // Walk the receiver's full super graph in BFS
+                        // order: each in-module class contributes its
+                        // own methods, then its interface entries
+                        // (which the parser also uses to record a
+                        // no-args parent class like `class Foo :
+                        // BLAKE2Digest`), then its `super_class`. We
+                        // re-enqueue same-module entries we discover
+                        // via the interface list so a deeper-nested
+                        // grandparent's methods still get matched.
+                        let mut to_visit: Vec<String> = vec![class_name.clone()];
+                        let mut visited: rustc_hash::FxHashSet<String> =
+                            rustc_hash::FxHashSet::default();
+                        'search: while let Some(cname) = to_visit.pop() {
+                            if !visited.insert(cname.clone()) {
+                                continue;
+                            }
+                            let found = module.find_class(&cname);
                             if let Some(cls) = found {
                                 // Prefer the non-stub overload when present.
                                 // A class's `methods` list can contain BOTH
@@ -15831,11 +15987,85 @@ fn lower_expr(
                                         },
                                         m.return_ty.clone(),
                                     ));
-                                    break;
+                                    break 'search;
                                 }
-                                // Search interfaces.
+                                // Companion-object methods on this class
+                                // (or an ancestor). Kotlin makes parent
+                                // companion members accessible from
+                                // subclass scope as if they were
+                                // inherited statics — `class TupleDigest
+                                // : SHAKEDigest` ctor delegation
+                                // referencing `blockSizeFromBitStrength`
+                                // resolves to
+                                // `SHAKEDigest$Companion.blockSizeFromBitStrength`.
+                                // Emit: getstatic <cls>.Companion; then
+                                // invokevirtual on the companion class.
+                                if let Some(comp_name) = cls.companion_class_name.clone() {
+                                    if let Some(comp_cls) = module.find_class(&comp_name) {
+                                        if let Some(_m) =
+                                            comp_cls.methods.iter().find(|m| m.name == callee_str)
+                                        {
+                                            let comp_desc = format!("L{};", comp_name);
+                                            let comp_local =
+                                                fb.new_local(Ty::Class(comp_name.clone()));
+                                            fb.push_stmt(MStmt::Assign {
+                                                dest: comp_local,
+                                                value: Rvalue::GetStaticField {
+                                                    class_name: cname.clone(),
+                                                    field_name: "Companion".to_string(),
+                                                    descriptor: comp_desc,
+                                                },
+                                            });
+                                            arg_locals.insert(0, comp_local);
+                                            let ret_ty = comp_cls
+                                                .methods
+                                                .iter()
+                                                .find(|m| m.name == callee_str)
+                                                .map(|m| m.return_ty.clone())
+                                                .unwrap_or(Ty::Any);
+                                            resolved = Some((
+                                                CallKind::Virtual {
+                                                    class_name: comp_name,
+                                                    method_name: callee_str.to_string(),
+                                                },
+                                                ret_ty,
+                                            ));
+                                            break 'search;
+                                        }
+                                    }
+                                }
+                                // Search interfaces. The parser cannot
+                                // distinguish `class Foo : ParentClass`
+                                // (no-args super-ctor delegation) from
+                                // `class Foo : Interface`, so a parent
+                                // CLASS without `(args)` ends up in
+                                // `cls.interfaces`. We therefore also
+                                // try classinfo against each entry to
+                                // pick up inherited methods like
+                                // `Digest.digestLength()` declared on
+                                // the parent class — used by every
+                                // KotlinCrypto/hash subclass.
+                                //
+                                // Interface entries come in two shapes:
+                                // SIMPLE (`SHAKEDigest`) when the
+                                // interface is in the same source set
+                                // as the current class, FQ (`org/.../
+                                // SHAKEDigest`) when the parser
+                                // already resolved an imported parent
+                                // name. In-module MirClass entries
+                                // use SIMPLE names, so for the
+                                // find_class step strip a leading FQ
+                                // prefix down to the last segment.
                                 for iname in &cls.interfaces {
-                                    if let Some(icls) = module.find_class(iname) {
+                                    let simple_iname = iname
+                                        .rsplit('/')
+                                        .next()
+                                        .map(|s| s.to_string())
+                                        .unwrap_or_else(|| iname.clone());
+                                    if let Some(icls) = module
+                                        .find_class(iname)
+                                        .or_else(|| module.find_class(&simple_iname))
+                                    {
                                         if let Some(m) =
                                             icls.methods.iter().find(|m| m.name == callee_str)
                                         {
@@ -15850,10 +16080,192 @@ fn lower_expr(
                                             break 'search;
                                         }
                                     }
+                                    // Classpath lookup: the interface
+                                    // entry may actually name a
+                                    // classfile parent (e.g. `: Digest`
+                                    // from a JAR). Skotch-classinfo
+                                    // walks the class's own superclass
+                                    // chain when resolving the
+                                    // method, so this single lookup
+                                    // also picks up grand-parent
+                                    // methods. `iname` here might be
+                                    // simple (`Digest`) or FQ
+                                    // (`org/kotlincrypto/core/digest
+                                    // /Digest`) depending on whether
+                                    // the parser already FQ-resolved
+                                    // the import; try both.
+                                    let resolved_name = if iname.contains('/') {
+                                        iname.clone()
+                                    } else {
+                                        // Try the current file's
+                                        // `import_map` first (covers
+                                        // direct imports like
+                                        // `org.kotlincrypto.core.Digest`),
+                                        // then fall back to the
+                                        // cross-file class registry
+                                        // (covers transitive parents
+                                        // — `ParallelDigest`'s file
+                                        // doesn't import Digest
+                                        // directly, but KeccakDigest's
+                                        // does, and the package
+                                        // symbol table records the
+                                        // FQ name for the whole
+                                        // module).
+                                        //
+                                        // Final fallback: search every
+                                        // MirClass for one whose JVM
+                                        // name's last segment matches
+                                        // `iname`. The cross-file stub
+                                        // registration may have raced
+                                        // ahead of the simple-name
+                                        // lookup table (the
+                                        // PackageSymbolTable iterates
+                                        // a HashMap so order isn't
+                                        // guaranteed). Walking the
+                                        // module class list directly
+                                        // sidesteps the race.
+                                        module
+                                            .import_map
+                                            .get(iname)
+                                            .cloned()
+                                            .or_else(|| {
+                                                module
+                                                    .cross_file_classes
+                                                    .get(iname)
+                                                    .map(|(jvm, _, _)| jvm.clone())
+                                            })
+                                            .or_else(|| {
+                                                module.classes.iter().find_map(|c| {
+                                                    if c.name.rsplit('/').next() == Some(iname) {
+                                                        Some(c.name.clone())
+                                                    } else {
+                                                        None
+                                                    }
+                                                })
+                                            })
+                                            .or_else(|| {
+                                                // Last-ditch: scan the
+                                                // preloaded CLASSPATH
+                                                // for a class whose
+                                                // last segment matches.
+                                                // Hits when a transitive
+                                                // parent (e.g. `Digest`
+                                                // from core-jvm.jar)
+                                                // is referenced only by
+                                                // a child class that
+                                                // itself isn't directly
+                                                // imported by this file.
+                                                skotch_classinfo::find_class_jvm_name_by_simple(
+                                                    iname,
+                                                )
+                                            })
+                                            .unwrap_or_else(|| iname.clone())
+                                    };
+                                    let desc_opt = skotch_classinfo::lookup_method_descriptor(
+                                        &resolved_name,
+                                        callee_str,
+                                        arg_locals.len(),
+                                    );
+                                    if let Some(desc) = desc_opt {
+                                        arg_locals.insert(0, *this_local);
+                                        resolved = Some((
+                                            CallKind::VirtualJava {
+                                                class_name: resolved_name,
+                                                method_name: callee_str.to_string(),
+                                                descriptor: desc,
+                                            },
+                                            Ty::Any,
+                                        ));
+                                        break 'search;
+                                    }
+                                    // Re-enqueue the iface name so its
+                                    // OWN inherited methods get walked
+                                    // — `class Bit32 : BLAKE2Digest`
+                                    // → BLAKE2Digest's `interfaces`
+                                    // contain `Digest`, which holds
+                                    // `digestLength`. Push BOTH the
+                                    // FQ and the simple form so the
+                                    // outer pop loop picks up
+                                    // whichever name the in-module
+                                    // class is registered under.
+                                    let push_target = if module.find_class(iname).is_some() {
+                                        Some(iname.clone())
+                                    } else if module.find_class(&simple_iname).is_some() {
+                                        Some(simple_iname.clone())
+                                    } else {
+                                        None
+                                    };
+                                    if let Some(t) = push_target {
+                                        if !visited.contains(&t) {
+                                            to_visit.push(t);
+                                        }
+                                    }
                                 }
-                                search_class = cls.super_class.clone();
+                                if let Some(parent) = cls.super_class.clone() {
+                                    if !visited.contains(&parent) {
+                                        to_visit.push(parent);
+                                    }
+                                }
+                            }
+                            // If `cname` wasn't in the in-module set,
+                            // try classinfo directly — the entry might
+                            // be the FQ name of an external parent
+                            // class that the parser recorded via
+                            // `super_class`. KotlinCrypto/hash's
+                            // KeccakDigest.super_class is
+                            // `org/kotlincrypto/core/digest/Digest`,
+                            // which lives in the cached JAR and has
+                            // the inherited methods we're after.
+                            //
+                            // When `cname` is a simple name like
+                            // `Digest` (because the parser saw
+                            // `class SHAKEDigest : Digest()` with no
+                            // matching import in this file), FQ-resolve
+                            // it via the same chain the iface walk uses
+                            // before the classinfo lookup, since the
+                            // descriptor cache is keyed by FQ.
+                            let cname_fq = if cname.contains('/') {
+                                cname.clone()
                             } else {
-                                break;
+                                module
+                                    .import_map
+                                    .get(&cname)
+                                    .cloned()
+                                    .or_else(|| {
+                                        module
+                                            .cross_file_classes
+                                            .get(&cname)
+                                            .map(|(jvm, _, _)| jvm.clone())
+                                    })
+                                    .or_else(|| {
+                                        module.classes.iter().find_map(|c| {
+                                            if c.name.rsplit('/').next() == Some(cname.as_str()) {
+                                                Some(c.name.clone())
+                                            } else {
+                                                None
+                                            }
+                                        })
+                                    })
+                                    .or_else(|| {
+                                        skotch_classinfo::find_class_jvm_name_by_simple(&cname)
+                                    })
+                                    .unwrap_or_else(|| cname.clone())
+                            };
+                            if let Some(desc) = skotch_classinfo::lookup_method_descriptor(
+                                &cname_fq,
+                                callee_str,
+                                arg_locals.len(),
+                            ) {
+                                arg_locals.insert(0, *this_local);
+                                resolved = Some((
+                                    CallKind::VirtualJava {
+                                        class_name: cname_fq,
+                                        method_name: callee_str.to_string(),
+                                        descriptor: desc,
+                                    },
+                                    Ty::Any,
+                                ));
+                                break 'search;
                             }
                         }
                         // If not found in MirClass hierarchy, try JDK
@@ -16963,6 +17375,55 @@ fn lower_expr(
                         // "unknown call target" path; this is a
                         // diagnosed error rather than a runtime crash.
                         let tid_ty = fb.mf.locals.get(tid.0 as usize).cloned();
+                        // Bitwise intrinsics dispatched through an
+                        // implicit `this`: `Int.leftEncodeBits()`'s
+                        // body uses `shl(3)`/`ushr(29)` against the
+                        // extension receiver, which is `this: Int`.
+                        // The receiver+arg pair is statically a
+                        // primitive bitwise op — no JVM method exists
+                        // to dispatch through, so route directly to
+                        // the same `$bitwise` intrinsic the explicit
+                        // `n.shl(3)` form goes through.
+                        if arg_locals.len() == 1 {
+                            let arg_ty = fb.mf.locals[arg_locals[0].0 as usize].clone();
+                            let opcode_name: Option<(Ty, &str, &str)> =
+                                match (callee_str, tid_ty.as_ref().unwrap_or(&Ty::Any), &arg_ty) {
+                                    ("shl", Ty::Int, Ty::Int) => Some((Ty::Int, "ishl", "(II)I")),
+                                    ("shr", Ty::Int, Ty::Int) => Some((Ty::Int, "ishr", "(II)I")),
+                                    ("ushr", Ty::Int, Ty::Int) => Some((Ty::Int, "iushr", "(II)I")),
+                                    ("and", Ty::Int, Ty::Int) => Some((Ty::Int, "iand", "(II)I")),
+                                    ("or", Ty::Int, Ty::Int) => Some((Ty::Int, "ior", "(II)I")),
+                                    ("xor", Ty::Int, Ty::Int) => Some((Ty::Int, "ixor", "(II)I")),
+                                    ("shl", Ty::Long, Ty::Int) => Some((Ty::Long, "lshl", "(JI)J")),
+                                    ("shr", Ty::Long, Ty::Int) => Some((Ty::Long, "lshr", "(JI)J")),
+                                    ("ushr", Ty::Long, Ty::Int) => {
+                                        Some((Ty::Long, "lushr", "(JI)J"))
+                                    }
+                                    ("and", Ty::Long, Ty::Long) => {
+                                        Some((Ty::Long, "land", "(JJ)J"))
+                                    }
+                                    ("or", Ty::Long, Ty::Long) => Some((Ty::Long, "lor", "(JJ)J")),
+                                    ("xor", Ty::Long, Ty::Long) => {
+                                        Some((Ty::Long, "lxor", "(JJ)J"))
+                                    }
+                                    _ => None,
+                                };
+                            if let Some((ret_ty, opname, desc)) = opcode_name {
+                                let dest = fb.new_local(ret_ty);
+                                fb.push_stmt(MStmt::Assign {
+                                    dest,
+                                    value: Rvalue::Call {
+                                        kind: CallKind::StaticJava {
+                                            class_name: "$bitwise".to_string(),
+                                            method_name: opname.to_string(),
+                                            descriptor: desc.to_string(),
+                                        },
+                                        args: vec![tid, arg_locals[0]],
+                                    },
+                                });
+                                return Some(dest);
+                            }
+                        }
                         let tid_class_name = match &tid_ty {
                             Some(Ty::Class(cn)) => Some(cn.clone()),
                             _ => None,
@@ -18584,6 +19045,35 @@ fn lower_expr(
                         .find(|c| &c.name == cn)
                         .and_then(|cls| cls.methods.iter().find(|m| m.name == "get"))
                         .map(|m| m.return_ty.clone());
+                    // Top-level extension function:
+                    //   `operator fun X.get(i: Byte): Int`
+                    // is lowered as a top-level fn with the receiver
+                    // as the first parameter. KotlinCrypto/hash's
+                    // `internal inline operator fun Bit32Message
+                    // .get(sigmaByte: Byte): Int` is a real-world
+                    // case (used inside the BLAKE2 mixing rounds).
+                    // MIR-level extension fns don't preserve their
+                    // `receiver_ty` AST-side annotation, so we
+                    // recognize them positionally: a fn named `get`
+                    // with exactly two params whose first param's
+                    // type matches the receiver class.
+                    let ext_get_fid = if get_method.is_some() {
+                        None
+                    } else {
+                        module.functions.iter().find_map(|f| {
+                            if f.name != "get" || f.params.len() != 2 {
+                                return None;
+                            }
+                            let first_pid = f.params[0];
+                            let first_ty = f.locals.get(first_pid.0 as usize)?;
+                            if let Ty::Class(rn) = first_ty {
+                                if rn == cn {
+                                    return Some(f.id);
+                                }
+                            }
+                            None
+                        })
+                    };
                     if let Some(ret_ty) = get_method {
                         let dest = fb.new_local(ret_ty);
                         fb.push_stmt(MStmt::Assign {
@@ -18592,6 +19082,52 @@ fn lower_expr(
                                 kind: CallKind::Virtual {
                                     class_name: cn.clone(),
                                     method_name: "get".to_string(),
+                                },
+                                args: vec![arr, idx],
+                            },
+                        });
+                        Some(dest)
+                    } else if let Some(fid) = ext_get_fid {
+                        let ret_ty = module.functions[fid.0 as usize].return_ty.clone();
+                        let dest = fb.new_local(ret_ty);
+                        fb.push_stmt(MStmt::Assign {
+                            dest,
+                            value: Rvalue::Call {
+                                kind: CallKind::Static(fid),
+                                args: vec![arr, idx],
+                            },
+                        });
+                        Some(dest)
+                    } else if let Some((owner, desc, ret_ty)) = module
+                        .cross_file_fn_overloads
+                        .get("get")
+                        .and_then(|overloads| {
+                            overloads
+                                .iter()
+                                .find_map(|(o, d, r, x)| match &x.receiver_ty {
+                                    Some(Ty::Class(rn)) if rn == cn => {
+                                        Some((o.clone(), d.clone(), r.clone()))
+                                    }
+                                    _ => None,
+                                })
+                        })
+                    {
+                        // Cross-file `operator fun X.get(...)` —
+                        // emit as a static call against the owning
+                        // wrapper class with the receiver as arg 0.
+                        // KotlinCrypto/hash's `internal inline
+                        // operator fun Bit32Message.get(sigmaByte:
+                        // Byte): Int` lives in `-Message.kt` and is
+                        // resolved this way from BLAKE2Digest's
+                        // mixing rounds.
+                        let dest = fb.new_local(ret_ty);
+                        fb.push_stmt(MStmt::Assign {
+                            dest,
+                            value: Rvalue::Call {
+                                kind: CallKind::StaticJava {
+                                    class_name: owner,
+                                    method_name: "get".to_string(),
+                                    descriptor: desc,
                                 },
                                 args: vec![arr, idx],
                             },
@@ -18869,6 +19405,25 @@ fn lower_expr(
                     ("Byte", "MIN_VALUE") => Some((Ty::Byte, MirConst::Int(i8::MIN as i32))),
                     ("Short", "MAX_VALUE") => Some((Ty::Short, MirConst::Int(i16::MAX as i32))),
                     ("Short", "MIN_VALUE") => Some((Ty::Short, MirConst::Int(i16::MIN as i32))),
+                    // `Byte.SIZE_BITS` / `Byte.SIZE_BYTES` (and the
+                    // matching Short/Int/Long/Char companions) are
+                    // `const val` in Kotlin's stdlib — kotlinc
+                    // folds the reference to its literal value at
+                    // every use. Mirror that here so expressions
+                    // like `bitStrength / Byte.SIZE_BITS` produce a
+                    // real Int instead of falling through to the
+                    // unresolved-field placeholder that ate the
+                    // entire `super(…)` argument in parity/101-hash.
+                    ("Byte", "SIZE_BITS") => Some((Ty::Int, MirConst::Int(8))),
+                    ("Byte", "SIZE_BYTES") => Some((Ty::Int, MirConst::Int(1))),
+                    ("Short", "SIZE_BITS") => Some((Ty::Int, MirConst::Int(16))),
+                    ("Short", "SIZE_BYTES") => Some((Ty::Int, MirConst::Int(2))),
+                    ("Int", "SIZE_BITS") => Some((Ty::Int, MirConst::Int(32))),
+                    ("Int", "SIZE_BYTES") => Some((Ty::Int, MirConst::Int(4))),
+                    ("Long", "SIZE_BITS") => Some((Ty::Int, MirConst::Int(64))),
+                    ("Long", "SIZE_BYTES") => Some((Ty::Int, MirConst::Int(8))),
+                    ("Char", "SIZE_BITS") => Some((Ty::Int, MirConst::Int(16))),
+                    ("Char", "SIZE_BYTES") => Some((Ty::Int, MirConst::Int(2))),
                     _ => None,
                 };
                 if let Some((ty, val)) = constant {
@@ -20313,6 +20868,145 @@ fn lower_expr(
                     value: Rvalue::Local(obj),
                 });
                 Some(dest)
+            }
+        }
+        Expr::IncDec {
+            target,
+            is_dec,
+            is_prefix,
+            span,
+        } => {
+            // Postfix `name++`/`name--`: yield the pre-bump value of
+            // `name`, then write `name + 1` back. Prefix `++name`/
+            // `--name`: write the new value first, yield it. Either
+            // way, the bump is in-place on the target local. Field-
+            // targeted bumps (`this.x++`, `someObj.f++`) and array-
+            // index bumps (`a[i]++`) hit the parser's bare-Ident
+            // restriction earlier and never reach this arm.
+            let target_lid = scope
+                .iter()
+                .rev()
+                .find(|(s, _)| s == target)
+                .map(|(_, lid)| *lid);
+            let target_lid = match target_lid {
+                Some(lid) => lid,
+                None => {
+                    diags.push(Diagnostic::error(
+                        *span,
+                        format!(
+                            "`{}{}{}` operand `{}` is not in scope",
+                            if *is_prefix {
+                                if *is_dec {
+                                    "--"
+                                } else {
+                                    "++"
+                                }
+                            } else {
+                                ""
+                            },
+                            interner.resolve(*target),
+                            if *is_prefix {
+                                ""
+                            } else {
+                                if *is_dec {
+                                    "--"
+                                } else {
+                                    "++"
+                                }
+                            },
+                            interner.resolve(*target),
+                        ),
+                    ));
+                    let dest = fb.new_local(Ty::Any);
+                    fb.push_stmt(MStmt::Assign {
+                        dest,
+                        value: Rvalue::Const(MirConst::Null),
+                    });
+                    return Some(dest);
+                }
+            };
+            let target_ty = fb.mf.locals[target_lid.0 as usize].clone();
+            // Build the `1` literal in the right slot type so the
+            // BinOp doesn't trip on type mismatch for `Long`/`Char`.
+            let one_const = match target_ty {
+                Ty::Long => MirConst::Long(1),
+                _ => MirConst::Int(1),
+            };
+            let one = fb.new_local(target_ty.clone());
+            fb.push_stmt(MStmt::Assign {
+                dest: one,
+                value: Rvalue::Const(one_const),
+            });
+            // Use the type-specialized opcodes — the MIR's BinOp set
+            // splits int/long versions; bump on a `Long` slot must use
+            // `AddL`/`SubL` or the JVM emitter picks the wrong opcode.
+            let op = match (&target_ty, *is_dec) {
+                (Ty::Long, false) => MBinOp::AddL,
+                (Ty::Long, true) => MBinOp::SubL,
+                (_, false) => MBinOp::AddI,
+                (_, true) => MBinOp::SubI,
+            };
+            let bumped = fb.new_local(target_ty.clone());
+            fb.push_stmt(MStmt::Assign {
+                dest: bumped,
+                value: Rvalue::BinOp {
+                    op,
+                    lhs: target_lid,
+                    rhs: one,
+                },
+            });
+            // If the target local is a pre-loaded mirror of a
+            // mutable field, the bump must also `putfield` the
+            // underlying field so subsequent reads (in this method
+            // or in a nested call) pick up the new value. Without
+            // this writeback, `pos++` inside an instance method
+            // increments only the cached copy — the field stays at
+            // its initial value and an enclosing `while (pos <
+            // src.length)` runs forever (parity/101-hash and
+            // fixture 1291's `try_static_call` regression both
+            // surfaced this).
+            let field_writeback = fb.field_local_writebacks.get(&target_lid.0).cloned();
+            if *is_prefix {
+                // Prefix: bump first, value is the new value.
+                fb.push_stmt(MStmt::Assign {
+                    dest: target_lid,
+                    value: Rvalue::Local(bumped),
+                });
+                if let Some((recv, cls, fname)) = field_writeback {
+                    fb.push_stmt(MStmt::Assign {
+                        dest: target_lid,
+                        value: Rvalue::PutField {
+                            receiver: recv,
+                            class_name: cls,
+                            field_name: fname,
+                            value: target_lid,
+                        },
+                    });
+                }
+                Some(bumped)
+            } else {
+                // Postfix: spill the OLD value before mutating.
+                let saved = fb.new_local(target_ty.clone());
+                fb.push_stmt(MStmt::Assign {
+                    dest: saved,
+                    value: Rvalue::Local(target_lid),
+                });
+                fb.push_stmt(MStmt::Assign {
+                    dest: target_lid,
+                    value: Rvalue::Local(bumped),
+                });
+                if let Some((recv, cls, fname)) = field_writeback {
+                    fb.push_stmt(MStmt::Assign {
+                        dest: target_lid,
+                        value: Rvalue::PutField {
+                            receiver: recv,
+                            class_name: cls,
+                            field_name: fname,
+                            value: target_lid,
+                        },
+                    });
+                }
+                Some(saved)
             }
         }
         Expr::NotNullAssert { expr: asserted, .. } => {
@@ -23947,7 +24641,7 @@ fn lower_class(
         }
     }
 
-    let super_class = c.parent_class.as_ref().map(|sc| {
+    let mut super_class = c.parent_class.as_ref().map(|sc| {
         let simple = interner.resolve(sc.name).to_string();
         // Stdlib exception names (`RuntimeException`, `Exception`, etc.)
         // are auto-imported in Kotlin and resolve to their `java/lang/`
@@ -23963,6 +24657,63 @@ fn lower_class(
         }
         module.import_map.get(&simple).cloned().unwrap_or(simple)
     });
+
+    // The parser cannot distinguish `: Foo` (no-args super-class
+    // delegation) from `: Foo` (interface implementation) — both
+    // appear identically in source. It puts every parens-less
+    // supertype into `c.interfaces`. When the supertype turns out
+    // to be a CLASS (not an interface) — common for parent
+    // abstract classes whose default no-arg ctor is being used —
+    // promote the first such entry to `super_class`. The check
+    // routes through classinfo's `check_is_interface`; entries
+    // that can't be loaded are left in interfaces (matches today's
+    // behaviour and lets the BFS-based method walk still find
+    // them as fallback supertypes). Skip when `super_class` is
+    // already set — `: Foo(args), Bar` already has Foo as parent
+    // and Bar as the only candidate, but if Bar turns out to be
+    // a class the JVM would reject `implements Bar` anyway.
+    {
+        for iface_sym in c.interfaces.iter() {
+            let simple = interner.resolve(*iface_sym).to_string();
+            let fq = module
+                .import_map
+                .get(&simple)
+                .cloned()
+                .or_else(|| intrinsics::kotlin_exception_class(&simple).map(|s| s.to_string()))
+                .or_else(|| intrinsics::kotlin_to_jvm_class(&simple).map(|s| s.to_string()))
+                .or_else(|| {
+                    module
+                        .cross_file_classes
+                        .get(&simple)
+                        .map(|(jvm, _, _)| jvm.clone())
+                })
+                .or_else(|| skotch_classinfo::find_class_jvm_name_by_simple(&simple))
+                .unwrap_or(simple.clone());
+            // Source: classify via (in this priority order) the
+            // in-module MirClass list (in-flight lowering), the
+            // cross-file class registry's kind_str ("class" /
+            // "interface" / "object"), and finally classinfo for
+            // JAR-resident classes.
+            let is_iface: Option<bool> = module
+                .classes
+                .iter()
+                .find(|c2| c2.name == fq || c2.name == simple)
+                .map(|c2| c2.is_interface)
+                .or_else(|| {
+                    module
+                        .cross_file_classes
+                        .get(&simple)
+                        .map(|(_, kind, _)| kind == "interface")
+                })
+                .or_else(|| skotch_classinfo::check_is_interface(&fq));
+            if let Some(false) = is_iface {
+                if super_class.is_none() {
+                    super_class = Some(fq);
+                    break;
+                }
+            }
+        }
+    }
 
     // Pre-register the class with method stubs so that implicit
     // `this.method()` resolution works during method body lowering.
@@ -24012,11 +24763,14 @@ fn lower_class(
     // map so the parent class's `interfaces` table holds the real
     // `androidx/viewbinding/ViewBinding`-style entries — without this
     // the class file's interface_table holds bare `ViewBinding` and
-    // ClassLoader fails resolution at load time.
+    // ClassLoader fails resolution at load time. Drop any entry that
+    // resolves to the same FQ as `super_class` (the parens-less
+    // supertype was promoted from interface→superclass above).
     let iface_names: Vec<String> = c
         .interfaces
         .iter()
         .map(|s| module.fq_resolve(interner.resolve(*s)))
+        .filter(|fq| super_class.as_deref() != Some(fq.as_str()))
         .collect();
     // Replace the fields-only reservation pushed before the property-init
     // loop with the stub that now also carries the constructor + stub methods.
@@ -25017,6 +25771,21 @@ fn lower_class(
             // `mir-lower:15577` and reach the Companion class's methods.
             let this_sym = interner.intern("this");
             let mut scope: Vec<(Symbol, LocalId)> = vec![(this_sym, this_local)];
+            // Extension receiver on a companion method:
+            // `companion object { fun Int.leftEncodeBits(): ... }`.
+            // In Kotlin the extension receiver shadows the dispatch
+            // receiver — `this` inside the body refers to the
+            // extension target (the `Int`), not the Companion. Push
+            // the receiver as a synthetic first user param and rebind
+            // `this` so bare references like `shl(3)` resolve against
+            // the Int (and the bitwise-intrinsic fast path picks it
+            // up).
+            if let Some(ref recv) = method.receiver_ty {
+                let recv_ty = resolve_type(interner.resolve(recv.name), module);
+                let recv_local = fb.new_local(recv_ty);
+                fb.mf.params.push(recv_local);
+                scope.push((this_sym, recv_local));
+            }
             for (pi, p) in method.params.iter().enumerate() {
                 // Function-typed params (`init: Tree<T>.() -> Unit`) need to
                 // erase to `kotlin/jvm/functions/FunctionN` for the JVM
@@ -25081,11 +25850,6 @@ fn lower_class(
         // call site (via invokevirtual on Companion).
         for prop in &c.companion_properties {
             let prop_name = interner.resolve(prop.name).to_string();
-            let prop_ty = prop
-                .ty
-                .as_ref()
-                .map(|tr| resolve_type(interner.resolve(tr.name), module))
-                .unwrap_or(Ty::Error);
             // Build initial-value constant from the init expression.
             // For non-trivial init we fall through to a Null/default.
             let init_const: Option<MirConst> = prop.init.as_ref().and_then(|e| match e {
@@ -25100,6 +25864,27 @@ fn lower_class(
                 }
                 _ => None,
             });
+            // `const val BLOCK_SIZE = 64` has no annotated type — fall
+            // back to the init literal's type so the synthesized
+            // `getBLOCK_SIZE()` returns `I` (and the backend emits
+            // `bipush 64; ireturn`) instead of `Ljava/lang/Object;`
+            // with a `bipush; areturn` mismatch the verifier
+            // rejects.
+            let inferred_ty: Option<Ty> = init_const.as_ref().map(|c| match c {
+                MirConst::Int(_) => Ty::Int,
+                MirConst::Long(_) => Ty::Long,
+                MirConst::Float(_) => Ty::Float,
+                MirConst::Double(_) => Ty::Double,
+                MirConst::Bool(_) => Ty::Bool,
+                MirConst::String(_) => Ty::String,
+                MirConst::Unit | MirConst::Null => Ty::Any,
+            });
+            let prop_ty = prop
+                .ty
+                .as_ref()
+                .map(|tr| resolve_type(interner.resolve(tr.name), module))
+                .or(inferred_ty)
+                .unwrap_or(Ty::Error);
             let getter_name = format!(
                 "get{}{}",
                 prop_name
@@ -25783,17 +26568,56 @@ fn lower_class(
                 .push(interner.resolve(p.name).to_string());
         }
 
-        // Emit delegation call.
+        // Emit delegation call. `: this(args)` invokes a sibling
+        // secondary constructor on the same class; `: super(args)`
+        // invokes the parent class's primary constructor. When no
+        // explicit delegation is written, kotlinc inserts an implicit
+        // no-arg `super()` against the parent class.
+        let delegate_target_class = if sec_ctor.has_delegation && sec_ctor.delegate_is_super {
+            // FQ-resolve the parent class name so the emitted
+            // <init> call references e.g.
+            // `org/kotlincrypto/core/digest/Digest.<init>` rather
+            // than the bare simple name. Falls back to the
+            // class's resolved `super_class` (which absorbed any
+            // parens-less interface→class promotion the loader
+            // performed earlier) before defaulting to
+            // `java/lang/Object`.
+            c.parent_class
+                .as_ref()
+                .map(|sc| {
+                    let simple = interner.resolve(sc.name).to_string();
+                    module.import_map.get(&simple).cloned().unwrap_or(simple)
+                })
+                .or_else(|| super_class.clone())
+                .unwrap_or_else(|| "java/lang/Object".to_string())
+        } else if sec_ctor.has_delegation {
+            class_name.clone()
+        } else {
+            c.parent_class
+                .as_ref()
+                .map(|sc| {
+                    let simple = interner.resolve(sc.name).to_string();
+                    module.import_map.get(&simple).cloned().unwrap_or(simple)
+                })
+                .or_else(|| super_class.clone())
+                .unwrap_or_else(|| "java/lang/Object".to_string())
+        };
         if sec_ctor.has_delegation {
-            // `: this(args)` — delegate to another constructor of the same class.
             let tmp_idx = module.functions.len() + 8000;
             let mut fb = FnBuilder::new(tmp_idx, "<sec-init>".to_string(), Ty::Unit);
             fb.mf.locals = sec_fn.locals.clone();
             fb.mf.params = sec_fn.params.clone();
             let mut delegate_arg_ids = vec![sec_this]; // receiver
-            for arg_expr in &sec_ctor.delegate_args {
+                                                       // Lower each delegation arg, ignoring the optional `name`
+                                                       // for now — kotlinc's positional+named arg reordering
+                                                       // happens at the call site for the parent ctor's
+                                                       // descriptor, which we resolve below. The lowered
+                                                       // arguments retain their source order; the receiver
+                                                       // class's <init> dispatch picks the right overload from
+                                                       // arg count + types.
+            for call_arg in &sec_ctor.delegate_args {
                 if let Some(id) = lower_expr(
-                    arg_expr,
+                    &call_arg.expr,
                     &mut fb,
                     &mut sec_scope,
                     module,
@@ -25810,28 +26634,19 @@ fn lower_class(
             for stmt in fb.mf.blocks[0].stmts.drain(..) {
                 sec_fn.blocks[0].stmts.push(stmt);
             }
-            // Call the delegate constructor (this class's <init> matching the delegate args).
             sec_fn.blocks[0].stmts.push(MStmt::Assign {
                 dest: sec_this, // dummy
                 value: Rvalue::Call {
-                    kind: CallKind::Constructor(class_name.clone()),
+                    kind: CallKind::Constructor(delegate_target_class),
                     args: delegate_arg_ids,
                 },
             });
         } else {
-            // No explicit delegation — call super constructor.
-            let super_class_name = c
-                .parent_class
-                .as_ref()
-                .map(|sc| {
-                    let simple = interner.resolve(sc.name).to_string();
-                    module.import_map.get(&simple).cloned().unwrap_or(simple)
-                })
-                .unwrap_or_else(|| "java/lang/Object".to_string());
+            // No explicit delegation — implicit `super()` no-arg call.
             sec_fn.blocks[0].stmts.push(MStmt::Assign {
                 dest: sec_this, // dummy
                 value: Rvalue::Call {
-                    kind: CallKind::Constructor(super_class_name),
+                    kind: CallKind::Constructor(delegate_target_class),
                     args: vec![sec_this],
                 },
             });

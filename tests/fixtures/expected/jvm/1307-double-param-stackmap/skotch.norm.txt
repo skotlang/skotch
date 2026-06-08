@@ -1,0 +1,127 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        escapeIter (DDI)I 0x0019
+  code        max_stack=4 max_locals=44
+    0000 dconst_0
+    0001 dstore 5
+    0003 dconst_0
+    0004 dstore 7
+    0006 iconst_0
+    0007 istore 9
+    0009 iload 9
+    0011 iload 4
+    0013 if_icmpge 20
+    0016 iconst_1
+    0017 goto 21
+    0020 iconst_0
+    0021 istore 10
+    0023 iconst_0
+    0024 istore 11
+    0026 iload 10
+    0028 ifeq 160
+    0031 goto 111
+    0034 dload 5
+    0036 dstore 12
+    0038 dload 5
+    0040 dstore 14
+    0042 dload 12
+    0044 dload 14
+    0046 dmul
+    0047 dstore 16
+    0049 dload 7
+    0051 dstore 18
+    0053 dload 7
+    0055 dstore 20
+    0057 dload 18
+    0059 dload 20
+    0061 dmul
+    0062 dstore 22
+    0064 dload 16
+    0066 dload 22
+    0068 dsub
+    0069 dload_0
+    0070 dadd
+    0071 dstore 24
+    0073 dload 5
+    0075 dstore 26
+    0077 ldc2_w double(2)
+    0080 dload 26
+    0082 dmul
+    0083 dstore 28
+    0085 dload 7
+    0087 dstore 30
+    0089 dload 28
+    0091 dload 30
+    0093 dmul
+    0094 dload_2
+    0095 dadd
+    0096 dstore 7
+    0098 dload 24
+    0100 dstore 5
+    0102 iinc 9 1
+    0105 goto 9
+    0108 iload 9
+    0110 ireturn
+    0111 dload 5
+    0113 dstore 32
+    0115 dload 5
+    0117 dstore 34
+    0119 dload 32
+    0121 dload 34
+    0123 dmul
+    0124 dstore 36
+    0126 dload 7
+    0128 dstore 38
+    0130 dload 7
+    0132 dstore 40
+    0134 dload 38
+    0136 dload 40
+    0138 dmul
+    0139 dstore 42
+    0141 dload 36
+    0143 dload 42
+    0145 dadd
+    0146 ldc2_w double(4)
+    0149 dcmpg
+    0150 ifge 157
+    0153 iconst_1
+    0154 goto 158
+    0157 iconst_0
+    0158 istore 11
+    0160 iload 11
+    0162 ifeq 108
+    0165 goto 34
+    sub_attr  StackMapTable (78 bytes)
+method        main ()V 0x0019
+  code        max_stack=5 max_locals=1
+    0000 dconst_0
+    0001 dconst_0
+    0002 bipush 50
+    0004 invokestatic Method(InputKt.escapeIter:(DDI)I)
+    0007 istore_0
+    0008 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0011 iload_0
+    0012 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0015 ldc2_w double(2)
+    0018 ldc2_w double(2)
+    0021 bipush 50
+    0023 invokestatic Method(InputKt.escapeIter:(DDI)I)
+    0026 istore_0
+    0027 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0030 iload_0
+    0031 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0034 ldc2_w double(-1)
+    0037 dconst_0
+    0038 bipush 50
+    0040 invokestatic Method(InputKt.escapeIter:(DDI)I)
+    0043 istore_0
+    0044 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0047 iload_0
+    0048 invokevirtual Method(java/io/PrintStream.println:(I)V)
+    0051 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

@@ -1,0 +1,167 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        main ()V 0x0019
+  code        max_stack=5 max_locals=4
+    0000 bipush 10
+    0002 anewarray Class(Instr)
+    0005 astore_1
+    0006 aload_1
+    0007 iconst_0
+    0008 new Class(Push)
+    0011 dup
+    0012 iconst_5
+    0013 invokespecial Method(Push.<init>:(I)V)
+    0016 aastore
+    0017 aload_1
+    0018 iconst_1
+    0019 getstatic Field(Dup.INSTANCE:LDup;)
+    0022 aastore
+    0023 aload_1
+    0024 iconst_2
+    0025 new Class(JumpIfZero)
+    0028 dup
+    0029 bipush 9
+    0031 invokespecial Method(JumpIfZero.<init>:(I)V)
+    0034 aastore
+    0035 aload_1
+    0036 iconst_3
+    0037 getstatic Field(Dup.INSTANCE:LDup;)
+    0040 aastore
+    0041 aload_1
+    0042 iconst_4
+    0043 getstatic Field(Print.INSTANCE:LPrint;)
+    0046 aastore
+    0047 aload_1
+    0048 iconst_5
+    0049 new Class(Push)
+    0052 dup
+    0053 iconst_1
+    0054 invokespecial Method(Push.<init>:(I)V)
+    0057 aastore
+    0058 aload_1
+    0059 bipush 6
+    0061 getstatic Field(Sub.INSTANCE:LSub;)
+    0064 aastore
+    0065 aload_1
+    0066 bipush 7
+    0068 new Class(Jump)
+    0071 dup
+    0072 iconst_1
+    0073 invokespecial Method(Jump.<init>:(I)V)
+    0076 aastore
+    0077 aload_1
+    0078 bipush 8
+    0080 getstatic Field(Halt.INSTANCE:LHalt;)
+    0083 aastore
+    0084 aload_1
+    0085 bipush 9
+    0087 getstatic Field(Halt.INSTANCE:LHalt;)
+    0090 aastore
+    0091 aload_1
+    0092 invokestatic Method(kotlin/collections/CollectionsKt.listOf:([Ljava/lang/Object;)Ljava/util/List;)
+    0095 astore_0
+    0096 new Class(Vm)
+    0099 dup
+    0100 aload_0
+    0101 invokespecial Method(Vm.<init>:(Ljava/util/List;)V)
+    0104 invokevirtual Method(Vm.run:()V)
+    0107 ldc "---"
+    0109 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0112 swap
+    0113 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0116 bipush 7
+    0118 anewarray Class(Instr)
+    0121 astore_2
+    0122 aload_2
+    0123 iconst_0
+    0124 new Class(Push)
+    0127 dup
+    0128 iconst_2
+    0129 invokespecial Method(Push.<init>:(I)V)
+    0132 aastore
+    0133 aload_2
+    0134 iconst_1
+    0135 new Class(Push)
+    0138 dup
+    0139 iconst_3
+    0140 invokespecial Method(Push.<init>:(I)V)
+    0143 aastore
+    0144 aload_2
+    0145 iconst_2
+    0146 getstatic Field(Add.INSTANCE:LAdd;)
+    0149 aastore
+    0150 aload_2
+    0151 iconst_3
+    0152 new Class(Push)
+    0155 dup
+    0156 iconst_4
+    0157 invokespecial Method(Push.<init>:(I)V)
+    0160 aastore
+    0161 aload_2
+    0162 iconst_4
+    0163 getstatic Field(Mul.INSTANCE:LMul;)
+    0166 aastore
+    0167 aload_2
+    0168 iconst_5
+    0169 getstatic Field(Print.INSTANCE:LPrint;)
+    0172 aastore
+    0173 aload_2
+    0174 bipush 6
+    0176 getstatic Field(Halt.INSTANCE:LHalt;)
+    0179 aastore
+    0180 aload_2
+    0181 invokestatic Method(kotlin/collections/CollectionsKt.listOf:([Ljava/lang/Object;)Ljava/util/List;)
+    0184 astore_1
+    0185 new Class(Vm)
+    0188 dup
+    0189 aload_1
+    0190 invokespecial Method(Vm.<init>:(Ljava/util/List;)V)
+    0193 invokevirtual Method(Vm.run:()V)
+    0196 ldc "---"
+    0198 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0201 swap
+    0202 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0205 iconst_5
+    0206 anewarray Class(Instr)
+    0209 astore_3
+    0210 aload_3
+    0211 iconst_0
+    0212 new Class(Push)
+    0215 dup
+    0216 bipush 10
+    0218 invokespecial Method(Push.<init>:(I)V)
+    0221 aastore
+    0222 aload_3
+    0223 iconst_1
+    0224 new Class(Push)
+    0227 dup
+    0228 bipush 20
+    0230 invokespecial Method(Push.<init>:(I)V)
+    0233 aastore
+    0234 aload_3
+    0235 iconst_2
+    0236 getstatic Field(Swap.INSTANCE:LSwap;)
+    0239 aastore
+    0240 aload_3
+    0241 iconst_3
+    0242 getstatic Field(Print.INSTANCE:LPrint;)
+    0245 aastore
+    0246 aload_3
+    0247 iconst_4
+    0248 getstatic Field(Halt.INSTANCE:LHalt;)
+    0251 aastore
+    0252 aload_3
+    0253 invokestatic Method(kotlin/collections/CollectionsKt.listOf:([Ljava/lang/Object;)Ljava/util/List;)
+    0256 astore_2
+    0257 new Class(Vm)
+    0260 dup
+    0261 aload_2
+    0262 invokespecial Method(Vm.<init>:(Ljava/util/List;)V)
+    0265 invokevirtual Method(Vm.run:()V)
+    0268 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return

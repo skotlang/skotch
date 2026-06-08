@@ -2281,6 +2281,7 @@ dependencies = [
  "skotch-intern",
  "skotch-lexer",
  "skotch-lsp",
+ "skotch-mir-lower",
  "skotch-parser",
  "skotch-repl",
  "skotch-resolve",

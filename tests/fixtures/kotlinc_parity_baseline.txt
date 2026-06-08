@@ -434,7 +434,6 @@
 543-stringbuilder-chain
 544-java-file-class
 547-exception-getmessage
-548-nested-fun-capture
 549-nullable-field-assign
 55-while-loop
 550-multi-class-file
@@ -454,7 +453,6 @@
 570-import-alias
 571-annotation-runtime
 572-annotation-suppress
-573-annotation-class
 574-jvm-static-companion
 58-class-basic
 583-suspend-int-trivial

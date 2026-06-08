@@ -26,6 +26,7 @@ skotch-parser       = { workspace = true }
 skotch-resolve      = { workspace = true }
 skotch-backend-jvm  = { workspace = true }
 skotch-compose      = { workspace = true }
+skotch-mir-lower    = { workspace = true }
 clap                = { workspace = true }
 anyhow              = { workspace = true }
 tokio               = { workspace = true }

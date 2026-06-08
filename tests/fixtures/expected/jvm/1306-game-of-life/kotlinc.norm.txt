@@ -1,0 +1,68 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        gliderInitial ()[I 0x0019
+  code        max_stack=3 max_locals=1
+    0000 bipush 100
+    0002 newarray int
+    0004 astore_0
+    0005 aload_0
+    0006 iconst_1
+    0007 iconst_1
+    0008 iastore
+    0009 aload_0
+    0010 bipush 12
+    0012 iconst_1
+    0013 iastore
+    0014 aload_0
+    0015 bipush 20
+    0017 iconst_1
+    0018 iastore
+    0019 aload_0
+    0020 bipush 21
+    0022 iconst_1
+    0023 iastore
+    0024 aload_0
+    0025 bipush 22
+    0027 iconst_1
+    0028 iastore
+    0029 aload_0
+    0030 areturn
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+method        main ()V 0x0019
+  code        max_stack=5 max_locals=2
+    0000 new Class(Generation)
+    0003 dup
+    0004 bipush 10
+    0006 bipush 10
+    0008 invokestatic Method(InputKt.gliderInitial:()[I)
+    0011 invokespecial Method(Generation.<init>:(II[I)V)
+    0014 astore_0
+    0015 iconst_0
+    0016 istore_1
+    0017 iload_1
+    0018 iconst_4
+    0019 if_icmpgt 57
+    0022 iload_1
+    0023 invokedynamic InvokeDynamic(makeConcatWithConstants:(I)Ljava/lang/String;)
+    0028 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0031 swap
+    0032 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0035 aload_0
+    0036 invokevirtual Method(Generation.show:()Ljava/lang/String;)
+    0039 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0042 swap
+    0043 invokevirtual Method(java/io/PrintStream.print:(Ljava/lang/Object;)V)
+    0046 aload_0
+    0047 invokevirtual Method(Generation.step:()LGeneration;)
+    0050 astore_0
+    0051 iinc 1 1
+    0054 goto 17
+    0057 return
+    sub_attr  StackMapTable (10 bytes)
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
+class_attr    BootstrapMethods (8 bytes)

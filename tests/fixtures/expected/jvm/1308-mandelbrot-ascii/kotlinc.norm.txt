@@ -1,0 +1,158 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        escapeIterations (DDI)I 0x0019
+  code        max_stack=6 max_locals=12
+    0000 dconst_0
+    0001 dstore 5
+    0003 dconst_0
+    0004 dstore 7
+    0006 iconst_0
+    0007 istore 9
+    0009 iload 9
+    0011 iload 4
+    0013 if_icmpge 72
+    0016 dload 5
+    0018 dload 5
+    0020 dmul
+    0021 dload 7
+    0023 dload 7
+    0025 dmul
+    0026 dadd
+    0027 ldc2_w double(4)
+    0030 dcmpg
+    0031 ifge 72
+    0034 dload 5
+    0036 dload 5
+    0038 dmul
+    0039 dload 7
+    0041 dload 7
+    0043 dmul
+    0044 dsub
+    0045 dload_0
+    0046 dadd
+    0047 dstore 10
+    0049 ldc2_w double(2)
+    0052 dload 5
+    0054 dmul
+    0055 dload 7
+    0057 dmul
+    0058 dload_2
+    0059 dadd
+    0060 dstore 7
+    0062 dload 10
+    0064 dstore 5
+    0066 iinc 9 1
+    0069 goto 9
+    0072 iload 9
+    0074 ireturn
+    sub_attr  StackMapTable (9 bytes)
+method        main ()V 0x0019
+  code        max_stack=3 max_locals=0
+    0000 bipush 60
+    0002 bipush 20
+    0004 bipush 50
+    0006 invokestatic Method(InputKt.renderMandelbrot:(III)Ljava/lang/String;)
+    0009 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0012 swap
+    0013 invokevirtual Method(java/io/PrintStream.print:(Ljava/lang/Object;)V)
+    0016 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
+method        renderMandelbrot (III)Ljava/lang/String; 0x0019
+  code        max_stack=6 max_locals=11
+    0000 new Class(java/lang/StringBuilder)
+    0003 dup
+    0004 invokespecial Method(java/lang/StringBuilder.<init>:()V)
+    0007 astore_3
+    0008 iconst_0
+    0009 istore 4
+    0011 iload 4
+    0013 iload_1
+    0014 if_icmpge 98
+    0017 iconst_0
+    0018 istore 5
+    0020 iload 5
+    0022 iload_0
+    0023 if_icmpge 85
+    0026 ldc2_w double(-2.5)
+    0029 ldc2_w double(3.5)
+    0032 iload 5
+    0034 i2d
+    0035 dmul
+    0036 iload_0
+    0037 i2d
+    0038 ddiv
+    0039 dadd
+    0040 dstore 6
+    0042 ldc2_w double(-1)
+    0045 ldc2_w double(2)
+    0048 iload 4
+    0050 i2d
+    0051 dmul
+    0052 iload_1
+    0053 i2d
+    0054 ddiv
+    0055 dadd
+    0056 dstore 8
+    0058 dload 6
+    0060 dload 8
+    0062 iload_2
+    0063 invokestatic Method(InputKt.escapeIterations:(DDI)I)
+    0066 istore 10
+    0068 aload_3
+    0069 iload 10
+    0071 iload_2
+    0072 invokestatic Method(InputKt.shadeFor:(II)C)
+    0075 invokevirtual Method(java/lang/StringBuilder.append:(C)Ljava/lang/StringBuilder;)
+    0078 pop
+    0079 iinc 5 1
+    0082 goto 20
+    0085 aload_3
+    0086 bipush 10
+    0088 invokevirtual Method(java/lang/StringBuilder.append:(C)Ljava/lang/StringBuilder;)
+    0091 pop
+    0092 iinc 4 1
+    0095 goto 11
+    0098 aload_3
+    0099 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
+    0102 dup
+    0103 ldc "toString(...)"
+    0105 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullExpressionValue:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0108 areturn
+    sub_attr  StackMapTable (19 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+method        shadeFor (II)C 0x0019
+  code        max_stack=2 max_locals=2
+    0000 iload_0
+    0001 iload_1
+    0002 if_icmplt 8
+    0005 bipush 35
+    0007 ireturn
+    0008 iload_0
+    0009 iconst_2
+    0010 imul
+    0011 iload_1
+    0012 if_icmplt 18
+    0015 bipush 42
+    0017 ireturn
+    0018 iload_0
+    0019 iconst_4
+    0020 imul
+    0021 iload_1
+    0022 if_icmplt 28
+    0025 bipush 43
+    0027 ireturn
+    0028 iload_0
+    0029 bipush 8
+    0031 imul
+    0032 iload_1
+    0033 if_icmplt 39
+    0036 bipush 46
+    0038 ireturn
+    0039 bipush 32
+    0041 ireturn
+    sub_attr  StackMapTable (6 bytes)

@@ -577,6 +577,15 @@ fn collect_top_val_refs_in_expr(
         Expr::NotNullAssert { expr, .. } => {
             collect_top_val_refs_in_expr(expr, top_vals, out);
         }
+        Expr::IncDec { target, .. } => {
+            // `name++` reads `name` (and writes a new value back). For
+            // top-level-val cycle detection only the READ matters —
+            // if the target IS a top-level val, record the
+            // reference.
+            if top_vals.contains(target) {
+                out.insert(*target);
+            }
+        }
         Expr::Lambda { body, .. } => {
             collect_top_val_refs_in_block(body, top_vals, out);
         }
@@ -1884,6 +1893,13 @@ impl<'a> TypeChecker<'a> {
                 } else {
                     t
                 }
+            }
+
+            Expr::IncDec { target, span, .. } => {
+                // The expression's type is the target variable's
+                // pre-bump value — synthesize as a plain Ident read.
+                let synth = Expr::Ident(*target, *span);
+                self.synth_expr(&synth, scope)
             }
 
             Expr::Lambda { params, body, .. } => {

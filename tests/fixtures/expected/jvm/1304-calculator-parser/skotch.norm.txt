@@ -1,0 +1,595 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        evaluate (Ljava/lang/String;)Ljava/lang/String; 0x0019
+  code        max_stack=2 max_locals=4
+    0000 aload_0
+    0001 ldc "src"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 aload_0
+    0007 invokestatic Method(InputKt.tokenize:(Ljava/lang/String;)Ljava/util/List;)
+    0010 astore_1
+    0011 aload_1
+    0012 invokestatic Method(InputKt.parse:(Ljava/util/List;)LExpr;)
+    0015 astore_2
+    0016 aload_0
+    0017 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;)
+    0022 astore_3
+    0023 aload_3
+    0024 aload_2
+    0025 invokevirtual Method(Expr.show:()Ljava/lang/String;)
+    0028 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;)
+    0033 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;)
+    0038 aload_2
+    0039 invokevirtual Method(Expr.eval:()I)
+    0042 invokedynamic InvokeDynamic(makeConcatWithConstants:(Ljava/lang/String;I)Ljava/lang/String;)
+    0047 areturn
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)
+method        isAddOp (LToken;)Z 0x0019
+  code        max_stack=2 max_locals=3
+    0000 aload_0
+    0001 ldc "t"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 aload_0
+    0007 instanceof Class(PlusTok)
+    0010 istore_1
+    0011 iconst_1
+    0012 istore_2
+    0013 iload_1
+    0014 ifne 22
+    0017 aload_0
+    0018 instanceof Class(MinusTok)
+    0021 istore_2
+    0022 iload_2
+    0023 ireturn
+    sub_attr  StackMapTable (7 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)
+method        isMulOp (LToken;)Z 0x0019
+  code        max_stack=2 max_locals=3
+    0000 aload_0
+    0001 ldc "t"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 aload_0
+    0007 instanceof Class(StarTok)
+    0010 istore_1
+    0011 iconst_1
+    0012 istore_2
+    0013 iload_1
+    0014 ifne 22
+    0017 aload_0
+    0018 instanceof Class(SlashTok)
+    0021 istore_2
+    0022 iload_2
+    0023 ireturn
+    sub_attr  StackMapTable (7 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)
+method        main ()V 0x0019
+  code        max_stack=2 max_locals=0
+    0000 ldc "1 + 2"
+    0002 invokestatic Method(InputKt.evaluate:(Ljava/lang/String;)Ljava/lang/String;)
+    0005 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0008 swap
+    0009 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0012 ldc "3 * 4"
+    0014 invokestatic Method(InputKt.evaluate:(Ljava/lang/String;)Ljava/lang/String;)
+    0017 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0020 swap
+    0021 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0024 ldc "1 + 2 * 3"
+    0026 invokestatic Method(InputKt.evaluate:(Ljava/lang/String;)Ljava/lang/String;)
+    0029 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0032 swap
+    0033 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0036 ldc "(1 + 2) * 3"
+    0038 invokestatic Method(InputKt.evaluate:(Ljava/lang/String;)Ljava/lang/String;)
+    0041 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0044 swap
+    0045 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0048 ldc "10 - 4 - 3"
+    0050 invokestatic Method(InputKt.evaluate:(Ljava/lang/String;)Ljava/lang/String;)
+    0053 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0056 swap
+    0057 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0060 ldc "8 / 2 / 2"
+    0062 invokestatic Method(InputKt.evaluate:(Ljava/lang/String;)Ljava/lang/String;)
+    0065 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0068 swap
+    0069 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0072 ldc "-5 + 7"
+    0074 invokestatic Method(InputKt.evaluate:(Ljava/lang/String;)Ljava/lang/String;)
+    0077 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0080 swap
+    0081 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0084 ldc "2 * -3"
+    0086 invokestatic Method(InputKt.evaluate:(Ljava/lang/String;)Ljava/lang/String;)
+    0089 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0092 swap
+    0093 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0096 ldc_w "(1 + 2) * (3 + 4)"
+    0099 invokestatic Method(InputKt.evaluate:(Ljava/lang/String;)Ljava/lang/String;)
+    0102 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0105 swap
+    0106 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0109 ldc_w "100 / (2 + 3) - 5"
+    0112 invokestatic Method(InputKt.evaluate:(Ljava/lang/String;)Ljava/lang/String;)
+    0115 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0118 swap
+    0119 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0122 ldc_w "-(2 + 3)"
+    0125 invokestatic Method(InputKt.evaluate:(Ljava/lang/String;)Ljava/lang/String;)
+    0128 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0131 swap
+    0132 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0135 return
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
+method        parse (Ljava/util/List;)LExpr; 0x0019
+  code        max_stack=2 max_locals=2
+    0000 aload_0
+    0001 ldc "tokens"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 aload_0
+    0007 iconst_0
+    0008 invokestatic Method(InputKt.parseExpr:(Ljava/util/List;I)LParseResult;)
+    0011 astore_1
+    0012 aload_1
+    0013 invokevirtual Method(ParseResult.getExpr:()LExpr;)
+    0016 areturn
+  attr        Signature (2 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)
+method        parseAtom (Ljava/util/List;I)LParseResult; 0x0019
+  code        max_stack=4 max_locals=10
+    0000 aload_0
+    0001 ldc "tokens"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 aload_0
+    0007 iload_1
+    0008 invokeinterface InterfaceMethod(java/util/List.get:(I)Ljava/lang/Object;)
+    0013 checkcast Class(Token)
+    0016 astore_2
+    0017 aload_2
+    0018 instanceof Class(NumTok)
+    0021 ifeq 62
+    0024 aload_2
+    0025 checkcast Class(NumTok)
+    0028 invokevirtual Method(NumTok.getValue:()I)
+    0031 istore_3
+    0032 new Class(Num)
+    0035 dup
+    0036 iload_3
+    0037 invokespecial Method(Num.<init>:(I)V)
+    0040 astore 4
+    0042 iload_1
+    0043 iconst_1
+    0044 iadd
+    0045 istore 5
+    0047 new Class(ParseResult)
+    0050 dup
+    0051 aload 4
+    0053 checkcast Class(Expr)
+    0056 iload 5
+    0058 invokespecial Method(ParseResult.<init>:(LExpr;I)V)
+    0061 areturn
+    0062 aload_2
+    0063 instanceof Class(LParenTok)
+    0066 ifeq 106
+    0069 aload_0
+    0070 iload_1
+    0071 iconst_1
+    0072 iadd
+    0073 invokestatic Method(InputKt.parseExpr:(Ljava/util/List;I)LParseResult;)
+    0076 astore 6
+    0078 aload 6
+    0080 invokevirtual Method(ParseResult.getExpr:()LExpr;)
+    0083 astore 7
+    0085 aload 6
+    0087 invokevirtual Method(ParseResult.getNext:()I)
+    0090 iconst_1
+    0091 iadd
+    0092 istore 8
+    0094 new Class(ParseResult)
+    0097 dup
+    0098 aload 7
+    0100 iload 8
+    0102 invokespecial Method(ParseResult.<init>:(LExpr;I)V)
+    0105 areturn
+    0106 new Class(Num)
+    0109 dup
+    0110 iconst_0
+    0111 invokespecial Method(Num.<init>:(I)V)
+    0114 astore 9
+    0116 new Class(ParseResult)
+    0119 dup
+    0120 aload 9
+    0122 checkcast Class(Expr)
+    0125 iload_1
+    0126 invokespecial Method(ParseResult.<init>:(LExpr;I)V)
+    0129 areturn
+    sub_attr  StackMapTable (9 bytes)
+  attr        Signature (2 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (9 bytes)
+method        parseExpr (Ljava/util/List;I)LParseResult; 0x0019
+  code        max_stack=5 max_locals=9
+    0000 aload_0
+    0001 ldc "tokens"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 aload_0
+    0007 iload_1
+    0008 invokestatic Method(InputKt.parseTerm:(Ljava/util/List;I)LParseResult;)
+    0011 astore_2
+    0012 aload_0
+    0013 aload_2
+    0014 invokevirtual Method(ParseResult.getNext:()I)
+    0017 invokeinterface InterfaceMethod(java/util/List.get:(I)Ljava/lang/Object;)
+    0022 checkcast Class(Token)
+    0025 invokestatic Method(InputKt.isAddOp:(LToken;)Z)
+    0028 ifeq 53
+    0031 aload_0
+    0032 aload_2
+    0033 invokevirtual Method(ParseResult.getNext:()I)
+    0036 invokeinterface InterfaceMethod(java/util/List.get:(I)Ljava/lang/Object;)
+    0041 checkcast Class(Token)
+    0044 instanceof Class(PlusTok)
+    0047 ifeq 61
+    0050 goto 55
+    0053 aload_2
+    0054 areturn
+    0055 ldc "+"
+    0057 astore_3
+    0058 goto 64
+    0061 ldc "-"
+    0063 astore_3
+    0064 aload_0
+    0065 aload_2
+    0066 invokevirtual Method(ParseResult.getNext:()I)
+    0069 iconst_1
+    0070 iadd
+    0071 invokestatic Method(InputKt.parseTerm:(Ljava/util/List;I)LParseResult;)
+    0074 astore 4
+    0076 aload_2
+    0077 invokevirtual Method(ParseResult.getExpr:()LExpr;)
+    0080 astore 5
+    0082 aload 4
+    0084 invokevirtual Method(ParseResult.getExpr:()LExpr;)
+    0087 astore 6
+    0089 new Class(BinOp)
+    0092 dup
+    0093 aload_3
+    0094 aload 5
+    0096 aload 6
+    0098 invokespecial Method(BinOp.<init>:(Ljava/lang/String;LExpr;LExpr;)V)
+    0101 astore 7
+    0103 aload 4
+    0105 invokevirtual Method(ParseResult.getNext:()I)
+    0108 istore 8
+    0110 new Class(ParseResult)
+    0113 dup
+    0114 aload 7
+    0116 checkcast Class(Expr)
+    0119 iload 8
+    0121 invokespecial Method(ParseResult.<init>:(LExpr;I)V)
+    0124 astore_2
+    0125 goto 12
+    sub_attr  StackMapTable (17 bytes)
+  attr        Signature (2 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (9 bytes)
+method        parseTerm (Ljava/util/List;I)LParseResult; 0x0019
+  code        max_stack=5 max_locals=9
+    0000 aload_0
+    0001 ldc "tokens"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 aload_0
+    0007 iload_1
+    0008 invokestatic Method(InputKt.parseUnary:(Ljava/util/List;I)LParseResult;)
+    0011 astore_2
+    0012 aload_0
+    0013 aload_2
+    0014 invokevirtual Method(ParseResult.getNext:()I)
+    0017 invokeinterface InterfaceMethod(java/util/List.get:(I)Ljava/lang/Object;)
+    0022 checkcast Class(Token)
+    0025 invokestatic Method(InputKt.isMulOp:(LToken;)Z)
+    0028 ifeq 53
+    0031 aload_0
+    0032 aload_2
+    0033 invokevirtual Method(ParseResult.getNext:()I)
+    0036 invokeinterface InterfaceMethod(java/util/List.get:(I)Ljava/lang/Object;)
+    0041 checkcast Class(Token)
+    0044 instanceof Class(StarTok)
+    0047 ifeq 61
+    0050 goto 55
+    0053 aload_2
+    0054 areturn
+    0055 ldc "*"
+    0057 astore_3
+    0058 goto 64
+    0061 ldc "/"
+    0063 astore_3
+    0064 aload_0
+    0065 aload_2
+    0066 invokevirtual Method(ParseResult.getNext:()I)
+    0069 iconst_1
+    0070 iadd
+    0071 invokestatic Method(InputKt.parseUnary:(Ljava/util/List;I)LParseResult;)
+    0074 astore 4
+    0076 aload_2
+    0077 invokevirtual Method(ParseResult.getExpr:()LExpr;)
+    0080 astore 5
+    0082 aload 4
+    0084 invokevirtual Method(ParseResult.getExpr:()LExpr;)
+    0087 astore 6
+    0089 new Class(BinOp)
+    0092 dup
+    0093 aload_3
+    0094 aload 5
+    0096 aload 6
+    0098 invokespecial Method(BinOp.<init>:(Ljava/lang/String;LExpr;LExpr;)V)
+    0101 astore 7
+    0103 aload 4
+    0105 invokevirtual Method(ParseResult.getNext:()I)
+    0108 istore 8
+    0110 new Class(ParseResult)
+    0113 dup
+    0114 aload 7
+    0116 checkcast Class(Expr)
+    0119 iload 8
+    0121 invokespecial Method(ParseResult.<init>:(LExpr;I)V)
+    0124 astore_2
+    0125 goto 12
+    sub_attr  StackMapTable (17 bytes)
+  attr        Signature (2 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (9 bytes)
+method        parseUnary (Ljava/util/List;I)LParseResult; 0x0019
+  code        max_stack=4 max_locals=7
+    0000 aload_0
+    0001 ldc "tokens"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 aload_0
+    0007 iload_1
+    0008 invokeinterface InterfaceMethod(java/util/List.get:(I)Ljava/lang/Object;)
+    0013 checkcast Class(Token)
+    0016 astore_2
+    0017 aload_2
+    0018 instanceof Class(MinusTok)
+    0021 ifeq 70
+    0024 aload_0
+    0025 iload_1
+    0026 iconst_1
+    0027 iadd
+    0028 invokestatic Method(InputKt.parseUnary:(Ljava/util/List;I)LParseResult;)
+    0031 astore_3
+    0032 aload_3
+    0033 invokevirtual Method(ParseResult.getExpr:()LExpr;)
+    0036 astore 4
+    0038 new Class(UnaryNeg)
+    0041 dup
+    0042 aload 4
+    0044 invokespecial Method(UnaryNeg.<init>:(LExpr;)V)
+    0047 astore 5
+    0049 aload_3
+    0050 invokevirtual Method(ParseResult.getNext:()I)
+    0053 istore 6
+    0055 new Class(ParseResult)
+    0058 dup
+    0059 aload 5
+    0061 checkcast Class(Expr)
+    0064 iload 6
+    0066 invokespecial Method(ParseResult.<init>:(LExpr;I)V)
+    0069 areturn
+    0070 aload_0
+    0071 iload_1
+    0072 invokestatic Method(InputKt.parseAtom:(Ljava/util/List;I)LParseResult;)
+    0075 areturn
+    sub_attr  StackMapTable (8 bytes)
+  attr        Signature (2 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (9 bytes)
+method        readNumber (Ljava/lang/String;ILjava/util/List;)I 0x0019
+  code        max_stack=4 max_locals=11
+    0000 aload_0
+    0001 ldc "src"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 aload_2
+    0007 ldc "out"
+    0009 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0012 new Class(java/lang/StringBuilder)
+    0015 dup
+    0016 invokespecial Method(java/lang/StringBuilder.<init>:()V)
+    0019 astore_3
+    0020 iload_1
+    0021 istore 4
+    0023 iload 4
+    0025 istore 5
+    0027 aload_0
+    0028 invokevirtual Method(java/lang/String.length:()I)
+    0031 istore 6
+    0033 iload 5
+    0035 iload 6
+    0037 if_icmpge 73
+    0040 aload_0
+    0041 iload 4
+    0043 invokevirtual Method(java/lang/String.charAt:(I)C)
+    0046 istore 7
+    0048 iload 7
+    0050 bipush 48
+    0052 if_icmplt 59
+    0055 iconst_1
+    0056 goto 60
+    0059 iconst_0
+    0060 istore 8
+    0062 iconst_0
+    0063 istore 9
+    0065 iload 8
+    0067 ifeq 115
+    0070 goto 101
+    0073 aload_3
+    0074 invokevirtual Method(java/lang/StringBuilder.toString:()Ljava/lang/String;)
+    0077 invokestatic Method(java/lang/Integer.parseInt:(Ljava/lang/String;)I)
+    0080 istore 10
+    0082 aload_2
+    0083 new Class(NumTok)
+    0086 dup
+    0087 iload 10
+    0089 invokespecial Method(NumTok.<init>:(I)V)
+    0092 invokeinterface InterfaceMethod(java/util/List.add:(Ljava/lang/Object;)Z)
+    0097 pop
+    0098 iload 4
+    0100 ireturn
+    0101 iload 7
+    0103 bipush 57
+    0105 if_icmpgt 112
+    0108 iconst_1
+    0109 goto 113
+    0112 iconst_0
+    0113 istore 9
+    0115 iload 9
+    0117 ifeq 133
+    0120 aload_3
+    0121 iload 7
+    0123 invokevirtual Method(java/lang/StringBuilder.append:(C)Ljava/lang/StringBuilder;)
+    0126 pop
+    0127 iinc 4 1
+    0130 goto 136
+    0133 goto 73
+    0136 goto 23
+    sub_attr  StackMapTable (32 bytes)
+  attr        Signature (2 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (15 bytes)
+method        singleCharToken (C)LToken; 0x0019
+  code        max_stack=2 max_locals=1
+    0000 iload_0
+    0001 bipush 43
+    0003 if_icmpne 10
+    0006 getstatic Field(PlusTok.INSTANCE:LPlusTok;)
+    0009 areturn
+    0010 iload_0
+    0011 bipush 45
+    0013 if_icmpne 20
+    0016 getstatic Field(MinusTok.INSTANCE:LMinusTok;)
+    0019 areturn
+    0020 iload_0
+    0021 bipush 42
+    0023 if_icmpne 30
+    0026 getstatic Field(StarTok.INSTANCE:LStarTok;)
+    0029 areturn
+    0030 iload_0
+    0031 bipush 47
+    0033 if_icmpne 40
+    0036 getstatic Field(SlashTok.INSTANCE:LSlashTok;)
+    0039 areturn
+    0040 iload_0
+    0041 bipush 40
+    0043 if_icmpne 50
+    0046 getstatic Field(LParenTok.INSTANCE:LLParenTok;)
+    0049 areturn
+    0050 iload_0
+    0051 bipush 41
+    0053 if_icmpne 60
+    0056 getstatic Field(RParenTok.INSTANCE:LRParenTok;)
+    0059 areturn
+    0060 aconst_null
+    0061 areturn
+    sub_attr  StackMapTable (8 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+method        stepOnce (Ljava/lang/String;ILjava/util/List;)I 0x0019
+  code        max_stack=3 max_locals=7
+    0000 aload_0
+    0001 ldc "src"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 aload_2
+    0007 ldc "out"
+    0009 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0012 aload_0
+    0013 iload_1
+    0014 invokevirtual Method(java/lang/String.charAt:(I)C)
+    0017 istore_3
+    0018 iload_3
+    0019 invokestatic Method(InputKt.singleCharToken:(C)LToken;)
+    0022 astore 4
+    0024 aload 4
+    0026 ifnull 42
+    0029 aload_2
+    0030 aload 4
+    0032 invokeinterface InterfaceMethod(java/util/List.add:(Ljava/lang/Object;)Z)
+    0037 pop
+    0038 iload_1
+    0039 iconst_1
+    0040 iadd
+    0041 ireturn
+    0042 iload_3
+    0043 bipush 48
+    0045 if_icmplt 52
+    0048 iconst_1
+    0049 goto 53
+    0052 iconst_0
+    0053 istore 5
+    0055 iconst_0
+    0056 istore 6
+    0058 iload 5
+    0060 ifeq 76
+    0063 iload_3
+    0064 bipush 57
+    0066 if_icmpgt 73
+    0069 iconst_1
+    0070 goto 74
+    0073 iconst_0
+    0074 istore 6
+    0076 iload 6
+    0078 ifeq 88
+    0081 aload_0
+    0082 iload_1
+    0083 aload_2
+    0084 invokestatic Method(InputKt.readNumber:(Ljava/lang/String;ILjava/util/List;)I)
+    0087 ireturn
+    0088 iload_1
+    0089 iconst_1
+    0090 iadd
+    0091 ireturn
+    sub_attr  StackMapTable (21 bytes)
+  attr        Signature (2 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (15 bytes)
+method        tokenize (Ljava/lang/String;)Ljava/util/List; 0x0019
+  code        max_stack=3 max_locals=6
+    0000 aload_0
+    0001 ldc "src"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 iconst_0
+    0007 anewarray Class(java/lang/Object)
+    0010 invokestatic Method(kotlin/collections/CollectionsKt.mutableListOf:([Ljava/lang/Object;)Ljava/util/List;)
+    0013 astore_1
+    0014 iconst_0
+    0015 istore_2
+    0016 iload_2
+    0017 istore_3
+    0018 aload_0
+    0019 invokevirtual Method(java/lang/String.length:()I)
+    0022 istore 4
+    0024 iload_3
+    0025 iload 4
+    0027 if_icmpge 44
+    0030 iload_2
+    0031 istore 5
+    0033 aload_0
+    0034 iload 5
+    0036 aload_1
+    0037 invokestatic Method(InputKt.stepOnce:(Ljava/lang/String;ILjava/util/List;)I)
+    0040 istore_2
+    0041 goto 16
+    0044 aload_1
+    0045 getstatic Field(EofTok.INSTANCE:LEofTok;)
+    0048 invokeinterface InterfaceMethod(java/util/List.add:(Ljava/lang/Object;)Z)
+    0053 pop
+    0054 aload_1
+    0055 areturn
+    sub_attr  StackMapTable (14 bytes)
+  attr        Signature (2 bytes)
+  attr        RuntimeInvisibleAnnotations (6 bytes)
+  attr        RuntimeInvisibleParameterAnnotations (7 bytes)
+class_attr    BootstrapMethods (20 bytes)

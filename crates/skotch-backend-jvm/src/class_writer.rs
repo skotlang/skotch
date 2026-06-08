@@ -1656,11 +1656,39 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
     // This happens when the class has no explicit primary constructor params
     // and a secondary constructor has the same number of params.
     let primary_param_count = class.constructor.params.len().saturating_sub(1);
-    let primary_conflicts = !class.secondary_constructors.is_empty()
+    let mut primary_conflicts = !class.secondary_constructors.is_empty()
         && class
             .secondary_constructors
             .iter()
             .any(|sec| sec.params.len().saturating_sub(1) == primary_param_count);
+    // When the class has no `()` clause on its header AND no primary
+    // ctor body to run AND at least one secondary constructor, kotlinc
+    // emits NO primary constructor. Skotch's synthesized empty
+    // `<init>()V` would have nothing meaningful to call on the
+    // super (the super may not even have a no-arg ctor — e.g.
+    // `Bit32Digest : Digest` where Digest only has typed
+    // constructors), so the JVM rejects the class with `Bad <init>
+    // method call`. Suppress that no-op shell here.
+    //
+    // The synthesized primary always carries a single MStmt: the
+    // super-init `Call(Constructor(Object))`. Detect it by counting
+    // stmts across all blocks and treating ≤1 + 0-param as "no
+    // body": that distinguishes the synthesized shell from a
+    // user-written `class Foo { init { … } }` whose lowered MIR
+    // appends real assignments after the super-init.
+    let body_stmt_count: usize = class.constructor.blocks.iter().map(|b| b.stmts.len()).sum();
+    let super_is_object = class
+        .super_class
+        .as_deref()
+        .map(|s| s == "java/lang/Object")
+        .unwrap_or(true);
+    if !class.secondary_constructors.is_empty()
+        && primary_param_count == 0
+        && body_stmt_count <= 1
+        && !super_is_object
+    {
+        primary_conflicts = true;
+    }
 
     // Stash the module pointer so descriptor-validation helpers
     // (has_short_class_in_descriptor) can recognize unnamed-package
@@ -10514,6 +10542,8 @@ fn emit_mir_segment(
                             "i2l" => 0x85,
                             "i2c" => 0x92,
                             "i2f" => 0x86,
+                            "i2b" => 0x91,
+                            "i2s" => 0x93,
                             "l2i" => 0x88,
                             "l2d" => 0x8A,
                             "l2f" => 0x89,
@@ -10523,6 +10553,39 @@ fn emit_mir_segment(
                             "f2i" => 0x8B,
                             "f2l" => 0x8C,
                             "f2d" => 0x8D,
+                            _ => 0x00,
+                        };
+                        if opcode != 0x00 {
+                            code.push(opcode);
+                        }
+                        // l2b is l2i + i2b (no direct opcode).
+                        if method_name == "l2b" {
+                            code.push(0x88); // l2i
+                            code.push(0x91); // i2b
+                        }
+                        emit_store_mir_local(code, func, local_slot, *dest);
+                    } else if class_name == "$bitwise" || class_name.ends_with("/$bitwise") {
+                        // Kotlin's `Int.shl(Int)`, `Int.and(Int)`, etc.
+                        // compile to a single bitwise opcode. The
+                        // mir-lower routes these here through a
+                        // pseudo-static call so backend codegen
+                        // stays a single arm.
+                        for a in args {
+                            emit_load_mir_local(code, func, local_slot, *a);
+                        }
+                        let opcode: u8 = match method_name.as_str() {
+                            "ishl" => 0x78,
+                            "ishr" => 0x7A,
+                            "iushr" => 0x7C,
+                            "iand" => 0x7E,
+                            "ior" => 0x80,
+                            "ixor" => 0x82,
+                            "lshl" => 0x79,
+                            "lshr" => 0x7B,
+                            "lushr" => 0x7D,
+                            "land" => 0x7F,
+                            "lor" => 0x81,
+                            "lxor" => 0x83,
                             _ => 0x00,
                         };
                         if opcode != 0x00 {
@@ -15637,6 +15700,8 @@ fn walk_block(
                             "i2l" => 0x85,
                             "i2c" => 0x92,
                             "i2f" => 0x86,
+                            "i2b" => 0x91,
+                            "i2s" => 0x93,
                             "l2i" => 0x88,
                             "l2d" => 0x8A,
                             "l2f" => 0x89,
@@ -15651,12 +15716,60 @@ fn walk_block(
                         if opcode != 0x00 {
                             code.push(opcode);
                         }
+                        // l2b: kotlinc emits the same two-opcode form.
+                        if method_name == "l2b" {
+                            code.push(0x88); // l2i
+                            code.push(0x91); // i2b
+                                             // l2i pops wide(2) pushes int(1), then i2b
+                                             // pops int(1) pushes byte(1) → net -1 from
+                                             // start.
+                            bump(stack, max_stack, -1);
+                        }
                         // Stack effect: wide→narrow = -1, narrow→wide = +1, same = 0
                         // (Float and Int both occupy 1 slot.)
                         let effect = match method_name.as_str() {
                             "i2d" | "i2l" | "f2d" | "f2l" => 1,          // narrow(1)→wide(2)
                             "d2i" | "d2l" | "l2i" | "d2f" | "l2f" => -1, // wide(2)→narrow(1)
                             // i2f, f2i, i2c, l2i (listed), d2f (listed), f2d handled, etc. → 0
+                            _ => 0,
+                        };
+                        bump(stack, max_stack, effect);
+                        store_local(code, stack, slots, next_slot, *dest, &func.locals);
+                    } else if class_name == "$bitwise" || class_name.ends_with("/$bitwise") {
+                        // Kotlin Int/Long bitwise members compile to
+                        // single-opcode bytecode. Load both args, then
+                        // emit the matching `i*` / `l*` shift / boolean
+                        // opcode; the stack effect collapses two
+                        // operands to one result of the receiver's
+                        // width.
+                        load_local(code, stack, max_stack, slots, args[0], &func.locals);
+                        load_local(code, stack, max_stack, slots, args[1], &func.locals);
+                        let opcode: u8 = match method_name.as_str() {
+                            "ishl" => 0x78,
+                            "ishr" => 0x7A,
+                            "iushr" => 0x7C,
+                            "iand" => 0x7E,
+                            "ior" => 0x80,
+                            "ixor" => 0x82,
+                            "lshl" => 0x79,
+                            "lshr" => 0x7B,
+                            "lushr" => 0x7D,
+                            "land" => 0x7F,
+                            "lor" => 0x81,
+                            "lxor" => 0x83,
+                            _ => 0x00,
+                        };
+                        if opcode != 0x00 {
+                            code.push(opcode);
+                        }
+                        // Stack effect after the opcode:
+                        //   ishl/ishr/iushr/iand/ior/ixor: (II) → (I) net -1
+                        //   lshl/lshr/lushr:               (JI) → (J) net -1
+                        //   land/lor/lxor:                 (JJ) → (J) net -2
+                        let effect = match method_name.as_str() {
+                            "ishl" | "ishr" | "iushr" | "iand" | "ior" | "ixor" => -1,
+                            "lshl" | "lshr" | "lushr" => -1,
+                            "land" | "lor" | "lxor" => -2,
                             _ => 0,
                         };
                         bump(stack, max_stack, effect);
@@ -15945,14 +16058,55 @@ fn walk_block(
                         && func.params.first() == Some(&args[0]);
 
                     if receiver_in_args {
-                        // Super constructor call: load this + args
+                        // Super constructor call: load this + args.
+                        // Look up the target class's matching <init>
+                        // overload so the descriptor reflects the
+                        // declared param types (e.g. `[I` for an
+                        // IntArray param) instead of falling back to
+                        // the arg's runtime `Ty` which may have
+                        // erased to `Any`. Without this, calling
+                        // `super(256, intArrayOf(...))` against a
+                        // ctor declared `(I[I)V` emits
+                        // `(ILjava/lang/Object;)V` and the JVM
+                        // raises `NoSuchMethodError` on linkage.
+                        let provided = args.len().saturating_sub(1);
+                        let target_param_tys: Option<Vec<Ty>> =
+                            module.find_class(class_name).and_then(|c| {
+                                let primary_count = c.constructor.params.len().saturating_sub(1);
+                                if primary_count == provided {
+                                    return Some(
+                                        c.constructor
+                                            .params
+                                            .iter()
+                                            .skip(1)
+                                            .map(|p| c.constructor.locals[p.0 as usize].clone())
+                                            .collect(),
+                                    );
+                                }
+                                for sec in &c.secondary_constructors {
+                                    let sec_count = sec.params.len().saturating_sub(1);
+                                    if sec_count == provided {
+                                        return Some(
+                                            sec.params
+                                                .iter()
+                                                .skip(1)
+                                                .map(|p| sec.locals[p.0 as usize].clone())
+                                                .collect(),
+                                        );
+                                    }
+                                }
+                                None
+                            });
                         for a in args {
                             load_local(code, stack, max_stack, slots, *a, &func.locals);
                         }
                         let mut descriptor = String::from("(");
-                        for a in args.iter().skip(1) {
-                            let ty = &func.locals[a.0 as usize];
-                            descriptor.push_str(&jvm_param_type_string(ty));
+                        for (i, a) in args.iter().enumerate().skip(1) {
+                            let ty: Ty = target_param_tys
+                                .as_ref()
+                                .and_then(|v| v.get(i - 1).cloned())
+                                .unwrap_or_else(|| func.locals[a.0 as usize].clone());
+                            descriptor.push_str(&jvm_param_type_string(&ty));
                         }
                         descriptor.push_str(")V");
                         let mref = cp.methodref(class_name, "<init>", &descriptor);
@@ -16715,21 +16869,33 @@ fn walk_block(
             Rvalue::ArrayLoad { array, index } => {
                 load_local(code, stack, max_stack, slots, *array, &func.locals);
                 load_local(code, stack, max_stack, slots, *index, &func.locals);
-                // Select load opcode based on element type.
-                let load_op: u8 = match &func.locals[dest.0 as usize] {
-                    Ty::Long => 0x2F,                            // laload
-                    Ty::Double => 0x31,                          // daload
-                    Ty::Byte => 0x33,                            // baload
-                    Ty::Bool => 0x33,                            // baload
-                    Ty::Any | Ty::String | Ty::Class(_) => 0x32, // aaload (Object[])
-                    _ => 0x2E,                                   // iaload (int, char, short)
+                // Prefer the ARRAY's element type for the load
+                // opcode (mirrors the ArrayStore fix). The `dest`
+                // local's type can be `Ty::Any` when the receiver
+                // side of an iter loop hasn't yet had its element
+                // type pinned (`for (b in buf) { … }`), and using
+                // it picks `iaload` against a `[B` array — JVM
+                // rejects with `Bad type on operand stack`.
+                let arr_ty = &func.locals[array.0 as usize];
+                let dest_ty = &func.locals[dest.0 as usize];
+                let load_op: u8 = match arr_ty {
+                    Ty::ByteArray => 0x33,    // baload
+                    Ty::BooleanArray => 0x33, // baload (boolean[])
+                    Ty::IntArray => 0x2E,     // iaload
+                    Ty::LongArray => 0x2F,    // laload
+                    Ty::DoubleArray => 0x31,  // daload
+                    _ => match dest_ty {
+                        Ty::Long => 0x2F,
+                        Ty::Double => 0x31,
+                        Ty::Byte | Ty::Bool => 0x33,
+                        Ty::Any | Ty::String | Ty::Class(_) => 0x32,
+                        _ => 0x2E,
+                    },
                 };
                 code.push(load_op);
-                let width = if matches!(func.locals[dest.0 as usize], Ty::Long | Ty::Double) {
-                    0 // wide: pops 2, pushes 2 → net 0
-                } else {
-                    -1 // narrow: pops 2, pushes 1 → net -1
-                };
+                let result_is_wide = matches!(arr_ty, Ty::LongArray | Ty::DoubleArray)
+                    || matches!(dest_ty, Ty::Long | Ty::Double);
+                let width = if result_is_wide { 0 } else { -1 };
                 bump(stack, max_stack, width);
                 store_local(code, stack, slots, next_slot, *dest, &func.locals);
             }
@@ -16741,14 +16907,28 @@ fn walk_block(
                 load_local(code, stack, max_stack, slots, *array, &func.locals);
                 load_local(code, stack, max_stack, slots, *index, &func.locals);
                 load_local(code, stack, max_stack, slots, *value, &func.locals);
-                // Select store opcode based on value type.
+                // Pick the store opcode from the ARRAY's element type
+                // when it's a known primitive array, otherwise fall
+                // back to the value type. Without this, a known
+                // `ByteArray` slot whose RHS resolved to `Ty::Any`
+                // (unresolved `toByte()` etc.) picked `aastore` and
+                // the JVM rejected the class with `Bad type on
+                // operand stack`.
+                let arr_ty = &func.locals[array.0 as usize];
                 let val_ty = &func.locals[value.0 as usize];
-                let store_op: u8 = match val_ty {
-                    Ty::Long => 0x50,                            // lastore
-                    Ty::Double => 0x52,                          // dastore
-                    Ty::Byte | Ty::Bool => 0x54,                 // bastore
-                    Ty::Any | Ty::String | Ty::Class(_) => 0x53, // aastore (Object[])
-                    _ => 0x4F,                                   // iastore (int, char, short)
+                let store_op: u8 = match arr_ty {
+                    Ty::ByteArray => 0x54,    // bastore
+                    Ty::IntArray => 0x4F,     // iastore
+                    Ty::LongArray => 0x50,    // lastore
+                    Ty::DoubleArray => 0x52,  // dastore
+                    Ty::BooleanArray => 0x54, // bastore (boolean[] uses bastore too)
+                    _ => match val_ty {
+                        Ty::Long => 0x50,
+                        Ty::Double => 0x52,
+                        Ty::Byte | Ty::Bool => 0x54,
+                        Ty::Any | Ty::String | Ty::Class(_) => 0x53,
+                        _ => 0x4F,
+                    },
                 };
                 code.push(store_op);
                 let width = if matches!(val_ty, Ty::Long | Ty::Double) {

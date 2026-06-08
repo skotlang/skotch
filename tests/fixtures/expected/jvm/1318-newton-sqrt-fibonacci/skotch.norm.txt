@@ -1,0 +1,153 @@
+class_version major=61 minor=0
+this_class    InputKt
+super_class   java/lang/Object
+access_flags  0x0031
+method        absD (D)D 0x0019
+  code        max_stack=4 max_locals=2
+    0000 dload_0
+    0001 dconst_0
+    0002 dcmpg
+    0003 ifge 9
+    0006 dload_0
+    0007 dneg
+    0008 dreturn
+    0009 dload_0
+    0010 dreturn
+    sub_attr  StackMapTable (3 bytes)
+method        main ()V 0x0019
+  code        max_stack=4 max_locals=19
+    0000 ldc "--- Newton's method for sqrt ---"
+    0002 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0005 swap
+    0006 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0009 iconst_0
+    0010 istore_0
+    0011 iload_0
+    0012 bipush 10
+    0014 if_icmpgt 43
+    0017 iload_0
+    0018 i2d
+    0019 invokestatic Method(InputKt.sqrt:(D)D)
+    0022 dstore_1
+    0023 iload_0
+    0024 dload_1
+    0025 invokedynamic InvokeDynamic(makeConcatWithConstants:(ID)Ljava/lang/String;)
+    0030 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0033 swap
+    0034 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0037 iinc 0 1
+    0040 goto 11
+    0043 ldc "--- Fibonacci ratio → golden ratio ---"
+    0045 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0048 swap
+    0049 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0052 ldc2_w double(5)
+    0055 invokestatic Method(InputKt.sqrt:(D)D)
+    0058 dstore_3
+    0059 dconst_1
+    0060 dload_3
+    0061 dadd
+    0062 ldc2_w double(2)
+    0065 ddiv
+    0066 dstore 5
+    0068 dload 5
+    0070 invokedynamic InvokeDynamic(makeConcatWithConstants:(D)Ljava/lang/String;)
+    0075 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0078 swap
+    0079 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0082 iconst_1
+    0083 istore 7
+    0085 iconst_1
+    0086 istore 8
+    0088 iconst_0
+    0089 istore 9
+    0091 iload 9
+    0093 bipush 15
+    0095 if_icmpge 160
+    0098 iload 8
+    0100 i2d
+    0101 dstore 10
+    0103 iload 7
+    0105 i2d
+    0106 dstore 12
+    0108 dload 10
+    0110 dload 12
+    0112 ddiv
+    0113 dstore 14
+    0115 iload 9
+    0117 dload 14
+    0119 invokedynamic InvokeDynamic(makeConcatWithConstants:(ID)Ljava/lang/String;)
+    0124 getstatic Field(java/lang/System.out:Ljava/io/PrintStream;)
+    0127 swap
+    0128 invokevirtual Method(java/io/PrintStream.println:(Ljava/lang/Object;)V)
+    0131 iload 7
+    0133 istore 16
+    0135 iload 8
+    0137 istore 17
+    0139 iload 16
+    0141 iload 17
+    0143 iadd
+    0144 istore 18
+    0146 iload 8
+    0148 istore 7
+    0150 iload 18
+    0152 istore 8
+    0154 iinc 9 1
+    0157 goto 91
+    0160 return
+    sub_attr  StackMapTable (25 bytes)
+method        main ([Ljava/lang/String;)V 0x1009
+  code        max_stack=0 max_locals=1
+    0000 invokestatic Method(InputKt.main:()V)
+    0003 return
+method        sqrt (D)D 0x0019
+  code        max_stack=4 max_locals=15
+    0000 dload_0
+    0001 dconst_0
+    0002 dcmpg
+    0003 ifne 8
+    0006 dconst_0
+    0007 dreturn
+    0008 dload_0
+    0009 ldc2_w double(2)
+    0012 ddiv
+    0013 dstore_2
+    0014 iconst_0
+    0015 istore 4
+    0017 iload 4
+    0019 bipush 50
+    0021 if_icmpge 68
+    0024 dload_2
+    0025 dstore 5
+    0027 dload_2
+    0028 dstore 7
+    0030 dload_0
+    0031 dload 7
+    0033 ddiv
+    0034 dstore 9
+    0036 dload 5
+    0038 dload 9
+    0040 dadd
+    0041 ldc2_w double(2)
+    0044 ddiv
+    0045 dstore 11
+    0047 dload_2
+    0048 dstore 13
+    0050 dload 11
+    0052 dload 13
+    0054 dsub
+    0055 invokestatic Method(InputKt.absD:(D)D)
+    0058 ldc2_w double(0.0000000001)
+    0061 dcmpg
+    0062 ifge 73
+    0065 goto 70
+    0068 dload_2
+    0069 dreturn
+    0070 dload 11
+    0072 dreturn
+    0073 dload 11
+    0075 dstore_2
+    0076 iinc 4 1
+    0079 goto 17
+    sub_attr  StackMapTable (25 bytes)
+class_attr    BootstrapMethods (20 bytes)
