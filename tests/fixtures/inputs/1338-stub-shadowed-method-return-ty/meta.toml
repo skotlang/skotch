@@ -1,0 +1,4 @@
+name = "1338-stub-shadowed-method-return-ty"
+status = "supported"
+features = ["class", "lambda-with-receiver", "implicit-this", "dispatch"]
+reason = "Lock-in for parity/51. Inside `html { foo() }` where `html`'s lambda is typed `HTML.() -> Unit`, the implicit-this resolution for `foo()` produced a CallKind::Virtual targeting HTML.foo. The JVM backend's class-lookup at ~16358 used `module.classes.iter().find(...)` (first match), which picked the cross-file STUB MirClass (return_ty=Any) over the real lowered one (return_ty=Unit). The emitted descriptor was `()Ljava/lang/Object;` — runtime NoSuchMethodError. Fix swaps to `module.find_class()` which prefers non-stub entries. Mirror fix in mir-lower's CallKind::Virtual dest_ty path (~17216)."

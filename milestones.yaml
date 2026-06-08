@@ -50,7 +50,7 @@
 #     Currently 1034/1062 JVM fixtures also pass DEX. Gaps are fixed
 #     incrementally, not in a big-bang milestone.
 #
-#     kotlinc byte parity — 819 fixtures are byte-identical to
+#     kotlinc byte parity — 820 fixtures are byte-identical to
 #     kotlinc 2.4.0 output (kotlinc_parity_baseline ratchet test).
 #     Any commit that drops a fixture from this set fails CI.
 #
@@ -68,16 +68,16 @@ project:
     by a >50× wall-clock margin on every example. Then resume the Compose
     Samples track for Android UI parity.
   codebase_stats:
-    # Last refreshed 2026-06-07.
+    # Last refreshed 2026-06-08.
     rust_lines: 107403
     crates: 38
-    active_fixtures: 1082
+    active_fixtures: 1086
     stub_fixtures: 0           # all stubs eliminated
-    jvm_e2e_fixtures: 1076
-    dex_e2e_fixtures: 1047     # 1321..1334 added DEX golden
-    kotlinc_byte_parity_baseline: 819  # tests/fixtures/kotlinc_parity_baseline.txt
+    jvm_e2e_fixtures: 1080
+    dex_e2e_fixtures: 1051     # 1321..1338 added DEX golden
+    kotlinc_byte_parity_baseline: 820  # tests/fixtures/kotlinc_parity_baseline.txt
     kotlinc_byte_parity_aspirational: 70
-    parity_examples: 48        # parity/01-hello-world through parity/48-infix-functions
+    parity_examples: 51        # parity/01-hello-world through parity/51-html-dsl-builder (49 + 50 + 51 are fail-skotch gap probes)
     measured_kotlinc_speedup: "~100× on small programs (parity bench)"
 
 # ============================================================================
@@ -2021,9 +2021,50 @@ milestones:
           calls parse_disjunction for the RHS, which doesn't accept
           `return` (return is a Stmt, not an Expr). Need either
           Expr::Return AST variant or special-case Elvis-then-return
-          desugaring at the parser level. Workaround in parity/43:
-          rewrite as `val h = head; if (h == null) return null`.
-          Surfaced by parity/43-linked-list.
+          desugaring at the parser level. Re-confirmed by parity/49.
+
+      - name: "Reified type-arg inference from LHS declared type"
+        completed: false
+        description: >
+          KNOWN GAP: `val firstInt: Int? = mixed.firstOfType()` where
+          `firstOfType<T>()` is an inline reified extension doesn't
+          infer the type arg from the LHS-declared `Int?`. Typeck
+          reports "type mismatch: expected <nullable>, found Any".
+          User can work around by spelling out the type arg
+          (`mixed.firstOfType<Int>()`). Fix: typeck should propagate
+          the declared LHS type as a constraint when call returns
+          `T?` and T is reified. Surfaced by parity/49.
+
+      - name: "Star projection in `as X<*>` cast expression"
+        completed: false
+        description: >
+          KNOWN GAP: the cast expression `(x as List<*>).foo()` fails
+          to parse — the parser handles type args in receiver types
+          (parser.rs:~1812, fixed in iter 49) and in declared types,
+          but the type expression on the right of `as` doesn't accept
+          `*`. Workaround: drop the cast (Kotlin's covariance often
+          makes it unnecessary). Surfaced by parity/49 fixture 1335.
+
+      - name: "Iteration on extension function receiver via `for-in`"
+        completed: false
+        description: >
+          KNOWN GAP: `fun <T> Iterable<T>.firstOnly(): T? { for (item
+          in this) return item; return null }` parses and compiles
+          but returns null at runtime. The for-in `this` isn't
+          dispatching to `Iterable.iterator()` correctly when `this`
+          is the extension-function receiver. Surfaced by parity/49
+          (an earlier draft of fixture 1335 hit this; current 1335
+          probes only the receiver-type parser path).
+
+      - name: "Local var mutation in for-loop body"
+        completed: false
+        description: >
+          KNOWN GAP: `var n = 0; for (item in items) { if (item > x)
+          n = n + 1 }; return n` returns the FIRST-bumped value
+          (e.g. 1) instead of accumulating. Local var inside a
+          for-loop body doesn't get the live-write-through behavior
+          that class-instance var fields do. Related to but distinct
+          from the var-capture-in-lambda gap. Surfaced by parity/49.
 
       - name: "Smart-cast nullable-Int auto-unbox in arithmetic"
         completed: false
@@ -2082,6 +2123,69 @@ milestones:
           covers the user-class-method-vs-stdlib-extension dispatch
           fix that landed in this iteration (the routing bug exposed
           by Counter.forEach/map mis-dispatching to CollectionsKt).
+
+      - name: "Runnable { lambda } SAM conversion to interface w/ run()"
+        completed: false
+        description: >
+          KNOWN GAP — surfaced by parity/50-modifiers-and-delegation's
+          Crossinline.kt: `val r = Runnable { body() }; r.run()` —
+          skotch doesn't recognize `Runnable` as a single-abstract-method
+          interface that can be constructed from a lambda. kotlinc
+          desugars to a synthetic class implementing Runnable with run()
+          forwarding to the captured lambda; skotch tries to call
+          Runnable as a constructor and emits invalid bytecode. Affects
+          all stdlib SAM interfaces (Runnable, Callable, Comparator,
+          ThreadFactory, etc.) and Java-defined functional interfaces.
+          Note: Kotlin-defined `fun interface` types may have a separate
+          desugaring path. Fix shape: detect single-abstract-method
+          interface receiver at lambda lowering, synthesize an anonymous
+          class that implements the SAM with the lambda body.
+
+      - name: "Unary `+` operator overload (`+\"text\"` → String.unaryPlus())"
+        completed: false
+        description: >
+          KNOWN GAP — surfaced by parity/51-html-dsl-builder. Parser at
+          parser.rs:~3613 (`parse_unary`) only handles `Minus`/`Bang` as
+          unary prefixes; `Plus` falls through to `parse_postfix` and
+          fails with "expected expression, found Plus". UnaryOp enum at
+          ast.rs:681 has Neg/Not, no Pos. Even after parser support,
+          dispatch to user-defined `operator fun X.unaryPlus()` (and
+          `unaryMinus`, `inc`, `dec`) needs wiring through mir-lower.
+          Standard HTML/XML DSL builders rely on `+"text"` to add a child
+          text node via an extension `operator fun String.unaryPlus()` on
+          the receiver class.
+
+      - name: "Cross-file implicit-this resolution in lambda-with-receiver bodies"
+        completed: false
+        description: >
+          KNOWN GAP — surfaced by parity/51-html-dsl-builder. Single-file
+          works after iter-51 fix (find_class non-stub preference). When
+          the receiver class lives in another file, the lambda body's
+          implicit-this lookup at mir-lower:~15772 finds the cross-file
+          STUB MirClass for HTML but the stub's `methods` either misses
+          the entry entirely or carries a `Ty::Any` return placeholder,
+          so the implicit call falls through to the "unknown call target"
+          path. Fix shape: ensure cross-file stub MirClass methods carry
+          real return types from PackageSymbolTable (currently lost), or
+          have the implicit-this resolver fall back to classpath lookup
+          when the in-file stub matches but has no body.
+
+      - name: "Custom property delegate via KProperty treated as `by lazy`"
+        completed: false
+        description: >
+          KNOWN GAP — surfaced by parity/50-modifiers-and-delegation's
+          Delegates.kt: a custom delegate with `operator fun getValue
+          (thisRef, prop: KProperty<*>): T` + matching setValue emits
+          broken bytecode. skotch appears to treat every `var x: T by
+          Expr` as `by lazy { Expr }` regardless of whether Expr is a
+          Lazy<T> or a custom delegate object — produces VerifyError on
+          load. kotlinc generates: a synthetic field `x$delegate`
+          holding the Delegate instance + getter/setter that forward to
+          `x$delegate.getValue(this, ::x)` / `setValue(...)` with a
+          KProperty1 reference. Fix shape: when lowering `by Expr`,
+          inspect Expr's type — if it has `getValue(thisRef, KProperty)`
+          / `setValue(...)`, generate the delegate-forwarding shape;
+          only emit `by lazy` for `lazy { ... }` calls.
 
     risks:
       - description: "Parity loop is open-ended — could run indefinitely"

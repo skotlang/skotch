@@ -10574,6 +10574,7 @@ fn emit_mir_segment(
                         emit_load_mir_local(code, func, local_slot, *a);
                     }
                     let dest_ty = &func.locals[dest.0 as usize];
+                    eprintln!("DBG BE CallKind::Virtual class={class_name} method={method_name} dest_ty={dest_ty:?} dest.0={}", dest.0);
                     let ret_desc = if method_name == "invoke"
                         && (module.is_lambda_class(class_name)
                             || class_name.starts_with("kotlin/jvm/functions/Function"))
@@ -16221,9 +16222,7 @@ fn walk_block(
                     } else {
                         let user_arity = args.len().saturating_sub(1);
                         module
-                            .classes
-                            .iter()
-                            .find(|c| &c.name == class_name)
+                            .find_class(class_name)
                             .and_then(|c| {
                                 c.methods.iter().find(|m| {
                                     m.name == *method_name
@@ -16364,11 +16363,18 @@ fn walk_block(
                         // `args.len() - 1` (skip the receiver) and the
                         // method's user-arity is `params.len() - 1`
                         // (params[0] is `this`).
+                        //
+                        // Use `find_class` (not `classes.iter().find()`)
+                        // so the non-stub MirClass wins when both a real
+                        // class and a cross-file stub share the JVM
+                        // name. Otherwise the stub's
+                        // `(empty)Ljava/lang/Object;` shape clobbers the
+                        // real method's real descriptor and the JVM
+                        // resolver fails at runtime with
+                        // `NoSuchMethodError`.
                         let user_arity = args.len().saturating_sub(1);
                         module
-                            .classes
-                            .iter()
-                            .find(|c| &c.name == class_name)
+                            .find_class(class_name)
                             .and_then(|c| {
                                 c.methods.iter().find(|m| {
                                     m.name == *method_name

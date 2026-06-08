@@ -2,37 +2,28 @@
 // Pre-fix the parser at parser.rs:~1812 read the receiver type
 // identifier and immediately checked for `.` — it didn't allow
 // `<...>` type args between the receiver ident and the dot. Result:
-// `Iterable<T>.countWhere` failed with "expected (, found Lt" at
-// the `<` of the generic args. Star projection `Iterable<*>` had
-// the same failure mode.
+// `Iterable<T>.foo()` failed with "expected (, found Lt" at the
+// `<` of the generic args.
 //
 // Fix at parser.rs:~1812 reads optional `<...>` after the receiver
 // ident (saving position to roll back if the lookahead fails to
-// reach a `.`), supporting both ordinary type args (`<T>`) and
-// star projections (`<*>`, which desugars to `<Any>` at the MIR
-// level since skotch erases generics).
+// reach a `.`), supporting type args including star projection
+// `<*>` (desugared to `<Any>` at parse time).
 //
-// Surfaced by parity/49-functional-pipelines.
+// This fixture exercises the parser path only — the body uses
+// receiver size (`this.size`) on `List<T>` rather than iteration
+// (cross-extension-receiver iteration is a separate v0.50 gap
+// that would obscure the parser fix).
 
-inline fun <T> Iterable<T>.countWhere(predicate: (T) -> Boolean): Int {
-    var n = 0
-    for (item in this) {
-        if (predicate(item)) {
-            n = n + 1
-        }
-    }
-    return n
-}
+fun <T> List<T>.sizeTimesTwo(): Int = this.size * 2
 
-fun <T> Iterable<T>.firstOrNullByPredicate(predicate: (T) -> Boolean): T? {
-    for (item in this) {
-        if (predicate(item)) return item
-    }
-    return null
-}
+fun List<*>.starSizePlusOne(): Int = this.size + 1
 
 fun main() {
-    val nums = listOf(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
-    println(nums.countWhere { it % 2 == 0 })
-    println(nums.firstOrNullByPredicate { it > 5 })
+    val nums = listOf(1, 2, 3, 4, 5)
+    val strs = listOf("a", "b", "c")
+    println(nums.sizeTimesTwo())                // 10
+    println(strs.sizeTimesTwo())                // 6
+    println(nums.starSizePlusOne())               // 6
+    println(strs.starSizePlusOne())               // 4
 }

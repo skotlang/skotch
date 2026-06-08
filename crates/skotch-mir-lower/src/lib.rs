@@ -15783,20 +15783,32 @@ fn lower_expr(
                         'search: while let Some(ref cname) = search_class {
                             let found = module.find_class(cname);
                             if let Some(cls) = found {
-                                if cls.methods.iter().any(|m| m.name == callee_str) {
+                                // Prefer the non-stub overload when present.
+                                // A class's `methods` list can contain BOTH
+                                // a stub MirFunction (registered during the
+                                // pre-lower stage so implicit-this resolution
+                                // works while the body is being lowered) AND
+                                // the real lowered MirFunction with proper
+                                // params and return type. The stub typically
+                                // has zero locals beyond `this`; the real
+                                // one has the body's locals. Picking the
+                                // stub first means the caller's dest local
+                                // gets the stub's `Ty::Any` return type and
+                                // the JVM backend emits the wrong descriptor
+                                // (`()Ljava/lang/Object;` instead of `()V`).
+                                let pick = cls
+                                    .methods
+                                    .iter()
+                                    .filter(|m| m.name == callee_str)
+                                    .max_by_key(|m| m.locals.len());
+                                if let Some(m) = pick {
                                     arg_locals.insert(0, *this_local);
-                                    let ret_ty = cls
-                                        .methods
-                                        .iter()
-                                        .find(|m| m.name == callee_str)
-                                        .map(|m| m.return_ty.clone())
-                                        .unwrap_or(Ty::Unit);
                                     resolved = Some((
                                         CallKind::Virtual {
                                             class_name: cname.clone(),
                                             method_name: callee_str.to_string(),
                                         },
-                                        ret_ty,
+                                        m.return_ty.clone(),
                                     ));
                                     break;
                                 }
@@ -16988,7 +17000,8 @@ fn lower_expr(
 
                         if let Some(cls) = current_class {
                             // Own methods (including private ones).
-                            if cls.methods.iter().any(|m| m.name == callee_str) {
+                            if let Some(method) = cls.methods.iter().find(|m| m.name == callee_str)
+                            {
                                 if let Some(d) = skotch_classinfo::lookup_method_descriptor(
                                     &cls.name,
                                     callee_str,
@@ -16996,14 +17009,22 @@ fn lower_expr(
                                 ) {
                                     resolved_desc = Some((cls.name.clone(), d));
                                 } else {
-                                    // Build descriptor from arg types.
+                                    // Build descriptor from arg types and the
+                                    // method's actual return type. Earlier this
+                                    // hardcoded `)Ljava/lang/Object;` which
+                                    // generates a non-existent JVM method for
+                                    // any void/primitive return — implicit-this
+                                    // calls inside lambda-with-receiver bodies
+                                    // (`html { foo() }` where `foo()` is on
+                                    // the receiver class) hit this path.
                                     let mut d = String::from("(");
                                     for a in &arg_locals {
                                         d.push_str(&jvm_type_string_for_ty(
                                             &fb.mf.locals[a.0 as usize],
                                         ));
                                     }
-                                    d.push_str(")Ljava/lang/Object;");
+                                    d.push(')');
+                                    d.push_str(&jvm_type_string_for_ty(&method.return_ty));
                                     resolved_desc = Some((cls.name.clone(), d));
                                 }
                             }
@@ -17211,7 +17232,17 @@ fn lower_expr(
                     let mut search = Some(class_name.clone());
                     while let Some(ref cname) = search {
                         if let Some(cls) = module.find_class(cname) {
-                            if let Some(m) = cls.methods.iter().find(|m| &m.name == method_name) {
+                            // Prefer the non-stub overload — same rationale
+                            // as the implicit-this resolution at line ~15786.
+                            // The stub registered before body-lowering carries
+                            // `Ty::Any` (placeholder) and would clobber the
+                            // real lowered method's return type.
+                            let m = cls
+                                .methods
+                                .iter()
+                                .filter(|m| &m.name == method_name)
+                                .max_by_key(|m| m.locals.len());
+                            if let Some(m) = m {
                                 ret = m.return_ty.clone();
                                 break;
                             }

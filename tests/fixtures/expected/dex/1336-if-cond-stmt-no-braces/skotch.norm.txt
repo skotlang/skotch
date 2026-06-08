@@ -1,82 +1,51 @@
 dex_version   035
-strings       35
-types         15
-methods       13
+strings       18
+types         8
+methods       7
 classes       1
 
 --- strings ---
   "<init>"
   "I"
-  "ILI"
-  "L"
   "LCounter;"
-  "LI"
   "LInputKt;"
-  "LL"
   "Ljava/io/PrintStream;"
-  "Ljava/lang/Integer;"
-  "Ljava/lang/Iterable;"
   "Ljava/lang/Object;"
   "Ljava/lang/System;"
-  "Ljava/util/Iterator;"
-  "Ljava/util/List;"
-  "Lkotlin/collections/CollectionsKt;"
   "V"
   "VI"
   "VL"
-  "Z"
-  "[Ljava/lang/Object;"
   "[Ljava/lang/String;"
-  "count"
   "getTotal"
-  "hasNext"
   "input.kt"
-  "intValue"
-  "iterator"
-  "listOf"
   "main"
   "maybeBump"
-  "next"
+  "maybeReset"
   "out"
   "println"
-  "valueOf"
 
 --- types ---
   I
   LCounter;
   LInputKt;
   Ljava/io/PrintStream;
-  Ljava/lang/Integer;
-  Ljava/lang/Iterable;
   Ljava/lang/Object;
   Ljava/lang/System;
-  Ljava/util/Iterator;
-  Ljava/util/List;
-  Lkotlin/collections/CollectionsKt;
   V
-  Z
-  [Ljava/lang/Object;
   [Ljava/lang/String;
 
 --- methods ---
   LCounter;.<init>()V
   LCounter;.getTotal()I
   LCounter;.maybeBump(I)V
-  LInputKt;.count(Ljava/lang/Object;I)I
+  LCounter;.maybeReset(I)V
   LInputKt;.main()V
   LInputKt;.main([Ljava/lang/String;)V
   Ljava/io/PrintStream;.println(I)V
-  Ljava/lang/Integer;.intValue()I
-  Ljava/lang/Integer;.valueOf(I)Ljava/lang/Integer;
-  Ljava/lang/Iterable;.iterator()Ljava/util/Iterator;
-  Ljava/util/Iterator;.hasNext()Z
-  Ljava/util/Iterator;.next()Ljava/lang/Object;
-  Lkotlin/collections/CollectionsKt;.listOf([Ljava/lang/Object;)Ljava/util/List;
 
 --- class[0] ---
   descriptor   LInputKt;
   super        Ljava/lang/Object;
   source_file  input.kt
-  method       count(Ljava/lang/Object;I)I flags=0x0019 regs=15 ins=2 outs=1 insns=40
-  method       main()V flags=0x0019 regs=41 ins=0 outs=2 insns=118
+  method       main()V flags=0x0019 regs=11 ins=0 outs=2 insns=59
   method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4

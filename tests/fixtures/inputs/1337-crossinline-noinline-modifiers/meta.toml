@@ -1,0 +1,4 @@
+name = "1337-crossinline-noinline-modifiers"
+status = "supported"
+features = ["crossinline", "noinline", "inline-function", "lambda-param-modifier", "parser"]
+reason = "Lock-in for parity/50-modifiers-and-delegation. `crossinline` and `noinline` are Ident-level modifiers on inline-function lambda params (no lexer keywords for them). Pre-fix the param parser at parser.rs:~1976 went straight from optional vararg modifier to param name — `crossinline`/`noinline` trickled into the param parser as bogus name candidates and broke everything downstream. Fix at parser.rs:~1989 accepts these Ident payloads as modifiers before the param name. skotch doesn't yet enforce the JVM-level semantics (non-local return prohibition / no-inlining); the parser/lowerer treat marked lambdas as regular inline lambdas, which is fine for the most common uses since skotch doesn't yet support non-local returns from inline lambdas anyway."

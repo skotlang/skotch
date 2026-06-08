@@ -192,6 +192,7 @@
 1331-multi-arg-index-operator
 1332-private-constructor-companion-factory
 1334-infix-member-functions
+1336-if-cond-stmt-no-braces
 134-string-template-val
 135-string-template-return
 138-fibonacci-display

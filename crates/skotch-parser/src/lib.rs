@@ -1829,9 +1829,7 @@ impl<'a> Parser<'a> {
                 let mut args = Vec::new();
                 loop {
                     self.skip_trivia();
-                    if self.peek_kind() == TokenKind::Gt
-                        || self.peek_kind() == TokenKind::Eof
-                    {
+                    if self.peek_kind() == TokenKind::Gt || self.peek_kind() == TokenKind::Eof {
                         break;
                     }
                     // Star projection `*` becomes `Any`. Kotlin's
@@ -1861,9 +1859,7 @@ impl<'a> Parser<'a> {
                     }
                 }
                 self.skip_trivia();
-                if self.peek_kind() == TokenKind::Gt
-                    && self.peek_kind_at(1) == TokenKind::Dot
-                {
+                if self.peek_kind() == TokenKind::Gt && self.peek_kind_at(1) == TokenKind::Dot {
                     self.bump(); // consume `>`
                     recv_type_args = args;
                 } else {
@@ -1984,6 +1980,25 @@ impl<'a> Parser<'a> {
         let is_vararg = self.eat(TokenKind::KwVararg);
         if is_vararg {
             self.skip_trivia();
+        }
+        // Consume `crossinline` / `noinline` modifiers (Ident tokens —
+        // not lexer keywords). Inline-function lambda-param modifiers
+        // controlling non-local return / inlining behavior. skotch
+        // currently ignores them: `crossinline` parses identically to
+        // a regular inline lambda (non-local returns are already not
+        // supported), `noinline` is a JVM perf hint. Surfaced by
+        // parity/50-modifiers-and-delegation.
+        while self.peek_kind() == TokenKind::Ident {
+            let text = match self.payload(self.pos) {
+                Some(TokenPayload::Ident(s)) => s.clone(),
+                _ => String::new(),
+            };
+            if text == "crossinline" || text == "noinline" {
+                self.bump();
+                self.skip_trivia();
+            } else {
+                break;
+            }
         }
         let name_idx = self.pos;
         let name_span = self.peek_span();
@@ -3262,18 +3277,11 @@ impl<'a> Parser<'a> {
         // continuation of lhs.
         // Newline OR Semi between lhs and the current position
         // means lhs's statement ended — bail out of infix detection.
-        let mut crossed_newline = false;
-        let mut scan = self.pos;
-        while scan > 0 {
-            scan -= 1;
-            match self.tokens[scan].kind {
-                TokenKind::Newline | TokenKind::Semi => {
-                    crossed_newline = true;
-                    break;
-                }
-                _ => break,
-            }
-        }
+        let crossed_newline = self.pos > 0
+            && matches!(
+                self.tokens[self.pos - 1].kind,
+                TokenKind::Newline | TokenKind::Semi
+            );
         // `..` range operator: `1..10` → `1.rangeTo(10)`. Always consume
         // here — the contexts that need to handle `..` themselves
         // (`for (i in 1..10)` and when's `in 1..10 ->` pattern) deliberately
