@@ -1,0 +1,96 @@
+dex_version   035
+strings       40
+types         12
+methods       19
+classes       1
+
+--- strings ---
+  "---"
+  "<init>"
+  "I"
+  "ILL"
+  "L"
+  "LI"
+  "LInputKt;"
+  "LL"
+  "LLI"
+  "LLLL"
+  "LMinHeap;"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Integer;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/String;"
+  "Ljava/lang/System;"
+  "V"
+  "VI"
+  "VL"
+  "Z"
+  "[I"
+  "[Ljava/lang/String;"
+  "heapSort"
+  "heapSort$lambda$0"
+  "input.kt"
+  "intValue"
+  "isEmpty"
+  "main"
+  "mergeThreeSortedStreams"
+  "mergeThreeSortedStreams$lambda$0"
+  "out"
+  "peek"
+  "pop"
+  "printMerged"
+  "println"
+  "push"
+  "size"
+  "topKLargest"
+  "topKLargest$lambda$0"
+  "valueOf"
+
+--- types ---
+  I
+  LInputKt;
+  LMinHeap;
+  Ljava/io/PrintStream;
+  Ljava/lang/Integer;
+  Ljava/lang/Object;
+  Ljava/lang/String;
+  Ljava/lang/System;
+  V
+  Z
+  [I
+  [Ljava/lang/String;
+
+--- methods ---
+  LInputKt;.heapSort$lambda$0(Ljava/lang/Object;Ljava/lang/Object;)I
+  LInputKt;.heapSort([I)[I
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  LInputKt;.mergeThreeSortedStreams$lambda$0(Ljava/lang/Object;Ljava/lang/Object;)I
+  LInputKt;.mergeThreeSortedStreams([I[I[I)[I
+  LInputKt;.printMerged()V
+  LInputKt;.topKLargest$lambda$0(Ljava/lang/Object;Ljava/lang/Object;)I
+  LInputKt;.topKLargest([II)[I
+  LMinHeap;.<init>(Ljava/lang/Object;)V
+  LMinHeap;.isEmpty()Z
+  LMinHeap;.peek()Ljava/lang/Object;
+  LMinHeap;.pop()Ljava/lang/Object;
+  LMinHeap;.push(Ljava/lang/Object;)V
+  LMinHeap;.size()I
+  Ljava/io/PrintStream;.println(I)V
+  Ljava/io/PrintStream;.println(Ljava/lang/String;)V
+  Ljava/lang/Integer;.intValue()I
+  Ljava/lang/Integer;.valueOf(I)Ljava/lang/Integer;
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       heapSort([I)[I flags=0x0019 regs=30 ins=1 outs=2 insns=75
+  method       heapSort$lambda$0(Ljava/lang/Object;Ljava/lang/Object;)I flags=0x0019 regs=5 ins=2 outs=1 insns=11
+  method       main()V flags=0x0019 regs=48 ins=0 outs=2 insns=127
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4
+  method       mergeThreeSortedStreams([I[I[I)[I flags=0x0019 regs=115 ins=3 outs=2 insns=333
+  method       mergeThreeSortedStreams$lambda$0(Ljava/lang/Object;Ljava/lang/Object;)I flags=0x0019 regs=5 ins=2 outs=1 insns=11
+  method       printMerged()V flags=0x0019 regs=44 ins=0 outs=3 insns=84
+  method       topKLargest([II)[I flags=0x0019 regs=59 ins=2 outs=2 insns=179
+  method       topKLargest$lambda$0(Ljava/lang/Object;Ljava/lang/Object;)I flags=0x0019 regs=5 ins=2 outs=1 insns=11

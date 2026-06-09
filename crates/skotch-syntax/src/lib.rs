@@ -6,7 +6,9 @@
 //! not — they consume the AST through the parser's output type.
 
 pub mod ast;
+pub mod syntax_kind;
 pub mod token;
 
 pub use ast::*;
+pub use syntax_kind::SyntaxKind;
 pub use token::*;

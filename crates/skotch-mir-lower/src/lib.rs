@@ -8986,7 +8986,22 @@ fn lower_expr(
                         }
                     }
 
-                    if qname.starts_with(|c: char| c.is_uppercase()) || qname.contains('.') {
+                    // Treat `qname` as a fully-qualified name reference
+                    // (and drop the call to a null placeholder) ONLY when
+                    // the root segment isn't an in-scope local. Without
+                    // this gate, a regular field-access chain like
+                    // `it.count.toString()` is mistaken for a FQ ref
+                    // (because the joined string contains `.`s) and the
+                    // entire call collapses to `aconst_null`, swallowing
+                    // both the field read AND the method call — surfaced
+                    // by the data-class `.field.toString()` shape in
+                    // fixture 1218.
+                    let first_segment = qname.split('.').next().unwrap_or(&qname);
+                    let first_sym = interner.intern(first_segment);
+                    let first_is_local = scope.iter().rev().any(|(s, _)| *s == first_sym);
+                    if !first_is_local
+                        && (qname.starts_with(|c: char| c.is_uppercase()) || qname.contains('.'))
+                    {
                         // Lower args first (for side effects), then return a
                         // null placeholder. This keeps compilation going for
                         // the rest of the function body.
@@ -10271,6 +10286,54 @@ fn lower_expr(
                             ];
                         }
                         let dest = fb.new_local(ret_ty);
+                        // Propagate element-type information for
+                        // chained collection calls. `users.map { it.name
+                        // }.filter { ... }` needs the filter call to
+                        // know the post-map element type is `String`,
+                        // not `Any`; otherwise the inner lambda's `it`
+                        // erases and member access falls through to a
+                        // null placeholder. Mirrors the
+                        // `local_generic_args` tracking that `listOf`
+                        // sets on its own result.
+                        let result_elem_ty: Option<Ty> = match facade_method.as_str() {
+                            // `map`/`mapNotNull`/`mapIndexed`: element
+                            // becomes the lambda's return type. The
+                            // lambda local can be typed either as
+                            // `Ty::Function { ret, .. }` (when its
+                            // body's return type was inferred at
+                            // lower time) or as `Ty::Class("Lambda$N")`
+                            // when the in-flight MIR class is used to
+                            // back the metafactory. Handle both.
+                            "map" | "mapIndexed" | "mapNotNull" => {
+                                all_args.last().and_then(|lid| {
+                                    let lty = fb.mf.locals[lid.0 as usize].clone();
+                                    match &lty {
+                                        Ty::Function { ret, .. } => Some((**ret).clone()),
+                                        Ty::Class(cn) => module
+                                            .classes
+                                            .iter()
+                                            .find(|c| &c.name == cn)
+                                            .and_then(|c| {
+                                                c.methods.iter().find(|m| m.name == "invoke")
+                                            })
+                                            .map(|m| m.return_ty.clone()),
+                                        _ => None,
+                                    }
+                                })
+                            }
+                            // `filter`/`filterNot`/`take`/`drop`/`reversed`/`sorted`/
+                            // `sortedBy`/`distinct`: receiver's element
+                            // type carries through unchanged.
+                            "filter" | "filterNot" | "filterNotNull" | "take" | "drop"
+                            | "takeWhile" | "dropWhile" | "reversed" | "sorted" | "sortedBy"
+                            | "sortedDescending" | "distinct" | "distinctBy" => {
+                                receiver_elem_ty.clone()
+                            }
+                            _ => None,
+                        };
+                        if let Some(elem) = result_elem_ty {
+                            fb.mf.local_generic_args.insert(dest.0, vec![elem]);
+                        }
                         fb.push_stmt(MStmt::Assign {
                             dest,
                             value: Rvalue::Call {
@@ -17694,7 +17757,26 @@ fn lower_expr(
                                 first_arg_ty,
                                 Ty::Any | Ty::Error | Ty::Unit | Ty::Nothing
                             );
-                            if first_param_is_t && arg_is_concrete {
+                            // Lambda-return inference for `fun <T>
+                            // remember(calc: () -> T): T`. When the
+                            // arg is a `Ty::Function { ret, .. }`
+                            // whose return type is concrete, treat
+                            // that as the T binding. Mirrors
+                            // kotlinc's lambda-driven inference.
+                            let lambda_ret: Option<Ty> = match &first_arg_ty {
+                                Ty::Function { ret, .. }
+                                    if !matches!(
+                                        **ret,
+                                        Ty::Any | Ty::Error | Ty::Unit | Ty::Nothing
+                                    ) =>
+                                {
+                                    Some((**ret).clone())
+                                }
+                                _ => None,
+                            };
+                            if let Some(lret) = lambda_ret {
+                                lret
+                            } else if first_param_is_t && arg_is_concrete {
                                 first_arg_ty
                             } else {
                                 raw_ret
@@ -20093,8 +20175,28 @@ fn lower_expr(
                     return Some(dest);
                 }
             }
-            // Receiver couldn't be lowered — return None.
-            let _ = (name_to_func, *span);
+            // Receiver couldn't be lowered cleanly. Erasure
+            // recovery: when the receiver is `Ty::Any` (often
+            // because a generic call's return type erased to
+            // Object), a member-access fallthrough that returned
+            // None propagated all the way up and made the
+            // enclosing function body abort. Emit a null
+            // placeholder so the val/print stays lowered and the
+            // rest of the function survives. Without this rescue,
+            // the source-level `println(b.value)` where `b: Any`
+            // clears `main()`'s entire body — surfaced by fixture
+            // 1221's generic-return-from-lambda inference gap.
+            let recv_preview =
+                lower_expr_preview_ty(receiver, fb, scope, module, name_to_func, interner);
+            let _ = *span;
+            if matches!(recv_preview, Some(Ty::Any) | None) {
+                let dest = fb.new_local(Ty::Any);
+                fb.push_stmt(MStmt::Assign {
+                    dest,
+                    value: Rvalue::Const(MirConst::Null),
+                });
+                return Some(dest);
+            }
             None
         }
         Expr::ElvisOp { lhs, rhs, .. } => {

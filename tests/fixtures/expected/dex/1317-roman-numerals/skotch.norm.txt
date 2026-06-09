@@ -1,0 +1,89 @@
+dex_version   035
+strings       42
+types         10
+methods       14
+classes       1
+
+--- strings ---
+  " => "
+  "<init>"
+  "C"
+  "CD"
+  "CI"
+  "CM"
+  "D"
+  "I"
+  "IC"
+  "IL"
+  "ILI"
+  "IV"
+  "IX"
+  "L"
+  "LI"
+  "LInputKt;"
+  "LL"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/String;"
+  "Ljava/lang/StringBuilder;"
+  "Ljava/lang/System;"
+  "M"
+  "V"
+  "VL"
+  "X"
+  "XC"
+  "XL"
+  "[Ljava/lang/String;"
+  "append"
+  "charAt"
+  "fromRoman"
+  "input.kt"
+  "length"
+  "main"
+  "nextRoman"
+  "out"
+  "println"
+  "romanValue"
+  "symbolAt"
+  "toRoman"
+  "toString"
+
+--- types ---
+  C
+  I
+  LInputKt;
+  Ljava/io/PrintStream;
+  Ljava/lang/Object;
+  Ljava/lang/String;
+  Ljava/lang/StringBuilder;
+  Ljava/lang/System;
+  V
+  [Ljava/lang/String;
+
+--- methods ---
+  LInputKt;.fromRoman(Ljava/lang/String;)I
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  LInputKt;.nextRoman(Ljava/lang/String;I)I
+  LInputKt;.romanValue(C)I
+  LInputKt;.symbolAt(I)Ljava/lang/String;
+  LInputKt;.toRoman(I)Ljava/lang/String;
+  Ljava/io/PrintStream;.println(Ljava/lang/String;)V
+  Ljava/lang/String;.charAt(I)C
+  Ljava/lang/String;.length()I
+  Ljava/lang/StringBuilder;.<init>()V
+  Ljava/lang/StringBuilder;.append(I)Ljava/lang/StringBuilder;
+  Ljava/lang/StringBuilder;.append(Ljava/lang/String;)Ljava/lang/StringBuilder;
+  Ljava/lang/StringBuilder;.toString()Ljava/lang/String;
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       fromRoman(Ljava/lang/String;)I flags=0x0019 regs=25 ins=1 outs=2 insns=63
+  method       main()V flags=0x0019 regs=68 ins=0 outs=2 insns=170
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4
+  method       nextRoman(Ljava/lang/String;I)I flags=0x0019 regs=13 ins=2 outs=2 insns=30
+  method       romanValue(C)I flags=0x0019 regs=34 ins=1 outs=0 insns=119
+  method       symbolAt(I)Ljava/lang/String; flags=0x0019 regs=64 ins=1 outs=0 insns=248
+  method       toRoman(I)Ljava/lang/String; flags=0x0019 regs=53 ins=1 outs=2 insns=127

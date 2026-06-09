@@ -1,0 +1,83 @@
+dex_version   035
+strings       34
+types         22
+methods       9
+classes       1
+
+--- strings ---
+  "---"
+  "<init>"
+  "I"
+  "INSTANCE"
+  "LAdd;"
+  "LDup;"
+  "LHalt;"
+  "LInputKt;"
+  "LJump;"
+  "LJumpIfZero;"
+  "LL"
+  "LMul;"
+  "LPrint;"
+  "LPush;"
+  "LSub;"
+  "LSwap;"
+  "LVm;"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/String;"
+  "Ljava/lang/System;"
+  "Ljava/util/List;"
+  "Lkotlin/collections/CollectionsKt;"
+  "V"
+  "VI"
+  "VL"
+  "[Ljava/lang/Object;"
+  "[Ljava/lang/String;"
+  "input.kt"
+  "listOf"
+  "main"
+  "out"
+  "println"
+  "run"
+
+--- types ---
+  I
+  LAdd;
+  LDup;
+  LHalt;
+  LInputKt;
+  LJump;
+  LJumpIfZero;
+  LMul;
+  LPrint;
+  LPush;
+  LSub;
+  LSwap;
+  LVm;
+  Ljava/io/PrintStream;
+  Ljava/lang/Object;
+  Ljava/lang/String;
+  Ljava/lang/System;
+  Ljava/util/List;
+  Lkotlin/collections/CollectionsKt;
+  V
+  [Ljava/lang/Object;
+  [Ljava/lang/String;
+
+--- methods ---
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  LJump;.<init>(I)V
+  LJumpIfZero;.<init>(I)V
+  LPush;.<init>(I)V
+  LVm;.<init>(Ljava/lang/Object;)V
+  LVm;.run()V
+  Ljava/io/PrintStream;.println(Ljava/lang/String;)V
+  Lkotlin/collections/CollectionsKt;.listOf([Ljava/lang/Object;)Ljava/util/List;
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       main()V flags=0x0019 regs=68 ins=0 outs=2 insns=187
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4

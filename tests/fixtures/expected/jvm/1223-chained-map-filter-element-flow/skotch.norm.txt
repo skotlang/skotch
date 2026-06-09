@@ -80,8 +80,18 @@ method        main$lambda$0 (LUser;)Ljava/lang/String; 0x001A
     0006 aload_0
     0007 invokevirtual Method(User.getName:()Ljava/lang/String;)
     0010 areturn
-method        main$lambda$1 (Ljava/lang/Object;)Lkotlin/Unit; 0x001A
-  code        max_stack=1 max_locals=1
-    0000 getstatic Field(kotlin/Unit.INSTANCE:Lkotlin/Unit;)
-    0003 areturn
+method        main$lambda$1 (Ljava/lang/String;)Z 0x001A
+  code        max_stack=2 max_locals=1
+    0000 aload_0
+    0001 ldc "it"
+    0003 invokestatic Method(kotlin/jvm/internal/Intrinsics.checkNotNullParameter:(Ljava/lang/Object;Ljava/lang/String;)V)
+    0006 aload_0
+    0007 invokevirtual Method(java/lang/String.length:()I)
+    0010 iconst_3
+    0011 if_icmple 18
+    0014 iconst_1
+    0015 goto 19
+    0018 iconst_0
+    0019 ireturn
+    sub_attr  StackMapTable (5 bytes)
 class_attr    BootstrapMethods (22 bytes)

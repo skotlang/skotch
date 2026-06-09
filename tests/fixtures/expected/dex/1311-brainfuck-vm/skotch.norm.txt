@@ -1,0 +1,115 @@
+dex_version   035
+strings       53
+types         12
+methods       21
+classes       1
+
+--- strings ---
+  ""
+  "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++."
+  "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++."
+  ",.."
+  ",>,[<+>-]<------------------------------------------------."
+  "34"
+  "<init>"
+  "C"
+  "CI"
+  "I"
+  "IC"
+  "ICLII"
+  "ILI"
+  "L"
+  "L$convert;"
+  "LC"
+  "LInputKt;"
+  "LLL"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/String;"
+  "Ljava/lang/StringBuilder;"
+  "Ljava/lang/System;"
+  "V"
+  "VCIL"
+  "VCLI"
+  "VCLILL"
+  "VL"
+  "VLLIL"
+  "VLLLLL"
+  "Z"
+  "[I"
+  "[Ljava/lang/String;"
+  "append"
+  "applySimpleOp"
+  "bracketJump"
+  "bumpCell"
+  "charAt"
+  "deltaBackwardScan"
+  "deltaForwardScan"
+  "findMatchingClose"
+  "findMatchingOpen"
+  "i2c"
+  "input.kt"
+  "length"
+  "main"
+  "movePtr"
+  "out"
+  "println"
+  "readByte"
+  "runBrainfuck"
+  "stepBf"
+  "toString"
+
+--- types ---
+  C
+  I
+  L$convert;
+  LInputKt;
+  Ljava/io/PrintStream;
+  Ljava/lang/Object;
+  Ljava/lang/String;
+  Ljava/lang/StringBuilder;
+  Ljava/lang/System;
+  V
+  [I
+  [Ljava/lang/String;
+
+--- methods ---
+  L$convert;.i2c(I)C
+  LInputKt;.applySimpleOp(C[IILjava/lang/Object;[I)V
+  LInputKt;.bracketJump(CLjava/lang/String;II)I
+  LInputKt;.bumpCell(C[II)V
+  LInputKt;.deltaBackwardScan(C)I
+  LInputKt;.deltaForwardScan(C)I
+  LInputKt;.findMatchingClose(Ljava/lang/String;I)I
+  LInputKt;.findMatchingOpen(Ljava/lang/String;I)I
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  LInputKt;.movePtr(CI[I)V
+  LInputKt;.readByte(Ljava/lang/String;[II[I)V
+  LInputKt;.runBrainfuck(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+  LInputKt;.stepBf(Ljava/lang/String;Ljava/lang/String;[I[ILjava/lang/Object;)V
+  Ljava/io/PrintStream;.println()V
+  Ljava/io/PrintStream;.println(Ljava/lang/String;)V
+  Ljava/lang/String;.charAt(I)C
+  Ljava/lang/String;.length()I
+  Ljava/lang/StringBuilder;.<init>()V
+  Ljava/lang/StringBuilder;.append(C)Ljava/lang/StringBuilder;
+  Ljava/lang/StringBuilder;.toString()Ljava/lang/String;
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       applySimpleOp(C[IILjava/lang/Object;[I)V flags=0x0019 regs=26 ins=5 outs=3 insns=87
+  method       bracketJump(CLjava/lang/String;II)I flags=0x0019 regs=22 ins=4 outs=2 insns=63
+  method       bumpCell(C[II)V flags=0x0019 regs=12 ins=3 outs=0 insns=17
+  method       deltaBackwardScan(C)I flags=0x0019 regs=12 ins=1 outs=0 insns=28
+  method       deltaForwardScan(C)I flags=0x0019 regs=12 ins=1 outs=0 insns=28
+  method       findMatchingClose(Ljava/lang/String;I)I flags=0x0019 regs=19 ins=2 outs=2 insns=35
+  method       findMatchingOpen(Ljava/lang/String;I)I flags=0x0019 regs=19 ins=2 outs=2 insns=35
+  method       main()V flags=0x0019 regs=13 ins=0 outs=2 insns=58
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4
+  method       movePtr(CI[I)V flags=0x0019 regs=12 ins=3 outs=0 insns=19
+  method       readByte(Ljava/lang/String;[II[I)V flags=0x0019 regs=15 ins=4 outs=2 insns=24
+  method       runBrainfuck(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String; flags=0x0019 regs=12 ins=2 outs=5 insns=29
+  method       stepBf(Ljava/lang/String;Ljava/lang/String;[I[ILjava/lang/Object;)V flags=0x0019 regs=23 ins=5 outs=5 insns=34

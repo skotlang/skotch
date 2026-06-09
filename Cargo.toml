@@ -10,6 +10,7 @@ members = [
     # Layer 1 — front-end
     "crates/skotch-syntax",
     "crates/skotch-lexer",
+    "crates/skotch-parser-core",
     "crates/skotch-parser",
 
     # Layer 2 — semantic analysis
@@ -149,6 +150,7 @@ skotch-config          = { path = "crates/skotch-config" }
 skotch-diagnostics     = { path = "crates/skotch-diagnostics" }
 skotch-syntax          = { path = "crates/skotch-syntax" }
 skotch-lexer           = { path = "crates/skotch-lexer" }
+skotch-parser-core     = { path = "crates/skotch-parser-core" }
 skotch-parser          = { path = "crates/skotch-parser" }
 skotch-resolve         = { path = "crates/skotch-resolve" }
 skotch-types           = { path = "crates/skotch-types" }

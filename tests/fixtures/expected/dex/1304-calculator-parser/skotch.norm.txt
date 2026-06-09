@@ -1,0 +1,183 @@
+dex_version   035
+strings       90
+types         29
+methods       34
+classes       1
+
+--- strings ---
+  " = "
+  " => "
+  "(1 + 2) * (3 + 4)"
+  "(1 + 2) * 3"
+  "*"
+  "+"
+  "-"
+  "-(2 + 3)"
+  "-5 + 7"
+  "/"
+  "1 + 2"
+  "1 + 2 * 3"
+  "10 - 4 - 3"
+  "100 / (2 + 3) - 5"
+  "2 * -3"
+  "3 * 4"
+  "8 / 2 / 2"
+  "<init>"
+  "C"
+  "CI"
+  "I"
+  "IL"
+  "ILIL"
+  "INSTANCE"
+  "L"
+  "LBinOp;"
+  "LC"
+  "LEofTok;"
+  "LExpr;"
+  "LI"
+  "LInputKt;"
+  "LL"
+  "LLI"
+  "LLParenTok;"
+  "LMinusTok;"
+  "LNum;"
+  "LNumTok;"
+  "LParseResult;"
+  "LPlusTok;"
+  "LRParenTok;"
+  "LSlashTok;"
+  "LStarTok;"
+  "LToken;"
+  "LUnaryNeg;"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Integer;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/String;"
+  "Ljava/lang/StringBuilder;"
+  "Ljava/lang/System;"
+  "Ljava/util/List;"
+  "Lkotlin/collections/CollectionsKt;"
+  "V"
+  "VI"
+  "VL"
+  "VLI"
+  "VLLL"
+  "Z"
+  "ZL"
+  "[Ljava/lang/Object;"
+  "[Ljava/lang/String;"
+  "add"
+  "append"
+  "charAt"
+  "eval"
+  "evaluate"
+  "get"
+  "getExpr"
+  "getNext"
+  "getValue"
+  "input.kt"
+  "isAddOp"
+  "isMulOp"
+  "length"
+  "main"
+  "mutableListOf"
+  "out"
+  "parse"
+  "parseAtom"
+  "parseExpr"
+  "parseInt"
+  "parseTerm"
+  "parseUnary"
+  "println"
+  "readNumber"
+  "show"
+  "singleCharToken"
+  "stepOnce"
+  "toString"
+  "tokenize"
+
+--- types ---
+  C
+  I
+  LBinOp;
+  LEofTok;
+  LExpr;
+  LInputKt;
+  LLParenTok;
+  LMinusTok;
+  LNum;
+  LNumTok;
+  LParseResult;
+  LPlusTok;
+  LRParenTok;
+  LSlashTok;
+  LStarTok;
+  LToken;
+  LUnaryNeg;
+  Ljava/io/PrintStream;
+  Ljava/lang/Integer;
+  Ljava/lang/Object;
+  Ljava/lang/String;
+  Ljava/lang/StringBuilder;
+  Ljava/lang/System;
+  Ljava/util/List;
+  Lkotlin/collections/CollectionsKt;
+  V
+  Z
+  [Ljava/lang/Object;
+  [Ljava/lang/String;
+
+--- methods ---
+  LBinOp;.<init>(Ljava/lang/String;Ljava/lang/Object;Ljava/lang/Object;)V
+  LExpr;.eval()I
+  LExpr;.show()Ljava/lang/String;
+  LInputKt;.evaluate(Ljava/lang/String;)Ljava/lang/String;
+  LInputKt;.isAddOp(Ljava/lang/Object;)Z
+  LInputKt;.isMulOp(Ljava/lang/Object;)Z
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  LInputKt;.parse(Ljava/lang/Object;)Ljava/lang/Object;
+  LInputKt;.parseAtom(Ljava/lang/Object;I)Ljava/lang/Object;
+  LInputKt;.parseExpr(Ljava/lang/Object;I)Ljava/lang/Object;
+  LInputKt;.parseTerm(Ljava/lang/Object;I)Ljava/lang/Object;
+  LInputKt;.parseUnary(Ljava/lang/Object;I)Ljava/lang/Object;
+  LInputKt;.readNumber(Ljava/lang/String;ILjava/lang/Object;)I
+  LInputKt;.singleCharToken(C)Ljava/lang/Object;
+  LInputKt;.stepOnce(Ljava/lang/String;ILjava/lang/Object;)I
+  LInputKt;.tokenize(Ljava/lang/String;)Ljava/lang/Object;
+  LNum;.<init>(I)V
+  LNumTok;.<init>(I)V
+  LNumTok;.getValue()I
+  LParseResult;.<init>(Ljava/lang/Object;I)V
+  LParseResult;.getExpr()Ljava/lang/Object;
+  LParseResult;.getNext()I
+  LUnaryNeg;.<init>(Ljava/lang/Object;)V
+  Ljava/io/PrintStream;.println(Ljava/lang/String;)V
+  Ljava/lang/Integer;.parseInt(Ljava/lang/String;)I
+  Ljava/lang/String;.charAt(I)C
+  Ljava/lang/String;.length()I
+  Ljava/lang/StringBuilder;.<init>()V
+  Ljava/lang/StringBuilder;.append(C)Ljava/lang/StringBuilder;
+  Ljava/lang/StringBuilder;.toString()Ljava/lang/String;
+  Ljava/util/List;.add(Ljava/lang/Object;)Z
+  Ljava/util/List;.get(I)Ljava/lang/Object;
+  Lkotlin/collections/CollectionsKt;.mutableListOf([Ljava/lang/Object;)Ljava/util/List;
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       evaluate(Ljava/lang/String;)Ljava/lang/String; flags=0x0019 regs=11 ins=1 outs=1 insns=21
+  method       isAddOp(Ljava/lang/Object;)Z flags=0x0019 regs=4 ins=1 outs=0 insns=11
+  method       isMulOp(Ljava/lang/Object;)Z flags=0x0019 regs=4 ins=1 outs=0 insns=11
+  method       main()V flags=0x0019 regs=23 ins=0 outs=2 insns=122
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4
+  method       parse(Ljava/lang/Object;)Ljava/lang/Object; flags=0x0019 regs=4 ins=1 outs=2 insns=10
+  method       parseAtom(Ljava/lang/Object;I)Ljava/lang/Object; flags=0x0019 regs=28 ins=2 outs=3 insns=81
+  method       parseExpr(Ljava/lang/Object;I)Ljava/lang/Object; flags=0x0019 regs=29 ins=2 outs=4 insns=92
+  method       parseTerm(Ljava/lang/Object;I)Ljava/lang/Object; flags=0x0019 regs=29 ins=2 outs=4 insns=92
+  method       parseUnary(Ljava/lang/Object;I)Ljava/lang/Object; flags=0x0019 regs=16 ins=2 outs=3 insns=46
+  method       readNumber(Ljava/lang/String;ILjava/lang/Object;)I flags=0x0019 regs=27 ins=3 outs=2 insns=80
+  method       singleCharToken(C)Ljava/lang/Object; flags=0x0019 regs=34 ins=1 outs=0 insns=119
+  method       stepOnce(Ljava/lang/String;ILjava/lang/Object;)I flags=0x0019 regs=25 ins=3 outs=3 insns=65
+  method       tokenize(Ljava/lang/String;)Ljava/lang/Object; flags=0x0019 regs=13 ins=1 outs=3 insns=33

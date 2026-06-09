@@ -1,0 +1,95 @@
+dex_version   035
+strings       45
+types         13
+methods       16
+classes       1
+
+--- strings ---
+  "---"
+  "<init>"
+  "C"
+  "CII"
+  "D"
+  "DI"
+  "I"
+  "ILI"
+  "L"
+  "L$convert;"
+  "LC"
+  "LComplex;"
+  "LIII"
+  "LInputKt;"
+  "LL"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/String;"
+  "Ljava/lang/StringBuilder;"
+  "Ljava/lang/System;"
+  "V"
+  "VDD"
+  "VL"
+  "[Ljava/lang/String;"
+  "a * b = "
+  "a + b = "
+  "a - b = "
+  "a = "
+  "append"
+  "b = "
+  "i2d"
+  "input.kt"
+  "magnitudeSquared"
+  "main"
+  "mandelbrotEscape"
+  "minus"
+  "out"
+  "plus"
+  "println"
+  "renderViaComplex"
+  "shadeFor"
+  "show"
+  "times"
+  "toString"
+  "|a|² = "
+
+--- types ---
+  C
+  D
+  I
+  L$convert;
+  LComplex;
+  LInputKt;
+  Ljava/io/PrintStream;
+  Ljava/lang/Object;
+  Ljava/lang/String;
+  Ljava/lang/StringBuilder;
+  Ljava/lang/System;
+  V
+  [Ljava/lang/String;
+
+--- methods ---
+  L$convert;.i2d(I)D
+  LComplex;.<init>(DD)V
+  LComplex;.magnitudeSquared()D
+  LComplex;.minus(Ljava/lang/Object;)Ljava/lang/Object;
+  LComplex;.plus(Ljava/lang/Object;)Ljava/lang/Object;
+  LComplex;.show()Ljava/lang/String;
+  LComplex;.times(Ljava/lang/Object;)Ljava/lang/Object;
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  LInputKt;.mandelbrotEscape(Ljava/lang/Object;I)I
+  LInputKt;.renderViaComplex(III)Ljava/lang/String;
+  LInputKt;.shadeFor(II)C
+  Ljava/io/PrintStream;.println(Ljava/lang/String;)V
+  Ljava/lang/StringBuilder;.<init>()V
+  Ljava/lang/StringBuilder;.append(C)Ljava/lang/StringBuilder;
+  Ljava/lang/StringBuilder;.toString()Ljava/lang/String;
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       main()V flags=0x0019 regs=33 ins=0 outs=3 insns=131
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4
+  method       mandelbrotEscape(Ljava/lang/Object;I)I flags=0x0019 regs=25 ins=2 outs=3 insns=74
+  method       renderViaComplex(III)Ljava/lang/String; flags=0x0019 regs=43 ins=3 outs=3 insns=126
+  method       shadeFor(II)C flags=0x0019 regs=27 ins=2 outs=0 insns=79

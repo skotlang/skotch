@@ -1717,7 +1717,7 @@ impl<'a> Resolver<'a> {
         expr: &Expr,
         scope: &mut Vec<(Symbol, DefId)>,
         rf: &mut ResolvedFunction,
-        _is_callee: bool,
+        is_callee: bool,
     ) {
         match expr {
             Expr::IntLit(_, _)
@@ -1756,16 +1756,23 @@ impl<'a> Resolver<'a> {
                         if is_possible_external(name_str) {
                             return DefId::PossibleExternal(*name);
                         }
-                        // Emit diagnostic but defer to MIR lowering via
-                        // PossibleExternal (not Error). MIR lowering has more
-                        // context (classpath, import map, lambda receiver scope)
-                        // to resolve identifiers. Using PossibleExternal instead
-                        // of Error avoids triggering `has_null_stubs()` stubbing.
-                        // Use warning level: MIR lowering may still resolve it.
-                        self.diags.push(Diagnostic::warning(
-                            *span,
-                            format!("unresolved identifier `{name_str}`"),
-                        ));
+                        // Suppress the warning when this Ident is a
+                        // call callee. The MIR-lower bare-Ident
+                        // dispatch handles a wide menu of method-like
+                        // resolutions the resolver doesn't see —
+                        // implicit-this methods on the enclosing
+                        // class, stdlib intrinsics on the extension
+                        // receiver (e.g. `Int.shl`/`Int.ushr` from
+                        // inside `Int.foo()`), companion-inherited
+                        // members, etc. Warning here is noisy and
+                        // every call would emit one even when the
+                        // dispatch site below resolves cleanly.
+                        if !is_callee {
+                            self.diags.push(Diagnostic::warning(
+                                *span,
+                                format!("unresolved identifier `{name_str}`"),
+                            ));
+                        }
                         DefId::PossibleExternal(*name)
                     })
                 });

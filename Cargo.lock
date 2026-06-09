@@ -2472,6 +2472,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "skotch-parser-core"
+version = "0.41.0"
+dependencies = [
+ "skotch-diagnostics",
+ "skotch-lexer",
+ "skotch-span",
+ "skotch-syntax",
+]
+
+[[package]]
 name = "skotch-repl"
 version = "0.41.0"
 dependencies = [

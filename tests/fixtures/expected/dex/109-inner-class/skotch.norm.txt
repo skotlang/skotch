@@ -1,21 +1,18 @@
 dex_version   035
-strings       21
-types         11
+strings       18
+types         9
 methods       6
 classes       1
 
 --- strings ---
   "<init>"
   "I"
-  "IL"
   "LInputKt;"
   "LOuter$Inner;"
   "LOuter;"
   "Ljava/io/PrintStream;"
-  "Ljava/lang/Iterable;"
   "Ljava/lang/Object;"
   "Ljava/lang/System;"
-  "Lkotlin/collections/CollectionsKt;"
   "V"
   "VI"
   "VL"
@@ -25,7 +22,7 @@ classes       1
   "main"
   "out"
   "println"
-  "sumOfInt"
+  "sum"
 
 --- types ---
   I
@@ -33,10 +30,8 @@ classes       1
   LOuter$Inner;
   LOuter;
   Ljava/io/PrintStream;
-  Ljava/lang/Iterable;
   Ljava/lang/Object;
   Ljava/lang/System;
-  Lkotlin/collections/CollectionsKt;
   V
   [Ljava/lang/String;
 
@@ -44,9 +39,9 @@ classes       1
   LInputKt;.main()V
   LInputKt;.main([Ljava/lang/String;)V
   LOuter$Inner;.<init>(Ljava/lang/Object;I)V
+  LOuter$Inner;.sum()I
   LOuter;.<init>(I)V
   Ljava/io/PrintStream;.println(I)V
-  Lkotlin/collections/CollectionsKt;.sumOfInt(Ljava/lang/Iterable;)I
 
 --- class[0] ---
   descriptor   LInputKt;

@@ -1,0 +1,12 @@
+[package]
+name        = "skotch-parser-core"
+version     = { workspace = true }
+edition     = { workspace = true }
+license     = { workspace = true }
+description = "Event-emitting parser plumbing (Parser, Marker, Event, TreeSink) shared by the FIR and SIL Kotlin grammars"
+
+[dependencies]
+skotch-span        = { workspace = true }
+skotch-syntax      = { workspace = true }
+skotch-lexer       = { workspace = true }
+skotch-diagnostics = { workspace = true }

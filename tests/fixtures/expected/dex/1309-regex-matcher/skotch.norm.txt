@@ -1,0 +1,173 @@
+dex_version   035
+strings       88
+types         17
+methods       34
+classes       1
+
+--- strings ---
+  ""
+  "(ab)*"
+  "(ab)*c"
+  "(a|b)*c"
+  "."
+  ".*"
+  "<init>"
+  "C"
+  "CI"
+  "I"
+  "ILI"
+  "ILLI"
+  "ILLLI"
+  "INSTANCE"
+  "L"
+  "LAlt;"
+  "LCharRe;"
+  "LConcat;"
+  "LDotRe;"
+  "LInputKt;"
+  "LL"
+  "LLI"
+  "LLL"
+  "LLLI"
+  "LParseResult;"
+  "LStar;"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/String;"
+  "Ljava/lang/System;"
+  "V"
+  "VC"
+  "VL"
+  "VLI"
+  "VLL"
+  "Z"
+  "ZC"
+  "ZLL"
+  "[I"
+  "[Ljava/lang/String;"
+  "a"
+  "a*"
+  "a*b"
+  "a.*b"
+  "aaa"
+  "aaab"
+  "aab"
+  "aabbabc"
+  "ab"
+  "ababab"
+  "ababc"
+  "abxc"
+  "anything goes"
+  "axxxb"
+  "a|b"
+  "b"
+  "c"
+  "charAt"
+  "collectStarEnds"
+  "describe"
+  "getA"
+  "getB"
+  "getC"
+  "getInner"
+  "getNext"
+  "getRe"
+  "input.kt"
+  "isAltOrCloseParen"
+  "length"
+  "main"
+  "match"
+  "matchAlt"
+  "matchAt"
+  "matchChar"
+  "matchConcat"
+  "matchDot"
+  "matchStarGreedy"
+  "matchStarThen"
+  "matches"
+  "no match"
+  "out"
+  "parseAlt"
+  "parseAtom"
+  "parseConcat"
+  "parsePost"
+  "parseRegex"
+  "println"
+  "x"
+
+--- types ---
+  C
+  I
+  LAlt;
+  LCharRe;
+  LConcat;
+  LDotRe;
+  LInputKt;
+  LParseResult;
+  LStar;
+  Ljava/io/PrintStream;
+  Ljava/lang/Object;
+  Ljava/lang/String;
+  Ljava/lang/System;
+  V
+  Z
+  [I
+  [Ljava/lang/String;
+
+--- methods ---
+  LAlt;.<init>(Ljava/lang/Object;Ljava/lang/Object;)V
+  LAlt;.getA()Ljava/lang/Object;
+  LAlt;.getB()Ljava/lang/Object;
+  LCharRe;.<init>(C)V
+  LCharRe;.getC()C
+  LConcat;.<init>(Ljava/lang/Object;Ljava/lang/Object;)V
+  LConcat;.getA()Ljava/lang/Object;
+  LConcat;.getB()Ljava/lang/Object;
+  LInputKt;.collectStarEnds(Ljava/lang/Object;Ljava/lang/String;I)[I
+  LInputKt;.describe(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+  LInputKt;.isAltOrCloseParen(C)Z
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  LInputKt;.matchAlt(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/String;I)I
+  LInputKt;.matchAt(Ljava/lang/Object;Ljava/lang/String;I)I
+  LInputKt;.matchChar(Ljava/lang/Object;Ljava/lang/String;I)I
+  LInputKt;.matchConcat(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/String;I)I
+  LInputKt;.matchDot(Ljava/lang/String;I)I
+  LInputKt;.matchStarGreedy(Ljava/lang/Object;Ljava/lang/String;I)I
+  LInputKt;.matchStarThen(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/String;I)I
+  LInputKt;.matches(Ljava/lang/Object;Ljava/lang/String;)Z
+  LInputKt;.parseAlt(Ljava/lang/String;I)Ljava/lang/Object;
+  LInputKt;.parseAtom(Ljava/lang/String;I)Ljava/lang/Object;
+  LInputKt;.parseConcat(Ljava/lang/String;I)Ljava/lang/Object;
+  LInputKt;.parsePost(Ljava/lang/String;I)Ljava/lang/Object;
+  LInputKt;.parseRegex(Ljava/lang/String;)Ljava/lang/Object;
+  LParseResult;.<init>(Ljava/lang/Object;I)V
+  LParseResult;.getNext()I
+  LParseResult;.getRe()Ljava/lang/Object;
+  LStar;.<init>(Ljava/lang/Object;)V
+  LStar;.getInner()Ljava/lang/Object;
+  Ljava/io/PrintStream;.println(Ljava/lang/String;)V
+  Ljava/lang/String;.charAt(I)C
+  Ljava/lang/String;.length()I
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       collectStarEnds(Ljava/lang/Object;Ljava/lang/String;I)[I flags=0x0019 regs=42 ins=3 outs=3 insns=107
+  method       describe(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String; flags=0x0019 regs=8 ins=2 outs=2 insns=19
+  method       isAltOrCloseParen(C)Z flags=0x0019 regs=6 ins=1 outs=0 insns=19
+  method       main()V flags=0x0019 regs=61 ins=0 outs=2 insns=261
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4
+  method       matchAlt(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/String;I)I flags=0x0019 regs=10 ins=4 outs=3 insns=20
+  method       matchAt(Ljava/lang/Object;Ljava/lang/String;I)I flags=0x0019 regs=34 ins=3 outs=4 insns=99
+  method       matchChar(Ljava/lang/Object;Ljava/lang/String;I)I flags=0x0019 regs=14 ins=3 outs=2 insns=36
+  method       matchConcat(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/String;I)I flags=0x0019 regs=19 ins=4 outs=4 insns=38
+  method       matchDot(Ljava/lang/String;I)I flags=0x0019 regs=9 ins=2 outs=1 insns=19
+  method       matchStarGreedy(Ljava/lang/Object;Ljava/lang/String;I)I flags=0x0019 regs=21 ins=3 outs=3 insns=47
+  method       matchStarThen(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/String;I)I flags=0x0019 regs=25 ins=4 outs=3 insns=48
+  method       matches(Ljava/lang/Object;Ljava/lang/String;)Z flags=0x0019 regs=6 ins=2 outs=3 insns=14
+  method       parseAlt(Ljava/lang/String;I)Ljava/lang/Object; flags=0x0019 regs=28 ins=2 outs=3 insns=86
+  method       parseAtom(Ljava/lang/String;I)Ljava/lang/Object; flags=0x0019 regs=29 ins=2 outs=3 insns=81
+  method       parseConcat(Ljava/lang/String;I)Ljava/lang/Object; flags=0x0019 regs=27 ins=2 outs=3 insns=85
+  method       parsePost(Ljava/lang/String;I)Ljava/lang/Object; flags=0x0019 regs=21 ins=2 outs=3 insns=65
+  method       parseRegex(Ljava/lang/String;)Ljava/lang/Object; flags=0x0019 regs=4 ins=1 outs=2 insns=10
