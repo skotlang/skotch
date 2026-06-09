@@ -1377,7 +1377,11 @@ mod tests {
         let src = "\"\"\"line one\nline two\"\"\"";
         let (lf, d) = lex_str(src);
         assert!(d.is_empty(), "{:?}", d);
-        // Single chunk containing the literal newline.
+        // kotlinc PSI emits each embedded `\n` as its own
+        // LITERAL_STRING_TEMPLATE_ENTRY (each backslash and each
+        // newline split the chunk), so the lexer surfaces them as
+        // separate `StringChunk`s. The text is still preserved
+        // verbatim — concatenating the chunks reproduces the source.
         let chunks: Vec<_> = lf
             .payloads
             .iter()
@@ -1386,12 +1390,24 @@ mod tests {
                 _ => None,
             })
             .collect();
-        assert_eq!(chunks, vec!["line one\nline two".to_string()]);
+        assert_eq!(
+            chunks,
+            vec![
+                "line one".to_string(),
+                "\n".to_string(),
+                "line two".to_string()
+            ]
+        );
+        assert_eq!(chunks.concat(), "line one\nline two");
     }
 
     #[test]
     fn lex_raw_string_does_not_interpret_escapes() {
-        // `\n` is the literal two characters, NOT a newline.
+        // `\n` inside a raw string is the two literal characters `\`
+        // and `n`, NOT a newline. kotlinc PSI splits at the backslash,
+        // so the lexer emits separate chunks (`a`, `\`, `nb`) — the
+        // semantic invariant is that NO escape interpretation happens,
+        // which we verify by reconstructing the source verbatim.
         let (lf, _d) = lex_str(r#""""a\nb""""#);
         let chunks: Vec<_> = lf
             .payloads
@@ -1401,7 +1417,11 @@ mod tests {
                 _ => None,
             })
             .collect();
-        assert_eq!(chunks, vec![r#"a\nb"#.to_string()]);
+        assert_eq!(
+            chunks,
+            vec!["a".to_string(), "\\".to_string(), "nb".to_string()]
+        );
+        assert_eq!(chunks.concat(), r#"a\nb"#);
     }
 
     #[test]
