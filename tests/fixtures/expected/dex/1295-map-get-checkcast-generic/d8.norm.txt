@@ -1,0 +1,130 @@
+dex_version   035
+strings       66
+types         18
+methods       20
+classes       2
+
+--- strings ---
+  ""
+  "()V"
+  "<init>"
+  ">;>;"
+  "A"
+  "A: "
+  "B"
+  "B: "
+  "C"
+  "D"
+  "I"
+  "IL"
+  "L"
+  "LG;"
+  "LI"
+  "LInputKt;"
+  "LL"
+  "LLL"
+  "Ldalvik/annotation/Signature;"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/String;"
+  "Ljava/lang/StringBuilder;"
+  "Ljava/lang/System;"
+  "Ljava/util/ArrayList;"
+  "Ljava/util/LinkedHashMap;"
+  "Ljava/util/List;"
+  "Ljava/util/List<"
+  "Ljava/util/Map;"
+  "Ljava/util/Map<"
+  "Lkotlin/Metadata;"
+  "Lkotlin/jvm/internal/Intrinsics;"
+  "V"
+  "VL"
+  "VLL"
+  "Z"
+  "ZL"
+  "[Ljava/lang/String;"
+  "add"
+  "append"
+  "checkNotNull"
+  "checkNotNullParameter"
+  "containsKey"
+  "d1"
+  "d2"
+  "edges"
+  "from"
+  "g"
+  "get"
+  "input.kt"
+  "k"
+  "list"
+  "main"
+  "mv"
+  "out"
+  "println"
+  "put"
+  "size"
+  "to"
+  "toString"
+  "v"
+  "value"
+  "xi"
+  "~~D8{\"backend\":\"dex\",\"compilation-mode\":\"debug\",\"has-checksums\":false,\"min-api\":1,\"sha-1\":\"a7ad18a70460b799d0482e497c109a75bf7f91de\",\"version\":\"8.10.9-dev\"}"
+  "��\u{6}\n��\n\u{2}\u{10}\u{2}\u{1a}\u{6}\u{10}��\u{1a}\u{2}0\u{1}"
+  "��(\n\u{2}\u{18}\u{2}\n\u{2}\u{10}��\n\u{2}\u{8}\u{3}\n\u{2}\u{10}%\n\u{2}\u{10}\u{e}\n\u{2}\u{10}!\n��\n\u{2}\u{10}\u{2}\n\u{2}\u{8}\u{3}\n\u{2}\u{10}\u{8}\n��\u{18}��2\u{2}0\u{1}B\u{7}¢\u{6}\u{4}\u{8}\u{2}\u{10}\u{3}J\u{16}\u{10}\u{8}\u{1a}\u{2}0\t2\u{6}\u{10}\n\u{1a}\u{2}0\u{6}2\u{6}\u{10}\u{b}\u{1a}\u{2}0\u{6}J\u{e}\u{10}\u{c}\u{1a}\u{2}0\r2\u{6}\u{10}\u{e}\u{1a}\u{2}0\u{6}R \u{10}\u{4}\u{1a}\u{14}\u{12}\u{4}\u{12}\u{2}0\u{6}\u{12}\n\u{12}\u{8}\u{12}\u{4}\u{12}\u{2}0\u{6}0\u{7}0\u{5}X\u{82}\u{4}¢\u{6}\u{2}\n��"
+
+--- types ---
+  I
+  LG;
+  LInputKt;
+  Ldalvik/annotation/Signature;
+  Ljava/io/PrintStream;
+  Ljava/lang/Object;
+  Ljava/lang/String;
+  Ljava/lang/StringBuilder;
+  Ljava/lang/System;
+  Ljava/util/ArrayList;
+  Ljava/util/LinkedHashMap;
+  Ljava/util/List;
+  Ljava/util/Map;
+  Lkotlin/Metadata;
+  Lkotlin/jvm/internal/Intrinsics;
+  V
+  Z
+  [Ljava/lang/String;
+
+--- methods ---
+  LG;.<init>()V
+  LG;.add(Ljava/lang/String;Ljava/lang/String;)V
+  LG;.size(Ljava/lang/String;)I
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  Ljava/io/PrintStream;.println(Ljava/lang/Object;)V
+  Ljava/lang/Object;.<init>()V
+  Ljava/lang/StringBuilder;.<init>()V
+  Ljava/lang/StringBuilder;.append(I)Ljava/lang/StringBuilder;
+  Ljava/lang/StringBuilder;.append(Ljava/lang/String;)Ljava/lang/StringBuilder;
+  Ljava/lang/StringBuilder;.toString()Ljava/lang/String;
+  Ljava/util/ArrayList;.<init>()V
+  Ljava/util/LinkedHashMap;.<init>()V
+  Ljava/util/List;.add(Ljava/lang/Object;)Z
+  Ljava/util/List;.size()I
+  Ljava/util/Map;.containsKey(Ljava/lang/Object;)Z
+  Ljava/util/Map;.get(Ljava/lang/Object;)Ljava/lang/Object;
+  Ljava/util/Map;.put(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;
+  Lkotlin/jvm/internal/Intrinsics;.checkNotNull(Ljava/lang/Object;)V
+  Lkotlin/jvm/internal/Intrinsics;.checkNotNullParameter(Ljava/lang/Object;Ljava/lang/String;)V
+
+--- class[0] ---
+  descriptor   LG;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       <init>()V flags=0x10001 regs=2 ins=1 outs=1 insns=13
+  method       add(Ljava/lang/String;Ljava/lang/String;)V flags=0x0011 regs=5 ins=3 outs=3 insns=45
+  method       size(Ljava/lang/String;)I flags=0x0011 regs=4 ins=2 outs=2 insns=22
+
+--- class[1] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       main()V flags=0x0019 regs=5 ins=0 outs=3 insns=79
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4

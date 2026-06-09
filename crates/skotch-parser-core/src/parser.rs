@@ -112,6 +112,23 @@ impl<'i, 'src> Parser<'i, 'src> {
         self.pos += 1;
     }
 
+    /// Like [`Self::bump_as`] but consumes `n` consecutive raw input
+    /// tokens and merges them into a single output token with `kind`.
+    /// The emitted span covers all `n` tokens; the text spans the
+    /// concatenated source bytes. Used for compound operators that the
+    /// lexer doesn't already fuse — `as ?` → `AS_SAFE "as?"`, for
+    /// example.
+    pub fn bump_n_as(&mut self, n: u8, kind: SyntaxKind) {
+        if self.current() == SyntaxKind::EOF || n == 0 {
+            return;
+        }
+        self.events.push(Event::Token {
+            kind,
+            n_raw_tokens: n,
+        });
+        self.pos += n as usize;
+    }
+
     /// Advance only if `current() == kind`. Returns whether the bump
     /// happened.
     pub fn eat(&mut self, kind: SyntaxKind) -> bool {

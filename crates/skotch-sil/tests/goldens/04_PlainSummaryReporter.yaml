@@ -1,0 +1,2144 @@
+file: "04_PlainSummaryReporter.kt"
+source_length: 3115
+crlf_normalized: false
+ast:
+  type: "kotlin.FILE"
+  children:
+    - type: "PACKAGE_DIRECTIVE"
+      children:
+        - type: "package"
+          text: "package"
+        - type: "WHITE_SPACE"
+          text: " "
+        - type: "DOT_QUALIFIED_EXPRESSION"
+          children:
+            - type: "DOT_QUALIFIED_EXPRESSION"
+              children:
+                - type: "DOT_QUALIFIED_EXPRESSION"
+                  children:
+                    - type: "DOT_QUALIFIED_EXPRESSION"
+                      children:
+                        - type: "DOT_QUALIFIED_EXPRESSION"
+                          children:
+                            - type: "REFERENCE_EXPRESSION"
+                              children:
+                                - type: "IDENTIFIER"
+                                  text: "com"
+                            - type: "DOT"
+                              text: "."
+                            - type: "REFERENCE_EXPRESSION"
+                              children:
+                                - type: "IDENTIFIER"
+                                  text: "pinterest"
+                        - type: "DOT"
+                          text: "."
+                        - type: "REFERENCE_EXPRESSION"
+                          children:
+                            - type: "IDENTIFIER"
+                              text: "ktlint"
+                    - type: "DOT"
+                      text: "."
+                    - type: "REFERENCE_EXPRESSION"
+                      children:
+                        - type: "IDENTIFIER"
+                          text: "cli"
+                - type: "DOT"
+                  text: "."
+                - type: "REFERENCE_EXPRESSION"
+                  children:
+                    - type: "IDENTIFIER"
+                      text: "reporter"
+            - type: "DOT"
+              text: "."
+            - type: "REFERENCE_EXPRESSION"
+              children:
+                - type: "IDENTIFIER"
+                  text: "plainsummary"
+    - type: "WHITE_SPACE"
+      text: "\n\n"
+    - type: "IMPORT_LIST"
+      children:
+        - type: "IMPORT_DIRECTIVE"
+          children:
+            - type: "import"
+              text: "import"
+            - type: "WHITE_SPACE"
+              text: " "
+            - type: "DOT_QUALIFIED_EXPRESSION"
+              children:
+                - type: "DOT_QUALIFIED_EXPRESSION"
+                  children:
+                    - type: "DOT_QUALIFIED_EXPRESSION"
+                      children:
+                        - type: "DOT_QUALIFIED_EXPRESSION"
+                          children:
+                            - type: "DOT_QUALIFIED_EXPRESSION"
+                              children:
+                                - type: "DOT_QUALIFIED_EXPRESSION"
+                                  children:
+                                    - type: "DOT_QUALIFIED_EXPRESSION"
+                                      children:
+                                        - type: "REFERENCE_EXPRESSION"
+                                          children:
+                                            - type: "IDENTIFIER"
+                                              text: "com"
+                                        - type: "DOT"
+                                          text: "."
+                                        - type: "REFERENCE_EXPRESSION"
+                                          children:
+                                            - type: "IDENTIFIER"
+                                              text: "pinterest"
+                                    - type: "DOT"
+                                      text: "."
+                                    - type: "REFERENCE_EXPRESSION"
+                                      children:
+                                        - type: "IDENTIFIER"
+                                          text: "ktlint"
+                                - type: "DOT"
+                                  text: "."
+                                - type: "REFERENCE_EXPRESSION"
+                                  children:
+                                    - type: "IDENTIFIER"
+                                      text: "cli"
+                            - type: "DOT"
+                              text: "."
+                            - type: "REFERENCE_EXPRESSION"
+                              children:
+                                - type: "IDENTIFIER"
+                                  text: "reporter"
+                        - type: "DOT"
+                          text: "."
+                        - type: "REFERENCE_EXPRESSION"
+                          children:
+                            - type: "IDENTIFIER"
+                              text: "core"
+                    - type: "DOT"
+                      text: "."
+                    - type: "REFERENCE_EXPRESSION"
+                      children:
+                        - type: "IDENTIFIER"
+                          text: "api"
+                - type: "DOT"
+                  text: "."
+                - type: "REFERENCE_EXPRESSION"
+                  children:
+                    - type: "IDENTIFIER"
+                      text: "KtlintCliError"
+        - type: "WHITE_SPACE"
+          text: "\n"
+        - type: "IMPORT_DIRECTIVE"
+          children:
+            - type: "import"
+              text: "import"
+            - type: "WHITE_SPACE"
+              text: " "
+            - type: "DOT_QUALIFIED_EXPRESSION"
+              children:
+                - type: "DOT_QUALIFIED_EXPRESSION"
+                  children:
+                    - type: "DOT_QUALIFIED_EXPRESSION"
+                      children:
+                        - type: "DOT_QUALIFIED_EXPRESSION"
+                          children:
+                            - type: "DOT_QUALIFIED_EXPRESSION"
+                              children:
+                                - type: "DOT_QUALIFIED_EXPRESSION"
+                                  children:
+                                    - type: "DOT_QUALIFIED_EXPRESSION"
+                                      children:
+                                        - type: "DOT_QUALIFIED_EXPRESSION"
+                                          children:
+                                            - type: "DOT_QUALIFIED_EXPRESSION"
+                                              children:
+                                                - type: "REFERENCE_EXPRESSION"
+                                                  children:
+                                                    - type: "IDENTIFIER"
+                                                      text: "com"
+                                                - type: "DOT"
+                                                  text: "."
+                                                - type: "REFERENCE_EXPRESSION"
+                                                  children:
+                                                    - type: "IDENTIFIER"
+                                                      text: "pinterest"
+                                            - type: "DOT"
+                                              text: "."
+                                            - type: "REFERENCE_EXPRESSION"
+                                              children:
+                                                - type: "IDENTIFIER"
+                                                  text: "ktlint"
+                                        - type: "DOT"
+                                          text: "."
+                                        - type: "REFERENCE_EXPRESSION"
+                                          children:
+                                            - type: "IDENTIFIER"
+                                              text: "cli"
+                                    - type: "DOT"
+                                      text: "."
+                                    - type: "REFERENCE_EXPRESSION"
+                                      children:
+                                        - type: "IDENTIFIER"
+                                          text: "reporter"
+                                - type: "DOT"
+                                  text: "."
+                                - type: "REFERENCE_EXPRESSION"
+                                  children:
+                                    - type: "IDENTIFIER"
+                                      text: "core"
+                            - type: "DOT"
+                              text: "."
+                            - type: "REFERENCE_EXPRESSION"
+                              children:
+                                - type: "IDENTIFIER"
+                                  text: "api"
+                        - type: "DOT"
+                          text: "."
+                        - type: "REFERENCE_EXPRESSION"
+                          children:
+                            - type: "IDENTIFIER"
+                              text: "KtlintCliError"
+                    - type: "DOT"
+                      text: "."
+                    - type: "REFERENCE_EXPRESSION"
+                      children:
+                        - type: "IDENTIFIER"
+                          text: "Status"
+                - type: "DOT"
+                  text: "."
+                - type: "REFERENCE_EXPRESSION"
+                  children:
+                    - type: "IDENTIFIER"
+                      text: "KOTLIN_PARSE_EXCEPTION"
+        - type: "WHITE_SPACE"
+          text: "\n"
+        - type: "IMPORT_DIRECTIVE"
+          children:
+            - type: "import"
+              text: "import"
+            - type: "WHITE_SPACE"
+              text: " "
+            - type: "DOT_QUALIFIED_EXPRESSION"
+              children:
+                - type: "DOT_QUALIFIED_EXPRESSION"
+                  children:
+                    - type: "DOT_QUALIFIED_EXPRESSION"
+                      children:
+                        - type: "DOT_QUALIFIED_EXPRESSION"
+                          children:
+                            - type: "DOT_QUALIFIED_EXPRESSION"
+                              children:
+                                - type: "DOT_QUALIFIED_EXPRESSION"
+                                  children:
+                                    - type: "DOT_QUALIFIED_EXPRESSION"
+                                      children:
+                                        - type: "DOT_QUALIFIED_EXPRESSION"
+                                          children:
+                                            - type: "DOT_QUALIFIED_EXPRESSION"
+                                              children:
+                                                - type: "REFERENCE_EXPRESSION"
+                                                  children:
+                                                    - type: "IDENTIFIER"
+                                                      text: "com"
+                                                - type: "DOT"
+                                                  text: "."
+                                                - type: "REFERENCE_EXPRESSION"
+                                                  children:
+                                                    - type: "IDENTIFIER"
+                                                      text: "pinterest"
+                                            - type: "DOT"
+                                              text: "."
+                                            - type: "REFERENCE_EXPRESSION"
+                                              children:
+                                                - type: "IDENTIFIER"
+                                                  text: "ktlint"
+                                        - type: "DOT"
+                                          text: "."
+                                        - type: "REFERENCE_EXPRESSION"
+                                          children:
+                                            - type: "IDENTIFIER"
+                                              text: "cli"
+                                    - type: "DOT"
+                                      text: "."
+                                    - type: "REFERENCE_EXPRESSION"
+                                      children:
+                                        - type: "IDENTIFIER"
+                                          text: "reporter"
+                                - type: "DOT"
+                                  text: "."
+                                - type: "REFERENCE_EXPRESSION"
+                                  children:
+                                    - type: "IDENTIFIER"
+                                      text: "core"
+                            - type: "DOT"
+                              text: "."
+                            - type: "REFERENCE_EXPRESSION"
+                              children:
+                                - type: "IDENTIFIER"
+                                  text: "api"
+                        - type: "DOT"
+                          text: "."
+                        - type: "REFERENCE_EXPRESSION"
+                          children:
+                            - type: "IDENTIFIER"
+                              text: "KtlintCliError"
+                    - type: "DOT"
+                      text: "."
+                    - type: "REFERENCE_EXPRESSION"
+                      children:
+                        - type: "IDENTIFIER"
+                          text: "Status"
+                - type: "DOT"
+                  text: "."
+                - type: "REFERENCE_EXPRESSION"
+                  children:
+                    - type: "IDENTIFIER"
+                      text: "KTLINT_RULE_ENGINE_EXCEPTION"
+        - type: "WHITE_SPACE"
+          text: "\n"
+        - type: "IMPORT_DIRECTIVE"
+          children:
+            - type: "import"
+              text: "import"
+            - type: "WHITE_SPACE"
+              text: " "
+            - type: "DOT_QUALIFIED_EXPRESSION"
+              children:
+                - type: "DOT_QUALIFIED_EXPRESSION"
+                  children:
+                    - type: "DOT_QUALIFIED_EXPRESSION"
+                      children:
+                        - type: "DOT_QUALIFIED_EXPRESSION"
+                          children:
+                            - type: "DOT_QUALIFIED_EXPRESSION"
+                              children:
+                                - type: "DOT_QUALIFIED_EXPRESSION"
+                                  children:
+                                    - type: "DOT_QUALIFIED_EXPRESSION"
+                                      children:
+                                        - type: "REFERENCE_EXPRESSION"
+                                          children:
+                                            - type: "IDENTIFIER"
+                                              text: "com"
+                                        - type: "DOT"
+                                          text: "."
+                                        - type: "REFERENCE_EXPRESSION"
+                                          children:
+                                            - type: "IDENTIFIER"
+                                              text: "pinterest"
+                                    - type: "DOT"
+                                      text: "."
+                                    - type: "REFERENCE_EXPRESSION"
+                                      children:
+                                        - type: "IDENTIFIER"
+                                          text: "ktlint"
+                                - type: "DOT"
+                                  text: "."
+                                - type: "REFERENCE_EXPRESSION"
+                                  children:
+                                    - type: "IDENTIFIER"
+                                      text: "cli"
+                            - type: "DOT"
+                              text: "."
+                            - type: "REFERENCE_EXPRESSION"
+                              children:
+                                - type: "IDENTIFIER"
+                                  text: "reporter"
+                        - type: "DOT"
+                          text: "."
+                        - type: "REFERENCE_EXPRESSION"
+                          children:
+                            - type: "IDENTIFIER"
+                              text: "core"
+                    - type: "DOT"
+                      text: "."
+                    - type: "REFERENCE_EXPRESSION"
+                      children:
+                        - type: "IDENTIFIER"
+                          text: "api"
+                - type: "DOT"
+                  text: "."
+                - type: "REFERENCE_EXPRESSION"
+                  children:
+                    - type: "IDENTIFIER"
+                      text: "ReporterV2"
+        - type: "WHITE_SPACE"
+          text: "\n"
+        - type: "IMPORT_DIRECTIVE"
+          children:
+            - type: "import"
+              text: "import"
+            - type: "WHITE_SPACE"
+              text: " "
+            - type: "DOT_QUALIFIED_EXPRESSION"
+              children:
+                - type: "DOT_QUALIFIED_EXPRESSION"
+                  children:
+                    - type: "REFERENCE_EXPRESSION"
+                      children:
+                        - type: "IDENTIFIER"
+                          text: "java"
+                    - type: "DOT"
+                      text: "."
+                    - type: "REFERENCE_EXPRESSION"
+                      children:
+                        - type: "IDENTIFIER"
+                          text: "io"
+                - type: "DOT"
+                  text: "."
+                - type: "REFERENCE_EXPRESSION"
+                  children:
+                    - type: "IDENTIFIER"
+                      text: "PrintStream"
+        - type: "WHITE_SPACE"
+          text: "\n"
+        - type: "IMPORT_DIRECTIVE"
+          children:
+            - type: "import"
+              text: "import"
+            - type: "WHITE_SPACE"
+              text: " "
+            - type: "DOT_QUALIFIED_EXPRESSION"
+              children:
+                - type: "DOT_QUALIFIED_EXPRESSION"
+                  children:
+                    - type: "DOT_QUALIFIED_EXPRESSION"
+                      children:
+                        - type: "REFERENCE_EXPRESSION"
+                          children:
+                            - type: "IDENTIFIER"
+                              text: "java"
+                        - type: "DOT"
+                          text: "."
+                        - type: "REFERENCE_EXPRESSION"
+                          children:
+                            - type: "IDENTIFIER"
+                              text: "util"
+                    - type: "DOT"
+                      text: "."
+                    - type: "REFERENCE_EXPRESSION"
+                      children:
+                        - type: "IDENTIFIER"
+                          text: "concurrent"
+                - type: "DOT"
+                  text: "."
+                - type: "REFERENCE_EXPRESSION"
+                  children:
+                    - type: "IDENTIFIER"
+                      text: "ConcurrentHashMap"
+    - type: "WHITE_SPACE"
+      text: "\n\n"
+    - type: "CLASS"
+      children:
+        - type: "KDoc"
+          children:
+            - type: "KDOC_START"
+              text: "/**"
+            - type: "WHITE_SPACE"
+              text: "\n "
+            - type: "KDOC_SECTION"
+              children:
+                - type: "KDOC_LEADING_ASTERISK"
+                  text: "*"
+                - type: "KDOC_TEXT"
+                  text: " Reports a summary "
+                - type: "KDOC_LPAR"
+                  text: "("
+                - type: "KDOC_TEXT"
+                  text: "count per rule"
+                - type: "KDOC_RPAR"
+                  text: ")"
+                - type: "KDOC_TEXT"
+                  text: " of the "
+                - type: "KDOC_MARKDOWN_LINK"
+                  children:
+                    - type: "LBRACKET"
+                      text: "["
+                    - type: "KDOC_NAME"
+                      children:
+                        - type: "IDENTIFIER"
+                          text: "KtlintCliError"
+                    - type: "RBRACKET"
+                      text: "]"
+                - type: "KDOC_TEXT"
+                  text: "s which have been autocorrected and not been autocorrected."
+            - type: "WHITE_SPACE"
+              text: "\n "
+            - type: "KDOC_END"
+              text: "*/"
+        - type: "WHITE_SPACE"
+          text: "\n"
+        - type: "MODIFIER_LIST"
+          children:
+            - type: "public"
+              text: "public"
+        - type: "WHITE_SPACE"
+          text: " "
+        - type: "class"
+          text: "class"
+        - type: "WHITE_SPACE"
+          text: " "
+        - type: "IDENTIFIER"
+          text: "PlainSummaryReporter"
+        - type: "PRIMARY_CONSTRUCTOR"
+          children:
+            - type: "VALUE_PARAMETER_LIST"
+              children:
+                - type: "LPAR"
+                  text: "("
+                - type: "WHITE_SPACE"
+                  text: "\n    "
+                - type: "VALUE_PARAMETER"
+                  children:
+                    - type: "MODIFIER_LIST"
+                      children:
+                        - type: "private"
+                          text: "private"
+                    - type: "WHITE_SPACE"
+                      text: " "
+                    - type: "val"
+                      text: "val"
+                    - type: "WHITE_SPACE"
+                      text: " "
+                    - type: "IDENTIFIER"
+                      text: "out"
+                    - type: "COLON"
+                      text: ":"
+                    - type: "WHITE_SPACE"
+                      text: " "
+                    - type: "TYPE_REFERENCE"
+                      children:
+                        - type: "USER_TYPE"
+                          children:
+                            - type: "REFERENCE_EXPRESSION"
+                              children:
+                                - type: "IDENTIFIER"
+                                  text: "PrintStream"
+                - type: "COMMA"
+                  text: ","
+                - type: "WHITE_SPACE"
+                  text: "\n"
+                - type: "RPAR"
+                  text: ")"
+        - type: "WHITE_SPACE"
+          text: " "
+        - type: "COLON"
+          text: ":"
+        - type: "WHITE_SPACE"
+          text: " "
+        - type: "SUPER_TYPE_LIST"
+          children:
+            - type: "SUPER_TYPE_ENTRY"
+              children:
+                - type: "TYPE_REFERENCE"
+                  children:
+                    - type: "USER_TYPE"
+                      children:
+                        - type: "REFERENCE_EXPRESSION"
+                          children:
+                            - type: "IDENTIFIER"
+                              text: "ReporterV2"
+        - type: "WHITE_SPACE"
+          text: " "
+        - type: "CLASS_BODY"
+          children:
+            - type: "LBRACE"
+              text: "{"
+            - type: "WHITE_SPACE"
+              text: "\n    "
+            - type: "PROPERTY"
+              children:
+                - type: "MODIFIER_LIST"
+                  children:
+                    - type: "private"
+                      text: "private"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "val"
+                  text: "val"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "IDENTIFIER"
+                  text: "ruleViolationCountAutocorrected"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "EQ"
+                  text: "="
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "CALL_EXPRESSION"
+                  children:
+                    - type: "REFERENCE_EXPRESSION"
+                      children:
+                        - type: "IDENTIFIER"
+                          text: "ConcurrentHashMap"
+                    - type: "TYPE_ARGUMENT_LIST"
+                      children:
+                        - type: "LT"
+                          text: "<"
+                        - type: "TYPE_PROJECTION"
+                          children:
+                            - type: "TYPE_REFERENCE"
+                              children:
+                                - type: "USER_TYPE"
+                                  children:
+                                    - type: "REFERENCE_EXPRESSION"
+                                      children:
+                                        - type: "IDENTIFIER"
+                                          text: "String"
+                        - type: "COMMA"
+                          text: ","
+                        - type: "WHITE_SPACE"
+                          text: " "
+                        - type: "TYPE_PROJECTION"
+                          children:
+                            - type: "TYPE_REFERENCE"
+                              children:
+                                - type: "USER_TYPE"
+                                  children:
+                                    - type: "REFERENCE_EXPRESSION"
+                                      children:
+                                        - type: "IDENTIFIER"
+                                          text: "Long"
+                        - type: "GT"
+                          text: ">"
+                    - type: "VALUE_ARGUMENT_LIST"
+                      children:
+                        - type: "LPAR"
+                          text: "("
+                        - type: "RPAR"
+                          text: ")"
+            - type: "WHITE_SPACE"
+              text: "\n    "
+            - type: "PROPERTY"
+              children:
+                - type: "MODIFIER_LIST"
+                  children:
+                    - type: "private"
+                      text: "private"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "val"
+                  text: "val"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "IDENTIFIER"
+                  text: "ruleViolationCountNoAutocorrection"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "EQ"
+                  text: "="
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "CALL_EXPRESSION"
+                  children:
+                    - type: "REFERENCE_EXPRESSION"
+                      children:
+                        - type: "IDENTIFIER"
+                          text: "ConcurrentHashMap"
+                    - type: "TYPE_ARGUMENT_LIST"
+                      children:
+                        - type: "LT"
+                          text: "<"
+                        - type: "TYPE_PROJECTION"
+                          children:
+                            - type: "TYPE_REFERENCE"
+                              children:
+                                - type: "USER_TYPE"
+                                  children:
+                                    - type: "REFERENCE_EXPRESSION"
+                                      children:
+                                        - type: "IDENTIFIER"
+                                          text: "String"
+                        - type: "COMMA"
+                          text: ","
+                        - type: "WHITE_SPACE"
+                          text: " "
+                        - type: "TYPE_PROJECTION"
+                          children:
+                            - type: "TYPE_REFERENCE"
+                              children:
+                                - type: "USER_TYPE"
+                                  children:
+                                    - type: "REFERENCE_EXPRESSION"
+                                      children:
+                                        - type: "IDENTIFIER"
+                                          text: "Long"
+                        - type: "GT"
+                          text: ">"
+                    - type: "VALUE_ARGUMENT_LIST"
+                      children:
+                        - type: "LPAR"
+                          text: "("
+                        - type: "RPAR"
+                          text: ")"
+            - type: "WHITE_SPACE"
+              text: "\n\n    "
+            - type: "FUN"
+              children:
+                - type: "MODIFIER_LIST"
+                  children:
+                    - type: "override"
+                      text: "override"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "fun"
+                  text: "fun"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "IDENTIFIER"
+                  text: "onLintError"
+                - type: "VALUE_PARAMETER_LIST"
+                  children:
+                    - type: "LPAR"
+                      text: "("
+                    - type: "WHITE_SPACE"
+                      text: "\n        "
+                    - type: "VALUE_PARAMETER"
+                      children:
+                        - type: "IDENTIFIER"
+                          text: "file"
+                        - type: "COLON"
+                          text: ":"
+                        - type: "WHITE_SPACE"
+                          text: " "
+                        - type: "TYPE_REFERENCE"
+                          children:
+                            - type: "USER_TYPE"
+                              children:
+                                - type: "REFERENCE_EXPRESSION"
+                                  children:
+                                    - type: "IDENTIFIER"
+                                      text: "String"
+                    - type: "COMMA"
+                      text: ","
+                    - type: "WHITE_SPACE"
+                      text: "\n        "
+                    - type: "VALUE_PARAMETER"
+                      children:
+                        - type: "IDENTIFIER"
+                          text: "ktlintCliError"
+                        - type: "COLON"
+                          text: ":"
+                        - type: "WHITE_SPACE"
+                          text: " "
+                        - type: "TYPE_REFERENCE"
+                          children:
+                            - type: "USER_TYPE"
+                              children:
+                                - type: "REFERENCE_EXPRESSION"
+                                  children:
+                                    - type: "IDENTIFIER"
+                                      text: "KtlintCliError"
+                    - type: "COMMA"
+                      text: ","
+                    - type: "WHITE_SPACE"
+                      text: "\n    "
+                    - type: "RPAR"
+                      text: ")"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "BLOCK"
+                  children:
+                    - type: "LBRACE"
+                      text: "{"
+                    - type: "WHITE_SPACE"
+                      text: "\n        "
+                    - type: "IF"
+                      children:
+                        - type: "if"
+                          text: "if"
+                        - type: "WHITE_SPACE"
+                          text: " "
+                        - type: "LPAR"
+                          text: "("
+                        - type: "CONDITION"
+                          children:
+                            - type: "BINARY_EXPRESSION"
+                              children:
+                                - type: "DOT_QUALIFIED_EXPRESSION"
+                                  children:
+                                    - type: "REFERENCE_EXPRESSION"
+                                      children:
+                                        - type: "IDENTIFIER"
+                                          text: "ktlintCliError"
+                                    - type: "DOT"
+                                      text: "."
+                                    - type: "REFERENCE_EXPRESSION"
+                                      children:
+                                        - type: "IDENTIFIER"
+                                          text: "status"
+                                - type: "WHITE_SPACE"
+                                  text: " "
+                                - type: "OPERATION_REFERENCE"
+                                  children:
+                                    - type: "EQEQ"
+                                      text: "=="
+                                - type: "WHITE_SPACE"
+                                  text: " "
+                                - type: "DOT_QUALIFIED_EXPRESSION"
+                                  children:
+                                    - type: "DOT_QUALIFIED_EXPRESSION"
+                                      children:
+                                        - type: "REFERENCE_EXPRESSION"
+                                          children:
+                                            - type: "IDENTIFIER"
+                                              text: "KtlintCliError"
+                                        - type: "DOT"
+                                          text: "."
+                                        - type: "REFERENCE_EXPRESSION"
+                                          children:
+                                            - type: "IDENTIFIER"
+                                              text: "Status"
+                                    - type: "DOT"
+                                      text: "."
+                                    - type: "REFERENCE_EXPRESSION"
+                                      children:
+                                        - type: "IDENTIFIER"
+                                          text: "FORMAT_IS_AUTOCORRECTED"
+                        - type: "RPAR"
+                          text: ")"
+                        - type: "WHITE_SPACE"
+                          text: " "
+                        - type: "THEN"
+                          children:
+                            - type: "BLOCK"
+                              children:
+                                - type: "LBRACE"
+                                  text: "{"
+                                - type: "WHITE_SPACE"
+                                  text: "\n            "
+                                - type: "DOT_QUALIFIED_EXPRESSION"
+                                  children:
+                                    - type: "REFERENCE_EXPRESSION"
+                                      children:
+                                        - type: "IDENTIFIER"
+                                          text: "ruleViolationCountAutocorrected"
+                                    - type: "WHITE_SPACE"
+                                      text: "\n                "
+                                    - type: "DOT"
+                                      text: "."
+                                    - type: "CALL_EXPRESSION"
+                                      children:
+                                        - type: "REFERENCE_EXPRESSION"
+                                          children:
+                                            - type: "IDENTIFIER"
+                                              text: "merge"
+                                        - type: "VALUE_ARGUMENT_LIST"
+                                          children:
+                                            - type: "LPAR"
+                                              text: "("
+                                            - type: "VALUE_ARGUMENT"
+                                              children:
+                                                - type: "DOT_QUALIFIED_EXPRESSION"
+                                                  children:
+                                                    - type: "REFERENCE_EXPRESSION"
+                                                      children:
+                                                        - type: "IDENTIFIER"
+                                                          text: "ktlintCliError"
+                                                    - type: "DOT"
+                                                      text: "."
+                                                    - type: "REFERENCE_EXPRESSION"
+                                                      children:
+                                                        - type: "IDENTIFIER"
+                                                          text: "ruleId"
+                                            - type: "COMMA"
+                                              text: ","
+                                            - type: "WHITE_SPACE"
+                                              text: " "
+                                            - type: "VALUE_ARGUMENT"
+                                              children:
+                                                - type: "INTEGER_CONSTANT"
+                                                  children:
+                                                    - type: "INTEGER_LITERAL"
+                                                      text: "1"
+                                            - type: "RPAR"
+                                              text: ")"
+                                        - type: "WHITE_SPACE"
+                                          text: " "
+                                        - type: "LAMBDA_ARGUMENT"
+                                          children:
+                                            - type: "LAMBDA_EXPRESSION"
+                                              children:
+                                                - type: "FUNCTION_LITERAL"
+                                                  children:
+                                                    - type: "LBRACE"
+                                                      text: "{"
+                                                    - type: "WHITE_SPACE"
+                                                      text: " "
+                                                    - type: "VALUE_PARAMETER_LIST"
+                                                      children:
+                                                        - type: "VALUE_PARAMETER"
+                                                          children:
+                                                            - type: "IDENTIFIER"
+                                                              text: "previousValue"
+                                                        - type: "COMMA"
+                                                          text: ","
+                                                        - type: "WHITE_SPACE"
+                                                          text: " "
+                                                        - type: "VALUE_PARAMETER"
+                                                          children:
+                                                            - type: "IDENTIFIER"
+                                                              text: "_"
+                                                    - type: "WHITE_SPACE"
+                                                      text: " "
+                                                    - type: "ARROW"
+                                                      text: "->"
+                                                    - type: "WHITE_SPACE"
+                                                      text: "\n                    "
+                                                    - type: "BLOCK"
+                                                      children:
+                                                        - type: "BINARY_EXPRESSION"
+                                                          children:
+                                                            - type: "REFERENCE_EXPRESSION"
+                                                              children:
+                                                                - type: "IDENTIFIER"
+                                                                  text: "previousValue"
+                                                            - type: "WHITE_SPACE"
+                                                              text: " "
+                                                            - type: "OPERATION_REFERENCE"
+                                                              children:
+                                                                - type: "PLUS"
+                                                                  text: "+"
+                                                            - type: "WHITE_SPACE"
+                                                              text: " "
+                                                            - type: "INTEGER_CONSTANT"
+                                                              children:
+                                                                - type: "INTEGER_LITERAL"
+                                                                  text: "1"
+                                                    - type: "WHITE_SPACE"
+                                                      text: "\n                "
+                                                    - type: "RBRACE"
+                                                      text: "}"
+                                - type: "WHITE_SPACE"
+                                  text: "\n        "
+                                - type: "RBRACE"
+                                  text: "}"
+                        - type: "WHITE_SPACE"
+                          text: " "
+                        - type: "else"
+                          text: "else"
+                        - type: "WHITE_SPACE"
+                          text: " "
+                        - type: "ELSE"
+                          children:
+                            - type: "BLOCK"
+                              children:
+                                - type: "LBRACE"
+                                  text: "{"
+                                - type: "WHITE_SPACE"
+                                  text: "\n            "
+                                - type: "DOT_QUALIFIED_EXPRESSION"
+                                  children:
+                                    - type: "REFERENCE_EXPRESSION"
+                                      children:
+                                        - type: "IDENTIFIER"
+                                          text: "ruleViolationCountNoAutocorrection"
+                                    - type: "WHITE_SPACE"
+                                      text: "\n                "
+                                    - type: "DOT"
+                                      text: "."
+                                    - type: "CALL_EXPRESSION"
+                                      children:
+                                        - type: "REFERENCE_EXPRESSION"
+                                          children:
+                                            - type: "IDENTIFIER"
+                                              text: "merge"
+                                        - type: "VALUE_ARGUMENT_LIST"
+                                          children:
+                                            - type: "LPAR"
+                                              text: "("
+                                            - type: "VALUE_ARGUMENT"
+                                              children:
+                                                - type: "DOT_QUALIFIED_EXPRESSION"
+                                                  children:
+                                                    - type: "REFERENCE_EXPRESSION"
+                                                      children:
+                                                        - type: "IDENTIFIER"
+                                                          text: "ktlintCliError"
+                                                    - type: "DOT"
+                                                      text: "."
+                                                    - type: "CALL_EXPRESSION"
+                                                      children:
+                                                        - type: "REFERENCE_EXPRESSION"
+                                                          children:
+                                                            - type: "IDENTIFIER"
+                                                              text: "causedBy"
+                                                        - type: "VALUE_ARGUMENT_LIST"
+                                                          children:
+                                                            - type: "LPAR"
+                                                              text: "("
+                                                            - type: "RPAR"
+                                                              text: ")"
+                                            - type: "COMMA"
+                                              text: ","
+                                            - type: "WHITE_SPACE"
+                                              text: " "
+                                            - type: "VALUE_ARGUMENT"
+                                              children:
+                                                - type: "INTEGER_CONSTANT"
+                                                  children:
+                                                    - type: "INTEGER_LITERAL"
+                                                      text: "1"
+                                            - type: "RPAR"
+                                              text: ")"
+                                        - type: "WHITE_SPACE"
+                                          text: " "
+                                        - type: "LAMBDA_ARGUMENT"
+                                          children:
+                                            - type: "LAMBDA_EXPRESSION"
+                                              children:
+                                                - type: "FUNCTION_LITERAL"
+                                                  children:
+                                                    - type: "LBRACE"
+                                                      text: "{"
+                                                    - type: "WHITE_SPACE"
+                                                      text: " "
+                                                    - type: "VALUE_PARAMETER_LIST"
+                                                      children:
+                                                        - type: "VALUE_PARAMETER"
+                                                          children:
+                                                            - type: "IDENTIFIER"
+                                                              text: "previousValue"
+                                                        - type: "COMMA"
+                                                          text: ","
+                                                        - type: "WHITE_SPACE"
+                                                          text: " "
+                                                        - type: "VALUE_PARAMETER"
+                                                          children:
+                                                            - type: "IDENTIFIER"
+                                                              text: "_"
+                                                    - type: "WHITE_SPACE"
+                                                      text: " "
+                                                    - type: "ARROW"
+                                                      text: "->"
+                                                    - type: "WHITE_SPACE"
+                                                      text: "\n                    "
+                                                    - type: "BLOCK"
+                                                      children:
+                                                        - type: "BINARY_EXPRESSION"
+                                                          children:
+                                                            - type: "REFERENCE_EXPRESSION"
+                                                              children:
+                                                                - type: "IDENTIFIER"
+                                                                  text: "previousValue"
+                                                            - type: "WHITE_SPACE"
+                                                              text: " "
+                                                            - type: "OPERATION_REFERENCE"
+                                                              children:
+                                                                - type: "PLUS"
+                                                                  text: "+"
+                                                            - type: "WHITE_SPACE"
+                                                              text: " "
+                                                            - type: "INTEGER_CONSTANT"
+                                                              children:
+                                                                - type: "INTEGER_LITERAL"
+                                                                  text: "1"
+                                                    - type: "WHITE_SPACE"
+                                                      text: "\n                "
+                                                    - type: "RBRACE"
+                                                      text: "}"
+                                - type: "WHITE_SPACE"
+                                  text: "\n        "
+                                - type: "RBRACE"
+                                  text: "}"
+                    - type: "WHITE_SPACE"
+                      text: "\n    "
+                    - type: "RBRACE"
+                      text: "}"
+            - type: "WHITE_SPACE"
+              text: "\n\n    "
+            - type: "FUN"
+              children:
+                - type: "MODIFIER_LIST"
+                  children:
+                    - type: "override"
+                      text: "override"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "fun"
+                  text: "fun"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "IDENTIFIER"
+                  text: "afterAll"
+                - type: "VALUE_PARAMETER_LIST"
+                  children:
+                    - type: "LPAR"
+                      text: "("
+                    - type: "RPAR"
+                      text: ")"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "BLOCK"
+                  children:
+                    - type: "LBRACE"
+                      text: "{"
+                    - type: "WHITE_SPACE"
+                      text: "\n        "
+                    - type: "IF"
+                      children:
+                        - type: "if"
+                          text: "if"
+                        - type: "WHITE_SPACE"
+                          text: " "
+                        - type: "LPAR"
+                          text: "("
+                        - type: "CONDITION"
+                          children:
+                            - type: "DOT_QUALIFIED_EXPRESSION"
+                              children:
+                                - type: "REFERENCE_EXPRESSION"
+                                  children:
+                                    - type: "IDENTIFIER"
+                                      text: "ruleViolationCountAutocorrected"
+                                - type: "DOT"
+                                  text: "."
+                                - type: "CALL_EXPRESSION"
+                                  children:
+                                    - type: "REFERENCE_EXPRESSION"
+                                      children:
+                                        - type: "IDENTIFIER"
+                                          text: "isNotEmpty"
+                                    - type: "VALUE_ARGUMENT_LIST"
+                                      children:
+                                        - type: "LPAR"
+                                          text: "("
+                                        - type: "RPAR"
+                                          text: ")"
+                        - type: "RPAR"
+                          text: ")"
+                        - type: "WHITE_SPACE"
+                          text: " "
+                        - type: "THEN"
+                          children:
+                            - type: "BLOCK"
+                              children:
+                                - type: "LBRACE"
+                                  text: "{"
+                                - type: "WHITE_SPACE"
+                                  text: "\n            "
+                                - type: "DOT_QUALIFIED_EXPRESSION"
+                                  children:
+                                    - type: "REFERENCE_EXPRESSION"
+                                      children:
+                                        - type: "IDENTIFIER"
+                                          text: "ruleViolationCountAutocorrected"
+                                    - type: "DOT"
+                                      text: "."
+                                    - type: "CALL_EXPRESSION"
+                                      children:
+                                        - type: "REFERENCE_EXPRESSION"
+                                          children:
+                                            - type: "IDENTIFIER"
+                                              text: "printSummary"
+                                        - type: "VALUE_ARGUMENT_LIST"
+                                          children:
+                                            - type: "LPAR"
+                                              text: "("
+                                            - type: "VALUE_ARGUMENT"
+                                              children:
+                                                - type: "STRING_TEMPLATE"
+                                                  children:
+                                                    - type: "OPEN_QUOTE"
+                                                      text: "\""
+                                                    - type: "LITERAL_STRING_TEMPLATE_ENTRY"
+                                                      children:
+                                                        - type: "REGULAR_STRING_PART"
+                                                          text: "Count (descending) of autocorrected errors by rule:"
+                                                    - type: "CLOSING_QUOTE"
+                                                      text: "\""
+                                            - type: "RPAR"
+                                              text: ")"
+                                - type: "WHITE_SPACE"
+                                  text: "\n        "
+                                - type: "RBRACE"
+                                  text: "}"
+                    - type: "WHITE_SPACE"
+                      text: "\n        "
+                    - type: "IF"
+                      children:
+                        - type: "if"
+                          text: "if"
+                        - type: "WHITE_SPACE"
+                          text: " "
+                        - type: "LPAR"
+                          text: "("
+                        - type: "CONDITION"
+                          children:
+                            - type: "DOT_QUALIFIED_EXPRESSION"
+                              children:
+                                - type: "REFERENCE_EXPRESSION"
+                                  children:
+                                    - type: "IDENTIFIER"
+                                      text: "ruleViolationCountNoAutocorrection"
+                                - type: "DOT"
+                                  text: "."
+                                - type: "CALL_EXPRESSION"
+                                  children:
+                                    - type: "REFERENCE_EXPRESSION"
+                                      children:
+                                        - type: "IDENTIFIER"
+                                          text: "isNotEmpty"
+                                    - type: "VALUE_ARGUMENT_LIST"
+                                      children:
+                                        - type: "LPAR"
+                                          text: "("
+                                        - type: "RPAR"
+                                          text: ")"
+                        - type: "RPAR"
+                          text: ")"
+                        - type: "WHITE_SPACE"
+                          text: " "
+                        - type: "THEN"
+                          children:
+                            - type: "BLOCK"
+                              children:
+                                - type: "LBRACE"
+                                  text: "{"
+                                - type: "WHITE_SPACE"
+                                  text: "\n            "
+                                - type: "IF"
+                                  children:
+                                    - type: "if"
+                                      text: "if"
+                                    - type: "WHITE_SPACE"
+                                      text: " "
+                                    - type: "LPAR"
+                                      text: "("
+                                    - type: "CONDITION"
+                                      children:
+                                        - type: "DOT_QUALIFIED_EXPRESSION"
+                                          children:
+                                            - type: "REFERENCE_EXPRESSION"
+                                              children:
+                                                - type: "IDENTIFIER"
+                                                  text: "ruleViolationCountAutocorrected"
+                                            - type: "DOT"
+                                              text: "."
+                                            - type: "CALL_EXPRESSION"
+                                              children:
+                                                - type: "REFERENCE_EXPRESSION"
+                                                  children:
+                                                    - type: "IDENTIFIER"
+                                                      text: "isNotEmpty"
+                                                - type: "VALUE_ARGUMENT_LIST"
+                                                  children:
+                                                    - type: "LPAR"
+                                                      text: "("
+                                                    - type: "RPAR"
+                                                      text: ")"
+                                    - type: "RPAR"
+                                      text: ")"
+                                    - type: "WHITE_SPACE"
+                                      text: " "
+                                    - type: "THEN"
+                                      children:
+                                        - type: "BLOCK"
+                                          children:
+                                            - type: "LBRACE"
+                                              text: "{"
+                                            - type: "WHITE_SPACE"
+                                              text: "\n                "
+                                            - type: "DOT_QUALIFIED_EXPRESSION"
+                                              children:
+                                                - type: "REFERENCE_EXPRESSION"
+                                                  children:
+                                                    - type: "IDENTIFIER"
+                                                      text: "out"
+                                                - type: "DOT"
+                                                  text: "."
+                                                - type: "CALL_EXPRESSION"
+                                                  children:
+                                                    - type: "REFERENCE_EXPRESSION"
+                                                      children:
+                                                        - type: "IDENTIFIER"
+                                                          text: "println"
+                                                    - type: "VALUE_ARGUMENT_LIST"
+                                                      children:
+                                                        - type: "LPAR"
+                                                          text: "("
+                                                        - type: "VALUE_ARGUMENT"
+                                                          children:
+                                                            - type: "STRING_TEMPLATE"
+                                                              children:
+                                                                - type: "OPEN_QUOTE"
+                                                                  text: "\""
+                                                                - type: "CLOSING_QUOTE"
+                                                                  text: "\""
+                                                        - type: "RPAR"
+                                                          text: ")"
+                                            - type: "WHITE_SPACE"
+                                              text: "\n            "
+                                            - type: "RBRACE"
+                                              text: "}"
+                                - type: "WHITE_SPACE"
+                                  text: "\n            "
+                                - type: "DOT_QUALIFIED_EXPRESSION"
+                                  children:
+                                    - type: "REFERENCE_EXPRESSION"
+                                      children:
+                                        - type: "IDENTIFIER"
+                                          text: "ruleViolationCountNoAutocorrection"
+                                    - type: "DOT"
+                                      text: "."
+                                    - type: "CALL_EXPRESSION"
+                                      children:
+                                        - type: "REFERENCE_EXPRESSION"
+                                          children:
+                                            - type: "IDENTIFIER"
+                                              text: "printSummary"
+                                        - type: "VALUE_ARGUMENT_LIST"
+                                          children:
+                                            - type: "LPAR"
+                                              text: "("
+                                            - type: "VALUE_ARGUMENT"
+                                              children:
+                                                - type: "STRING_TEMPLATE"
+                                                  children:
+                                                    - type: "OPEN_QUOTE"
+                                                      text: "\""
+                                                    - type: "LITERAL_STRING_TEMPLATE_ENTRY"
+                                                      children:
+                                                        - type: "REGULAR_STRING_PART"
+                                                          text: "Count (descending) of errors not autocorrected by rule:"
+                                                    - type: "CLOSING_QUOTE"
+                                                      text: "\""
+                                            - type: "RPAR"
+                                              text: ")"
+                                - type: "WHITE_SPACE"
+                                  text: "\n        "
+                                - type: "RBRACE"
+                                  text: "}"
+                    - type: "WHITE_SPACE"
+                      text: "\n    "
+                    - type: "RBRACE"
+                      text: "}"
+            - type: "WHITE_SPACE"
+              text: "\n\n    "
+            - type: "FUN"
+              children:
+                - type: "MODIFIER_LIST"
+                  children:
+                    - type: "private"
+                      text: "private"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "fun"
+                  text: "fun"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "TYPE_REFERENCE"
+                  children:
+                    - type: "USER_TYPE"
+                      children:
+                        - type: "REFERENCE_EXPRESSION"
+                          children:
+                            - type: "IDENTIFIER"
+                              text: "ConcurrentHashMap"
+                        - type: "TYPE_ARGUMENT_LIST"
+                          children:
+                            - type: "LT"
+                              text: "<"
+                            - type: "TYPE_PROJECTION"
+                              children:
+                                - type: "TYPE_REFERENCE"
+                                  children:
+                                    - type: "USER_TYPE"
+                                      children:
+                                        - type: "REFERENCE_EXPRESSION"
+                                          children:
+                                            - type: "IDENTIFIER"
+                                              text: "String"
+                            - type: "COMMA"
+                              text: ","
+                            - type: "WHITE_SPACE"
+                              text: " "
+                            - type: "TYPE_PROJECTION"
+                              children:
+                                - type: "TYPE_REFERENCE"
+                                  children:
+                                    - type: "USER_TYPE"
+                                      children:
+                                        - type: "REFERENCE_EXPRESSION"
+                                          children:
+                                            - type: "IDENTIFIER"
+                                              text: "Long"
+                            - type: "GT"
+                              text: ">"
+                - type: "DOT"
+                  text: "."
+                - type: "IDENTIFIER"
+                  text: "printSummary"
+                - type: "VALUE_PARAMETER_LIST"
+                  children:
+                    - type: "LPAR"
+                      text: "("
+                    - type: "VALUE_PARAMETER"
+                      children:
+                        - type: "IDENTIFIER"
+                          text: "header"
+                        - type: "COLON"
+                          text: ":"
+                        - type: "WHITE_SPACE"
+                          text: " "
+                        - type: "TYPE_REFERENCE"
+                          children:
+                            - type: "USER_TYPE"
+                              children:
+                                - type: "REFERENCE_EXPRESSION"
+                                  children:
+                                    - type: "IDENTIFIER"
+                                      text: "String"
+                    - type: "RPAR"
+                      text: ")"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "BLOCK"
+                  children:
+                    - type: "LBRACE"
+                      text: "{"
+                    - type: "WHITE_SPACE"
+                      text: "\n        "
+                    - type: "DOT_QUALIFIED_EXPRESSION"
+                      children:
+                        - type: "REFERENCE_EXPRESSION"
+                          children:
+                            - type: "IDENTIFIER"
+                              text: "out"
+                        - type: "DOT"
+                          text: "."
+                        - type: "CALL_EXPRESSION"
+                          children:
+                            - type: "REFERENCE_EXPRESSION"
+                              children:
+                                - type: "IDENTIFIER"
+                                  text: "println"
+                            - type: "VALUE_ARGUMENT_LIST"
+                              children:
+                                - type: "LPAR"
+                                  text: "("
+                                - type: "VALUE_ARGUMENT"
+                                  children:
+                                    - type: "REFERENCE_EXPRESSION"
+                                      children:
+                                        - type: "IDENTIFIER"
+                                          text: "header"
+                                - type: "RPAR"
+                                  text: ")"
+                    - type: "WHITE_SPACE"
+                      text: "\n        "
+                    - type: "DOT_QUALIFIED_EXPRESSION"
+                      children:
+                        - type: "DOT_QUALIFIED_EXPRESSION"
+                          children:
+                            - type: "CALL_EXPRESSION"
+                              children:
+                                - type: "REFERENCE_EXPRESSION"
+                                  children:
+                                    - type: "IDENTIFIER"
+                                      text: "toList"
+                                - type: "VALUE_ARGUMENT_LIST"
+                                  children:
+                                    - type: "LPAR"
+                                      text: "("
+                                    - type: "RPAR"
+                                      text: ")"
+                            - type: "WHITE_SPACE"
+                              text: "\n            "
+                            - type: "DOT"
+                              text: "."
+                            - type: "CALL_EXPRESSION"
+                              children:
+                                - type: "REFERENCE_EXPRESSION"
+                                  children:
+                                    - type: "IDENTIFIER"
+                                      text: "sortedWith"
+                                - type: "VALUE_ARGUMENT_LIST"
+                                  children:
+                                    - type: "LPAR"
+                                      text: "("
+                                    - type: "VALUE_ARGUMENT"
+                                      children:
+                                        - type: "REFERENCE_EXPRESSION"
+                                          children:
+                                            - type: "IDENTIFIER"
+                                              text: "COUNT_DESC_AND_RULE_ID_ASC_COMPARATOR"
+                                    - type: "RPAR"
+                                      text: ")"
+                        - type: "WHITE_SPACE"
+                          text: "\n            "
+                        - type: "DOT"
+                          text: "."
+                        - type: "CALL_EXPRESSION"
+                          children:
+                            - type: "REFERENCE_EXPRESSION"
+                              children:
+                                - type: "IDENTIFIER"
+                                  text: "map"
+                            - type: "WHITE_SPACE"
+                              text: " "
+                            - type: "LAMBDA_ARGUMENT"
+                              children:
+                                - type: "LAMBDA_EXPRESSION"
+                                  children:
+                                    - type: "FUNCTION_LITERAL"
+                                      children:
+                                        - type: "LBRACE"
+                                          text: "{"
+                                        - type: "WHITE_SPACE"
+                                          text: " "
+                                        - type: "BLOCK"
+                                          children:
+                                            - type: "DOT_QUALIFIED_EXPRESSION"
+                                              children:
+                                                - type: "REFERENCE_EXPRESSION"
+                                                  children:
+                                                    - type: "IDENTIFIER"
+                                                      text: "out"
+                                                - type: "DOT"
+                                                  text: "."
+                                                - type: "CALL_EXPRESSION"
+                                                  children:
+                                                    - type: "REFERENCE_EXPRESSION"
+                                                      children:
+                                                        - type: "IDENTIFIER"
+                                                          text: "println"
+                                                    - type: "VALUE_ARGUMENT_LIST"
+                                                      children:
+                                                        - type: "LPAR"
+                                                          text: "("
+                                                        - type: "VALUE_ARGUMENT"
+                                                          children:
+                                                            - type: "STRING_TEMPLATE"
+                                                              children:
+                                                                - type: "OPEN_QUOTE"
+                                                                  text: "\""
+                                                                - type: "LITERAL_STRING_TEMPLATE_ENTRY"
+                                                                  children:
+                                                                    - type: "REGULAR_STRING_PART"
+                                                                      text: "  "
+                                                                - type: "LONG_STRING_TEMPLATE_ENTRY"
+                                                                  children:
+                                                                    - type: "LONG_TEMPLATE_ENTRY_START"
+                                                                      text: "${"
+                                                                    - type: "DOT_QUALIFIED_EXPRESSION"
+                                                                      children:
+                                                                        - type: "REFERENCE_EXPRESSION"
+                                                                          children:
+                                                                            - type: "IDENTIFIER"
+                                                                              text: "it"
+                                                                        - type: "DOT"
+                                                                          text: "."
+                                                                        - type: "REFERENCE_EXPRESSION"
+                                                                          children:
+                                                                            - type: "IDENTIFIER"
+                                                                              text: "first"
+                                                                    - type: "LONG_TEMPLATE_ENTRY_END"
+                                                                      text: "}"
+                                                                - type: "LITERAL_STRING_TEMPLATE_ENTRY"
+                                                                  children:
+                                                                    - type: "REGULAR_STRING_PART"
+                                                                      text: ": "
+                                                                - type: "LONG_STRING_TEMPLATE_ENTRY"
+                                                                  children:
+                                                                    - type: "LONG_TEMPLATE_ENTRY_START"
+                                                                      text: "${"
+                                                                    - type: "DOT_QUALIFIED_EXPRESSION"
+                                                                      children:
+                                                                        - type: "REFERENCE_EXPRESSION"
+                                                                          children:
+                                                                            - type: "IDENTIFIER"
+                                                                              text: "it"
+                                                                        - type: "DOT"
+                                                                          text: "."
+                                                                        - type: "REFERENCE_EXPRESSION"
+                                                                          children:
+                                                                            - type: "IDENTIFIER"
+                                                                              text: "second"
+                                                                    - type: "LONG_TEMPLATE_ENTRY_END"
+                                                                      text: "}"
+                                                                - type: "CLOSING_QUOTE"
+                                                                  text: "\""
+                                                        - type: "RPAR"
+                                                          text: ")"
+                                        - type: "WHITE_SPACE"
+                                          text: " "
+                                        - type: "RBRACE"
+                                          text: "}"
+                    - type: "WHITE_SPACE"
+                      text: "\n    "
+                    - type: "RBRACE"
+                      text: "}"
+            - type: "WHITE_SPACE"
+              text: "\n\n    "
+            - type: "FUN"
+              children:
+                - type: "MODIFIER_LIST"
+                  children:
+                    - type: "private"
+                      text: "private"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "fun"
+                  text: "fun"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "TYPE_REFERENCE"
+                  children:
+                    - type: "USER_TYPE"
+                      children:
+                        - type: "REFERENCE_EXPRESSION"
+                          children:
+                            - type: "IDENTIFIER"
+                              text: "KtlintCliError"
+                - type: "DOT"
+                  text: "."
+                - type: "IDENTIFIER"
+                  text: "causedBy"
+                - type: "VALUE_PARAMETER_LIST"
+                  children:
+                    - type: "LPAR"
+                      text: "("
+                    - type: "RPAR"
+                      text: ")"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "EQ"
+                  text: "="
+                - type: "WHITE_SPACE"
+                  text: "\n        "
+                - type: "WHEN"
+                  children:
+                    - type: "when"
+                      text: "when"
+                    - type: "WHITE_SPACE"
+                      text: " "
+                    - type: "LPAR"
+                      text: "("
+                    - type: "REFERENCE_EXPRESSION"
+                      children:
+                        - type: "IDENTIFIER"
+                          text: "status"
+                    - type: "RPAR"
+                      text: ")"
+                    - type: "WHITE_SPACE"
+                      text: " "
+                    - type: "LBRACE"
+                      text: "{"
+                    - type: "WHITE_SPACE"
+                      text: "\n            "
+                    - type: "WHEN_ENTRY"
+                      children:
+                        - type: "WHEN_CONDITION_WITH_EXPRESSION"
+                          children:
+                            - type: "REFERENCE_EXPRESSION"
+                              children:
+                                - type: "IDENTIFIER"
+                                  text: "KOTLIN_PARSE_EXCEPTION"
+                        - type: "WHITE_SPACE"
+                          text: " "
+                        - type: "ARROW"
+                          text: "->"
+                        - type: "WHITE_SPACE"
+                          text: " "
+                        - type: "REFERENCE_EXPRESSION"
+                          children:
+                            - type: "IDENTIFIER"
+                              text: "KOTLIN_PARSE_EXCEPTION_MESSAGE"
+                    - type: "WHITE_SPACE"
+                      text: "\n            "
+                    - type: "WHEN_ENTRY"
+                      children:
+                        - type: "WHEN_CONDITION_WITH_EXPRESSION"
+                          children:
+                            - type: "REFERENCE_EXPRESSION"
+                              children:
+                                - type: "IDENTIFIER"
+                                  text: "KTLINT_RULE_ENGINE_EXCEPTION"
+                        - type: "WHITE_SPACE"
+                          text: " "
+                        - type: "ARROW"
+                          text: "->"
+                        - type: "WHITE_SPACE"
+                          text: " "
+                        - type: "REFERENCE_EXPRESSION"
+                          children:
+                            - type: "IDENTIFIER"
+                              text: "KTLINT_RULE_ENGINE_EXCEPTION_MESSAGE"
+                    - type: "WHITE_SPACE"
+                      text: "\n            "
+                    - type: "WHEN_ENTRY"
+                      children:
+                        - type: "else"
+                          text: "else"
+                        - type: "WHITE_SPACE"
+                          text: " "
+                        - type: "ARROW"
+                          text: "->"
+                        - type: "WHITE_SPACE"
+                          text: " "
+                        - type: "DOT_QUALIFIED_EXPRESSION"
+                          children:
+                            - type: "REFERENCE_EXPRESSION"
+                              children:
+                                - type: "IDENTIFIER"
+                                  text: "ruleId"
+                            - type: "DOT"
+                              text: "."
+                            - type: "CALL_EXPRESSION"
+                              children:
+                                - type: "REFERENCE_EXPRESSION"
+                                  children:
+                                    - type: "IDENTIFIER"
+                                      text: "ifEmpty"
+                                - type: "WHITE_SPACE"
+                                  text: " "
+                                - type: "LAMBDA_ARGUMENT"
+                                  children:
+                                    - type: "LAMBDA_EXPRESSION"
+                                      children:
+                                        - type: "FUNCTION_LITERAL"
+                                          children:
+                                            - type: "LBRACE"
+                                              text: "{"
+                                            - type: "WHITE_SPACE"
+                                              text: " "
+                                            - type: "BLOCK"
+                                              children:
+                                                - type: "REFERENCE_EXPRESSION"
+                                                  children:
+                                                    - type: "IDENTIFIER"
+                                                      text: "UNKNOWN_CAUSE_MESSAGE"
+                                            - type: "WHITE_SPACE"
+                                              text: " "
+                                            - type: "RBRACE"
+                                              text: "}"
+                    - type: "WHITE_SPACE"
+                      text: "\n        "
+                    - type: "RBRACE"
+                      text: "}"
+            - type: "WHITE_SPACE"
+              text: "\n\n    "
+            - type: "OBJECT_DECLARATION"
+              children:
+                - type: "MODIFIER_LIST"
+                  children:
+                    - type: "private"
+                      text: "private"
+                    - type: "WHITE_SPACE"
+                      text: " "
+                    - type: "companion"
+                      text: "companion"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "object"
+                  text: "object"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "CLASS_BODY"
+                  children:
+                    - type: "LBRACE"
+                      text: "{"
+                    - type: "WHITE_SPACE"
+                      text: "\n        "
+                    - type: "PROPERTY"
+                      children:
+                        - type: "val"
+                          text: "val"
+                        - type: "WHITE_SPACE"
+                          text: " "
+                        - type: "IDENTIFIER"
+                          text: "COUNT_DESC_AND_RULE_ID_ASC_COMPARATOR"
+                        - type: "WHITE_SPACE"
+                          text: " "
+                        - type: "EQ"
+                          text: "="
+                        - type: "WHITE_SPACE"
+                          text: "\n            "
+                        - type: "DOT_QUALIFIED_EXPRESSION"
+                          children:
+                            - type: "DOT_QUALIFIED_EXPRESSION"
+                              children:
+                                - type: "DOT_QUALIFIED_EXPRESSION"
+                                  children:
+                                    - type: "REFERENCE_EXPRESSION"
+                                      children:
+                                        - type: "IDENTIFIER"
+                                          text: "kotlin"
+                                    - type: "WHITE_SPACE"
+                                      text: "\n                "
+                                    - type: "DOT"
+                                      text: "."
+                                    - type: "CALL_EXPRESSION"
+                                      children:
+                                        - type: "REFERENCE_EXPRESSION"
+                                          children:
+                                            - type: "IDENTIFIER"
+                                              text: "Comparator"
+                                        - type: "TYPE_ARGUMENT_LIST"
+                                          children:
+                                            - type: "LT"
+                                              text: "<"
+                                            - type: "TYPE_PROJECTION"
+                                              children:
+                                                - type: "TYPE_REFERENCE"
+                                                  children:
+                                                    - type: "USER_TYPE"
+                                                      children:
+                                                        - type: "REFERENCE_EXPRESSION"
+                                                          children:
+                                                            - type: "IDENTIFIER"
+                                                              text: "Pair"
+                                                        - type: "TYPE_ARGUMENT_LIST"
+                                                          children:
+                                                            - type: "LT"
+                                                              text: "<"
+                                                            - type: "TYPE_PROJECTION"
+                                                              children:
+                                                                - type: "TYPE_REFERENCE"
+                                                                  children:
+                                                                    - type: "USER_TYPE"
+                                                                      children:
+                                                                        - type: "REFERENCE_EXPRESSION"
+                                                                          children:
+                                                                            - type: "IDENTIFIER"
+                                                                              text: "String"
+                                                            - type: "COMMA"
+                                                              text: ","
+                                                            - type: "WHITE_SPACE"
+                                                              text: " "
+                                                            - type: "TYPE_PROJECTION"
+                                                              children:
+                                                                - type: "TYPE_REFERENCE"
+                                                                  children:
+                                                                    - type: "USER_TYPE"
+                                                                      children:
+                                                                        - type: "REFERENCE_EXPRESSION"
+                                                                          children:
+                                                                            - type: "IDENTIFIER"
+                                                                              text: "Long"
+                                                            - type: "GT"
+                                                              text: ">"
+                                            - type: "GT"
+                                              text: ">"
+                                        - type: "WHITE_SPACE"
+                                          text: " "
+                                        - type: "LAMBDA_ARGUMENT"
+                                          children:
+                                            - type: "LAMBDA_EXPRESSION"
+                                              children:
+                                                - type: "FUNCTION_LITERAL"
+                                                  children:
+                                                    - type: "LBRACE"
+                                                      text: "{"
+                                                    - type: "WHITE_SPACE"
+                                                      text: " "
+                                                    - type: "VALUE_PARAMETER_LIST"
+                                                      children:
+                                                        - type: "VALUE_PARAMETER"
+                                                          children:
+                                                            - type: "IDENTIFIER"
+                                                              text: "left"
+                                                        - type: "COMMA"
+                                                          text: ","
+                                                        - type: "WHITE_SPACE"
+                                                          text: " "
+                                                        - type: "VALUE_PARAMETER"
+                                                          children:
+                                                            - type: "IDENTIFIER"
+                                                              text: "right"
+                                                    - type: "WHITE_SPACE"
+                                                      text: " "
+                                                    - type: "ARROW"
+                                                      text: "->"
+                                                    - type: "WHITE_SPACE"
+                                                      text: "\n                    "
+                                                    - type: "BLOCK"
+                                                      children:
+                                                        - type: "CALL_EXPRESSION"
+                                                          children:
+                                                            - type: "REFERENCE_EXPRESSION"
+                                                              children:
+                                                                - type: "IDENTIFIER"
+                                                                  text: "compareValuesBy"
+                                                            - type: "VALUE_ARGUMENT_LIST"
+                                                              children:
+                                                                - type: "LPAR"
+                                                                  text: "("
+                                                                - type: "VALUE_ARGUMENT"
+                                                                  children:
+                                                                    - type: "REFERENCE_EXPRESSION"
+                                                                      children:
+                                                                        - type: "IDENTIFIER"
+                                                                          text: "left"
+                                                                - type: "COMMA"
+                                                                  text: ","
+                                                                - type: "WHITE_SPACE"
+                                                                  text: " "
+                                                                - type: "VALUE_ARGUMENT"
+                                                                  children:
+                                                                    - type: "REFERENCE_EXPRESSION"
+                                                                      children:
+                                                                        - type: "IDENTIFIER"
+                                                                          text: "right"
+                                                                - type: "RPAR"
+                                                                  text: ")"
+                                                            - type: "WHITE_SPACE"
+                                                              text: " "
+                                                            - type: "LAMBDA_ARGUMENT"
+                                                              children:
+                                                                - type: "LAMBDA_EXPRESSION"
+                                                                  children:
+                                                                    - type: "FUNCTION_LITERAL"
+                                                                      children:
+                                                                        - type: "LBRACE"
+                                                                          text: "{"
+                                                                        - type: "WHITE_SPACE"
+                                                                          text: " "
+                                                                        - type: "BLOCK"
+                                                                          children:
+                                                                            - type: "DOT_QUALIFIED_EXPRESSION"
+                                                                              children:
+                                                                                - type: "REFERENCE_EXPRESSION"
+                                                                                  children:
+                                                                                    - type: "IDENTIFIER"
+                                                                                      text: "it"
+                                                                                - type: "DOT"
+                                                                                  text: "."
+                                                                                - type: "REFERENCE_EXPRESSION"
+                                                                                  children:
+                                                                                    - type: "IDENTIFIER"
+                                                                                      text: "second"
+                                                                        - type: "WHITE_SPACE"
+                                                                          text: " "
+                                                                        - type: "RBRACE"
+                                                                          text: "}"
+                                                    - type: "WHITE_SPACE"
+                                                      text: "\n                "
+                                                    - type: "RBRACE"
+                                                      text: "}"
+                                - type: "DOT"
+                                  text: "."
+                                - type: "CALL_EXPRESSION"
+                                  children:
+                                    - type: "REFERENCE_EXPRESSION"
+                                      children:
+                                        - type: "IDENTIFIER"
+                                          text: "reversed"
+                                    - type: "VALUE_ARGUMENT_LIST"
+                                      children:
+                                        - type: "LPAR"
+                                          text: "("
+                                        - type: "RPAR"
+                                          text: ")"
+                            - type: "WHITE_SPACE"
+                              text: "\n                "
+                            - type: "DOT"
+                              text: "."
+                            - type: "CALL_EXPRESSION"
+                              children:
+                                - type: "REFERENCE_EXPRESSION"
+                                  children:
+                                    - type: "IDENTIFIER"
+                                      text: "thenComparator"
+                                - type: "WHITE_SPACE"
+                                  text: " "
+                                - type: "LAMBDA_ARGUMENT"
+                                  children:
+                                    - type: "LAMBDA_EXPRESSION"
+                                      children:
+                                        - type: "FUNCTION_LITERAL"
+                                          children:
+                                            - type: "LBRACE"
+                                              text: "{"
+                                            - type: "WHITE_SPACE"
+                                              text: " "
+                                            - type: "VALUE_PARAMETER_LIST"
+                                              children:
+                                                - type: "VALUE_PARAMETER"
+                                                  children:
+                                                    - type: "IDENTIFIER"
+                                                      text: "left"
+                                                - type: "COMMA"
+                                                  text: ","
+                                                - type: "WHITE_SPACE"
+                                                  text: " "
+                                                - type: "VALUE_PARAMETER"
+                                                  children:
+                                                    - type: "IDENTIFIER"
+                                                      text: "right"
+                                            - type: "WHITE_SPACE"
+                                              text: " "
+                                            - type: "ARROW"
+                                              text: "->"
+                                            - type: "WHITE_SPACE"
+                                              text: "\n                    "
+                                            - type: "BLOCK"
+                                              children:
+                                                - type: "CALL_EXPRESSION"
+                                                  children:
+                                                    - type: "REFERENCE_EXPRESSION"
+                                                      children:
+                                                        - type: "IDENTIFIER"
+                                                          text: "compareValuesBy"
+                                                    - type: "VALUE_ARGUMENT_LIST"
+                                                      children:
+                                                        - type: "LPAR"
+                                                          text: "("
+                                                        - type: "VALUE_ARGUMENT"
+                                                          children:
+                                                            - type: "REFERENCE_EXPRESSION"
+                                                              children:
+                                                                - type: "IDENTIFIER"
+                                                                  text: "left"
+                                                        - type: "COMMA"
+                                                          text: ","
+                                                        - type: "WHITE_SPACE"
+                                                          text: " "
+                                                        - type: "VALUE_ARGUMENT"
+                                                          children:
+                                                            - type: "REFERENCE_EXPRESSION"
+                                                              children:
+                                                                - type: "IDENTIFIER"
+                                                                  text: "right"
+                                                        - type: "RPAR"
+                                                          text: ")"
+                                                    - type: "WHITE_SPACE"
+                                                      text: " "
+                                                    - type: "LAMBDA_ARGUMENT"
+                                                      children:
+                                                        - type: "LAMBDA_EXPRESSION"
+                                                          children:
+                                                            - type: "FUNCTION_LITERAL"
+                                                              children:
+                                                                - type: "LBRACE"
+                                                                  text: "{"
+                                                                - type: "WHITE_SPACE"
+                                                                  text: " "
+                                                                - type: "BLOCK"
+                                                                  children:
+                                                                    - type: "DOT_QUALIFIED_EXPRESSION"
+                                                                      children:
+                                                                        - type: "REFERENCE_EXPRESSION"
+                                                                          children:
+                                                                            - type: "IDENTIFIER"
+                                                                              text: "it"
+                                                                        - type: "DOT"
+                                                                          text: "."
+                                                                        - type: "REFERENCE_EXPRESSION"
+                                                                          children:
+                                                                            - type: "IDENTIFIER"
+                                                                              text: "first"
+                                                                - type: "WHITE_SPACE"
+                                                                  text: " "
+                                                                - type: "RBRACE"
+                                                                  text: "}"
+                                            - type: "WHITE_SPACE"
+                                              text: "\n                "
+                                            - type: "RBRACE"
+                                              text: "}"
+                    - type: "WHITE_SPACE"
+                      text: "\n\n        "
+                    - type: "PROPERTY"
+                      children:
+                        - type: "MODIFIER_LIST"
+                          children:
+                            - type: "const"
+                              text: "const"
+                        - type: "WHITE_SPACE"
+                          text: " "
+                        - type: "val"
+                          text: "val"
+                        - type: "WHITE_SPACE"
+                          text: " "
+                        - type: "IDENTIFIER"
+                          text: "KOTLIN_PARSE_EXCEPTION_MESSAGE"
+                        - type: "WHITE_SPACE"
+                          text: " "
+                        - type: "EQ"
+                          text: "="
+                        - type: "WHITE_SPACE"
+                          text: " "
+                        - type: "STRING_TEMPLATE"
+                          children:
+                            - type: "OPEN_QUOTE"
+                              text: "\""
+                            - type: "LITERAL_STRING_TEMPLATE_ENTRY"
+                              children:
+                                - type: "REGULAR_STRING_PART"
+                                  text: "Not a valid Kotlin file"
+                            - type: "CLOSING_QUOTE"
+                              text: "\""
+                    - type: "WHITE_SPACE"
+                      text: "\n        "
+                    - type: "PROPERTY"
+                      children:
+                        - type: "MODIFIER_LIST"
+                          children:
+                            - type: "const"
+                              text: "const"
+                        - type: "WHITE_SPACE"
+                          text: " "
+                        - type: "val"
+                          text: "val"
+                        - type: "WHITE_SPACE"
+                          text: " "
+                        - type: "IDENTIFIER"
+                          text: "KTLINT_RULE_ENGINE_EXCEPTION_MESSAGE"
+                        - type: "WHITE_SPACE"
+                          text: " "
+                        - type: "EQ"
+                          text: "="
+                        - type: "WHITE_SPACE"
+                          text: " "
+                        - type: "STRING_TEMPLATE"
+                          children:
+                            - type: "OPEN_QUOTE"
+                              text: "\""
+                            - type: "LITERAL_STRING_TEMPLATE_ENTRY"
+                              children:
+                                - type: "REGULAR_STRING_PART"
+                                  text: "An internal error occurred in the Ktlint Rule Engine"
+                            - type: "CLOSING_QUOTE"
+                              text: "\""
+                    - type: "WHITE_SPACE"
+                      text: "\n        "
+                    - type: "PROPERTY"
+                      children:
+                        - type: "MODIFIER_LIST"
+                          children:
+                            - type: "const"
+                              text: "const"
+                        - type: "WHITE_SPACE"
+                          text: " "
+                        - type: "val"
+                          text: "val"
+                        - type: "WHITE_SPACE"
+                          text: " "
+                        - type: "IDENTIFIER"
+                          text: "UNKNOWN_CAUSE_MESSAGE"
+                        - type: "WHITE_SPACE"
+                          text: " "
+                        - type: "EQ"
+                          text: "="
+                        - type: "WHITE_SPACE"
+                          text: " "
+                        - type: "STRING_TEMPLATE"
+                          children:
+                            - type: "OPEN_QUOTE"
+                              text: "\""
+                            - type: "LITERAL_STRING_TEMPLATE_ENTRY"
+                              children:
+                                - type: "REGULAR_STRING_PART"
+                                  text: "Unknown"
+                            - type: "CLOSING_QUOTE"
+                              text: "\""
+                    - type: "WHITE_SPACE"
+                      text: "\n    "
+                    - type: "RBRACE"
+                      text: "}"
+            - type: "WHITE_SPACE"
+              text: "\n"
+            - type: "RBRACE"
+              text: "}"
+    - type: "WHITE_SPACE"
+      text: "\n"

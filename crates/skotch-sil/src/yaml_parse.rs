@@ -99,7 +99,9 @@ impl<'a> Parser<'a> {
         self.skip_empty();
         loop {
             self.skip_empty();
-            let (indent, content) = self.current().ok_or_else(|| self.err("unexpected EOF in header"))?;
+            let (indent, content) = self
+                .current()
+                .ok_or_else(|| self.err("unexpected EOF in header"))?;
             if indent != 0 {
                 return Err(self.err(format!(
                     "expected header field at indent 0 (got indent {})",
@@ -115,9 +117,9 @@ impl<'a> Parser<'a> {
             match key {
                 "file" => file = parse_string_literal(value, self)?,
                 "source_length" => {
-                    source_length = value.parse::<u32>().map_err(|_| {
-                        self.err(format!("invalid source_length: {:?}", value))
-                    })?
+                    source_length = value
+                        .parse::<u32>()
+                        .map_err(|_| self.err(format!("invalid source_length: {:?}", value)))?
                 }
                 "crlf_normalized" => match value {
                     "true" => crlf_normalized = true,
@@ -149,7 +151,11 @@ impl<'a> Parser<'a> {
     ///
     /// When `as_list_item` is true the line opens with `- ` and the
     /// rest of the node's fields live at `expected_indent + 2`.
-    fn parse_node(&mut self, expected_indent: usize, as_list_item: bool) -> Result<SilNode, YamlParseError> {
+    fn parse_node(
+        &mut self,
+        expected_indent: usize,
+        as_list_item: bool,
+    ) -> Result<SilNode, YamlParseError> {
         self.skip_empty();
         let (indent, content) = self
             .current()
@@ -169,10 +175,7 @@ impl<'a> Parser<'a> {
             (content, expected_indent)
         };
         let (key, value) = split_kv(head_content).ok_or_else(|| {
-            self.err(format!(
-                "expected `type: \"...\"` (got {:?})",
-                head_content
-            ))
+            self.err(format!("expected `type: \"...\"` (got {:?})", head_content))
         })?;
         if key != "type" {
             return Err(self.err(format!("expected `type:`, got {:?}", key)));
@@ -205,7 +208,10 @@ impl<'a> Parser<'a> {
             )));
         }
         let (key, value) = split_kv(content).ok_or_else(|| {
-            self.err(format!("expected `text:` or `children:` (got {:?})", content))
+            self.err(format!(
+                "expected `text:` or `children:` (got {:?})",
+                content
+            ))
         })?;
         let (data, span) = match key {
             "text" => {
@@ -236,10 +242,8 @@ impl<'a> Parser<'a> {
                             break;
                         }
                         if i > child_indent {
-                            return Err(self.err(format!(
-                                "child indented {} (expected {})",
-                                i, child_indent
-                            )));
+                            return Err(self
+                                .err(format!("child indented {} (expected {})", i, child_indent)));
                         }
                         if !c.starts_with("- ") {
                             break;
@@ -325,12 +329,8 @@ fn parse_string_literal(value: &str, p: &Parser<'_>) -> Result<String, YamlParse
             'r' => out.push('\r'),
             't' => out.push('\t'),
             'x' => {
-                let h1 = chars
-                    .next()
-                    .ok_or_else(|| p.err("short \\xHH escape"))?;
-                let h2 = chars
-                    .next()
-                    .ok_or_else(|| p.err("short \\xHH escape"))?;
+                let h1 = chars.next().ok_or_else(|| p.err("short \\xHH escape"))?;
+                let h2 = chars.next().ok_or_else(|| p.err("short \\xHH escape"))?;
                 let hex = format!("{}{}", h1, h2);
                 let code = u32::from_str_radix(&hex, 16)
                     .map_err(|_| p.err(format!("invalid hex in \\x{}{}", h1, h2)))?;
@@ -432,6 +432,8 @@ mod tests {
         };
         assert_eq!(children.len(), 1);
         assert_eq!(children[0].kind, SyntaxKind::IMPORT_LIST);
-        assert!(matches!(&children[0].data, SilData::Composite { children } if children.is_empty()));
+        assert!(
+            matches!(&children[0].data, SilData::Composite { children } if children.is_empty())
+        );
     }
 }

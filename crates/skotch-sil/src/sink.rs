@@ -83,15 +83,17 @@ impl SilSink {
             "SilSink::finish with {} unclosed nodes",
             self.open.len()
         );
-        let root = self.root.take().unwrap_or_else(|| SilNode::composite(
-            SyntaxKind::FILE,
-            vec![],
-            Span {
-                file: self.file_id,
-                start: 0,
-                end: 0,
-            },
-        ));
+        let root = self.root.take().unwrap_or_else(|| {
+            SilNode::composite(
+                SyntaxKind::FILE,
+                vec![],
+                Span {
+                    file: self.file_id,
+                    start: 0,
+                    end: 0,
+                },
+            )
+        });
         SilTree {
             file: self.file,
             source_length: self.source_length,
@@ -165,11 +167,81 @@ impl TreeSink for SilSink {
         // Doc comments arrive as a single `KDOC` token from the
         // lexer; expand them into the structured `KDoc` sub-tree
         // here so the SIL output matches kotlinc PSI shape.
-        let node = if kind == SyntaxKind::KDOC && text.starts_with("/**") && text.ends_with("*/") {
-            parse_kdoc(text, span.start, self.file_id)
-        } else {
-            SilNode::token(kind, text, span)
-        };
+        if kind == SyntaxKind::KDOC && text.starts_with("/**") && text.ends_with("*/") {
+            let node = parse_kdoc(text, span.start, self.file_id);
+            self.attach(node, span);
+            return;
+        }
+
+        // `$ident` short-template entry: kotlinc PSI splits this into
+        // a leading `$` (SHORT_TEMPLATE_ENTRY_START) plus a
+        // REFERENCE_EXPRESSION wrapping the identifier. The lexer
+        // emits the entire `$ident` as one STRING_IDENT_REF token —
+        // synthesize the split here.
+        if kind == SyntaxKind::STRING_IDENT_REF && text.starts_with('$') && text.len() > 1 {
+            let dollar_span = Span {
+                file: self.file_id,
+                start: span.start,
+                end: span.start + 1,
+            };
+            let ident_span = Span {
+                file: self.file_id,
+                start: span.start + 1,
+                end: span.end,
+            };
+            // The `$` token uses SHORT_TEMPLATE_ENTRY_START kind via
+            // the yaml_kind mapping; we keep it on STRING_IDENT_REF
+            // here so name lookup stays consistent.
+            let dollar = SilNode::token(SyntaxKind::STRING_IDENT_REF, "$", dollar_span);
+            // `$this` is the THIS_EXPRESSION form of a short template
+            // entry. kotlinc wraps it as
+            //   SHORT_STRING_TEMPLATE_ENTRY { $ THIS_EXPRESSION { REF { this } } }
+            // rather than the plain `$ident` REF shape.
+            let ident_text = &text[1..];
+            let ref_kind = if ident_text == "this" {
+                SyntaxKind::KW_THIS
+            } else {
+                SyntaxKind::IDENTIFIER
+            };
+            let ident = SilNode::token(ref_kind, ident_text, ident_span);
+            let ref_expr = SilNode {
+                kind: SyntaxKind::REFERENCE_EXPRESSION,
+                span: ident_span,
+                data: crate::tree::SilData::Composite {
+                    children: vec![ident],
+                },
+            };
+            self.attach(dollar, dollar_span);
+            if ident_text == "this" {
+                let this_expr = SilNode {
+                    kind: SyntaxKind::THIS_EXPRESSION,
+                    span: ident_span,
+                    data: crate::tree::SilData::Composite {
+                        children: vec![ref_expr],
+                    },
+                };
+                self.attach(this_expr, ident_span);
+            } else {
+                self.attach(ref_expr, ident_span);
+            }
+            return;
+        }
+
+        let node = SilNode::token(kind, text, span);
+        self.attach(node, span);
+    }
+
+    fn error(&mut self, message: &str, _span: Span) {
+        let _ = (); // keep signature shape for the helper below
+        self.record_error(message);
+    }
+}
+
+impl SilSink {
+    /// Attach `node` to the currently-open composite (or set as root
+    /// if nothing is open). Updates the parent's span range so the
+    /// composite covers all its children.
+    fn attach(&mut self, node: SilNode, span: Span) {
         if let Some(parent) = self.open.last_mut() {
             if parent.start == u32::MAX {
                 parent.start = span.start;
@@ -179,14 +251,11 @@ impl TreeSink for SilSink {
             parent.end = parent.end.max(span.end);
             parent.children.push(node);
         } else {
-            // Top-level token with no surrounding composite is a
-            // parser-bug condition; preserve it as the root rather
-            // than dropping it on the floor.
             self.root = Some(node);
         }
     }
 
-    fn error(&mut self, message: &str, _span: Span) {
+    fn record_error(&mut self, message: &str) {
         // Attach to the innermost open composite. If we're at top
         // level, push a synthetic ERROR_ELEMENT so the message is
         // captured somewhere.

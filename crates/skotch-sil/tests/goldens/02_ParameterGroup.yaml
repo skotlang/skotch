@@ -1,0 +1,2658 @@
+file: "02_ParameterGroup.kt"
+source_length: 3793
+crlf_normalized: false
+ast:
+  type: "kotlin.FILE"
+  children:
+    - type: "PACKAGE_DIRECTIVE"
+      children:
+        - type: "package"
+          text: "package"
+        - type: "WHITE_SPACE"
+          text: " "
+        - type: "DOT_QUALIFIED_EXPRESSION"
+          children:
+            - type: "DOT_QUALIFIED_EXPRESSION"
+              children:
+                - type: "DOT_QUALIFIED_EXPRESSION"
+                  children:
+                    - type: "DOT_QUALIFIED_EXPRESSION"
+                      children:
+                        - type: "DOT_QUALIFIED_EXPRESSION"
+                          children:
+                            - type: "REFERENCE_EXPRESSION"
+                              children:
+                                - type: "IDENTIFIER"
+                                  text: "com"
+                            - type: "DOT"
+                              text: "."
+                            - type: "REFERENCE_EXPRESSION"
+                              children:
+                                - type: "IDENTIFIER"
+                                  text: "github"
+                        - type: "DOT"
+                          text: "."
+                        - type: "REFERENCE_EXPRESSION"
+                          children:
+                            - type: "IDENTIFIER"
+                              text: "ajalt"
+                    - type: "DOT"
+                      text: "."
+                    - type: "REFERENCE_EXPRESSION"
+                      children:
+                        - type: "IDENTIFIER"
+                          text: "clikt"
+                - type: "DOT"
+                  text: "."
+                - type: "REFERENCE_EXPRESSION"
+                  children:
+                    - type: "IDENTIFIER"
+                      text: "parameters"
+            - type: "DOT"
+              text: "."
+            - type: "REFERENCE_EXPRESSION"
+              children:
+                - type: "IDENTIFIER"
+                  text: "groups"
+    - type: "WHITE_SPACE"
+      text: "\n\n"
+    - type: "IMPORT_LIST"
+      children:
+        - type: "IMPORT_DIRECTIVE"
+          children:
+            - type: "import"
+              text: "import"
+            - type: "WHITE_SPACE"
+              text: " "
+            - type: "DOT_QUALIFIED_EXPRESSION"
+              children:
+                - type: "DOT_QUALIFIED_EXPRESSION"
+                  children:
+                    - type: "DOT_QUALIFIED_EXPRESSION"
+                      children:
+                        - type: "DOT_QUALIFIED_EXPRESSION"
+                          children:
+                            - type: "DOT_QUALIFIED_EXPRESSION"
+                              children:
+                                - type: "REFERENCE_EXPRESSION"
+                                  children:
+                                    - type: "IDENTIFIER"
+                                      text: "com"
+                                - type: "DOT"
+                                  text: "."
+                                - type: "REFERENCE_EXPRESSION"
+                                  children:
+                                    - type: "IDENTIFIER"
+                                      text: "github"
+                            - type: "DOT"
+                              text: "."
+                            - type: "REFERENCE_EXPRESSION"
+                              children:
+                                - type: "IDENTIFIER"
+                                  text: "ajalt"
+                        - type: "DOT"
+                          text: "."
+                        - type: "REFERENCE_EXPRESSION"
+                          children:
+                            - type: "IDENTIFIER"
+                              text: "clikt"
+                    - type: "DOT"
+                      text: "."
+                    - type: "REFERENCE_EXPRESSION"
+                      children:
+                        - type: "IDENTIFIER"
+                          text: "core"
+                - type: "DOT"
+                  text: "."
+                - type: "REFERENCE_EXPRESSION"
+                  children:
+                    - type: "IDENTIFIER"
+                      text: "BaseCliktCommand"
+        - type: "WHITE_SPACE"
+          text: "\n"
+        - type: "IMPORT_DIRECTIVE"
+          children:
+            - type: "import"
+              text: "import"
+            - type: "WHITE_SPACE"
+              text: " "
+            - type: "DOT_QUALIFIED_EXPRESSION"
+              children:
+                - type: "DOT_QUALIFIED_EXPRESSION"
+                  children:
+                    - type: "DOT_QUALIFIED_EXPRESSION"
+                      children:
+                        - type: "DOT_QUALIFIED_EXPRESSION"
+                          children:
+                            - type: "DOT_QUALIFIED_EXPRESSION"
+                              children:
+                                - type: "REFERENCE_EXPRESSION"
+                                  children:
+                                    - type: "IDENTIFIER"
+                                      text: "com"
+                                - type: "DOT"
+                                  text: "."
+                                - type: "REFERENCE_EXPRESSION"
+                                  children:
+                                    - type: "IDENTIFIER"
+                                      text: "github"
+                            - type: "DOT"
+                              text: "."
+                            - type: "REFERENCE_EXPRESSION"
+                              children:
+                                - type: "IDENTIFIER"
+                                  text: "ajalt"
+                        - type: "DOT"
+                          text: "."
+                        - type: "REFERENCE_EXPRESSION"
+                          children:
+                            - type: "IDENTIFIER"
+                              text: "clikt"
+                    - type: "DOT"
+                      text: "."
+                    - type: "REFERENCE_EXPRESSION"
+                      children:
+                        - type: "IDENTIFIER"
+                          text: "core"
+                - type: "DOT"
+                  text: "."
+                - type: "REFERENCE_EXPRESSION"
+                  children:
+                    - type: "IDENTIFIER"
+                      text: "Context"
+        - type: "WHITE_SPACE"
+          text: "\n"
+        - type: "IMPORT_DIRECTIVE"
+          children:
+            - type: "import"
+              text: "import"
+            - type: "WHITE_SPACE"
+              text: " "
+            - type: "DOT_QUALIFIED_EXPRESSION"
+              children:
+                - type: "DOT_QUALIFIED_EXPRESSION"
+                  children:
+                    - type: "DOT_QUALIFIED_EXPRESSION"
+                      children:
+                        - type: "DOT_QUALIFIED_EXPRESSION"
+                          children:
+                            - type: "DOT_QUALIFIED_EXPRESSION"
+                              children:
+                                - type: "REFERENCE_EXPRESSION"
+                                  children:
+                                    - type: "IDENTIFIER"
+                                      text: "com"
+                                - type: "DOT"
+                                  text: "."
+                                - type: "REFERENCE_EXPRESSION"
+                                  children:
+                                    - type: "IDENTIFIER"
+                                      text: "github"
+                            - type: "DOT"
+                              text: "."
+                            - type: "REFERENCE_EXPRESSION"
+                              children:
+                                - type: "IDENTIFIER"
+                                  text: "ajalt"
+                        - type: "DOT"
+                          text: "."
+                        - type: "REFERENCE_EXPRESSION"
+                          children:
+                            - type: "IDENTIFIER"
+                              text: "clikt"
+                    - type: "DOT"
+                      text: "."
+                    - type: "REFERENCE_EXPRESSION"
+                      children:
+                        - type: "IDENTIFIER"
+                          text: "core"
+                - type: "DOT"
+                  text: "."
+                - type: "REFERENCE_EXPRESSION"
+                  children:
+                    - type: "IDENTIFIER"
+                      text: "GroupableOption"
+        - type: "WHITE_SPACE"
+          text: "\n"
+        - type: "IMPORT_DIRECTIVE"
+          children:
+            - type: "import"
+              text: "import"
+            - type: "WHITE_SPACE"
+              text: " "
+            - type: "DOT_QUALIFIED_EXPRESSION"
+              children:
+                - type: "DOT_QUALIFIED_EXPRESSION"
+                  children:
+                    - type: "DOT_QUALIFIED_EXPRESSION"
+                      children:
+                        - type: "DOT_QUALIFIED_EXPRESSION"
+                          children:
+                            - type: "DOT_QUALIFIED_EXPRESSION"
+                              children:
+                                - type: "REFERENCE_EXPRESSION"
+                                  children:
+                                    - type: "IDENTIFIER"
+                                      text: "com"
+                                - type: "DOT"
+                                  text: "."
+                                - type: "REFERENCE_EXPRESSION"
+                                  children:
+                                    - type: "IDENTIFIER"
+                                      text: "github"
+                            - type: "DOT"
+                              text: "."
+                            - type: "REFERENCE_EXPRESSION"
+                              children:
+                                - type: "IDENTIFIER"
+                                  text: "ajalt"
+                        - type: "DOT"
+                          text: "."
+                        - type: "REFERENCE_EXPRESSION"
+                          children:
+                            - type: "IDENTIFIER"
+                              text: "clikt"
+                    - type: "DOT"
+                      text: "."
+                    - type: "REFERENCE_EXPRESSION"
+                      children:
+                        - type: "IDENTIFIER"
+                          text: "core"
+                - type: "DOT"
+                  text: "."
+                - type: "REFERENCE_EXPRESSION"
+                  children:
+                    - type: "IDENTIFIER"
+                      text: "ParameterHolder"
+        - type: "WHITE_SPACE"
+          text: "\n"
+        - type: "IMPORT_DIRECTIVE"
+          children:
+            - type: "import"
+              text: "import"
+            - type: "WHITE_SPACE"
+              text: " "
+            - type: "DOT_QUALIFIED_EXPRESSION"
+              children:
+                - type: "DOT_QUALIFIED_EXPRESSION"
+                  children:
+                    - type: "DOT_QUALIFIED_EXPRESSION"
+                      children:
+                        - type: "DOT_QUALIFIED_EXPRESSION"
+                          children:
+                            - type: "DOT_QUALIFIED_EXPRESSION"
+                              children:
+                                - type: "REFERENCE_EXPRESSION"
+                                  children:
+                                    - type: "IDENTIFIER"
+                                      text: "com"
+                                - type: "DOT"
+                                  text: "."
+                                - type: "REFERENCE_EXPRESSION"
+                                  children:
+                                    - type: "IDENTIFIER"
+                                      text: "github"
+                            - type: "DOT"
+                              text: "."
+                            - type: "REFERENCE_EXPRESSION"
+                              children:
+                                - type: "IDENTIFIER"
+                                  text: "ajalt"
+                        - type: "DOT"
+                          text: "."
+                        - type: "REFERENCE_EXPRESSION"
+                          children:
+                            - type: "IDENTIFIER"
+                              text: "clikt"
+                    - type: "DOT"
+                      text: "."
+                    - type: "REFERENCE_EXPRESSION"
+                      children:
+                        - type: "IDENTIFIER"
+                          text: "internal"
+                - type: "DOT"
+                  text: "."
+                - type: "REFERENCE_EXPRESSION"
+                  children:
+                    - type: "IDENTIFIER"
+                      text: "finalizeOptions"
+        - type: "WHITE_SPACE"
+          text: "\n"
+        - type: "IMPORT_DIRECTIVE"
+          children:
+            - type: "import"
+              text: "import"
+            - type: "WHITE_SPACE"
+              text: " "
+            - type: "DOT_QUALIFIED_EXPRESSION"
+              children:
+                - type: "DOT_QUALIFIED_EXPRESSION"
+                  children:
+                    - type: "DOT_QUALIFIED_EXPRESSION"
+                      children:
+                        - type: "DOT_QUALIFIED_EXPRESSION"
+                          children:
+                            - type: "DOT_QUALIFIED_EXPRESSION"
+                              children:
+                                - type: "REFERENCE_EXPRESSION"
+                                  children:
+                                    - type: "IDENTIFIER"
+                                      text: "com"
+                                - type: "DOT"
+                                  text: "."
+                                - type: "REFERENCE_EXPRESSION"
+                                  children:
+                                    - type: "IDENTIFIER"
+                                      text: "github"
+                            - type: "DOT"
+                              text: "."
+                            - type: "REFERENCE_EXPRESSION"
+                              children:
+                                - type: "IDENTIFIER"
+                                  text: "ajalt"
+                        - type: "DOT"
+                          text: "."
+                        - type: "REFERENCE_EXPRESSION"
+                          children:
+                            - type: "IDENTIFIER"
+                              text: "clikt"
+                    - type: "DOT"
+                      text: "."
+                    - type: "REFERENCE_EXPRESSION"
+                      children:
+                        - type: "IDENTIFIER"
+                          text: "output"
+                - type: "DOT"
+                  text: "."
+                - type: "REFERENCE_EXPRESSION"
+                  children:
+                    - type: "IDENTIFIER"
+                      text: "HelpFormatter"
+        - type: "WHITE_SPACE"
+          text: "\n"
+        - type: "IMPORT_DIRECTIVE"
+          children:
+            - type: "import"
+              text: "import"
+            - type: "WHITE_SPACE"
+              text: " "
+            - type: "DOT_QUALIFIED_EXPRESSION"
+              children:
+                - type: "DOT_QUALIFIED_EXPRESSION"
+                  children:
+                    - type: "DOT_QUALIFIED_EXPRESSION"
+                      children:
+                        - type: "DOT_QUALIFIED_EXPRESSION"
+                          children:
+                            - type: "DOT_QUALIFIED_EXPRESSION"
+                              children:
+                                - type: "DOT_QUALIFIED_EXPRESSION"
+                                  children:
+                                    - type: "REFERENCE_EXPRESSION"
+                                      children:
+                                        - type: "IDENTIFIER"
+                                          text: "com"
+                                    - type: "DOT"
+                                      text: "."
+                                    - type: "REFERENCE_EXPRESSION"
+                                      children:
+                                        - type: "IDENTIFIER"
+                                          text: "github"
+                                - type: "DOT"
+                                  text: "."
+                                - type: "REFERENCE_EXPRESSION"
+                                  children:
+                                    - type: "IDENTIFIER"
+                                      text: "ajalt"
+                            - type: "DOT"
+                              text: "."
+                            - type: "REFERENCE_EXPRESSION"
+                              children:
+                                - type: "IDENTIFIER"
+                                  text: "clikt"
+                        - type: "DOT"
+                          text: "."
+                        - type: "REFERENCE_EXPRESSION"
+                          children:
+                            - type: "IDENTIFIER"
+                              text: "parameters"
+                    - type: "DOT"
+                      text: "."
+                    - type: "REFERENCE_EXPRESSION"
+                      children:
+                        - type: "IDENTIFIER"
+                          text: "options"
+                - type: "DOT"
+                  text: "."
+                - type: "REFERENCE_EXPRESSION"
+                  children:
+                    - type: "IDENTIFIER"
+                      text: "Option"
+        - type: "WHITE_SPACE"
+          text: "\n"
+        - type: "IMPORT_DIRECTIVE"
+          children:
+            - type: "import"
+              text: "import"
+            - type: "WHITE_SPACE"
+              text: " "
+            - type: "DOT_QUALIFIED_EXPRESSION"
+              children:
+                - type: "DOT_QUALIFIED_EXPRESSION"
+                  children:
+                    - type: "DOT_QUALIFIED_EXPRESSION"
+                      children:
+                        - type: "DOT_QUALIFIED_EXPRESSION"
+                          children:
+                            - type: "DOT_QUALIFIED_EXPRESSION"
+                              children:
+                                - type: "REFERENCE_EXPRESSION"
+                                  children:
+                                    - type: "IDENTIFIER"
+                                      text: "com"
+                                - type: "DOT"
+                                  text: "."
+                                - type: "REFERENCE_EXPRESSION"
+                                  children:
+                                    - type: "IDENTIFIER"
+                                      text: "github"
+                            - type: "DOT"
+                              text: "."
+                            - type: "REFERENCE_EXPRESSION"
+                              children:
+                                - type: "IDENTIFIER"
+                                  text: "ajalt"
+                        - type: "DOT"
+                          text: "."
+                        - type: "REFERENCE_EXPRESSION"
+                          children:
+                            - type: "IDENTIFIER"
+                              text: "clikt"
+                    - type: "DOT"
+                      text: "."
+                    - type: "REFERENCE_EXPRESSION"
+                      children:
+                        - type: "IDENTIFIER"
+                          text: "parsers"
+                - type: "DOT"
+                  text: "."
+                - type: "REFERENCE_EXPRESSION"
+                  children:
+                    - type: "IDENTIFIER"
+                      text: "OptionInvocation"
+        - type: "WHITE_SPACE"
+          text: "\n"
+        - type: "IMPORT_DIRECTIVE"
+          children:
+            - type: "import"
+              text: "import"
+            - type: "WHITE_SPACE"
+              text: " "
+            - type: "DOT_QUALIFIED_EXPRESSION"
+              children:
+                - type: "DOT_QUALIFIED_EXPRESSION"
+                  children:
+                    - type: "REFERENCE_EXPRESSION"
+                      children:
+                        - type: "IDENTIFIER"
+                          text: "kotlin"
+                    - type: "DOT"
+                      text: "."
+                    - type: "REFERENCE_EXPRESSION"
+                      children:
+                        - type: "IDENTIFIER"
+                          text: "properties"
+                - type: "DOT"
+                  text: "."
+                - type: "REFERENCE_EXPRESSION"
+                  children:
+                    - type: "IDENTIFIER"
+                      text: "PropertyDelegateProvider"
+        - type: "WHITE_SPACE"
+          text: "\n"
+        - type: "IMPORT_DIRECTIVE"
+          children:
+            - type: "import"
+              text: "import"
+            - type: "WHITE_SPACE"
+              text: " "
+            - type: "DOT_QUALIFIED_EXPRESSION"
+              children:
+                - type: "DOT_QUALIFIED_EXPRESSION"
+                  children:
+                    - type: "REFERENCE_EXPRESSION"
+                      children:
+                        - type: "IDENTIFIER"
+                          text: "kotlin"
+                    - type: "DOT"
+                      text: "."
+                    - type: "REFERENCE_EXPRESSION"
+                      children:
+                        - type: "IDENTIFIER"
+                          text: "properties"
+                - type: "DOT"
+                  text: "."
+                - type: "REFERENCE_EXPRESSION"
+                  children:
+                    - type: "IDENTIFIER"
+                      text: "ReadOnlyProperty"
+        - type: "WHITE_SPACE"
+          text: "\n"
+        - type: "IMPORT_DIRECTIVE"
+          children:
+            - type: "import"
+              text: "import"
+            - type: "WHITE_SPACE"
+              text: " "
+            - type: "DOT_QUALIFIED_EXPRESSION"
+              children:
+                - type: "DOT_QUALIFIED_EXPRESSION"
+                  children:
+                    - type: "REFERENCE_EXPRESSION"
+                      children:
+                        - type: "IDENTIFIER"
+                          text: "kotlin"
+                    - type: "DOT"
+                      text: "."
+                    - type: "REFERENCE_EXPRESSION"
+                      children:
+                        - type: "IDENTIFIER"
+                          text: "reflect"
+                - type: "DOT"
+                  text: "."
+                - type: "REFERENCE_EXPRESSION"
+                  children:
+                    - type: "IDENTIFIER"
+                      text: "KProperty"
+    - type: "WHITE_SPACE"
+      text: "\n\n"
+    - type: "CLASS"
+      children:
+        - type: "interface"
+          text: "interface"
+        - type: "WHITE_SPACE"
+          text: " "
+        - type: "IDENTIFIER"
+          text: "ParameterGroup"
+        - type: "WHITE_SPACE"
+          text: " "
+        - type: "CLASS_BODY"
+          children:
+            - type: "LBRACE"
+              text: "{"
+            - type: "WHITE_SPACE"
+              text: "\n    "
+            - type: "PROPERTY"
+              children:
+                - type: "KDoc"
+                  children:
+                    - type: "KDOC_START"
+                      text: "/**"
+                    - type: "WHITE_SPACE"
+                      text: "\n     "
+                    - type: "KDOC_SECTION"
+                      children:
+                        - type: "KDOC_LEADING_ASTERISK"
+                          text: "*"
+                        - type: "KDOC_TEXT"
+                          text: " The name of the group, or null if parameters in the group should not be separated from other"
+                        - type: "WHITE_SPACE"
+                          text: "\n     "
+                        - type: "KDOC_LEADING_ASTERISK"
+                          text: "*"
+                        - type: "KDOC_TEXT"
+                          text: " parameters in the help output."
+                    - type: "WHITE_SPACE"
+                      text: "\n     "
+                    - type: "KDOC_END"
+                      text: "*/"
+                - type: "WHITE_SPACE"
+                  text: "\n    "
+                - type: "val"
+                  text: "val"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "IDENTIFIER"
+                  text: "groupName"
+                - type: "COLON"
+                  text: ":"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "TYPE_REFERENCE"
+                  children:
+                    - type: "NULLABLE_TYPE"
+                      children:
+                        - type: "USER_TYPE"
+                          children:
+                            - type: "REFERENCE_EXPRESSION"
+                              children:
+                                - type: "IDENTIFIER"
+                                  text: "String"
+                        - type: "QUEST"
+                          text: "?"
+            - type: "WHITE_SPACE"
+              text: "\n\n    "
+            - type: "PROPERTY"
+              children:
+                - type: "KDoc"
+                  children:
+                    - type: "KDOC_START"
+                      text: "/**"
+                    - type: "WHITE_SPACE"
+                      text: "\n     "
+                    - type: "KDOC_SECTION"
+                      children:
+                        - type: "KDOC_LEADING_ASTERISK"
+                          text: "*"
+                        - type: "KDOC_TEXT"
+                          text: " A help message to display for this group."
+                        - type: "WHITE_SPACE"
+                          text: "\n     "
+                        - type: "KDOC_LEADING_ASTERISK"
+                          text: "*"
+                        - type: "WHITE_SPACE"
+                          text: "\n     "
+                        - type: "KDOC_LEADING_ASTERISK"
+                          text: "*"
+                        - type: "KDOC_TEXT"
+                          text: " If "
+                        - type: "KDOC_MARKDOWN_LINK"
+                          children:
+                            - type: "LBRACKET"
+                              text: "["
+                            - type: "KDOC_NAME"
+                              children:
+                                - type: "IDENTIFIER"
+                                  text: "groupName"
+                            - type: "RBRACKET"
+                              text: "]"
+                        - type: "KDOC_TEXT"
+                          text: " is null, the help formatter will ignore this value."
+                    - type: "WHITE_SPACE"
+                      text: "\n     "
+                    - type: "KDOC_END"
+                      text: "*/"
+                - type: "WHITE_SPACE"
+                  text: "\n    "
+                - type: "val"
+                  text: "val"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "IDENTIFIER"
+                  text: "groupHelp"
+                - type: "COLON"
+                  text: ":"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "TYPE_REFERENCE"
+                  children:
+                    - type: "NULLABLE_TYPE"
+                      children:
+                        - type: "USER_TYPE"
+                          children:
+                            - type: "REFERENCE_EXPRESSION"
+                              children:
+                                - type: "IDENTIFIER"
+                                  text: "String"
+                        - type: "QUEST"
+                          text: "?"
+            - type: "WHITE_SPACE"
+              text: "\n\n    "
+            - type: "FUN"
+              children:
+                - type: "fun"
+                  text: "fun"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "IDENTIFIER"
+                  text: "parameterHelp"
+                - type: "VALUE_PARAMETER_LIST"
+                  children:
+                    - type: "LPAR"
+                      text: "("
+                    - type: "VALUE_PARAMETER"
+                      children:
+                        - type: "IDENTIFIER"
+                          text: "context"
+                        - type: "COLON"
+                          text: ":"
+                        - type: "WHITE_SPACE"
+                          text: " "
+                        - type: "TYPE_REFERENCE"
+                          children:
+                            - type: "USER_TYPE"
+                              children:
+                                - type: "REFERENCE_EXPRESSION"
+                                  children:
+                                    - type: "IDENTIFIER"
+                                      text: "Context"
+                    - type: "RPAR"
+                      text: ")"
+                - type: "COLON"
+                  text: ":"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "TYPE_REFERENCE"
+                  children:
+                    - type: "NULLABLE_TYPE"
+                      children:
+                        - type: "USER_TYPE"
+                          children:
+                            - type: "USER_TYPE"
+                              children:
+                                - type: "USER_TYPE"
+                                  children:
+                                    - type: "REFERENCE_EXPRESSION"
+                                      children:
+                                        - type: "IDENTIFIER"
+                                          text: "HelpFormatter"
+                                - type: "DOT"
+                                  text: "."
+                                - type: "REFERENCE_EXPRESSION"
+                                  children:
+                                    - type: "IDENTIFIER"
+                                      text: "ParameterHelp"
+                            - type: "DOT"
+                              text: "."
+                            - type: "REFERENCE_EXPRESSION"
+                              children:
+                                - type: "IDENTIFIER"
+                                  text: "Group"
+                        - type: "QUEST"
+                          text: "?"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "BLOCK"
+                  children:
+                    - type: "LBRACE"
+                      text: "{"
+                    - type: "WHITE_SPACE"
+                      text: "\n        "
+                    - type: "PROPERTY"
+                      children:
+                        - type: "val"
+                          text: "val"
+                        - type: "WHITE_SPACE"
+                          text: " "
+                        - type: "IDENTIFIER"
+                          text: "n"
+                        - type: "WHITE_SPACE"
+                          text: " "
+                        - type: "EQ"
+                          text: "="
+                        - type: "WHITE_SPACE"
+                          text: " "
+                        - type: "REFERENCE_EXPRESSION"
+                          children:
+                            - type: "IDENTIFIER"
+                              text: "groupName"
+                    - type: "WHITE_SPACE"
+                      text: "\n        "
+                    - type: "PROPERTY"
+                      children:
+                        - type: "val"
+                          text: "val"
+                        - type: "WHITE_SPACE"
+                          text: " "
+                        - type: "IDENTIFIER"
+                          text: "h"
+                        - type: "WHITE_SPACE"
+                          text: " "
+                        - type: "EQ"
+                          text: "="
+                        - type: "WHITE_SPACE"
+                          text: " "
+                        - type: "REFERENCE_EXPRESSION"
+                          children:
+                            - type: "IDENTIFIER"
+                              text: "groupHelp"
+                    - type: "WHITE_SPACE"
+                      text: "\n        "
+                    - type: "RETURN"
+                      children:
+                        - type: "return"
+                          text: "return"
+                        - type: "WHITE_SPACE"
+                          text: " "
+                        - type: "IF"
+                          children:
+                            - type: "if"
+                              text: "if"
+                            - type: "WHITE_SPACE"
+                              text: " "
+                            - type: "LPAR"
+                              text: "("
+                            - type: "CONDITION"
+                              children:
+                                - type: "BINARY_EXPRESSION"
+                                  children:
+                                    - type: "BINARY_EXPRESSION"
+                                      children:
+                                        - type: "REFERENCE_EXPRESSION"
+                                          children:
+                                            - type: "IDENTIFIER"
+                                              text: "n"
+                                        - type: "WHITE_SPACE"
+                                          text: " "
+                                        - type: "OPERATION_REFERENCE"
+                                          children:
+                                            - type: "EQEQ"
+                                              text: "=="
+                                        - type: "WHITE_SPACE"
+                                          text: " "
+                                        - type: "NULL"
+                                          children:
+                                            - type: "null"
+                                              text: "null"
+                                    - type: "WHITE_SPACE"
+                                      text: " "
+                                    - type: "OPERATION_REFERENCE"
+                                      children:
+                                        - type: "OROR"
+                                          text: "||"
+                                    - type: "WHITE_SPACE"
+                                      text: " "
+                                    - type: "BINARY_EXPRESSION"
+                                      children:
+                                        - type: "REFERENCE_EXPRESSION"
+                                          children:
+                                            - type: "IDENTIFIER"
+                                              text: "h"
+                                        - type: "WHITE_SPACE"
+                                          text: " "
+                                        - type: "OPERATION_REFERENCE"
+                                          children:
+                                            - type: "EQEQ"
+                                              text: "=="
+                                        - type: "WHITE_SPACE"
+                                          text: " "
+                                        - type: "NULL"
+                                          children:
+                                            - type: "null"
+                                              text: "null"
+                            - type: "RPAR"
+                              text: ")"
+                            - type: "WHITE_SPACE"
+                              text: " "
+                            - type: "THEN"
+                              children:
+                                - type: "NULL"
+                                  children:
+                                    - type: "null"
+                                      text: "null"
+                            - type: "WHITE_SPACE"
+                              text: " "
+                            - type: "else"
+                              text: "else"
+                            - type: "WHITE_SPACE"
+                              text: " "
+                            - type: "ELSE"
+                              children:
+                                - type: "DOT_QUALIFIED_EXPRESSION"
+                                  children:
+                                    - type: "DOT_QUALIFIED_EXPRESSION"
+                                      children:
+                                        - type: "REFERENCE_EXPRESSION"
+                                          children:
+                                            - type: "IDENTIFIER"
+                                              text: "HelpFormatter"
+                                        - type: "DOT"
+                                          text: "."
+                                        - type: "REFERENCE_EXPRESSION"
+                                          children:
+                                            - type: "IDENTIFIER"
+                                              text: "ParameterHelp"
+                                    - type: "DOT"
+                                      text: "."
+                                    - type: "CALL_EXPRESSION"
+                                      children:
+                                        - type: "REFERENCE_EXPRESSION"
+                                          children:
+                                            - type: "IDENTIFIER"
+                                              text: "Group"
+                                        - type: "VALUE_ARGUMENT_LIST"
+                                          children:
+                                            - type: "LPAR"
+                                              text: "("
+                                            - type: "VALUE_ARGUMENT"
+                                              children:
+                                                - type: "REFERENCE_EXPRESSION"
+                                                  children:
+                                                    - type: "IDENTIFIER"
+                                                      text: "n"
+                                            - type: "COMMA"
+                                              text: ","
+                                            - type: "WHITE_SPACE"
+                                              text: " "
+                                            - type: "VALUE_ARGUMENT"
+                                              children:
+                                                - type: "REFERENCE_EXPRESSION"
+                                                  children:
+                                                    - type: "IDENTIFIER"
+                                                      text: "h"
+                                            - type: "RPAR"
+                                              text: ")"
+                    - type: "WHITE_SPACE"
+                      text: "\n    "
+                    - type: "RBRACE"
+                      text: "}"
+            - type: "WHITE_SPACE"
+              text: "\n\n    "
+            - type: "FUN"
+              children:
+                - type: "KDoc"
+                  children:
+                    - type: "KDOC_START"
+                      text: "/**"
+                    - type: "WHITE_SPACE"
+                      text: "\n     "
+                    - type: "KDOC_SECTION"
+                      children:
+                        - type: "KDOC_LEADING_ASTERISK"
+                          text: "*"
+                        - type: "KDOC_TEXT"
+                          text: " Called after this command's argv is parsed and all options are validated to validate the group constraints."
+                        - type: "WHITE_SPACE"
+                          text: "\n     "
+                        - type: "KDOC_LEADING_ASTERISK"
+                          text: "*"
+                        - type: "WHITE_SPACE"
+                          text: "\n     "
+                        - type: "KDOC_LEADING_ASTERISK"
+                          text: "*"
+                        - type: "KDOC_TEXT"
+                          text: " "
+                        - type: "KDOC_TAG"
+                          children:
+                            - type: "KDOC_TAG_NAME"
+                              text: "@param"
+                            - type: "WHITE_SPACE"
+                              text: " "
+                            - type: "KDOC_MARKDOWN_LINK"
+                              children:
+                                - type: "KDOC_NAME"
+                                  children:
+                                    - type: "IDENTIFIER"
+                                      text: "context"
+                            - type: "WHITE_SPACE"
+                              text: " "
+                            - type: "KDOC_TEXT"
+                              text: "The context for this parse"
+                        - type: "WHITE_SPACE"
+                          text: "\n     "
+                        - type: "KDOC_LEADING_ASTERISK"
+                          text: "*"
+                        - type: "KDOC_TEXT"
+                          text: " "
+                        - type: "KDOC_TAG"
+                          children:
+                            - type: "KDOC_TAG_NAME"
+                              text: "@param"
+                            - type: "WHITE_SPACE"
+                              text: " "
+                            - type: "KDOC_MARKDOWN_LINK"
+                              children:
+                                - type: "KDOC_NAME"
+                                  children:
+                                    - type: "IDENTIFIER"
+                                      text: "invocationsByOption"
+                            - type: "WHITE_SPACE"
+                              text: " "
+                            - type: "KDOC_TEXT"
+                              text: "The invocations of options in this group."
+                    - type: "WHITE_SPACE"
+                      text: "\n     "
+                    - type: "KDOC_END"
+                      text: "*/"
+                - type: "WHITE_SPACE"
+                  text: "\n    "
+                - type: "fun"
+                  text: "fun"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "IDENTIFIER"
+                  text: "finalize"
+                - type: "VALUE_PARAMETER_LIST"
+                  children:
+                    - type: "LPAR"
+                      text: "("
+                    - type: "VALUE_PARAMETER"
+                      children:
+                        - type: "IDENTIFIER"
+                          text: "context"
+                        - type: "COLON"
+                          text: ":"
+                        - type: "WHITE_SPACE"
+                          text: " "
+                        - type: "TYPE_REFERENCE"
+                          children:
+                            - type: "USER_TYPE"
+                              children:
+                                - type: "REFERENCE_EXPRESSION"
+                                  children:
+                                    - type: "IDENTIFIER"
+                                      text: "Context"
+                    - type: "COMMA"
+                      text: ","
+                    - type: "WHITE_SPACE"
+                      text: " "
+                    - type: "VALUE_PARAMETER"
+                      children:
+                        - type: "IDENTIFIER"
+                          text: "invocationsByOption"
+                        - type: "COLON"
+                          text: ":"
+                        - type: "WHITE_SPACE"
+                          text: " "
+                        - type: "TYPE_REFERENCE"
+                          children:
+                            - type: "USER_TYPE"
+                              children:
+                                - type: "REFERENCE_EXPRESSION"
+                                  children:
+                                    - type: "IDENTIFIER"
+                                      text: "Map"
+                                - type: "TYPE_ARGUMENT_LIST"
+                                  children:
+                                    - type: "LT"
+                                      text: "<"
+                                    - type: "TYPE_PROJECTION"
+                                      children:
+                                        - type: "TYPE_REFERENCE"
+                                          children:
+                                            - type: "USER_TYPE"
+                                              children:
+                                                - type: "REFERENCE_EXPRESSION"
+                                                  children:
+                                                    - type: "IDENTIFIER"
+                                                      text: "Option"
+                                    - type: "COMMA"
+                                      text: ","
+                                    - type: "WHITE_SPACE"
+                                      text: " "
+                                    - type: "TYPE_PROJECTION"
+                                      children:
+                                        - type: "TYPE_REFERENCE"
+                                          children:
+                                            - type: "USER_TYPE"
+                                              children:
+                                                - type: "REFERENCE_EXPRESSION"
+                                                  children:
+                                                    - type: "IDENTIFIER"
+                                                      text: "List"
+                                                - type: "TYPE_ARGUMENT_LIST"
+                                                  children:
+                                                    - type: "LT"
+                                                      text: "<"
+                                                    - type: "TYPE_PROJECTION"
+                                                      children:
+                                                        - type: "TYPE_REFERENCE"
+                                                          children:
+                                                            - type: "USER_TYPE"
+                                                              children:
+                                                                - type: "REFERENCE_EXPRESSION"
+                                                                  children:
+                                                                    - type: "IDENTIFIER"
+                                                                      text: "OptionInvocation"
+                                                    - type: "GT"
+                                                      text: ">"
+                                    - type: "GT"
+                                      text: ">"
+                    - type: "RPAR"
+                      text: ")"
+            - type: "WHITE_SPACE"
+              text: "\n\n    "
+            - type: "FUN"
+              children:
+                - type: "KDoc"
+                  children:
+                    - type: "KDOC_START"
+                      text: "/**"
+                    - type: "WHITE_SPACE"
+                      text: "\n     "
+                    - type: "KDOC_SECTION"
+                      children:
+                        - type: "KDOC_LEADING_ASTERISK"
+                          text: "*"
+                        - type: "KDOC_TEXT"
+                          text: " Called after all of a command's parameters have been "
+                        - type: "KDOC_MARKDOWN_LINK"
+                          children:
+                            - type: "LBRACKET"
+                              text: "["
+                            - type: "KDOC_NAME"
+                              children:
+                                - type: "IDENTIFIER"
+                                  text: "finalize"
+                            - type: "RBRACKET"
+                              text: "]"
+                        - type: "KDOC_TEXT"
+                          text: "d to perform validation of the final values."
+                    - type: "WHITE_SPACE"
+                      text: "\n     "
+                    - type: "KDOC_END"
+                      text: "*/"
+                - type: "WHITE_SPACE"
+                  text: "\n    "
+                - type: "fun"
+                  text: "fun"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "IDENTIFIER"
+                  text: "postValidate"
+                - type: "VALUE_PARAMETER_LIST"
+                  children:
+                    - type: "LPAR"
+                      text: "("
+                    - type: "VALUE_PARAMETER"
+                      children:
+                        - type: "IDENTIFIER"
+                          text: "context"
+                        - type: "COLON"
+                          text: ":"
+                        - type: "WHITE_SPACE"
+                          text: " "
+                        - type: "TYPE_REFERENCE"
+                          children:
+                            - type: "USER_TYPE"
+                              children:
+                                - type: "REFERENCE_EXPRESSION"
+                                  children:
+                                    - type: "IDENTIFIER"
+                                      text: "Context"
+                    - type: "RPAR"
+                      text: ")"
+            - type: "WHITE_SPACE"
+              text: "\n"
+            - type: "RBRACE"
+              text: "}"
+    - type: "WHITE_SPACE"
+      text: "\n\n"
+    - type: "CLASS"
+      children:
+        - type: "KDoc"
+          children:
+            - type: "KDOC_START"
+              text: "/**"
+            - type: "KDOC_SECTION"
+              children:
+                - type: "KDOC_TEXT"
+                  text: " A "
+                - type: "KDOC_MARKDOWN_LINK"
+                  children:
+                    - type: "LBRACKET"
+                      text: "["
+                    - type: "KDOC_NAME"
+                      children:
+                        - type: "IDENTIFIER"
+                          text: "ParameterGroup"
+                    - type: "RBRACKET"
+                      text: "]"
+                - type: "KDOC_TEXT"
+                  text: " that can be used as a property delegate "
+            - type: "KDOC_END"
+              text: "*/"
+        - type: "WHITE_SPACE"
+          text: "\n"
+        - type: "interface"
+          text: "interface"
+        - type: "WHITE_SPACE"
+          text: " "
+        - type: "IDENTIFIER"
+          text: "ParameterGroupDelegate"
+        - type: "TYPE_PARAMETER_LIST"
+          children:
+            - type: "LT"
+              text: "<"
+            - type: "TYPE_PARAMETER"
+              children:
+                - type: "MODIFIER_LIST"
+                  children:
+                    - type: "out"
+                      text: "out"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "IDENTIFIER"
+                  text: "T"
+            - type: "GT"
+              text: ">"
+        - type: "WHITE_SPACE"
+          text: " "
+        - type: "COLON"
+          text: ":"
+        - type: "WHITE_SPACE"
+          text: "\n    "
+        - type: "SUPER_TYPE_LIST"
+          children:
+            - type: "SUPER_TYPE_ENTRY"
+              children:
+                - type: "TYPE_REFERENCE"
+                  children:
+                    - type: "USER_TYPE"
+                      children:
+                        - type: "REFERENCE_EXPRESSION"
+                          children:
+                            - type: "IDENTIFIER"
+                              text: "ParameterGroup"
+            - type: "COMMA"
+              text: ","
+            - type: "WHITE_SPACE"
+              text: "\n    "
+            - type: "SUPER_TYPE_ENTRY"
+              children:
+                - type: "TYPE_REFERENCE"
+                  children:
+                    - type: "USER_TYPE"
+                      children:
+                        - type: "REFERENCE_EXPRESSION"
+                          children:
+                            - type: "IDENTIFIER"
+                              text: "ReadOnlyProperty"
+                        - type: "TYPE_ARGUMENT_LIST"
+                          children:
+                            - type: "LT"
+                              text: "<"
+                            - type: "TYPE_PROJECTION"
+                              children:
+                                - type: "TYPE_REFERENCE"
+                                  children:
+                                    - type: "USER_TYPE"
+                                      children:
+                                        - type: "REFERENCE_EXPRESSION"
+                                          children:
+                                            - type: "IDENTIFIER"
+                                              text: "BaseCliktCommand"
+                                        - type: "TYPE_ARGUMENT_LIST"
+                                          children:
+                                            - type: "LT"
+                                              text: "<"
+                                            - type: "TYPE_PROJECTION"
+                                              children:
+                                                - type: "MUL"
+                                                  text: "*"
+                                            - type: "GT"
+                                              text: ">"
+                            - type: "COMMA"
+                              text: ","
+                            - type: "WHITE_SPACE"
+                              text: " "
+                            - type: "TYPE_PROJECTION"
+                              children:
+                                - type: "TYPE_REFERENCE"
+                                  children:
+                                    - type: "USER_TYPE"
+                                      children:
+                                        - type: "REFERENCE_EXPRESSION"
+                                          children:
+                                            - type: "IDENTIFIER"
+                                              text: "T"
+                            - type: "GT"
+                              text: ">"
+            - type: "COMMA"
+              text: ","
+            - type: "WHITE_SPACE"
+              text: "\n    "
+            - type: "SUPER_TYPE_ENTRY"
+              children:
+                - type: "TYPE_REFERENCE"
+                  children:
+                    - type: "USER_TYPE"
+                      children:
+                        - type: "REFERENCE_EXPRESSION"
+                          children:
+                            - type: "IDENTIFIER"
+                              text: "PropertyDelegateProvider"
+                        - type: "TYPE_ARGUMENT_LIST"
+                          children:
+                            - type: "LT"
+                              text: "<"
+                            - type: "TYPE_PROJECTION"
+                              children:
+                                - type: "TYPE_REFERENCE"
+                                  children:
+                                    - type: "USER_TYPE"
+                                      children:
+                                        - type: "REFERENCE_EXPRESSION"
+                                          children:
+                                            - type: "IDENTIFIER"
+                                              text: "BaseCliktCommand"
+                                        - type: "TYPE_ARGUMENT_LIST"
+                                          children:
+                                            - type: "LT"
+                                              text: "<"
+                                            - type: "TYPE_PROJECTION"
+                                              children:
+                                                - type: "MUL"
+                                                  text: "*"
+                                            - type: "GT"
+                                              text: ">"
+                            - type: "COMMA"
+                              text: ","
+                            - type: "WHITE_SPACE"
+                              text: " "
+                            - type: "TYPE_PROJECTION"
+                              children:
+                                - type: "TYPE_REFERENCE"
+                                  children:
+                                    - type: "USER_TYPE"
+                                      children:
+                                        - type: "REFERENCE_EXPRESSION"
+                                          children:
+                                            - type: "IDENTIFIER"
+                                              text: "ReadOnlyProperty"
+                                        - type: "TYPE_ARGUMENT_LIST"
+                                          children:
+                                            - type: "LT"
+                                              text: "<"
+                                            - type: "TYPE_PROJECTION"
+                                              children:
+                                                - type: "TYPE_REFERENCE"
+                                                  children:
+                                                    - type: "USER_TYPE"
+                                                      children:
+                                                        - type: "REFERENCE_EXPRESSION"
+                                                          children:
+                                                            - type: "IDENTIFIER"
+                                                              text: "BaseCliktCommand"
+                                                        - type: "TYPE_ARGUMENT_LIST"
+                                                          children:
+                                                            - type: "LT"
+                                                              text: "<"
+                                                            - type: "TYPE_PROJECTION"
+                                                              children:
+                                                                - type: "MUL"
+                                                                  text: "*"
+                                                            - type: "GT"
+                                                              text: ">"
+                                            - type: "COMMA"
+                                              text: ","
+                                            - type: "WHITE_SPACE"
+                                              text: " "
+                                            - type: "TYPE_PROJECTION"
+                                              children:
+                                                - type: "TYPE_REFERENCE"
+                                                  children:
+                                                    - type: "USER_TYPE"
+                                                      children:
+                                                        - type: "REFERENCE_EXPRESSION"
+                                                          children:
+                                                            - type: "IDENTIFIER"
+                                                              text: "T"
+                                            - type: "GT"
+                                              text: ">"
+                            - type: "GT"
+                              text: ">"
+        - type: "WHITE_SPACE"
+          text: " "
+        - type: "CLASS_BODY"
+          children:
+            - type: "LBRACE"
+              text: "{"
+            - type: "WHITE_SPACE"
+              text: "\n    "
+            - type: "FUN"
+              children:
+                - type: "KDoc"
+                  children:
+                    - type: "KDOC_START"
+                      text: "/**"
+                    - type: "KDOC_SECTION"
+                      children:
+                        - type: "KDOC_TEXT"
+                          text: " Implementations must call [BaseCliktCommand<*>.registerOptionGroup] "
+                    - type: "KDOC_END"
+                      text: "*/"
+                - type: "WHITE_SPACE"
+                  text: "\n    "
+                - type: "MODIFIER_LIST"
+                  children:
+                    - type: "override"
+                      text: "override"
+                    - type: "WHITE_SPACE"
+                      text: " "
+                    - type: "operator"
+                      text: "operator"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "fun"
+                  text: "fun"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "IDENTIFIER"
+                  text: "provideDelegate"
+                - type: "VALUE_PARAMETER_LIST"
+                  children:
+                    - type: "LPAR"
+                      text: "("
+                    - type: "WHITE_SPACE"
+                      text: "\n        "
+                    - type: "VALUE_PARAMETER"
+                      children:
+                        - type: "IDENTIFIER"
+                          text: "thisRef"
+                        - type: "COLON"
+                          text: ":"
+                        - type: "WHITE_SPACE"
+                          text: " "
+                        - type: "TYPE_REFERENCE"
+                          children:
+                            - type: "USER_TYPE"
+                              children:
+                                - type: "REFERENCE_EXPRESSION"
+                                  children:
+                                    - type: "IDENTIFIER"
+                                      text: "BaseCliktCommand"
+                                - type: "TYPE_ARGUMENT_LIST"
+                                  children:
+                                    - type: "LT"
+                                      text: "<"
+                                    - type: "TYPE_PROJECTION"
+                                      children:
+                                        - type: "MUL"
+                                          text: "*"
+                                    - type: "GT"
+                                      text: ">"
+                    - type: "COMMA"
+                      text: ","
+                    - type: "WHITE_SPACE"
+                      text: "\n        "
+                    - type: "VALUE_PARAMETER"
+                      children:
+                        - type: "IDENTIFIER"
+                          text: "property"
+                        - type: "COLON"
+                          text: ":"
+                        - type: "WHITE_SPACE"
+                          text: " "
+                        - type: "TYPE_REFERENCE"
+                          children:
+                            - type: "USER_TYPE"
+                              children:
+                                - type: "REFERENCE_EXPRESSION"
+                                  children:
+                                    - type: "IDENTIFIER"
+                                      text: "KProperty"
+                                - type: "TYPE_ARGUMENT_LIST"
+                                  children:
+                                    - type: "LT"
+                                      text: "<"
+                                    - type: "TYPE_PROJECTION"
+                                      children:
+                                        - type: "MUL"
+                                          text: "*"
+                                    - type: "GT"
+                                      text: ">"
+                    - type: "COMMA"
+                      text: ","
+                    - type: "WHITE_SPACE"
+                      text: "\n    "
+                    - type: "RPAR"
+                      text: ")"
+                - type: "COLON"
+                  text: ":"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "TYPE_REFERENCE"
+                  children:
+                    - type: "USER_TYPE"
+                      children:
+                        - type: "REFERENCE_EXPRESSION"
+                          children:
+                            - type: "IDENTIFIER"
+                              text: "ReadOnlyProperty"
+                        - type: "TYPE_ARGUMENT_LIST"
+                          children:
+                            - type: "LT"
+                              text: "<"
+                            - type: "TYPE_PROJECTION"
+                              children:
+                                - type: "TYPE_REFERENCE"
+                                  children:
+                                    - type: "USER_TYPE"
+                                      children:
+                                        - type: "REFERENCE_EXPRESSION"
+                                          children:
+                                            - type: "IDENTIFIER"
+                                              text: "BaseCliktCommand"
+                                        - type: "TYPE_ARGUMENT_LIST"
+                                          children:
+                                            - type: "LT"
+                                              text: "<"
+                                            - type: "TYPE_PROJECTION"
+                                              children:
+                                                - type: "MUL"
+                                                  text: "*"
+                                            - type: "GT"
+                                              text: ">"
+                            - type: "COMMA"
+                              text: ","
+                            - type: "WHITE_SPACE"
+                              text: " "
+                            - type: "TYPE_PROJECTION"
+                              children:
+                                - type: "TYPE_REFERENCE"
+                                  children:
+                                    - type: "USER_TYPE"
+                                      children:
+                                        - type: "REFERENCE_EXPRESSION"
+                                          children:
+                                            - type: "IDENTIFIER"
+                                              text: "T"
+                            - type: "GT"
+                              text: ">"
+            - type: "WHITE_SPACE"
+              text: "\n"
+            - type: "RBRACE"
+              text: "}"
+    - type: "WHITE_SPACE"
+      text: "\n\n"
+    - type: "CLASS"
+      children:
+        - type: "KDoc"
+          children:
+            - type: "KDOC_START"
+              text: "/**"
+            - type: "WHITE_SPACE"
+              text: "\n "
+            - type: "KDOC_SECTION"
+              children:
+                - type: "KDOC_LEADING_ASTERISK"
+                  text: "*"
+                - type: "KDOC_TEXT"
+                  text: " A group of options that can be shown together in help output, or restricted to be "
+                - type: "KDOC_MARKDOWN_LINK"
+                  children:
+                    - type: "LBRACKET"
+                      text: "["
+                    - type: "KDOC_NAME"
+                      children:
+                        - type: "IDENTIFIER"
+                          text: "cooccurring"
+                    - type: "RBRACKET"
+                      text: "]"
+                - type: "KDOC_TEXT"
+                  text: "."
+                - type: "WHITE_SPACE"
+                  text: "\n "
+                - type: "KDOC_LEADING_ASTERISK"
+                  text: "*"
+                - type: "WHITE_SPACE"
+                  text: "\n "
+                - type: "KDOC_LEADING_ASTERISK"
+                  text: "*"
+                - type: "KDOC_TEXT"
+                  text: " Declare a subclass with option delegate properties, then use an instance of your subclass is a"
+                - type: "WHITE_SPACE"
+                  text: "\n "
+                - type: "KDOC_LEADING_ASTERISK"
+                  text: "*"
+                - type: "KDOC_TEXT"
+                  text: " delegate property in your command with "
+                - type: "KDOC_MARKDOWN_LINK"
+                  children:
+                    - type: "LBRACKET"
+                      text: "["
+                    - type: "KDOC_NAME"
+                      children:
+                        - type: "IDENTIFIER"
+                          text: "provideDelegate"
+                    - type: "RBRACKET"
+                      text: "]"
+                - type: "KDOC_TEXT"
+                  text: "."
+                - type: "WHITE_SPACE"
+                  text: "\n "
+                - type: "KDOC_LEADING_ASTERISK"
+                  text: "*"
+                - type: "WHITE_SPACE"
+                  text: "\n "
+                - type: "KDOC_LEADING_ASTERISK"
+                  text: "*"
+                - type: "KDOC_TEXT"
+                  text: " ### Example:"
+                - type: "WHITE_SPACE"
+                  text: "\n "
+                - type: "KDOC_LEADING_ASTERISK"
+                  text: "*"
+                - type: "WHITE_SPACE"
+                  text: "\n "
+                - type: "KDOC_LEADING_ASTERISK"
+                  text: "*"
+                - type: "KDOC_TEXT"
+                  text: " ```"
+                - type: "WHITE_SPACE"
+                  text: "\n "
+                - type: "KDOC_LEADING_ASTERISK"
+                  text: "*"
+                - type: "KDOC_CODE_BLOCK_TEXT"
+                  text: " class UserOptions : OptionGroup(name = \"User Options\", help = \"Options controlling the user\") {"
+                - type: "WHITE_SPACE"
+                  text: "\n "
+                - type: "KDOC_LEADING_ASTERISK"
+                  text: "*"
+                - type: "KDOC_CODE_BLOCK_TEXT"
+                  text: "   val name by option()"
+                - type: "WHITE_SPACE"
+                  text: "\n "
+                - type: "KDOC_LEADING_ASTERISK"
+                  text: "*"
+                - type: "KDOC_CODE_BLOCK_TEXT"
+                  text: "   val age by option().int()"
+                - type: "WHITE_SPACE"
+                  text: "\n "
+                - type: "KDOC_LEADING_ASTERISK"
+                  text: "*"
+                - type: "KDOC_CODE_BLOCK_TEXT"
+                  text: " }"
+                - type: "WHITE_SPACE"
+                  text: "\n "
+                - type: "KDOC_LEADING_ASTERISK"
+                  text: "*"
+                - type: "WHITE_SPACE"
+                  text: "\n "
+                - type: "KDOC_LEADING_ASTERISK"
+                  text: "*"
+                - type: "KDOC_CODE_BLOCK_TEXT"
+                  text: " class Tool : CliktCommand() {"
+                - type: "WHITE_SPACE"
+                  text: "\n "
+                - type: "KDOC_LEADING_ASTERISK"
+                  text: "*"
+                - type: "KDOC_CODE_BLOCK_TEXT"
+                  text: "   val userOptions by UserOptions()"
+                - type: "WHITE_SPACE"
+                  text: "\n "
+                - type: "KDOC_LEADING_ASTERISK"
+                  text: "*"
+                - type: "KDOC_CODE_BLOCK_TEXT"
+                  text: " }"
+                - type: "WHITE_SPACE"
+                  text: "\n "
+                - type: "KDOC_LEADING_ASTERISK"
+                  text: "*"
+                - type: "KDOC_TEXT"
+                  text: " ```"
+            - type: "WHITE_SPACE"
+              text: "\n "
+            - type: "KDOC_END"
+              text: "*/"
+        - type: "WHITE_SPACE"
+          text: "\n"
+        - type: "MODIFIER_LIST"
+          children:
+            - type: "open"
+              text: "open"
+        - type: "WHITE_SPACE"
+          text: " "
+        - type: "class"
+          text: "class"
+        - type: "WHITE_SPACE"
+          text: " "
+        - type: "IDENTIFIER"
+          text: "OptionGroup"
+        - type: "PRIMARY_CONSTRUCTOR"
+          children:
+            - type: "VALUE_PARAMETER_LIST"
+              children:
+                - type: "LPAR"
+                  text: "("
+                - type: "WHITE_SPACE"
+                  text: "\n    "
+                - type: "VALUE_PARAMETER"
+                  children:
+                    - type: "IDENTIFIER"
+                      text: "name"
+                    - type: "COLON"
+                      text: ":"
+                    - type: "WHITE_SPACE"
+                      text: " "
+                    - type: "TYPE_REFERENCE"
+                      children:
+                        - type: "NULLABLE_TYPE"
+                          children:
+                            - type: "USER_TYPE"
+                              children:
+                                - type: "REFERENCE_EXPRESSION"
+                                  children:
+                                    - type: "IDENTIFIER"
+                                      text: "String"
+                            - type: "QUEST"
+                              text: "?"
+                    - type: "WHITE_SPACE"
+                      text: " "
+                    - type: "EQ"
+                      text: "="
+                    - type: "WHITE_SPACE"
+                      text: " "
+                    - type: "NULL"
+                      children:
+                        - type: "null"
+                          text: "null"
+                - type: "COMMA"
+                  text: ","
+                - type: "WHITE_SPACE"
+                  text: "\n    "
+                - type: "VALUE_PARAMETER"
+                  children:
+                    - type: "IDENTIFIER"
+                      text: "help"
+                    - type: "COLON"
+                      text: ":"
+                    - type: "WHITE_SPACE"
+                      text: " "
+                    - type: "TYPE_REFERENCE"
+                      children:
+                        - type: "NULLABLE_TYPE"
+                          children:
+                            - type: "USER_TYPE"
+                              children:
+                                - type: "REFERENCE_EXPRESSION"
+                                  children:
+                                    - type: "IDENTIFIER"
+                                      text: "String"
+                            - type: "QUEST"
+                              text: "?"
+                    - type: "WHITE_SPACE"
+                      text: " "
+                    - type: "EQ"
+                      text: "="
+                    - type: "WHITE_SPACE"
+                      text: " "
+                    - type: "NULL"
+                      children:
+                        - type: "null"
+                          text: "null"
+                - type: "COMMA"
+                  text: ","
+                - type: "WHITE_SPACE"
+                  text: "\n"
+                - type: "RPAR"
+                  text: ")"
+        - type: "WHITE_SPACE"
+          text: " "
+        - type: "COLON"
+          text: ":"
+        - type: "WHITE_SPACE"
+          text: " "
+        - type: "SUPER_TYPE_LIST"
+          children:
+            - type: "SUPER_TYPE_ENTRY"
+              children:
+                - type: "TYPE_REFERENCE"
+                  children:
+                    - type: "USER_TYPE"
+                      children:
+                        - type: "REFERENCE_EXPRESSION"
+                          children:
+                            - type: "IDENTIFIER"
+                              text: "ParameterGroup"
+            - type: "COMMA"
+              text: ","
+            - type: "WHITE_SPACE"
+              text: " "
+            - type: "SUPER_TYPE_ENTRY"
+              children:
+                - type: "TYPE_REFERENCE"
+                  children:
+                    - type: "USER_TYPE"
+                      children:
+                        - type: "REFERENCE_EXPRESSION"
+                          children:
+                            - type: "IDENTIFIER"
+                              text: "ParameterHolder"
+        - type: "WHITE_SPACE"
+          text: " "
+        - type: "CLASS_BODY"
+          children:
+            - type: "LBRACE"
+              text: "{"
+            - type: "WHITE_SPACE"
+              text: "\n    "
+            - type: "PROPERTY"
+              children:
+                - type: "MODIFIER_LIST"
+                  children:
+                    - type: "internal"
+                      text: "internal"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "val"
+                  text: "val"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "IDENTIFIER"
+                  text: "options"
+                - type: "COLON"
+                  text: ":"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "TYPE_REFERENCE"
+                  children:
+                    - type: "USER_TYPE"
+                      children:
+                        - type: "REFERENCE_EXPRESSION"
+                          children:
+                            - type: "IDENTIFIER"
+                              text: "MutableList"
+                        - type: "TYPE_ARGUMENT_LIST"
+                          children:
+                            - type: "LT"
+                              text: "<"
+                            - type: "TYPE_PROJECTION"
+                              children:
+                                - type: "TYPE_REFERENCE"
+                                  children:
+                                    - type: "USER_TYPE"
+                                      children:
+                                        - type: "REFERENCE_EXPRESSION"
+                                          children:
+                                            - type: "IDENTIFIER"
+                                              text: "GroupableOption"
+                            - type: "GT"
+                              text: ">"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "EQ"
+                  text: "="
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "CALL_EXPRESSION"
+                  children:
+                    - type: "REFERENCE_EXPRESSION"
+                      children:
+                        - type: "IDENTIFIER"
+                          text: "mutableListOf"
+                    - type: "VALUE_ARGUMENT_LIST"
+                      children:
+                        - type: "LPAR"
+                          text: "("
+                        - type: "RPAR"
+                          text: ")"
+            - type: "WHITE_SPACE"
+              text: "\n    "
+            - type: "PROPERTY"
+              children:
+                - type: "MODIFIER_LIST"
+                  children:
+                    - type: "override"
+                      text: "override"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "val"
+                  text: "val"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "IDENTIFIER"
+                  text: "groupName"
+                - type: "COLON"
+                  text: ":"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "TYPE_REFERENCE"
+                  children:
+                    - type: "NULLABLE_TYPE"
+                      children:
+                        - type: "USER_TYPE"
+                          children:
+                            - type: "REFERENCE_EXPRESSION"
+                              children:
+                                - type: "IDENTIFIER"
+                                  text: "String"
+                        - type: "QUEST"
+                          text: "?"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "EQ"
+                  text: "="
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "REFERENCE_EXPRESSION"
+                  children:
+                    - type: "IDENTIFIER"
+                      text: "name"
+            - type: "WHITE_SPACE"
+              text: "\n    "
+            - type: "PROPERTY"
+              children:
+                - type: "MODIFIER_LIST"
+                  children:
+                    - type: "override"
+                      text: "override"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "val"
+                  text: "val"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "IDENTIFIER"
+                  text: "groupHelp"
+                - type: "COLON"
+                  text: ":"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "TYPE_REFERENCE"
+                  children:
+                    - type: "NULLABLE_TYPE"
+                      children:
+                        - type: "USER_TYPE"
+                          children:
+                            - type: "REFERENCE_EXPRESSION"
+                              children:
+                                - type: "IDENTIFIER"
+                                  text: "String"
+                        - type: "QUEST"
+                          text: "?"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "EQ"
+                  text: "="
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "REFERENCE_EXPRESSION"
+                  children:
+                    - type: "IDENTIFIER"
+                      text: "help"
+            - type: "WHITE_SPACE"
+              text: "\n\n    "
+            - type: "FUN"
+              children:
+                - type: "MODIFIER_LIST"
+                  children:
+                    - type: "override"
+                      text: "override"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "fun"
+                  text: "fun"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "IDENTIFIER"
+                  text: "registerOption"
+                - type: "VALUE_PARAMETER_LIST"
+                  children:
+                    - type: "LPAR"
+                      text: "("
+                    - type: "VALUE_PARAMETER"
+                      children:
+                        - type: "IDENTIFIER"
+                          text: "option"
+                        - type: "COLON"
+                          text: ":"
+                        - type: "WHITE_SPACE"
+                          text: " "
+                        - type: "TYPE_REFERENCE"
+                          children:
+                            - type: "USER_TYPE"
+                              children:
+                                - type: "REFERENCE_EXPRESSION"
+                                  children:
+                                    - type: "IDENTIFIER"
+                                      text: "GroupableOption"
+                    - type: "RPAR"
+                      text: ")"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "BLOCK"
+                  children:
+                    - type: "LBRACE"
+                      text: "{"
+                    - type: "WHITE_SPACE"
+                      text: "\n        "
+                    - type: "BINARY_EXPRESSION"
+                      children:
+                        - type: "DOT_QUALIFIED_EXPRESSION"
+                          children:
+                            - type: "REFERENCE_EXPRESSION"
+                              children:
+                                - type: "IDENTIFIER"
+                                  text: "option"
+                            - type: "DOT"
+                              text: "."
+                            - type: "REFERENCE_EXPRESSION"
+                              children:
+                                - type: "IDENTIFIER"
+                                  text: "parameterGroup"
+                        - type: "WHITE_SPACE"
+                          text: " "
+                        - type: "OPERATION_REFERENCE"
+                          children:
+                            - type: "EQ"
+                              text: "="
+                        - type: "WHITE_SPACE"
+                          text: " "
+                        - type: "THIS_EXPRESSION"
+                          children:
+                            - type: "REFERENCE_EXPRESSION"
+                              children:
+                                - type: "this"
+                                  text: "this"
+                    - type: "WHITE_SPACE"
+                      text: "\n        "
+                    - type: "BINARY_EXPRESSION"
+                      children:
+                        - type: "REFERENCE_EXPRESSION"
+                          children:
+                            - type: "IDENTIFIER"
+                              text: "options"
+                        - type: "WHITE_SPACE"
+                          text: " "
+                        - type: "OPERATION_REFERENCE"
+                          children:
+                            - type: "PLUSEQ"
+                              text: "+="
+                        - type: "WHITE_SPACE"
+                          text: " "
+                        - type: "REFERENCE_EXPRESSION"
+                          children:
+                            - type: "IDENTIFIER"
+                              text: "option"
+                    - type: "WHITE_SPACE"
+                      text: "\n    "
+                    - type: "RBRACE"
+                      text: "}"
+            - type: "WHITE_SPACE"
+              text: "\n\n    "
+            - type: "FUN"
+              children:
+                - type: "MODIFIER_LIST"
+                  children:
+                    - type: "override"
+                      text: "override"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "fun"
+                  text: "fun"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "IDENTIFIER"
+                  text: "finalize"
+                - type: "VALUE_PARAMETER_LIST"
+                  children:
+                    - type: "LPAR"
+                      text: "("
+                    - type: "WHITE_SPACE"
+                      text: "\n        "
+                    - type: "VALUE_PARAMETER"
+                      children:
+                        - type: "IDENTIFIER"
+                          text: "context"
+                        - type: "COLON"
+                          text: ":"
+                        - type: "WHITE_SPACE"
+                          text: " "
+                        - type: "TYPE_REFERENCE"
+                          children:
+                            - type: "USER_TYPE"
+                              children:
+                                - type: "REFERENCE_EXPRESSION"
+                                  children:
+                                    - type: "IDENTIFIER"
+                                      text: "Context"
+                    - type: "COMMA"
+                      text: ","
+                    - type: "WHITE_SPACE"
+                      text: "\n        "
+                    - type: "VALUE_PARAMETER"
+                      children:
+                        - type: "IDENTIFIER"
+                          text: "invocationsByOption"
+                        - type: "COLON"
+                          text: ":"
+                        - type: "WHITE_SPACE"
+                          text: " "
+                        - type: "TYPE_REFERENCE"
+                          children:
+                            - type: "USER_TYPE"
+                              children:
+                                - type: "REFERENCE_EXPRESSION"
+                                  children:
+                                    - type: "IDENTIFIER"
+                                      text: "Map"
+                                - type: "TYPE_ARGUMENT_LIST"
+                                  children:
+                                    - type: "LT"
+                                      text: "<"
+                                    - type: "TYPE_PROJECTION"
+                                      children:
+                                        - type: "TYPE_REFERENCE"
+                                          children:
+                                            - type: "USER_TYPE"
+                                              children:
+                                                - type: "REFERENCE_EXPRESSION"
+                                                  children:
+                                                    - type: "IDENTIFIER"
+                                                      text: "Option"
+                                    - type: "COMMA"
+                                      text: ","
+                                    - type: "WHITE_SPACE"
+                                      text: " "
+                                    - type: "TYPE_PROJECTION"
+                                      children:
+                                        - type: "TYPE_REFERENCE"
+                                          children:
+                                            - type: "USER_TYPE"
+                                              children:
+                                                - type: "REFERENCE_EXPRESSION"
+                                                  children:
+                                                    - type: "IDENTIFIER"
+                                                      text: "List"
+                                                - type: "TYPE_ARGUMENT_LIST"
+                                                  children:
+                                                    - type: "LT"
+                                                      text: "<"
+                                                    - type: "TYPE_PROJECTION"
+                                                      children:
+                                                        - type: "TYPE_REFERENCE"
+                                                          children:
+                                                            - type: "USER_TYPE"
+                                                              children:
+                                                                - type: "REFERENCE_EXPRESSION"
+                                                                  children:
+                                                                    - type: "IDENTIFIER"
+                                                                      text: "OptionInvocation"
+                                                    - type: "GT"
+                                                      text: ">"
+                                    - type: "GT"
+                                      text: ">"
+                    - type: "COMMA"
+                      text: ","
+                    - type: "WHITE_SPACE"
+                      text: "\n    "
+                    - type: "RPAR"
+                      text: ")"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "BLOCK"
+                  children:
+                    - type: "LBRACE"
+                      text: "{"
+                    - type: "WHITE_SPACE"
+                      text: "\n        "
+                    - type: "CALL_EXPRESSION"
+                      children:
+                        - type: "REFERENCE_EXPRESSION"
+                          children:
+                            - type: "IDENTIFIER"
+                              text: "finalizeOptions"
+                        - type: "VALUE_ARGUMENT_LIST"
+                          children:
+                            - type: "LPAR"
+                              text: "("
+                            - type: "VALUE_ARGUMENT"
+                              children:
+                                - type: "REFERENCE_EXPRESSION"
+                                  children:
+                                    - type: "IDENTIFIER"
+                                      text: "context"
+                            - type: "COMMA"
+                              text: ","
+                            - type: "WHITE_SPACE"
+                              text: " "
+                            - type: "VALUE_ARGUMENT"
+                              children:
+                                - type: "REFERENCE_EXPRESSION"
+                                  children:
+                                    - type: "IDENTIFIER"
+                                      text: "options"
+                            - type: "COMMA"
+                              text: ","
+                            - type: "WHITE_SPACE"
+                              text: " "
+                            - type: "VALUE_ARGUMENT"
+                              children:
+                                - type: "REFERENCE_EXPRESSION"
+                                  children:
+                                    - type: "IDENTIFIER"
+                                      text: "invocationsByOption"
+                            - type: "RPAR"
+                              text: ")"
+                    - type: "WHITE_SPACE"
+                      text: "\n    "
+                    - type: "RBRACE"
+                      text: "}"
+            - type: "WHITE_SPACE"
+              text: "\n\n    "
+            - type: "FUN"
+              children:
+                - type: "MODIFIER_LIST"
+                  children:
+                    - type: "override"
+                      text: "override"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "fun"
+                  text: "fun"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "IDENTIFIER"
+                  text: "postValidate"
+                - type: "VALUE_PARAMETER_LIST"
+                  children:
+                    - type: "LPAR"
+                      text: "("
+                    - type: "VALUE_PARAMETER"
+                      children:
+                        - type: "IDENTIFIER"
+                          text: "context"
+                        - type: "COLON"
+                          text: ":"
+                        - type: "WHITE_SPACE"
+                          text: " "
+                        - type: "TYPE_REFERENCE"
+                          children:
+                            - type: "USER_TYPE"
+                              children:
+                                - type: "REFERENCE_EXPRESSION"
+                                  children:
+                                    - type: "IDENTIFIER"
+                                      text: "Context"
+                    - type: "RPAR"
+                      text: ")"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "EQ"
+                  text: "="
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "DOT_QUALIFIED_EXPRESSION"
+                  children:
+                    - type: "REFERENCE_EXPRESSION"
+                      children:
+                        - type: "IDENTIFIER"
+                          text: "options"
+                    - type: "DOT"
+                      text: "."
+                    - type: "CALL_EXPRESSION"
+                      children:
+                        - type: "REFERENCE_EXPRESSION"
+                          children:
+                            - type: "IDENTIFIER"
+                              text: "forEach"
+                        - type: "WHITE_SPACE"
+                          text: " "
+                        - type: "LAMBDA_ARGUMENT"
+                          children:
+                            - type: "LAMBDA_EXPRESSION"
+                              children:
+                                - type: "FUNCTION_LITERAL"
+                                  children:
+                                    - type: "LBRACE"
+                                      text: "{"
+                                    - type: "WHITE_SPACE"
+                                      text: " "
+                                    - type: "BLOCK"
+                                      children:
+                                        - type: "DOT_QUALIFIED_EXPRESSION"
+                                          children:
+                                            - type: "REFERENCE_EXPRESSION"
+                                              children:
+                                                - type: "IDENTIFIER"
+                                                  text: "it"
+                                            - type: "DOT"
+                                              text: "."
+                                            - type: "CALL_EXPRESSION"
+                                              children:
+                                                - type: "REFERENCE_EXPRESSION"
+                                                  children:
+                                                    - type: "IDENTIFIER"
+                                                      text: "postValidate"
+                                                - type: "VALUE_ARGUMENT_LIST"
+                                                  children:
+                                                    - type: "LPAR"
+                                                      text: "("
+                                                    - type: "VALUE_ARGUMENT"
+                                                      children:
+                                                        - type: "REFERENCE_EXPRESSION"
+                                                          children:
+                                                            - type: "IDENTIFIER"
+                                                              text: "context"
+                                                    - type: "RPAR"
+                                                      text: ")"
+                                    - type: "WHITE_SPACE"
+                                      text: " "
+                                    - type: "RBRACE"
+                                      text: "}"
+            - type: "WHITE_SPACE"
+              text: "\n"
+            - type: "RBRACE"
+              text: "}"
+    - type: "WHITE_SPACE"
+      text: "\n\n"
+    - type: "FUN"
+      children:
+        - type: "MODIFIER_LIST"
+          children:
+            - type: "operator"
+              text: "operator"
+        - type: "WHITE_SPACE"
+          text: " "
+        - type: "fun"
+          text: "fun"
+        - type: "WHITE_SPACE"
+          text: " "
+        - type: "TYPE_PARAMETER_LIST"
+          children:
+            - type: "LT"
+              text: "<"
+            - type: "TYPE_PARAMETER"
+              children:
+                - type: "IDENTIFIER"
+                  text: "T"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "COLON"
+                  text: ":"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "TYPE_REFERENCE"
+                  children:
+                    - type: "USER_TYPE"
+                      children:
+                        - type: "REFERENCE_EXPRESSION"
+                          children:
+                            - type: "IDENTIFIER"
+                              text: "OptionGroup"
+            - type: "GT"
+              text: ">"
+        - type: "WHITE_SPACE"
+          text: " "
+        - type: "TYPE_REFERENCE"
+          children:
+            - type: "USER_TYPE"
+              children:
+                - type: "REFERENCE_EXPRESSION"
+                  children:
+                    - type: "IDENTIFIER"
+                      text: "T"
+        - type: "DOT"
+          text: "."
+        - type: "IDENTIFIER"
+          text: "provideDelegate"
+        - type: "VALUE_PARAMETER_LIST"
+          children:
+            - type: "LPAR"
+              text: "("
+            - type: "WHITE_SPACE"
+              text: "\n    "
+            - type: "VALUE_PARAMETER"
+              children:
+                - type: "IDENTIFIER"
+                  text: "thisRef"
+                - type: "COLON"
+                  text: ":"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "TYPE_REFERENCE"
+                  children:
+                    - type: "USER_TYPE"
+                      children:
+                        - type: "REFERENCE_EXPRESSION"
+                          children:
+                            - type: "IDENTIFIER"
+                              text: "BaseCliktCommand"
+                        - type: "TYPE_ARGUMENT_LIST"
+                          children:
+                            - type: "LT"
+                              text: "<"
+                            - type: "TYPE_PROJECTION"
+                              children:
+                                - type: "MUL"
+                                  text: "*"
+                            - type: "GT"
+                              text: ">"
+            - type: "COMMA"
+              text: ","
+            - type: "WHITE_SPACE"
+              text: "\n    "
+            - type: "VALUE_PARAMETER"
+              children:
+                - type: "IDENTIFIER"
+                  text: "prop"
+                - type: "COLON"
+                  text: ":"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "TYPE_REFERENCE"
+                  children:
+                    - type: "USER_TYPE"
+                      children:
+                        - type: "REFERENCE_EXPRESSION"
+                          children:
+                            - type: "IDENTIFIER"
+                              text: "KProperty"
+                        - type: "TYPE_ARGUMENT_LIST"
+                          children:
+                            - type: "LT"
+                              text: "<"
+                            - type: "TYPE_PROJECTION"
+                              children:
+                                - type: "MUL"
+                                  text: "*"
+                            - type: "GT"
+                              text: ">"
+            - type: "COMMA"
+              text: ","
+            - type: "WHITE_SPACE"
+              text: "\n"
+            - type: "RPAR"
+              text: ")"
+        - type: "COLON"
+          text: ":"
+        - type: "WHITE_SPACE"
+          text: " "
+        - type: "TYPE_REFERENCE"
+          children:
+            - type: "USER_TYPE"
+              children:
+                - type: "REFERENCE_EXPRESSION"
+                  children:
+                    - type: "IDENTIFIER"
+                      text: "ReadOnlyProperty"
+                - type: "TYPE_ARGUMENT_LIST"
+                  children:
+                    - type: "LT"
+                      text: "<"
+                    - type: "TYPE_PROJECTION"
+                      children:
+                        - type: "TYPE_REFERENCE"
+                          children:
+                            - type: "USER_TYPE"
+                              children:
+                                - type: "REFERENCE_EXPRESSION"
+                                  children:
+                                    - type: "IDENTIFIER"
+                                      text: "BaseCliktCommand"
+                                - type: "TYPE_ARGUMENT_LIST"
+                                  children:
+                                    - type: "LT"
+                                      text: "<"
+                                    - type: "TYPE_PROJECTION"
+                                      children:
+                                        - type: "MUL"
+                                          text: "*"
+                                    - type: "GT"
+                                      text: ">"
+                    - type: "COMMA"
+                      text: ","
+                    - type: "WHITE_SPACE"
+                      text: " "
+                    - type: "TYPE_PROJECTION"
+                      children:
+                        - type: "TYPE_REFERENCE"
+                          children:
+                            - type: "USER_TYPE"
+                              children:
+                                - type: "REFERENCE_EXPRESSION"
+                                  children:
+                                    - type: "IDENTIFIER"
+                                      text: "T"
+                    - type: "GT"
+                      text: ">"
+        - type: "WHITE_SPACE"
+          text: " "
+        - type: "BLOCK"
+          children:
+            - type: "LBRACE"
+              text: "{"
+            - type: "WHITE_SPACE"
+              text: "\n    "
+            - type: "DOT_QUALIFIED_EXPRESSION"
+              children:
+                - type: "REFERENCE_EXPRESSION"
+                  children:
+                    - type: "IDENTIFIER"
+                      text: "thisRef"
+                - type: "DOT"
+                  text: "."
+                - type: "CALL_EXPRESSION"
+                  children:
+                    - type: "REFERENCE_EXPRESSION"
+                      children:
+                        - type: "IDENTIFIER"
+                          text: "registerOptionGroup"
+                    - type: "VALUE_ARGUMENT_LIST"
+                      children:
+                        - type: "LPAR"
+                          text: "("
+                        - type: "VALUE_ARGUMENT"
+                          children:
+                            - type: "THIS_EXPRESSION"
+                              children:
+                                - type: "REFERENCE_EXPRESSION"
+                                  children:
+                                    - type: "this"
+                                      text: "this"
+                        - type: "RPAR"
+                          text: ")"
+            - type: "WHITE_SPACE"
+              text: "\n    "
+            - type: "DOT_QUALIFIED_EXPRESSION"
+              children:
+                - type: "REFERENCE_EXPRESSION"
+                  children:
+                    - type: "IDENTIFIER"
+                      text: "options"
+                - type: "DOT"
+                  text: "."
+                - type: "CALL_EXPRESSION"
+                  children:
+                    - type: "REFERENCE_EXPRESSION"
+                      children:
+                        - type: "IDENTIFIER"
+                          text: "forEach"
+                    - type: "WHITE_SPACE"
+                      text: " "
+                    - type: "LAMBDA_ARGUMENT"
+                      children:
+                        - type: "LAMBDA_EXPRESSION"
+                          children:
+                            - type: "FUNCTION_LITERAL"
+                              children:
+                                - type: "LBRACE"
+                                  text: "{"
+                                - type: "WHITE_SPACE"
+                                  text: " "
+                                - type: "BLOCK"
+                                  children:
+                                    - type: "DOT_QUALIFIED_EXPRESSION"
+                                      children:
+                                        - type: "REFERENCE_EXPRESSION"
+                                          children:
+                                            - type: "IDENTIFIER"
+                                              text: "thisRef"
+                                        - type: "DOT"
+                                          text: "."
+                                        - type: "CALL_EXPRESSION"
+                                          children:
+                                            - type: "REFERENCE_EXPRESSION"
+                                              children:
+                                                - type: "IDENTIFIER"
+                                                  text: "registerOption"
+                                            - type: "VALUE_ARGUMENT_LIST"
+                                              children:
+                                                - type: "LPAR"
+                                                  text: "("
+                                                - type: "VALUE_ARGUMENT"
+                                                  children:
+                                                    - type: "REFERENCE_EXPRESSION"
+                                                      children:
+                                                        - type: "IDENTIFIER"
+                                                          text: "it"
+                                                - type: "RPAR"
+                                                  text: ")"
+                                - type: "WHITE_SPACE"
+                                  text: " "
+                                - type: "RBRACE"
+                                  text: "}"
+            - type: "WHITE_SPACE"
+              text: "\n    "
+            - type: "RETURN"
+              children:
+                - type: "return"
+                  text: "return"
+                - type: "WHITE_SPACE"
+                  text: " "
+                - type: "CALL_EXPRESSION"
+                  children:
+                    - type: "REFERENCE_EXPRESSION"
+                      children:
+                        - type: "IDENTIFIER"
+                          text: "ReadOnlyProperty"
+                    - type: "WHITE_SPACE"
+                      text: " "
+                    - type: "LAMBDA_ARGUMENT"
+                      children:
+                        - type: "LAMBDA_EXPRESSION"
+                          children:
+                            - type: "FUNCTION_LITERAL"
+                              children:
+                                - type: "LBRACE"
+                                  text: "{"
+                                - type: "WHITE_SPACE"
+                                  text: " "
+                                - type: "VALUE_PARAMETER_LIST"
+                                  children:
+                                    - type: "VALUE_PARAMETER"
+                                      children:
+                                        - type: "IDENTIFIER"
+                                          text: "_"
+                                    - type: "COMMA"
+                                      text: ","
+                                    - type: "WHITE_SPACE"
+                                      text: " "
+                                    - type: "VALUE_PARAMETER"
+                                      children:
+                                        - type: "IDENTIFIER"
+                                          text: "_"
+                                - type: "WHITE_SPACE"
+                                  text: " "
+                                - type: "ARROW"
+                                  text: "->"
+                                - type: "WHITE_SPACE"
+                                  text: " "
+                                - type: "BLOCK"
+                                  children:
+                                    - type: "THIS_EXPRESSION"
+                                      children:
+                                        - type: "REFERENCE_EXPRESSION"
+                                          children:
+                                            - type: "this"
+                                              text: "this"
+                                        - type: "LABEL_QUALIFIER"
+                                          children:
+                                            - type: "LABEL"
+                                              children:
+                                                - type: "AT"
+                                                  text: "@"
+                                                - type: "IDENTIFIER"
+                                                  text: "provideDelegate"
+                                - type: "WHITE_SPACE"
+                                  text: " "
+                                - type: "RBRACE"
+                                  text: "}"
+            - type: "WHITE_SPACE"
+              text: "\n"
+            - type: "RBRACE"
+              text: "}"
+    - type: "WHITE_SPACE"
+      text: "\n"

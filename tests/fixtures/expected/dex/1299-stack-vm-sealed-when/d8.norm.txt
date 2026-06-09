@@ -1,0 +1,288 @@
+dex_version   035
+strings       104
+types         33
+methods       44
+classes       13
+
+--- strings ---
+  ""
+  "("
+  "()"
+  "()I"
+  "()Ljava/util/List;"
+  "()V"
+  "(I)V"
+  "(Ljava/util/List;)V"
+  "+"
+  "---"
+  "<clinit>"
+  "<init>"
+  ">;"
+  ">;)V"
+  "I"
+  "II"
+  "INSTANCE"
+  "L"
+  "LAdd;"
+  "LDup;"
+  "LHalt;"
+  "LI"
+  "LInputKt;"
+  "LInstr;"
+  "LJump;"
+  "LJumpIfZero;"
+  "LL"
+  "LMul;"
+  "LPrint;"
+  "LPush;"
+  "LSub;"
+  "LSwap;"
+  "LVm;"
+  "Ldalvik/annotation/Signature;"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Integer;"
+  "Ljava/lang/Number;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/String;"
+  "Ljava/lang/System;"
+  "Ljava/util/ArrayList;"
+  "Ljava/util/List;"
+  "Ljava/util/List<"
+  "Lkotlin/Metadata;"
+  "Lkotlin/NoWhenBranchMatchedException;"
+  "Lkotlin/collections/CollectionsKt;"
+  "Lkotlin/jvm/internal/DefaultConstructorMarker;"
+  "Lkotlin/jvm/internal/Intrinsics;"
+  "V"
+  "VI"
+  "VL"
+  "VLL"
+  "Z"
+  "ZL"
+  "[LInstr;"
+  "[Ljava/lang/Object;"
+  "[Ljava/lang/String;"
+  "a"
+  "add"
+  "arith"
+  "b"
+  "checkNotNullParameter"
+  "countdown"
+  "d1"
+  "d2"
+  "get"
+  "getProgram"
+  "getTarget"
+  "getValue"
+  "halted"
+  "input.kt"
+  "instr"
+  "intValue"
+  "k"
+  "listOf"
+  "main"
+  "mv"
+  "nextPcForJumpIfZero"
+  "out"
+  "pc"
+  "peek"
+  "pop"
+  "println"
+  "program"
+  "push"
+  "remove"
+  "run"
+  "size"
+  "stack"
+  "swap"
+  "t"
+  "target"
+  "top"
+  "u"
+  "v"
+  "value"
+  "valueOf"
+  "xi"
+  "~~D8{\"backend\":\"dex\",\"compilation-mode\":\"debug\",\"has-checksums\":false,\"min-api\":1,\"sha-1\":\"a7ad18a70460b799d0482e497c109a75bf7f91de\",\"version\":\"8.10.9-dev\"}"
+  "��\u{6}\n��\n\u{2}\u{10}\u{2}\u{1a}\u{6}\u{10}��\u{1a}\u{2}0\u{1}"
+  "��\u{c}\n\u{2}\u{18}\u{2}\n\u{2}\u{18}\u{2}\n\u{2}\u{8}\u{2}\u{8}Æ\u{2}\u{18}��2\u{2}0\u{1}B\t\u{8}\u{2}¢\u{6}\u{4}\u{8}\u{2}\u{10}\u{3}"
+  "��\u{12}\n\u{2}\u{18}\u{2}\n\u{2}\u{18}\u{2}\n��\n\u{2}\u{10}\u{8}\n\u{2}\u{8}\u{4}\u{18}��2\u{2}0\u{1}B\u{f}\u{12}\u{6}\u{10}\u{2}\u{1a}\u{2}0\u{3}¢\u{6}\u{4}\u{8}\u{4}\u{10}\u{5}R\u{11}\u{10}\u{2}\u{1a}\u{2}0\u{3}¢\u{6}\u{8}\n��\u{1a}\u{4}\u{8}\u{6}\u{10}\u{7}"
+  "��0\n\u{2}\u{18}\u{2}\n\u{2}\u{10}��\n��\n\u{2}\u{10} \n\u{2}\u{18}\u{2}\n\u{2}\u{8}\u{5}\n\u{2}\u{10}!\n\u{2}\u{10}\u{8}\n\u{2}\u{8}\u{2}\n\u{2}\u{10}\u{b}\n��\n\u{2}\u{10}\u{2}\n\u{2}\u{8}\u{6}\u{18}��2\u{2}0\u{1}B\u{15}\u{12}\u{c}\u{10}\u{2}\u{1a}\u{8}\u{12}\u{4}\u{12}\u{2}0\u{4}0\u{3}¢\u{6}\u{4}\u{8}\u{5}\u{10}\u{6}J\u{10}\u{10}\u{f}\u{1a}\u{2}0\u{10}2\u{6}\u{10}\u{11}\u{1a}\u{2}0\u{b}H\u{2}J\u{8}\u{10}\u{12}\u{1a}\u{2}0\u{b}H\u{2}J\u{8}\u{10}\u{13}\u{1a}\u{2}0\u{b}H\u{2}J\u{10}\u{10}\u{14}\u{1a}\u{2}0\u{b}2\u{6}\u{10}\u{15}\u{1a}\u{2}0\u{b}H\u{2}J\u{6}\u{10}\u{16}\u{1a}\u{2}0\u{10}R\u{17}\u{10}\u{2}\u{1a}\u{8}\u{12}\u{4}\u{12}\u{2}0\u{4}0\u{3}¢\u{6}\u{8}\n��\u{1a}\u{4}\u{8}\u{7}\u{10}\u{8}R\u{14}\u{10}\t\u{1a}\u{8}\u{12}\u{4}\u{12}\u{2}0\u{b}0\nX\u{82}\u{4}¢\u{6}\u{2}\n��R\u{e}\u{10}\u{c}\u{1a}\u{2}0\u{b}X\u{82}\u{e}¢\u{6}\u{2}\n��R\u{e}\u{10}\r\u{1a}\u{2}0\u{e}X\u{82}\u{e}¢\u{6}\u{2}\n��"
+  "��4\n\u{2}\u{18}\u{2}\n\u{2}\u{10}��\n\u{2}\u{8}\u{2}\n\u{2}\u{18}\u{2}\n\u{2}\u{18}\u{2}\n\u{2}\u{18}\u{2}\n\u{2}\u{18}\u{2}\n\u{2}\u{18}\u{2}\n\u{2}\u{18}\u{2}\n\u{2}\u{18}\u{2}\n\u{2}\u{18}\u{2}\n\u{2}\u{18}\u{2}\n\u{2}\u{18}\u{2}\u{8}6\u{18}��2\u{2}0\u{1}B\t\u{8}\u{4}¢\u{6}\u{4}\u{8}\u{2}\u{10}\u{3}\u{82}\u{1}\n\u{4}\u{5}\u{6}\u{7}\u{8}\t\n\u{b}\u{c}\r"
+
+--- types ---
+  I
+  LAdd;
+  LDup;
+  LHalt;
+  LInputKt;
+  LInstr;
+  LJump;
+  LJumpIfZero;
+  LMul;
+  LPrint;
+  LPush;
+  LSub;
+  LSwap;
+  LVm;
+  Ldalvik/annotation/Signature;
+  Ljava/io/PrintStream;
+  Ljava/lang/Integer;
+  Ljava/lang/Number;
+  Ljava/lang/Object;
+  Ljava/lang/String;
+  Ljava/lang/System;
+  Ljava/util/ArrayList;
+  Ljava/util/List;
+  Lkotlin/Metadata;
+  Lkotlin/NoWhenBranchMatchedException;
+  Lkotlin/collections/CollectionsKt;
+  Lkotlin/jvm/internal/DefaultConstructorMarker;
+  Lkotlin/jvm/internal/Intrinsics;
+  V
+  Z
+  [LInstr;
+  [Ljava/lang/Object;
+  [Ljava/lang/String;
+
+--- methods ---
+  LAdd;.<clinit>()V
+  LAdd;.<init>()V
+  LDup;.<clinit>()V
+  LDup;.<init>()V
+  LHalt;.<clinit>()V
+  LHalt;.<init>()V
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  LInstr;.<init>()V
+  LInstr;.<init>(Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+  LJump;.<init>(I)V
+  LJump;.getTarget()I
+  LJumpIfZero;.<init>(I)V
+  LJumpIfZero;.getTarget()I
+  LMul;.<clinit>()V
+  LMul;.<init>()V
+  LPrint;.<clinit>()V
+  LPrint;.<init>()V
+  LPush;.<init>(I)V
+  LPush;.getValue()I
+  LSub;.<clinit>()V
+  LSub;.<init>()V
+  LSwap;.<clinit>()V
+  LSwap;.<init>()V
+  LVm;.<init>(Ljava/util/List;)V
+  LVm;.getProgram()Ljava/util/List;
+  LVm;.nextPcForJumpIfZero(I)I
+  LVm;.peek()I
+  LVm;.pop()I
+  LVm;.push(I)V
+  LVm;.run()V
+  Ljava/io/PrintStream;.println(I)V
+  Ljava/io/PrintStream;.println(Ljava/lang/Object;)V
+  Ljava/lang/Integer;.valueOf(I)Ljava/lang/Integer;
+  Ljava/lang/Number;.intValue()I
+  Ljava/lang/Object;.<init>()V
+  Ljava/util/ArrayList;.<init>()V
+  Ljava/util/List;.add(Ljava/lang/Object;)Z
+  Ljava/util/List;.get(I)Ljava/lang/Object;
+  Ljava/util/List;.remove(I)Ljava/lang/Object;
+  Ljava/util/List;.size()I
+  Lkotlin/NoWhenBranchMatchedException;.<init>()V
+  Lkotlin/collections/CollectionsKt;.listOf([Ljava/lang/Object;)Ljava/util/List;
+  Lkotlin/jvm/internal/Intrinsics;.checkNotNullParameter(Ljava/lang/Object;Ljava/lang/String;)V
+
+--- class[0] ---
+  descriptor   LInstr;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       <init>()V flags=0x10002 regs=1 ins=1 outs=1 insns=4
+  method       <init>(Lkotlin/jvm/internal/DefaultConstructorMarker;)V flags=0x11001 regs=2 ins=2 outs=1 insns=4
+
+--- class[1] ---
+  descriptor   LAdd;
+  super        LInstr;
+  source_file  input.kt
+  method       <clinit>()V flags=0x10008 regs=1 ins=0 outs=1 insns=8
+  method       <init>()V flags=0x10002 regs=2 ins=1 outs=2 insns=5
+
+--- class[2] ---
+  descriptor   LDup;
+  super        LInstr;
+  source_file  input.kt
+  method       <clinit>()V flags=0x10008 regs=1 ins=0 outs=1 insns=8
+  method       <init>()V flags=0x10002 regs=2 ins=1 outs=2 insns=5
+
+--- class[3] ---
+  descriptor   LHalt;
+  super        LInstr;
+  source_file  input.kt
+  method       <clinit>()V flags=0x10008 regs=1 ins=0 outs=1 insns=8
+  method       <init>()V flags=0x10002 regs=2 ins=1 outs=2 insns=5
+
+--- class[4] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       main()V flags=0x0019 regs=13 ins=0 outs=2 insns=205
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4
+
+--- class[5] ---
+  descriptor   LJump;
+  super        LInstr;
+  source_file  input.kt
+  method       <init>(I)V flags=0x10001 regs=3 ins=2 outs=2 insns=7
+  method       getTarget()I flags=0x0011 regs=2 ins=1 outs=0 insns=3
+
+--- class[6] ---
+  descriptor   LJumpIfZero;
+  super        LInstr;
+  source_file  input.kt
+  method       <init>(I)V flags=0x10001 regs=3 ins=2 outs=2 insns=7
+  method       getTarget()I flags=0x0011 regs=2 ins=1 outs=0 insns=3
+
+--- class[7] ---
+  descriptor   LMul;
+  super        LInstr;
+  source_file  input.kt
+  method       <clinit>()V flags=0x10008 regs=1 ins=0 outs=1 insns=8
+  method       <init>()V flags=0x10002 regs=2 ins=1 outs=2 insns=5
+
+--- class[8] ---
+  descriptor   LPrint;
+  super        LInstr;
+  source_file  input.kt
+  method       <clinit>()V flags=0x10008 regs=1 ins=0 outs=1 insns=8
+  method       <init>()V flags=0x10002 regs=2 ins=1 outs=2 insns=5
+
+--- class[9] ---
+  descriptor   LPush;
+  super        LInstr;
+  source_file  input.kt
+  method       <init>(I)V flags=0x10001 regs=3 ins=2 outs=2 insns=7
+  method       getValue()I flags=0x0011 regs=2 ins=1 outs=0 insns=3
+
+--- class[10] ---
+  descriptor   LSub;
+  super        LInstr;
+  source_file  input.kt
+  method       <clinit>()V flags=0x10008 regs=1 ins=0 outs=1 insns=8
+  method       <init>()V flags=0x10002 regs=2 ins=1 outs=2 insns=5
+
+--- class[11] ---
+  descriptor   LSwap;
+  super        LInstr;
+  source_file  input.kt
+  method       <clinit>()V flags=0x10008 regs=1 ins=0 outs=1 insns=8
+  method       <init>()V flags=0x10002 regs=2 ins=1 outs=2 insns=5
+
+--- class[12] ---
+  descriptor   LVm;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       <init>(Ljava/util/List;)V flags=0x10001 regs=3 ins=2 outs=2 insns=20
+  method       getProgram()Ljava/util/List; flags=0x0011 regs=2 ins=1 outs=0 insns=3
+  method       nextPcForJumpIfZero(I)I flags=0x0012 regs=4 ins=2 outs=1 insns=12
+  method       peek()I flags=0x0012 regs=3 ins=1 outs=2 insns=21
+  method       pop()I flags=0x0012 regs=4 ins=1 outs=2 insns=34
+  method       push(I)V flags=0x0012 regs=4 ins=2 outs=2 insns=10
+  method       run()V flags=0x0011 regs=6 ins=1 outs=2 insns=228

@@ -103,12 +103,7 @@ pub fn parse_kdoc(text: &str, base_start: u32, file_id: FileId) -> SilNode {
 ///
 /// `body_offset` is where the body starts inside the full KDoc text;
 /// `base_start` is the absolute source offset of the KDoc's `/**`.
-fn parse_section(
-    body: &str,
-    body_offset: usize,
-    base_start: u32,
-    file_id: FileId,
-) -> Vec<SilNode> {
+fn parse_section(body: &str, body_offset: usize, base_start: u32, file_id: FileId) -> Vec<SilNode> {
     let mut out: Vec<SilNode> = Vec::new();
     let bytes = body.as_bytes();
     let mk_span = |s: usize, e: usize| Span {
@@ -119,6 +114,10 @@ fn parse_section(
 
     let mut i = 0;
     let mut at_line_start = true;
+    // Inside a triple-backtick fenced code block, every line becomes
+    // one KDOC_CODE_BLOCK_TEXT (no link/paren parsing applies). The
+    // opening fence and closing fence themselves stay as KDOC_TEXT.
+    let mut in_code_block = false;
     while i < bytes.len() {
         let b = bytes[i];
 
@@ -162,6 +161,46 @@ fn parse_section(
         }
         at_line_start = false;
 
+        // Inside a code block, consume the rest of the line. If the
+        // line contains a closing ` ``` ` fence, the whole line goes
+        // out as one KDOC_TEXT (kotlinc's shape for the fence line).
+        // Otherwise the whole line content is one KDOC_CODE_BLOCK_TEXT.
+        if in_code_block {
+            let line_start = i;
+            let mut line_end = i;
+            let mut close_fence_at: Option<usize> = None;
+            while line_end < bytes.len() && bytes[line_end] != b'\n' && bytes[line_end] != b'\r' {
+                if line_end + 2 < bytes.len()
+                    && bytes[line_end] == b'`'
+                    && bytes[line_end + 1] == b'`'
+                    && bytes[line_end + 2] == b'`'
+                {
+                    close_fence_at = Some(line_end);
+                    line_end += 3;
+                    continue;
+                }
+                line_end += 1;
+            }
+            if line_end > line_start {
+                if close_fence_at.is_some() {
+                    out.push(SilNode::token(
+                        S::KDOC_TEXT,
+                        &body[line_start..line_end],
+                        mk_span(body_offset + line_start, body_offset + line_end),
+                    ));
+                    in_code_block = false;
+                } else {
+                    out.push(SilNode::token(
+                        S::KDOC_CODE_BLOCK_TEXT,
+                        &body[line_start..line_end],
+                        mk_span(body_offset + line_start, body_offset + line_end),
+                    ));
+                }
+            }
+            i = line_end;
+            continue;
+        }
+
         // KDOC_TAG: `@ident ...`
         if b == b'@' {
             let (tag, consumed) = parse_tag(&body[i..], body_offset + i, base_start, file_id);
@@ -187,34 +226,92 @@ fn parse_section(
             // fall through: treat as plain text
         }
 
+        // KDOC_LPAR / KDOC_RPAR: kotlinc treats `(` and `)` as standalone
+        // structural tokens inside a section so that descriptions like
+        // `Reports a summary (count per rule) of the ...` split into
+        // text / `(` / text / `)` / text rather than one long run.
+        if b == b'(' {
+            out.push(SilNode::token(
+                S::KDOC_LPAR,
+                "(",
+                mk_span(body_offset + i, body_offset + i + 1),
+            ));
+            i += 1;
+            continue;
+        }
+        if b == b')' {
+            out.push(SilNode::token(
+                S::KDOC_RPAR,
+                ")",
+                mk_span(body_offset + i, body_offset + i + 1),
+            ));
+            i += 1;
+            continue;
+        }
+
         // KDOC_TEXT: run until a structural boundary. Stops at `\n`
-        // (handled by the WS arm above), `@` (tag), or `[` (link).
-        // Pure inline whitespace does NOT terminate the text run.
+        // (handled by the WS arm above), `@` (tag), `[` (potential
+        // link), or `(`/`)` (paren tokens, handled above). Pure inline
+        // whitespace does NOT terminate the text run.
         //
-        // Special case: `[display][target]` — kotlinc treats the
-        // `[display]` part as plain KDOC_TEXT (display brackets are
-        // literal text in the doc) and only the `[target]` becomes a
-        // KDOC_MARKDOWN_LINK. We absorb `[display]` into the running
-        // text and stop at `[target]`.
+        // Special cases:
+        //   * `[display][target]` — kotlinc treats the `[display]`
+        //     part as plain KDOC_TEXT (display brackets are literal
+        //     text in the doc) and only the `[target]` becomes a
+        //     KDOC_MARKDOWN_LINK. We absorb `[display]` into the
+        //     running text and stop at `[target]`.
+        //   * `[non-identifier]` — `[` content that isn't a valid
+        //     KDOC_NAME (e.g. `[Foo<*>]`, `[a + b]`) is not a link;
+        //     consume the `[...]` as plain text.
         let text_start = i;
         while i < bytes.len() {
             let bb = bytes[i];
-            if matches!(bb, b'\n' | b'\r' | b'@') {
+            if matches!(bb, b'\n' | b'\r' | b'@' | b'(' | b')') {
                 break;
             }
             if bb == b'[' {
                 if let Some((display_end, has_target)) = peek_display_target(&body[i..]) {
                     if has_target {
-                        // Include `[display]` in the text run; the
-                        // next iteration of the outer loop will pick
-                        // up `[target]` and emit it as the link.
+                        // `[display][target]` — kotlinc absorbs the
+                        // first `[display]` into the running text
+                        // regardless of validity; the next loop turn
+                        // will pick up `[target]` and emit it as the
+                        // KDOC_MARKDOWN_LINK.
                         i += display_end;
                         continue;
                     }
+                    // Single `[...]`: only treat as a link boundary
+                    // when the inner content forms a valid KDOC_NAME.
+                    let inner = &body[i + 1..i + display_end - 1];
+                    if is_valid_kdoc_name(inner) {
+                        break;
+                    }
+                    // Otherwise absorb `[...]` as plain text.
+                    i += display_end;
+                    continue;
                 }
                 break;
             }
             i += 1;
+        }
+        // Triple-backtick fence inside the text run opens a code
+        // block. Emit the text-so-far AND the fence as one KDOC_TEXT
+        // (kotlinc keeps the opening fence as part of the surrounding
+        // text), then flip into code-block mode.
+        let fence_at = body[text_start..i].rfind("```");
+        if let Some(off) = fence_at {
+            if text_start + off + 3 == i
+                || i == bytes.len()
+                || matches!(bytes.get(i), Some(b'\n') | Some(b'\r'))
+            {
+                out.push(SilNode::token(
+                    S::KDOC_TEXT,
+                    &body[text_start..i],
+                    mk_span(body_offset + text_start, body_offset + i),
+                ));
+                in_code_block = true;
+                continue;
+            }
         }
         if i > text_start {
             out.push(SilNode::token(
@@ -222,7 +319,18 @@ fn parse_section(
                 &body[text_start..i],
                 mk_span(body_offset + text_start, body_offset + i),
             ));
+            continue;
         }
+        // No structural arm matched and the text loop made no
+        // progress — consume the byte as a single-char text run to
+        // guarantee forward progress (defends against infinite
+        // loops on malformed input).
+        out.push(SilNode::token(
+            S::KDOC_TEXT,
+            &body[i..i + 1],
+            mk_span(body_offset + i, body_offset + i + 1),
+        ));
+        i += 1;
     }
     out
 }
@@ -237,9 +345,7 @@ fn peek_display_target(s: &str) -> Option<(usize, bool)> {
     if bytes.first() != Some(&b'[') {
         return None;
     }
-    let close_rel = bytes[1..]
-        .iter()
-        .position(|&b| b == b']' || b == b'\n')?;
+    let close_rel = bytes[1..].iter().position(|&b| b == b']' || b == b'\n')?;
     if bytes[1 + close_rel] != b']' {
         return None;
     }
@@ -444,6 +550,26 @@ fn parse_tag(s: &str, abs_start: usize, base_start: u32, file_id: FileId) -> (Si
             }
         }
 
+        // Paren tokens inside the tag description split runs into
+        // KDOC_TEXT / KDOC_LPAR / KDOC_TEXT / KDOC_RPAR / ...
+        if bb == b'(' || bb == b')' {
+            flush_text(&mut children, text_start, i);
+            let kind = if bb == b'(' {
+                S::KDOC_LPAR
+            } else {
+                S::KDOC_RPAR
+            };
+            let ch = if bb == b'(' { "(" } else { ")" };
+            children.push(SilNode::token(
+                kind,
+                ch,
+                mk_span(abs_start + i, abs_start + i + 1),
+            ));
+            i += 1;
+            text_start = i;
+            continue;
+        }
+
         i += 1;
     }
     flush_text(&mut children, text_start, i);
@@ -497,6 +623,13 @@ fn parse_markdown_link(
         return None;
     }
     let name_text = &s[1..close];
+    // kotlinc only treats `[...]` as a markdown link when the content
+    // is a valid (possibly dotted) Kotlin identifier — `[Foo]`,
+    // `[Foo.bar]`. Anything else (e.g. `[Foo<*>]`, `[a + b]`) stays
+    // as plain KDOC_TEXT.
+    if !is_valid_kdoc_name(name_text) {
+        return None;
+    }
     let name_node = build_kdoc_name(name_text, abs_start + 1, base_start, file_id);
 
     let mut children: Vec<SilNode> = vec![
@@ -519,7 +652,8 @@ fn parse_markdown_link(
         {
             if bytes[inner_start + rel_close] == b']' {
                 let tgt_text = &s[inner_start..inner_start + rel_close];
-                let tgt_node = build_kdoc_name(tgt_text, abs_start + inner_start, base_start, file_id);
+                let tgt_node =
+                    build_kdoc_name(tgt_text, abs_start + inner_start, base_start, file_id);
                 children.push(SilNode::token(
                     S::LBRACKET,
                     "[",
@@ -550,6 +684,37 @@ fn parse_markdown_link(
         data: crate::tree::SilData::Composite { children },
     };
     Some((link, i))
+}
+
+/// `true` when `text` is a (possibly dotted) Kotlin identifier
+/// — `Foo`, `Foo.bar`, `Foo.bar.baz`. Names with operators, generics,
+/// or whitespace are NOT valid KDOC names and should be left as plain
+/// text by the caller.
+fn is_valid_kdoc_name(text: &str) -> bool {
+    if text.is_empty() {
+        return false;
+    }
+    let mut expect_ident_start = true;
+    for &b in text.as_bytes() {
+        if b == b'.' {
+            if expect_ident_start {
+                return false; // leading dot or consecutive dots
+            }
+            expect_ident_start = true;
+            continue;
+        }
+        let is_start_char = b.is_ascii_alphabetic() || b == b'_';
+        let is_cont_char = b.is_ascii_alphanumeric() || b == b'_';
+        if expect_ident_start {
+            if !is_start_char {
+                return false;
+            }
+            expect_ident_start = false;
+        } else if !is_cont_char {
+            return false;
+        }
+    }
+    !expect_ident_start
 }
 
 /// Build a `KDOC_NAME` composite from a dotted name like `Foo.bar.baz`.

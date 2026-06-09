@@ -667,6 +667,20 @@ impl<'a> Lexer<'a> {
                     return;
                 }
                 b'\\' => {
+                    // Flush any pending literal-content chunk so the
+                    // escape sequence emerges as its own StringChunk
+                    // token. kotlinc PSI wraps each escape in a
+                    // dedicated ESCAPE_STRING_TEMPLATE_ENTRY, so
+                    // splitting at the lexer level keeps the parser
+                    // arms 1:1 with PSI nodes.
+                    if !chunk.is_empty() {
+                        self.emit(
+                            TokenKind::StringChunk,
+                            chunk_start,
+                            self.pos,
+                            Some(TokenPayload::StringChunk(std::mem::take(&mut chunk))),
+                        );
+                    }
                     let esc_start = self.pos;
                     self.pos += 1;
                     let Some(esc) = self.peek() else {
@@ -674,15 +688,16 @@ impl<'a> Lexer<'a> {
                         return;
                     };
                     self.pos += 1;
+                    let mut esc_chunk = String::new();
                     match esc {
-                        b'n' => chunk.push('\n'),
-                        b'r' => chunk.push('\r'),
-                        b't' => chunk.push('\t'),
-                        b'\\' => chunk.push('\\'),
-                        b'"' => chunk.push('"'),
-                        b'\'' => chunk.push('\''),
-                        b'$' => chunk.push('$'),
-                        b'0' => chunk.push('\0'),
+                        b'n' => esc_chunk.push('\n'),
+                        b'r' => esc_chunk.push('\r'),
+                        b't' => esc_chunk.push('\t'),
+                        b'\\' => esc_chunk.push('\\'),
+                        b'"' => esc_chunk.push('"'),
+                        b'\'' => esc_chunk.push('\''),
+                        b'$' => esc_chunk.push('$'),
+                        b'0' => esc_chunk.push('\0'),
                         b'u' => {
                             // Unicode escape: \uXXXX (4 hex digits)
                             let mut hex = String::with_capacity(4);
@@ -698,7 +713,7 @@ impl<'a> Lexer<'a> {
                             }
                             if let Ok(cp) = u32::from_str_radix(&hex, 16) {
                                 if let Some(ch) = char::from_u32(cp) {
-                                    chunk.push(ch);
+                                    esc_chunk.push(ch);
                                 }
                             }
                         }
@@ -710,49 +725,58 @@ impl<'a> Lexer<'a> {
                             );
                         }
                     }
+                    self.emit(
+                        TokenKind::StringChunk,
+                        esc_start,
+                        self.pos,
+                        Some(TokenPayload::StringChunk(esc_chunk)),
+                    );
+                    chunk_start = self.pos;
                 }
                 b'$' => {
-                    if !chunk.is_empty() {
-                        self.emit(
-                            TokenKind::StringChunk,
-                            chunk_start,
-                            self.pos,
-                            Some(TokenPayload::StringChunk(std::mem::take(&mut chunk))),
-                        );
-                    }
                     let dollar = self.pos;
-                    self.pos += 1;
-                    if self.peek() == Some(b'{') {
-                        // ${ ... } interpolation: re-enter normal lex mode
-                        // tracking brace depth.
-                        self.pos += 1;
-                        self.emit(TokenKind::StringExprStart, dollar, self.pos, None);
-                        self.scan_interpolated_expr();
-                    } else if matches!(self.peek(), Some(b) if b.is_ascii_alphabetic() || b == b'_')
-                    {
-                        // $ident interpolation.
-                        let id_start = self.pos;
-                        while let Some(b) = self.peek() {
-                            if b.is_ascii_alphanumeric() || b == b'_' {
-                                self.pos += 1;
-                            } else {
-                                break;
-                            }
+                    let lookahead = self.bytes.get(dollar + 1).copied();
+                    let is_template_open = lookahead == Some(b'{')
+                        || matches!(lookahead, Some(b) if b.is_ascii_alphabetic() || b == b'_');
+                    if is_template_open {
+                        if !chunk.is_empty() {
+                            self.emit(
+                                TokenKind::StringChunk,
+                                chunk_start,
+                                dollar,
+                                Some(TokenPayload::StringChunk(std::mem::take(&mut chunk))),
+                            );
                         }
-                        let text = std::str::from_utf8(&self.bytes[id_start..self.pos])
-                            .expect("ASCII ident")
-                            .to_string();
-                        self.emit(
-                            TokenKind::StringIdentRef,
-                            dollar,
-                            self.pos,
-                            Some(TokenPayload::StringIdentRef(text)),
-                        );
+                        self.pos += 1; // past `$`
+                        if self.peek() == Some(b'{') {
+                            self.pos += 1;
+                            self.emit(TokenKind::StringExprStart, dollar, self.pos, None);
+                            self.scan_interpolated_expr();
+                        } else {
+                            let id_start = self.pos;
+                            while let Some(b) = self.peek() {
+                                if b.is_ascii_alphanumeric() || b == b'_' {
+                                    self.pos += 1;
+                                } else {
+                                    break;
+                                }
+                            }
+                            let text = std::str::from_utf8(&self.bytes[id_start..self.pos])
+                                .expect("ASCII ident")
+                                .to_string();
+                            self.emit(
+                                TokenKind::StringIdentRef,
+                                dollar,
+                                self.pos,
+                                Some(TokenPayload::StringIdentRef(text)),
+                            );
+                        }
+                        chunk_start = self.pos;
                     } else {
-                        // Lone `$` — treat as literal.
+                        // Lone `$` — literal in the running chunk.
                         chunk.push('$');
+                        self.pos += 1;
                     }
-                    chunk_start = self.pos;
                 }
                 b'\n' => {
                     self.error(open, self.pos, "newline in string literal");
@@ -827,6 +851,80 @@ impl<'a> Lexer<'a> {
             };
 
             if b == b'$' {
+                let dollar = self.pos;
+                let lookahead = self.bytes.get(dollar + 1).copied();
+                let is_template_open = lookahead == Some(b'{')
+                    || matches!(lookahead, Some(b) if b.is_ascii_alphabetic() || b == b'_');
+                if is_template_open {
+                    // Flush the running chunk only when we're really
+                    // about to start a template entry — otherwise the
+                    // `$` is just a literal that joins the chunk.
+                    if !chunk.is_empty() {
+                        self.emit(
+                            TokenKind::StringChunk,
+                            chunk_start,
+                            dollar,
+                            Some(TokenPayload::StringChunk(std::mem::take(&mut chunk))),
+                        );
+                    }
+                    self.pos += 1; // past `$`
+                    if self.peek() == Some(b'{') {
+                        self.pos += 1;
+                        self.emit(TokenKind::StringExprStart, dollar, self.pos, None);
+                        self.scan_interpolated_expr();
+                    } else {
+                        let id_start = self.pos;
+                        while let Some(b) = self.peek() {
+                            if b.is_ascii_alphanumeric() || b == b'_' {
+                                self.pos += 1;
+                            } else {
+                                break;
+                            }
+                        }
+                        let text = std::str::from_utf8(&self.bytes[id_start..self.pos])
+                            .expect("ASCII ident")
+                            .to_string();
+                        self.emit(
+                            TokenKind::StringIdentRef,
+                            dollar,
+                            self.pos,
+                            Some(TokenPayload::StringIdentRef(text)),
+                        );
+                    }
+                    chunk_start = self.pos;
+                } else {
+                    // Lone `$` (followed by `)`, `@`, digit, EOF, …)
+                    // — kotlinc PSI still splits the chunk at the `$`:
+                    // the preceding literal becomes its own
+                    // LITERAL_STRING_TEMPLATE_ENTRY, then the `$` is
+                    // its own one-character literal entry, then the
+                    // remainder picks up as a fresh chunk.
+                    if !chunk.is_empty() {
+                        self.emit(
+                            TokenKind::StringChunk,
+                            chunk_start,
+                            dollar,
+                            Some(TokenPayload::StringChunk(std::mem::take(&mut chunk))),
+                        );
+                    }
+                    self.pos += 1;
+                    self.emit(
+                        TokenKind::StringChunk,
+                        dollar,
+                        self.pos,
+                        Some(TokenPayload::StringChunk("$".to_string())),
+                    );
+                    chunk_start = self.pos;
+                }
+                continue;
+            }
+
+            // kotlinc PSI splits a raw string at every backslash —
+            // each `\` becomes its own LITERAL_STRING_TEMPLATE_ENTRY,
+            // even though no escape interpretation happens. Flush the
+            // running chunk, emit the lone `\` as its own chunk, and
+            // continue.
+            if b == b'\\' {
                 if !chunk.is_empty() {
                     self.emit(
                         TokenKind::StringChunk,
@@ -835,40 +933,79 @@ impl<'a> Lexer<'a> {
                         Some(TokenPayload::StringChunk(std::mem::take(&mut chunk))),
                     );
                 }
-                let dollar = self.pos;
+                let bs_start = self.pos;
                 self.pos += 1;
-                if self.peek() == Some(b'{') {
-                    self.pos += 1;
-                    self.emit(TokenKind::StringExprStart, dollar, self.pos, None);
-                    self.scan_interpolated_expr();
-                } else if matches!(self.peek(), Some(b) if b.is_ascii_alphabetic() || b == b'_') {
-                    let id_start = self.pos;
-                    while let Some(b) = self.peek() {
-                        if b.is_ascii_alphanumeric() || b == b'_' {
-                            self.pos += 1;
-                        } else {
-                            break;
-                        }
-                    }
-                    let text = std::str::from_utf8(&self.bytes[id_start..self.pos])
-                        .expect("ASCII ident")
-                        .to_string();
-                    self.emit(
-                        TokenKind::StringIdentRef,
-                        dollar,
-                        self.pos,
-                        Some(TokenPayload::StringIdentRef(text)),
-                    );
-                } else {
-                    // Lone `$` — treat as literal.
-                    chunk.push('$');
-                }
+                self.emit(
+                    TokenKind::StringChunk,
+                    bs_start,
+                    self.pos,
+                    Some(TokenPayload::StringChunk("\\".to_string())),
+                );
                 chunk_start = self.pos;
                 continue;
             }
 
-            // Append the next UTF-8 character verbatim. Newlines,
-            // backslashes, and lone quotes all pass through unchanged.
+            // kotlinc PSI splits a raw string at every embedded `"`
+            // (each `"` becomes its own LITERAL_STRING_TEMPLATE_ENTRY)
+            // — but not at the closing `"""`, which terminates the
+            // literal entirely. A single `"` inside a triple-quoted
+            // string is fine: it would only be the closing delimiter
+            // if it were followed by two more quotes, which the loop
+            // header already checked for.
+            if b == b'"' {
+                if !chunk.is_empty() {
+                    self.emit(
+                        TokenKind::StringChunk,
+                        chunk_start,
+                        self.pos,
+                        Some(TokenPayload::StringChunk(std::mem::take(&mut chunk))),
+                    );
+                }
+                let q_start = self.pos;
+                self.pos += 1;
+                self.emit(
+                    TokenKind::StringChunk,
+                    q_start,
+                    self.pos,
+                    Some(TokenPayload::StringChunk("\"".to_string())),
+                );
+                chunk_start = self.pos;
+                continue;
+            }
+
+            // kotlinc PSI also splits each `\n` (or `\r\n`) inside a
+            // raw string as its own LITERAL_STRING_TEMPLATE_ENTRY.
+            if b == b'\n' || b == b'\r' {
+                if !chunk.is_empty() {
+                    self.emit(
+                        TokenKind::StringChunk,
+                        chunk_start,
+                        self.pos,
+                        Some(TokenPayload::StringChunk(std::mem::take(&mut chunk))),
+                    );
+                }
+                let nl_start = self.pos;
+                // Consume `\r\n` together to match the source text.
+                if b == b'\r' && self.peek_at(1) == Some(b'\n') {
+                    self.pos += 2;
+                } else {
+                    self.pos += 1;
+                }
+                let nl_text = std::str::from_utf8(&self.bytes[nl_start..self.pos])
+                    .expect("valid UTF-8 in source")
+                    .to_string();
+                self.emit(
+                    TokenKind::StringChunk,
+                    nl_start,
+                    self.pos,
+                    Some(TokenPayload::StringChunk(nl_text)),
+                );
+                chunk_start = self.pos;
+                continue;
+            }
+
+            // Append the next UTF-8 character verbatim. Lone quotes
+            // pass through unchanged.
             let ch_len = utf8_char_len(b);
             let end = (self.pos + ch_len).min(self.bytes.len());
             let s = std::str::from_utf8(&self.bytes[self.pos..end]).expect("valid UTF-8 in source");

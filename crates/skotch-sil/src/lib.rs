@@ -80,12 +80,7 @@ pub fn parse_sil_with_diagnostics(
     grammar::parse_file_root(&mut parser);
     let (events, errors) = parser.finish();
 
-    let mut sink = SilSink::new(
-        file_path,
-        normalized.len() as u32,
-        crlf_normalized,
-        file_id,
-    );
+    let mut sink = SilSink::new(file_path, normalized.len() as u32, crlf_normalized, file_id);
     ParseOutput::new(events, errors).process(&input, &mut sink);
     sink.finish()
 }

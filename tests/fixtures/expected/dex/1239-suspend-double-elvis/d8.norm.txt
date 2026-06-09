@@ -1,0 +1,58 @@
+dex_version   035
+strings       30
+types         8
+methods       3
+classes       1
+
+--- strings ---
+  ""
+  "$completion"
+  "("
+  "(Ljava/lang/Double;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;"
+  "-"
+  ">;)"
+  "D"
+  "LD"
+  "LInputKt;"
+  "LLL"
+  "Ldalvik/annotation/Signature;"
+  "Ljava/lang/Double;"
+  "Ljava/lang/Object;"
+  "Lkotlin/Metadata;"
+  "Lkotlin/coroutines/Continuation;"
+  "Lkotlin/coroutines/Continuation<"
+  "Lkotlin/coroutines/jvm/internal/Boxing;"
+  "boxDouble"
+  "d1"
+  "d2"
+  "doubleValue"
+  "input.kt"
+  "k"
+  "mv"
+  "safe"
+  "value"
+  "x"
+  "xi"
+  "~~D8{\"backend\":\"dex\",\"compilation-mode\":\"debug\",\"has-checksums\":false,\"min-api\":1,\"sha-1\":\"a7ad18a70460b799d0482e497c109a75bf7f91de\",\"version\":\"8.10.9-dev\"}"
+  "��\n\n��\n\u{2}\u{10}\u{6}\n\u{2}\u{8}\u{2}\u{1a}\u{18}\u{10}��\u{1a}\u{2}0\u{1}2\u{8}\u{10}\u{2}\u{1a}\u{4}\u{18}\u{1}0\u{1}H\u{86}@¢\u{6}\u{2}\u{10}\u{3}"
+
+--- types ---
+  D
+  LInputKt;
+  Ldalvik/annotation/Signature;
+  Ljava/lang/Double;
+  Ljava/lang/Object;
+  Lkotlin/Metadata;
+  Lkotlin/coroutines/Continuation;
+  Lkotlin/coroutines/jvm/internal/Boxing;
+
+--- methods ---
+  LInputKt;.safe(Ljava/lang/Double;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+  Ljava/lang/Double;.doubleValue()D
+  Lkotlin/coroutines/jvm/internal/Boxing;.boxDouble(D)Ljava/lang/Double;
+
+--- class[0] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       safe(Ljava/lang/Double;Lkotlin/coroutines/Continuation;)Ljava/lang/Object; flags=0x0019 regs=4 ins=2 outs=2 insns=14

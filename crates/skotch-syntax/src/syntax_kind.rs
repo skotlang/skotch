@@ -66,6 +66,8 @@ pub enum SyntaxKind {
     PROPERTY_ACCESSOR,
     PRIMARY_CONSTRUCTOR,
     SECONDARY_CONSTRUCTOR,
+    CONSTRUCTOR_DELEGATION_CALL,
+    CONSTRUCTOR_DELEGATION_REFERENCE,
     CLASS_BODY,
     ANONYMOUS_INITIALIZER,
 
@@ -74,6 +76,9 @@ pub enum SyntaxKind {
     ANNOTATION,
     ANNOTATION_ENTRY,
     ANNOTATION_USE_SITE_TARGET,
+    /// File-level annotation list, e.g. `@file:Suppress(...)`. Sits at
+    /// FILE level before the PACKAGE_DIRECTIVE.
+    FILE_ANNOTATION_LIST,
 
     // ─── composite — parameters / arguments ─────────────────────────────
     VALUE_PARAMETER_LIST,
@@ -109,6 +114,9 @@ pub enum SyntaxKind {
     IF,
     THEN,
     ELSE,
+    /// Wraps the body of a `for`/`while`/`do` loop — kotlinc PSI
+    /// places the BLOCK/statement under a `BODY` composite.
+    BODY,
     WHEN,
     WHEN_ENTRY,
     WHEN_CONDITION_IN_RANGE,
@@ -128,6 +136,13 @@ pub enum SyntaxKind {
     DESTRUCTURING_DECLARATION,
     DESTRUCTURING_DECLARATION_ENTRY,
     LABELED_STATEMENT,
+    /// `@label` qualifier on `this`, `super`, `return`, `break`, or
+    /// `continue` — a LABEL composite wrapped in LABEL_QUALIFIER.
+    LABEL_QUALIFIER,
+    LABEL,
+    /// `for (x in <expr>)` — the iterable expression inside the
+    /// for-loop header is wrapped in LOOP_RANGE by kotlinc PSI.
+    LOOP_RANGE,
 
     // ─── composite — expressions ────────────────────────────────────────
     BINARY_EXPRESSION,
@@ -265,6 +280,12 @@ pub enum SyntaxKind {
     KW_RECEIVER,
     KW_FILE,
     KW_FUN_INTERFACE, // not a real token; placeholder for `fun interface`
+    /// `public` visibility modifier. The lexer surfaces this as
+    /// IDENTIFIER (it isn't a hard keyword); the SIL grammar uses
+    /// `bump_as` to reclassify it inside MODIFIER_LIST.
+    KW_PUBLIC,
+    /// `inner class …` modifier. Same soft-keyword story as `public`.
+    KW_INNER,
 
     // punctuation
     LPAR,
@@ -281,6 +302,7 @@ pub enum SyntaxKind {
     DOTDOT,
     QUEST,
     QUESTDOT,
+    AS_SAFE,
     AT,
     ARROW,
     EQ,
@@ -327,6 +349,9 @@ pub enum SyntaxKind {
     KDOC_TAG_NAME,
     KDOC_NAME,
     KDOC_TEXT,
+    KDOC_CODE_BLOCK_TEXT,
+    KDOC_LPAR,
+    KDOC_RPAR,
     KDOC_MARKDOWN_LINK,
     KDOC_MARKDOWN_INLINE_LINK,
 }

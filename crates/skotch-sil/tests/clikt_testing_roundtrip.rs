@@ -68,10 +68,7 @@ fn clikt_testing_kt_full_yaml_roundtrip() {
     );
 
     let final_text = reconstruct_from_yaml(&yaml).expect("reconstruct from yaml");
-    assert_eq!(
-        final_text, normalized,
-        "YAML roundtrip lost source bytes"
-    );
+    assert_eq!(final_text, normalized, "YAML roundtrip lost source bytes");
 }
 
 #[test]

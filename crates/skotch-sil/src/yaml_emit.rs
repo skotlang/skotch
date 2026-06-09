@@ -41,7 +41,11 @@ fn write_header(out: &mut String, tree: &SilTree) {
     let _ = writeln!(
         out,
         "crlf_normalized: {}",
-        if tree.crlf_normalized { "true" } else { "false" }
+        if tree.crlf_normalized {
+            "true"
+        } else {
+            "false"
+        }
     );
 }
 
@@ -141,11 +145,7 @@ mod tests {
     #[test]
     fn leaf_emits_text_field() {
         let leaf = SilNode::token(SyntaxKind::KW_PACKAGE, "package", s(0, 7));
-        let root = SilNode::composite(
-            SyntaxKind::PACKAGE_DIRECTIVE,
-            vec![leaf],
-            s(0, 7),
-        );
+        let root = SilNode::composite(SyntaxKind::PACKAGE_DIRECTIVE, vec![leaf], s(0, 7));
         let file = SilNode::composite(SyntaxKind::FILE, vec![root], s(0, 7));
         let tree = SilTree {
             file: "x.kt".to_string(),

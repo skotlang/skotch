@@ -36,6 +36,8 @@ pub fn syntax_kind_name(kind: SyntaxKind) -> &'static str {
         PROPERTY_ACCESSOR => "PROPERTY_ACCESSOR",
         PRIMARY_CONSTRUCTOR => "PRIMARY_CONSTRUCTOR",
         SECONDARY_CONSTRUCTOR => "SECONDARY_CONSTRUCTOR",
+        CONSTRUCTOR_DELEGATION_CALL => "CONSTRUCTOR_DELEGATION_CALL",
+        CONSTRUCTOR_DELEGATION_REFERENCE => "CONSTRUCTOR_DELEGATION_REFERENCE",
         CLASS_BODY => "CLASS_BODY",
         ANONYMOUS_INITIALIZER => "CLASS_INITIALIZER",
 
@@ -44,6 +46,7 @@ pub fn syntax_kind_name(kind: SyntaxKind) -> &'static str {
         ANNOTATION => "ANNOTATION",
         ANNOTATION_ENTRY => "ANNOTATION_ENTRY",
         ANNOTATION_USE_SITE_TARGET => "ANNOTATION_TARGET",
+        FILE_ANNOTATION_LIST => "FILE_ANNOTATION_LIST",
 
         // ─── composite — parameters / arguments ───
         VALUE_PARAMETER_LIST => "VALUE_PARAMETER_LIST",
@@ -79,6 +82,7 @@ pub fn syntax_kind_name(kind: SyntaxKind) -> &'static str {
         IF => "IF",
         THEN => "THEN",
         ELSE => "ELSE",
+        BODY => "BODY",
         WHEN => "WHEN",
         WHEN_ENTRY => "WHEN_ENTRY",
         WHEN_CONDITION_IN_RANGE => "WHEN_CONDITION_IN_RANGE",
@@ -98,6 +102,9 @@ pub fn syntax_kind_name(kind: SyntaxKind) -> &'static str {
         DESTRUCTURING_DECLARATION => "DESTRUCTURING_DECLARATION",
         DESTRUCTURING_DECLARATION_ENTRY => "DESTRUCTURING_DECLARATION_ENTRY",
         LABELED_STATEMENT => "LABELED_STATEMENT",
+        LABEL_QUALIFIER => "LABEL_QUALIFIER",
+        LABEL => "LABEL",
+        LOOP_RANGE => "LOOP_RANGE",
 
         // ─── composite — expressions ───
         BINARY_EXPRESSION => "BINARY_EXPRESSION",
@@ -227,6 +234,8 @@ pub fn syntax_kind_name(kind: SyntaxKind) -> &'static str {
         KW_RECEIVER => "receiver",
         KW_FILE => "file",
         KW_FUN_INTERFACE => "fun",
+        KW_PUBLIC => "public",
+        KW_INNER => "inner",
 
         // ─── punctuation tokens — UPPER_SNAKE per kotlinc ───
         LPAR => "LPAR",
@@ -243,6 +252,7 @@ pub fn syntax_kind_name(kind: SyntaxKind) -> &'static str {
         DOTDOT => "RANGE",
         QUEST => "QUEST",
         QUESTDOT => "SAFE_ACCESS",
+        AS_SAFE => "AS_SAFE",
         AT => "AT",
         ARROW => "ARROW",
         EQ => "EQ",
@@ -290,6 +300,9 @@ pub fn syntax_kind_name(kind: SyntaxKind) -> &'static str {
         KDOC_TAG_NAME => "KDOC_TAG_NAME",
         KDOC_NAME => "KDOC_NAME",
         KDOC_TEXT => "KDOC_TEXT",
+        KDOC_CODE_BLOCK_TEXT => "KDOC_CODE_BLOCK_TEXT",
+        KDOC_LPAR => "KDOC_LPAR",
+        KDOC_RPAR => "KDOC_RPAR",
         KDOC_MARKDOWN_LINK => "KDOC_MARKDOWN_LINK",
         KDOC_MARKDOWN_INLINE_LINK => "KDOC_MARKDOWN_INLINE_LINK",
     }
@@ -323,12 +336,15 @@ pub fn syntax_kind_from_name(name: &str) -> SyntaxKind {
         "PROPERTY_ACCESSOR" => PROPERTY_ACCESSOR,
         "PRIMARY_CONSTRUCTOR" => PRIMARY_CONSTRUCTOR,
         "SECONDARY_CONSTRUCTOR" => SECONDARY_CONSTRUCTOR,
+        "CONSTRUCTOR_DELEGATION_CALL" => CONSTRUCTOR_DELEGATION_CALL,
+        "CONSTRUCTOR_DELEGATION_REFERENCE" => CONSTRUCTOR_DELEGATION_REFERENCE,
         "CLASS_BODY" => CLASS_BODY,
         "CLASS_INITIALIZER" => ANONYMOUS_INITIALIZER,
         "MODIFIER_LIST" => MODIFIER_LIST,
         "ANNOTATION" => ANNOTATION,
         "ANNOTATION_ENTRY" => ANNOTATION_ENTRY,
         "ANNOTATION_TARGET" => ANNOTATION_USE_SITE_TARGET,
+        "FILE_ANNOTATION_LIST" => FILE_ANNOTATION_LIST,
         "VALUE_PARAMETER_LIST" => VALUE_PARAMETER_LIST,
         "VALUE_PARAMETER" => VALUE_PARAMETER,
         "VALUE_ARGUMENT_LIST" => VALUE_ARGUMENT_LIST,
@@ -356,6 +372,7 @@ pub fn syntax_kind_from_name(name: &str) -> SyntaxKind {
         "IF" => IF,
         "THEN" => THEN,
         "ELSE" => ELSE,
+        "BODY" => BODY,
         "WHEN" => WHEN,
         "WHEN_ENTRY" => WHEN_ENTRY,
         "WHEN_CONDITION_IN_RANGE" => WHEN_CONDITION_IN_RANGE,
@@ -375,6 +392,9 @@ pub fn syntax_kind_from_name(name: &str) -> SyntaxKind {
         "DESTRUCTURING_DECLARATION" => DESTRUCTURING_DECLARATION,
         "DESTRUCTURING_DECLARATION_ENTRY" => DESTRUCTURING_DECLARATION_ENTRY,
         "LABELED_STATEMENT" => LABELED_STATEMENT,
+        "LABEL_QUALIFIER" => LABEL_QUALIFIER,
+        "LABEL" => LABEL,
+        "LOOP_RANGE" => LOOP_RANGE,
         "BINARY_EXPRESSION" => BINARY_EXPRESSION,
         "BINARY_WITH_TYPE" => BINARY_WITH_TYPE_RHS_EXPRESSION,
         "PREFIX_EXPRESSION" => PREFIX_EXPRESSION,
@@ -491,6 +511,8 @@ pub fn syntax_kind_from_name(name: &str) -> SyntaxKind {
         "property" => KW_PROPERTY,
         "receiver" => KW_RECEIVER,
         "file" => KW_FILE,
+        "public" => KW_PUBLIC,
+        "inner" => KW_INNER,
 
         // punctuation
         "LPAR" => LPAR,
@@ -507,6 +529,7 @@ pub fn syntax_kind_from_name(name: &str) -> SyntaxKind {
         "RANGE" => DOTDOT,
         "QUEST" => QUEST,
         "SAFE_ACCESS" => QUESTDOT,
+        "AS_SAFE" => AS_SAFE,
         "AT" => AT,
         "ARROW" => ARROW,
         "EQ" => EQ,
@@ -551,6 +574,9 @@ pub fn syntax_kind_from_name(name: &str) -> SyntaxKind {
         "KDOC_TAG_NAME" => KDOC_TAG_NAME,
         "KDOC_NAME" => KDOC_NAME,
         "KDOC_TEXT" => KDOC_TEXT,
+        "KDOC_CODE_BLOCK_TEXT" => KDOC_CODE_BLOCK_TEXT,
+        "KDOC_LPAR" => KDOC_LPAR,
+        "KDOC_RPAR" => KDOC_RPAR,
         "KDOC_MARKDOWN_LINK" => KDOC_MARKDOWN_LINK,
         "KDOC_MARKDOWN_INLINE_LINK" => KDOC_MARKDOWN_INLINE_LINK,
 
@@ -601,7 +627,12 @@ mod tests {
             SyntaxKind::KDOC,
         ] {
             let name = syntax_kind_name(k);
-            assert_eq!(syntax_kind_from_name(name), k, "round-trip failed for {:?}", k);
+            assert_eq!(
+                syntax_kind_from_name(name),
+                k,
+                "round-trip failed for {:?}",
+                k
+            );
         }
     }
 }

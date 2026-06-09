@@ -1,13 +1,14 @@
 dex_version   035
-strings       49
+strings       50
 types         11
 methods       13
 classes       1
 
 --- strings ---
   ""
-  "\") = "
-  "\", \""
+  "\""
+  ") = "
+  ", "
   "<init>"
   "C"
   "CI"
@@ -36,7 +37,7 @@ classes       1
   "append"
   "cellValue"
   "charAt"
-  "d(\""
+  "d("
   "editDistance"
   "execution"
   "flaw"
@@ -92,4 +93,4 @@ classes       1
   method       main()V flags=0x0019 regs=18 ins=0 outs=2 insns=64
   method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4
   method       min3(III)I flags=0x0019 regs=13 ins=3 outs=0 insns=27
-  method       report(Ljava/lang/String;Ljava/lang/String;)V flags=0x0019 regs=8 ins=2 outs=2 insns=49
+  method       report(Ljava/lang/String;Ljava/lang/String;)V flags=0x0019 regs=12 ins=2 outs=2 insns=73

@@ -1,0 +1,86 @@
+dex_version   035
+strings       38
+types         11
+methods       9
+classes       2
+
+--- strings ---
+  ""
+  "$i$a$-repeat-InputKt$main$1"
+  "$i$a$-repeat-InputKt$main$2"
+  "(I)V"
+  "<init>"
+  "I"
+  "LCounter;"
+  "LInputKt;"
+  "Ldalvik/annotation/SourceDebugExtension;"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/System;"
+  "Lkotlin/Metadata;"
+  "Lkotlin/jvm/internal/DefaultConstructorMarker;"
+  "SMAP\ninput.kt\nKotlin\n*S Kotlin\n*F\n+ 1 input.kt\nInputKt\n+ 2 fake.kt\nkotlin/jvm/internal/FakeKt\n*L\n1#1,19:1\n1#2:20\n*E\n"
+  "V"
+  "VI"
+  "VIIL"
+  "VL"
+  "[Ljava/lang/String;"
+  "bump"
+  "c"
+  "c2"
+  "d1"
+  "d2"
+  "input.kt"
+  "it"
+  "k"
+  "main"
+  "mv"
+  "n"
+  "out"
+  "println"
+  "value"
+  "xi"
+  "~~D8{\"backend\":\"dex\",\"compilation-mode\":\"debug\",\"has-checksums\":false,\"min-api\":1,\"sha-1\":\"a7ad18a70460b799d0482e497c109a75bf7f91de\",\"version\":\"8.10.9-dev\"}"
+  "��\u{6}\n��\n\u{2}\u{10}\u{2}\u{1a}\u{6}\u{10}��\u{1a}\u{2}0\u{1}"
+  "��\u{12}\n\u{2}\u{18}\u{2}\n\u{2}\u{10}��\n��\n\u{2}\u{10}\u{8}\n\u{2}\u{8}\u{4}\u{18}��2\u{2}0\u{1}B\u{11}\u{12}\u{8}\u{8}\u{2}\u{10}\u{2}\u{1a}\u{2}0\u{3}¢\u{6}\u{4}\u{8}\u{4}\u{10}\u{5}J\u{6}\u{10}\u{6}\u{1a}\u{2}0\u{3}J\u{6}\u{10}\u{7}\u{1a}\u{2}0\u{3}R\u{e}\u{10}\u{2}\u{1a}\u{2}0\u{3}X\u{82}\u{e}¢\u{6}\u{2}\n��"
+
+--- types ---
+  I
+  LCounter;
+  LInputKt;
+  Ldalvik/annotation/SourceDebugExtension;
+  Ljava/io/PrintStream;
+  Ljava/lang/Object;
+  Ljava/lang/System;
+  Lkotlin/Metadata;
+  Lkotlin/jvm/internal/DefaultConstructorMarker;
+  V
+  [Ljava/lang/String;
+
+--- methods ---
+  LCounter;.<init>()V
+  LCounter;.<init>(I)V
+  LCounter;.<init>(IILkotlin/jvm/internal/DefaultConstructorMarker;)V
+  LCounter;.bump()I
+  LCounter;.value()I
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  Ljava/io/PrintStream;.println(I)V
+  Ljava/lang/Object;.<init>()V
+
+--- class[0] ---
+  descriptor   LCounter;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       <init>()V flags=0x10001 regs=4 ins=1 outs=4 insns=7
+  method       <init>(I)V flags=0x10001 regs=2 ins=2 outs=1 insns=6
+  method       <init>(IILkotlin/jvm/internal/DefaultConstructorMarker;)V flags=0x11001 regs=4 ins=4 outs=2 insns=9
+  method       bump()I flags=0x0011 regs=2 ins=1 outs=0 insns=9
+  method       value()I flags=0x0011 regs=2 ins=1 outs=0 insns=3
+
+--- class[1] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       main()V flags=0x0019 regs=7 ins=0 outs=4 insns=56
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4

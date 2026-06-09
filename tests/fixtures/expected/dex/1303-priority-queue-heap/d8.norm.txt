@@ -1,0 +1,251 @@
+dex_version   035
+strings       127
+types         22
+methods       40
+classes       5
+
+--- strings ---
+  ""
+  "$r8$lambda$3GbuKTtTPjPjcT_OqX0ORxI-J8c"
+  "$r8$lambda$i7cOhuu1ja4FBculaA9NeCIh1Go"
+  "$r8$lambda$x9APxIVvjXqvLvjsmThXe-vFsWc"
+  "("
+  "()Ljava/lang/Object;"
+  "()TT;"
+  "(Ljava/lang/Object;)V"
+  "(Lkotlin/jvm/functions/Function2;)V"
+  "(TT;)V"
+  "---"
+  "-TT;-TT;"
+  "<T:"
+  "<init>"
+  ">"
+  ">;"
+  ">;)V"
+  "D8$$SyntheticClass"
+  "I"
+  "III"
+  "L"
+  "LI"
+  "LIL"
+  "LInputKt$$ExternalSyntheticLambda0;"
+  "LInputKt$$ExternalSyntheticLambda1;"
+  "LInputKt$$ExternalSyntheticLambda2;"
+  "LInputKt;"
+  "LL"
+  "LLI"
+  "LLL"
+  "LLLL"
+  "LMinHeap;"
+  "Ldalvik/annotation/Signature;"
+  "Ljava/io/PrintStream;"
+  "Ljava/lang/Integer;"
+  "Ljava/lang/Number;"
+  "Ljava/lang/Object;"
+  "Ljava/lang/String;"
+  "Ljava/lang/System;"
+  "Ljava/util/ArrayList;"
+  "Ljava/util/List;"
+  "Ljava/util/List<"
+  "Lkotlin/Function2;"
+  "Lkotlin/Metadata;"
+  "Lkotlin/jvm/functions/Function2;"
+  "Lkotlin/jvm/functions/Function2<"
+  "Lkotlin/jvm/internal/Intrinsics;"
+  "T"
+  "TT;>;"
+  "TT;TT;"
+  "V"
+  "VI"
+  "VL"
+  "VLL"
+  "Z"
+  "ZL"
+  "[I"
+  "[Ljava/lang/String;"
+  "a"
+  "add"
+  "ai"
+  "asc"
+  "b"
+  "bi"
+  "c"
+  "checkNotNullParameter"
+  "ci"
+  "compare"
+  "d1"
+  "d2"
+  "get"
+  "heap"
+  "heapSort"
+  "heapSort$lambda$0"
+  "i"
+  "idx"
+  "input"
+  "input.kt"
+  "intValue"
+  "invoke"
+  "isEmpty"
+  "item"
+  "items"
+  "j"
+  "k"
+  "k1"
+  "last"
+  "left"
+  "main"
+  "mergeThreeSortedStreams"
+  "mergeThreeSortedStreams$lambda$0"
+  "merged"
+  "mv"
+  "n"
+  "out"
+  "packed"
+  "parent"
+  "peek"
+  "pop"
+  "printMerged"
+  "println"
+  "push"
+  "remove"
+  "right"
+  "set"
+  "siftDown"
+  "siftUp"
+  "size"
+  "smallest"
+  "sorted"
+  "streamIdx"
+  "tmp"
+  "top"
+  "top3"
+  "topKLargest"
+  "topKLargest$lambda$0"
+  "total"
+  "unsorted"
+  "v"
+  "value"
+  "valueOf"
+  "x"
+  "xi"
+  "y"
+  "~~D8{\"backend\":\"dex\",\"compilation-mode\":\"debug\",\"has-checksums\":false,\"min-api\":1,\"sha-1\":\"a7ad18a70460b799d0482e497c109a75bf7f91de\",\"version\":\"8.10.9-dev\"}"
+  "��\u{16}\n��\n\u{2}\u{10}\u{15}\n\u{2}\u{8}\u{7}\n\u{2}\u{10}\u{8}\n��\n\u{2}\u{10}\u{2}\n��\u{1a}\u{1e}\u{10}��\u{1a}\u{2}0\u{1}2\u{6}\u{10}\u{2}\u{1a}\u{2}0\u{1}2\u{6}\u{10}\u{3}\u{1a}\u{2}0\u{1}2\u{6}\u{10}\u{4}\u{1a}\u{2}0\u{1}\u{1a}\u{e}\u{10}\u{5}\u{1a}\u{2}0\u{1}2\u{6}\u{10}\u{6}\u{1a}\u{2}0\u{1}\u{1a}\u{16}\u{10}\u{7}\u{1a}\u{2}0\u{1}2\u{6}\u{10}\u{6}\u{1a}\u{2}0\u{1}2\u{6}\u{10}\u{8}\u{1a}\u{2}0\t\u{1a}\u{6}\u{10}\n\u{1a}\u{2}0\u{b}\u{1a}\u{6}\u{10}\u{c}\u{1a}\u{2}0\u{b}"
+  "��.\n\u{2}\u{18}\u{2}\n��\n\u{2}\u{10}��\n��\n\u{2}\u{18}\u{2}\n\u{2}\u{10}\u{8}\n\u{2}\u{8}\u{3}\n\u{2}\u{10}!\n\u{2}\u{8}\u{2}\n\u{2}\u{10}\u{b}\n��\n\u{2}\u{10}\u{2}\n\u{2}\u{8}\u{8}\u{18}��*\u{4}\u{8}��\u{10}\u{1}2\u{2}0\u{2}B!\u{12}\u{18}\u{10}\u{3}\u{1a}\u{14}\u{12}\u{4}\u{12}\u{2}8��\u{12}\u{4}\u{12}\u{2}8��\u{12}\u{4}\u{12}\u{2}0\u{5}0\u{4}¢\u{6}\u{4}\u{8}\u{6}\u{10}\u{7}J\u{6}\u{10}\n\u{1a}\u{2}0\u{5}J\u{6}\u{10}\u{b}\u{1a}\u{2}0\u{c}J\u{13}\u{10}\r\u{1a}\u{2}0\u{e}2\u{6}\u{10}\u{f}\u{1a}\u{2}8��¢\u{6}\u{2}\u{10}\u{10}J\u{b}\u{10}\u{11}\u{1a}\u{2}8��¢\u{6}\u{2}\u{10}\u{12}J\u{b}\u{10}\u{13}\u{1a}\u{2}8��¢\u{6}\u{2}\u{10}\u{12}J\u{10}\u{10}\u{14}\u{1a}\u{2}0\u{e}2\u{6}\u{10}\u{15}\u{1a}\u{2}0\u{5}H\u{2}J\u{10}\u{10}\u{16}\u{1a}\u{2}0\u{e}2\u{6}\u{10}\u{15}\u{1a}\u{2}0\u{5}H\u{2}R \u{10}\u{3}\u{1a}\u{14}\u{12}\u{4}\u{12}\u{2}8��\u{12}\u{4}\u{12}\u{2}8��\u{12}\u{4}\u{12}\u{2}0\u{5}0\u{4}X\u{82}\u{4}¢\u{6}\u{2}\n��R\u{14}\u{10}\u{8}\u{1a}\u{8}\u{12}\u{4}\u{12}\u{2}8��0\tX\u{82}\u{4}¢\u{6}\u{2}\n��"
+
+--- types ---
+  I
+  LInputKt$$ExternalSyntheticLambda0;
+  LInputKt$$ExternalSyntheticLambda1;
+  LInputKt$$ExternalSyntheticLambda2;
+  LInputKt;
+  LMinHeap;
+  Ldalvik/annotation/Signature;
+  Ljava/io/PrintStream;
+  Ljava/lang/Integer;
+  Ljava/lang/Number;
+  Ljava/lang/Object;
+  Ljava/lang/String;
+  Ljava/lang/System;
+  Ljava/util/ArrayList;
+  Ljava/util/List;
+  Lkotlin/Metadata;
+  Lkotlin/jvm/functions/Function2;
+  Lkotlin/jvm/internal/Intrinsics;
+  V
+  Z
+  [I
+  [Ljava/lang/String;
+
+--- methods ---
+  LInputKt$$ExternalSyntheticLambda0;.<init>()V
+  LInputKt$$ExternalSyntheticLambda0;.invoke(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;
+  LInputKt$$ExternalSyntheticLambda1;.<init>()V
+  LInputKt$$ExternalSyntheticLambda1;.invoke(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;
+  LInputKt$$ExternalSyntheticLambda2;.<init>()V
+  LInputKt$$ExternalSyntheticLambda2;.invoke(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;
+  LInputKt;.$r8$lambda$3GbuKTtTPjPjcT_OqX0ORxI-J8c(II)I
+  LInputKt;.$r8$lambda$i7cOhuu1ja4FBculaA9NeCIh1Go(II)I
+  LInputKt;.$r8$lambda$x9APxIVvjXqvLvjsmThXe-vFsWc(II)I
+  LInputKt;.heapSort$lambda$0(II)I
+  LInputKt;.heapSort([I)[I
+  LInputKt;.main()V
+  LInputKt;.main([Ljava/lang/String;)V
+  LInputKt;.mergeThreeSortedStreams$lambda$0(II)I
+  LInputKt;.mergeThreeSortedStreams([I[I[I)[I
+  LInputKt;.printMerged()V
+  LInputKt;.topKLargest$lambda$0(II)I
+  LInputKt;.topKLargest([II)[I
+  LMinHeap;.<init>(Lkotlin/jvm/functions/Function2;)V
+  LMinHeap;.isEmpty()Z
+  LMinHeap;.peek()Ljava/lang/Object;
+  LMinHeap;.pop()Ljava/lang/Object;
+  LMinHeap;.push(Ljava/lang/Object;)V
+  LMinHeap;.siftDown(I)V
+  LMinHeap;.siftUp(I)V
+  LMinHeap;.size()I
+  Ljava/io/PrintStream;.println(I)V
+  Ljava/io/PrintStream;.println(Ljava/lang/Object;)V
+  Ljava/lang/Integer;.intValue()I
+  Ljava/lang/Integer;.valueOf(I)Ljava/lang/Integer;
+  Ljava/lang/Number;.intValue()I
+  Ljava/lang/Object;.<init>()V
+  Ljava/util/ArrayList;.<init>()V
+  Ljava/util/List;.add(Ljava/lang/Object;)Z
+  Ljava/util/List;.get(I)Ljava/lang/Object;
+  Ljava/util/List;.remove(I)Ljava/lang/Object;
+  Ljava/util/List;.set(ILjava/lang/Object;)Ljava/lang/Object;
+  Ljava/util/List;.size()I
+  Lkotlin/jvm/functions/Function2;.invoke(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;
+  Lkotlin/jvm/internal/Intrinsics;.checkNotNullParameter(Ljava/lang/Object;Ljava/lang/String;)V
+
+--- class[0] ---
+  descriptor   LInputKt$$ExternalSyntheticLambda0;
+  super        Ljava/lang/Object;
+  source_file  D8$$SyntheticClass
+  method       <init>()V flags=0x11001 regs=1 ins=1 outs=1 insns=4
+  method       invoke(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object; flags=0x0011 regs=3 ins=3 outs=2 insns=21
+
+--- class[1] ---
+  descriptor   LInputKt$$ExternalSyntheticLambda1;
+  super        Ljava/lang/Object;
+  source_file  D8$$SyntheticClass
+  method       <init>()V flags=0x11001 regs=1 ins=1 outs=1 insns=4
+  method       invoke(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object; flags=0x0011 regs=3 ins=3 outs=2 insns=21
+
+--- class[2] ---
+  descriptor   LInputKt$$ExternalSyntheticLambda2;
+  super        Ljava/lang/Object;
+  source_file  D8$$SyntheticClass
+  method       <init>()V flags=0x11001 regs=1 ins=1 outs=1 insns=4
+  method       invoke(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object; flags=0x0011 regs=3 ins=3 outs=2 insns=21
+
+--- class[3] ---
+  descriptor   LInputKt;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       $r8$lambda$3GbuKTtTPjPjcT_OqX0ORxI-J8c(II)I flags=0x1009 regs=2 ins=2 outs=2 insns=5
+  method       $r8$lambda$i7cOhuu1ja4FBculaA9NeCIh1Go(II)I flags=0x1009 regs=2 ins=2 outs=2 insns=5
+  method       $r8$lambda$x9APxIVvjXqvLvjsmThXe-vFsWc(II)I flags=0x1009 regs=2 ins=2 outs=2 insns=5
+  method       heapSort([I)[I flags=0x0019 regs=6 ins=1 outs=2 insns=57
+  method       heapSort$lambda$0(II)I flags=0x001A regs=3 ins=2 outs=0 insns=3
+  method       main()V flags=0x0019 regs=8 ins=0 outs=2 insns=82
+  method       main([Ljava/lang/String;)V flags=0x1009 regs=1 ins=1 outs=0 insns=4
+  method       mergeThreeSortedStreams([I[I[I)[I flags=0x0019 regs=15 ins=3 outs=2 insns=178
+  method       mergeThreeSortedStreams$lambda$0(II)I flags=0x001A regs=3 ins=2 outs=0 insns=3
+  method       printMerged()V flags=0x0019 regs=7 ins=0 outs=4 insns=48
+  method       topKLargest([II)[I flags=0x0019 regs=9 ins=2 outs=2 insns=108
+  method       topKLargest$lambda$0(II)I flags=0x001A regs=3 ins=2 outs=0 insns=3
+
+--- class[4] ---
+  descriptor   LMinHeap;
+  super        Ljava/lang/Object;
+  source_file  input.kt
+  method       <init>(Lkotlin/jvm/functions/Function2;)V flags=0x10001 regs=3 ins=2 outs=2 insns=20
+  method       isEmpty()Z flags=0x0011 regs=2 ins=1 outs=1 insns=12
+  method       peek()Ljava/lang/Object; flags=0x0011 regs=3 ins=1 outs=2 insns=8
+  method       pop()Ljava/lang/Object; flags=0x0011 regs=6 ins=1 outs=3 insns=43
+  method       push(Ljava/lang/Object;)V flags=0x0011 regs=3 ins=2 outs=2 insns=17
+  method       siftDown(I)V flags=0x0012 regs=10 ins=2 outs=3 insns=102
+  method       siftUp(I)V flags=0x0012 regs=7 ins=2 outs=3 insns=59
+  method       size()I flags=0x0011 regs=2 ins=1 outs=1 insns=7
