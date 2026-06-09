@@ -146,6 +146,18 @@ enum Command {
     Bsp,
     /// Generate the `.bsp/skotch.json` connection file for IDE discovery.
     Init,
+    /// Source Information Layer — parse / emit / validate lossless
+    /// concrete syntax trees.
+    ///
+    /// The SIL pipeline preserves every byte of source (including
+    /// whitespace, comments, and KDoc) and emits a YAML representation
+    /// matching the `scripts/kotlin-psi.main.kts` reference. Use this
+    /// to produce golden trees for parser parity testing and to
+    /// validate that a YAML still reproduces its source.
+    Sil {
+        #[command(subcommand)]
+        cmd: SilCommand,
+    },
     /// kotlinc-cli emulation (Kotlin/JVM compiler options).
     ///
     /// The full flag list and examples live in `kotlinc::HELP_TEXT` and
@@ -166,6 +178,33 @@ enum Command {
         /// supported flag list and examples.
         #[arg(value_name = "KOTLINC_ARGS")]
         args: Vec<String>,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum SilCommand {
+    /// Parse `<file.kt>` and print the SIL YAML to stdout.
+    ///
+    /// Output matches `scripts/kotlin-psi.main.kts` byte for byte so
+    /// the script can be retired once the Rust pipeline is wired in
+    /// everywhere.
+    Parse {
+        /// Path to the Kotlin source file.
+        input: PathBuf,
+    },
+    /// Read a SIL YAML file and write the reconstructed source to
+    /// stdout. Equivalent to `cat input.kt` for a YAML produced by
+    /// `skotch sil parse input.kt`.
+    Reconstruct {
+        /// Path to the YAML file.
+        input: PathBuf,
+    },
+    /// Parse `<file.kt>` to SIL, emit YAML, re-parse the YAML,
+    /// reconstruct the source, and assert it matches the input. Exit
+    /// 0 if the round trip succeeds; non-zero otherwise.
+    Roundtrip {
+        /// Path to the Kotlin source file to round-trip.
+        input: PathBuf,
     },
 }
 
@@ -196,6 +235,7 @@ fn main() -> Result<()> {
                     | "bsp"
                     | "init"
                     | "kotlinc"
+                    | "sil"
                     | "help"
             )
             && (first_arg.ends_with(".kts") || first_arg.ends_with(".kt"))
@@ -354,6 +394,56 @@ fn main() -> Result<()> {
         Command::Kotlinc { args } => {
             kotlinc::run(&args)?;
         }
+        Command::Sil { cmd } => {
+            run_sil(cmd)?;
+        }
     }
     Ok(())
+}
+
+fn run_sil(cmd: SilCommand) -> Result<()> {
+    match cmd {
+        SilCommand::Parse { input } => {
+            let src = std::fs::read_to_string(&input)
+                .with_context(|| format!("read {}", input.display()))?;
+            let tree = skotch_sil::parse_sil(input.to_string_lossy(), &src);
+            let yaml = skotch_sil::emit_yaml(&tree);
+            print!("{}", yaml);
+            Ok(())
+        }
+        SilCommand::Reconstruct { input } => {
+            let yaml = std::fs::read_to_string(&input)
+                .with_context(|| format!("read {}", input.display()))?;
+            let src = skotch_sil::reconstruct_from_yaml(&yaml)
+                .map_err(|e| anyhow::anyhow!("YAML parse error: {}", e))?;
+            print!("{}", src);
+            Ok(())
+        }
+        SilCommand::Roundtrip { input } => {
+            let src = std::fs::read_to_string(&input)
+                .with_context(|| format!("read {}", input.display()))?;
+            let normalized = if src.contains('\r') {
+                src.replace("\r\n", "\n").replace('\r', "\n")
+            } else {
+                src.clone()
+            };
+            let tree = skotch_sil::parse_sil(input.to_string_lossy(), &src);
+            let yaml = skotch_sil::emit_yaml(&tree);
+            let recovered = skotch_sil::reconstruct_from_yaml(&yaml)
+                .map_err(|e| anyhow::anyhow!("YAML parse error: {}", e))?;
+            if recovered != normalized {
+                anyhow::bail!(
+                    "round-trip mismatch: original {} bytes, recovered {} bytes",
+                    normalized.len(),
+                    recovered.len()
+                );
+            }
+            eprintln!(
+                "ok: {} bytes round-tripped through SIL ({} YAML bytes)",
+                normalized.len(),
+                yaml.len()
+            );
+            Ok(())
+        }
+    }
 }

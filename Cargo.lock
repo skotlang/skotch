@@ -2285,6 +2285,7 @@ dependencies = [
  "skotch-parser",
  "skotch-repl",
  "skotch-resolve",
+ "skotch-sil",
  "skotch-span",
  "skotch-syntax",
  "tokio",
@@ -2528,6 +2529,17 @@ dependencies = [
  "pkcs8",
  "rsa",
  "sha2",
+]
+
+[[package]]
+name = "skotch-sil"
+version = "0.41.0"
+dependencies = [
+ "skotch-diagnostics",
+ "skotch-lexer",
+ "skotch-parser-core",
+ "skotch-span",
+ "skotch-syntax",
 ]
 
 [[package]]

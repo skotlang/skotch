@@ -23,6 +23,7 @@ skotch-span         = { workspace = true }
 skotch-syntax       = { workspace = true }
 skotch-lexer        = { workspace = true }
 skotch-parser       = { workspace = true }
+skotch-sil          = { workspace = true }
 skotch-resolve      = { workspace = true }
 skotch-backend-jvm  = { workspace = true }
 skotch-compose      = { workspace = true }

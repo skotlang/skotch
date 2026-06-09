@@ -191,6 +191,11 @@ pub enum SyntaxKind {
     REGULAR_STRING_PART,
     OPEN_QUOTE,
     CLOSING_QUOTE,
+    /// A leaf token representing a backslash-escape inside a string
+    /// (`\n`, `\t`, `\\`, `\xHH`, …). Distinguishes escape content
+    /// from plain `REGULAR_STRING_PART` so the SIL output matches
+    /// kotlinc PSI's `ESCAPE_STRING_TEMPLATE_ENTRY` shape.
+    ESCAPE_SEQUENCE,
 
     // keywords (lowercase IElementType `toString()` to match psi.yaml)
     KW_FUN,

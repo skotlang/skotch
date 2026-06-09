@@ -57,6 +57,20 @@ impl<'i, 'src> Parser<'i, 'src> {
         self.input.token(self.pos).span
     }
 
+    /// Verbatim source text of the token at the cursor. Equivalent to
+    /// `self.input().text_of(self.pos())` but ergonomic enough for the
+    /// many grammar predicates that examine token text — most often to
+    /// detect newlines inside a `WHITE_SPACE` token (kotlinc's
+    /// `WHITE_SPACE` element covers spaces *and* newlines).
+    pub fn current_text(&self) -> &'src str {
+        self.input.text_of(self.pos)
+    }
+
+    /// Same as [`Self::current_text`] but at an arbitrary offset.
+    pub fn text_at(&self, offset: usize) -> &'src str {
+        self.input.text_of(self.pos + offset)
+    }
+
     pub fn nth(&self, n: usize) -> SyntaxKind {
         self.input.kind(self.pos + n)
     }
@@ -73,6 +87,22 @@ impl<'i, 'src> Parser<'i, 'src> {
     pub fn bump(&mut self) {
         let kind = self.current();
         if kind == SyntaxKind::EOF {
+            return;
+        }
+        self.events.push(Event::Token {
+            kind,
+            n_raw_tokens: 1,
+        });
+        self.pos += 1;
+    }
+
+    /// Like [`Self::bump`] but emits the token with `kind` instead of
+    /// the lexer's reported kind. Used when the grammar reclassifies
+    /// a token in context — e.g. a `STRING_CHUNK` whose text is an
+    /// escape sequence becomes an `ESCAPE_SEQUENCE` inside a
+    /// `ESCAPE_STRING_TEMPLATE_ENTRY` composite.
+    pub fn bump_as(&mut self, kind: SyntaxKind) {
+        if self.current() == SyntaxKind::EOF {
             return;
         }
         self.events.push(Event::Token {

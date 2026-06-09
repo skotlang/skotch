@@ -1,0 +1,13 @@
+[package]
+name        = "skotch-sil"
+version     = { workspace = true }
+edition     = { workspace = true }
+license     = { workspace = true }
+description = "Source Information Layer — lossless concrete syntax tree for Kotlin, with YAML emit / parse matching kotlinc PSI shape"
+
+[dependencies]
+skotch-span        = { workspace = true }
+skotch-syntax      = { workspace = true }
+skotch-lexer       = { workspace = true }
+skotch-parser-core = { workspace = true }
+skotch-diagnostics = { workspace = true }

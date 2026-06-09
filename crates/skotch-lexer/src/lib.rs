@@ -146,25 +146,45 @@ impl<'a> Lexer<'a> {
     /// Lex one token. May recurse into [`scan_string`] which itself
     /// re-enters this state machine for `${ … }` interpolations.
     fn next_token(&mut self) {
-        // Whitespace run (spaces, tabs, CR — not newlines). In default
-        // mode this is consumed silently; in preserve_trivia mode it
-        // becomes one `Whitespace` token per run.
-        let ws_start = self.pos;
-        while let Some(b) = self.peek() {
-            if b == b' ' || b == b'\t' || b == b'\r' {
-                self.pos += 1;
-            } else {
-                break;
+        if self.options.preserve_trivia {
+            // SIL mode: whitespace and newlines merge into one
+            // `Whitespace` token whose text spans the entire run.
+            // kotlinc's PSI uses the same convention — it has no
+            // separate `NEWLINE` element — and matching that shape
+            // is required for byte-identical SIL YAML.
+            let ws_start = self.pos;
+            while let Some(b) = self.peek() {
+                if matches!(b, b' ' | b'\t' | b'\r' | b'\n') {
+                    self.pos += 1;
+                } else {
+                    break;
+                }
             }
-        }
-        if self.options.preserve_trivia && self.pos > ws_start {
-            self.emit(TokenKind::Whitespace, ws_start, self.pos, None);
+            if self.pos > ws_start {
+                self.emit(TokenKind::Whitespace, ws_start, self.pos, None);
+                return;
+            }
+        } else {
+            // FIR mode: inline whitespace consumed silently; newlines
+            // emitted as a separate `Newline` token so the FIR
+            // parser's newline-sensitive grammar can react. This is
+            // the historical behavior — every caller of `lex()` sees
+            // it.
+            while let Some(b) = self.peek() {
+                if b == b' ' || b == b'\t' || b == b'\r' {
+                    self.pos += 1;
+                } else {
+                    break;
+                }
+            }
         }
         let start = self.pos;
         let Some(b) = self.peek() else { return };
 
-        // Newlines: collapse a run of `\n`s into one `Newline` token.
-        if b == b'\n' {
+        // FIR mode only: collapse a run of `\n`s into one `Newline`
+        // token. SIL mode handled the newline above as part of the
+        // unified whitespace token.
+        if b == b'\n' && !self.options.preserve_trivia {
             while let Some(b'\n') = self.peek() {
                 self.pos += 1;
             }
@@ -1359,11 +1379,14 @@ mod tests {
     fn trivia_preserve_emits_line_comment() {
         let (lf, d) = lex_str_trivia("// hello\nfun x()");
         assert!(d.is_empty(), "{:?}", d);
+        // In SIL mode (preserve_trivia=true), the trailing `\n` is
+        // merged into the *following* `Whitespace` token — kotlinc's
+        // PSI has no separate `NEWLINE` element, and we mirror that.
         assert_eq!(
             kinds(&lf),
             vec![
-                TokenKind::LineComment, // "// hello"  (newline excluded)
-                TokenKind::Newline,
+                TokenKind::LineComment, // "// hello"
+                TokenKind::Whitespace,  // "\n"
                 TokenKind::KwFun,
                 TokenKind::Whitespace,
                 TokenKind::Ident,
@@ -1372,11 +1395,10 @@ mod tests {
                 TokenKind::Eof,
             ]
         );
-        // The comment text must NOT include the trailing newline; that
-        // newline is a separate token to keep Kotlin's newline-sensitive
-        // grammar working unchanged.
         let comment_span = lf.tokens[0].span;
         assert_eq!(comment_span.end - comment_span.start, 8); // "// hello".len()
+        let ws_span = lf.tokens[1].span;
+        assert_eq!(ws_span.end - ws_span.start, 1); // just "\n"
     }
 
     #[test]
