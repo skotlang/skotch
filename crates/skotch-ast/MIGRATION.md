@@ -7,6 +7,9 @@
 - [x] `skotch-ast` crate: typed wrapper types over `SilNode`, ~80
       composite kinds + token shims, `KtDecl` / `KtExpr` enum unions.
 - [x] `skotch_ast::parse(file, source) -> ParsedFile` entry point.
+- [x] `skotch_parser::parse_to_sil(file, source) -> SilTree` bridge —
+      consumers can call this instead of `parse_file()` to obtain a
+      SIL tree they wrap with the typed accessors.
 
 **Not yet done — these are the per-crate migration steps:**
 
