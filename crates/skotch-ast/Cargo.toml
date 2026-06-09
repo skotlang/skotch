@@ -1,0 +1,11 @@
+[package]
+name        = "skotch-ast"
+version     = { workspace = true }
+edition     = { workspace = true }
+license     = { workspace = true }
+description = "Typed AST wrappers over the lossless SIL syntax tree, modeled after rust-analyzer's AstNode pattern"
+
+[dependencies]
+skotch-span        = { workspace = true }
+skotch-syntax      = { workspace = true }
+skotch-sil         = { workspace = true }

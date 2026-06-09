@@ -13,6 +13,7 @@ members = [
     "crates/skotch-parser-core",
     "crates/skotch-parser",
     "crates/skotch-sil",
+    "crates/skotch-ast",
 
     # Layer 2 — semantic analysis
     "crates/skotch-resolve",
@@ -154,6 +155,7 @@ skotch-lexer           = { path = "crates/skotch-lexer" }
 skotch-parser-core     = { path = "crates/skotch-parser-core" }
 skotch-parser          = { path = "crates/skotch-parser" }
 skotch-sil             = { path = "crates/skotch-sil" }
+skotch-ast             = { path = "crates/skotch-ast" }
 skotch-resolve         = { path = "crates/skotch-resolve" }
 skotch-types           = { path = "crates/skotch-types" }
 skotch-stdlib-registry = { path = "crates/skotch-stdlib-registry" }
