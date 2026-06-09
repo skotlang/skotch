@@ -405,7 +405,23 @@ fn parse_top_level_decl(p: &mut Parser<'_, '_>) {
     let has_modifiers = parse_modifier_list_opt(p);
     skip_trivia(p);
 
+    // `typealias` lexes as IDENT in our lexer; reclassify when it
+    // appears at a decl introducer position.
+    if p.at(S::IDENTIFIER) && p.current_text() == "typealias" {
+        p.bump_as(S::KW_TYPEALIAS);
+        parse_typealias_body_after_kw(p);
+        m.complete(p, S::TYPEALIAS);
+        return;
+    }
+    // `enum class` triggers the enum-entry-aware class body parser.
+    // Detect it here so that `enum` consumed as a soft modifier above
+    // doesn't lose its `entries-allowed` signal.
+    let is_enum_class = p.at(S::KW_CLASS) && was_enum_modifier(p);
     let kind = match p.current() {
+        S::KW_CLASS if is_enum_class => {
+            parse_enum_class_body(p);
+            S::CLASS
+        }
         S::KW_CLASS | S::KW_INTERFACE => {
             parse_class_or_interface_body(p);
             S::CLASS
@@ -431,7 +447,7 @@ fn parse_top_level_decl(p: &mut Parser<'_, '_>) {
             p.bump();
             skip_trivia(p);
             if p.at(S::KW_CLASS) {
-                parse_class_or_interface_body(p);
+                parse_enum_class_body(p);
                 S::CLASS
             } else {
                 m.complete(p, S::ERROR_ELEMENT);
@@ -540,6 +556,24 @@ fn ident_text_as_soft_modifier(p: &Parser<'_, '_>) -> Option<SyntaxKind> {
         "companion" => Some(S::KW_COMPANION),
         "data" => Some(S::KW_DATA),
         "sealed" => Some(S::KW_SEALED),
+        "annotation" => Some(S::KW_ANNOTATION),
+        "open" => Some(S::KW_OPEN),
+        "abstract" => Some(S::KW_ABSTRACT),
+        "override" => Some(S::KW_OVERRIDE),
+        "operator" => Some(S::KW_OPERATOR),
+        "infix" => Some(S::KW_INFIX),
+        "lateinit" => Some(S::KW_LATEINIT),
+        "tailrec" => Some(S::KW_TAILREC),
+        "suspend" => Some(S::KW_SUSPEND),
+        "external" => None,
+        "expect" => Some(S::KW_EXPECT),
+        "actual" => Some(S::KW_ACTUAL),
+        "crossinline" => Some(S::KW_CROSSINLINE),
+        "noinline" => Some(S::KW_NOINLINE),
+        "reified" => Some(S::KW_REIFIED),
+        "value" => Some(S::KW_VALUE),
+        "vararg" => Some(S::KW_VARARG),
+        "const" => Some(S::KW_CONST),
         _ => None,
     }
 }
@@ -566,7 +600,28 @@ fn looks_like_modifier_after_trivia(p: &Parser<'_, '_>) -> bool {
         if k == S::IDENTIFIER
             && matches!(
                 p.text_at(i),
-                "public" | "inner" | "companion" | "data" | "sealed"
+                "public"
+                | "inner"
+                | "companion"
+                | "data"
+                | "sealed"
+                | "annotation"
+                | "open"
+                | "abstract"
+                | "override"
+                | "operator"
+                | "infix"
+                | "lateinit"
+                | "tailrec"
+                | "suspend"
+                | "expect"
+                | "actual"
+                | "crossinline"
+                | "noinline"
+                | "reified"
+                | "value"
+                | "vararg"
+                | "const"
             )
         {
             let mut j = i + 1;
@@ -596,7 +651,28 @@ fn looks_like_modifier_after_trivia(p: &Parser<'_, '_>) -> bool {
                     || (kk == S::IDENTIFIER
                         && matches!(
                             p.text_at(j),
-                            "public" | "inner" | "companion" | "data" | "sealed"
+                            "public"
+                | "inner"
+                | "companion"
+                | "data"
+                | "sealed"
+                | "annotation"
+                | "open"
+                | "abstract"
+                | "override"
+                | "operator"
+                | "infix"
+                | "lateinit"
+                | "tailrec"
+                | "suspend"
+                | "expect"
+                | "actual"
+                | "crossinline"
+                | "noinline"
+                | "reified"
+                | "value"
+                | "vararg"
+                | "const"
                         ));
             }
         }
@@ -689,7 +765,28 @@ fn soft_modifier_followed_by_decl(p: &Parser<'_, '_>) -> bool {
             || (k == S::IDENTIFIER
                 && matches!(
                     p.text_at(i),
-                    "public" | "inner" | "companion" | "data" | "sealed"
+                    "public"
+                | "inner"
+                | "companion"
+                | "data"
+                | "sealed"
+                | "annotation"
+                | "open"
+                | "abstract"
+                | "override"
+                | "operator"
+                | "infix"
+                | "lateinit"
+                | "tailrec"
+                | "suspend"
+                | "expect"
+                | "actual"
+                | "crossinline"
+                | "noinline"
+                | "reified"
+                | "value"
+                | "vararg"
+                | "const"
                 ));
     }
 }
@@ -716,6 +813,25 @@ fn is_soft_keyword(k: SyntaxKind) -> bool {
             | S::KW_EXPECT
             | S::KW_OPEN
             | S::KW_OVERRIDE
+            | S::KW_OPERATOR
+            | S::KW_INFIX
+            | S::KW_LATEINIT
+            | S::KW_TAILREC
+            | S::KW_SUSPEND
+            | S::KW_CROSSINLINE
+            | S::KW_NOINLINE
+            | S::KW_VARARG
+            | S::KW_CONST
+            | S::KW_INNER
+            | S::KW_PUBLIC
+            | S::KW_ABSTRACT
+            | S::KW_INLINE
+            | S::KW_PRIVATE
+            | S::KW_PROTECTED
+            | S::KW_INTERNAL
+            | S::KW_ANNOTATION
+            | S::KW_VALUE
+            | S::KW_INIT
     )
 }
 
@@ -859,6 +975,8 @@ fn parse_super_type_entry(p: &mut Parser<'_, '_>) {
     let m = p.start();
     let tref = parse_type_ref(p);
     let next = next_non_trivia(p, 0);
+    let by_at_next = next == S::KW_BY
+        || (next == S::IDENTIFIER && next_non_trivia_text_eq(p, 0, "by"));
     if next == S::LPAR {
         // SUPER_TYPE_CALL_ENTRY: wrap the type-ref in CONSTRUCTOR_CALLEE.
         let callee = tref.precede(p);
@@ -866,14 +984,51 @@ fn parse_super_type_entry(p: &mut Parser<'_, '_>) {
         skip_trivia(p);
         parse_value_argument_list(p);
         m.complete(p, S::SUPER_TYPE_CALL_ENTRY);
-    } else if next == S::KW_BY {
+    } else if by_at_next {
         skip_trivia(p);
-        p.bump();
+        if p.at(S::IDENTIFIER) && p.current_text() == "by" {
+            p.bump_as(S::KW_BY);
+        } else {
+            p.bump();
+        }
         skip_trivia(p);
         parse_expression(p);
         m.complete(p, S::DELEGATED_SUPER_TYPE_ENTRY);
     } else {
         m.complete(p, S::SUPER_TYPE_ENTRY);
+    }
+}
+
+/// Peek past trivia at `offset` and return the raw source text of the
+/// first non-trivia token. Returns `""` at EOF.
+fn next_non_trivia_text<'src>(p: &Parser<'src, '_>, mut offset: usize) -> &'src str {
+    loop {
+        let k = p.nth(offset);
+        if matches!(
+            k,
+            S::WHITE_SPACE | S::NEWLINE | S::LINE_COMMENT | S::BLOCK_COMMENT
+        ) {
+            offset += 1;
+            continue;
+        }
+        return p.text_at(offset);
+    }
+}
+
+/// Peek past trivia at `offset` and check whether the next non-trivia
+/// token is an IDENT whose text matches `expected`. Cheap, used by
+/// soft-keyword detectors.
+fn next_non_trivia_text_eq(p: &Parser<'_, '_>, mut offset: usize, expected: &str) -> bool {
+    loop {
+        let k = p.nth(offset);
+        if matches!(
+            k,
+            S::WHITE_SPACE | S::NEWLINE | S::LINE_COMMENT | S::BLOCK_COMMENT
+        ) {
+            offset += 1;
+            continue;
+        }
+        return k == S::IDENTIFIER && p.text_at(offset) == expected;
     }
 }
 
@@ -910,6 +1065,10 @@ fn parse_type_constraint(p: &mut Parser<'_, '_>) {
 }
 
 fn parse_class_body(p: &mut Parser<'_, '_>) {
+    parse_class_body_impl(p, /* enum_entries */ false);
+}
+
+fn parse_class_body_impl(p: &mut Parser<'_, '_>, enum_entries: bool) {
     let m = p.start();
     p.bump(); // {
               // Only WS sits at CLASS_BODY level; KDoc / line / block comments
@@ -917,7 +1076,40 @@ fn parse_class_body(p: &mut Parser<'_, '_>) {
     while p.at(S::WHITE_SPACE) {
         p.bump();
     }
+    // Enum class body starts with a comma-separated list of enum
+    // entries, optionally terminated by `;`, then plain class members.
+    let mut entries_done = !enum_entries;
     while !p.at(S::RBRACE) && !p.at(S::EOF) {
+        if !entries_done {
+            // Try to parse an enum entry.
+            if looks_like_enum_entry_in_enum_body(p) {
+                parse_enum_entry_at_top(p);
+                // Between entries: comma + WS, or end-of-entries (`;`
+                // or `}` or another non-entry member).
+                while p.at(S::WHITE_SPACE) {
+                    p.bump();
+                }
+                if p.at(S::COMMA) {
+                    p.bump();
+                    while p.at(S::WHITE_SPACE) {
+                        p.bump();
+                    }
+                    continue;
+                }
+                if p.at(S::SEMICOLON) {
+                    p.bump();
+                    entries_done = true;
+                    while p.at(S::WHITE_SPACE) {
+                        p.bump();
+                    }
+                    continue;
+                }
+                entries_done = true;
+                continue;
+            }
+            // No entries (e.g. enum body containing only methods).
+            entries_done = true;
+        }
         parse_class_member(p);
         // Between members: only WS at CLASS_BODY level.
         while p.at(S::WHITE_SPACE) {
@@ -928,6 +1120,211 @@ fn parse_class_body(p: &mut Parser<'_, '_>) {
         p.bump();
     }
     m.complete(p, S::CLASS_BODY);
+}
+
+/// Wraps `parse_enum_entry_body` in an ENUM_ENTRY composite.
+fn parse_enum_entry_at_top(p: &mut Parser<'_, '_>) {
+    let m = p.start();
+    parse_modifier_list_opt(p);
+    skip_trivia(p);
+    parse_enum_entry_body(p);
+    m.complete(p, S::ENUM_ENTRY);
+}
+
+/// Heuristic: inside an enum class body, an IDENT followed by `,`,
+/// `;`, `(`, `{`, or `}` (across trivia) starts an enum entry. An
+/// IDENT followed by `:`/`<`/`=`/`fun`/`val`/etc. is a regular
+/// class member instead.
+fn looks_like_enum_entry_in_enum_body(p: &Parser<'_, '_>) -> bool {
+    // Walk modifiers/annotations.
+    let mut i = 0;
+    loop {
+        let k = p.nth(i);
+        if matches!(
+            k,
+            S::WHITE_SPACE | S::NEWLINE | S::LINE_COMMENT | S::BLOCK_COMMENT | S::KDOC
+        ) {
+            i += 1;
+            continue;
+        }
+        if k == S::AT {
+            // Skip annotation: `@Name` optionally `(args)`.
+            i += 1;
+            while matches!(
+                p.nth(i),
+                S::WHITE_SPACE | S::NEWLINE | S::LINE_COMMENT | S::BLOCK_COMMENT | S::KDOC
+            ) {
+                i += 1;
+            }
+            if p.nth(i) == S::IDENTIFIER || is_soft_keyword(p.nth(i)) {
+                i += 1;
+            }
+            while matches!(
+                p.nth(i),
+                S::WHITE_SPACE | S::NEWLINE | S::LINE_COMMENT | S::BLOCK_COMMENT | S::KDOC
+            ) {
+                i += 1;
+            }
+            if p.nth(i) == S::LPAR {
+                let mut depth = 1;
+                i += 1;
+                while depth > 0 && i < 64 {
+                    match p.nth(i) {
+                        S::LPAR => depth += 1,
+                        S::RPAR => depth -= 1,
+                        S::EOF => return false,
+                        _ => {}
+                    }
+                    i += 1;
+                }
+            }
+            continue;
+        }
+        if is_modifier_keyword(k) {
+            i += 1;
+            continue;
+        }
+        // Now we expect either IDENT (entry name) or a real decl
+        // keyword (`fun`, `val`, etc.). If it's a decl keyword, this
+        // is NOT an enum entry.
+        if matches!(
+            k,
+            S::KW_FUN
+                | S::KW_VAL
+                | S::KW_VAR
+                | S::KW_CLASS
+                | S::KW_OBJECT
+                | S::KW_INTERFACE
+                | S::KW_INIT
+                | S::KW_CONSTRUCTOR
+                | S::KW_TYPEALIAS
+                | S::KW_COMPANION
+        ) {
+            return false;
+        }
+        if k != S::IDENTIFIER && !is_soft_keyword(k) {
+            return false;
+        }
+        // Look past the ident for a follower that identifies an enum
+        // entry shape.
+        let mut j = i + 1;
+        while matches!(
+            p.nth(j),
+            S::WHITE_SPACE | S::NEWLINE | S::LINE_COMMENT | S::BLOCK_COMMENT | S::KDOC
+        ) {
+            j += 1;
+        }
+        return matches!(
+            p.nth(j),
+            S::COMMA | S::SEMICOLON | S::LPAR | S::LBRACE | S::RBRACE
+        );
+    }
+}
+
+/// Walk the parser's recently-emitted token events backwards to find
+/// out whether the just-finished modifier list contained `enum`.
+/// Stops at the first non-modifier-shaped token (so we don't bleed
+/// past the current decl's modifier list into earlier siblings).
+fn was_enum_modifier(p: &Parser<'_, '_>) -> bool {
+    for k in p.recent_token_kinds() {
+        match k {
+            S::KW_ENUM => return true,
+            S::WHITE_SPACE
+            | S::NEWLINE
+            | S::LINE_COMMENT
+            | S::BLOCK_COMMENT
+            | S::KDOC
+            | S::AT
+            | S::IDENTIFIER
+            | S::LPAR
+            | S::RPAR
+            | S::COMMA
+            | S::DOT => {}
+            k if is_modifier_keyword(k) || is_soft_modifier_keyword(k) => {}
+            k if matches!(
+                k,
+                S::KW_PUBLIC
+                    | S::KW_PROTECTED
+                    | S::KW_PRIVATE
+                    | S::KW_INTERNAL
+                    | S::KW_OPEN
+                    | S::KW_ABSTRACT
+                    | S::KW_FINALLY
+                    | S::KW_OVERRIDE
+                    | S::KW_INLINE
+                    | S::KW_INFIX
+                    | S::KW_OPERATOR
+                    | S::KW_VARARG
+                    | S::KW_LATEINIT
+                    | S::KW_SUSPEND
+                    | S::KW_TAILREC
+                    | S::KW_CONST
+                    | S::KW_CROSSINLINE
+                    | S::KW_NOINLINE
+                    | S::KW_REIFIED
+                    | S::KW_ACTUAL
+                    | S::KW_EXPECT
+                    | S::KW_ANNOTATION
+                    | S::KW_DATA
+                    | S::KW_SEALED
+                    | S::KW_COMPANION
+                    | S::KW_INNER
+            ) =>
+            {
+                // still inside the modifier list
+            }
+            _ => return false,
+        }
+    }
+    false
+}
+
+/// Same as `parse_class_or_interface_body` but tags the class body as
+/// an enum-class body so the body parser recognizes entries.
+fn parse_enum_class_body(p: &mut Parser<'_, '_>) {
+    // Reuses the standard class parser but flips the body-mode flag.
+    // The structure is otherwise identical (modifiers/typeparams/
+    // primary-ctor/super-types/where/body) — the only difference is
+    // how the body iterates entries.
+    p.bump(); // class
+    skip_trivia(p);
+    if p.at(S::IDENTIFIER) {
+        p.bump();
+    }
+    skip_trivia_if_class_continues(p);
+    if p.at(S::LT) {
+        parse_type_parameter_list(p);
+        skip_trivia_if_class_continues(p);
+    }
+    if p.at(S::LPAR) {
+        let pc = p.start();
+        parse_value_parameter_list(p);
+        pc.complete(p, S::PRIMARY_CONSTRUCTOR);
+        skip_trivia_if_class_continues(p);
+    }
+    if p.at(S::COLON) {
+        p.bump();
+        skip_trivia(p);
+        let stl = p.start();
+        loop {
+            parse_super_type_entry(p);
+            if next_non_trivia(p, 0) != S::COMMA {
+                break;
+            }
+            skip_trivia(p);
+            p.bump();
+            skip_trivia(p);
+        }
+        stl.complete(p, S::SUPER_TYPE_LIST);
+        skip_trivia_if_class_continues(p);
+    }
+    if p.at(S::KW_WHERE) {
+        parse_type_constraint_list(p);
+        skip_trivia_if_class_continues(p);
+    }
+    if p.at(S::LBRACE) {
+        parse_class_body_impl(p, /* enum_entries */ true);
+    }
 }
 
 fn parse_class_member(p: &mut Parser<'_, '_>) {
@@ -1068,7 +1465,28 @@ fn looks_like_primary_constructor_with_modifiers(p: &Parser<'_, '_>) -> bool {
             S::IDENTIFIER
                 if matches!(
                     p.text_at(i),
-                    "public" | "inner" | "companion" | "data" | "sealed"
+                    "public"
+                | "inner"
+                | "companion"
+                | "data"
+                | "sealed"
+                | "annotation"
+                | "open"
+                | "abstract"
+                | "override"
+                | "operator"
+                | "infix"
+                | "lateinit"
+                | "tailrec"
+                | "suspend"
+                | "expect"
+                | "actual"
+                | "crossinline"
+                | "noinline"
+                | "reified"
+                | "value"
+                | "vararg"
+                | "const"
                 ) =>
             {
                 saw_mod = true;
@@ -1346,7 +1764,37 @@ fn parse_property_body(p: &mut Parser<'_, '_>) {
         parse_type_parameter_list(p);
         skip_trivia(p);
     }
-    if has_receiver_prefix(p) {
+    // Destructuring declaration: `val (a, b) = pair`. The DESTRUCTURING
+    // wrapper takes the spot of the property name.
+    if p.at(S::LPAR) {
+        let d = p.start();
+        p.bump();
+        loop {
+            skip_trivia(p);
+            if !(p.at(S::IDENTIFIER) || is_soft_keyword(p.current())) {
+                break;
+            }
+            let e = p.start();
+            p.bump();
+            // Optional `: Type`.
+            if next_non_trivia(p, 0) == S::COLON {
+                skip_trivia(p);
+                p.bump();
+                skip_trivia(p);
+                parse_type_ref(p);
+            }
+            e.complete(p, S::DESTRUCTURING_DECLARATION_ENTRY);
+            skip_trivia(p);
+            if !p.at(S::COMMA) {
+                break;
+            }
+            p.bump();
+        }
+        if p.at(S::RPAR) {
+            p.bump();
+        }
+        d.complete(p, S::DESTRUCTURING_DECLARATION);
+    } else if has_receiver_prefix(p) {
         parse_receiver_then_name(p);
     } else if p.at(S::IDENTIFIER) || is_soft_keyword(p.current()) {
         p.bump();
@@ -1362,7 +1810,10 @@ fn parse_property_body(p: &mut Parser<'_, '_>) {
         if matches!(
             next_non_trivia(p, 0),
             S::EQ | S::KW_BY | S::KW_GET | S::KW_SET
-        ) {
+        ) || next_non_trivia_text_eq(p, 0, "by")
+            || next_non_trivia_text_eq(p, 0, "get")
+            || next_non_trivia_text_eq(p, 0, "set")
+        {
             skip_trivia(p);
         }
     }
@@ -1378,8 +1829,12 @@ fn parse_property_body(p: &mut Parser<'_, '_>) {
             skip_trivia(p);
         }
     }
-    if p.at(S::KW_BY) {
-        p.bump();
+    if p.at(S::KW_BY) || (p.at(S::IDENTIFIER) && p.current_text() == "by") {
+        if p.at(S::IDENTIFIER) {
+            p.bump_as(S::KW_BY);
+        } else {
+            p.bump();
+        }
         skip_trivia(p);
         parse_expression(p);
         if next_non_trivia_property_continues(p) {
@@ -1474,6 +1929,13 @@ fn parse_property_accessor(p: &mut Parser<'_, '_>) {
 
 fn parse_typealias_body(p: &mut Parser<'_, '_>) {
     p.bump(); // typealias
+    parse_typealias_body_after_kw(p);
+}
+
+/// Inner half of [`parse_typealias_body`]: the `typealias` keyword has
+/// already been consumed (possibly via `bump_as` from a soft-keyword
+/// IDENT). Parses the name, optional type parameters, and the body.
+fn parse_typealias_body_after_kw(p: &mut Parser<'_, '_>) {
     skip_trivia(p);
     if p.at(S::IDENTIFIER) {
         p.bump();
@@ -1513,22 +1975,39 @@ fn parse_type_parameter_list(p: &mut Parser<'_, '_>) {
 
 fn parse_type_parameter(p: &mut Parser<'_, '_>) {
     let m = p.start();
-    // Variance modifier `in` / `out` (IDENT in the lexer, reclassified
-    // here) sits in a MODIFIER_LIST inside the TYPE_PARAMETER.
-    let variance = match p.current_text() {
-        "out" if p.at(S::IDENTIFIER) => Some(S::KW_OUT),
-        "in" if p.at(S::IDENTIFIER) => Some(S::KW_IN),
-        _ => None,
-    };
-    if let Some(kind) = variance {
-        let ml = p.start();
+    // Type-parameter modifiers: `in`/`out` (variance), `reified`. They
+    // sit in a MODIFIER_LIST inside the TYPE_PARAMETER. Multiple
+    // modifiers may appear (e.g. `reified out T`). Trailing trivia
+    // after the last modifier belongs at the TYPE_PARAMETER level.
+    let mut had_modifier = false;
+    let ml = p.start();
+    loop {
+        if had_modifier {
+            // Only consume trivia between consecutive modifiers.
+            let next_text = next_non_trivia_text(p, 0);
+            let next_is_modifier_like = matches!(next_text, "out" | "in" | "reified");
+            if next_is_modifier_like {
+                skip_trivia(p);
+            } else {
+                break;
+            }
+        }
+        let kind = match p.current_text() {
+            "out" if p.at(S::IDENTIFIER) => Some(S::KW_OUT),
+            "in" if p.at(S::IDENTIFIER) => Some(S::KW_IN),
+            "reified" if p.at(S::IDENTIFIER) => Some(S::KW_REIFIED),
+            _ => None,
+        };
+        let Some(kind) = kind else { break };
         p.bump_as(kind);
-        ml.complete(p, S::MODIFIER_LIST);
-        skip_trivia(p);
-    } else {
-        parse_modifier_list_opt(p);
-        skip_trivia(p);
+        had_modifier = true;
     }
+    if had_modifier {
+        ml.complete(p, S::MODIFIER_LIST);
+    } else {
+        ml.abandon(p);
+    }
+    skip_trivia(p);
     if p.at(S::IDENTIFIER) {
         p.bump();
     }
@@ -1545,7 +2024,15 @@ fn parse_type_ref(p: &mut Parser<'_, '_>) -> CompletedMarker {
     let m = p.start();
     parse_modifier_list_opt(p);
     skip_trivia(p);
-    // Function type: `(A, B) -> C` or `T.(A) -> C`.
+    // Function type with receiver: `T.(A) -> R` (and the generic form
+    // `Foo<X>.(A) -> R`). Look ahead through the leading USER_TYPE
+    // segments for a `.(` before the `->` to disambiguate from a
+    // dotted regular type.
+    if looks_like_receiver_function_type(p) {
+        parse_receiver_function_type(p);
+        return m.complete(p, S::TYPE_REFERENCE);
+    }
+    // Function type: `(A, B) -> C`.
     if p.at(S::LPAR) && looks_like_function_type(p) {
         parse_function_type_after_modifiers(p);
         return m.complete(p, S::TYPE_REFERENCE);
@@ -1565,6 +2052,121 @@ fn parse_type_ref(p: &mut Parser<'_, '_>) -> CompletedMarker {
         user_cm = null_m.complete(p, S::NULLABLE_TYPE);
     }
     m.complete(p, S::TYPE_REFERENCE)
+}
+
+/// Look ahead for `Type.(args) -> result` — a function type with a
+/// receiver. The receiver is a USER_TYPE that ends BEFORE the final
+/// `.(` separator.
+fn looks_like_receiver_function_type(p: &Parser<'_, '_>) -> bool {
+    // Walk forward balancing `<>`s. Find the FIRST top-level `.(` that
+    // is followed eventually by `->`.
+    let mut i = 0usize;
+    let mut depth_lt = 0i32;
+    loop {
+        let k = p.nth(i);
+        match k {
+            S::EOF | S::LBRACE | S::SEMICOLON | S::EQ => return false,
+            S::LT => depth_lt += 1,
+            S::GT => depth_lt -= 1,
+            S::DOT if depth_lt == 0 && p.nth(i + 1) == S::LPAR => {
+                // Confirm `->` follows the closing `)`.
+                let mut j = i + 2;
+                let mut depth = 1i32;
+                while depth > 0 && j < 256 {
+                    match p.nth(j) {
+                        S::LPAR => depth += 1,
+                        S::RPAR => depth -= 1,
+                        S::EOF => return false,
+                        _ => {}
+                    }
+                    j += 1;
+                }
+                while matches!(
+                    p.nth(j),
+                    S::WHITE_SPACE | S::NEWLINE | S::LINE_COMMENT | S::BLOCK_COMMENT
+                ) {
+                    j += 1;
+                }
+                return p.nth(j) == S::ARROW;
+            }
+            _ => {}
+        }
+        i += 1;
+        if i > 256 {
+            return false;
+        }
+    }
+}
+
+fn parse_receiver_function_type(p: &mut Parser<'_, '_>) {
+    // FUNCTION_TYPE wraps FUNCTION_TYPE_RECEIVER, the `.`, the params,
+    // the `->`, and the return type.
+    let ft = p.start();
+    let recv = p.start();
+    let first = p.start();
+    parse_user_type_segment(p);
+    let mut cm = first.complete(p, S::USER_TYPE);
+    loop {
+        if next_non_trivia(p, 0) != S::DOT {
+            break;
+        }
+        let mut probe = 1usize;
+        while matches!(p.nth(probe), S::WHITE_SPACE | S::NEWLINE) {
+            probe += 1;
+        }
+        if p.nth(probe) == S::LPAR {
+            break;
+        }
+        let outer = cm.precede(p);
+        skip_ws(p);
+        p.bump(); // .
+        skip_ws(p);
+        parse_user_type_segment(p);
+        cm = outer.complete(p, S::USER_TYPE);
+    }
+    let _ = cm;
+    recv.complete(p, S::FUNCTION_TYPE_RECEIVER);
+    skip_trivia(p);
+    if p.at(S::DOT) {
+        p.bump();
+    }
+    skip_trivia(p);
+    // Parameter list — function-type-style.
+    if p.at(S::LPAR) {
+        let plist = p.start();
+        p.bump();
+        skip_trivia(p);
+        if !p.at(S::RPAR) {
+            loop {
+                let prm = p.start();
+                if p.at(S::IDENTIFIER) && next_non_trivia(p, 1) == S::COLON {
+                    p.bump();
+                    skip_trivia(p);
+                    p.bump();
+                    skip_trivia(p);
+                }
+                parse_type_ref(p);
+                prm.complete(p, S::VALUE_PARAMETER);
+                skip_trivia(p);
+                if !p.at(S::COMMA) {
+                    break;
+                }
+                p.bump();
+                skip_trivia(p);
+            }
+        }
+        if p.at(S::RPAR) {
+            p.bump();
+        }
+        plist.complete(p, S::VALUE_PARAMETER_LIST);
+    }
+    skip_trivia(p);
+    if p.at(S::ARROW) {
+        p.bump();
+        skip_trivia(p);
+        parse_type_ref(p);
+    }
+    ft.complete(p, S::FUNCTION_TYPE);
 }
 
 fn looks_like_function_type(p: &Parser<'_, '_>) -> bool {
@@ -1788,7 +2390,60 @@ fn parse_value_parameter(p: &mut Parser<'_, '_>) {
             p.bump();
         }
     }
-    parse_modifier_list_opt(p);
+    // Param-position soft modifiers: `vararg`, `crossinline`,
+    // `noinline`, and (for primary-ctor params) `val`/`var`. These
+    // come BEFORE the param name, so they can't be picked up by the
+    // generic modifier-list scan (which requires a decl-introducer
+    // follower like `class`/`fun`).
+    let ml = p.start();
+    let mut had_any = false;
+    loop {
+        // Only consume trivia between modifiers when ANOTHER modifier
+        // follows — trailing trivia after the last modifier belongs at
+        // the VALUE_PARAMETER level (kotlinc PSI shape).
+        let next = next_non_trivia(p, 0);
+        let next_text = next_non_trivia_text(p, 0);
+        let next_is_modifier_like = next == S::AT
+            || is_modifier_keyword(next)
+            || matches!(
+                next_text,
+                "vararg" | "crossinline" | "noinline"
+            );
+        if had_any {
+            if next_is_modifier_like {
+                skip_trivia(p);
+            } else {
+                break;
+            }
+        }
+        let reclass = match p.current_text() {
+            "vararg" if p.at(S::IDENTIFIER) => Some(S::KW_VARARG),
+            "crossinline" if p.at(S::IDENTIFIER) => Some(S::KW_CROSSINLINE),
+            "noinline" if p.at(S::IDENTIFIER) => Some(S::KW_NOINLINE),
+            _ => None,
+        };
+        if let Some(k) = reclass {
+            p.bump_as(k);
+            had_any = true;
+            continue;
+        }
+        if p.at(S::AT) {
+            parse_annotation_entry(p);
+            had_any = true;
+            continue;
+        }
+        if is_modifier_keyword(p.current()) {
+            p.bump();
+            had_any = true;
+            continue;
+        }
+        break;
+    }
+    if had_any {
+        ml.complete(p, S::MODIFIER_LIST);
+    } else {
+        ml.abandon(p);
+    }
     skip_trivia(p);
     if matches!(p.current(), S::KW_VAL | S::KW_VAR) {
         p.bump();
@@ -1988,6 +2643,12 @@ fn parse_elvis(p: &mut Parser<'_, '_>) -> CompletedMarker {
 fn parse_infix_op(p: &mut Parser<'_, '_>) -> CompletedMarker {
     let mut lhs = parse_range(p);
     loop {
+        // Newlines end an infix-operator chain in Kotlin — `a\nin b` is
+        // statement `a` followed by statement `in b`, not `a in b`. Bail
+        // out if a newline precedes the next token.
+        if has_newline_before_next_non_trivia(p) {
+            break;
+        }
         let next = next_non_trivia(p, 0);
         // `is X`
         if next == S::KW_IS {
@@ -2013,9 +2674,144 @@ fn parse_infix_op(p: &mut Parser<'_, '_>) -> CompletedMarker {
             lhs = m.complete(p, S::BINARY_EXPRESSION);
             continue;
         }
+        // `!is X` / `!in X` — negated form. The `!` is followed by
+        // the keyword. The two raw tokens stay separate so the YAML
+        // matches kotlinc's PSI which lists them as siblings inside
+        // OPERATION_REFERENCE.
+        if next == S::EXCL {
+            let excl_offset = next_non_trivia_offset(p, 0);
+            let nextnext = next_non_trivia(p, excl_offset + 1);
+            if matches!(nextnext, S::KW_IS | S::KW_IN) {
+                skip_ws(p);
+                let m = lhs.precede(p);
+                let op = p.start();
+                p.bump(); // !
+                skip_ws(p);
+                p.bump(); // is / in
+                op.complete(p, S::OPERATION_REFERENCE);
+                skip_trivia(p);
+                if nextnext == S::KW_IS {
+                    parse_type_ref(p);
+                    lhs = m.complete(p, S::IS_EXPRESSION);
+                } else {
+                    parse_range(p);
+                    lhs = m.complete(p, S::BINARY_EXPRESSION);
+                }
+                continue;
+            }
+        }
+        // Generic infix function call: `lhs IDENT rhs` (e.g. `0 until
+        // 5`, `a or b`, `xs shr 2`). Only kicks in when the IDENT is
+        // not a hard keyword and is followed by an expression on the
+        // same line.
+        if next == S::IDENTIFIER && is_infix_function_position(p) {
+            skip_ws(p);
+            let m = lhs.precede(p);
+            let op = p.start();
+            let r = p.start();
+            p.bump(); // IDENT
+            r.complete(p, S::REFERENCE_EXPRESSION);
+            op.complete(p, S::OPERATION_REFERENCE);
+            skip_trivia(p);
+            parse_range(p);
+            lhs = m.complete(p, S::BINARY_EXPRESSION);
+            continue;
+        }
         break;
     }
     lhs
+}
+
+/// Heuristic: when does `IDENT` at the cursor represent an infix
+/// function call? We require:
+/// 1. Trivia separation from the previous token (so `foo.bar` and
+///    `foo()` don't get mis-parsed as infix calls).
+/// 2. An expression-starting token follows the IDENT (so `IDENT(`,
+///    `IDENT.`, etc. — call shapes — don't trigger here).
+fn is_infix_function_position(p: &Parser<'_, '_>) -> bool {
+    // Cursor must be at WS, then the IDENT (or at WS containing
+    // newline — which we already rejected above — or directly at the
+    // IDENT with no leading WS, which isn't infix).
+    if !matches!(p.current(), S::WHITE_SPACE) {
+        return false;
+    }
+    if p.text_at(0).contains('\n') {
+        return false;
+    }
+    let after_ws = p.nth(1);
+    if after_ws != S::IDENTIFIER {
+        return false;
+    }
+    // The IDENT must NOT be one of the soft keywords we already
+    // intercept elsewhere (decl introducers, modifiers).
+    let ident_text = p.text_at(1);
+    if matches!(
+        ident_text,
+        "fun"
+            | "val"
+            | "var"
+            | "class"
+            | "object"
+            | "interface"
+            | "package"
+            | "import"
+            | "return"
+            | "throw"
+            | "break"
+            | "continue"
+            | "if"
+            | "else"
+            | "when"
+            | "for"
+            | "while"
+            | "do"
+            | "try"
+            | "catch"
+            | "finally"
+            | "by"
+            | "where"
+            | "get"
+            | "set"
+            | "constructor"
+            | "init"
+            | "this"
+            | "super"
+            | "true"
+            | "false"
+            | "null"
+    ) {
+        return false;
+    }
+    // Look past the IDENT for an expression-starter.
+    let mut j = 2usize;
+    while matches!(p.nth(j), S::WHITE_SPACE) {
+        if p.text_at(j).contains('\n') {
+            return false;
+        }
+        j += 1;
+    }
+    matches!(
+        p.nth(j),
+        S::IDENTIFIER
+            | S::INTEGER_LITERAL
+            | S::LONG_LITERAL
+            | S::FLOAT_LITERAL
+            | S::DOUBLE_LITERAL
+            | S::CHARACTER_LITERAL
+            | S::STRING_START
+            | S::LPAR
+            | S::LBRACE
+            | S::LBRACKET
+            | S::KW_TRUE
+            | S::KW_FALSE
+            | S::KW_NULL
+            | S::KW_IF
+            | S::KW_WHEN
+            | S::KW_TRY
+            | S::MINUS
+            | S::PLUS
+            | S::EXCL
+    )
 }
 
 fn parse_range(p: &mut Parser<'_, '_>) -> CompletedMarker {
@@ -2439,6 +3235,24 @@ fn parse_atom(p: &mut Parser<'_, '_>) -> CompletedMarker {
         consume_label_qualifier_opt(p);
         return m.complete(p, S::THIS_EXPRESSION);
     }
+    // Standalone callable reference: `::name` or `::class`. Wraps
+    // the reference in CALLABLE_REFERENCE_EXPRESSION (or
+    // CLASS_LITERAL_EXPRESSION).
+    if p.at(S::COLONCOLON) {
+        let m = p.start();
+        p.bump();
+        skip_ws(p);
+        if p.at(S::KW_CLASS) {
+            p.bump();
+            return m.complete(p, S::CLASS_LITERAL_EXPRESSION);
+        }
+        let r = p.start();
+        if p.at(S::IDENTIFIER) || is_soft_keyword(p.current()) {
+            p.bump();
+        }
+        r.complete(p, S::REFERENCE_EXPRESSION);
+        return m.complete(p, S::CALLABLE_REFERENCE_EXPRESSION);
+    }
     match p.current() {
         S::IDENTIFIER => {
             let m = p.start();
@@ -2675,11 +3489,16 @@ fn parse_lambda_expression(p: &mut Parser<'_, '_>) -> CompletedMarker {
     // when empty (`{}` -> BLOCK with empty children). The trailing
     // WS before `}` sits at FUNCTION_LITERAL level, not inside BLOCK.
     let block = p.start();
-    if !p.at(S::RBRACE) {
+    if !p.at(S::RBRACE) && next_non_trivia(p, 0) != S::RBRACE {
         parse_block_body(p);
     }
     block.complete(p, S::BLOCK);
-    if p.at(S::WHITE_SPACE) {
+    // Any trailing trivia (WS, line/block comments, KDoc) before `}`
+    // sits at FUNCTION_LITERAL level, not inside BLOCK.
+    while matches!(
+        p.current(),
+        S::WHITE_SPACE | S::LINE_COMMENT | S::BLOCK_COMMENT | S::KDOC
+    ) {
         p.bump();
     }
     if p.at(S::RBRACE) {
@@ -2792,7 +3611,13 @@ fn parse_when_expression(p: &mut Parser<'_, '_>) -> CompletedMarker {
         skip_trivia(p);
         while !p.at(S::RBRACE) && !p.at(S::EOF) {
             parse_when_entry(p);
+            // Allow `;` between entries (mostly for the inline form
+            // `when (x) { 1 -> a; 2 -> b }`).
             skip_trivia(p);
+            if p.at(S::SEMICOLON) {
+                p.bump();
+                skip_trivia(p);
+            }
         }
         if p.at(S::RBRACE) {
             p.bump();
@@ -3100,6 +3925,11 @@ fn parse_brace_block_with_empty(_p: &mut Parser<'_, '_>) {
 
 fn parse_block_body(p: &mut Parser<'_, '_>) {
     while !p.at(S::RBRACE) && !p.at(S::EOF) {
+        // Block contains only trivia (a comment, whitespace) — leave
+        // the trailing trivia to the outer composite and stop.
+        if next_non_trivia(p, 0) == S::RBRACE {
+            break;
+        }
         parse_statement_or_expression(p);
         // Trailing trivia: leave it for the outer composite if it
         // sits before the closing `}`. Only consume trivia + the
@@ -3160,6 +3990,47 @@ fn next_non_trivia(p: &Parser<'_, '_>, mut offset: usize) -> SyntaxKind {
             continue;
         }
         return k;
+    }
+}
+
+/// Same as `next_non_trivia` but returns the absolute offset of the
+/// first non-trivia token at or after `start`.
+fn next_non_trivia_offset(p: &Parser<'_, '_>, mut offset: usize) -> usize {
+    loop {
+        let k = p.nth(offset);
+        if matches!(
+            k,
+            S::WHITE_SPACE | S::NEWLINE | S::LINE_COMMENT | S::BLOCK_COMMENT
+        ) {
+            offset += 1;
+            continue;
+        }
+        return offset;
+    }
+}
+
+/// `true` if there's a newline (a `\n` inside WHITE_SPACE, or a
+/// NEWLINE token) between the cursor and the first non-trivia token.
+/// Used by infix/binary parsers to stop at a newline boundary —
+/// Kotlin's grammar treats newlines as soft statement terminators for
+/// infix operators like `in` and `is`.
+fn has_newline_before_next_non_trivia(p: &Parser<'_, '_>) -> bool {
+    let mut offset = 0usize;
+    loop {
+        let k = p.nth(offset);
+        match k {
+            S::NEWLINE => return true,
+            S::WHITE_SPACE => {
+                if p.text_at(offset).contains('\n') {
+                    return true;
+                }
+                offset += 1;
+            }
+            S::LINE_COMMENT | S::BLOCK_COMMENT => {
+                offset += 1;
+            }
+            _ => return false,
+        }
     }
 }
 

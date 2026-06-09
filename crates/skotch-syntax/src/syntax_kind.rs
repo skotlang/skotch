@@ -268,6 +268,7 @@ pub enum SyntaxKind {
     KW_ANNOTATION,
     KW_COMPANION,
     KW_REIFIED,
+    KW_VALUE,
     KW_CROSSINLINE,
     KW_NOINLINE,
     KW_ACTUAL,
@@ -303,6 +304,10 @@ pub enum SyntaxKind {
     QUEST,
     QUESTDOT,
     AS_SAFE,
+    /// `!is` — the negated type-check operator, fused from `!` + `is`.
+    NOT_IS,
+    /// `!in` — the negated membership operator, fused from `!` + `in`.
+    NOT_IN,
     AT,
     ARROW,
     EQ,

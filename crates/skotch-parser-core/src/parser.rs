@@ -160,6 +160,17 @@ impl<'i, 'src> Parser<'i, 'src> {
     pub fn finish(self) -> (Vec<Event>, Vec<String>) {
         (self.events, self.errors)
     }
+
+    /// Iterate the already-emitted events in reverse, surfacing each
+    /// `Token` event's `SyntaxKind`. Used by grammars to ask "did the
+    /// recently-completed modifier list contain X?" without threading
+    /// state through every parsing helper.
+    pub fn recent_token_kinds(&self) -> impl Iterator<Item = SyntaxKind> + '_ {
+        self.events.iter().rev().filter_map(|ev| match ev {
+            Event::Token { kind, .. } => Some(*kind),
+            _ => None,
+        })
+    }
 }
 
 /// A reserved slot in the event stream that hasn't yet decided what
