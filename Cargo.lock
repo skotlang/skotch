@@ -2477,6 +2477,7 @@ dependencies = [
  "skotch-diagnostics",
  "skotch-intern",
  "skotch-lexer",
+ "skotch-sil",
  "skotch-span",
  "skotch-syntax",
 ]

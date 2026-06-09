@@ -57,6 +57,20 @@ pub fn parse_file(lexed: &LexedFile, interner: &mut Interner, diags: &mut Diagno
     p.parse_file()
 }
 
+/// Parse a source file via the SIL (Source Information Layer)
+/// pipeline — kotlinc-PSI-shaped lossless concrete syntax tree.
+///
+/// This is the path forward for the AST migration. Returns a
+/// [`skotch_sil::SilTree`] that consumers wrap with the typed
+/// [`skotch_ast`] accessors. The legacy [`parse_file`] above remains
+/// available; consumers migrate one at a time.
+///
+/// `file_name` is the display path written into the SIL tree's
+/// `file:` field (used by YAML emit and diagnostics).
+pub fn parse_to_sil(file_name: &str, source: &str) -> skotch_sil::SilTree {
+    skotch_sil::parse_sil(file_name, source)
+}
+
 struct Parser<'a> {
     file: FileId,
     tokens: &'a [Token],
