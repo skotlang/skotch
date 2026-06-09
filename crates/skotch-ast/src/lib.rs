@@ -33,6 +33,20 @@
 //! Modeled after `rowan` / rust-analyzer's `ast.rs`, but specialized
 //! for our `SilNode` data structure (owned `Vec<SilNode>` children,
 //! not a shared arena).
+//!
+//! ## End-to-end example
+//!
+//! ```
+//! use skotch_ast::{parse, AstNode, AstToken, KtDecl, KtExpr};
+//!
+//! let parsed = parse("hello.kt", "fun main() { println(\"hi\") }");
+//! let file = parsed.file();
+//! for decl in file.decls() {
+//!     if let KtDecl::Fun(f) = decl {
+//!         println!("function: {:?}", f.name());
+//!     }
+//! }
+//! ```
 
 #![allow(clippy::needless_lifetimes)]
 
