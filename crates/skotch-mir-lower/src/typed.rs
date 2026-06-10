@@ -563,6 +563,192 @@ fn const_ty(c: &skotch_mir::MirConst) -> Ty {
     }
 }
 
+/// Try to lower a simple `if (cond) then-arm else else-arm` expression
+/// body. Returns None when the if's condition / arms / else are not
+/// simple binary-comparison + literal/ref arms.
+fn try_lower_if_expression(
+    if_e: &skotch_ast::KtIf<'_>,
+    f: skotch_ast::KtFun<'_>,
+    strings: &mut Vec<String>,
+    _fn_lookup: &rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)>,
+) -> Option<(Vec<BasicBlock>, Vec<Ty>)> {
+    use skotch_ast::KtExpr;
+    use skotch_mir::{LocalId, Rvalue, Stmt as MStmt};
+
+    let param_count = f
+        .value_parameter_list()
+        .map(|pl| pl.parameters().count())
+        .unwrap_or(0);
+    let outer_param_names: Vec<String> = f
+        .value_parameter_list()
+        .map(|pl| {
+            pl.parameters()
+                .map(|p| p.name().unwrap_or("").to_string())
+                .collect()
+        })
+        .unwrap_or_default();
+
+    // Condition must be a binary comparison between two refs / literals.
+    let cond_expr = if_e.condition().and_then(|c| c.expression())?;
+    let cond_expr = unwrap_parens(cond_expr);
+    let cmp = match cond_expr {
+        KtExpr::Binary(b) => b,
+        _ => return None,
+    };
+    let cmp_op = cmp.operation().map(|o| o.text()).unwrap_or_default();
+    let cmp_mir_op = match cmp_op.as_str() {
+        "==" => skotch_mir::BinOp::CmpEq,
+        "!=" => skotch_mir::BinOp::CmpNe,
+        "<" => skotch_mir::BinOp::CmpLt,
+        ">" => skotch_mir::BinOp::CmpGt,
+        "<=" => skotch_mir::BinOp::CmpLe,
+        ">=" => skotch_mir::BinOp::CmpGe,
+        _ => return None,
+    };
+
+    let resolve_operand = |e: skotch_ast::KtExpr<'_>,
+                           next_slot: &mut u32,
+                           pre_stmts: &mut Vec<MStmt>,
+                           extra_locals: &mut Vec<Ty>,
+                           strings: &mut Vec<String>|
+     -> Option<LocalId> {
+        let e = unwrap_parens(e);
+        match e {
+            KtExpr::Reference(r) => {
+                let n = r.name()?;
+                let idx = outer_param_names.iter().position(|p| p == n)?;
+                Some(LocalId(idx as u32))
+            }
+            other => {
+                let (k, ty) = literal_to_const(&other, strings)?;
+                let slot = LocalId(*next_slot);
+                *next_slot += 1;
+                extra_locals.push(ty);
+                pre_stmts.push(MStmt::Assign {
+                    dest: slot,
+                    value: Rvalue::Const(k),
+                });
+                Some(slot)
+            }
+        }
+    };
+
+    let then_expr = if_e.then_branch().and_then(|t| t.expression())?;
+    let then_expr = unwrap_parens(then_expr);
+    let else_expr = if_e.else_branch().and_then(|e| e.expression())?;
+    let else_expr = unwrap_parens(else_expr);
+
+    let mut next_slot = param_count as u32;
+    let mut extra_locals: Vec<Ty> = Vec::new();
+
+    // Build the condition statements.
+    let mut b0_stmts: Vec<MStmt> = Vec::new();
+    let lhs = resolve_operand(
+        cmp.lhs()?,
+        &mut next_slot,
+        &mut b0_stmts,
+        &mut extra_locals,
+        strings,
+    )?;
+    let rhs = resolve_operand(
+        cmp.rhs()?,
+        &mut next_slot,
+        &mut b0_stmts,
+        &mut extra_locals,
+        strings,
+    )?;
+    let cond_slot = LocalId(next_slot);
+    next_slot += 1;
+    extra_locals.push(Ty::Bool);
+    b0_stmts.push(MStmt::Assign {
+        dest: cond_slot,
+        value: Rvalue::BinOp {
+            op: cmp_mir_op,
+            lhs,
+            rhs,
+        },
+    });
+
+    // Reserve the result_slot before lowering arms; both arms write
+    // into the same slot.
+    let result_slot = LocalId(next_slot);
+    next_slot += 1;
+    // Pick the arm type from the then-branch (best effort).
+    let arm_ty = match &then_expr {
+        KtExpr::Reference(rr) => {
+            rr.name()
+                .and_then(|n| {
+                    f.value_parameter_list().and_then(|pl| {
+                        pl.parameters().find_map(|p| {
+                            if p.name() != Some(n) {
+                                return None;
+                            }
+                            p.type_reference()
+                                .and_then(|tr| tr.user_type())
+                                .and_then(|u| u.name())
+                                .and_then(skotch_types::ty_from_name)
+                        })
+                    })
+                })
+                .unwrap_or(Ty::Any)
+        }
+        _ => Ty::Any,
+    };
+    extra_locals.push(arm_ty.clone());
+
+    // Build the then arm.
+    let mut b1_stmts: Vec<MStmt> = Vec::new();
+    let then_slot = resolve_operand(
+        then_expr,
+        &mut next_slot,
+        &mut b1_stmts,
+        &mut extra_locals,
+        strings,
+    )?;
+    b1_stmts.push(MStmt::Assign {
+        dest: result_slot,
+        value: Rvalue::Local(then_slot),
+    });
+
+    // Build the else arm.
+    let mut b2_stmts: Vec<MStmt> = Vec::new();
+    let else_slot = resolve_operand(
+        else_expr,
+        &mut next_slot,
+        &mut b2_stmts,
+        &mut extra_locals,
+        strings,
+    )?;
+    b2_stmts.push(MStmt::Assign {
+        dest: result_slot,
+        value: Rvalue::Local(else_slot),
+    });
+
+    let blocks = vec![
+        BasicBlock {
+            stmts: b0_stmts,
+            terminator: Terminator::Branch {
+                cond: cond_slot,
+                then_block: 1,
+                else_block: 2,
+            },
+        },
+        BasicBlock {
+            stmts: b1_stmts,
+            terminator: Terminator::Goto(3),
+        },
+        BasicBlock {
+            stmts: b2_stmts,
+            terminator: Terminator::Goto(3),
+        },
+        BasicBlock {
+            stmts: Vec::new(),
+            terminator: Terminator::ReturnValue(result_slot),
+        },
+    ];
+    Some((blocks, extra_locals))
+}
+
 /// Try to lower a multi-statement block body using a simple local
 /// tracking pass. Handles bodies whose statements are sequences of:
 ///   - val <name> = <literal>            (KtProperty)
@@ -880,6 +1066,21 @@ fn lower_simple_body(
     };
     // Parenthesized passthrough: `(literal)` or `(a + b)`.
     let body_expr = unwrap_parens(body_expr);
+
+    // if/else expression body:
+    //   fun max(a: Int, b: Int): Int = if (a > b) a else b
+    // Emits a 4-block CFG:
+    //   block 0: cond_local = BinOp(cond); Branch(cond_local, 1, 2)
+    //   block 1: result_local = then-arm; Goto(3)
+    //   block 2: result_local = else-arm; Goto(3)
+    //   block 3: ReturnValue(result_local)
+    if let KtExpr::If(if_e) = &body_expr {
+        if let Some(blocks_and_locals) =
+            try_lower_if_expression(if_e, f, strings, fn_lookup)
+        {
+            return blocks_and_locals;
+        }
+    }
 
     // Static-call body: `fun outer() = inner(arg1, arg2)` where
     // inner is a top-level fn in the same file. Args may be either
@@ -2012,6 +2213,25 @@ mod tests {
             }
         }
         assert!(matches!(block.terminator, Terminator::ReturnValue(_)));
+    }
+
+    #[test]
+    fn typed_lower_if_expression_max_of_two() {
+        let module = lower("fun max(a: Int, b: Int): Int = if (a > b) a else b", "TestKt");
+        let f = &module.functions[0];
+        // 4 blocks: cond, then, else, join.
+        assert_eq!(f.blocks.len(), 4);
+        // Block 0: cond computation + Branch.
+        assert!(matches!(
+            f.blocks[0].terminator,
+            Terminator::Branch { then_block: 1, else_block: 2, .. }
+        ));
+        // Block 1: then arm, Goto(3).
+        assert!(matches!(f.blocks[1].terminator, Terminator::Goto(3)));
+        // Block 2: else arm, Goto(3).
+        assert!(matches!(f.blocks[2].terminator, Terminator::Goto(3)));
+        // Block 3: ReturnValue.
+        assert!(matches!(f.blocks[3].terminator, Terminator::ReturnValue(_)));
     }
 
     #[test]
