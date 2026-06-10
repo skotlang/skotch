@@ -100,6 +100,7 @@ pub fn lower_file(
                 None => continue,
             };
             let (_, interfaces) = collect_class_super_iface(i.super_type_list());
+            let methods = collect_interface_methods(i);
             let mir_class = skotch_mir::MirClass {
                 name: name.clone(),
                 super_class: None,
@@ -108,7 +109,7 @@ pub fn lower_file(
                 is_interface: true,
                 interfaces,
                 fields: Vec::new(),
-                methods: Vec::new(),
+                methods,
                 constructor: empty_constructor(&name),
                 secondary_constructors: Vec::new(),
                 is_suspend_lambda: false,
@@ -136,6 +137,7 @@ pub fn lower_file(
                 None => continue,
             };
             let (super_class, interfaces) = collect_class_super_iface(o.super_type_list());
+            let methods = collect_object_methods(o);
             let mir_class = skotch_mir::MirClass {
                 name: name.clone(),
                 super_class,
@@ -144,7 +146,7 @@ pub fn lower_file(
                 is_interface: false,
                 interfaces,
                 fields: Vec::new(),
-                methods: Vec::new(),
+                methods,
                 constructor: empty_constructor(&name),
                 secondary_constructors: Vec::new(),
                 is_suspend_lambda: false,
@@ -433,6 +435,103 @@ fn collect_class_fields(c: skotch_ast::KtClass<'_>) -> Vec<skotch_mir::MirField>
         }
     }
     fields
+}
+
+/// Same-shape helper for interfaces.
+fn collect_interface_methods(i: skotch_ast::KtInterface<'_>) -> Vec<MirFunction> {
+    let mut methods = Vec::new();
+    let Some(body) = i.body() else { return methods };
+    let mut method_idx = 0u32;
+    for d in body.declarations() {
+        if let KtDecl::Fun(f) = d {
+            methods.push(method_from_fun(f, method_idx, true));
+            method_idx += 1;
+        }
+    }
+    methods
+}
+
+/// Same-shape helper for object singletons.
+fn collect_object_methods(o: skotch_ast::KtObjectDeclaration<'_>) -> Vec<MirFunction> {
+    let mut methods = Vec::new();
+    let Some(body) = o.body() else { return methods };
+    let mut method_idx = 0u32;
+    for d in body.declarations() {
+        if let KtDecl::Fun(f) = d {
+            methods.push(method_from_fun(f, method_idx, false));
+            method_idx += 1;
+        }
+    }
+    methods
+}
+
+/// Build a MirFunction from a typed KtFun. `is_abstract_default`
+/// applies when the source has no body and the surrounding decl is
+/// an interface (where methods default abstract).
+fn method_from_fun(
+    f: skotch_ast::KtFun<'_>,
+    method_idx: u32,
+    is_abstract_default: bool,
+) -> MirFunction {
+    let name = f.name().unwrap_or("<anon>").to_string();
+    let param_count = f
+        .value_parameter_list()
+        .map(|pl| pl.parameters().count())
+        .unwrap_or(0);
+    let params: Vec<skotch_mir::LocalId> =
+        (0..param_count).map(|i| skotch_mir::LocalId(i as u32)).collect();
+    let param_names: Vec<String> = f
+        .value_parameter_list()
+        .map(|pl| {
+            pl.parameters()
+                .map(|p| p.name().unwrap_or("").to_string())
+                .collect()
+        })
+        .unwrap_or_default();
+    let return_ty = match f
+        .return_type()
+        .and_then(|tr| tr.user_type())
+        .and_then(|u| u.name())
+    {
+        Some(name) => skotch_types::ty_from_name(name).unwrap_or(Ty::Any),
+        None => Ty::Unit,
+    };
+    let locals: Vec<Ty> = (0..param_count).map(|_| Ty::Any).collect();
+    let has_body = f.body_block().is_some() || f.body_expression().is_some();
+    let is_abstract = f.is_abstract() || (is_abstract_default && !has_body);
+    MirFunction {
+        id: FuncId(method_idx),
+        name,
+        params,
+        locals,
+        blocks: vec![BasicBlock {
+            stmts: Vec::new(),
+            terminator: Terminator::Return,
+        }],
+        return_ty,
+        required_params: param_count,
+        param_names,
+        param_receiver_types: Vec::new(),
+        param_defaults: Vec::new(),
+        is_abstract,
+        vararg_index: None,
+        exception_handlers: Vec::new(),
+        is_suspend: f.is_suspend(),
+        is_inline: f.is_inline(),
+        has_type_params: f
+            .type_parameter_list()
+            .map(|tpl| tpl.parameters().next().is_some())
+            .unwrap_or(false),
+        suspend_original_return_ty: None,
+        suspend_state_machine: None,
+        annotations: Vec::new(),
+        named_locals: Vec::new(),
+        is_private: f.visibility() == skotch_syntax::Visibility::Private,
+        is_static: false,
+        default_call_masks: Vec::new(),
+        needs_leading_nop: false,
+        local_generic_args: rustc_hash::FxHashMap::default(),
+    }
 }
 
 /// Collect methods from a class body. Each becomes a MirFunction
@@ -836,6 +935,33 @@ mod tests {
         assert_eq!(c.constructor.required_params, 2);
         assert_eq!(c.constructor.param_names, vec!["x".to_string(), "y".to_string()]);
         assert_eq!(c.constructor.locals, vec![Ty::Int, Ty::Int]);
+    }
+
+    #[test]
+    fn typed_lower_interface_with_methods_marks_abstract() {
+        let module = lower(
+            "interface Printable { fun pretty(): String }",
+            "TestKt",
+        );
+        let c = &module.classes[0];
+        assert_eq!(c.methods.len(), 1);
+        let m = &c.methods[0];
+        assert_eq!(m.name, "pretty");
+        // No body → abstract default kicks in.
+        assert!(m.is_abstract);
+    }
+
+    #[test]
+    fn typed_lower_object_with_methods_emits_method_list() {
+        let module = lower(
+            "object S { fun greet(): String = \"hi\" }",
+            "TestKt",
+        );
+        let c = &module.classes[0];
+        assert!(c.is_object_singleton);
+        assert_eq!(c.methods.len(), 1);
+        assert_eq!(c.methods[0].name, "greet");
+        assert_eq!(c.methods[0].return_ty, Ty::String);
     }
 
     #[test]
