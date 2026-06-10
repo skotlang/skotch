@@ -23,6 +23,8 @@ use skotch_syntax::{
 };
 use skotch_types::Ty;
 
+pub mod typed;
+
 /// Stable identifier for any *defined* thing the resolver knows about.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum DefId {
