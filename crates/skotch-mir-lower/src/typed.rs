@@ -64,6 +64,46 @@ pub fn lower_file(
             let fields = collect_class_fields(c);
             let methods = collect_class_methods(c, &name);
             let constructor = constructor_from_primary(c, &name);
+            // Companion object handling: if the class body has a
+            // `companion object [Name] { ... }`, emit a sibling
+            // MirClass `<Outer>$<Companion>` and point the outer's
+            // companion_class_name at it.
+            let companion = c.body().and_then(|body| {
+                body.declarations().find_map(|d| match d {
+                    KtDecl::Object(o) if o.is_companion() => Some(o),
+                    _ => None,
+                })
+            });
+            let companion_class_name = companion.map(|o| {
+                let comp_simple = o.name().unwrap_or("Companion").to_string();
+                let comp_qname = format!("{}${}", name, comp_simple);
+                let comp_methods = collect_object_methods(o);
+                let comp_class = skotch_mir::MirClass {
+                    name: comp_qname.clone(),
+                    super_class: None,
+                    is_open: false,
+                    is_abstract: false,
+                    is_interface: false,
+                    interfaces: Vec::new(),
+                    fields: Vec::new(),
+                    methods: comp_methods,
+                    constructor: empty_constructor(&comp_qname),
+                    secondary_constructors: Vec::new(),
+                    is_suspend_lambda: false,
+                    is_lambda: false,
+                    is_cross_file_stub: false,
+                    annotations: Vec::new(),
+                    has_type_params: false,
+                    is_object_singleton: true,
+                    companion_class_name: None,
+                    static_fields: Vec::new(),
+                    clinit: None,
+                };
+                // Need to defer pushing — we don't have `&mut module`
+                // inside the closure. Build first, push after.
+                (comp_qname, comp_class)
+            });
+            let companion_class_name_str = companion_class_name.as_ref().map(|(n, _)| n.clone());
             let mir_class = skotch_mir::MirClass {
                 name: name.clone(),
                 super_class,
@@ -84,11 +124,14 @@ pub fn lower_file(
                     .map(|tpl| tpl.parameters().next().is_some())
                     .unwrap_or(false),
                 is_object_singleton: false,
-                companion_class_name: None,
+                companion_class_name: companion_class_name_str,
                 static_fields: Vec::new(),
                 clinit: None,
             };
             module.push_class(mir_class);
+            if let Some((_, comp_class)) = companion_class_name {
+                module.push_class(comp_class);
+            }
         }
     }
 
@@ -949,6 +992,24 @@ mod tests {
         assert_eq!(m.name, "pretty");
         // No body → abstract default kicks in.
         assert!(m.is_abstract);
+    }
+
+    #[test]
+    fn typed_lower_class_with_companion_emits_sibling_class() {
+        let module = lower(
+            "class Foo { companion object { fun create(): Foo = TODO() } }",
+            "TestKt",
+        );
+        let foo = module.classes.iter().find(|c| c.name == "Foo").expect("Foo");
+        assert_eq!(foo.companion_class_name.as_deref(), Some("Foo$Companion"));
+        let comp = module
+            .classes
+            .iter()
+            .find(|c| c.name == "Foo$Companion")
+            .expect("companion");
+        assert!(comp.is_object_singleton);
+        assert_eq!(comp.methods.len(), 1);
+        assert_eq!(comp.methods[0].name, "create");
     }
 
     #[test]
