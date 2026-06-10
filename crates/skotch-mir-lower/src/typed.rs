@@ -2726,6 +2726,44 @@ mod tests {
     }
 
     #[test]
+    fn typed_lower_block_bodied_return_with_binary() {
+        let module = lower(
+            "fun add(a: Int, b: Int): Int { return a + b }",
+            "TestKt",
+        );
+        let f = &module.functions[0];
+        assert_eq!(f.return_ty, Ty::Int);
+        let block = &f.blocks[0];
+        assert_eq!(block.stmts.len(), 1);
+        match &block.stmts[0] {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::BinOp { op, .. } => {
+                    assert!(matches!(op, skotch_mir::BinOp::AddI));
+                }
+                _ => panic!("expected BinOp"),
+            },
+        }
+        assert!(matches!(block.terminator, Terminator::ReturnValue(_)));
+    }
+
+    #[test]
+    fn typed_lower_block_bodied_return_with_param_ref() {
+        let module = lower(
+            "fun identity(x: Int): Int { return x }",
+            "TestKt",
+        );
+        let f = &module.functions[0];
+        assert_eq!(f.return_ty, Ty::Int);
+        let block = &f.blocks[0];
+        // Identity from return: empty stmts + ReturnValue(0)
+        assert!(block.stmts.is_empty());
+        match &block.terminator {
+            Terminator::ReturnValue(local) => assert_eq!(local.0, 0),
+            other => panic!("expected ReturnValue, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn typed_lower_block_bodied_fn_with_literal_return() {
         let module = lower("fun answer(): Int { return 7 }", "TestKt");
         let f = &module.functions[0];
