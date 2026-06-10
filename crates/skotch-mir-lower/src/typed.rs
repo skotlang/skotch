@@ -551,6 +551,70 @@ fn lower_simple_body(
             }
         }
     };
+    // Binary arithmetic body where both operands are references to
+    // the function's own parameters: `fun add(a: Int, b: Int) = a + b`.
+    if let KtExpr::Binary(b) = &body_expr {
+        let param_count = f
+            .value_parameter_list()
+            .map(|pl| pl.parameters().count())
+            .unwrap_or(0);
+        let param_names: Vec<String> = f
+            .value_parameter_list()
+            .map(|pl| {
+                pl.parameters()
+                    .map(|p| p.name().unwrap_or("").to_string())
+                    .collect()
+            })
+            .unwrap_or_default();
+        let lhs_idx = b.lhs().and_then(|l| match l {
+            KtExpr::Reference(r) => r
+                .name()
+                .and_then(|n| param_names.iter().position(|p| p == n)),
+            _ => None,
+        });
+        let rhs_idx = b.rhs().and_then(|r| match r {
+            KtExpr::Reference(rr) => rr
+                .name()
+                .and_then(|n| param_names.iter().position(|p| p == n)),
+            _ => None,
+        });
+        let op_text = b.operation().map(|o| o.text()).unwrap_or_default();
+        // Typed param types determine which variant to use. With
+        // current coverage we assume Int; long/float/double bodies
+        // need explicit typed-Ty tracking which lands later.
+        let mir_op = match op_text.as_str() {
+            "+" => Some(skotch_mir::BinOp::AddI),
+            "-" => Some(skotch_mir::BinOp::SubI),
+            "*" => Some(skotch_mir::BinOp::MulI),
+            "/" => Some(skotch_mir::BinOp::DivI),
+            "%" => Some(skotch_mir::BinOp::ModI),
+            _ => None,
+        };
+        if let (Some(lhs), Some(rhs), Some(op)) = (lhs_idx, rhs_idx, mir_op) {
+            // Result type: pull from f.return_type.
+            let return_ty = match f
+                .return_type()
+                .and_then(|tr| tr.user_type())
+                .and_then(|u| u.name())
+            {
+                Some(name) => skotch_types::ty_from_name(name).unwrap_or(Ty::Int),
+                None => Ty::Int,
+            };
+            let result_slot = skotch_mir::LocalId(param_count as u32);
+            let blocks = vec![BasicBlock {
+                stmts: vec![skotch_mir::Stmt::Assign {
+                    dest: result_slot,
+                    value: skotch_mir::Rvalue::BinOp {
+                        op,
+                        lhs: skotch_mir::LocalId(lhs as u32),
+                        rhs: skotch_mir::LocalId(rhs as u32),
+                    },
+                }],
+                terminator: Terminator::ReturnValue(result_slot),
+            }];
+            return (blocks, vec![return_ty]);
+        }
+    }
     let (c, ty) = match &body_expr {
         KtExpr::Integer(_) => {
             let text = skotch_ast::children(body_expr.syntax())
@@ -1369,6 +1433,31 @@ mod tests {
                 other => panic!("expected Const(String), got {other:?}"),
             },
         }
+    }
+
+    #[test]
+    fn typed_lower_binary_add_of_params() {
+        let module = lower("fun add(a: Int, b: Int): Int = a + b", "TestKt");
+        let f = &module.functions[0];
+        assert_eq!(f.return_ty, Ty::Int);
+        let block = &f.blocks[0];
+        assert_eq!(block.stmts.len(), 1);
+        match &block.stmts[0] {
+            skotch_mir::Stmt::Assign { dest, value } => {
+                assert_eq!(dest.0, 2);
+                match value {
+                    skotch_mir::Rvalue::BinOp { op, lhs, rhs } => {
+                        assert!(matches!(op, skotch_mir::BinOp::AddI));
+                        assert_eq!(lhs.0, 0); // param a
+                        assert_eq!(rhs.0, 1); // param b
+                    }
+                    other => panic!("expected BinOp, got {other:?}"),
+                }
+            }
+        }
+        assert!(matches!(block.terminator, Terminator::ReturnValue(_)));
+        // locals: a, b, result
+        assert_eq!(f.locals, vec![Ty::Int, Ty::Int, Ty::Int]);
     }
 
     #[test]
