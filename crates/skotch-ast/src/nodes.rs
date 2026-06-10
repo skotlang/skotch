@@ -87,11 +87,77 @@ ast_node!(
 ast_node!(KtFileAnnotationList = FILE_ANNOTATION_LIST);
 
 // ── Declarations ────────────────────────────────────────────────────
-ast_node!(KtClass = CLASS);
-ast_node!(KtInterface = INTERFACE);
+//
+// The SIL grammar emits a single `CLASS` composite for `class`,
+// `interface`, and `enum class` declarations. The typed wrappers
+// branch on the presence of `KW_INTERFACE` or `KW_ENUM` modifier
+// inside the composite so consumers can pattern-match on declaration
+// shape without re-checking keywords.
+
+#[derive(Copy, Clone, Debug)]
+pub struct KtClass<'a>(&'a SilNode);
+impl<'a> AstNode<'a> for KtClass<'a> {
+    fn cast(node: &'a SilNode) -> Option<Self> {
+        if node.kind == SyntaxKind::CLASS && !class_is_interface(node) && !class_is_enum(node) {
+            Some(Self(node))
+        } else {
+            None
+        }
+    }
+    fn syntax(self) -> &'a SilNode {
+        self.0
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct KtInterface<'a>(&'a SilNode);
+impl<'a> AstNode<'a> for KtInterface<'a> {
+    fn cast(node: &'a SilNode) -> Option<Self> {
+        if node.kind == SyntaxKind::CLASS && class_is_interface(node) {
+            Some(Self(node))
+        } else {
+            None
+        }
+    }
+    fn syntax(self) -> &'a SilNode {
+        self.0
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct KtEnumClass<'a>(&'a SilNode);
+impl<'a> AstNode<'a> for KtEnumClass<'a> {
+    fn cast(node: &'a SilNode) -> Option<Self> {
+        if node.kind == SyntaxKind::CLASS && class_is_enum(node) {
+            Some(Self(node))
+        } else {
+            None
+        }
+    }
+    fn syntax(self) -> &'a SilNode {
+        self.0
+    }
+}
+
+fn class_is_interface(node: &SilNode) -> bool {
+    children(node)
+        .iter()
+        .any(|c| c.kind == SyntaxKind::KW_INTERFACE)
+}
+
+fn class_is_enum(node: &SilNode) -> bool {
+    // An `enum class` carries `KW_ENUM` in its MODIFIER_LIST.
+    children(node).iter().any(|c| {
+        if c.kind == SyntaxKind::MODIFIER_LIST {
+            children(c).iter().any(|m| m.kind == SyntaxKind::KW_ENUM)
+        } else {
+            false
+        }
+    })
+}
+
 ast_node!(KtObjectDeclaration = OBJECT_DECLARATION);
 ast_node!(KtCompanionObject = COMPANION_OBJECT);
-ast_node!(KtEnumClass = ENUM_CLASS);
 ast_node!(KtEnumEntry = ENUM_ENTRY);
 ast_node!(KtTypeAlias = TYPEALIAS);
 ast_node!(KtFun = FUN);
@@ -230,10 +296,20 @@ pub enum KtDecl<'a> {
 impl<'a> KtDecl<'a> {
     pub fn cast(node: &'a SilNode) -> Option<Self> {
         match node.kind {
-            SyntaxKind::CLASS => Some(Self::Class(KtClass::cast(node)?)),
-            SyntaxKind::INTERFACE => Some(Self::Interface(KtInterface::cast(node)?)),
+            SyntaxKind::CLASS => {
+                // The SIL parser emits a single CLASS composite for
+                // class / interface / enum class. Route to the
+                // matching typed wrapper by inspecting modifier/keyword
+                // children.
+                if let Some(i) = KtInterface::cast(node) {
+                    return Some(Self::Interface(i));
+                }
+                if let Some(e) = KtEnumClass::cast(node) {
+                    return Some(Self::EnumClass(e));
+                }
+                Some(Self::Class(KtClass::cast(node)?))
+            }
             SyntaxKind::OBJECT_DECLARATION => Some(Self::Object(KtObjectDeclaration::cast(node)?)),
-            SyntaxKind::ENUM_CLASS => Some(Self::EnumClass(KtEnumClass::cast(node)?)),
             SyntaxKind::TYPEALIAS => Some(Self::TypeAlias(KtTypeAlias::cast(node)?)),
             SyntaxKind::FUN => Some(Self::Fun(KtFun::cast(node)?)),
             SyntaxKind::PROPERTY => Some(Self::Property(KtProperty::cast(node)?)),
@@ -423,21 +499,34 @@ impl<'a> KtFile<'a> {
 }
 
 impl<'a> KtPackageDirective<'a> {
-    /// The dotted name as a contiguous string (no whitespace).
+    /// The dotted name as a contiguous string (no whitespace). The SIL
+    /// shape nests qualified names inside `DOT_QUALIFIED_EXPRESSION`
+    /// composites whose leaves are `REFERENCE_EXPRESSION { IDENTIFIER }`
+    /// tokens.
     pub fn name(self) -> String {
-        let mut s = String::new();
-        for c in children(self.syntax()) {
-            if matches!(c.kind, SyntaxKind::IDENTIFIER | SyntaxKind::DOT) {
-                if let SilData::Token { text } = &c.data {
-                    s.push_str(text);
-                }
-            }
-        }
-        s
+        let mut parts: Vec<&str> = Vec::new();
+        collect_package_idents(self.syntax(), &mut parts);
+        parts.join(".")
     }
 
     pub fn is_empty(self) -> bool {
         children(self.syntax()).is_empty()
+    }
+}
+
+fn collect_package_idents<'a>(node: &'a SilNode, out: &mut Vec<&'a str>) {
+    for c in children(node) {
+        match c.kind {
+            SyntaxKind::IDENTIFIER => {
+                if let SilData::Token { text } = &c.data {
+                    out.push(text.as_str());
+                }
+            }
+            SyntaxKind::REFERENCE_EXPRESSION | SyntaxKind::DOT_QUALIFIED_EXPRESSION => {
+                collect_package_idents(c, out);
+            }
+            _ => {}
+        }
     }
 }
 
@@ -1832,6 +1921,20 @@ mod tests {
     fn debug_dump_nullable() {
         let parsed = crate::parse("t.kt", "fun f(x: Int?) {}");
         dump(parsed.file().syntax(), 0);
+    }
+
+    #[test]
+    #[ignore]
+    fn debug_dump_enum_iface_pkg() {
+        for s in [
+            "enum class Color { RED }",
+            "interface Foo",
+            "package com.foo\nclass Bar",
+        ] {
+            println!("=== {s:?}");
+            let parsed = crate::parse("t.kt", s);
+            dump(parsed.file().syntax(), 0);
+        }
     }
 
     #[test]
