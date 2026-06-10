@@ -341,6 +341,24 @@ pub fn lower_file(
         }
     }
 
+    // First pass: collect all top-level fn names → (FuncId, ret Ty).
+    // Needed so body lowering can resolve bare `inner()` calls.
+    let mut fn_lookup: rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)> =
+        rustc_hash::FxHashMap::default();
+    {
+        let mut idx = 0u32;
+        for decl in file.decls() {
+            if let KtDecl::Fun(f) = decl {
+                if let Some(name) = f.name() {
+                    let typed_fn = typed.functions.iter().find(|tf| tf.name_index == idx);
+                    let ret = typed_fn.map(|tf| tf.return_ty.clone()).unwrap_or(Ty::Unit);
+                    fn_lookup.insert(name.to_string(), (FuncId(idx), ret));
+                }
+                idx += 1;
+            }
+        }
+    }
+
     // Top-level functions — one MirFunction per KtFun decl.
     let mut fn_id = 0u32;
     for decl in file.decls() {
@@ -372,7 +390,8 @@ pub fn lower_file(
             // expression now emit MStmt::Assign + ReturnValue. Block
             // bodies and non-literal expression bodies still emit an
             // empty Return placeholder.
-            let (blocks, extra_locals) = lower_simple_body(f, &mut module.strings);
+            let (blocks, extra_locals) =
+                lower_simple_body(f, &mut module.strings, &fn_lookup);
 
             let mut locals = param_tys;
             locals.extend(extra_locals);
@@ -789,6 +808,7 @@ fn literal_to_const(
 fn lower_simple_body(
     f: skotch_ast::KtFun<'_>,
     strings: &mut Vec<String>,
+    fn_lookup: &rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)>,
 ) -> (Vec<BasicBlock>, Vec<Ty>) {
     use skotch_ast::KtExpr;
     use skotch_mir::{LocalId, MirConst};
@@ -860,6 +880,44 @@ fn lower_simple_body(
     };
     // Parenthesized passthrough: `(literal)` or `(a + b)`.
     let body_expr = unwrap_parens(body_expr);
+
+    // Static-call body: `fun outer() = inner()` where inner is a
+    // top-level fn in the same file. Emits Call(Static(FuncId), [])
+    // into a fresh result slot, then ReturnValue.
+    if let KtExpr::Call(call) = &body_expr {
+        if let Some(KtExpr::Reference(r)) = call.callee() {
+            if let Some(name) = r.name() {
+                if let Some((callee_id, callee_ret)) = fn_lookup.get(name) {
+                    let args = call.value_argument_list();
+                    let arg_count = args.map(|a| a.arguments().count()).unwrap_or(0);
+                    // For now we only support zero-arg calls; threading
+                    // args through requires per-arg lowering.
+                    if arg_count == 0 {
+                        let param_count = f
+                            .value_parameter_list()
+                            .map(|pl| pl.parameters().count())
+                            .unwrap_or(0);
+                        let result_slot = skotch_mir::LocalId(param_count as u32);
+                        let blocks = vec![BasicBlock {
+                            stmts: vec![skotch_mir::Stmt::Assign {
+                                dest: result_slot,
+                                value: skotch_mir::Rvalue::Call {
+                                    kind: skotch_mir::CallKind::Static(*callee_id),
+                                    args: Vec::new(),
+                                },
+                            }],
+                            terminator: if callee_ret == &Ty::Unit {
+                                Terminator::Return
+                            } else {
+                                Terminator::ReturnValue(result_slot)
+                            },
+                        }];
+                        return (blocks, vec![callee_ret.clone()]);
+                    }
+                }
+            }
+        }
+    }
 
     // Identity function body: `fun id(x: Int): Int = x` returns the
     // parameter directly with no intermediate slot. Just ReturnValue
@@ -1904,6 +1962,40 @@ mod tests {
             }
         }
         assert!(matches!(block.terminator, Terminator::ReturnValue(_)));
+    }
+
+    #[test]
+    fn typed_lower_static_call_resolves_funcid() {
+        let module = lower(
+            "fun inner(): Int = 42\nfun outer(): Int = inner()",
+            "TestKt",
+        );
+        let outer = &module.functions[1];
+        assert_eq!(outer.name, "outer");
+        match &outer.blocks[0].stmts[0] {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::Call { kind, args } => {
+                    assert!(matches!(kind, skotch_mir::CallKind::Static(_)));
+                    if let skotch_mir::CallKind::Static(callee_id) = kind {
+                        assert_eq!(callee_id.0, 0); // inner is FuncId 0
+                    }
+                    assert!(args.is_empty());
+                }
+                _ => panic!("expected Call"),
+            },
+        }
+        assert!(matches!(outer.blocks[0].terminator, Terminator::ReturnValue(_)));
+    }
+
+    #[test]
+    fn typed_lower_static_call_unit_return_uses_plain_return() {
+        let module = lower(
+            "fun side() {}\nfun caller() = side()",
+            "TestKt",
+        );
+        let caller = &module.functions[1];
+        // Unit-returning callee → Terminator is plain Return, not ReturnValue.
+        assert!(matches!(caller.blocks[0].terminator, Terminator::Return));
     }
 
     #[test]
