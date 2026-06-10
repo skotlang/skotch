@@ -22,13 +22,112 @@
 use crate::{Signature, TypedFile, TypedFunction, TypedTopVal};
 use rustc_hash::FxHashMap;
 use skotch_ast::{
-    AstNode, KtDecl, KtFile, KtFun, KtFunctionType, KtTypeReference, KtUserType, KtValueParameter,
-    KtValueParameterList,
+    AstNode, KtClass, KtClassBody, KtDecl, KtEnumClass, KtFile, KtFun, KtFunctionType, KtInterface,
+    KtObjectDeclaration, KtTypeReference, KtUserType, KtValueParameter, KtValueParameterList,
 };
 use skotch_diagnostics::Diagnostics;
 use skotch_intern::Interner;
 use skotch_resolve::{DefId, PackageSymbolTable, ResolvedFile};
 use skotch_types::Ty;
+
+// ── TypeEnv: per-file class / interface / enum / object signatures ──
+//
+// Mirrors the legacy `TypeEnv` in skotch-typeck/src/lib.rs but built
+// from the typed AST. `synth_expr` consults it to resolve member
+// calls (`receiver.method()`) and field access (`receiver.field`).
+
+#[derive(Clone, Debug, Default)]
+pub(crate) struct TypeEnv {
+    /// Simple class name → declared shape.
+    pub(crate) types: FxHashMap<String, TypeDecl>,
+    /// Enum entry name → owning enum class name (e.g. `RED` → `Color`).
+    pub(crate) enum_entries: FxHashMap<String, String>,
+    /// Sealed class name → direct subclass names.
+    pub(crate) sealed_subclasses: FxHashMap<String, Vec<String>>,
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(dead_code)] // `name` reserved for future diagnostics
+pub(crate) struct TypeDecl {
+    pub(crate) name: String,
+    pub(crate) super_class: Option<String>,
+    pub(crate) interfaces: Vec<String>,
+    pub(crate) fields: Vec<FieldSig>,
+    pub(crate) methods: Vec<MethodSig>,
+    pub(crate) companion_methods: Vec<MethodSig>,
+    pub(crate) is_enum: bool,
+    pub(crate) enum_entry_names: Vec<String>,
+    pub(crate) is_sealed: bool,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct FieldSig {
+    pub(crate) name: String,
+    pub(crate) ty: Ty,
+}
+
+#[derive(Clone, Debug)]
+#[allow(dead_code)] // `params` reserved for future overload resolution
+pub(crate) struct MethodSig {
+    pub(crate) name: String,
+    pub(crate) params: Vec<Ty>,
+    pub(crate) ret: Ty,
+}
+
+impl TypeEnv {
+    /// Walk a type's method table — including superclass and
+    /// implemented interfaces — for the given method name.
+    pub(crate) fn lookup_method(&self, type_name: &str, method_name: &str) -> Option<&MethodSig> {
+        let mut visited = rustc_hash::FxHashSet::default();
+        let mut stack = vec![type_name.to_string()];
+        while let Some(name) = stack.pop() {
+            if !visited.insert(name.clone()) {
+                continue;
+            }
+            if let Some(d) = self.types.get(&name) {
+                if let Some(m) = d.methods.iter().find(|m| m.name == method_name) {
+                    return Some(m);
+                }
+                if let Some(sc) = d.super_class.as_ref() {
+                    stack.push(sc.clone());
+                }
+                for i in &d.interfaces {
+                    stack.push(i.clone());
+                }
+            }
+        }
+        None
+    }
+
+    pub(crate) fn lookup_field(&self, type_name: &str, field_name: &str) -> Option<&FieldSig> {
+        let mut visited = rustc_hash::FxHashSet::default();
+        let mut stack = vec![type_name.to_string()];
+        while let Some(name) = stack.pop() {
+            if !visited.insert(name.clone()) {
+                continue;
+            }
+            if let Some(d) = self.types.get(&name) {
+                if let Some(f) = d.fields.iter().find(|f| f.name == field_name) {
+                    return Some(f);
+                }
+                if let Some(sc) = d.super_class.as_ref() {
+                    stack.push(sc.clone());
+                }
+            }
+        }
+        None
+    }
+
+    pub(crate) fn lookup_companion(
+        &self,
+        type_name: &str,
+        method_name: &str,
+    ) -> Option<&MethodSig> {
+        self.types
+            .get(type_name)
+            .and_then(|d| d.companion_methods.iter().find(|m| m.name == method_name))
+    }
+}
 
 /// Type-check a single file using the typed AST input.
 pub fn type_check(
@@ -41,7 +140,34 @@ pub fn type_check(
     let mut out = TypedFile::default();
 
     // ── Imports / typealiases (per-file) ────────────────────────────
-    let imports = collect_imports(file);
+    let mut imports = collect_imports(file);
+    // Add same-file class/interface/object/enum names so a body
+    // reference to one of them maps to `Ty::Class(SimpleName)`.
+    for d in file.decls() {
+        match d {
+            KtDecl::Class(c) => {
+                if let Some(n) = c.name() {
+                    imports.entry(n.to_string()).or_insert_with(|| n.to_string());
+                }
+            }
+            KtDecl::Interface(i) => {
+                if let Some(n) = i.name() {
+                    imports.entry(n.to_string()).or_insert_with(|| n.to_string());
+                }
+            }
+            KtDecl::Object(o) => {
+                if let Some(n) = o.name() {
+                    imports.entry(n.to_string()).or_insert_with(|| n.to_string());
+                }
+            }
+            KtDecl::EnumClass(e) => {
+                if let Some(n) = e.name() {
+                    imports.entry(n.to_string()).or_insert_with(|| n.to_string());
+                }
+            }
+            _ => {}
+        }
+    }
     let mut aliases: FxHashMap<String, AliasTarget> = FxHashMap::default();
     for d in file.decls() {
         if let KtDecl::TypeAlias(t) = d {
@@ -51,6 +177,9 @@ pub fn type_check(
         }
     }
     let _ = package_symbols; // future: thread cross-file aliases
+
+    // ── TypeEnv: walk class/interface/enum/object decls ─────────────
+    let env = build_type_env(file, &imports, &aliases);
 
     // ── Pass 1: top-level signatures ────────────────────────────────
     let mut fn_index = 0u32;
@@ -145,6 +274,7 @@ pub fn type_check(
                     &imports,
                     &aliases,
                     &fn_returns,
+                    &env,
                     &mut local_tys,
                     &mut scope,
                 );
@@ -159,16 +289,330 @@ pub fn type_check(
     out
 }
 
+// ── TypeEnv builder ─────────────────────────────────────────────────
+
+fn build_type_env(
+    file: KtFile<'_>,
+    imports: &FxHashMap<String, String>,
+    aliases: &FxHashMap<String, AliasTarget>,
+) -> TypeEnv {
+    let mut env = TypeEnv::default();
+    for d in file.decls() {
+        match d {
+            KtDecl::Class(c) => register_class(c, &mut env, imports, aliases),
+            KtDecl::Interface(i) => register_interface(i, &mut env, imports, aliases),
+            KtDecl::Object(o) => register_object(o, &mut env, imports, aliases),
+            KtDecl::EnumClass(e) => register_enum(e, &mut env, imports, aliases),
+            _ => {}
+        }
+    }
+    env
+}
+
+fn class_body_methods_props<'a>(
+    body: Option<KtClassBody<'a>>,
+) -> (Vec<skotch_ast::KtFun<'a>>, Vec<skotch_ast::KtProperty<'a>>) {
+    let mut methods = Vec::new();
+    let mut props = Vec::new();
+    if let Some(b) = body {
+        for d in b.declarations() {
+            match d {
+                KtDecl::Fun(f) => methods.push(f),
+                KtDecl::Property(p) => props.push(p),
+                _ => {}
+            }
+        }
+    }
+    (methods, props)
+}
+
+fn collect_super_class_iface(
+    super_list: Option<skotch_ast::KtSuperTypeList<'_>>,
+) -> (Option<String>, Vec<String>) {
+    let Some(list) = super_list else {
+        return (None, Vec::new());
+    };
+    let mut super_class = None;
+    let mut ifaces = Vec::new();
+    for entry in list.entries() {
+        let name = entry
+            .type_reference()
+            .and_then(|t| t.user_type())
+            .and_then(|u| u.name())
+            .map(|s| s.to_string());
+        let is_call = matches!(entry, skotch_ast::SuperTypeEntry::Call(_));
+        match name {
+            Some(n) if is_call => super_class = Some(n),
+            Some(n) => ifaces.push(n),
+            None => {}
+        }
+    }
+    (super_class, ifaces)
+}
+
+fn method_sig_from_fun(
+    f: skotch_ast::KtFun<'_>,
+    imports: &FxHashMap<String, String>,
+    aliases: &FxHashMap<String, AliasTarget>,
+) -> MethodSig {
+    let params: Vec<Ty> = f
+        .value_parameter_list()
+        .map(|pl| {
+            pl.parameters()
+                .map(|p| {
+                    p.type_reference()
+                        .map(|tr| type_ref_to_ty(tr, imports, aliases))
+                        .unwrap_or(Ty::Any)
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let ret = f
+        .return_type()
+        .map(|tr| type_ref_to_ty(tr, imports, aliases))
+        .unwrap_or_else(|| infer_return_ty(f));
+    MethodSig {
+        name: f.name().unwrap_or("").to_string(),
+        params,
+        ret,
+    }
+}
+
+fn register_class(
+    c: KtClass<'_>,
+    env: &mut TypeEnv,
+    imports: &FxHashMap<String, String>,
+    aliases: &FxHashMap<String, AliasTarget>,
+) {
+    let Some(name) = c.name() else { return };
+    let (body_methods, body_props) = class_body_methods_props(c.body());
+    let mut fields: Vec<FieldSig> = body_props
+        .iter()
+        .map(|p| FieldSig {
+            name: p.name().unwrap_or("").to_string(),
+            ty: p
+                .type_reference()
+                .map(|tr| type_ref_to_ty(tr, imports, aliases))
+                .unwrap_or(Ty::Any),
+        })
+        .collect();
+    // Primary-constructor val/var params become fields too.
+    if let Some(pc) = c.primary_constructor() {
+        if let Some(plist) = pc.value_parameter_list() {
+            for p in plist.parameters() {
+                if p.is_val() || p.is_var() {
+                    if let Some(pname) = p.name() {
+                        let ty = p
+                            .type_reference()
+                            .map(|tr| type_ref_to_ty(tr, imports, aliases))
+                            .unwrap_or(Ty::Any);
+                        fields.push(FieldSig {
+                            name: pname.to_string(),
+                            ty,
+                        });
+                    }
+                }
+            }
+        }
+    }
+    let methods: Vec<MethodSig> = body_methods
+        .iter()
+        .map(|f| method_sig_from_fun(*f, imports, aliases))
+        .collect();
+    let (companion_methods, _) = companion_signatures(c.body(), imports, aliases);
+    let (super_class, interfaces) = collect_super_class_iface(c.super_type_list());
+
+    if c.is_sealed() {
+        // Track this as a sealed parent; subclass tracking happens
+        // when their `super_class` matches.
+        env.sealed_subclasses.entry(name.to_string()).or_default();
+    }
+    // Add as a subclass to the parent's sealed list if the parent is sealed.
+    if let Some(sc) = &super_class {
+        if env
+            .types
+            .get(sc)
+            .map(|d| d.is_sealed)
+            .unwrap_or(false)
+        {
+            env.sealed_subclasses
+                .entry(sc.clone())
+                .or_default()
+                .push(name.to_string());
+        }
+    }
+    env.types.insert(
+        name.to_string(),
+        TypeDecl {
+            name: name.to_string(),
+            super_class,
+            interfaces,
+            fields,
+            methods,
+            companion_methods,
+            is_enum: false,
+            enum_entry_names: Vec::new(),
+            is_sealed: c.is_sealed(),
+        },
+    );
+}
+
+fn register_interface(
+    i: KtInterface<'_>,
+    env: &mut TypeEnv,
+    imports: &FxHashMap<String, String>,
+    aliases: &FxHashMap<String, AliasTarget>,
+) {
+    let Some(name) = i.name() else { return };
+    let (body_methods, _) = class_body_methods_props(i.body());
+    let methods: Vec<MethodSig> = body_methods
+        .iter()
+        .map(|f| method_sig_from_fun(*f, imports, aliases))
+        .collect();
+    let (_super, interfaces) = collect_super_class_iface(i.super_type_list());
+    if i.is_sealed() {
+        env.sealed_subclasses.entry(name.to_string()).or_default();
+    }
+    env.types.insert(
+        name.to_string(),
+        TypeDecl {
+            name: name.to_string(),
+            super_class: None,
+            interfaces,
+            fields: Vec::new(),
+            methods,
+            companion_methods: Vec::new(),
+            is_enum: false,
+            enum_entry_names: Vec::new(),
+            is_sealed: i.is_sealed(),
+        },
+    );
+}
+
+fn register_object(
+    o: KtObjectDeclaration<'_>,
+    env: &mut TypeEnv,
+    imports: &FxHashMap<String, String>,
+    aliases: &FxHashMap<String, AliasTarget>,
+) {
+    let Some(name) = o.name() else { return };
+    let (body_methods, body_props) = class_body_methods_props(o.body());
+    let fields: Vec<FieldSig> = body_props
+        .iter()
+        .map(|p| FieldSig {
+            name: p.name().unwrap_or("").to_string(),
+            ty: p
+                .type_reference()
+                .map(|tr| type_ref_to_ty(tr, imports, aliases))
+                .unwrap_or(Ty::Any),
+        })
+        .collect();
+    let methods: Vec<MethodSig> = body_methods
+        .iter()
+        .map(|f| method_sig_from_fun(*f, imports, aliases))
+        .collect();
+    let (super_class, interfaces) = collect_super_class_iface(o.super_type_list());
+    env.types.insert(
+        name.to_string(),
+        TypeDecl {
+            name: name.to_string(),
+            super_class,
+            interfaces,
+            fields,
+            methods,
+            companion_methods: Vec::new(),
+            is_enum: false,
+            enum_entry_names: Vec::new(),
+            is_sealed: false,
+        },
+    );
+}
+
+fn register_enum(
+    e: KtEnumClass<'_>,
+    env: &mut TypeEnv,
+    imports: &FxHashMap<String, String>,
+    aliases: &FxHashMap<String, AliasTarget>,
+) {
+    let Some(name) = e.name() else { return };
+    let (body_methods, body_props) = class_body_methods_props(e.body());
+    let fields: Vec<FieldSig> = body_props
+        .iter()
+        .map(|p| FieldSig {
+            name: p.name().unwrap_or("").to_string(),
+            ty: p
+                .type_reference()
+                .map(|tr| type_ref_to_ty(tr, imports, aliases))
+                .unwrap_or(Ty::Any),
+        })
+        .collect();
+    let methods: Vec<MethodSig> = body_methods
+        .iter()
+        .map(|f| method_sig_from_fun(*f, imports, aliases))
+        .collect();
+    let enum_entry_names: Vec<String> = e
+        .body()
+        .map(|b| {
+            b.enum_entries()
+                .filter_map(|ee| ee.name().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
+    for entry in &enum_entry_names {
+        env.enum_entries
+            .insert(entry.clone(), name.to_string());
+    }
+    env.types.insert(
+        name.to_string(),
+        TypeDecl {
+            name: name.to_string(),
+            super_class: Some("kotlin/Enum".to_string()),
+            interfaces: Vec::new(),
+            fields,
+            methods,
+            companion_methods: Vec::new(),
+            is_enum: true,
+            enum_entry_names,
+            is_sealed: false,
+        },
+    );
+}
+
+fn companion_signatures(
+    body: Option<KtClassBody<'_>>,
+    imports: &FxHashMap<String, String>,
+    aliases: &FxHashMap<String, AliasTarget>,
+) -> (Vec<MethodSig>, bool) {
+    let mut methods = Vec::new();
+    let mut has_companion = false;
+    if let Some(b) = body {
+        for d in b.declarations() {
+            if let KtDecl::Object(o) = d {
+                if o.is_companion() {
+                    has_companion = true;
+                    let (body_methods, _) = class_body_methods_props(o.body());
+                    for f in body_methods {
+                        methods.push(method_sig_from_fun(f, imports, aliases));
+                    }
+                }
+            }
+        }
+    }
+    (methods, has_companion)
+}
+
 /// Walk a function body to harvest local variable types in source
 /// order. Local `val`/`var` declarations surface as PROPERTY children
 /// of the BLOCK composite; nested blocks (inside `if` / `when` arms)
 /// recurse. Synthesized expression types feed the scope so a later
 /// initializer that references an earlier local picks up its type.
+#[allow(clippy::too_many_arguments)]
 fn walk_block_with_scope_and_fns(
     block: skotch_ast::KtBlock<'_>,
     imports: &FxHashMap<String, String>,
     aliases: &FxHashMap<String, AliasTarget>,
     fn_returns: &FxHashMap<String, Ty>,
+    env: &TypeEnv,
     local_tys: &mut Vec<Ty>,
     scope: &mut Vec<(String, Ty)>,
 ) {
@@ -181,7 +625,7 @@ fn walk_block_with_scope_and_fns(
                 .map(|tr| type_ref_to_ty(tr, imports, aliases))
                 .or_else(|| {
                     prop.initializer()
-                        .map(|e| synth_expr(&e, scope, fn_returns))
+                        .map(|e| synth_expr(&e, scope, fn_returns, env))
                 })
                 .unwrap_or(Ty::Any);
             local_tys.push(ty.clone());
@@ -195,18 +639,18 @@ fn walk_block_with_scope_and_fns(
                 KtExpr::If(i) => {
                     if let Some(KtExpr::Block(b)) = i.then_branch().and_then(|t| t.expression()) {
                         walk_block_with_scope_and_fns(
-                            b, imports, aliases, fn_returns, local_tys, scope,
+                            b, imports, aliases, fn_returns, env, local_tys, scope,
                         );
                     }
                     if let Some(KtExpr::Block(b)) = i.else_branch().and_then(|e| e.expression()) {
                         walk_block_with_scope_and_fns(
-                            b, imports, aliases, fn_returns, local_tys, scope,
+                            b, imports, aliases, fn_returns, env, local_tys, scope,
                         );
                     }
                 }
-                KtExpr::Block(b) => {
-                    walk_block_with_scope_and_fns(b, imports, aliases, fn_returns, local_tys, scope)
-                }
+                KtExpr::Block(b) => walk_block_with_scope_and_fns(
+                    b, imports, aliases, fn_returns, env, local_tys, scope,
+                ),
                 _ => {}
             }
         }
@@ -214,15 +658,16 @@ fn walk_block_with_scope_and_fns(
     scope.truncate(saved);
 }
 
-/// Synthesize the type of an expression against the given scope and
-/// the known top-level function-return map. Mirrors the legacy
-/// `TypeChecker::synth_expr` for the common shapes. Returns `Ty::Any`
-/// for shapes that need TypeEnv-aware inference (member calls, field
-/// access against user classes — those land in a follow-up session).
+/// Synthesize the type of an expression against the given scope, the
+/// top-level fn_returns map, and the TypeEnv (class/iface/enum/object
+/// members). Mirrors the legacy `TypeChecker::synth_expr` for the
+/// common shapes. Member calls and field access through DotQualified
+/// expressions are resolved against the TypeEnv.
 fn synth_expr(
     e: &skotch_ast::KtExpr<'_>,
     scope: &[(String, Ty)],
     fn_returns: &FxHashMap<String, Ty>,
+    env: &TypeEnv,
 ) -> Ty {
     use skotch_ast::KtExpr;
     match e {
@@ -237,13 +682,23 @@ fn synth_expr(
                 if let Some((_, t)) = scope.iter().rev().find(|(n, _)| n == name) {
                     return t.clone();
                 }
+                // Enum entry referenced bare: `RED` (in a context where
+                // its enum is implied) → Ty::Class(EnumName).
+                if let Some(enum_name) = env.enum_entries.get(name) {
+                    return Ty::Class(enum_name.clone());
+                }
+                // Top-level user class name as a value: `MyClass` → the
+                // class type itself. Useful for Companion access.
+                if env.types.contains_key(name) {
+                    return Ty::Class(name.to_string());
+                }
             }
             Ty::Any
         }
         KtExpr::Parenthesized(p) => {
             for c in skotch_ast::children(p.syntax()) {
                 if let Some(inner) = KtExpr::cast(c) {
-                    return synth_expr(&inner, scope, fn_returns);
+                    return synth_expr(&inner, scope, fn_returns, env);
                 }
             }
             Ty::Any
@@ -251,11 +706,11 @@ fn synth_expr(
         KtExpr::Binary(b) => {
             let lt = b
                 .lhs()
-                .map(|l| synth_expr(&l, scope, fn_returns))
+                .map(|l| synth_expr(&l, scope, fn_returns, env))
                 .unwrap_or(Ty::Any);
             let rt = b
                 .rhs()
-                .map(|r| synth_expr(&r, scope, fn_returns))
+                .map(|r| synth_expr(&r, scope, fn_returns, env))
                 .unwrap_or(Ty::Any);
             let op = b.operation().map(|o| o.text()).unwrap_or_default();
             match op.as_str() {
@@ -269,6 +724,27 @@ fn synth_expr(
                         Ty::Int
                     } else if op == "+" && lt == Ty::String {
                         Ty::String
+                    } else if let Ty::Class(class_name) = &lt {
+                        // Operator overloading: receiver.plus(rhs)
+                        let op_method = match op.as_str() {
+                            "+" => "plus",
+                            "-" => "minus",
+                            "*" => "times",
+                            "/" => "div",
+                            "%" => "rem",
+                            _ => unreachable!(),
+                        };
+                        if let Some(m) = env.lookup_method(class_name, op_method) {
+                            // Unit return on operator body → assume
+                            // receiver type (legacy behavior).
+                            if m.ret == Ty::Unit {
+                                lt.clone()
+                            } else {
+                                m.ret.clone()
+                            }
+                        } else {
+                            Ty::Int
+                        }
                     } else {
                         Ty::Int
                     }
@@ -279,7 +755,7 @@ fn synth_expr(
         KtExpr::Unary(u) => {
             for c in skotch_ast::children(u.syntax()) {
                 if let Some(inner) = KtExpr::cast(c) {
-                    return synth_expr(&inner, scope, fn_returns);
+                    return synth_expr(&inner, scope, fn_returns, env);
                 }
             }
             Ty::Any
@@ -287,7 +763,7 @@ fn synth_expr(
         KtExpr::Prefix(p) => {
             for c in skotch_ast::children(p.syntax()) {
                 if let Some(inner) = KtExpr::cast(c) {
-                    return synth_expr(&inner, scope, fn_returns);
+                    return synth_expr(&inner, scope, fn_returns, env);
                 }
             }
             Ty::Any
@@ -295,27 +771,104 @@ fn synth_expr(
         KtExpr::Postfix(p) => {
             for c in skotch_ast::children(p.syntax()) {
                 if let Some(inner) = KtExpr::cast(c) {
-                    return synth_expr(&inner, scope, fn_returns);
+                    return synth_expr(&inner, scope, fn_returns, env);
                 }
             }
             Ty::Any
         }
         KtExpr::Call(call) => {
-            // For a bare ref-callee like `helper()`, resolve against
-            // the top-level fn return map.
+            // A bare Call (not nested in a DotQualified).
+            //   helper()  — top-level fn → fn_returns
+            //   Box(7)    — class constructor → Ty::Class(Box)
             if let Some(KtExpr::Reference(r)) = call.callee() {
                 if let Some(name) = r.name() {
                     if let Some(ret) = fn_returns.get(name) {
                         return ret.clone();
                     }
+                    if env.types.contains_key(name) {
+                        return Ty::Class(name.to_string());
+                    }
                 }
             }
             Ty::Any
         }
-        // KtExpr::Field / DotQualified / Lambda / etc. require
-        // TypeEnv-aware lookup; pending follow-up port.
+        KtExpr::DotQualified(dq) => {
+            // `lhs.rhs` — rhs may be a Reference (field/property access)
+            // or a Call (member method call).
+            resolve_dot_qualified(*dq, scope, fn_returns, env)
+        }
+        // KtExpr::Lambda / KtExpr::Try / KtExpr::Throw etc. — Ty::Any until ported.
         _ => Ty::Any,
     }
+}
+
+/// Resolve a `receiver.member` expression where `member` is either a
+/// Reference (field) or a Call (method). The SIL emits both as direct
+/// children of the DOT_QUALIFIED_EXPRESSION composite.
+fn resolve_dot_qualified(
+    dq: skotch_ast::KtDotQualifiedExpression<'_>,
+    scope: &[(String, Ty)],
+    fn_returns: &FxHashMap<String, Ty>,
+    env: &TypeEnv,
+) -> Ty {
+    use skotch_ast::KtExpr;
+    let children: Vec<_> = skotch_ast::children(dq.syntax())
+        .iter()
+        .filter_map(KtExpr::cast)
+        .collect();
+    if children.len() < 2 {
+        return Ty::Any;
+    }
+    let receiver = &children[0];
+    let rhs = &children[1];
+    let receiver_ty = synth_expr(receiver, scope, fn_returns, env);
+    match rhs {
+        KtExpr::Reference(r) => {
+            let Some(name) = r.name() else { return Ty::Any };
+            field_or_enum_entry(&receiver_ty, name, env)
+        }
+        KtExpr::Call(call) => {
+            // Method call. Method name is the call's callee Reference.
+            let method_name = match call.callee() {
+                Some(KtExpr::Reference(rc)) => rc.name(),
+                _ => None,
+            };
+            let Some(method_name) = method_name else {
+                return Ty::Any;
+            };
+            method_on_receiver(&receiver_ty, method_name, env)
+        }
+        _ => Ty::Any,
+    }
+}
+
+fn field_or_enum_entry(receiver_ty: &Ty, name: &str, env: &TypeEnv) -> Ty {
+    if let Ty::Class(class_name) = receiver_ty {
+        if let Some(decl) = env.types.get(class_name) {
+            if decl.is_enum && decl.enum_entry_names.iter().any(|e| e == name) {
+                return Ty::Class(class_name.clone());
+            }
+            if let Some(f) = decl.fields.iter().find(|f| f.name == name) {
+                return f.ty.clone();
+            }
+        }
+        if let Some(f) = env.lookup_field(class_name, name) {
+            return f.ty.clone();
+        }
+    }
+    Ty::Any
+}
+
+fn method_on_receiver(receiver_ty: &Ty, name: &str, env: &TypeEnv) -> Ty {
+    if let Ty::Class(class_name) = receiver_ty {
+        if let Some(m) = env.lookup_companion(class_name, name) {
+            return m.ret.clone();
+        }
+        if let Some(m) = env.lookup_method(class_name, name) {
+            return m.ret.clone();
+        }
+    }
+    Ty::Any
 }
 
 // ── Import collection ───────────────────────────────────────────────
@@ -686,6 +1239,69 @@ mod tests {
         let f = &typed.functions[0];
         // x = s (param, String); y = x + "!" (String + String = String).
         assert_eq!(f.local_tys, vec![Ty::String, Ty::String]);
+    }
+
+    #[test]
+    fn body_local_resolves_member_call() {
+        let parsed = skotch_ast::parse(
+            "test.kt",
+            "class Box(val x: Int) { fun stretch(): Int = 1 }\nfun main() {\n  val b = Box(7)\n  val s = b.stretch()\n}",
+        );
+        let resolved = ResolvedFile::default();
+        let mut interner = Interner::new();
+        let mut diags = Diagnostics::new();
+        let typed = type_check(parsed.file(), &resolved, &mut interner, &mut diags, None);
+        let main_fn = typed
+            .functions
+            .iter()
+            .find(|f| f.name_index == 0)
+            .expect("main");
+        // b → Ty::Class("Box") (constructor call); s → b.stretch() → Int.
+        assert_eq!(
+            main_fn.local_tys,
+            vec![Ty::Class("Box".to_string()), Ty::Int],
+        );
+    }
+
+    #[test]
+    fn body_local_resolves_field_access() {
+        let parsed = skotch_ast::parse(
+            "test.kt",
+            "class P(val x: String)\nfun touch(p: P) { val v = p.x }",
+        );
+        let resolved = ResolvedFile::default();
+        let mut interner = Interner::new();
+        let mut diags = Diagnostics::new();
+        let typed = type_check(parsed.file(), &resolved, &mut interner, &mut diags, None);
+        let f = typed
+            .functions
+            .iter()
+            .find(|f| f.name_index == 0)
+            .expect("touch");
+        // p.x → field lookup on Ty::Class(P) returns String.
+        assert_eq!(f.local_tys, vec![Ty::String]);
+    }
+
+    #[test]
+    fn body_local_resolves_enum_entry_access() {
+        let parsed = skotch_ast::parse(
+            "test.kt",
+            "enum class Color { RED, GREEN, BLUE }\nfun main() { val c = Color.RED }",
+        );
+        let resolved = ResolvedFile::default();
+        let mut interner = Interner::new();
+        let mut diags = Diagnostics::new();
+        let typed = type_check(parsed.file(), &resolved, &mut interner, &mut diags, None);
+        let main_fn = typed
+            .functions
+            .iter()
+            .find(|f| f.name_index == 0)
+            .expect("main");
+        // Color.RED → Ty::Class("Color").
+        match &main_fn.local_tys[0] {
+            Ty::Class(n) => assert_eq!(n, "Color"),
+            other => panic!("expected Class(Color), got {other:?}"),
+        }
     }
 
     #[test]
