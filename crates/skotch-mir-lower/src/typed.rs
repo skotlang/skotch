@@ -741,8 +741,11 @@ fn lower_simple_body(
             }
         }
     };
-    // Binary arithmetic body where both operands are references to
-    // the function's own parameters: `fun add(a: Int, b: Int) = a + b`.
+    // Binary arithmetic body where each operand is either a param
+    // reference or a literal constant. Examples:
+    //   fun add(a: Int, b: Int) = a + b
+    //   fun double(x: Int) = x * 2
+    //   fun addOne(x: Int) = x + 1
     if let KtExpr::Binary(b) = &body_expr {
         let param_count = f
             .value_parameter_list()
@@ -756,22 +759,7 @@ fn lower_simple_body(
                     .collect()
             })
             .unwrap_or_default();
-        let lhs_idx = b.lhs().and_then(|l| match l {
-            KtExpr::Reference(r) => r
-                .name()
-                .and_then(|n| param_names.iter().position(|p| p == n)),
-            _ => None,
-        });
-        let rhs_idx = b.rhs().and_then(|r| match r {
-            KtExpr::Reference(rr) => rr
-                .name()
-                .and_then(|n| param_names.iter().position(|p| p == n)),
-            _ => None,
-        });
         let op_text = b.operation().map(|o| o.text()).unwrap_or_default();
-        // Typed param types determine which variant to use. With
-        // current coverage we assume Int; long/float/double bodies
-        // need explicit typed-Ty tracking which lands later.
         let mir_op = match op_text.as_str() {
             "+" => Some(skotch_mir::BinOp::AddI),
             "-" => Some(skotch_mir::BinOp::SubI),
@@ -780,29 +768,66 @@ fn lower_simple_body(
             "%" => Some(skotch_mir::BinOp::ModI),
             _ => None,
         };
-        if let (Some(lhs), Some(rhs), Some(op)) = (lhs_idx, rhs_idx, mir_op) {
-            // Result type: pull from f.return_type.
-            let return_ty = match f
-                .return_type()
-                .and_then(|tr| tr.user_type())
-                .and_then(|u| u.name())
-            {
-                Some(name) => skotch_types::ty_from_name(name).unwrap_or(Ty::Int),
-                None => Ty::Int,
+        if let Some(op) = mir_op {
+            // Pre-allocate slots: params (locals 0..N), then
+            // optional Const slots for each literal operand, then
+            // the result slot.
+            let mut next_slot = param_count as u32;
+            let mut pre_stmts: Vec<skotch_mir::Stmt> = Vec::new();
+            let mut extra_locals: Vec<Ty> = Vec::new();
+
+            let mut resolve_operand = |e: skotch_ast::KtExpr<'_>,
+                                   next_slot: &mut u32,
+                                   pre_stmts: &mut Vec<skotch_mir::Stmt>,
+                                   extra_locals: &mut Vec<Ty>|
+             -> Option<skotch_mir::LocalId> {
+                match e {
+                    KtExpr::Reference(r) => {
+                        let n = r.name()?;
+                        let idx = param_names.iter().position(|p| p == n)?;
+                        Some(skotch_mir::LocalId(idx as u32))
+                    }
+                    other => {
+                        let (k, ty) = literal_to_const(&other, strings)?;
+                        let slot = skotch_mir::LocalId(*next_slot);
+                        *next_slot += 1;
+                        extra_locals.push(ty);
+                        pre_stmts.push(skotch_mir::Stmt::Assign {
+                            dest: slot,
+                            value: skotch_mir::Rvalue::Const(k),
+                        });
+                        Some(slot)
+                    }
+                }
             };
-            let result_slot = skotch_mir::LocalId(param_count as u32);
-            let blocks = vec![BasicBlock {
-                stmts: vec![skotch_mir::Stmt::Assign {
+
+            let lhs_slot = b.lhs().and_then(|l| {
+                resolve_operand(l, &mut next_slot, &mut pre_stmts, &mut extra_locals)
+            });
+            let rhs_slot = b.rhs().and_then(|r| {
+                resolve_operand(r, &mut next_slot, &mut pre_stmts, &mut extra_locals)
+            });
+            if let (Some(lhs), Some(rhs)) = (lhs_slot, rhs_slot) {
+                let return_ty = match f
+                    .return_type()
+                    .and_then(|tr| tr.user_type())
+                    .and_then(|u| u.name())
+                {
+                    Some(name) => skotch_types::ty_from_name(name).unwrap_or(Ty::Int),
+                    None => Ty::Int,
+                };
+                let result_slot = skotch_mir::LocalId(next_slot);
+                extra_locals.push(return_ty);
+                pre_stmts.push(skotch_mir::Stmt::Assign {
                     dest: result_slot,
-                    value: skotch_mir::Rvalue::BinOp {
-                        op,
-                        lhs: skotch_mir::LocalId(lhs as u32),
-                        rhs: skotch_mir::LocalId(rhs as u32),
-                    },
-                }],
-                terminator: Terminator::ReturnValue(result_slot),
-            }];
-            return (blocks, vec![return_ty]);
+                    value: skotch_mir::Rvalue::BinOp { op, lhs, rhs },
+                });
+                let blocks = vec![BasicBlock {
+                    stmts: pre_stmts,
+                    terminator: Terminator::ReturnValue(result_slot),
+                }];
+                return (blocks, extra_locals);
+            }
         }
     }
     let (c, ty) = match &body_expr {
@@ -1646,6 +1671,60 @@ mod tests {
             },
         }
         assert_eq!(f.locals, vec![Ty::Int, Ty::Unit]);
+    }
+
+    #[test]
+    fn typed_lower_binary_param_plus_literal() {
+        let module = lower("fun addOne(x: Int): Int = x + 1", "TestKt");
+        let f = &module.functions[0];
+        let block = &f.blocks[0];
+        // 2 stmts: Const(Int(1)) for the literal, BinOp for the add.
+        assert_eq!(block.stmts.len(), 2);
+        match &block.stmts[0] {
+            skotch_mir::Stmt::Assign { dest, value } => {
+                assert_eq!(dest.0, 1); // literal goes to slot after param
+                assert!(matches!(
+                    value,
+                    skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(1))
+                ));
+            }
+        }
+        match &block.stmts[1] {
+            skotch_mir::Stmt::Assign { dest, value } => {
+                assert_eq!(dest.0, 2); // result slot
+                match value {
+                    skotch_mir::Rvalue::BinOp { op, lhs, rhs } => {
+                        assert!(matches!(op, skotch_mir::BinOp::AddI));
+                        assert_eq!(lhs.0, 0); // param x
+                        assert_eq!(rhs.0, 1); // literal 1
+                    }
+                    other => panic!("expected BinOp, got {other:?}"),
+                }
+            }
+        }
+        assert!(matches!(block.terminator, Terminator::ReturnValue(_)));
+    }
+
+    #[test]
+    fn typed_lower_binary_literal_minus_param() {
+        let module = lower("fun negFrom(x: Int): Int = 0 - x", "TestKt");
+        let f = &module.functions[0];
+        let block = &f.blocks[0];
+        match &block.stmts[0] {
+            skotch_mir::Stmt::Assign { value, .. } => {
+                assert!(matches!(value, skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(0))));
+            }
+        }
+        match &block.stmts[1] {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::BinOp { op, lhs, rhs } => {
+                    assert!(matches!(op, skotch_mir::BinOp::SubI));
+                    assert_eq!(lhs.0, 1); // literal 0
+                    assert_eq!(rhs.0, 0); // param x
+                }
+                _ => panic!("expected BinOp"),
+            },
+        }
     }
 
     #[test]
