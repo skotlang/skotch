@@ -881,38 +881,88 @@ fn lower_simple_body(
     // Parenthesized passthrough: `(literal)` or `(a + b)`.
     let body_expr = unwrap_parens(body_expr);
 
-    // Static-call body: `fun outer() = inner()` where inner is a
-    // top-level fn in the same file. Emits Call(Static(FuncId), [])
-    // into a fresh result slot, then ReturnValue.
+    // Static-call body: `fun outer() = inner(arg1, arg2)` where
+    // inner is a top-level fn in the same file. Args may be either
+    // literal constants or References to the outer's parameters.
     if let KtExpr::Call(call) = &body_expr {
         if let Some(KtExpr::Reference(r)) = call.callee() {
             if let Some(name) = r.name() {
                 if let Some((callee_id, callee_ret)) = fn_lookup.get(name) {
-                    let args = call.value_argument_list();
-                    let arg_count = args.map(|a| a.arguments().count()).unwrap_or(0);
-                    // For now we only support zero-arg calls; threading
-                    // args through requires per-arg lowering.
-                    if arg_count == 0 {
-                        let param_count = f
-                            .value_parameter_list()
-                            .map(|pl| pl.parameters().count())
-                            .unwrap_or(0);
-                        let result_slot = skotch_mir::LocalId(param_count as u32);
-                        let blocks = vec![BasicBlock {
-                            stmts: vec![skotch_mir::Stmt::Assign {
-                                dest: result_slot,
-                                value: skotch_mir::Rvalue::Call {
-                                    kind: skotch_mir::CallKind::Static(*callee_id),
-                                    args: Vec::new(),
+                    let param_count = f
+                        .value_parameter_list()
+                        .map(|pl| pl.parameters().count())
+                        .unwrap_or(0);
+                    let outer_param_names: Vec<String> = f
+                        .value_parameter_list()
+                        .map(|pl| {
+                            pl.parameters()
+                                .map(|p| p.name().unwrap_or("").to_string())
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    let mut next_slot = param_count as u32;
+                    let mut pre_stmts: Vec<skotch_mir::Stmt> = Vec::new();
+                    let mut extra_locals: Vec<Ty> = Vec::new();
+                    let mut arg_slots: Vec<skotch_mir::LocalId> = Vec::new();
+                    let mut ok = true;
+                    if let Some(arg_list) = call.value_argument_list() {
+                        for arg in arg_list.arguments() {
+                            let Some(arg_expr) = arg.expression() else {
+                                ok = false;
+                                break;
+                            };
+                            match arg_expr {
+                                KtExpr::Reference(rr) => {
+                                    let Some(an) = rr.name() else {
+                                        ok = false;
+                                        break;
+                                    };
+                                    let Some(idx) =
+                                        outer_param_names.iter().position(|p| p == an)
+                                    else {
+                                        ok = false;
+                                        break;
+                                    };
+                                    arg_slots.push(skotch_mir::LocalId(idx as u32));
+                                }
+                                other => match literal_to_const(&other, strings) {
+                                    Some((k, ty)) => {
+                                        let slot = skotch_mir::LocalId(next_slot);
+                                        next_slot += 1;
+                                        extra_locals.push(ty);
+                                        pre_stmts.push(skotch_mir::Stmt::Assign {
+                                            dest: slot,
+                                            value: skotch_mir::Rvalue::Const(k),
+                                        });
+                                        arg_slots.push(slot);
+                                    }
+                                    None => {
+                                        ok = false;
+                                        break;
+                                    }
                                 },
-                            }],
+                            }
+                        }
+                    }
+                    if ok {
+                        let result_slot = skotch_mir::LocalId(next_slot);
+                        extra_locals.push(callee_ret.clone());
+                        pre_stmts.push(skotch_mir::Stmt::Assign {
+                            dest: result_slot,
+                            value: skotch_mir::Rvalue::Call {
+                                kind: skotch_mir::CallKind::Static(*callee_id),
+                                args: arg_slots,
+                            },
+                        });
+                        let blocks = vec![BasicBlock {
+                            stmts: pre_stmts,
                             terminator: if callee_ret == &Ty::Unit {
                                 Terminator::Return
                             } else {
                                 Terminator::ReturnValue(result_slot)
                             },
                         }];
-                        return (blocks, vec![callee_ret.clone()]);
+                        return (blocks, extra_locals);
                     }
                 }
             }
@@ -1985,6 +2035,48 @@ mod tests {
             },
         }
         assert!(matches!(outer.blocks[0].terminator, Terminator::ReturnValue(_)));
+    }
+
+    #[test]
+    fn typed_lower_static_call_with_literal_args() {
+        let module = lower(
+            "fun add(a: Int, b: Int): Int = a + b\nfun main(): Int = add(1, 2)",
+            "TestKt",
+        );
+        let main = &module.functions[1];
+        // main's body: Const(1) → slot 0, Const(2) → slot 1,
+        // Call(Static(add), [slot 0, slot 1]) → slot 2.
+        assert_eq!(main.blocks[0].stmts.len(), 3);
+        match &main.blocks[0].stmts[2] {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::Call { kind, args } => {
+                    assert!(matches!(kind, skotch_mir::CallKind::Static(_)));
+                    assert_eq!(args.len(), 2);
+                    assert_eq!(args[0].0, 0);
+                    assert_eq!(args[1].0, 1);
+                }
+                _ => panic!("expected Call"),
+            },
+        }
+    }
+
+    #[test]
+    fn typed_lower_static_call_with_param_arg() {
+        let module = lower(
+            "fun double(x: Int): Int = x + x\nfun foo(n: Int): Int = double(n)",
+            "TestKt",
+        );
+        let foo = &module.functions[1];
+        // foo's body: Call(Static(double), [n_local])
+        match &foo.blocks[0].stmts[0] {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::Call { args, .. } => {
+                    assert_eq!(args.len(), 1);
+                    assert_eq!(args[0].0, 0); // n is param 0
+                }
+                _ => panic!("expected Call"),
+            },
+        }
     }
 
     #[test]
