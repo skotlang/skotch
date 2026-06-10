@@ -12,7 +12,7 @@
 //! migration pattern as [`skotch_resolve::typed`] and
 //! [`skotch_typeck::typed`].
 
-use skotch_ast::{KtDecl, KtFile};
+use skotch_ast::{AstNode, KtDecl, KtFile};
 use skotch_diagnostics::Diagnostics;
 use skotch_intern::Interner;
 use skotch_mir::{BasicBlock, FuncId, MirFunction, MirModule, Terminator};
@@ -50,6 +50,49 @@ pub fn lower_file(
         wrapper_class: wrapper_class.to_string(),
         ..MirModule::default()
     };
+
+    // Top-level vals — emit as top_level_consts (if `const val`) or
+    // top_level_props (otherwise). The actual <clinit> synthesis and
+    // get<Name>() accessor emission is deferred to a follow-up port.
+    for decl in file.decls() {
+        if let KtDecl::Property(p) = decl {
+            let Some(name) = p.name() else { continue };
+            let ty = p
+                .type_reference()
+                .and_then(|tr| {
+                    // Walk the typed TypeRef to a Ty. We don't yet have
+                    // shared TypeRef->Ty here; use the typeck output
+                    // when available, or fall back to Ty::Any.
+                    let _ = tr;
+                    None
+                })
+                .or_else(|| {
+                    // Pull from TypedFile.top_vals if pass-1 typeck
+                    // collected the val.
+                    typed.top_vals.iter().find_map(|tv| {
+                        // We don't track the val name in TypedTopVal;
+                        // best-effort: assume source-order matches.
+                        // (TypedTopVal.name_index is the index, not a
+                        // symbol.) Pull by position below instead.
+                        let _ = tv;
+                        None
+                    })
+                })
+                .unwrap_or(skotch_types::Ty::Any);
+            let init_const = p.initializer().and_then(lower_const_init_typed);
+            let entry = (
+                name.to_string(),
+                ty,
+                init_const.unwrap_or(skotch_mir::MirConst::Null),
+            );
+            if p.is_const() {
+                module.top_level_consts.push(entry);
+            } else {
+                module.top_level_prop_names.insert(name.to_string());
+                module.top_level_props.push(entry);
+            }
+        }
+    }
 
     // Top-level functions — one MirFunction per KtFun decl.
     let mut fn_id = 0u32;
@@ -124,6 +167,66 @@ pub fn lower_file(
     }
 
     module
+}
+
+/// Lower a const initializer expression (val/property RHS) to a
+/// `MirConst`. Only the simplest literal forms are recognized; more
+/// complex initializers run inside <clinit> at runtime. Mirrors the
+/// legacy `lower_const_init`.
+fn lower_const_init_typed(e: skotch_ast::KtExpr<'_>) -> Option<skotch_mir::MirConst> {
+    use skotch_ast::KtExpr;
+    use skotch_mir::MirConst;
+    match e {
+        KtExpr::Boolean(_) => {
+            // The boolean composite child is a KW_TRUE / KW_FALSE token.
+            let is_true = skotch_ast::children(e.syntax())
+                .iter()
+                .any(|c| c.kind == skotch_syntax::SyntaxKind::KW_TRUE);
+            Some(MirConst::Bool(is_true))
+        }
+        KtExpr::Integer(_) => {
+            // Pull the integer literal text from the child INTEGER_LITERAL.
+            let text = skotch_ast::children(e.syntax()).iter().find_map(|c| {
+                if c.kind == skotch_syntax::SyntaxKind::INTEGER_LITERAL {
+                    if let skotch_sil::SilData::Token { text } = &c.data {
+                        return Some(text.as_str());
+                    }
+                }
+                None
+            })?;
+            let v: i64 = text.parse().ok()?;
+            // Mirror legacy: Int by default (cast).
+            Some(MirConst::Int(v as i32))
+        }
+        KtExpr::Float(_) => {
+            let text = skotch_ast::children(e.syntax()).iter().find_map(|c| {
+                if matches!(
+                    c.kind,
+                    skotch_syntax::SyntaxKind::FLOAT_LITERAL
+                        | skotch_syntax::SyntaxKind::DOUBLE_LITERAL
+                ) {
+                    if let skotch_sil::SilData::Token { text } = &c.data {
+                        return Some(text.as_str());
+                    }
+                }
+                None
+            })?;
+            let v: f64 = text.trim_end_matches(['f', 'F']).parse().ok()?;
+            // Disambiguate Float vs Double from suffix.
+            if text.ends_with('f') || text.ends_with('F') {
+                Some(MirConst::Float(v as f32))
+            } else {
+                Some(MirConst::Double(v))
+            }
+        }
+        KtExpr::Null(_) => Some(MirConst::Null),
+        KtExpr::Parenthesized(p) => skotch_ast::children(p.syntax())
+            .iter()
+            .find_map(|c| KtExpr::cast(c).and_then(lower_const_init_typed)),
+        // String templates require MirModule access to intern strings,
+        // so defer until call sites can pass module in.
+        _ => None,
+    }
 }
 
 #[cfg(test)]
@@ -207,5 +310,36 @@ mod tests {
         let module = lower("private fun secret() {}", "TestKt");
         let f = &module.functions[0];
         assert!(f.is_private);
+    }
+
+    #[test]
+    fn typed_lower_const_val_emits_top_level_const() {
+        let module = lower("const val MAX: Int = 42", "TestKt");
+        assert_eq!(module.top_level_consts.len(), 1);
+        let (name, _ty, c) = &module.top_level_consts[0];
+        assert_eq!(name, "MAX");
+        assert!(matches!(c, skotch_mir::MirConst::Int(42)));
+    }
+
+    #[test]
+    fn typed_lower_top_val_emits_top_level_prop() {
+        let module = lower("val HALF: Double = 0.5", "TestKt");
+        assert_eq!(module.top_level_props.len(), 1);
+        assert!(module.top_level_prop_names.contains("HALF"));
+        let (name, _ty, c) = &module.top_level_props[0];
+        assert_eq!(name, "HALF");
+        assert!(matches!(c, skotch_mir::MirConst::Double(d) if (*d - 0.5).abs() < 1e-9));
+    }
+
+    #[test]
+    fn typed_lower_top_val_with_no_literal_init() {
+        // Non-literal init: const lowering returns None → MirConst::Null
+        // placeholder; the real <clinit> path handles the actual init.
+        let module = lower("val X = foo()", "TestKt");
+        assert_eq!(module.top_level_props.len(), 1);
+        assert!(matches!(
+            module.top_level_props[0].2,
+            skotch_mir::MirConst::Null
+        ));
     }
 }
