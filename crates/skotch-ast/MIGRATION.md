@@ -7,12 +7,53 @@
 - [x] `skotch-ast` crate: typed wrapper types over `SilNode`, ~80
       composite kinds + token shims, `KtDecl` / `KtExpr` enum unions.
 - [x] `skotch_ast::parse(file, source) -> ParsedFile` entry point.
-- [x] `skotch_parser::parse_to_sil(file, source) -> SilTree` bridge —
-      consumers can call this instead of `parse_file()` to obtain a
-      SIL tree they wrap with the typed accessors.
-- [x] `skotch-resolve` Cargo deps updated (skotch-sil, skotch-ast)
-      so the next migration session can immediately start using the
-      typed accessors.
+- [x] `skotch_parser::parse_to_sil(file, source) -> SilTree` bridge.
+- [x] **`typed` module scaffolds** in `skotch-resolve`,
+      `skotch-typeck`, `skotch-mir-lower`, `skotch-driver` —
+      end-to-end typed-AST compilation pipeline (parse → resolve →
+      typeck → lower) plumbed and tested. Each scaffold is the
+      migration target; consumer migration fills in the body one
+      composite kind at a time.
+
+**Next concrete migration steps** (each maps to a specific
+`typed` module body):
+
+1. `skotch_resolve::typed::gather_declarations` — currently handles
+   top-level `fun` + `val`. Add `KtClass`/`KtInterface`/`KtObject`/
+   `KtEnumClass`/`KtTypeAlias` arms. Each arm builds the same
+   `ExternalFunDecl`/`ExternalClassDecl`/etc. record as the legacy
+   pattern-match arm at `crate::gather_declarations`. Port descriptor
+   computation (`build_descriptor_with_aliases`) to walk typed
+   `KtValueParameter` / `KtTypeReference` children.
+
+2. `skotch_resolve::typed::resolve_file` — currently registers
+   top-level fun/val. Add body-level resolution: parameter scopes,
+   local val/var scopes, when-arm `is`/`as` smart-cast scopes.
+   Match the recursion structure in the legacy `Resolver` impl.
+
+3. `skotch_typeck::typed::type_check` — currently returns empty.
+   Fill in the two-pass bidirectional checker: pass 1 collects
+   signatures, pass 2 walks each function body. Each `KtExpr`
+   variant maps to one inference rule from the legacy
+   `infer_expr` switch.
+
+4. `skotch_mir_lower::typed::lower_file` — currently returns
+   wrapper-only `MirModule`. The legacy `lower_file` is 27k lines;
+   port one decl kind at a time, with golden tests covering each
+   stage. Start with: top-level `fun`, top-level `val`, basic
+   `if`/`when`/`for`/`while`, string templates, then classes,
+   inheritance, generics, coroutines, etc.
+
+5. `skotch_driver::typed::compile_source` — already wires the
+   typed pipeline; once the underlying scaffolds gain coverage, the
+   legacy `crate::compile_source` becomes a thin shim around it.
+
+**Coverage gates** (run after each crate's body fills in):
+- `cargo test -p <crate>` for the crate's own tests.
+- `cargo test --package skotch-driver --test fixture_compare` for
+  the bytecode goldens.
+- `cargo run -p xtask -- gen-fixtures --target {jvm,dex} --skotch-only`
+  to refresh the goldens.
 
 **Not yet done — these are the per-crate migration steps:**
 
