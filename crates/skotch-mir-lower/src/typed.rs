@@ -413,6 +413,84 @@ pub fn lower_file(
     module
 }
 
+/// Try to lower `println(stringLiteral)` to the Println intrinsic.
+/// Returns None when the call isn't of this exact shape.
+fn try_lower_println_call(
+    call: &skotch_ast::KtCallExpression<'_>,
+    strings: &mut Vec<String>,
+) -> Option<Vec<BasicBlock>> {
+    use skotch_ast::KtExpr;
+    // Callee must be a bare Reference named `println`.
+    let name = match call.callee() {
+        Some(KtExpr::Reference(r)) => r.name(),
+        _ => None,
+    }?;
+    if name != "println" {
+        return None;
+    }
+    let args = call.value_argument_list()?;
+    let arg_exprs: Vec<KtExpr<'_>> = args.arguments().filter_map(|a| a.expression()).collect();
+    if arg_exprs.len() != 1 {
+        return None;
+    }
+    // Single arg must be a string literal (no interpolation).
+    let mut buf = String::new();
+    let mut interpolated = false;
+    if let KtExpr::String(_) = &arg_exprs[0] {
+        for child in skotch_ast::children(arg_exprs[0].syntax()) {
+            use skotch_syntax::SyntaxKind as S;
+            match child.kind {
+                S::LITERAL_STRING_TEMPLATE_ENTRY => {
+                    for cc in skotch_ast::children(child) {
+                        if cc.kind == S::STRING_CHUNK {
+                            if let skotch_sil::SilData::Token { text } = &cc.data {
+                                buf.push_str(text);
+                            }
+                        }
+                    }
+                }
+                S::STRING_START | S::STRING_END | S::WHITE_SPACE => {}
+                _ => interpolated = true,
+            }
+        }
+    } else {
+        return None;
+    }
+    if interpolated {
+        return None;
+    }
+    let sid = match strings.iter().position(|s| s == &buf) {
+        Some(i) => skotch_mir::StringId(i as u32),
+        None => {
+            let id = skotch_mir::StringId(strings.len() as u32);
+            strings.push(buf);
+            id
+        }
+    };
+    // Layout:
+    //   local 0: String (the arg)
+    //   local 1: Unit   (the unused println return)
+    let str_slot = skotch_mir::LocalId(0);
+    let result_slot = skotch_mir::LocalId(1);
+    let blocks = vec![BasicBlock {
+        stmts: vec![
+            skotch_mir::Stmt::Assign {
+                dest: str_slot,
+                value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::String(sid)),
+            },
+            skotch_mir::Stmt::Assign {
+                dest: result_slot,
+                value: skotch_mir::Rvalue::Call {
+                    kind: skotch_mir::CallKind::Println,
+                    args: vec![str_slot],
+                },
+            },
+        ],
+        terminator: Terminator::Return,
+    }];
+    Some(blocks)
+}
+
 /// Build a function body for an expression-bodied function when the
 /// expression is a recognized literal. The body becomes:
 ///   local N: Ty
@@ -437,16 +515,28 @@ fn lower_simple_body(
         )
     };
 
-    // First try expression-bodied form; if absent, look at the
-    // block body for a single `return <literal>` statement.
+    // First try expression-bodied form. If absent, walk the block:
+    //   - single `return <literal>`            → literal return
+    //   - single `println(<literal>)` call     → Println intrinsic
+    //   (block bodies with multiple statements still fall back)
     let body_expr = match f.body_expression() {
         Some(e) => e,
         None => {
             let Some(block) = f.body_block() else {
                 return make_placeholder();
             };
+            // Collect non-trivia statements.
+            let stmts: Vec<KtExpr<'_>> = block.statements().collect();
+            if stmts.len() == 1 {
+                if let KtExpr::Call(call) = &stmts[0] {
+                    // `println(stringLiteral)` → Println intrinsic.
+                    if let Some(blocks) = try_lower_println_call(call, strings) {
+                        return (blocks, vec![Ty::String, Ty::Unit]);
+                    }
+                }
+            }
             let mut returned: Option<KtExpr<'_>> = None;
-            for stmt in block.statements() {
+            for stmt in &stmts {
                 if let KtExpr::Return(r) = stmt {
                     for c in skotch_ast::children(r.syntax()) {
                         if let Some(e) = KtExpr::cast(c) {
@@ -1279,6 +1369,44 @@ mod tests {
                 other => panic!("expected Const(String), got {other:?}"),
             },
         }
+    }
+
+    #[test]
+    fn typed_lower_println_string_literal() {
+        let module = lower("fun main() { println(\"hello\") }", "TestKt");
+        let f = &module.functions[0];
+        assert_eq!(f.blocks.len(), 1);
+        let block = &f.blocks[0];
+        assert_eq!(block.stmts.len(), 2);
+        // stmt 0: Assign local 0 = Const(String(sid))
+        match &block.stmts[0] {
+            skotch_mir::Stmt::Assign { dest, value } => {
+                assert_eq!(dest.0, 0);
+                match value {
+                    skotch_mir::Rvalue::Const(skotch_mir::MirConst::String(sid)) => {
+                        assert_eq!(module.strings[sid.0 as usize], "hello");
+                    }
+                    other => panic!("expected Const(String), got {other:?}"),
+                }
+            }
+        }
+        // stmt 1: Assign local 1 = Call(Println, [local 0])
+        match &block.stmts[1] {
+            skotch_mir::Stmt::Assign { dest, value } => {
+                assert_eq!(dest.0, 1);
+                match value {
+                    skotch_mir::Rvalue::Call { kind, args } => {
+                        assert!(matches!(kind, skotch_mir::CallKind::Println));
+                        assert_eq!(args.len(), 1);
+                        assert_eq!(args[0].0, 0);
+                    }
+                    other => panic!("expected Call, got {other:?}"),
+                }
+            }
+        }
+        assert!(matches!(block.terminator, Terminator::Return));
+        // Locals: 0 (String for arg), 1 (Unit for unused return)
+        assert_eq!(f.locals, vec![Ty::String, Ty::Unit]);
     }
 
     #[test]
