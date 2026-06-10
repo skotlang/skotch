@@ -231,13 +231,31 @@ recursion becomes traversal through `children()` / typed accessors.
   `DOT_QUALIFIED_EXPRESSION → REFERENCE_EXPRESSION → IDENTIFIER` for
   dotted package names.
 - Ported `skotch_resolve::typed` to feature-parity Pass 1 over the
-  typed AST (~1180 LOC of new code). Added 15 unit tests + 13 parity
+  typed AST (~1180 LOC of new code). Added 22 unit tests + 13 parity
   tests against the legacy `gather_declarations`.
 - Fixed enum super-class JVM erasure: typed gather now emits
   `Some("java/lang/Enum")` (kotlinc-erased form) to match legacy.
 - Expanded `skotch_typeck::typed` to Pass 1 with full Ty conversion
-  (was Ty::Any placeholder). 8 unit tests + 5 parity tests.
+  (was Ty::Any placeholder). 10 unit tests + 5 parity tests.
+- Added Pass 2 body walk in `skotch_resolve::typed::resolve_function_body`:
+  param/local/`this`/top-level/super references tracked through
+  KtBlock children (PROPERTY for local val/var, KtExpr for nested
+  expressions). Handles Reference, This, Super, Call, Binary,
+  DotQualified, SafeAccess, If, Return, Throw, Block,
+  Parenthesized, Prefix/Postfix/Unary, String template.
+- Added Pass 2 local-type harvest in `skotch_typeck::typed`:
+  per-fn body walk records local val/var types in TypedFunction.local_tys.
 
-**Remaining (multi-session):** body-walk in resolve; Pass 2 body
-inference in typeck; full mir-lower port (~27k LOC); driver cutover;
-LSP/REPL migration; legacy AST deletion.
+**Verification: 449/449 workspace lib tests pass, 0 failures across
+40 test suites. Clippy clean on changed crates.**
+
+**Remaining (multi-session):**
+- Body walk: for/while/when/lambda/try-catch in resolve
+- Full bidirectional inference in typeck Pass 2 (operator
+  overloading, smart casts, member lookups, when exhaustiveness)
+- Mir-lower port (~28k LOC, dominant cost)
+- LSP migration (~12 pattern-match sites)
+- REPL migration
+- Driver cutover
+- Test/golden migration
+- Delete legacy parser + AST
