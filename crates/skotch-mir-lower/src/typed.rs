@@ -132,6 +132,48 @@ pub fn lower_file(
             if let Some((_, comp_class)) = companion_class_name {
                 module.push_class(comp_class);
             }
+            // Nested classes — `class Outer { class Inner { ... } }`
+            // becomes a sibling `Outer$Inner` MirClass.
+            if let Some(body) = c.body() {
+                for d in body.declarations() {
+                    if let KtDecl::Class(nested) = d {
+                        if let Some(nested_simple) = nested.name() {
+                            let nested_qname = format!("{}${}", name, nested_simple);
+                            let nested_fields = collect_class_fields(nested);
+                            let nested_methods = collect_class_methods(nested, &nested_qname);
+                            let nested_ctor =
+                                constructor_from_primary(nested, &nested_qname);
+                            let (n_super, n_ifaces) =
+                                collect_class_super_iface(nested.super_type_list());
+                            let nested_mir = skotch_mir::MirClass {
+                                name: nested_qname.clone(),
+                                super_class: n_super,
+                                is_open: nested.is_open() || nested.is_sealed(),
+                                is_abstract: nested.is_abstract() || nested.is_sealed(),
+                                is_interface: false,
+                                interfaces: n_ifaces,
+                                fields: nested_fields,
+                                methods: nested_methods,
+                                constructor: nested_ctor,
+                                secondary_constructors: collect_secondary_ctors(nested),
+                                is_suspend_lambda: false,
+                                is_lambda: false,
+                                is_cross_file_stub: false,
+                                annotations: Vec::new(),
+                                has_type_params: nested
+                                    .type_parameter_list()
+                                    .map(|tpl| tpl.parameters().next().is_some())
+                                    .unwrap_or(false),
+                                is_object_singleton: false,
+                                companion_class_name: None,
+                                static_fields: Vec::new(),
+                                clinit: None,
+                            };
+                            module.push_class(nested_mir);
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -1063,6 +1105,16 @@ mod tests {
         assert_eq!(m.name, "pretty");
         // No body → abstract default kicks in.
         assert!(m.is_abstract);
+    }
+
+    #[test]
+    fn typed_lower_nested_class_emits_outer_dollar_inner() {
+        let module = lower("class Outer { class Inner }", "TestKt");
+        assert!(module.classes.iter().any(|c| c.name == "Outer"));
+        assert!(module
+            .classes
+            .iter()
+            .any(|c| c.name == "Outer$Inner"));
     }
 
     #[test]
