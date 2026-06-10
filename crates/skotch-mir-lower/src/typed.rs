@@ -89,6 +89,110 @@ pub fn lower_file(
         }
     }
 
+    // Top-level interfaces — emit as MirClass with is_interface=true.
+    for decl in file.decls() {
+        if let KtDecl::Interface(i) = decl {
+            let name = match i.name() {
+                Some(n) => n.to_string(),
+                None => continue,
+            };
+            let (_, interfaces) = collect_class_super_iface(i.super_type_list());
+            let mir_class = skotch_mir::MirClass {
+                name: name.clone(),
+                super_class: None,
+                is_open: false,
+                is_abstract: true,
+                is_interface: true,
+                interfaces,
+                fields: Vec::new(),
+                methods: Vec::new(),
+                constructor: empty_constructor(&name),
+                secondary_constructors: Vec::new(),
+                is_suspend_lambda: false,
+                is_lambda: false,
+                is_cross_file_stub: false,
+                annotations: Vec::new(),
+                has_type_params: i
+                    .type_parameter_list()
+                    .map(|tpl| tpl.parameters().next().is_some())
+                    .unwrap_or(false),
+                is_object_singleton: false,
+                companion_class_name: None,
+                static_fields: Vec::new(),
+                clinit: None,
+            };
+            module.push_class(mir_class);
+        }
+    }
+
+    // Top-level object declarations — emit with is_object_singleton.
+    for decl in file.decls() {
+        if let KtDecl::Object(o) = decl {
+            let name = match o.name() {
+                Some(n) => n.to_string(),
+                None => continue,
+            };
+            let (super_class, interfaces) = collect_class_super_iface(o.super_type_list());
+            let mir_class = skotch_mir::MirClass {
+                name: name.clone(),
+                super_class,
+                is_open: false,
+                is_abstract: false,
+                is_interface: false,
+                interfaces,
+                fields: Vec::new(),
+                methods: Vec::new(),
+                constructor: empty_constructor(&name),
+                secondary_constructors: Vec::new(),
+                is_suspend_lambda: false,
+                is_lambda: false,
+                is_cross_file_stub: false,
+                annotations: Vec::new(),
+                has_type_params: false,
+                is_object_singleton: true,
+                companion_class_name: None,
+                static_fields: Vec::new(),
+                clinit: None,
+            };
+            module.push_class(mir_class);
+        }
+    }
+
+    // Top-level enum classes — emit with is_enum metadata via
+    // module.enum_names; the static_fields population happens in
+    // the body lowering follow-up.
+    for decl in file.decls() {
+        if let KtDecl::EnumClass(e) = decl {
+            let name = match e.name() {
+                Some(n) => n.to_string(),
+                None => continue,
+            };
+            let mir_class = skotch_mir::MirClass {
+                name: name.clone(),
+                super_class: Some("java/lang/Enum".to_string()),
+                is_open: false,
+                is_abstract: false,
+                is_interface: false,
+                interfaces: Vec::new(),
+                fields: Vec::new(),
+                methods: Vec::new(),
+                constructor: empty_constructor(&name),
+                secondary_constructors: Vec::new(),
+                is_suspend_lambda: false,
+                is_lambda: false,
+                is_cross_file_stub: false,
+                annotations: Vec::new(),
+                has_type_params: false,
+                is_object_singleton: false,
+                companion_class_name: None,
+                static_fields: Vec::new(),
+                clinit: None,
+            };
+            module.push_class(mir_class);
+            module.enum_names.insert(name);
+        }
+    }
+
     // Top-level vals — emit as top_level_consts (if `const val`) or
     // top_level_props (otherwise). The actual <clinit> synthesis and
     // get<Name>() accessor emission is deferred to a follow-up port.
@@ -485,6 +589,29 @@ mod tests {
         let c = &module.classes[0];
         assert!(c.is_open);
         assert!(c.is_abstract);
+    }
+
+    #[test]
+    fn typed_lower_interface_marks_is_interface() {
+        let module = lower("interface Printable", "TestKt");
+        let c = &module.classes[0];
+        assert!(c.is_interface);
+        assert!(c.is_abstract);
+    }
+
+    #[test]
+    fn typed_lower_object_singleton_marks_flag() {
+        let module = lower("object Singleton", "TestKt");
+        let c = &module.classes[0];
+        assert!(c.is_object_singleton);
+    }
+
+    #[test]
+    fn typed_lower_enum_class_marks_enum() {
+        let module = lower("enum class Color { RED, GREEN, BLUE }", "TestKt");
+        let c = &module.classes[0];
+        assert_eq!(c.super_class.as_deref(), Some("java/lang/Enum"));
+        assert!(module.enum_names.contains("Color"));
     }
 
     #[test]
