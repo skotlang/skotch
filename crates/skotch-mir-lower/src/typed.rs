@@ -2399,6 +2399,30 @@ mod tests {
     }
 
     #[test]
+    fn typed_lower_mixed_chained_binary() {
+        // Tests that resolve_operand_rec handles nested Binary in
+        // either operand position.
+        let module = lower("fun f(a: Int): Int = (a + 1) * 2", "TestKt");
+        let f = &module.functions[0];
+        let block = &f.blocks[0];
+        // Stmts in order:
+        //  Const(1) → slot 1
+        //  BinOp(AddI, a=0, slot 1) → slot 2  (inner a + 1)
+        //  Const(2) → slot 3
+        //  BinOp(MulI, slot 2, slot 3) → slot 4 (outer)
+        assert_eq!(block.stmts.len(), 4);
+        match &block.stmts[3] {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::BinOp { op, .. } => {
+                    assert!(matches!(op, skotch_mir::BinOp::MulI));
+                }
+                _ => panic!("expected BinOp"),
+            },
+        }
+        assert!(matches!(block.terminator, Terminator::ReturnValue(_)));
+    }
+
+    #[test]
     fn typed_lower_chained_binary_add() {
         let module = lower("fun sum3(a: Int, b: Int, c: Int): Int = a + b + c", "TestKt");
         let f = &module.functions[0];
