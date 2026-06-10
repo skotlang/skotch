@@ -51,6 +51,44 @@ pub fn lower_file(
         ..MirModule::default()
     };
 
+    // Top-level classes — emit minimal MirClass entries. Full body
+    // lowering (methods, init blocks, ctor synthesis, companion
+    // objects) lands in follow-up sessions; for now just the shape.
+    for decl in file.decls() {
+        if let KtDecl::Class(c) = decl {
+            let name = match c.name() {
+                Some(n) => n.to_string(),
+                None => continue,
+            };
+            let (super_class, interfaces) = collect_class_super_iface(c.super_type_list());
+            let mir_class = skotch_mir::MirClass {
+                name: name.clone(),
+                super_class,
+                is_open: c.is_open() || c.is_sealed(),
+                is_abstract: c.is_abstract() || c.is_sealed(),
+                is_interface: false,
+                interfaces,
+                fields: Vec::new(),
+                methods: Vec::new(),
+                constructor: empty_constructor(&name),
+                secondary_constructors: Vec::new(),
+                is_suspend_lambda: false,
+                is_lambda: false,
+                is_cross_file_stub: false,
+                annotations: Vec::new(),
+                has_type_params: c
+                    .type_parameter_list()
+                    .map(|tpl| tpl.parameters().next().is_some())
+                    .unwrap_or(false),
+                is_object_singleton: false,
+                companion_class_name: None,
+                static_fields: Vec::new(),
+                clinit: None,
+            };
+            module.push_class(mir_class);
+        }
+    }
+
     // Top-level vals — emit as top_level_consts (if `const val`) or
     // top_level_props (otherwise). The actual <clinit> synthesis and
     // get<Name>() accessor emission is deferred to a follow-up port.
@@ -167,6 +205,70 @@ pub fn lower_file(
     }
 
     module
+}
+
+/// Walk a `KtSuperTypeList` to extract (super_class, interfaces).
+/// SUPER_TYPE_CALL_ENTRY counts as the super class; bare
+/// SUPER_TYPE_ENTRY and DELEGATED_SUPER_TYPE_ENTRY count as
+/// interfaces (in Kotlin, a class can only extend one other class
+/// and the call entry is the construction).
+fn collect_class_super_iface(
+    list: Option<skotch_ast::KtSuperTypeList<'_>>,
+) -> (Option<String>, Vec<String>) {
+    let Some(l) = list else {
+        return (None, Vec::new());
+    };
+    let mut super_class = None;
+    let mut ifaces = Vec::new();
+    for entry in l.entries() {
+        let name = entry
+            .type_reference()
+            .and_then(|t| t.user_type())
+            .and_then(|u| u.name())
+            .map(|s| s.to_string());
+        match (name, &entry) {
+            (Some(n), skotch_ast::SuperTypeEntry::Call(_)) => super_class = Some(n),
+            (Some(n), _) => ifaces.push(n),
+            (None, _) => {}
+        }
+    }
+    (super_class, ifaces)
+}
+
+/// Build a minimal `<init>()V` constructor for a class with no
+/// declared primary or secondary ctors. Mirrors what kotlinc emits
+/// for a class with no body (`class Foo`).
+fn empty_constructor(class_name: &str) -> MirFunction {
+    MirFunction {
+        id: FuncId(0),
+        name: "<init>".to_string(),
+        params: Vec::new(),
+        locals: vec![Ty::Class(class_name.to_string())],
+        blocks: vec![BasicBlock {
+            stmts: Vec::new(),
+            terminator: Terminator::Return,
+        }],
+        return_ty: Ty::Unit,
+        required_params: 0,
+        param_names: Vec::new(),
+        param_receiver_types: Vec::new(),
+        param_defaults: Vec::new(),
+        is_abstract: false,
+        vararg_index: None,
+        exception_handlers: Vec::new(),
+        is_suspend: false,
+        is_inline: false,
+        has_type_params: false,
+        suspend_original_return_ty: None,
+        suspend_state_machine: None,
+        annotations: Vec::new(),
+        named_locals: Vec::new(),
+        is_private: false,
+        is_static: false,
+        default_call_masks: Vec::new(),
+        needs_leading_nop: false,
+        local_generic_args: rustc_hash::FxHashMap::default(),
+    }
 }
 
 /// Lower a const initializer expression (val/property RHS) to a
@@ -329,6 +431,60 @@ mod tests {
         let (name, _ty, c) = &module.top_level_props[0];
         assert_eq!(name, "HALF");
         assert!(matches!(c, skotch_mir::MirConst::Double(d) if (*d - 0.5).abs() < 1e-9));
+    }
+
+    #[test]
+    fn typed_lower_empty_class_emits_mir_class() {
+        let module = lower("class Foo", "TestKt");
+        assert_eq!(module.classes.len(), 1);
+        let c = &module.classes[0];
+        assert_eq!(c.name, "Foo");
+        assert!(!c.is_open);
+        assert!(!c.is_abstract);
+        assert!(!c.is_interface);
+        assert!(c.super_class.is_none());
+    }
+
+    #[test]
+    fn typed_lower_open_class_marks_open() {
+        let module = lower("open class Foo", "TestKt");
+        assert!(module.classes[0].is_open);
+    }
+
+    #[test]
+    fn typed_lower_abstract_class_marks_abstract() {
+        let module = lower("abstract class Foo", "TestKt");
+        assert!(module.classes[0].is_abstract);
+    }
+
+    #[test]
+    fn typed_lower_class_with_super_records_super_class() {
+        let module = lower("open class Base\nclass Derived : Base()", "TestKt");
+        let derived = module
+            .classes
+            .iter()
+            .find(|c| c.name == "Derived")
+            .expect("Derived");
+        assert_eq!(derived.super_class.as_deref(), Some("Base"));
+    }
+
+    #[test]
+    fn typed_lower_class_with_interface_records_interface() {
+        let module = lower("interface I\nclass Foo : I", "TestKt");
+        let foo = module
+            .classes
+            .iter()
+            .find(|c| c.name == "Foo")
+            .expect("Foo");
+        assert_eq!(foo.interfaces, vec!["I".to_string()]);
+    }
+
+    #[test]
+    fn typed_lower_sealed_class_is_open_and_abstract() {
+        let module = lower("sealed class Tree", "TestKt");
+        let c = &module.classes[0];
+        assert!(c.is_open);
+        assert!(c.is_abstract);
     }
 
     #[test]
