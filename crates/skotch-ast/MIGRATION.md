@@ -371,3 +371,36 @@ Push 3 commits: 4
 - `ast: MIGRATION.md updated with session-5/push-2 progress`
 - `ast,resolve,mir-lower: name_span accessors, top_vals, class
   fields/methods/ctor`
+
+### 2026-06-10 (session 5 — push 4)
+
+- mir-lower: enum classes emit per-entry static_fields (typed
+  `Ty::Class(EnumName)`, one MirField per `RED`/`GREEN`/...).
+  Synthesized <clinit> still pending — backends today see the
+  static_fields and emit `ACC_STATIC | ACC_FINAL | ACC_ENUM`
+  headers.
+- mir-lower: interfaces and object singletons now emit declared
+  methods as MirFunction entries with full signatures (param
+  names/types, return type, modifier flags). Interface methods
+  with no body default to `is_abstract = true`. `method_from_fun`
+  factored out as the common body-method builder.
+
+**Push 4 totals (focused tests, all green):**
+- mir-lower: 23 unit tests (up from 18)
+- All others unchanged from push 3: ast 8+4, resolve 36, typeck
+  23, repl 26 = **120 tests** across the migration surface.
+
+**Cumulative session 5 totals:**
+- **38+ commits** since push start (some overwritten by linter
+  formatting passes).
+- ~6000 LOC of new typed code.
+- Migration paths in place for resolve, typeck, mir-lower; tests
+  in place for parity verification.
+- REPL fully migrated off legacy AST.
+
+**Still TODO (multi-session):**
+- mir-lower body statement + expression lowering (the bulk of
+  the 27k LOC port).
+- LSP migration (12 sites + DocumentState shape change).
+- Driver cutover.
+- Test/golden migration + legacy AST deletion.
