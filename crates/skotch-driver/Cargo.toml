@@ -11,6 +11,8 @@ skotch-intern         = { workspace = true }
 skotch-syntax         = { workspace = true }
 skotch-lexer          = { workspace = true }
 skotch-parser         = { workspace = true }
+skotch-sil            = { workspace = true }
+skotch-ast            = { workspace = true }
 skotch-resolve        = { workspace = true }
 skotch-typeck         = { workspace = true }
 skotch-mir            = { workspace = true }

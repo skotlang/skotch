@@ -17,6 +17,8 @@ use skotch_resolve::resolve_file;
 use skotch_span::SourceMap;
 use skotch_typeck::type_check;
 
+pub mod typed;
+
 /// Selected output target for [`emit`].
 ///
 /// Targets `Klib`, `Llvm`, and `Native` together implement the
