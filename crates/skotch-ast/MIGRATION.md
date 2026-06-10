@@ -10,6 +10,9 @@
 - [x] `skotch_parser::parse_to_sil(file, source) -> SilTree` bridge —
       consumers can call this instead of `parse_file()` to obtain a
       SIL tree they wrap with the typed accessors.
+- [x] `skotch-resolve` Cargo deps updated (skotch-sil, skotch-ast)
+      so the next migration session can immediately start using the
+      typed accessors.
 
 **Not yet done — these are the per-crate migration steps:**
 
