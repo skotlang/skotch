@@ -249,13 +249,46 @@ recursion becomes traversal through `children()` / typed accessors.
 **Verification: 449/449 workspace lib tests pass, 0 failures across
 40 test suites. Clippy clean on changed crates.**
 
+**Session 4 add-ons:**
+- Body walk extended in `skotch_resolve::typed`: for-loop var,
+  while/do-while conditions, when-arm subjects, try-catch
+  exception vars, lambda params.
+- `skotch_typeck::typed` Pass 2 synth_expr ported: literals,
+  references against scope, parenthesized passthrough, binary ops
+  with Int/Long/Double promotion + String concat + boolean
+  comparisons, unary/prefix/postfix passthrough, bare-callee Call
+  resolution via the top-level fn_returns map. Each fn body's
+  scope is seeded with that fn's own parameters so initializer
+  refs resolve correctly.
+- `skotch-repl::classify_input` migrated to typed AST: first
+  consumer crate that no longer touches the legacy
+  `skotch_syntax::Decl` enum (the highlighter still uses
+  TokenKind, which is the token-kind enum, not the AST).
+- `skotch_mir_lower::typed` initial port: top-level KtFun decls
+  emit MirFunction with FuncId / name / params / locals /
+  return_ty / single-block Return terminator / suspend/inline/
+  private/has_type_params flags / param_names. 6 unit tests
+  verify the typed pipeline end-to-end (parse → typeck →
+  mir-lower).
+
+**Verification: 456/456 workspace lib tests pass on second run
+after the body-walk and synth_expr additions; +7 from baseline.**
+
 **Remaining (multi-session):**
-- Body walk: for/while/when/lambda/try-catch in resolve
 - Full bidirectional inference in typeck Pass 2 (operator
-  overloading, smart casts, member lookups, when exhaustiveness)
-- Mir-lower port (~28k LOC, dominant cost)
-- LSP migration (~12 pattern-match sites)
-- REPL migration
-- Driver cutover
-- Test/golden migration
-- Delete legacy parser + AST
+  overloading, smart casts, member lookups, when exhaustiveness,
+  cycle detection across top vals)
+- Mir-lower port: body statement lowering, expression lowering,
+  class/interface/enum/object lowering — the legacy `lower_file`
+  is ~27k LOC of dense pattern-matching across Stmt / Expr /
+  Decl variants
+- LSP migration (~12 pattern-match sites, DocumentState shape
+  change)
+- Driver cutover: switch `skotch_driver::compile_source` to call
+  the typed pipeline exclusively once the typed mir-lower
+  reaches feature parity
+- Test/golden migration: ~7 backend test modules + ~30 unit
+  tests hardcode `skotch_parser::parse_file`; rewrite to use
+  `skotch_ast::parse` and regenerate ~1313 fixture goldens
+- Delete legacy parser + AST: `crates/skotch-syntax/src/ast.rs`
+  (744 LOC) + `crates/skotch-parser/` (5606 LOC)
