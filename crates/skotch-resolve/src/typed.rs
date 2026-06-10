@@ -1181,31 +1181,232 @@ pub fn resolve_file(
         }
     }
 
-    // ── Pass 2: per-function ResolvedFunction with param symbols ───
+    // ── Pass 2: per-function ResolvedFunction with body-walk ────────
+    let mut fn_idx_for_body = 0u32;
     for decl in file.decls() {
         if let KtDecl::Fun(f) = decl {
-            let name_sym = f
-                .name()
-                .map(|n| interner.intern(n))
-                .unwrap_or_else(|| interner.intern("<anonymous>"));
-            let params: Vec<Symbol> = f
-                .value_parameter_list()
-                .map(|pl| {
-                    pl.parameters()
-                        .filter_map(|p| p.name().map(|n| interner.intern(n)))
-                        .collect()
-                })
-                .unwrap_or_default();
-            out.functions.push(ResolvedFunction {
-                name: name_sym,
-                params,
-                locals: Vec::new(),
-                body_refs: Vec::new(),
-            });
+            let rf = resolve_function_body(f, fn_idx_for_body, interner, &out.top_level);
+            out.functions.push(rf);
+            fn_idx_for_body += 1;
         }
     }
 
     out
+}
+
+// ── Body-walk Resolver ──────────────────────────────────────────────
+//
+// Mirrors the legacy `Resolver` impl. Walks each function body to
+// collect `ResolvedRef` entries (one per identifier reference) and
+// the locals table. Scopes are stack-allocated; `is`/`as` smart-cast
+// scopes are still TODO.
+
+fn resolve_function_body(
+    f: KtFun<'_>,
+    fn_idx: u32,
+    interner: &mut Interner,
+    top_level: &rustc_hash::FxHashMap<Symbol, DefId>,
+) -> ResolvedFunction {
+    use skotch_syntax::SyntaxKind as S;
+    let name_sym = f
+        .name()
+        .map(|n| interner.intern(n))
+        .unwrap_or_else(|| interner.intern("<anonymous>"));
+
+    let mut scope: Vec<(Symbol, DefId)> = Vec::new();
+
+    // Extension fn → `this` is param 0.
+    let has_receiver = f.receiver_type().is_some();
+    if has_receiver {
+        let this_sym = interner.intern("this");
+        scope.push((this_sym, DefId::Param(fn_idx, 0)));
+    }
+    let param_offset = if has_receiver { 1u32 } else { 0 };
+    let params_vec: Vec<Symbol> = f
+        .value_parameter_list()
+        .map(|pl| {
+            pl.parameters()
+                .filter_map(|p| p.name().map(|n| interner.intern(n)))
+                .collect()
+        })
+        .unwrap_or_default();
+    for (i, sym) in params_vec.iter().enumerate() {
+        scope.push((*sym, DefId::Param(fn_idx, i as u32 + param_offset)));
+    }
+
+    let mut rf = ResolvedFunction {
+        name: name_sym,
+        params: params_vec,
+        locals: Vec::new(),
+        body_refs: Vec::new(),
+    };
+
+    if let Some(block) = f.body_block() {
+        resolve_block(block, fn_idx, &mut scope, &mut rf, interner, top_level);
+    } else if let Some(e) = f.body_expression() {
+        resolve_expr(&e, fn_idx, &mut scope, &mut rf, interner, top_level);
+    }
+
+    let _ = S::EOF; // Silence unused-import on the rare branch.
+    rf
+}
+
+fn resolve_block(
+    block: skotch_ast::KtBlock<'_>,
+    fn_idx: u32,
+    scope: &mut Vec<(Symbol, DefId)>,
+    rf: &mut ResolvedFunction,
+    interner: &mut Interner,
+    top_level: &rustc_hash::FxHashMap<Symbol, DefId>,
+) {
+    let saved = scope.len();
+    for stmt in block.statements() {
+        resolve_expr(&stmt, fn_idx, scope, rf, interner, top_level);
+    }
+    scope.truncate(saved);
+}
+
+fn resolve_expr(
+    e: &skotch_ast::KtExpr<'_>,
+    fn_idx: u32,
+    scope: &mut Vec<(Symbol, DefId)>,
+    rf: &mut ResolvedFunction,
+    interner: &mut Interner,
+    top_level: &rustc_hash::FxHashMap<Symbol, DefId>,
+) {
+    use skotch_ast::KtExpr;
+    match e {
+        KtExpr::Reference(r) => {
+            if let Some(name) = r.name() {
+                let sym = interner.intern(name);
+                let def = scope
+                    .iter()
+                    .rev()
+                    .find_map(|(s, d)| if *s == sym { Some(*d) } else { None })
+                    .or_else(|| top_level.get(&sym).copied())
+                    .unwrap_or(DefId::PossibleExternal(sym));
+                rf.body_refs.push(crate::ResolvedRef {
+                    span: r.span(),
+                    def,
+                });
+            }
+        }
+        KtExpr::This(t) => {
+            // `this` keyword — resolves to the function's receiver
+            // (extension fn) or the enclosing class's instance.
+            let this_sym = interner.intern("this");
+            let def = scope
+                .iter()
+                .rev()
+                .find_map(|(s, d)| if *s == this_sym { Some(*d) } else { None })
+                .unwrap_or(DefId::PossibleExternal(this_sym));
+            rf.body_refs.push(crate::ResolvedRef {
+                span: t.span(),
+                def,
+            });
+        }
+        KtExpr::Super(s) => {
+            let super_sym = interner.intern("super");
+            rf.body_refs.push(crate::ResolvedRef {
+                span: s.span(),
+                def: DefId::PossibleExternal(super_sym),
+            });
+        }
+        KtExpr::Call(c) => {
+            if let Some(callee) = c.callee() {
+                resolve_expr(&callee, fn_idx, scope, rf, interner, top_level);
+            }
+            if let Some(args) = c.value_argument_list() {
+                for a in args.arguments() {
+                    if let Some(av) = a.expression() {
+                        resolve_expr(&av, fn_idx, scope, rf, interner, top_level);
+                    }
+                }
+            }
+        }
+        KtExpr::Binary(b) => {
+            if let Some(l) = b.lhs() {
+                resolve_expr(&l, fn_idx, scope, rf, interner, top_level);
+            }
+            if let Some(r) = b.rhs() {
+                resolve_expr(&r, fn_idx, scope, rf, interner, top_level);
+            }
+        }
+        KtExpr::DotQualified(d) => {
+            // The receiver of `a.b.c`. We resolve `a`; `b` and `c` are
+            // member-name idents whose resolution requires type
+            // information (handled in mir-lower).
+            for c in skotch_ast::children(d.syntax()) {
+                if let Some(child_e) = KtExpr::cast(c) {
+                    resolve_expr(&child_e, fn_idx, scope, rf, interner, top_level);
+                    break; // Only resolve the leftmost (receiver).
+                }
+            }
+        }
+        KtExpr::SafeAccess(s) => {
+            for c in skotch_ast::children(s.syntax()) {
+                if let Some(child_e) = KtExpr::cast(c) {
+                    resolve_expr(&child_e, fn_idx, scope, rf, interner, top_level);
+                    break;
+                }
+            }
+        }
+        KtExpr::If(i) => {
+            if let Some(cond) = i.condition().and_then(|c| c.expression()) {
+                resolve_expr(&cond, fn_idx, scope, rf, interner, top_level);
+            }
+            if let Some(t) = i.then_branch().and_then(|t| t.expression()) {
+                resolve_expr(&t, fn_idx, scope, rf, interner, top_level);
+            }
+            if let Some(el) = i.else_branch().and_then(|e| e.expression()) {
+                resolve_expr(&el, fn_idx, scope, rf, interner, top_level);
+            }
+        }
+        KtExpr::Return(r) => {
+            for c in skotch_ast::children(r.syntax()) {
+                if let Some(child) = KtExpr::cast(c) {
+                    resolve_expr(&child, fn_idx, scope, rf, interner, top_level);
+                }
+            }
+        }
+        KtExpr::Throw(t) => {
+            for c in skotch_ast::children(t.syntax()) {
+                if let Some(child) = KtExpr::cast(c) {
+                    resolve_expr(&child, fn_idx, scope, rf, interner, top_level);
+                }
+            }
+        }
+        KtExpr::Block(b) => {
+            resolve_block(*b, fn_idx, scope, rf, interner, top_level);
+        }
+        KtExpr::Parenthesized(p) => {
+            for c in skotch_ast::children(p.syntax()) {
+                if let Some(child) = KtExpr::cast(c) {
+                    resolve_expr(&child, fn_idx, scope, rf, interner, top_level);
+                }
+            }
+        }
+        KtExpr::Prefix(_)
+        | KtExpr::Postfix(_)
+        | KtExpr::Unary(_) => {
+            // Skip operator-only; the operand resolves via further KtExpr cast.
+            for c in skotch_ast::children(e.syntax()) {
+                if let Some(child) = KtExpr::cast(c) {
+                    resolve_expr(&child, fn_idx, scope, rf, interner, top_level);
+                }
+            }
+        }
+        KtExpr::String(t) => {
+            // Walk short-template-entry / block-template-entry children.
+            for c in skotch_ast::children(t.syntax()) {
+                if let Some(child) = KtExpr::cast(c) {
+                    resolve_expr(&child, fn_idx, scope, rf, interner, top_level);
+                }
+            }
+        }
+        // Leaf constants / others: no further work for now.
+        _ => {}
+    }
 }
 
 
@@ -1365,6 +1566,60 @@ mod tests {
             .get("Outer$Inner")
             .expect("inner via FQ");
         assert_eq!(inner.jvm_name, "Outer$Inner");
+    }
+
+    #[test]
+    fn resolve_body_tracks_param_reference() {
+        let p = parse("fun add(a: Int, b: Int): Int = a + b");
+        let mut interner = Interner::new();
+        let r = resolve_file(p.file(), &mut interner, None);
+        let f = &r.functions[0];
+        // The body walks `a + b`. Each ident becomes a ResolvedRef
+        // pointing to Param(0, 0) or Param(0, 1).
+        let a = interner.intern("a");
+        let b = interner.intern("b");
+        let mut saw_a = false;
+        let mut saw_b = false;
+        for ref_ in &f.body_refs {
+            match ref_.def {
+                DefId::Param(0, 0) => saw_a = true,
+                DefId::Param(0, 1) => saw_b = true,
+                _ => {}
+            }
+        }
+        assert!(saw_a, "expected ref to a as Param(0,0); refs={:?}", f.body_refs);
+        assert!(saw_b, "expected ref to b as Param(0,1)");
+        // Symbol IDs round-trip through the interner.
+        let _ = (a, b);
+    }
+
+    #[test]
+    fn resolve_body_tracks_top_level_function_call() {
+        let p = parse("fun helper(): Int = 1\nfun main() { helper() }");
+        let mut interner = Interner::new();
+        let r = resolve_file(p.file(), &mut interner, None);
+        let main_fn = &r.functions[1];
+        let helper_def = main_fn
+            .body_refs
+            .iter()
+            .find(|rf| matches!(rf.def, DefId::Function(_)))
+            .expect("expected ref to helper");
+        assert_eq!(helper_def.def, DefId::Function(0));
+    }
+
+    #[test]
+    fn extension_function_this_param() {
+        let p = parse("fun String.exclaim(): String = this");
+        let mut interner = Interner::new();
+        let r = resolve_file(p.file(), &mut interner, None);
+        let f = &r.functions[0];
+        // The body just references `this` — Param(0, 0) (receiver).
+        let this_ref = f
+            .body_refs
+            .iter()
+            .find(|rf| matches!(rf.def, DefId::Param(0, 0)))
+            .expect("expected ref to this");
+        assert_eq!(this_ref.def, DefId::Param(0, 0));
     }
 
     #[test]
