@@ -1925,6 +1925,16 @@ mod tests {
 
     #[test]
     #[ignore]
+    fn debug_dump_fun_body_with_locals() {
+        let parsed = crate::parse(
+            "t.kt",
+            "fun main() {\n  val a: Int = 1\n  val b: String = \"hi\"\n}",
+        );
+        dump(parsed.file().syntax(), 0);
+    }
+
+    #[test]
+    #[ignore]
     fn debug_dump_enum_iface_pkg() {
         for s in [
             "enum class Color { RED }",

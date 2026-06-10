@@ -98,7 +98,70 @@ pub fn type_check(
         }
     }
 
+    // ── Pass 2: per-function body inference (basic) ─────────────────
+    //
+    // For each top-level fun we walk the body, recording locals types
+    // in `TypedFunction.local_tys`. This is a minimal bidirectional
+    // checker — literal and var-init shapes only. Full coverage
+    // (operator overloading, smart casts, sealed exhaustiveness)
+    // lands in subsequent sessions.
+    let mut fn_idx = 0u32;
+    for decl in file.decls() {
+        if let KtDecl::Fun(f) = decl {
+            let mut local_tys: Vec<Ty> = Vec::new();
+            if let Some(block) = f.body_block() {
+                walk_block_for_locals(block, &imports, &aliases, &mut local_tys);
+            }
+            if let Some(rec) = out.functions.iter_mut().find(|r| r.name_index == fn_idx) {
+                rec.local_tys = local_tys;
+            }
+            fn_idx += 1;
+        }
+    }
+
     out
+}
+
+/// Walk a function body to harvest local variable types in source
+/// order. Local `val`/`var` declarations surface as PROPERTY children
+/// of the BLOCK composite; nested blocks (inside `if` / `when` arms)
+/// recurse.
+fn walk_block_for_locals(
+    block: skotch_ast::KtBlock<'_>,
+    imports: &FxHashMap<String, String>,
+    aliases: &FxHashMap<String, AliasTarget>,
+    local_tys: &mut Vec<Ty>,
+) {
+    use skotch_ast::KtExpr;
+    for c in skotch_ast::children(block.syntax()) {
+        if let Some(prop) = skotch_ast::KtProperty::cast(c) {
+            let ty = prop
+                .type_reference()
+                .map(|tr| type_ref_to_ty(tr, imports, aliases))
+                .or_else(|| prop.initializer().map(|e| literal_ty(&e)))
+                .unwrap_or(Ty::Any);
+            local_tys.push(ty);
+            continue;
+        }
+        if let Some(expr) = KtExpr::cast(c) {
+            match expr {
+                KtExpr::If(i) => {
+                    if let Some(KtExpr::Block(b)) =
+                        i.then_branch().and_then(|t| t.expression())
+                    {
+                        walk_block_for_locals(b, imports, aliases, local_tys);
+                    }
+                    if let Some(KtExpr::Block(b)) =
+                        i.else_branch().and_then(|e| e.expression())
+                    {
+                        walk_block_for_locals(b, imports, aliases, local_tys);
+                    }
+                }
+                KtExpr::Block(b) => walk_block_for_locals(b, imports, aliases, local_tys),
+                _ => {}
+            }
+        }
+    }
 }
 
 // ── Import collection ───────────────────────────────────────────────
@@ -392,5 +455,30 @@ mod tests {
         let mut diags = Diagnostics::new();
         let typed = type_check(parsed.file(), &resolved, &mut interner, &mut diags, None);
         assert_eq!(typed.functions[0].return_ty, Ty::Double);
+    }
+
+    #[test]
+    fn body_walks_record_local_types() {
+        let parsed = skotch_ast::parse(
+            "test.kt",
+            "fun main() {\n  val a: Int = 1\n  val b: String = \"hi\"\n}",
+        );
+        let resolved = ResolvedFile::default();
+        let mut interner = Interner::new();
+        let mut diags = Diagnostics::new();
+        let typed = type_check(parsed.file(), &resolved, &mut interner, &mut diags, None);
+        let f = &typed.functions[0];
+        assert_eq!(f.local_tys, vec![Ty::Int, Ty::String]);
+    }
+
+    #[test]
+    fn body_locals_infer_from_initializer_when_no_annotation() {
+        let parsed = skotch_ast::parse("test.kt", "fun main() {\n  val a = 42\n}");
+        let resolved = ResolvedFile::default();
+        let mut interner = Interner::new();
+        let mut diags = Diagnostics::new();
+        let typed = type_check(parsed.file(), &resolved, &mut interner, &mut diags, None);
+        let f = &typed.functions[0];
+        assert_eq!(f.local_tys, vec![Ty::Int]);
     }
 }
