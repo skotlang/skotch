@@ -62,11 +62,8 @@ use std::io::{BufRead, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-use skotch_diagnostics::Diagnostics;
+use skotch_ast::KtDecl;
 use skotch_driver::{emit, EmitOptions, Target};
-use skotch_intern::Interner;
-use skotch_span::FileId;
-use skotch_syntax::Decl;
 
 pub use completion::ScanMode;
 use completion::{expand_tilde, scan_dir_classes, CompletionCtx, SkotchCompleter};
@@ -927,29 +924,31 @@ fn split_top_level_semicolons(line: &str) -> Vec<String> {
 }
 
 fn classify_input(line: &str) -> DeclKind {
-    let mut interner = Interner::new();
-    let mut diags = Diagnostics::new();
-    let file_id = FileId(0);
-    let lexed = skotch_lexer::lex(file_id, line, &mut diags);
-    let ast = skotch_parser::parse_file(&lexed, &mut interner, &mut diags);
+    let parsed = skotch_ast::parse("repl.kt", line);
+    let file = parsed.file();
 
     // Check for import statements first.
-    if !ast.imports.is_empty() {
-        return DeclKind::Import;
+    if let Some(list) = file.import_list() {
+        if skotch_ast::typed_children::<skotch_ast::KtImportDirective>(
+            skotch_ast::AstNode::syntax(list),
+        )
+        .next()
+        .is_some()
+        {
+            return DeclKind::Import;
+        }
     }
 
     // If parsing produced a single top-level declaration, classify it.
-    if let Some(decl) = ast.decls.first() {
+    if let Some(decl) = file.decls().next() {
         return match decl {
-            Decl::Fun(_)
-            | Decl::Class(_)
-            | Decl::Interface(_)
-            | Decl::Object(_)
-            | Decl::Enum(_)
-            | Decl::TypeAlias(_) => DeclKind::TopLevel,
-            Decl::Val(v) if v.is_var => DeclKind::LocalDecl,
-            Decl::Val(_) => DeclKind::LocalDecl,
-            Decl::Unsupported { .. } => DeclKind::Expr,
+            KtDecl::Fun(_)
+            | KtDecl::Class(_)
+            | KtDecl::Interface(_)
+            | KtDecl::Object(_)
+            | KtDecl::EnumClass(_)
+            | KtDecl::TypeAlias(_) => DeclKind::TopLevel,
+            KtDecl::Property(_) => DeclKind::LocalDecl,
         };
     }
 

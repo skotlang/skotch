@@ -16,6 +16,7 @@ skotch-span        = { workspace = true }
 skotch-syntax      = { workspace = true }
 skotch-lexer       = { workspace = true }
 skotch-parser      = { workspace = true }
+skotch-ast         = { workspace = true }
 anyhow             = { workspace = true }
 which              = { workspace = true }
 reedline           = { workspace = true }

@@ -2505,6 +2505,7 @@ dependencies = [
  "nu-ansi-term",
  "reedline",
  "similar",
+ "skotch-ast",
  "skotch-classinfo",
  "skotch-diagnostics",
  "skotch-driver",
