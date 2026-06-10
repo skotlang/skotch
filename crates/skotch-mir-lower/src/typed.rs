@@ -161,15 +161,30 @@ pub fn lower_file(
         }
     }
 
-    // Top-level enum classes — emit with is_enum metadata via
-    // module.enum_names; the static_fields population happens in
-    // the body lowering follow-up.
+    // Top-level enum classes — emit MirClass with the entry list as
+    // static_fields (one per `RED`, `GREEN`, …). The synthesized
+    // <clinit> that constructs and stores each entry is deferred to
+    // a follow-up — for now the static_fields signal the JVM
+    // backend to emit `ACC_STATIC | ACC_FINAL | ACC_ENUM` fields.
     for decl in file.decls() {
         if let KtDecl::EnumClass(e) = decl {
             let name = match e.name() {
                 Some(n) => n.to_string(),
                 None => continue,
             };
+            let static_fields: Vec<skotch_mir::MirField> = e
+                .body()
+                .map(|body| {
+                    body.enum_entries()
+                        .filter_map(|entry| entry.name())
+                        .map(|entry_name| skotch_mir::MirField {
+                            name: entry_name.to_string(),
+                            ty: Ty::Class(name.clone()),
+                            is_jvm_field: false,
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
             let mir_class = skotch_mir::MirClass {
                 name: name.clone(),
                 super_class: Some("java/lang/Enum".to_string()),
@@ -188,7 +203,7 @@ pub fn lower_file(
                 has_type_params: false,
                 is_object_singleton: false,
                 companion_class_name: None,
-                static_fields: Vec::new(),
+                static_fields,
                 clinit: None,
             };
             module.push_class(mir_class);
@@ -794,6 +809,51 @@ mod tests {
         let c = &module.classes[0];
         assert_eq!(c.super_class.as_deref(), Some("java/lang/Enum"));
         assert!(module.enum_names.contains("Color"));
+    }
+
+    #[test]
+    fn typed_lower_enum_class_entries_emitted_as_static_fields() {
+        let module = lower("enum class Color { RED, GREEN, BLUE }", "TestKt");
+        let c = &module.classes[0];
+        let entry_names: Vec<&str> = c.static_fields.iter().map(|f| f.name.as_str()).collect();
+        assert_eq!(entry_names, vec!["RED", "GREEN", "BLUE"]);
+        // Each entry's type is the enum class itself.
+        for f in &c.static_fields {
+            match &f.ty {
+                Ty::Class(n) => assert_eq!(n, "Color"),
+                other => panic!("expected Ty::Class(Color), got {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn typed_lower_class_with_primary_ctor_emits_fields_and_ctor() {
+        let module = lower("class Box(val x: Int, val y: Int)", "TestKt");
+        let c = module.classes.iter().find(|c| c.name == "Box").unwrap();
+        let field_names: Vec<&str> = c.fields.iter().map(|f| f.name.as_str()).collect();
+        assert_eq!(field_names, vec!["x", "y"]);
+        // Constructor signature.
+        assert_eq!(c.constructor.required_params, 2);
+        assert_eq!(c.constructor.param_names, vec!["x".to_string(), "y".to_string()]);
+        assert_eq!(c.constructor.locals, vec![Ty::Int, Ty::Int]);
+    }
+
+    #[test]
+    fn typed_lower_class_with_methods_emits_method_signatures() {
+        let module = lower(
+            "class P(val x: Int) { fun double(): Int = 0; fun greet(): String = \"\" }",
+            "TestKt",
+        );
+        let c = module.classes.iter().find(|c| c.name == "P").unwrap();
+        let methods: Vec<(&str, &Ty)> = c
+            .methods
+            .iter()
+            .map(|m| (m.name.as_str(), &m.return_ty))
+            .collect();
+        assert_eq!(
+            methods,
+            vec![("double", &Ty::Int), ("greet", &Ty::String)],
+        );
     }
 
     #[test]
