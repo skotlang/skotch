@@ -462,3 +462,44 @@ interpolation, generic method calls, lambda lifting,
 coroutines). LSP migration + driver cutover + legacy deletion
 follow once mir-lower reaches parity on a representative
 fixture set.
+
+### 2026-06-10 (session 5 — push 6)
+
+mir-lower expression / statement body lowering further expanded:
+
+- Parenthesized expression passthrough: `(literal)` and `(a + b)`
+  bodies unwrap identically to their inner expressions. Same fix
+  landed in typeck's literal_ty for return-type inference.
+- Identity function body: `fun id(x: Int): Int = x` emits an
+  empty stmts block + ReturnValue(param_slot) directly with no
+  intermediate local.
+- Binary operator type tracking with promotion:
+  - operand_numeric_ty resolves Int/Long/Float/Double from
+    literal suffix or KtTypeReference on the parameter
+  - promote_numeric follows Kotlin: Double > Float > Long > Int
+  - BinOp variant dispatch: AddI/AddL/AddF/AddD (and Sub/Mul/Div/Mod
+    for each), CmpEq/CmpNe/CmpLt/CmpGt/CmpLe/CmpGe, ConcatStr for
+    String operand.
+
+**Push 6 totals (focused tests, all green):**
+- mir-lower: 48 unit tests (up from 35)
+- typeck: 18 unit (parenthesized literal_ty fix added in this push)
+- Other crates unchanged: ast 8, resolve 36, repl 26
+- Sum: **136 tests** across the migration surface
+
+**Cumulative session 5 totals (all pushes):**
+- ~70 commits since session 4 end
+- ~10,000+ LOC of new typed code
+- typed-resolve at full body-walk parity for current shapes
+- typed-typeck Pass 2 with TypeEnv + member call resolution
+- typed-mir-lower with substantial body lowering coverage:
+  classes, methods (signatures), top-level vals, expression
+  body lowering for literals + binary arithmetic (with proper
+  type promotion) + comparisons + identity + println intrinsic
+  + multi-stmt blocks (val + println pattern).
+
+The mir-lower port still has a long way to go for control flow
+(if/else/when/for/while), string template interpolation,
+method calls on user types, lambdas, suspend/coroutines, etc.
+But the foundation for body lowering is now in place and
+each shape can be added incrementally with confidence.
