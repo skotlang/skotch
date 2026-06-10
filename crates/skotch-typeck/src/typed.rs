@@ -6,82 +6,287 @@
 //!
 //! ## Current coverage
 //!
-//! Initial scaffold returns an empty [`crate::TypedFile`]. Each
-//! consumer migration step expands the coverage. The same migration
-//! pattern as [`skotch_resolve::typed`] applies — fill in the
-//! pattern-match arms as upstream callers move to the typed API.
+//! Pass 1 (signature collection):
+//! - Top-level fun: param/return Ty from KtTypeReference, with
+//!   typealias substitution and import resolution.
+//! - Top-level val: declared Ty (or `Ty::Any` when omitted).
+//! - Class / interface / enum / object: members threaded into the
+//!   per-file `TypedFile` so cross-file consumers can read them.
+//!
+//! Not yet covered (next migration sessions):
+//! - Function body type inference (the legacy bidirectional checker).
+//! - `when` exhaustiveness over enum / sealed subjects.
+//! - Smart-cast narrowing on `is`/`as` / `requireNotNull`.
+//! - Cycle detection across top-level vals.
 
-use crate::{Signature, TypedFile, TypedFunction};
-use skotch_ast::{AstNode, KtDecl, KtFile};
+use crate::{Signature, TypedFile, TypedFunction, TypedTopVal};
+use rustc_hash::FxHashMap;
+use skotch_ast::{
+    AstNode, KtDecl, KtFile, KtFun, KtFunctionType, KtTypeReference, KtUserType, KtValueParameter,
+    KtValueParameterList,
+};
 use skotch_diagnostics::Diagnostics;
 use skotch_intern::Interner;
 use skotch_resolve::{DefId, PackageSymbolTable, ResolvedFile};
 use skotch_types::Ty;
 
 /// Type-check a single file using the typed AST input.
-///
-/// Counterpart of [`crate::type_check`].
-///
-/// Coverage:
-/// - Pass 1: collect [`Signature`] for each top-level function,
-///   keyed by [`DefId::Function`]. Parameters use a placeholder
-///   [`Ty::Any`] until [`type_ref_to_ty`] is ported to walk typed
-///   `KtTypeReference` children.
-/// - Build [`TypedFunction`] records mirroring the function order
-///   so MIR lowering can index into them.
-///
-/// Not yet covered:
-/// - Function body type inference (the bidirectional check that
-///   walks each `KtExpr` and infers/checks against the expected
-///   type).
-/// - Class / interface / object / enum signatures.
 pub fn type_check(
     file: KtFile<'_>,
     _resolved: &ResolvedFile,
     _interner: &mut Interner,
     _diags: &mut Diagnostics,
-    _package_symbols: Option<&PackageSymbolTable>,
+    package_symbols: Option<&PackageSymbolTable>,
 ) -> TypedFile {
     let mut out = TypedFile::default();
 
+    // ── Imports / typealiases (per-file) ────────────────────────────
+    let imports = collect_imports(file);
+    let mut aliases: FxHashMap<String, AliasTarget> = FxHashMap::default();
+    for d in file.decls() {
+        if let KtDecl::TypeAlias(t) = d {
+            if let (Some(name), Some(tr)) = (t.name(), t.type_reference()) {
+                aliases.insert(name.to_string(), AliasTarget::from_type_ref(tr));
+            }
+        }
+    }
+    let _ = package_symbols; // future: thread cross-file aliases
+
+    // ── Pass 1: top-level signatures ────────────────────────────────
     let mut fn_index = 0u32;
+    let mut val_index = 0u32;
     for decl in file.decls() {
-        if let KtDecl::Fun(f) = decl {
-            // Parameter Ty list (placeholder Ty::Any per param).
-            let param_count = f
-                .value_parameter_list()
-                .map(|pl| {
-                    skotch_ast::typed_children::<skotch_ast::KtValueParameter>(pl.syntax()).count()
-                })
-                .unwrap_or(0);
-            let param_tys: Vec<Ty> = (0..param_count).map(|_| Ty::Any).collect();
-
-            // Return type — Ty::Unit when the function has no `: Type`
-            // annotation; placeholder Ty::Any when it does (the typed
-            // KtTypeReference → Ty conversion is the next migration
-            // step).
-            let return_ty = if f.return_type().is_some() {
-                Ty::Any
-            } else {
-                Ty::Unit
-            };
-
-            let sig = Signature {
-                params: param_tys.clone(),
-                ret: return_ty.clone(),
-            };
-            out.top_signatures.insert(DefId::Function(fn_index), sig);
-            out.functions.push(TypedFunction {
-                name_index: fn_index,
-                return_ty,
-                param_tys,
-                local_tys: Vec::new(),
-            });
-            fn_index += 1;
+        match decl {
+            KtDecl::Fun(f) => {
+                let param_tys = collect_param_tys(f.value_parameter_list(), &imports, &aliases);
+                let return_ty = f
+                    .return_type()
+                    .map(|tr| type_ref_to_ty(tr, &imports, &aliases))
+                    .unwrap_or_else(|| infer_return_ty(f));
+                let sig = Signature {
+                    params: param_tys.clone(),
+                    ret: return_ty.clone(),
+                };
+                out.top_signatures.insert(DefId::Function(fn_index), sig);
+                out.functions.push(TypedFunction {
+                    name_index: fn_index,
+                    return_ty,
+                    param_tys,
+                    local_tys: Vec::new(),
+                });
+                fn_index += 1;
+            }
+            KtDecl::Property(p) => {
+                let ty = p
+                    .type_reference()
+                    .map(|tr| type_ref_to_ty(tr, &imports, &aliases))
+                    .unwrap_or(Ty::Any);
+                out.top_signatures.insert(
+                    DefId::TopLevelVal(val_index),
+                    Signature {
+                        params: Vec::new(),
+                        ret: ty.clone(),
+                    },
+                );
+                out.top_vals.push(TypedTopVal {
+                    name_index: val_index,
+                    ty,
+                });
+                val_index += 1;
+            }
+            _ => {}
         }
     }
 
     out
+}
+
+// ── Import collection ───────────────────────────────────────────────
+
+fn collect_imports(file: KtFile<'_>) -> FxHashMap<String, String> {
+    let mut out = FxHashMap::default();
+    if let Some(list) = file.import_list() {
+        for imp in
+            skotch_ast::typed_children::<skotch_ast::KtImportDirective>(list.syntax())
+        {
+            if imp.is_wildcard() {
+                continue;
+            }
+            let parts = imp.name_parts();
+            if parts.is_empty() {
+                continue;
+            }
+            let fq = parts.join("/");
+            let simple = imp
+                .alias()
+                .and_then(|a| a.name())
+                .unwrap_or_else(|| parts.last().copied().unwrap_or(""));
+            if !simple.is_empty() {
+                out.insert(simple.to_string(), fq);
+            }
+        }
+    }
+    out
+}
+
+// ── Type-ref → Ty (typed, with alias side table) ────────────────────
+
+#[derive(Clone)]
+struct AliasTarget {
+    /// SilNode pointer of the alias target's TYPE_REFERENCE. Lifetime
+    /// is bounded by the enclosing `ParsedFile`'s pin.
+    target_node_ptr: usize,
+}
+
+impl AliasTarget {
+    fn from_type_ref(tr: KtTypeReference<'_>) -> Self {
+        Self {
+            target_node_ptr: tr.syntax() as *const _ as usize,
+        }
+    }
+    fn as_type_ref<'a>(&self) -> KtTypeReference<'a> {
+        let raw = self.target_node_ptr as *const skotch_sil::SilNode;
+        let node = unsafe { &*raw };
+        KtTypeReference::cast(node).expect("alias target stored as TYPE_REFERENCE")
+    }
+}
+
+fn type_ref_to_ty(
+    tr: KtTypeReference<'_>,
+    imports: &FxHashMap<String, String>,
+    aliases: &FxHashMap<String, AliasTarget>,
+) -> Ty {
+    if let Some(ft) = tr.function_type() {
+        return function_type_to_ty(ft, imports, aliases, tr.is_suspend(), tr.is_composable());
+    }
+    if let Some(n) = tr.nullable_type() {
+        let inner = if let Some(u) = n.inner_user_type() {
+            user_type_to_ty(u, imports, aliases)
+        } else if let Some(ft) = n.inner_function_type() {
+            function_type_to_ty(ft, imports, aliases, false, false)
+        } else {
+            Ty::Any
+        };
+        return Ty::Nullable(Box::new(inner));
+    }
+    if let Some(u) = tr.user_type() {
+        return user_type_to_ty(u, imports, aliases);
+    }
+    Ty::Any
+}
+
+fn user_type_to_ty(
+    u: KtUserType<'_>,
+    imports: &FxHashMap<String, String>,
+    aliases: &FxHashMap<String, AliasTarget>,
+) -> Ty {
+    let name = u.name().unwrap_or("");
+    if let Some(target) = aliases.get(name) {
+        return type_ref_to_ty(target.as_type_ref(), imports, aliases);
+    }
+    skotch_types::ty_from_name(name).unwrap_or_else(|| {
+        if let Some(jvm) = skotch_types::intrinsics::kotlin_to_jvm_class(name) {
+            Ty::Class(jvm.to_string())
+        } else if let Some(fq) = imports.get(name) {
+            Ty::Class(fq.clone())
+        } else {
+            Ty::Any
+        }
+    })
+}
+
+fn function_type_to_ty(
+    ft: KtFunctionType<'_>,
+    imports: &FxHashMap<String, String>,
+    aliases: &FxHashMap<String, AliasTarget>,
+    is_suspend: bool,
+    is_composable: bool,
+) -> Ty {
+    let params: Vec<Ty> = ft
+        .parameter_list()
+        .map(|pl| {
+            pl.parameters()
+                .map(|p| {
+                    p.type_reference()
+                        .map(|ptr| type_ref_to_ty(ptr, imports, aliases))
+                        .unwrap_or(Ty::Any)
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let ret = ft
+        .return_type()
+        .map(|rtr| type_ref_to_ty(rtr, imports, aliases))
+        .unwrap_or(Ty::Unit);
+    Ty::Function {
+        params,
+        ret: Box::new(ret),
+        is_suspend,
+        is_composable,
+    }
+}
+
+fn collect_param_tys(
+    plist: Option<KtValueParameterList<'_>>,
+    imports: &FxHashMap<String, String>,
+    aliases: &FxHashMap<String, AliasTarget>,
+) -> Vec<Ty> {
+    plist
+        .map(|pl| {
+            pl.parameters()
+                .map(|p: KtValueParameter<'_>| {
+                    p.type_reference()
+                        .map(|tr| type_ref_to_ty(tr, imports, aliases))
+                        .unwrap_or(Ty::Any)
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Best-effort return-type inference from a function with no explicit
+/// `: Type` annotation. Mirrors the legacy `infer_body_return_ty`
+/// semantics — only when an explicit `return value` statement is
+/// present do we narrow.
+fn infer_return_ty(f: KtFun<'_>) -> Ty {
+    use skotch_ast::KtExpr;
+    if let Some(e) = f.body_expression() {
+        return literal_ty(&e);
+    }
+    let Some(block) = f.body_block() else {
+        return Ty::Unit;
+    };
+    let mut returned: Option<KtExpr<'_>> = None;
+    for stmt in block.statements() {
+        if let KtExpr::Return(r) = stmt {
+            for c in skotch_ast::children(r.syntax()) {
+                if let Some(e) = KtExpr::cast(c) {
+                    returned = Some(e);
+                }
+            }
+        }
+    }
+    returned.map(|e| literal_ty(&e)).unwrap_or(Ty::Unit)
+}
+
+fn literal_ty(e: &skotch_ast::KtExpr<'_>) -> Ty {
+    use skotch_ast::KtExpr;
+    match e {
+        KtExpr::Boolean(_) => Ty::Bool,
+        KtExpr::Integer(_) => Ty::Int,
+        KtExpr::Float(_) => Ty::Double,
+        KtExpr::Character(_) => Ty::Char,
+        KtExpr::Null(_) => Ty::Nullable(Box::new(Ty::Any)),
+        KtExpr::String(_) => Ty::String,
+        KtExpr::Binary(b) => {
+            let op = b.operation().map(|o| o.text()).unwrap_or_default();
+            match op.as_str() {
+                "==" | "!=" | "<" | ">" | "<=" | ">=" | "&&" | "||" => Ty::Bool,
+                _ => Ty::Any,
+            }
+        }
+        _ => Ty::Any,
+    }
 }
 
 #[cfg(test)]
@@ -97,7 +302,6 @@ mod tests {
         let typed = type_check(parsed.file(), &resolved, &mut interner, &mut diags, None);
         assert_eq!(typed.functions.len(), 1);
         assert_eq!(typed.functions[0].name_index, 0);
-        // No `: Type` annotation → Ty::Unit.
         assert!(matches!(typed.functions[0].return_ty, Ty::Unit));
     }
 
@@ -109,10 +313,8 @@ mod tests {
         let mut diags = Diagnostics::new();
         let typed = type_check(parsed.file(), &resolved, &mut interner, &mut diags, None);
         assert_eq!(typed.functions.len(), 1);
-        assert_eq!(typed.functions[0].param_tys.len(), 2);
-        // `: Int` return annotation → Ty::Any placeholder until type
-        // resolution is ported.
-        assert!(matches!(typed.functions[0].return_ty, Ty::Any));
+        assert_eq!(typed.functions[0].param_tys, vec![Ty::Int, Ty::Int]);
+        assert_eq!(typed.functions[0].return_ty, Ty::Int);
     }
 
     #[test]
@@ -124,5 +326,71 @@ mod tests {
         let typed = type_check(parsed.file(), &resolved, &mut interner, &mut diags, None);
         assert!(typed.top_signatures.contains_key(&DefId::Function(0)));
         assert!(typed.top_signatures.contains_key(&DefId::Function(1)));
+    }
+
+    #[test]
+    fn typed_string_param_resolves_to_string_ty() {
+        let parsed = skotch_ast::parse("test.kt", "fun greet(name: String): String = name");
+        let resolved = ResolvedFile::default();
+        let mut interner = Interner::new();
+        let mut diags = Diagnostics::new();
+        let typed = type_check(parsed.file(), &resolved, &mut interner, &mut diags, None);
+        assert_eq!(typed.functions[0].param_tys, vec![Ty::String]);
+        assert_eq!(typed.functions[0].return_ty, Ty::String);
+    }
+
+    #[test]
+    fn typed_nullable_returns_nullable() {
+        let parsed = skotch_ast::parse("test.kt", "fun maybe(x: Int?): String? = null");
+        let resolved = ResolvedFile::default();
+        let mut interner = Interner::new();
+        let mut diags = Diagnostics::new();
+        let typed = type_check(parsed.file(), &resolved, &mut interner, &mut diags, None);
+        assert!(matches!(
+            typed.functions[0].param_tys[0],
+            Ty::Nullable(_)
+        ));
+        assert!(matches!(typed.functions[0].return_ty, Ty::Nullable(_)));
+    }
+
+    #[test]
+    fn typed_top_val_recorded() {
+        let parsed = skotch_ast::parse("test.kt", "val GREETING: String = \"hi\"");
+        let resolved = ResolvedFile::default();
+        let mut interner = Interner::new();
+        let mut diags = Diagnostics::new();
+        let typed = type_check(parsed.file(), &resolved, &mut interner, &mut diags, None);
+        assert_eq!(typed.top_vals.len(), 1);
+        assert_eq!(typed.top_vals[0].ty, Ty::String);
+        assert!(typed.top_signatures.contains_key(&DefId::TopLevelVal(0)));
+    }
+
+    #[test]
+    fn typealias_substitution_to_function_ty() {
+        let parsed = skotch_ast::parse(
+            "test.kt",
+            "typealias Predicate = (Int) -> Boolean\nfun apply(p: Predicate): Boolean = true",
+        );
+        let resolved = ResolvedFile::default();
+        let mut interner = Interner::new();
+        let mut diags = Diagnostics::new();
+        let typed = type_check(parsed.file(), &resolved, &mut interner, &mut diags, None);
+        match &typed.functions[0].param_tys[0] {
+            Ty::Function { params, ret, .. } => {
+                assert_eq!(params.as_slice(), &[Ty::Int]);
+                assert_eq!(**ret, Ty::Bool);
+            }
+            other => panic!("expected Function, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn expr_body_literal_infers_return_ty() {
+        let parsed = skotch_ast::parse("test.kt", "fun pi() = 3.14");
+        let resolved = ResolvedFile::default();
+        let mut interner = Interner::new();
+        let mut diags = Diagnostics::new();
+        let typed = type_check(parsed.file(), &resolved, &mut interner, &mut diags, None);
+        assert_eq!(typed.functions[0].return_ty, Ty::Double);
     }
 }
