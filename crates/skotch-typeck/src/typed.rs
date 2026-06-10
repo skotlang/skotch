@@ -125,22 +125,38 @@ pub fn type_check(
 /// Walk a function body to harvest local variable types in source
 /// order. Local `val`/`var` declarations surface as PROPERTY children
 /// of the BLOCK composite; nested blocks (inside `if` / `when` arms)
-/// recurse.
+/// recurse. Synthesized expression types feed the scope so a later
+/// initializer that references an earlier local picks up its type.
 fn walk_block_for_locals(
     block: skotch_ast::KtBlock<'_>,
     imports: &FxHashMap<String, String>,
     aliases: &FxHashMap<String, AliasTarget>,
     local_tys: &mut Vec<Ty>,
 ) {
+    let mut scope: Vec<(String, Ty)> = Vec::new();
+    walk_block_with_scope(block, imports, aliases, local_tys, &mut scope);
+}
+
+fn walk_block_with_scope(
+    block: skotch_ast::KtBlock<'_>,
+    imports: &FxHashMap<String, String>,
+    aliases: &FxHashMap<String, AliasTarget>,
+    local_tys: &mut Vec<Ty>,
+    scope: &mut Vec<(String, Ty)>,
+) {
     use skotch_ast::KtExpr;
+    let saved = scope.len();
     for c in skotch_ast::children(block.syntax()) {
         if let Some(prop) = skotch_ast::KtProperty::cast(c) {
             let ty = prop
                 .type_reference()
                 .map(|tr| type_ref_to_ty(tr, imports, aliases))
-                .or_else(|| prop.initializer().map(|e| literal_ty(&e)))
+                .or_else(|| prop.initializer().map(|e| synth_expr(&e, scope)))
                 .unwrap_or(Ty::Any);
-            local_tys.push(ty);
+            local_tys.push(ty.clone());
+            if let Some(name) = prop.name() {
+                scope.push((name.to_string(), ty));
+            }
             continue;
         }
         if let Some(expr) = KtExpr::cast(c) {
@@ -149,18 +165,103 @@ fn walk_block_for_locals(
                     if let Some(KtExpr::Block(b)) =
                         i.then_branch().and_then(|t| t.expression())
                     {
-                        walk_block_for_locals(b, imports, aliases, local_tys);
+                        walk_block_with_scope(b, imports, aliases, local_tys, scope);
                     }
                     if let Some(KtExpr::Block(b)) =
                         i.else_branch().and_then(|e| e.expression())
                     {
-                        walk_block_for_locals(b, imports, aliases, local_tys);
+                        walk_block_with_scope(b, imports, aliases, local_tys, scope);
                     }
                 }
-                KtExpr::Block(b) => walk_block_for_locals(b, imports, aliases, local_tys),
+                KtExpr::Block(b) => {
+                    walk_block_with_scope(b, imports, aliases, local_tys, scope)
+                }
                 _ => {}
             }
         }
+    }
+    scope.truncate(saved);
+}
+
+/// Synthesize the type of an expression against the given scope.
+/// Mirrors the legacy `TypeChecker::synth_expr` for the common
+/// expression shapes. Returns `Ty::Any` for shapes that need
+/// TypeEnv-aware inference (method calls, field access against
+/// user classes — those land in a follow-up session).
+fn synth_expr(e: &skotch_ast::KtExpr<'_>, scope: &[(String, Ty)]) -> Ty {
+    use skotch_ast::KtExpr;
+    match e {
+        KtExpr::Boolean(_) => Ty::Bool,
+        KtExpr::Integer(_) => Ty::Int,
+        KtExpr::Float(_) => Ty::Double,
+        KtExpr::Character(_) => Ty::Char,
+        KtExpr::Null(_) => Ty::Nullable(Box::new(Ty::Any)),
+        KtExpr::String(_) => Ty::String,
+        KtExpr::Reference(r) => {
+            if let Some(name) = r.name() {
+                if let Some((_, t)) = scope.iter().rev().find(|(n, _)| n == name) {
+                    return t.clone();
+                }
+            }
+            Ty::Any
+        }
+        KtExpr::Parenthesized(p) => {
+            for c in skotch_ast::children(p.syntax()) {
+                if let Some(inner) = KtExpr::cast(c) {
+                    return synth_expr(&inner, scope);
+                }
+            }
+            Ty::Any
+        }
+        KtExpr::Binary(b) => {
+            let lt = b.lhs().map(|l| synth_expr(&l, scope)).unwrap_or(Ty::Any);
+            let rt = b.rhs().map(|r| synth_expr(&r, scope)).unwrap_or(Ty::Any);
+            let op = b.operation().map(|o| o.text()).unwrap_or_default();
+            match op.as_str() {
+                "==" | "!=" | "<" | ">" | "<=" | ">=" | "&&" | "||" => Ty::Bool,
+                "+" | "-" | "*" | "/" | "%" => {
+                    if lt == Ty::Double || rt == Ty::Double {
+                        Ty::Double
+                    } else if lt == Ty::Long || rt == Ty::Long {
+                        Ty::Long
+                    } else if matches!(lt, Ty::Int | Ty::Any) && matches!(rt, Ty::Int | Ty::Any) {
+                        Ty::Int
+                    } else if op == "+" && lt == Ty::String {
+                        Ty::String
+                    } else {
+                        Ty::Int
+                    }
+                }
+                _ => Ty::Any,
+            }
+        }
+        KtExpr::Unary(u) => {
+            for c in skotch_ast::children(u.syntax()) {
+                if let Some(inner) = KtExpr::cast(c) {
+                    return synth_expr(&inner, scope);
+                }
+            }
+            Ty::Any
+        }
+        KtExpr::Prefix(p) => {
+            for c in skotch_ast::children(p.syntax()) {
+                if let Some(inner) = KtExpr::cast(c) {
+                    return synth_expr(&inner, scope);
+                }
+            }
+            Ty::Any
+        }
+        KtExpr::Postfix(p) => {
+            for c in skotch_ast::children(p.syntax()) {
+                if let Some(inner) = KtExpr::cast(c) {
+                    return synth_expr(&inner, scope);
+                }
+            }
+            Ty::Any
+        }
+        // KtExpr::Call / Field / DotQualified / Lambda / etc. require
+        // TypeEnv-aware lookup; pending follow-up port.
+        _ => Ty::Any,
     }
 }
 
@@ -480,5 +581,48 @@ mod tests {
         let typed = type_check(parsed.file(), &resolved, &mut interner, &mut diags, None);
         let f = &typed.functions[0];
         assert_eq!(f.local_tys, vec![Ty::Int]);
+    }
+
+    #[test]
+    fn body_local_initialized_from_binary_op() {
+        let parsed = skotch_ast::parse(
+            "test.kt",
+            "fun main() {\n  val a = 1\n  val b = a + 2\n}",
+        );
+        let resolved = ResolvedFile::default();
+        let mut interner = Interner::new();
+        let mut diags = Diagnostics::new();
+        let typed = type_check(parsed.file(), &resolved, &mut interner, &mut diags, None);
+        let f = &typed.functions[0];
+        // a inferred from literal as Int; b from synth_expr(a + 2) → Int.
+        assert_eq!(f.local_tys, vec![Ty::Int, Ty::Int]);
+    }
+
+    #[test]
+    fn body_local_initialized_from_comparison() {
+        let parsed = skotch_ast::parse(
+            "test.kt",
+            "fun main() {\n  val a = 1\n  val b = a > 0\n}",
+        );
+        let resolved = ResolvedFile::default();
+        let mut interner = Interner::new();
+        let mut diags = Diagnostics::new();
+        let typed = type_check(parsed.file(), &resolved, &mut interner, &mut diags, None);
+        let f = &typed.functions[0];
+        assert_eq!(f.local_tys, vec![Ty::Int, Ty::Bool]);
+    }
+
+    #[test]
+    fn body_local_initialized_from_string_concat() {
+        let parsed = skotch_ast::parse(
+            "test.kt",
+            "fun main() {\n  val a = \"hi\"\n  val b = a + \"!\"\n}",
+        );
+        let resolved = ResolvedFile::default();
+        let mut interner = Interner::new();
+        let mut diags = Diagnostics::new();
+        let typed = type_check(parsed.file(), &resolved, &mut interner, &mut diags, None);
+        let f = &typed.functions[0];
+        assert_eq!(f.local_tys, vec![Ty::String, Ty::String]);
     }
 }
