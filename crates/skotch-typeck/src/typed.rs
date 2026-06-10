@@ -105,12 +105,49 @@ pub fn type_check(
     // checker — literal and var-init shapes only. Full coverage
     // (operator overloading, smart casts, sealed exhaustiveness)
     // lands in subsequent sessions.
+    //
+    // Build a name->Ty map of top-level fun return types so calls
+    // resolve through synth_expr at least at the simplest level.
+    let mut fn_returns: FxHashMap<String, Ty> = FxHashMap::default();
+    for decl in file.decls() {
+        if let KtDecl::Fun(f) = decl {
+            if let Some(name) = f.name() {
+                let ret = f
+                    .return_type()
+                    .map(|tr| type_ref_to_ty(tr, &imports, &aliases))
+                    .unwrap_or_else(|| infer_return_ty(f));
+                fn_returns.insert(name.to_string(), ret);
+            }
+        }
+    }
+
     let mut fn_idx = 0u32;
     for decl in file.decls() {
         if let KtDecl::Fun(f) = decl {
             let mut local_tys: Vec<Ty> = Vec::new();
+            // Seed the scope with this fn's parameters so an init
+            // expression that references a param resolves to its type.
+            let mut scope: Vec<(String, Ty)> = Vec::new();
+            if let Some(plist) = f.value_parameter_list() {
+                for p in plist.parameters() {
+                    if let Some(name) = p.name() {
+                        let ty = p
+                            .type_reference()
+                            .map(|tr| type_ref_to_ty(tr, &imports, &aliases))
+                            .unwrap_or(Ty::Any);
+                        scope.push((name.to_string(), ty));
+                    }
+                }
+            }
             if let Some(block) = f.body_block() {
-                walk_block_for_locals(block, &imports, &aliases, &mut local_tys);
+                walk_block_with_scope_and_fns(
+                    block,
+                    &imports,
+                    &aliases,
+                    &fn_returns,
+                    &mut local_tys,
+                    &mut scope,
+                );
             }
             if let Some(rec) = out.functions.iter_mut().find(|r| r.name_index == fn_idx) {
                 rec.local_tys = local_tys;
@@ -127,20 +164,11 @@ pub fn type_check(
 /// of the BLOCK composite; nested blocks (inside `if` / `when` arms)
 /// recurse. Synthesized expression types feed the scope so a later
 /// initializer that references an earlier local picks up its type.
-fn walk_block_for_locals(
+fn walk_block_with_scope_and_fns(
     block: skotch_ast::KtBlock<'_>,
     imports: &FxHashMap<String, String>,
     aliases: &FxHashMap<String, AliasTarget>,
-    local_tys: &mut Vec<Ty>,
-) {
-    let mut scope: Vec<(String, Ty)> = Vec::new();
-    walk_block_with_scope(block, imports, aliases, local_tys, &mut scope);
-}
-
-fn walk_block_with_scope(
-    block: skotch_ast::KtBlock<'_>,
-    imports: &FxHashMap<String, String>,
-    aliases: &FxHashMap<String, AliasTarget>,
+    fn_returns: &FxHashMap<String, Ty>,
     local_tys: &mut Vec<Ty>,
     scope: &mut Vec<(String, Ty)>,
 ) {
@@ -151,7 +179,10 @@ fn walk_block_with_scope(
             let ty = prop
                 .type_reference()
                 .map(|tr| type_ref_to_ty(tr, imports, aliases))
-                .or_else(|| prop.initializer().map(|e| synth_expr(&e, scope)))
+                .or_else(|| {
+                    prop.initializer()
+                        .map(|e| synth_expr(&e, scope, fn_returns))
+                })
                 .unwrap_or(Ty::Any);
             local_tys.push(ty.clone());
             if let Some(name) = prop.name() {
@@ -165,17 +196,31 @@ fn walk_block_with_scope(
                     if let Some(KtExpr::Block(b)) =
                         i.then_branch().and_then(|t| t.expression())
                     {
-                        walk_block_with_scope(b, imports, aliases, local_tys, scope);
+                        walk_block_with_scope_and_fns(
+                            b,
+                            imports,
+                            aliases,
+                            fn_returns,
+                            local_tys,
+                            scope,
+                        );
                     }
                     if let Some(KtExpr::Block(b)) =
                         i.else_branch().and_then(|e| e.expression())
                     {
-                        walk_block_with_scope(b, imports, aliases, local_tys, scope);
+                        walk_block_with_scope_and_fns(
+                            b,
+                            imports,
+                            aliases,
+                            fn_returns,
+                            local_tys,
+                            scope,
+                        );
                     }
                 }
-                KtExpr::Block(b) => {
-                    walk_block_with_scope(b, imports, aliases, local_tys, scope)
-                }
+                KtExpr::Block(b) => walk_block_with_scope_and_fns(
+                    b, imports, aliases, fn_returns, local_tys, scope,
+                ),
                 _ => {}
             }
         }
@@ -183,12 +228,16 @@ fn walk_block_with_scope(
     scope.truncate(saved);
 }
 
-/// Synthesize the type of an expression against the given scope.
-/// Mirrors the legacy `TypeChecker::synth_expr` for the common
-/// expression shapes. Returns `Ty::Any` for shapes that need
-/// TypeEnv-aware inference (method calls, field access against
-/// user classes — those land in a follow-up session).
-fn synth_expr(e: &skotch_ast::KtExpr<'_>, scope: &[(String, Ty)]) -> Ty {
+/// Synthesize the type of an expression against the given scope and
+/// the known top-level function-return map. Mirrors the legacy
+/// `TypeChecker::synth_expr` for the common shapes. Returns `Ty::Any`
+/// for shapes that need TypeEnv-aware inference (member calls, field
+/// access against user classes — those land in a follow-up session).
+fn synth_expr(
+    e: &skotch_ast::KtExpr<'_>,
+    scope: &[(String, Ty)],
+    fn_returns: &FxHashMap<String, Ty>,
+) -> Ty {
     use skotch_ast::KtExpr;
     match e {
         KtExpr::Boolean(_) => Ty::Bool,
@@ -208,14 +257,20 @@ fn synth_expr(e: &skotch_ast::KtExpr<'_>, scope: &[(String, Ty)]) -> Ty {
         KtExpr::Parenthesized(p) => {
             for c in skotch_ast::children(p.syntax()) {
                 if let Some(inner) = KtExpr::cast(c) {
-                    return synth_expr(&inner, scope);
+                    return synth_expr(&inner, scope, fn_returns);
                 }
             }
             Ty::Any
         }
         KtExpr::Binary(b) => {
-            let lt = b.lhs().map(|l| synth_expr(&l, scope)).unwrap_or(Ty::Any);
-            let rt = b.rhs().map(|r| synth_expr(&r, scope)).unwrap_or(Ty::Any);
+            let lt = b
+                .lhs()
+                .map(|l| synth_expr(&l, scope, fn_returns))
+                .unwrap_or(Ty::Any);
+            let rt = b
+                .rhs()
+                .map(|r| synth_expr(&r, scope, fn_returns))
+                .unwrap_or(Ty::Any);
             let op = b.operation().map(|o| o.text()).unwrap_or_default();
             match op.as_str() {
                 "==" | "!=" | "<" | ">" | "<=" | ">=" | "&&" | "||" => Ty::Bool,
@@ -238,7 +293,7 @@ fn synth_expr(e: &skotch_ast::KtExpr<'_>, scope: &[(String, Ty)]) -> Ty {
         KtExpr::Unary(u) => {
             for c in skotch_ast::children(u.syntax()) {
                 if let Some(inner) = KtExpr::cast(c) {
-                    return synth_expr(&inner, scope);
+                    return synth_expr(&inner, scope, fn_returns);
                 }
             }
             Ty::Any
@@ -246,7 +301,7 @@ fn synth_expr(e: &skotch_ast::KtExpr<'_>, scope: &[(String, Ty)]) -> Ty {
         KtExpr::Prefix(p) => {
             for c in skotch_ast::children(p.syntax()) {
                 if let Some(inner) = KtExpr::cast(c) {
-                    return synth_expr(&inner, scope);
+                    return synth_expr(&inner, scope, fn_returns);
                 }
             }
             Ty::Any
@@ -254,12 +309,24 @@ fn synth_expr(e: &skotch_ast::KtExpr<'_>, scope: &[(String, Ty)]) -> Ty {
         KtExpr::Postfix(p) => {
             for c in skotch_ast::children(p.syntax()) {
                 if let Some(inner) = KtExpr::cast(c) {
-                    return synth_expr(&inner, scope);
+                    return synth_expr(&inner, scope, fn_returns);
                 }
             }
             Ty::Any
         }
-        // KtExpr::Call / Field / DotQualified / Lambda / etc. require
+        KtExpr::Call(call) => {
+            // For a bare ref-callee like `helper()`, resolve against
+            // the top-level fn return map.
+            if let Some(KtExpr::Reference(r)) = call.callee() {
+                if let Some(name) = r.name() {
+                    if let Some(ret) = fn_returns.get(name) {
+                        return ret.clone();
+                    }
+                }
+            }
+            Ty::Any
+        }
+        // KtExpr::Field / DotQualified / Lambda / etc. require
         // TypeEnv-aware lookup; pending follow-up port.
         _ => Ty::Any,
     }
@@ -610,6 +677,40 @@ mod tests {
         let typed = type_check(parsed.file(), &resolved, &mut interner, &mut diags, None);
         let f = &typed.functions[0];
         assert_eq!(f.local_tys, vec![Ty::Int, Ty::Bool]);
+    }
+
+    #[test]
+    fn body_local_resolves_fn_call_return_type() {
+        let parsed = skotch_ast::parse(
+            "test.kt",
+            "fun helper(): Int = 1\nfun main() {\n  val x = helper()\n}",
+        );
+        let resolved = ResolvedFile::default();
+        let mut interner = Interner::new();
+        let mut diags = Diagnostics::new();
+        let typed = type_check(parsed.file(), &resolved, &mut interner, &mut diags, None);
+        let main_fn = typed
+            .functions
+            .iter()
+            .find(|f| f.name_index == 1)
+            .expect("main fn");
+        // x = helper() — helper is declared returning Int.
+        assert_eq!(main_fn.local_tys, vec![Ty::Int]);
+    }
+
+    #[test]
+    fn body_local_resolves_param_type() {
+        let parsed = skotch_ast::parse(
+            "test.kt",
+            "fun process(s: String) {\n  val x = s\n  val y = x + \"!\"\n}",
+        );
+        let resolved = ResolvedFile::default();
+        let mut interner = Interner::new();
+        let mut diags = Diagnostics::new();
+        let typed = type_check(parsed.file(), &resolved, &mut interner, &mut diags, None);
+        let f = &typed.functions[0];
+        // x = s (param, String); y = x + "!" (String + String = String).
+        assert_eq!(f.local_tys, vec![Ty::String, Ty::String]);
     }
 
     #[test]
