@@ -368,22 +368,19 @@ pub fn lower_file(
                         .collect()
                 })
                 .unwrap_or_default();
-            // Single empty basic block terminating in Return.
-            // This is the minimum viable body — further statement
-            // lowering lands in follow-up porting steps. Even a
-            // non-Unit-returning fn body produces a Return terminator
-            // here as the placeholder; a future port emits
-            // ReturnValue with the lowered last expression.
-            let blocks = vec![BasicBlock {
-                stmts: Vec::new(),
-                terminator: Terminator::Return,
-            }];
+            // Body lowering: expression-bodied fns with a literal
+            // expression now emit MStmt::Assign + ReturnValue. Block
+            // bodies and non-literal expression bodies still emit an
+            // empty Return placeholder.
+            let (blocks, extra_locals) = lower_simple_body(f, &mut module.strings);
 
+            let mut locals = param_tys;
+            locals.extend(extra_locals);
             module.functions.push(MirFunction {
                 id: FuncId(fn_id),
                 name,
                 params,
-                locals: param_tys,
+                locals,
                 blocks,
                 return_ty,
                 required_params: param_count,
@@ -414,6 +411,114 @@ pub fn lower_file(
     }
 
     module
+}
+
+/// Build a function body for an expression-bodied function when the
+/// expression is a recognized literal. The body becomes:
+///   local N: Ty
+///   Assign(local N, Const(literal))
+///   Return value local N
+/// Block-bodied functions and non-literal expression bodies fall
+/// back to an empty Return placeholder.
+fn lower_simple_body(
+    f: skotch_ast::KtFun<'_>,
+    strings: &mut Vec<String>,
+) -> (Vec<BasicBlock>, Vec<Ty>) {
+    use skotch_ast::KtExpr;
+    use skotch_mir::{LocalId, MirConst};
+
+    let make_placeholder = || {
+        (
+            vec![BasicBlock {
+                stmts: Vec::new(),
+                terminator: Terminator::Return,
+            }],
+            Vec::new(),
+        )
+    };
+
+    let Some(body_expr) = f.body_expression() else {
+        return make_placeholder();
+    };
+    let (c, ty) = match &body_expr {
+        KtExpr::Integer(_) => {
+            let text = skotch_ast::children(body_expr.syntax())
+                .iter()
+                .find_map(|cc| {
+                    if cc.kind == skotch_syntax::SyntaxKind::INTEGER_LITERAL {
+                        if let skotch_sil::SilData::Token { text } = &cc.data {
+                            return Some(text.as_str());
+                        }
+                    }
+                    None
+                });
+            let Some(text) = text else { return make_placeholder() };
+            let Ok(v) = text.parse::<i64>() else { return make_placeholder() };
+            (MirConst::Int(v as i32), Ty::Int)
+        }
+        KtExpr::Boolean(_) => {
+            let is_true = skotch_ast::children(body_expr.syntax())
+                .iter()
+                .any(|cc| cc.kind == skotch_syntax::SyntaxKind::KW_TRUE);
+            (MirConst::Bool(is_true), Ty::Bool)
+        }
+        KtExpr::Null(_) => (MirConst::Null, Ty::Nullable(Box::new(Ty::Any))),
+        KtExpr::String(_) => {
+            // Build the string from the LITERAL_STRING_TEMPLATE_ENTRY
+            // children: a plain literal with no $ interpolation has
+            // exactly one entry whose child is a STRING_CHUNK token.
+            let mut buf = String::new();
+            let mut interpolated = false;
+            for child in skotch_ast::children(body_expr.syntax()) {
+                use skotch_syntax::SyntaxKind as S;
+                match child.kind {
+                    S::LITERAL_STRING_TEMPLATE_ENTRY => {
+                        for cc in skotch_ast::children(child) {
+                            if cc.kind == S::STRING_CHUNK {
+                                if let skotch_sil::SilData::Token { text } = &cc.data {
+                                    buf.push_str(text);
+                                }
+                            }
+                        }
+                    }
+                    S::STRING_START | S::STRING_END | S::WHITE_SPACE => {}
+                    _ => {
+                        interpolated = true;
+                    }
+                }
+            }
+            if interpolated {
+                return make_placeholder();
+            }
+            let sid = match strings.iter().position(|s| s == &buf) {
+                Some(i) => skotch_mir::StringId(i as u32),
+                None => {
+                    let id = skotch_mir::StringId(strings.len() as u32);
+                    strings.push(buf);
+                    id
+                }
+            };
+            (MirConst::String(sid), Ty::String)
+        }
+        _ => return make_placeholder(),
+    };
+
+    // Decide the result local slot. With no params, the result lives
+    // in local 0; otherwise it's the next slot after the params.
+    let param_count = f
+        .value_parameter_list()
+        .map(|pl| pl.parameters().count())
+        .unwrap_or(0);
+    let result_slot = LocalId(param_count as u32);
+    let extra_locals = vec![ty];
+    let blocks = vec![BasicBlock {
+        stmts: vec![skotch_mir::Stmt::Assign {
+            dest: result_slot,
+            value: skotch_mir::Rvalue::Const(c),
+        }],
+        terminator: Terminator::ReturnValue(result_slot),
+    }];
+    (blocks, extra_locals)
 }
 
 /// Build an `<init>(P1, P2, ...)V` constructor from a class's
@@ -941,7 +1046,9 @@ mod tests {
         assert_eq!(f.required_params, 2);
         assert_eq!(f.return_ty, Ty::Int);
         assert_eq!(f.param_names, vec!["a".to_string(), "b".to_string()]);
-        assert_eq!(f.locals, vec![Ty::Int, Ty::Int]);
+        // Two params (Int, Int) plus a result slot for the `= 0`
+        // literal body lowering.
+        assert_eq!(f.locals, vec![Ty::Int, Ty::Int, Ty::Int]);
     }
 
     #[test]
@@ -1105,6 +1212,62 @@ mod tests {
         assert_eq!(m.name, "pretty");
         // No body → abstract default kicks in.
         assert!(m.is_abstract);
+    }
+
+    #[test]
+    fn typed_lower_expr_bodied_int_returns_int_literal() {
+        let module = lower("fun answer(): Int = 42", "TestKt");
+        let f = &module.functions[0];
+        assert_eq!(f.return_ty, Ty::Int);
+        assert_eq!(f.blocks.len(), 1);
+        // First stmt: Assign(local 0, Const(Int(42)))
+        let block = &f.blocks[0];
+        assert_eq!(block.stmts.len(), 1);
+        match &block.stmts[0] {
+            skotch_mir::Stmt::Assign { dest, value } => {
+                assert_eq!(dest.0, 0);
+                assert!(matches!(value, skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(42))));
+            }
+        }
+        assert!(matches!(block.terminator, Terminator::ReturnValue(_)));
+        assert_eq!(f.locals, vec![Ty::Int]);
+    }
+
+    #[test]
+    fn typed_lower_expr_bodied_bool_returns_bool_literal() {
+        let module = lower("fun ok(): Boolean = true", "TestKt");
+        let f = &module.functions[0];
+        assert_eq!(f.return_ty, Ty::Bool);
+        match &f.blocks[0].stmts[0] {
+            skotch_mir::Stmt::Assign { value, .. } => {
+                assert!(matches!(value, skotch_mir::Rvalue::Const(skotch_mir::MirConst::Bool(true))));
+            }
+        }
+    }
+
+    #[test]
+    fn typed_lower_expr_bodied_string_returns_string_const() {
+        let module = lower("fun greet(): String = \"hi\"", "TestKt");
+        let f = &module.functions[0];
+        assert_eq!(f.return_ty, Ty::String);
+        match &f.blocks[0].stmts[0] {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::Const(skotch_mir::MirConst::String(sid)) => {
+                    assert_eq!(module.strings[sid.0 as usize], "hi");
+                }
+                other => panic!("expected Const(String), got {other:?}"),
+            },
+        }
+    }
+
+    #[test]
+    fn typed_lower_block_bodied_fn_still_empty_return() {
+        // Block body — currently still emits an empty Return.
+        let module = lower("fun main() { }", "TestKt");
+        let f = &module.functions[0];
+        assert_eq!(f.blocks.len(), 1);
+        assert!(f.blocks[0].stmts.is_empty());
+        assert!(matches!(f.blocks[0].terminator, Terminator::Return));
     }
 
     #[test]
