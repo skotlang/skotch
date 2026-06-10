@@ -766,6 +766,12 @@ fn lower_simple_body(
             "*" => Some(skotch_mir::BinOp::MulI),
             "/" => Some(skotch_mir::BinOp::DivI),
             "%" => Some(skotch_mir::BinOp::ModI),
+            "==" => Some(skotch_mir::BinOp::CmpEq),
+            "!=" => Some(skotch_mir::BinOp::CmpNe),
+            "<" => Some(skotch_mir::BinOp::CmpLt),
+            ">" => Some(skotch_mir::BinOp::CmpGt),
+            "<=" => Some(skotch_mir::BinOp::CmpLe),
+            ">=" => Some(skotch_mir::BinOp::CmpGe),
             _ => None,
         };
         if let Some(op) = mir_op {
@@ -808,13 +814,26 @@ fn lower_simple_body(
                 resolve_operand(r, &mut next_slot, &mut pre_stmts, &mut extra_locals)
             });
             if let (Some(lhs), Some(rhs)) = (lhs_slot, rhs_slot) {
-                let return_ty = match f
-                    .return_type()
-                    .and_then(|tr| tr.user_type())
-                    .and_then(|u| u.name())
-                {
-                    Some(name) => skotch_types::ty_from_name(name).unwrap_or(Ty::Int),
-                    None => Ty::Int,
+                let is_cmp = matches!(
+                    op,
+                    skotch_mir::BinOp::CmpEq
+                        | skotch_mir::BinOp::CmpNe
+                        | skotch_mir::BinOp::CmpLt
+                        | skotch_mir::BinOp::CmpGt
+                        | skotch_mir::BinOp::CmpLe
+                        | skotch_mir::BinOp::CmpGe
+                );
+                let return_ty = if is_cmp {
+                    Ty::Bool
+                } else {
+                    match f
+                        .return_type()
+                        .and_then(|tr| tr.user_type())
+                        .and_then(|u| u.name())
+                    {
+                        Some(name) => skotch_types::ty_from_name(name).unwrap_or(Ty::Int),
+                        None => Ty::Int,
+                    }
                 };
                 let result_slot = skotch_mir::LocalId(next_slot);
                 extra_locals.push(return_ty);
@@ -1703,6 +1722,38 @@ mod tests {
             }
         }
         assert!(matches!(block.terminator, Terminator::ReturnValue(_)));
+    }
+
+    #[test]
+    fn typed_lower_binary_gt_comparison() {
+        let module = lower("fun isPos(x: Int): Boolean = x > 0", "TestKt");
+        let f = &module.functions[0];
+        assert_eq!(f.return_ty, Ty::Bool);
+        let block = &f.blocks[0];
+        // 2 stmts: literal 0 then comparison
+        match &block.stmts[1] {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::BinOp { op, .. } => {
+                    assert!(matches!(op, skotch_mir::BinOp::CmpGt));
+                }
+                _ => panic!("expected BinOp"),
+            },
+        }
+    }
+
+    #[test]
+    fn typed_lower_binary_eq_returns_bool() {
+        let module = lower("fun same(a: Int, b: Int): Boolean = a == b", "TestKt");
+        let f = &module.functions[0];
+        assert_eq!(f.return_ty, Ty::Bool);
+        match &f.blocks[0].stmts[0] {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::BinOp { op, .. } => {
+                    assert!(matches!(op, skotch_mir::BinOp::CmpEq));
+                }
+                _ => panic!("expected BinOp"),
+            },
+        }
     }
 
     #[test]
