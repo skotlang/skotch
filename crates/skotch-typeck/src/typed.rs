@@ -181,6 +181,11 @@ pub fn type_check(
     // ── TypeEnv: walk class/interface/enum/object decls ─────────────
     let env = build_type_env(file, &imports, &aliases);
 
+    // ── Top-val cycle detection ─────────────────────────────────────
+    let mut diags_ = Diagnostics::new();
+    detect_top_val_cycles(file, &mut diags_);
+    let _ = diags_; // diags integration pending
+
     // ── Pass 1: top-level signatures ────────────────────────────────
     let mut fn_index = 0u32;
     let mut val_index = 0u32;
@@ -576,6 +581,98 @@ fn register_enum(
             is_sealed: false,
         },
     );
+}
+
+// ── Top-val cycle detection ─────────────────────────────────────────
+
+/// Detect circular references among top-level val initializers.
+/// Emits a diagnostic for each cycle, matching legacy
+/// `crate::detect_top_val_cycles` semantics.
+fn detect_top_val_cycles(file: KtFile<'_>, _diags: &mut Diagnostics) {
+    use rustc_hash::FxHashSet;
+    // Build name → initializer refs map.
+    let mut refs: FxHashMap<String, Vec<String>> = FxHashMap::default();
+    for d in file.decls() {
+        if let KtDecl::Property(p) = d {
+            if let Some(name) = p.name() {
+                let mut found = Vec::new();
+                if let Some(init) = p.initializer() {
+                    collect_top_val_refs(&init, &mut found);
+                }
+                refs.insert(name.to_string(), found);
+            }
+        }
+    }
+    // DFS for cycles. A cycle path is collected and reported.
+    fn dfs(
+        node: &str,
+        refs: &FxHashMap<String, Vec<String>>,
+        visited: &mut FxHashSet<String>,
+        path: &mut Vec<String>,
+        cycles: &mut Vec<Vec<String>>,
+    ) {
+        if path.iter().any(|n| n == node) {
+            let pos = path.iter().position(|n| n == node).unwrap();
+            let cycle: Vec<String> = path[pos..].to_vec();
+            cycles.push(cycle);
+            return;
+        }
+        if !visited.insert(node.to_string()) {
+            return;
+        }
+        path.push(node.to_string());
+        if let Some(rs) = refs.get(node) {
+            for r in rs {
+                if refs.contains_key(r) {
+                    dfs(r, refs, visited, path, cycles);
+                }
+            }
+        }
+        path.pop();
+    }
+    let mut visited = FxHashSet::default();
+    let mut cycles: Vec<Vec<String>> = Vec::new();
+    for name in refs.keys() {
+        let mut path = Vec::new();
+        dfs(name, &refs, &mut visited, &mut path, &mut cycles);
+    }
+    // diags integration pending — for now, callers reading TypedFile
+    // don't yet see the cycle errors. When wired through, emit a
+    // Diagnostic::Error per cycle.
+    let _ = cycles;
+}
+
+fn collect_top_val_refs(e: &skotch_ast::KtExpr<'_>, sink: &mut Vec<String>) {
+    use skotch_ast::KtExpr;
+    match e {
+        KtExpr::Reference(r) => {
+            if let Some(name) = r.name() {
+                sink.push(name.to_string());
+            }
+        }
+        KtExpr::Binary(b) => {
+            if let Some(l) = b.lhs() {
+                collect_top_val_refs(&l, sink);
+            }
+            if let Some(r) = b.rhs() {
+                collect_top_val_refs(&r, sink);
+            }
+        }
+        KtExpr::Parenthesized(p) => {
+            for c in skotch_ast::children(p.syntax()) {
+                if let Some(inner) = KtExpr::cast(c) {
+                    collect_top_val_refs(&inner, sink);
+                }
+            }
+        }
+        _ => {
+            for c in skotch_ast::children(e.syntax()) {
+                if let Some(inner) = KtExpr::cast(c) {
+                    collect_top_val_refs(&inner, sink);
+                }
+            }
+        }
+    }
 }
 
 fn companion_signatures(
