@@ -114,7 +114,7 @@ pub fn lower_file(
                 fields,
                 methods,
                 constructor,
-                secondary_constructors: Vec::new(),
+                secondary_constructors: collect_secondary_ctors(c),
                 is_suspend_lambda: false,
                 is_lambda: false,
                 is_cross_file_stub: false,
@@ -478,6 +478,78 @@ fn collect_class_fields(c: skotch_ast::KtClass<'_>) -> Vec<skotch_mir::MirField>
         }
     }
     fields
+}
+
+/// Collect secondary constructors from a class body. Each becomes a
+/// MirFunction named `<init>` with empty body — full body lowering
+/// (including the `: this(args)` / `: super(args)` delegation
+/// emission) lands in a follow-up.
+fn collect_secondary_ctors(c: skotch_ast::KtClass<'_>) -> Vec<MirFunction> {
+    let mut out = Vec::new();
+    let Some(body) = c.body() else { return out };
+    let mut sc_idx = 0u32;
+    for sc in body.secondary_constructors() {
+        let param_count = sc
+            .value_parameter_list()
+            .map(|pl| pl.parameters().count())
+            .unwrap_or(0);
+        let params: Vec<skotch_mir::LocalId> =
+            (0..param_count).map(|i| skotch_mir::LocalId(i as u32)).collect();
+        let param_names: Vec<String> = sc
+            .value_parameter_list()
+            .map(|pl| {
+                pl.parameters()
+                    .map(|p| p.name().unwrap_or("").to_string())
+                    .collect()
+            })
+            .unwrap_or_default();
+        let param_tys: Vec<Ty> = sc
+            .value_parameter_list()
+            .map(|pl| {
+                pl.parameters()
+                    .map(|p| {
+                        p.type_reference()
+                            .and_then(|tr| tr.user_type())
+                            .and_then(|u| u.name())
+                            .and_then(skotch_types::ty_from_name)
+                            .unwrap_or(Ty::Any)
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        out.push(MirFunction {
+            id: FuncId(sc_idx),
+            name: "<init>".to_string(),
+            params,
+            locals: param_tys,
+            blocks: vec![BasicBlock {
+                stmts: Vec::new(),
+                terminator: Terminator::Return,
+            }],
+            return_ty: Ty::Unit,
+            required_params: param_count,
+            param_names,
+            param_receiver_types: Vec::new(),
+            param_defaults: Vec::new(),
+            is_abstract: false,
+            vararg_index: None,
+            exception_handlers: Vec::new(),
+            is_suspend: false,
+            is_inline: false,
+            has_type_params: false,
+            suspend_original_return_ty: None,
+            suspend_state_machine: None,
+            annotations: Vec::new(),
+            named_locals: Vec::new(),
+            is_private: false,
+            is_static: false,
+            default_call_masks: Vec::new(),
+            needs_leading_nop: false,
+            local_generic_args: rustc_hash::FxHashMap::default(),
+        });
+        sc_idx += 1;
+    }
+    out
 }
 
 /// Same-shape helper for interfaces.
@@ -992,6 +1064,21 @@ mod tests {
         assert_eq!(m.name, "pretty");
         // No body → abstract default kicks in.
         assert!(m.is_abstract);
+    }
+
+    #[test]
+    fn typed_lower_class_with_secondary_ctor_emits_extra_init() {
+        let module = lower(
+            "class Foo(val x: Int) { constructor(s: String) : this(s.length) {} }",
+            "TestKt",
+        );
+        let foo = module.classes.iter().find(|c| c.name == "Foo").expect("Foo");
+        assert_eq!(foo.secondary_constructors.len(), 1);
+        let sc = &foo.secondary_constructors[0];
+        assert_eq!(sc.name, "<init>");
+        assert_eq!(sc.required_params, 1);
+        assert_eq!(sc.param_names, vec!["s".to_string()]);
+        assert_eq!(sc.locals, vec![Ty::String]);
     }
 
     #[test]
