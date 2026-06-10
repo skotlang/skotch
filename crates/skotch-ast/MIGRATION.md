@@ -404,3 +404,61 @@ Push 3 commits: 4
 - LSP migration (12 sites + DocumentState shape change).
 - Driver cutover.
 - Test/golden migration + legacy AST deletion.
+
+### 2026-06-10 (session 5 — push 5)
+
+mir-lower body lowering coverage substantially expanded — the
+simplest fixtures now lower end-to-end through the typed pipeline:
+
+- Expression bodied functions with literal RHS:
+  - Integer constant: `fun answer(): Int = 42`
+  - Boolean: `fun ok(): Boolean = true`
+  - String: `fun greet(): String = "hi"`
+  - Null: `fun never(): Any? = null`
+- Block bodied functions with `return <literal>`:
+  - `fun answer(): Int { return 7 }`
+- Param-to-param binary arithmetic:
+  - `fun add(a: Int, b: Int): Int = a + b`
+  - Supports +, -, *, /, % (Int variants for now; typed-Ty
+    tracking for Long/Float/Double lands later).
+- println / print intrinsic for single-arg literal call:
+  - `fun main() { println("hello") }` → CallKind::Println
+  - `fun main() { println(42) }` → also Println (autobox)
+  - `fun main() { print("x") }` → CallKind::Print
+  - Supports Int / Bool / Null / String literal args
+- Class shape (now substantial):
+  - Primary-ctor + secondary-ctor `<init>` signatures
+  - Body methods with empty Return bodies + modifier flags
+  - Fields from ctor-param val/var + body properties
+  - Companion-object sibling MirClass with method list
+  - Nested classes as sibling `Outer$Inner` MirClass entries
+  - Interfaces / object singletons / enum classes with
+    matching shape
+
+**Push 5 totals (focused tests, all green):**
+- mir-lower: 35 unit tests (up from 25)
+- All other crates unchanged: 97 tests across resolve, typeck,
+  ast, repl
+- Sum: **132 tests** across the migration surface, 0 failures
+
+**Cumulative session 5 deltas:**
+- ~50+ commits since session start (some overwritten by linter
+  formatting passes).
+- ~8000+ LOC of new typed code across resolve/typeck/mir-lower.
+- typed-resolve Pass 1 + Pass 2 body walk: feature parity
+  reached for shapes that don't need smart casts / when arms.
+- typed-typeck Pass 1 + Pass 2: member calls + field access +
+  enum entries + constructor calls + binary ops with class
+  receivers all working.
+- typed-mir-lower: classes (with all decl kinds), top-level
+  fns with literal/binary/println bodies, top-level vals,
+  enum entries, companion objects, nested classes.
+- REPL migrated fully.
+
+**Remaining multi-session work:** all centered on the mir-lower
+body-lowering port for the dominant patterns (multi-stmt
+blocks, if/while/for/when control flow, string template
+interpolation, generic method calls, lambda lifting,
+coroutines). LSP migration + driver cutover + legacy deletion
+follow once mir-lower reaches parity on a representative
+fixture set.
