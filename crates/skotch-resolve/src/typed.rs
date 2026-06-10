@@ -822,7 +822,10 @@ fn gather_enum(
         secondary_ctors: Vec::new(),
         companion_methods: Vec::new(),
         has_companion: false,
-        super_class: Some("kotlin/Enum".to_string()),
+        // Enums always extend `java/lang/Enum` at the JVM level. The
+        // source-level name is `kotlin/Enum` but the compiler erases it
+        // (see legacy gather_declarations enum arm).
+        super_class: Some("java/lang/Enum".to_string()),
         interfaces: iface_names,
         is_open: false,
         is_abstract: false,
