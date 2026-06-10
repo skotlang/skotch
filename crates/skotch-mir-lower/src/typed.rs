@@ -1265,16 +1265,88 @@ fn lower_simple_body(
             let mut pre_stmts: Vec<skotch_mir::Stmt> = Vec::new();
             let mut extra_locals: Vec<Ty> = Vec::new();
 
-            let mut resolve_operand = |e: skotch_ast::KtExpr<'_>,
-                                   next_slot: &mut u32,
-                                   pre_stmts: &mut Vec<skotch_mir::Stmt>,
-                                   extra_locals: &mut Vec<Ty>|
-             -> Option<skotch_mir::LocalId> {
+            // resolve_operand handles Reference / literal / nested
+            // Binary. Nested Binary recurses to emit the inner
+            // BinOp into its own slot, then returns that slot.
+            fn resolve_operand_rec(
+                e: skotch_ast::KtExpr<'_>,
+                f: skotch_ast::KtFun<'_>,
+                param_names: &[String],
+                next_slot: &mut u32,
+                pre_stmts: &mut Vec<skotch_mir::Stmt>,
+                extra_locals: &mut Vec<Ty>,
+                strings: &mut Vec<String>,
+            ) -> Option<skotch_mir::LocalId> {
+                use skotch_ast::KtExpr;
+                let e = unwrap_parens(e);
                 match e {
                     KtExpr::Reference(r) => {
                         let n = r.name()?;
                         let idx = param_names.iter().position(|p| p == n)?;
                         Some(skotch_mir::LocalId(idx as u32))
+                    }
+                    KtExpr::Binary(inner_b) => {
+                        // Recurse: lower the inner binary into its own slot.
+                        let inner_lhs = resolve_operand_rec(
+                            inner_b.lhs()?,
+                            f,
+                            param_names,
+                            next_slot,
+                            pre_stmts,
+                            extra_locals,
+                            strings,
+                        )?;
+                        let inner_rhs = resolve_operand_rec(
+                            inner_b.rhs()?,
+                            f,
+                            param_names,
+                            next_slot,
+                            pre_stmts,
+                            extra_locals,
+                            strings,
+                        )?;
+                        let op_text = inner_b
+                            .operation()
+                            .map(|o| o.text())
+                            .unwrap_or_default();
+                        let lhs_ty = operand_numeric_ty(&inner_b.lhs()?, f);
+                        let rhs_ty = operand_numeric_ty(&inner_b.rhs()?, f);
+                        let ty = promote_numeric(&lhs_ty, &rhs_ty);
+                        let mir_op = match (op_text.as_str(), &ty) {
+                            ("+", Ty::Long) => Some(skotch_mir::BinOp::AddL),
+                            ("-", Ty::Long) => Some(skotch_mir::BinOp::SubL),
+                            ("*", Ty::Long) => Some(skotch_mir::BinOp::MulL),
+                            ("/", Ty::Long) => Some(skotch_mir::BinOp::DivL),
+                            ("%", Ty::Long) => Some(skotch_mir::BinOp::ModL),
+                            ("+", Ty::Double) => Some(skotch_mir::BinOp::AddD),
+                            ("-", Ty::Double) => Some(skotch_mir::BinOp::SubD),
+                            ("*", Ty::Double) => Some(skotch_mir::BinOp::MulD),
+                            ("/", Ty::Double) => Some(skotch_mir::BinOp::DivD),
+                            ("%", Ty::Double) => Some(skotch_mir::BinOp::ModD),
+                            ("+", Ty::Float) => Some(skotch_mir::BinOp::AddF),
+                            ("-", Ty::Float) => Some(skotch_mir::BinOp::SubF),
+                            ("*", Ty::Float) => Some(skotch_mir::BinOp::MulF),
+                            ("/", Ty::Float) => Some(skotch_mir::BinOp::DivF),
+                            ("%", Ty::Float) => Some(skotch_mir::BinOp::ModF),
+                            ("+", _) => Some(skotch_mir::BinOp::AddI),
+                            ("-", _) => Some(skotch_mir::BinOp::SubI),
+                            ("*", _) => Some(skotch_mir::BinOp::MulI),
+                            ("/", _) => Some(skotch_mir::BinOp::DivI),
+                            ("%", _) => Some(skotch_mir::BinOp::ModI),
+                            _ => None,
+                        }?;
+                        let slot = skotch_mir::LocalId(*next_slot);
+                        *next_slot += 1;
+                        extra_locals.push(ty);
+                        pre_stmts.push(skotch_mir::Stmt::Assign {
+                            dest: slot,
+                            value: skotch_mir::Rvalue::BinOp {
+                                op: mir_op,
+                                lhs: inner_lhs,
+                                rhs: inner_rhs,
+                            },
+                        });
+                        Some(slot)
                     }
                     other => {
                         let (k, ty) = literal_to_const(&other, strings)?;
@@ -1288,6 +1360,22 @@ fn lower_simple_body(
                         Some(slot)
                     }
                 }
+            }
+
+            let mut resolve_operand = |e: skotch_ast::KtExpr<'_>,
+                                   next_slot: &mut u32,
+                                   pre_stmts: &mut Vec<skotch_mir::Stmt>,
+                                   extra_locals: &mut Vec<Ty>|
+             -> Option<skotch_mir::LocalId> {
+                resolve_operand_rec(
+                    e,
+                    f,
+                    &param_names,
+                    next_slot,
+                    pre_stmts,
+                    extra_locals,
+                    strings,
+                )
             };
 
             let lhs_slot = b.lhs().and_then(|l| {
@@ -2308,6 +2396,35 @@ mod tests {
         let caller = &module.functions[1];
         // Unit-returning callee → Terminator is plain Return, not ReturnValue.
         assert!(matches!(caller.blocks[0].terminator, Terminator::Return));
+    }
+
+    #[test]
+    fn typed_lower_chained_binary_add() {
+        let module = lower("fun sum3(a: Int, b: Int, c: Int): Int = a + b + c", "TestKt");
+        let f = &module.functions[0];
+        let block = &f.blocks[0];
+        // 2 BinOp stmts: inner (a + b), outer (inner + c).
+        assert_eq!(block.stmts.len(), 2);
+        // First stmt: inner a + b
+        match &block.stmts[0] {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::BinOp { op, lhs, rhs } => {
+                    assert!(matches!(op, skotch_mir::BinOp::AddI));
+                    assert_eq!(lhs.0, 0); // a
+                    assert_eq!(rhs.0, 1); // b
+                }
+                _ => panic!("expected BinOp"),
+            },
+        }
+        // Second stmt: outer Binary on inner_slot + c
+        match &block.stmts[1] {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::BinOp { rhs, .. } => {
+                    assert_eq!(rhs.0, 2); // c
+                }
+                _ => panic!("expected BinOp"),
+            },
+        }
     }
 
     #[test]
