@@ -193,7 +193,7 @@ fn visibility_from_modifier_list(modlist: Option<skotch_ast::KtModifierList<'_>>
 // children of a typed wrapper without forcing the caller to know the
 // underlying SilNode layout.
 #[allow(dead_code)]
-fn ident_text<'a>(node: &'a skotch_sil::SilNode) -> Option<&'a str> {
+fn ident_text(node: &skotch_sil::SilNode) -> Option<&str> {
     use skotch_syntax::SyntaxKind;
     for c in skotch_ast::children(node) {
         if c.kind == SyntaxKind::IDENTIFIER {

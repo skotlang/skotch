@@ -1241,36 +1241,32 @@ fn was_enum_modifier(p: &Parser<'_, '_>) -> bool {
             | S::COMMA
             | S::DOT => {}
             k if is_modifier_keyword(k) || is_soft_modifier_keyword(k) => {}
-            k if matches!(
-                k,
-                S::KW_PUBLIC
-                    | S::KW_PROTECTED
-                    | S::KW_PRIVATE
-                    | S::KW_INTERNAL
-                    | S::KW_OPEN
-                    | S::KW_ABSTRACT
-                    | S::KW_FINALLY
-                    | S::KW_OVERRIDE
-                    | S::KW_INLINE
-                    | S::KW_INFIX
-                    | S::KW_OPERATOR
-                    | S::KW_VARARG
-                    | S::KW_LATEINIT
-                    | S::KW_SUSPEND
-                    | S::KW_TAILREC
-                    | S::KW_CONST
-                    | S::KW_CROSSINLINE
-                    | S::KW_NOINLINE
-                    | S::KW_REIFIED
-                    | S::KW_ACTUAL
-                    | S::KW_EXPECT
-                    | S::KW_ANNOTATION
-                    | S::KW_DATA
-                    | S::KW_SEALED
-                    | S::KW_COMPANION
-                    | S::KW_INNER
-            ) =>
-            {
+            S::KW_PUBLIC
+            | S::KW_PROTECTED
+            | S::KW_PRIVATE
+            | S::KW_INTERNAL
+            | S::KW_OPEN
+            | S::KW_ABSTRACT
+            | S::KW_FINALLY
+            | S::KW_OVERRIDE
+            | S::KW_INLINE
+            | S::KW_INFIX
+            | S::KW_OPERATOR
+            | S::KW_VARARG
+            | S::KW_LATEINIT
+            | S::KW_SUSPEND
+            | S::KW_TAILREC
+            | S::KW_CONST
+            | S::KW_CROSSINLINE
+            | S::KW_NOINLINE
+            | S::KW_REIFIED
+            | S::KW_ACTUAL
+            | S::KW_EXPECT
+            | S::KW_ANNOTATION
+            | S::KW_DATA
+            | S::KW_SEALED
+            | S::KW_COMPANION
+            | S::KW_INNER => {
                 // still inside the modifier list
             }
             _ => return false,
