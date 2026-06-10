@@ -1259,9 +1259,29 @@ fn resolve_block(
     interner: &mut Interner,
     top_level: &rustc_hash::FxHashMap<Symbol, DefId>,
 ) {
+    use skotch_ast::KtExpr;
     let saved = scope.len();
-    for stmt in block.statements() {
-        resolve_expr(&stmt, fn_idx, scope, rf, interner, top_level);
+    // Walk children directly so we can match either PROPERTY (local
+    // val/var) or KtExpr. block.statements() only yields KtExpr.
+    for c in skotch_ast::children(block.syntax()) {
+        if let Some(prop) = skotch_ast::KtProperty::cast(c) {
+            // First resolve the initializer (referring to symbols in
+            // current scope before this local enters scope), then
+            // register the local under its name.
+            if let Some(init) = prop.initializer() {
+                resolve_expr(&init, fn_idx, scope, rf, interner, top_level);
+            }
+            if let Some(name) = prop.name() {
+                let sym = interner.intern(name);
+                let local_idx = rf.locals.len() as u32;
+                rf.locals.push(sym);
+                scope.push((sym, DefId::Local(fn_idx, local_idx)));
+            }
+            continue;
+        }
+        if let Some(e) = KtExpr::cast(c) {
+            resolve_expr(&e, fn_idx, scope, rf, interner, top_level);
+        }
     }
     scope.truncate(saved);
 }
@@ -1605,6 +1625,24 @@ mod tests {
             .find(|rf| matches!(rf.def, DefId::Function(_)))
             .expect("expected ref to helper");
         assert_eq!(helper_def.def, DefId::Function(0));
+    }
+
+    #[test]
+    fn resolve_body_tracks_local_val_declaration() {
+        let p = parse("fun main() {\n  val x = 1\n  println(x)\n}");
+        let mut interner = Interner::new();
+        let r = resolve_file(p.file(), &mut interner, None);
+        let f = &r.functions[0];
+        // The local val `x` should be in f.locals.
+        let x_sym = interner.intern("x");
+        assert!(f.locals.contains(&x_sym), "expected local x; locals={:?}", f.locals);
+        // The reference `x` inside println should resolve to Local(0,0).
+        let x_ref = f
+            .body_refs
+            .iter()
+            .find(|rf| matches!(rf.def, DefId::Local(0, 0)))
+            .expect("expected ref to local x as Local(0,0)");
+        assert_eq!(x_ref.def, DefId::Local(0, 0));
     }
 
     #[test]
