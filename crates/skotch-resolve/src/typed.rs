@@ -1382,6 +1382,103 @@ fn resolve_expr(
                 resolve_expr(&el, fn_idx, scope, rf, interner, top_level);
             }
         }
+        KtExpr::While(w) => {
+            if let Some(c) = w.condition().and_then(|c| c.expression()) {
+                resolve_expr(&c, fn_idx, scope, rf, interner, top_level);
+            }
+            if let Some(b) = w.body().and_then(|b| b.expression()) {
+                resolve_expr(&b, fn_idx, scope, rf, interner, top_level);
+            }
+        }
+        KtExpr::DoWhile(w) => {
+            if let Some(b) = w.body().and_then(|b| b.expression()) {
+                resolve_expr(&b, fn_idx, scope, rf, interner, top_level);
+            }
+            if let Some(c) = w.condition().and_then(|c| c.expression()) {
+                resolve_expr(&c, fn_idx, scope, rf, interner, top_level);
+            }
+        }
+        KtExpr::For(fo) => {
+            if let Some(range) = fo.loop_range().and_then(|r| r.expression()) {
+                resolve_expr(&range, fn_idx, scope, rf, interner, top_level);
+            }
+            // Push the loop parameter into scope, then walk body.
+            let saved = scope.len();
+            if let Some(p) = fo.loop_parameter() {
+                if let Some(name) = p.name() {
+                    let sym = interner.intern(name);
+                    let local_idx = rf.locals.len() as u32;
+                    rf.locals.push(sym);
+                    scope.push((sym, DefId::Local(fn_idx, local_idx)));
+                }
+            }
+            if let Some(b) = fo.body().and_then(|b| b.expression()) {
+                resolve_expr(&b, fn_idx, scope, rf, interner, top_level);
+            }
+            scope.truncate(saved);
+        }
+        KtExpr::When(w) => {
+            if let Some(subject) = w.subject() {
+                resolve_expr(&subject, fn_idx, scope, rf, interner, top_level);
+            }
+            for entry in w.entries() {
+                // Each arm's body resolves in its own scope; smart-cast
+                // narrowing not yet propagated here.
+                let saved = scope.len();
+                if let Some(b) = entry.body() {
+                    resolve_expr(&b, fn_idx, scope, rf, interner, top_level);
+                }
+                scope.truncate(saved);
+            }
+        }
+        KtExpr::Try(t) => {
+            if let Some(b) = t.try_block() {
+                resolve_block(b, fn_idx, scope, rf, interner, top_level);
+            }
+            for catch in t.catches() {
+                let saved = scope.len();
+                if let Some(p) = catch.parameter() {
+                    if let Some(name) = p.name() {
+                        let sym = interner.intern(name);
+                        let local_idx = rf.locals.len() as u32;
+                        rf.locals.push(sym);
+                        scope.push((sym, DefId::Local(fn_idx, local_idx)));
+                    }
+                }
+                if let Some(b) = catch.body() {
+                    resolve_block(b, fn_idx, scope, rf, interner, top_level);
+                }
+                scope.truncate(saved);
+            }
+            if let Some(fin) = t.finally() {
+                if let Some(b) = fin.body() {
+                    resolve_block(b, fn_idx, scope, rf, interner, top_level);
+                }
+            }
+        }
+        KtExpr::Lambda(l) => {
+            // Lambda introduces a new scope; capture analysis is
+            // upstream of typeck — here we just walk the body to
+            // resolve references against the outer scope so undeclared
+            // identifiers still go through PossibleExternal fallback.
+            let saved = scope.len();
+            if let Some(fl) = l.function_literal() {
+                if let Some(plist) = fl.value_parameter_list() {
+                    for p in plist.parameters() {
+                        if let Some(name) = p.name() {
+                            let sym = interner.intern(name);
+                            let local_idx = rf.locals.len() as u32;
+                            rf.locals.push(sym);
+                            scope.push((sym, DefId::Local(fn_idx, local_idx)));
+                        }
+                    }
+                }
+                if let Some(b) = fl.body() {
+                    resolve_block(b, fn_idx, scope, rf, interner, top_level);
+                }
+            }
+            scope.truncate(saved);
+        }
         KtExpr::Return(r) => {
             for c in skotch_ast::children(r.syntax()) {
                 if let Some(child) = KtExpr::cast(c) {
@@ -1643,6 +1740,61 @@ mod tests {
             .find(|rf| matches!(rf.def, DefId::Local(0, 0)))
             .expect("expected ref to local x as Local(0,0)");
         assert_eq!(x_ref.def, DefId::Local(0, 0));
+    }
+
+    #[test]
+    fn body_walk_for_loop_introduces_local() {
+        let p = parse("fun main() { for (i in 0..10) { println(i) } }");
+        let mut interner = Interner::new();
+        let r = resolve_file(p.file(), &mut interner, None);
+        let f = &r.functions[0];
+        let i_sym = interner.intern("i");
+        assert!(f.locals.contains(&i_sym), "expected loop var i; locals={:?}", f.locals);
+    }
+
+    #[test]
+    fn body_walk_while_loop_resolves_condition() {
+        let p = parse("fun main() {\n  val x = 1\n  while (x > 0) { println(x) }\n}");
+        let mut interner = Interner::new();
+        let r = resolve_file(p.file(), &mut interner, None);
+        let f = &r.functions[0];
+        // Multiple references to x (in condition + body); they should all resolve to Local(0,0).
+        let local_refs = f
+            .body_refs
+            .iter()
+            .filter(|rf| matches!(rf.def, DefId::Local(0, 0)))
+            .count();
+        assert!(local_refs >= 2, "expected ≥2 refs to local x; got {local_refs}");
+    }
+
+    #[test]
+    fn body_walk_when_arm() {
+        let p = parse(
+            "fun main() {\n  val x = 1\n  when (x) {\n    1 -> println(\"one\")\n    else -> println(\"other\")\n  }\n}",
+        );
+        let mut interner = Interner::new();
+        let r = resolve_file(p.file(), &mut interner, None);
+        let f = &r.functions[0];
+        // Subject `x` should resolve to Local(0,0).
+        assert!(
+            f.body_refs
+                .iter()
+                .any(|rf| matches!(rf.def, DefId::Local(0, 0))),
+            "expected ref to local x as subject; refs={:?}",
+            f.body_refs
+        );
+    }
+
+    #[test]
+    fn body_walk_try_catch_introduces_exception_var() {
+        let p = parse(
+            "fun main() {\n  try { println(\"hi\") } catch (e: Exception) { println(e) }\n}",
+        );
+        let mut interner = Interner::new();
+        let r = resolve_file(p.file(), &mut interner, None);
+        let f = &r.functions[0];
+        let e_sym = interner.intern("e");
+        assert!(f.locals.contains(&e_sym), "expected exception var e; locals={:?}", f.locals);
     }
 
     #[test]

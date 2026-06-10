@@ -1736,6 +1736,148 @@ impl<'a> KtPropertyAccessor<'a> {
     }
 }
 
+// ── Loop / when / try shapes ────────────────────────────────────────
+
+impl<'a> KtWhile<'a> {
+    pub fn condition(self) -> Option<KtCondition<'a>> {
+        first_typed_child(self.syntax())
+    }
+    pub fn body(self) -> Option<KtBody<'a>> {
+        first_typed_child(self.syntax())
+    }
+}
+
+impl<'a> KtDoWhile<'a> {
+    pub fn condition(self) -> Option<KtCondition<'a>> {
+        first_typed_child(self.syntax())
+    }
+    pub fn body(self) -> Option<KtBody<'a>> {
+        first_typed_child(self.syntax())
+    }
+}
+
+impl<'a> KtFor<'a> {
+    /// The loop parameter (`for (i in ...) { ... }` → `i`).
+    pub fn loop_parameter(self) -> Option<KtValueParameter<'a>> {
+        first_typed_child(self.syntax())
+    }
+    pub fn loop_range(self) -> Option<KtLoopRange<'a>> {
+        first_typed_child(self.syntax())
+    }
+    pub fn body(self) -> Option<KtBody<'a>> {
+        first_typed_child(self.syntax())
+    }
+    pub fn destructuring(self) -> Option<KtDestructuringDeclaration<'a>> {
+        first_typed_child(self.syntax())
+    }
+}
+
+impl<'a> KtBody<'a> {
+    pub fn expression(self) -> Option<KtExpr<'a>> {
+        children(self.syntax()).iter().find_map(KtExpr::cast)
+    }
+}
+
+impl<'a> KtLoopRange<'a> {
+    pub fn expression(self) -> Option<KtExpr<'a>> {
+        children(self.syntax()).iter().find_map(KtExpr::cast)
+    }
+}
+
+impl<'a> KtWhen<'a> {
+    /// Optional subject (`when (x)` → expression; `when {}` → None).
+    pub fn subject(self) -> Option<KtExpr<'a>> {
+        children(self.syntax()).iter().find_map(KtExpr::cast)
+    }
+    pub fn entries(self) -> impl Iterator<Item = KtWhenEntry<'a>> + 'a {
+        typed_children(self.syntax())
+    }
+}
+
+impl<'a> KtWhenEntry<'a> {
+    /// Each branch may have multiple conditions (`1, 2 -> ...`).
+    pub fn conditions(self) -> Vec<&'a SilNode> {
+        children(self.syntax())
+            .iter()
+            .filter(|c| {
+                matches!(
+                    c.kind,
+                    SyntaxKind::WHEN_CONDITION_IN_RANGE
+                        | SyntaxKind::WHEN_CONDITION_IS_PATTERN
+                        | SyntaxKind::WHEN_CONDITION_WITH_EXPRESSION
+                )
+            })
+            .collect()
+    }
+    pub fn body(self) -> Option<KtExpr<'a>> {
+        // The body comes after the `->` arrow token.
+        let mut after_arrow = false;
+        for c in children(self.syntax()) {
+            if c.kind == SyntaxKind::ARROW {
+                after_arrow = true;
+                continue;
+            }
+            if after_arrow {
+                if let Some(e) = KtExpr::cast(c) {
+                    return Some(e);
+                }
+            }
+        }
+        None
+    }
+    pub fn is_else(self) -> bool {
+        children(self.syntax())
+            .iter()
+            .any(|c| c.kind == SyntaxKind::KW_ELSE)
+    }
+}
+
+impl<'a> KtTry<'a> {
+    pub fn try_block(self) -> Option<KtBlock<'a>> {
+        first_typed_child(self.syntax())
+    }
+    pub fn catches(self) -> impl Iterator<Item = KtCatch<'a>> + 'a {
+        typed_children(self.syntax())
+    }
+    pub fn finally(self) -> Option<KtFinally<'a>> {
+        first_typed_child(self.syntax())
+    }
+}
+
+impl<'a> KtCatch<'a> {
+    /// The `catch (e: Exception)` parameter — wrapped in a
+    /// VALUE_PARAMETER_LIST in the SIL shape (matches Kotlin's
+    /// concrete-syntax requirement of parens around the catch var).
+    pub fn parameter(self) -> Option<KtValueParameter<'a>> {
+        let plist = first_typed_child::<KtValueParameterList>(self.syntax())?;
+        plist.parameters().next()
+    }
+    pub fn body(self) -> Option<KtBlock<'a>> {
+        first_typed_child(self.syntax())
+    }
+}
+
+impl<'a> KtFinally<'a> {
+    pub fn body(self) -> Option<KtBlock<'a>> {
+        first_typed_child(self.syntax())
+    }
+}
+
+impl<'a> KtLambdaExpression<'a> {
+    pub fn function_literal(self) -> Option<KtFunctionLiteral<'a>> {
+        first_typed_child(self.syntax())
+    }
+}
+
+impl<'a> KtFunctionLiteral<'a> {
+    pub fn value_parameter_list(self) -> Option<KtValueParameterList<'a>> {
+        first_typed_child(self.syntax())
+    }
+    pub fn body(self) -> Option<KtBlock<'a>> {
+        first_typed_child(self.syntax())
+    }
+}
+
 // ── KtImportDirective helpers ───────────────────────────────────────
 
 impl<'a> KtImportDirective<'a> {
@@ -1920,6 +2062,16 @@ mod tests {
     #[ignore]
     fn debug_dump_nullable() {
         let parsed = crate::parse("t.kt", "fun f(x: Int?) {}");
+        dump(parsed.file().syntax(), 0);
+    }
+
+    #[test]
+    #[ignore]
+    fn debug_dump_try_catch() {
+        let parsed = crate::parse(
+            "t.kt",
+            "fun main() { try { println(\"hi\") } catch (e: Exception) { println(e) } }",
+        );
         dump(parsed.file().syntax(), 0);
     }
 
