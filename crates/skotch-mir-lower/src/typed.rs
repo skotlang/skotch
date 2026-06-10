@@ -437,8 +437,29 @@ fn lower_simple_body(
         )
     };
 
-    let Some(body_expr) = f.body_expression() else {
-        return make_placeholder();
+    // First try expression-bodied form; if absent, look at the
+    // block body for a single `return <literal>` statement.
+    let body_expr = match f.body_expression() {
+        Some(e) => e,
+        None => {
+            let Some(block) = f.body_block() else {
+                return make_placeholder();
+            };
+            let mut returned: Option<KtExpr<'_>> = None;
+            for stmt in block.statements() {
+                if let KtExpr::Return(r) = stmt {
+                    for c in skotch_ast::children(r.syntax()) {
+                        if let Some(e) = KtExpr::cast(c) {
+                            returned = Some(e);
+                        }
+                    }
+                }
+            }
+            match returned {
+                Some(e) => e,
+                None => return make_placeholder(),
+            }
+        }
     };
     let (c, ty) = match &body_expr {
         KtExpr::Integer(_) => {
@@ -1261,13 +1282,28 @@ mod tests {
     }
 
     #[test]
-    fn typed_lower_block_bodied_fn_still_empty_return() {
-        // Block body — currently still emits an empty Return.
+    fn typed_lower_block_bodied_fn_with_no_return_emits_empty_return() {
+        // Block body with no return — still emits empty Return.
         let module = lower("fun main() { }", "TestKt");
         let f = &module.functions[0];
         assert_eq!(f.blocks.len(), 1);
         assert!(f.blocks[0].stmts.is_empty());
         assert!(matches!(f.blocks[0].terminator, Terminator::Return));
+    }
+
+    #[test]
+    fn typed_lower_block_bodied_fn_with_literal_return() {
+        let module = lower("fun answer(): Int { return 7 }", "TestKt");
+        let f = &module.functions[0];
+        assert_eq!(f.return_ty, Ty::Int);
+        let block = &f.blocks[0];
+        assert_eq!(block.stmts.len(), 1);
+        match &block.stmts[0] {
+            skotch_mir::Stmt::Assign { value, .. } => {
+                assert!(matches!(value, skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(7))));
+            }
+        }
+        assert!(matches!(block.terminator, Terminator::ReturnValue(_)));
     }
 
     #[test]
