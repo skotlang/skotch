@@ -4,88 +4,118 @@
 
 **Done:**
 - [x] SIL grammar parses every fixture input (1086/1086, was 1011/1086).
-- [x] `skotch-ast` crate: typed wrapper types over `SilNode`, ~80
+- [x] `skotch-ast` crate: typed wrapper types over `SilNode`, ~110
       composite kinds + token shims, `KtDecl` / `KtExpr` enum unions.
 - [x] `skotch_ast::parse(file, source) -> ParsedFile` entry point.
 - [x] `skotch_parser::parse_to_sil(file, source) -> SilTree` bridge.
-- [x] **`typed` module scaffolds** in `skotch-resolve`,
-      `skotch-typeck`, `skotch-mir-lower`, `skotch-driver` —
-      end-to-end typed-AST compilation pipeline (parse → resolve →
-      typeck → lower) plumbed and tested. Each scaffold is the
-      migration target; consumer migration fills in the body one
-      composite kind at a time.
+- [x] **Comprehensive accessor surface** on typed AST: visibility,
+      modifiers (data/open/abstract/sealed/inner/suspend/inline/operator/
+      infix/tailrec/lateinit/const), annotations (with short-name
+      resolution and use-site target), extension receivers, type
+      references (KtUserType, KtFunctionType, KtNullableType, with
+      qualifier/dotted-name walking and REFERENCE_EXPRESSION-aware
+      ident extraction), supertype list entries (with SuperTypeEntry
+      union covering plain/call/delegated forms).
+- [x] **SIL emits a single `CLASS` composite** for `class`, `interface`
+      and `enum class`. `KtClass` / `KtInterface` / `KtEnumClass` casts
+      branch on the presence of `KW_INTERFACE` or `KW_ENUM` modifier.
+- [x] `skotch_resolve::typed` — **feature-parity Pass 1 (gather)**:
+      TypeRef → JVM descriptor / Ty with typealias substitution +
+      Kotlin-to-Java collection erasure; top-level fun/val gathering
+      with descriptor / param_tys / return_ty / receiver / is_extension
+      / has_default; class/interface/object/enum gathering with full
+      ExternalClassDecl shape (fields, ctor_params, methods,
+      secondary_ctors, companion_methods, has_companion, super_class,
+      interfaces, is_open/abstract/inner, enum_entries, annotations,
+      has_type_params, has_init_blocks); nested Outer\$Inner JVM names;
+      per-class imports overlay; cross-file same-package decl visibility
+      and typealias side-table (`AliasTarget` carrying a pinned SilNode
+      pointer for re-walking).
+- [x] `skotch_resolve::typed::resolve_file` — top-level decl
+      registration, stdlib intrinsic threading, ExternalPackage cross-
+      file entries, per-function ResolvedFunction with parameter symbols.
+- [x] **15 typed-resolve unit tests + 13 legacy-vs-typed parity tests**
+      covering top-level fun descriptors, primary ctor fields,
+      data-class/enum/interface/object/typealias kinds, extension
+      receivers, nullable descriptor erasure, package prefix on JVM
+      name, nested Outer\$Inner class naming, cross-file same-package
+      class import threading.
+- [x] `skotch_typeck::typed::type_check` — **Pass 1 signature collection
+      with full Ty conversion**: top-level fun param/return Ty,
+      top-level val Ty, typealias-to-Function substitution,
+      expression-body literal return inference.
+- [x] **8 typed-typeck unit tests + 5 legacy-vs-typed parity tests**
+      covering fun int arithmetic, fun string param, top-val string,
+      nullable param/return, unit return.
+- [x] `skotch_mir_lower::typed::lower_file` (scaffold only).
+- [x] `skotch_driver::typed::compile_source` (scaffold, wires the
+      typed pipeline parse→resolve→typeck→lower).
 
-**Next concrete migration steps** (each maps to a specific
-`typed` module body):
+**Next concrete migration steps** (per crate, dependency-order):
 
-1. `skotch_resolve::typed::gather_declarations` — currently handles
-   top-level `fun` + `val`. Add `KtClass`/`KtInterface`/`KtObject`/
-   `KtEnumClass`/`KtTypeAlias` arms. Each arm builds the same
-   `ExternalFunDecl`/`ExternalClassDecl`/etc. record as the legacy
-   pattern-match arm at `crate::gather_declarations`. Port descriptor
-   computation (`build_descriptor_with_aliases`) to walk typed
-   `KtValueParameter` / `KtTypeReference` children.
+1. **`skotch_resolve::typed` — body-walk Resolver impl**
+   - The current `resolve_file` registers top-level decls but does
+     not walk function bodies to track parameter / local / when-arm
+     smart-cast scopes.
+   - The legacy `Resolver` struct (`crate::Resolver` impl) is the
+     recursion target; the typed body walk needs `KtBlock`,
+     `KtExpr::Reference`, `KtIsExpression`, `KtWhen` accessors.
 
-2. `skotch_resolve::typed::resolve_file` — currently registers
-   top-level fun/val. Add body-level resolution: parameter scopes,
-   local val/var scopes, when-arm `is`/`as` smart-cast scopes.
-   Match the recursion structure in the legacy `Resolver` impl.
+2. **`skotch_typeck::typed` — Pass 2 body inference**
+   - Top-level fun/val signatures land via Pass 1 (done). Pass 2 walks
+     each function body bidirectionally; each `KtExpr` variant maps
+     to one inference rule.
+   - Class/interface/enum/object member signatures need to land at
+     gather time so member-method calls resolve cross-file.
+   - `when` exhaustiveness over enum and sealed subjects.
+   - `requireNotNull` / `checkNotNull` smart-cast narrowing.
 
-3. `skotch_typeck::typed::type_check` — currently returns empty.
-   Fill in the two-pass bidirectional checker: pass 1 collects
-   signatures, pass 2 walks each function body. Each `KtExpr`
-   variant maps to one inference rule from the legacy
-   `infer_expr` switch.
+3. **`skotch_mir_lower::typed::lower_file`** — the dominant cost.
+   - Legacy `lower_file` is 27.7k LOC across 22 top-level `lower_*` /
+     `emit_*` functions (lower_function, lower_stmt, lower_expr,
+     lower_val_stmt, lower_template_part, lower_enum, lower_object,
+     lower_class, lower_interface).
+   - 1107 `Expr::*` / `Stmt::*` / `Decl::*` pattern arms to rewrite
+     onto `KtExpr` / `KtBlock` / typed-AST equivalents.
+   - Strategy: port one decl kind at a time (top-level fun, then
+     top-level val, then if/when/for/while, then classes, then
+     coroutines etc.) with golden tests covering each stage.
 
-4. `skotch_mir_lower::typed::lower_file` — currently returns
-   wrapper-only `MirModule`. The legacy `lower_file` is 27k lines;
-   port one decl kind at a time, with golden tests covering each
-   stage. Start with: top-level `fun`, top-level `val`, basic
-   `if`/`when`/`for`/`while`, string templates, then classes,
-   inheritance, generics, coroutines, etc.
+4. **`skotch_driver::typed::compile_source`** — already wires the
+   typed pipeline parse→resolve→typeck→lower. Cuts over to the
+   legacy entry point becoming a shim once #1–#3 reach parity.
 
-5. `skotch_driver::typed::compile_source` — already wires the
-   typed pipeline; once the underlying scaffolds gain coverage, the
-   legacy `crate::compile_source` becomes a thin shim around it.
+5. **`skotch-lsp` and `skotch-repl`** — direct AST consumers. Each
+   has ~10 pattern-match sites on `Decl::Fun/Class/Val`. Mechanical
+   translation to typed wrappers.
+
+6. **Tests + golden refresh.** ~7 backend test modules and ~30 unit
+   tests hard-code `skotch_parser::parse_file` + Box AST literals.
+   Rewrite to use `skotch_ast::parse`. Then regenerate all ~1313
+   fixture goldens (jvm + dex + llvm + klib targets).
+
+7. **Delete legacy.** `crates/skotch-syntax/src/ast.rs` (744 LOC) +
+   `crates/skotch-parser/` (5606 LOC). Remove from workspace
+   Cargo.toml; `skotch-syntax` keeps only the token / visibility /
+   operator enums that `skotch-types` and `skotch-ast` reference.
 
 **Coverage gates** (run after each crate's body fills in):
 - `cargo test -p <crate>` for the crate's own tests.
+- `cargo test -p skotch-resolve --test typed_parity` for resolve.
+- `cargo test -p skotch-typeck --test typed_parity` for typeck.
 - `cargo test --package skotch-driver --test fixture_compare` for
   the bytecode goldens.
 - `cargo run -p xtask -- gen-fixtures --target {jvm,dex} --skotch-only`
   to refresh the goldens.
-
-**Not yet done — these are the per-crate migration steps:**
-
-| Crate              | LOC     | Status            | Notes |
-|--------------------|---------|-------------------|-------|
-| `skotch-parser`    |  5,606  | retain for now    | Replace with SIL-driven wrapper once consumers are migrated. |
-| `skotch-resolve`   |  2,057  | uses legacy AST   | ~12 AST types used; needs `Decl`, `Expr`, `Stmt`, `Block`, `Type*` rewritten on typed wrappers. |
-| `skotch-typeck`    |  2,410  | uses legacy AST   | Similar surface to resolve. |
-| `skotch-hir`       |  *small*  | uses legacy AST   | |
-| `skotch-mir-lower` | 27,665  | uses legacy AST   | The big one — lowering matches every `Expr`/`Stmt` variant. |
-| `skotch-backend-*` |  ~5,000 | uses legacy AST   | 5 backends, mostly call into mir-lower. |
-| `skotch-driver`    |    ~500 | uses legacy AST   | Compile-source orchestration. |
-| `skotch-db`        |     81  | uses legacy AST indirectly | Salsa-tracked compile pipeline. |
-| `skotch-lsp`       |  ~few k | uses legacy AST   | LSP server reads parsed files. |
-| `skotch-cli`       |   ~few k | uses legacy AST   | CLI orchestration. |
-| `skotch-repl`      |   ~few k | uses legacy AST   | REPL session. |
-
-**Estimated remaining effort:** ~30-60 hours of focused engineering for
-the full migration. The per-crate work is mostly mechanical (replace
-`match expr { Expr::Foo(a, b, c) => ... }` with `if let Some(call) =
-KtCallExpression::cast(node) { let args = call.value_argument_list()
-... }`), but every consumer needs to be rewritten and every test re-run.
 
 ## Suggested order
 
 Bottom-up by dependency: smaller, leafier crates first so the API
 shape stabilizes before mir-lower picks it up.
 
-1. **`skotch-resolve`** — relatively self-contained, uses `KtFile`,
-   `Decl`, `FunDecl`, `ClassDecl`, `ValDecl`, `Block`, `Expr`, `Stmt`,
-   `Param`, `ConstructorParam`, `Annotation`, `TypeRef`, `Visibility`.
+1. **`skotch-resolve`** — relatively self-contained. **Pass 1 done.**
 2. **`skotch-typeck`** — depends on resolve + the same AST types.
+   **Pass 1 done; Pass 2 body inference pending.**
 3. **`skotch-hir`** — typically a thin layer over the AST.
 4. **`skotch-mir-lower`** — the heavyweight. Lower-level functions
    pattern-match on every expression form. ~27k lines; budget at
@@ -151,14 +181,15 @@ recursion becomes traversal through `children()` / typed accessors.
    (Option-returning accessor on typed wrapper).
 6. **Spans:** `decl.span` → `decl.span()` (same).
 7. **Run the crate's tests:** confirm behavior matches.
+8. **Add parity tests** in `tests/typed_parity.rs` that fan both
+   pipelines through the same source and assert shape equality.
 
 ## Risk and mitigations
 
 - **Risk:** Migrating mir-lower partially breaks every backend test.
-  - **Mitigation:** Migrate mir-lower in one go with all tests
-    disabled until complete, OR introduce a thin compatibility shim
-    that converts `KtExpr` to the legacy `Expr` enum for backwards
-    compat during migration.
+  - **Mitigation:** Port one decl kind at a time with parity tests
+    against fixtures. Keep both legacy and typed entry points live
+    until full parity is verified end-to-end.
 - **Risk:** Fixture goldens drift on bytecode level if the migration
   introduces small lowering differences.
   - **Mitigation:** Run `cargo xtask gen-fixtures --target jvm/dex`
@@ -178,3 +209,35 @@ recursion becomes traversal through `children()` / typed accessors.
 - Should we add a `SilNode → Box<Expr>` adapter for piecewise
   migration? Not implemented; recommend full per-crate cutover
   instead so we don't grow a long-lived bridge layer.
+
+## Session log
+
+### 2026-06-10 (session 4)
+
+- Added 962 LOC of typed AST accessors (visibility, modifiers,
+  annotations, type-ref/user-type/function-type/nullable, supertype
+  entries, primary/secondary constructor surface, type parameters,
+  property accessors, import-directive name parts).
+- Fixed `KtClass` / `KtInterface` / `KtEnumClass` cast routing — SIL
+  emits a single `CLASS` composite; the typed wrappers branch on
+  `KW_INTERFACE` and `KW_ENUM` (modifier list) presence.
+- Fixed `KtUserType::name` to dig through `REFERENCE_EXPRESSION` for
+  the IDENTIFIER token (SIL stores the ident as a nested ref-expr,
+  not as a direct child).
+- Fixed `KtNullableType::inner_*` to surface `KtUserType` /
+  `KtFunctionType` directly (SIL omits the inner TYPE_REFERENCE
+  wrapper after `?`).
+- Fixed `KtPackageDirective::name` to walk
+  `DOT_QUALIFIED_EXPRESSION → REFERENCE_EXPRESSION → IDENTIFIER` for
+  dotted package names.
+- Ported `skotch_resolve::typed` to feature-parity Pass 1 over the
+  typed AST (~1180 LOC of new code). Added 15 unit tests + 13 parity
+  tests against the legacy `gather_declarations`.
+- Fixed enum super-class JVM erasure: typed gather now emits
+  `Some("java/lang/Enum")` (kotlinc-erased form) to match legacy.
+- Expanded `skotch_typeck::typed` to Pass 1 with full Ty conversion
+  (was Ty::Any placeholder). 8 unit tests + 5 parity tests.
+
+**Remaining (multi-session):** body-walk in resolve; Pass 2 body
+inference in typeck; full mir-lower port (~27k LOC); driver cutover;
+LSP/REPL migration; legacy AST deletion.
