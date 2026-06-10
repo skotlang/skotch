@@ -22,10 +22,10 @@
 
 use crate::{
     DefId, ExternalClassDecl, ExternalClassKind, ExternalFunDecl, ExternalValDecl,
-    PackageSymbolTable, ResolvedFile,
+    PackageSymbolTable, ResolvedFile, ResolvedFunction,
 };
 use skotch_ast::{AstNode, AstToken, KtDecl, KtFile, KtIdentifier};
-use skotch_intern::Interner;
+use skotch_intern::{Interner, Symbol};
 use skotch_syntax::Visibility;
 use skotch_types::Ty;
 
@@ -171,14 +171,23 @@ pub fn gather_declarations<'a>(
 /// Resolve identifier references in a single file. Typed-AST input
 /// counterpart of [`crate::resolve_file`].
 ///
-/// Minimal implementation: builds a [`ResolvedFile`] with each
-/// top-level `fun`/`val` registered as the corresponding [`DefId`].
-/// Body-level resolution (parameter references, local vals, inner
-/// scopes, when-arm scopes) is a follow-up migration step.
+/// Coverage:
+/// - Top-level `fun`/`val` registered as [`DefId::Function`] /
+///   [`DefId::TopLevelVal`].
+/// - `println` / `print` and stdlib top-level intrinsics
+///   registered as [`DefId::PrintlnIntrinsic`].
+/// - Per-function `ResolvedFunction` records carry parameter
+///   symbols (from `KtValueParameterList`) and the function name
+///   symbol.
+///
+/// Not yet covered (next migration step):
+/// - Body-walk that resolves identifier references against the
+///   function-local scope (params, locals, captured outer scope).
+/// - `when` arm smart-cast scopes.
 pub fn resolve_file(
     file: KtFile<'_>,
     interner: &mut Interner,
-    _package_symbols: Option<&PackageSymbolTable>,
+    package_symbols: Option<&PackageSymbolTable>,
 ) -> ResolvedFile {
     let mut out = ResolvedFile::default();
 
@@ -187,6 +196,14 @@ pub fn resolve_file(
     let print_sym = interner.intern("print");
     out.top_level.insert(print_sym, DefId::PrintlnIntrinsic);
 
+    // Stdlib top-level intrinsics (matches the canonical list in
+    // skotch_types::intrinsics::STDLIB_TOP_LEVEL_NAMES).
+    for name in skotch_types::intrinsics::STDLIB_TOP_LEVEL_NAMES {
+        let sym = interner.intern(name);
+        out.top_level.insert(sym, DefId::PrintlnIntrinsic);
+    }
+
+    // Pass 1: register every top-level name with a DefId.
     for (i, decl) in file.decls().enumerate() {
         match decl {
             KtDecl::Fun(f) => {
@@ -201,7 +218,82 @@ pub fn resolve_file(
                     out.top_level.insert(sym, DefId::TopLevelVal(i as u32));
                 }
             }
-            _ => {}
+            KtDecl::Class(c) => {
+                if let Some(name) = c.name() {
+                    let sym = interner.intern(name);
+                    out.top_level.insert(sym, DefId::Function(i as u32));
+                }
+            }
+            KtDecl::Object(o) => {
+                if let Some(name) = ident_text_from_decl(o.syntax()) {
+                    let sym = interner.intern(name);
+                    out.top_level.insert(sym, DefId::PossibleExternal(sym));
+                }
+            }
+            KtDecl::EnumClass(e) => {
+                if let Some(name) = ident_text_from_decl(e.syntax()) {
+                    let sym = interner.intern(name);
+                    out.top_level.insert(sym, DefId::PossibleExternal(sym));
+                }
+            }
+            KtDecl::Interface(i_) => {
+                if let Some(name) = ident_text_from_decl(i_.syntax()) {
+                    let sym = interner.intern(name);
+                    out.top_level.insert(sym, DefId::PossibleExternal(sym));
+                }
+            }
+            KtDecl::TypeAlias(_) => {}
+        }
+    }
+
+    // Cross-file declarations from the PackageSymbolTable, but local
+    // names take priority (or_insert).
+    if let Some(pkg) = package_symbols {
+        for name in pkg.functions.keys() {
+            let sym = interner.intern(name);
+            out.top_level
+                .entry(sym)
+                .or_insert(DefId::ExternalPackage(sym));
+        }
+        for name in pkg.vals.keys() {
+            let sym = interner.intern(name);
+            out.top_level
+                .entry(sym)
+                .or_insert(DefId::ExternalPackage(sym));
+        }
+        for name in pkg.classes.keys() {
+            let sym = interner.intern(name);
+            out.top_level
+                .entry(sym)
+                .or_insert(DefId::ExternalPackage(sym));
+        }
+    }
+
+    // Pass 2: build per-function `ResolvedFunction` records with
+    // parameter symbols. Body-walk left for the follow-up migration
+    // step.
+    for decl in file.decls() {
+        if let KtDecl::Fun(f) = decl {
+            let name_sym = f.name().map(|n| interner.intern(n)).unwrap_or_else(|| {
+                // Synthetic name when the parser couldn't surface one —
+                // mir-lower handles the fallback via the function index.
+                interner.intern("<anonymous>")
+            });
+            let mut params: Vec<Symbol> = Vec::new();
+            if let Some(plist) = f.value_parameter_list() {
+                for p in skotch_ast::typed_children::<skotch_ast::KtValueParameter>(plist.syntax())
+                {
+                    if let Some(pname) = p.name() {
+                        params.push(interner.intern(pname));
+                    }
+                }
+            }
+            out.functions.push(ResolvedFunction {
+                name: name_sym,
+                params,
+                locals: Vec::new(),
+                body_refs: Vec::new(),
+            });
         }
     }
 
@@ -326,6 +418,32 @@ mod tests {
         let b = interner.intern("b");
         assert_eq!(r.top_level.get(&a), Some(&DefId::Function(0)));
         assert_eq!(r.top_level.get(&b), Some(&DefId::Function(1)));
+    }
+
+    #[test]
+    fn typed_resolve_collects_param_symbols() {
+        let parsed = skotch_ast::parse("test.kt", "fun add(a: Int, b: Int): Int = a + b");
+        let mut interner = Interner::new();
+        let r = resolve_file(parsed.file(), &mut interner, None);
+        assert_eq!(r.functions.len(), 1);
+        let f = &r.functions[0];
+        assert_eq!(f.params.len(), 2);
+        assert_eq!(interner.resolve(f.params[0]), "a");
+        assert_eq!(interner.resolve(f.params[1]), "b");
+    }
+
+    #[test]
+    fn typed_resolve_threads_pkg_symbols() {
+        let parsed = skotch_ast::parse("test.kt", "fun main() { greet() }");
+        let mut interner = Interner::new();
+        let mut pkg = PackageSymbolTable::default();
+        pkg.functions.insert("greet".to_string(), Vec::new());
+        let r = resolve_file(parsed.file(), &mut interner, Some(&pkg));
+        let greet = interner.intern("greet");
+        match r.top_level.get(&greet) {
+            Some(DefId::ExternalPackage(s)) => assert_eq!(interner.resolve(*s), "greet"),
+            other => panic!("expected ExternalPackage(greet), got {:?}", other),
+        }
     }
 
     #[test]
