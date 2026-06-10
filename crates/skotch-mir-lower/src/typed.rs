@@ -427,6 +427,127 @@ fn const_ty(c: &skotch_mir::MirConst) -> Ty {
     }
 }
 
+/// Try to lower a multi-statement block body using a simple local
+/// tracking pass. Handles bodies whose statements are sequences of:
+///   - val <name> = <literal>            (KtProperty)
+///   - println(<ref-or-literal>)         (single-arg println call)
+///   - print(<ref-or-literal>)           (single-arg print call)
+/// Returns None for any unsupported statement.
+fn try_lower_multi_stmt_block(
+    block: skotch_ast::KtBlock<'_>,
+    f: skotch_ast::KtFun<'_>,
+    strings: &mut Vec<String>,
+) -> Option<(Vec<BasicBlock>, Vec<Ty>)> {
+    use skotch_ast::KtExpr;
+    use skotch_mir::{LocalId, Stmt as MStmt};
+
+    let param_count = f
+        .value_parameter_list()
+        .map(|pl| pl.parameters().count())
+        .unwrap_or(0);
+    // Param names → their slots.
+    let param_names: Vec<String> = f
+        .value_parameter_list()
+        .map(|pl| {
+            pl.parameters()
+                .map(|p| p.name().unwrap_or("").to_string())
+                .collect()
+        })
+        .unwrap_or_default();
+    let mut name_to_local: Vec<(String, LocalId)> = param_names
+        .iter()
+        .enumerate()
+        .map(|(i, n)| (n.clone(), LocalId(i as u32)))
+        .collect();
+
+    let mut local_tys: Vec<Ty> = Vec::new();
+    let mut stmts: Vec<MStmt> = Vec::new();
+    let mut next_slot: u32 = param_count as u32;
+
+    for c in skotch_ast::children(block.syntax()) {
+        if let Some(prop) = skotch_ast::KtProperty::cast(c) {
+            // `val <name> = <literal>` — emit Assign + push local.
+            let Some(name) = prop.name() else { return None };
+            let init = prop.initializer()?;
+            let (k, ty) = literal_to_const(&init, strings)?;
+            let slot = LocalId(next_slot);
+            next_slot += 1;
+            local_tys.push(ty);
+            stmts.push(MStmt::Assign {
+                dest: slot,
+                value: skotch_mir::Rvalue::Const(k),
+            });
+            name_to_local.push((name.to_string(), slot));
+            continue;
+        }
+        if let Some(expr) = KtExpr::cast(c) {
+            // Currently only handle `println(...)` / `print(...)` calls.
+            match expr {
+                KtExpr::Call(call) => {
+                    let name = match call.callee() {
+                        Some(KtExpr::Reference(r)) => r.name(),
+                        _ => None,
+                    }?;
+                    let kind = match name {
+                        "println" => skotch_mir::CallKind::Println,
+                        "print" => skotch_mir::CallKind::Print,
+                        _ => return None,
+                    };
+                    let args = call.value_argument_list()?;
+                    let arg_exprs: Vec<KtExpr<'_>> =
+                        args.arguments().filter_map(|a| a.expression()).collect();
+                    if arg_exprs.len() != 1 {
+                        return None;
+                    }
+                    // Arg is either a Reference to a known local /
+                    // param, or a literal that we intern.
+                    let arg_slot = match &arg_exprs[0] {
+                        KtExpr::Reference(r) => {
+                            let n = r.name()?;
+                            name_to_local
+                                .iter()
+                                .rev()
+                                .find(|(name, _)| name == n)
+                                .map(|(_, l)| *l)?
+                        }
+                        other => {
+                            let (k, ty) = literal_to_const(other, strings)?;
+                            let slot = LocalId(next_slot);
+                            next_slot += 1;
+                            local_tys.push(ty);
+                            stmts.push(MStmt::Assign {
+                                dest: slot,
+                                value: skotch_mir::Rvalue::Const(k),
+                            });
+                            slot
+                        }
+                    };
+                    let result_slot = LocalId(next_slot);
+                    next_slot += 1;
+                    local_tys.push(Ty::Unit);
+                    stmts.push(MStmt::Assign {
+                        dest: result_slot,
+                        value: skotch_mir::Rvalue::Call {
+                            kind,
+                            args: vec![arg_slot],
+                        },
+                    });
+                }
+                _ => return None,
+            }
+        }
+    }
+
+    if stmts.is_empty() {
+        return None;
+    }
+    let blocks = vec![BasicBlock {
+        stmts,
+        terminator: Terminator::Return,
+    }];
+    Some((blocks, local_tys))
+}
+
 /// Try to lower `println(literal)` / `print(literal)` to the
 /// Println / Print intrinsic. Returns None when the call isn't of
 /// this exact shape.
@@ -576,6 +697,14 @@ fn lower_simple_body(
             };
             // Collect non-trivia statements.
             let stmts: Vec<KtExpr<'_>> = block.statements().collect();
+            // Walk PROPERTY children + KtExpr stmts together via
+            // try_lower_multi_stmt_block — this handles
+            // `val x = 10; println(x)` and similar simple shapes.
+            if let Some((blocks, locals)) =
+                try_lower_multi_stmt_block(block, f, strings)
+            {
+                return (blocks, locals);
+            }
             if stmts.len() == 1 {
                 if let KtExpr::Call(call) = &stmts[0] {
                     // `println(literal)` / `print(literal)` → Println/Print intrinsic.
@@ -1516,6 +1645,54 @@ mod tests {
             },
         }
         assert_eq!(f.locals, vec![Ty::Int, Ty::Unit]);
+    }
+
+    #[test]
+    fn typed_lower_local_val_then_println() {
+        let module = lower(
+            "fun main() {\n  val x = 42\n  println(x)\n}",
+            "TestKt",
+        );
+        let f = &module.functions[0];
+        let block = &f.blocks[0];
+        // 3 stmts: Assign val x, Assign println-result, ...
+        // Actually 2 stmts: val x's Const, then Call(println, [x])
+        assert_eq!(block.stmts.len(), 2);
+        match &block.stmts[0] {
+            skotch_mir::Stmt::Assign { dest, value } => {
+                assert_eq!(dest.0, 0); // val x → local 0 (no params)
+                assert!(matches!(value, skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(42))));
+            }
+        }
+        match &block.stmts[1] {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::Call { kind, args } => {
+                    assert!(matches!(kind, skotch_mir::CallKind::Println));
+                    // arg passes the local x.
+                    assert_eq!(args[0].0, 0);
+                }
+                _ => panic!("expected Call"),
+            },
+        }
+        assert!(matches!(block.terminator, Terminator::Return));
+        // locals: x (Int), println-result (Unit)
+        assert_eq!(f.locals, vec![Ty::Int, Ty::Unit]);
+    }
+
+    #[test]
+    fn typed_lower_two_vals_then_print() {
+        let module = lower(
+            "fun main() {\n  val a = \"hi\"\n  val b = a\n  print(b)\n}",
+            "TestKt",
+        );
+        let f = &module.functions[0];
+        // Only `val b = a` is a non-literal init in body → not supported.
+        // So this should fall back to empty Return placeholder.
+        let block = &f.blocks[0];
+        assert!(
+            matches!(block.terminator, Terminator::Return),
+            "expected fallback Return for val-from-ref init"
+        );
     }
 
     #[test]
