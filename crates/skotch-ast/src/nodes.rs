@@ -820,6 +820,852 @@ impl<'a> KtModifierList<'a> {
     pub fn has_kind(self, kind: SyntaxKind) -> bool {
         self.modifier_kinds().any(|k| k == kind)
     }
+
+    /// Resolve the visibility encoded in this modifier list. Defaults
+    /// to `Public` when no visibility modifier is present.
+    pub fn visibility(self) -> skotch_syntax::Visibility {
+        use skotch_syntax::Visibility as V;
+        if self.has_kind(SyntaxKind::KW_PRIVATE) {
+            V::Private
+        } else if self.has_kind(SyntaxKind::KW_PROTECTED) {
+            V::Protected
+        } else if self.has_kind(SyntaxKind::KW_INTERNAL) {
+            V::Internal
+        } else {
+            V::Public
+        }
+    }
+
+    /// True when the modifier list has an `@Foo` annotation entry whose
+    /// short name matches `name` (case-sensitive, FQ prefix stripped).
+    pub fn has_annotation(self, name: &str) -> bool {
+        self.annotations().any(|a| {
+            a.short_name()
+                .map(|n| n == name)
+                .unwrap_or(false)
+        })
+    }
+}
+
+// ── KtAnnotationEntry ───────────────────────────────────────────────
+
+impl<'a> KtAnnotationEntry<'a> {
+    /// The constructor-callee identifier of the annotation. For a
+    /// qualified annotation like `@kotlin.jvm.JvmStatic`, returns
+    /// `"JvmStatic"` (the unqualified short tail of the dotted path).
+    pub fn short_name(self) -> Option<&'a str> {
+        // Walk the callee composite (CONSTRUCTOR_CALLEE) for the
+        // last IDENTIFIER token.
+        let callee = first_typed_child::<KtConstructorCallee>(self.syntax())?;
+        let mut last: Option<&str> = None;
+        for c in children(callee.syntax()) {
+            // The callee body may have nested type refs / user types.
+            // Walk one level deep to collect identifier tokens.
+            collect_last_ident_token(c, &mut last);
+        }
+        last
+    }
+
+    /// The optional `@field:JvmName` use-site target token text
+    /// (`field`, `param`, `get`, `set`, etc.).
+    pub fn use_site_target(self) -> Option<&'a str> {
+        let t = first_typed_child::<KtAnnotationUseSiteTarget>(self.syntax())?;
+        children(t.syntax()).iter().find_map(|c| {
+            if let SilData::Token { text } = &c.data {
+                Some(text.as_str())
+            } else {
+                None
+            }
+        })
+    }
+
+    pub fn value_argument_list(self) -> Option<KtValueArgumentList<'a>> {
+        first_typed_child(self.syntax())
+    }
+}
+
+fn collect_last_ident_token<'a>(node: &'a SilNode, sink: &mut Option<&'a str>) {
+    match &node.data {
+        SilData::Token { text } if node.kind == SyntaxKind::IDENTIFIER => {
+            *sink = Some(text.as_str());
+        }
+        SilData::Composite { children: cs } => {
+            for c in cs {
+                collect_last_ident_token(c, sink);
+            }
+        }
+        _ => {}
+    }
+}
+
+// ── KtClass: full modifier / visibility / supertype surface ─────────
+
+impl<'a> KtClass<'a> {
+    pub fn visibility(self) -> skotch_syntax::Visibility {
+        self.modifier_list()
+            .map(|m| m.visibility())
+            .unwrap_or(skotch_syntax::Visibility::Public)
+    }
+    pub fn is_data(self) -> bool {
+        self.modifier_list()
+            .map(|m| m.has_kind(SyntaxKind::KW_DATA))
+            .unwrap_or(false)
+    }
+    pub fn is_open(self) -> bool {
+        self.modifier_list()
+            .map(|m| m.has_kind(SyntaxKind::KW_OPEN))
+            .unwrap_or(false)
+    }
+    pub fn is_abstract(self) -> bool {
+        self.modifier_list()
+            .map(|m| m.has_kind(SyntaxKind::KW_ABSTRACT))
+            .unwrap_or(false)
+    }
+    pub fn is_sealed(self) -> bool {
+        self.modifier_list()
+            .map(|m| m.has_kind(SyntaxKind::KW_SEALED))
+            .unwrap_or(false)
+    }
+    pub fn is_inner(self) -> bool {
+        self.modifier_list()
+            .map(|m| m.has_kind(SyntaxKind::KW_INNER))
+            .unwrap_or(false)
+    }
+    /// Annotation short-names on this class (`"Composable"`,
+    /// `"Deprecated"`, …). Use-site target prefixes are stripped.
+    pub fn annotation_names(self) -> Vec<&'a str> {
+        self.modifier_list()
+            .map(|m| m.annotations().filter_map(|a| a.short_name()).collect())
+            .unwrap_or_default()
+    }
+}
+
+// ── KtInterface accessors ───────────────────────────────────────────
+
+impl<'a> KtInterface<'a> {
+    pub fn modifier_list(self) -> Option<KtModifierList<'a>> {
+        first_typed_child(self.syntax())
+    }
+    pub fn name(self) -> Option<&'a str> {
+        children(self.syntax()).iter().find_map(|c| {
+            if c.kind == SyntaxKind::IDENTIFIER {
+                if let SilData::Token { text } = &c.data {
+                    return Some(text.as_str());
+                }
+            }
+            None
+        })
+    }
+    pub fn type_parameter_list(self) -> Option<KtTypeParameterList<'a>> {
+        first_typed_child(self.syntax())
+    }
+    pub fn super_type_list(self) -> Option<KtSuperTypeList<'a>> {
+        first_typed_child(self.syntax())
+    }
+    pub fn body(self) -> Option<KtClassBody<'a>> {
+        first_typed_child(self.syntax())
+    }
+    pub fn visibility(self) -> skotch_syntax::Visibility {
+        self.modifier_list()
+            .map(|m| m.visibility())
+            .unwrap_or(skotch_syntax::Visibility::Public)
+    }
+    pub fn is_sealed(self) -> bool {
+        self.modifier_list()
+            .map(|m| m.has_kind(SyntaxKind::KW_SEALED))
+            .unwrap_or(false)
+    }
+    pub fn is_fun_interface(self) -> bool {
+        self.modifier_list()
+            .map(|m| m.has_kind(SyntaxKind::KW_FUN_INTERFACE))
+            .unwrap_or(false)
+    }
+}
+
+// ── KtObjectDeclaration accessors ───────────────────────────────────
+
+impl<'a> KtObjectDeclaration<'a> {
+    pub fn modifier_list(self) -> Option<KtModifierList<'a>> {
+        first_typed_child(self.syntax())
+    }
+    pub fn name(self) -> Option<&'a str> {
+        let mut after_kw = false;
+        for c in children(self.syntax()) {
+            if c.kind == SyntaxKind::KW_OBJECT {
+                after_kw = true;
+                continue;
+            }
+            if after_kw && c.kind == SyntaxKind::IDENTIFIER {
+                if let SilData::Token { text } = &c.data {
+                    return Some(text.as_str());
+                }
+            }
+        }
+        None
+    }
+    pub fn super_type_list(self) -> Option<KtSuperTypeList<'a>> {
+        first_typed_child(self.syntax())
+    }
+    pub fn body(self) -> Option<KtClassBody<'a>> {
+        first_typed_child(self.syntax())
+    }
+    pub fn visibility(self) -> skotch_syntax::Visibility {
+        self.modifier_list()
+            .map(|m| m.visibility())
+            .unwrap_or(skotch_syntax::Visibility::Public)
+    }
+    pub fn is_companion(self) -> bool {
+        self.modifier_list()
+            .map(|m| m.has_kind(SyntaxKind::KW_COMPANION))
+            .unwrap_or(false)
+    }
+}
+
+// ── KtEnumClass accessors ───────────────────────────────────────────
+
+impl<'a> KtEnumClass<'a> {
+    pub fn modifier_list(self) -> Option<KtModifierList<'a>> {
+        first_typed_child(self.syntax())
+    }
+    pub fn name(self) -> Option<&'a str> {
+        children(self.syntax()).iter().find_map(|c| {
+            if c.kind == SyntaxKind::IDENTIFIER {
+                if let SilData::Token { text } = &c.data {
+                    return Some(text.as_str());
+                }
+            }
+            None
+        })
+    }
+    pub fn primary_constructor(self) -> Option<KtPrimaryConstructor<'a>> {
+        first_typed_child(self.syntax())
+    }
+    pub fn super_type_list(self) -> Option<KtSuperTypeList<'a>> {
+        first_typed_child(self.syntax())
+    }
+    pub fn body(self) -> Option<KtClassBody<'a>> {
+        first_typed_child(self.syntax())
+    }
+    pub fn visibility(self) -> skotch_syntax::Visibility {
+        self.modifier_list()
+            .map(|m| m.visibility())
+            .unwrap_or(skotch_syntax::Visibility::Public)
+    }
+}
+
+// ── KtTypeAlias accessors ───────────────────────────────────────────
+
+impl<'a> KtTypeAlias<'a> {
+    pub fn modifier_list(self) -> Option<KtModifierList<'a>> {
+        first_typed_child(self.syntax())
+    }
+    pub fn name(self) -> Option<&'a str> {
+        let mut after_kw = false;
+        for c in children(self.syntax()) {
+            if c.kind == SyntaxKind::KW_TYPEALIAS {
+                after_kw = true;
+                continue;
+            }
+            if after_kw && c.kind == SyntaxKind::IDENTIFIER {
+                if let SilData::Token { text } = &c.data {
+                    return Some(text.as_str());
+                }
+            }
+        }
+        None
+    }
+    pub fn type_parameter_list(self) -> Option<KtTypeParameterList<'a>> {
+        first_typed_child(self.syntax())
+    }
+    pub fn type_reference(self) -> Option<KtTypeReference<'a>> {
+        first_typed_child(self.syntax())
+    }
+    pub fn visibility(self) -> skotch_syntax::Visibility {
+        self.modifier_list()
+            .map(|m| m.visibility())
+            .unwrap_or(skotch_syntax::Visibility::Public)
+    }
+}
+
+// ── KtFun: full modifier / visibility / receiver surface ────────────
+
+impl<'a> KtFun<'a> {
+    pub fn visibility(self) -> skotch_syntax::Visibility {
+        self.modifier_list()
+            .map(|m| m.visibility())
+            .unwrap_or(skotch_syntax::Visibility::Public)
+    }
+    pub fn is_open(self) -> bool {
+        self.modifier_list()
+            .map(|m| m.has_kind(SyntaxKind::KW_OPEN))
+            .unwrap_or(false)
+    }
+    pub fn is_override(self) -> bool {
+        self.modifier_list()
+            .map(|m| m.has_kind(SyntaxKind::KW_OVERRIDE))
+            .unwrap_or(false)
+    }
+    pub fn is_abstract(self) -> bool {
+        self.modifier_list()
+            .map(|m| m.has_kind(SyntaxKind::KW_ABSTRACT))
+            .unwrap_or(false)
+    }
+    pub fn is_suspend(self) -> bool {
+        self.modifier_list()
+            .map(|m| m.has_kind(SyntaxKind::KW_SUSPEND))
+            .unwrap_or(false)
+    }
+    pub fn is_inline(self) -> bool {
+        self.modifier_list()
+            .map(|m| m.has_kind(SyntaxKind::KW_INLINE))
+            .unwrap_or(false)
+    }
+    pub fn is_operator(self) -> bool {
+        self.modifier_list()
+            .map(|m| m.has_kind(SyntaxKind::KW_OPERATOR))
+            .unwrap_or(false)
+    }
+    pub fn is_infix(self) -> bool {
+        self.modifier_list()
+            .map(|m| m.has_kind(SyntaxKind::KW_INFIX))
+            .unwrap_or(false)
+    }
+    pub fn is_tailrec(self) -> bool {
+        self.modifier_list()
+            .map(|m| m.has_kind(SyntaxKind::KW_TAILREC))
+            .unwrap_or(false)
+    }
+    pub fn annotation_names(self) -> Vec<&'a str> {
+        self.modifier_list()
+            .map(|m| m.annotations().filter_map(|a| a.short_name()).collect())
+            .unwrap_or_default()
+    }
+    /// Extension-fn receiver type. The receiver is a `TYPE_REFERENCE`
+    /// appearing before the function name in source. We surface it as
+    /// the first `KtTypeReference` whose position is BEFORE the
+    /// function name token. (The return type's `KtTypeReference`
+    /// appears AFTER `RPAR`.)
+    pub fn receiver_type(self) -> Option<KtTypeReference<'a>> {
+        let mut found_name = false;
+        for c in children(self.syntax()) {
+            if c.kind == SyntaxKind::KW_FUN {
+                continue;
+            }
+            if c.kind == SyntaxKind::IDENTIFIER && !found_name {
+                // The fn-name identifier. If we haven't yet seen a
+                // TYPE_REFERENCE child, there's no receiver.
+                return None;
+            }
+            if c.kind == SyntaxKind::TYPE_REFERENCE && !found_name {
+                return KtTypeReference::cast(c);
+            }
+            if c.kind == SyntaxKind::DOT && !found_name {
+                // After a `Type .`, the next IDENTIFIER is the fn name.
+                found_name = true;
+            }
+        }
+        None
+    }
+}
+
+// ── KtProperty: full surface ────────────────────────────────────────
+
+impl<'a> KtProperty<'a> {
+    pub fn visibility(self) -> skotch_syntax::Visibility {
+        self.modifier_list()
+            .map(|m| m.visibility())
+            .unwrap_or(skotch_syntax::Visibility::Public)
+    }
+    pub fn is_lateinit(self) -> bool {
+        self.modifier_list()
+            .map(|m| m.has_kind(SyntaxKind::KW_LATEINIT))
+            .unwrap_or(false)
+    }
+    pub fn is_const(self) -> bool {
+        self.modifier_list()
+            .map(|m| m.has_kind(SyntaxKind::KW_CONST))
+            .unwrap_or(false)
+    }
+    pub fn annotation_names(self) -> Vec<&'a str> {
+        self.modifier_list()
+            .map(|m| m.annotations().filter_map(|a| a.short_name()).collect())
+            .unwrap_or_default()
+    }
+    pub fn property_accessors(self) -> impl Iterator<Item = KtPropertyAccessor<'a>> + 'a {
+        typed_children(self.syntax())
+    }
+    /// Receiver type for extension properties: `val String.lastChar`.
+    /// Same shape as KtFun::receiver_type.
+    pub fn receiver_type(self) -> Option<KtTypeReference<'a>> {
+        for c in children(self.syntax()) {
+            if matches!(c.kind, SyntaxKind::KW_VAL | SyntaxKind::KW_VAR) {
+                continue;
+            }
+            if c.kind == SyntaxKind::TYPE_REFERENCE {
+                // Could be the property type OR a receiver type.
+                // It's a receiver iff followed by a DOT before the name.
+                // Probe forward.
+                let mut after = false;
+                let mut saw_dot = false;
+                for d in children(self.syntax()) {
+                    if std::ptr::eq(d, c) {
+                        after = true;
+                        continue;
+                    }
+                    if after {
+                        if d.kind == SyntaxKind::DOT {
+                            saw_dot = true;
+                            break;
+                        }
+                        if d.kind == SyntaxKind::IDENTIFIER {
+                            break;
+                        }
+                    }
+                }
+                return if saw_dot { KtTypeReference::cast(c) } else { None };
+            }
+            if c.kind == SyntaxKind::IDENTIFIER {
+                return None;
+            }
+        }
+        None
+    }
+}
+
+// ── KtValueParameter: full surface ──────────────────────────────────
+
+impl<'a> KtValueParameter<'a> {
+    pub fn is_vararg(self) -> bool {
+        self.modifier_list()
+            .map(|m| m.has_kind(SyntaxKind::KW_VARARG))
+            .unwrap_or(false)
+    }
+    pub fn is_val(self) -> bool {
+        children(self.syntax())
+            .iter()
+            .any(|c| c.kind == SyntaxKind::KW_VAL)
+    }
+    pub fn is_var(self) -> bool {
+        children(self.syntax())
+            .iter()
+            .any(|c| c.kind == SyntaxKind::KW_VAR)
+    }
+    pub fn is_crossinline(self) -> bool {
+        self.modifier_list()
+            .map(|m| m.has_kind(SyntaxKind::KW_CROSSINLINE))
+            .unwrap_or(false)
+    }
+    pub fn is_noinline(self) -> bool {
+        self.modifier_list()
+            .map(|m| m.has_kind(SyntaxKind::KW_NOINLINE))
+            .unwrap_or(false)
+    }
+    pub fn annotation_names(self) -> Vec<&'a str> {
+        self.modifier_list()
+            .map(|m| m.annotations().filter_map(|a| a.short_name()).collect())
+            .unwrap_or_default()
+    }
+}
+
+// ── KtPrimaryConstructor / KtSecondaryConstructor ───────────────────
+
+impl<'a> KtPrimaryConstructor<'a> {
+    pub fn modifier_list(self) -> Option<KtModifierList<'a>> {
+        first_typed_child(self.syntax())
+    }
+    pub fn value_parameter_list(self) -> Option<KtValueParameterList<'a>> {
+        first_typed_child(self.syntax())
+    }
+    pub fn visibility(self) -> skotch_syntax::Visibility {
+        self.modifier_list()
+            .map(|m| m.visibility())
+            .unwrap_or(skotch_syntax::Visibility::Public)
+    }
+}
+
+impl<'a> KtSecondaryConstructor<'a> {
+    pub fn modifier_list(self) -> Option<KtModifierList<'a>> {
+        first_typed_child(self.syntax())
+    }
+    pub fn value_parameter_list(self) -> Option<KtValueParameterList<'a>> {
+        first_typed_child(self.syntax())
+    }
+    pub fn body(self) -> Option<KtBlock<'a>> {
+        first_typed_child(self.syntax())
+    }
+    pub fn delegation_call(self) -> Option<KtConstructorDelegationCall<'a>> {
+        first_typed_child(self.syntax())
+    }
+    pub fn visibility(self) -> skotch_syntax::Visibility {
+        self.modifier_list()
+            .map(|m| m.visibility())
+            .unwrap_or(skotch_syntax::Visibility::Public)
+    }
+}
+
+impl<'a> KtConstructorDelegationCall<'a> {
+    pub fn value_argument_list(self) -> Option<KtValueArgumentList<'a>> {
+        first_typed_child(self.syntax())
+    }
+    /// True when the delegation is `super(...)` rather than `this(...)`.
+    pub fn is_super(self) -> bool {
+        children(self.syntax()).iter().any(|c| {
+            matches!(c.kind, SyntaxKind::KW_SUPER)
+                || c.kind == SyntaxKind::CONSTRUCTOR_DELEGATION_REFERENCE
+                    && children(c).iter().any(|cc| cc.kind == SyntaxKind::KW_SUPER)
+        })
+    }
+}
+
+impl<'a> KtValueParameterList<'a> {
+    pub fn parameters(self) -> impl Iterator<Item = KtValueParameter<'a>> + 'a {
+        typed_children(self.syntax())
+    }
+}
+
+// ── Type-reference family ───────────────────────────────────────────
+
+impl<'a> KtTypeReference<'a> {
+    pub fn modifier_list(self) -> Option<KtModifierList<'a>> {
+        first_typed_child(self.syntax())
+    }
+
+    pub fn is_suspend(self) -> bool {
+        self.modifier_list()
+            .map(|m| m.has_kind(SyntaxKind::KW_SUSPEND))
+            .unwrap_or(false)
+    }
+
+    pub fn is_composable(self) -> bool {
+        self.modifier_list()
+            .map(|m| m.has_annotation("Composable"))
+            .unwrap_or(false)
+    }
+
+    /// Distinguish among the three kinds of typed children: user type,
+    /// function type, nullable wrapper, dynamic.
+    pub fn user_type(self) -> Option<KtUserType<'a>> {
+        first_typed_child(self.syntax())
+    }
+    pub fn function_type(self) -> Option<KtFunctionType<'a>> {
+        first_typed_child(self.syntax())
+    }
+    pub fn nullable_type(self) -> Option<KtNullableType<'a>> {
+        first_typed_child(self.syntax())
+    }
+    pub fn dynamic_type(self) -> Option<KtDynamicType<'a>> {
+        first_typed_child(self.syntax())
+    }
+
+    pub fn is_nullable(self) -> bool {
+        self.nullable_type().is_some()
+    }
+}
+
+impl<'a> KtNullableType<'a> {
+    /// The unwrapped inner type — directly a `KtUserType` or
+    /// `KtFunctionType`, NOT wrapped in a `TYPE_REFERENCE` in the SIL
+    /// shape (the `?` marker lives on the NULLABLE_TYPE composite, not
+    /// at the TYPE_REFERENCE level).
+    pub fn inner_user_type(self) -> Option<KtUserType<'a>> {
+        first_typed_child(self.syntax())
+    }
+    pub fn inner_function_type(self) -> Option<KtFunctionType<'a>> {
+        first_typed_child(self.syntax())
+    }
+    /// Recursively wrapped NULLABLE_TYPE (rare).
+    pub fn inner_nullable(self) -> Option<KtNullableType<'a>> {
+        first_typed_child(self.syntax())
+    }
+}
+
+impl<'a> KtUserType<'a> {
+    /// The optional qualifier — a preceding USER_TYPE composite for
+    /// dotted names like `kotlin.collections.List`.
+    pub fn qualifier(self) -> Option<KtUserType<'a>> {
+        first_typed_child(self.syntax())
+    }
+
+    /// The bare (unqualified) tail name of this user type. The SIL
+    /// shape stores it as `REFERENCE_EXPRESSION { IDENTIFIER }` —
+    /// we dig through the immediate REFERENCE_EXPRESSION child.
+    pub fn name(self) -> Option<&'a str> {
+        for c in children(self.syntax()) {
+            if c.kind == SyntaxKind::REFERENCE_EXPRESSION {
+                if let Some(r) = KtReferenceExpression::cast(c) {
+                    if let Some(n) = r.name() {
+                        return Some(n);
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    pub fn type_argument_list(self) -> Option<KtTypeArgumentList<'a>> {
+        first_typed_child(self.syntax())
+    }
+
+    /// Dotted FQ name: `kotlin.collections.List` → `kotlin.collections.List`.
+    pub fn dotted_name(self) -> String {
+        let mut parts: Vec<&str> = Vec::new();
+        fn rec<'a>(u: KtUserType<'a>, out: &mut Vec<&'a str>) {
+            if let Some(q) = u.qualifier() {
+                rec(q, out);
+            }
+            if let Some(n) = u.name() {
+                out.push(n);
+            }
+        }
+        rec(self, &mut parts);
+        parts.join(".")
+    }
+}
+
+impl<'a> KtFunctionType<'a> {
+    pub fn receiver(self) -> Option<KtFunctionTypeReceiver<'a>> {
+        first_typed_child(self.syntax())
+    }
+    pub fn parameter_list(self) -> Option<KtValueParameterList<'a>> {
+        first_typed_child(self.syntax())
+    }
+    /// Return type — the TYPE_REFERENCE appearing AFTER the `->` arrow.
+    pub fn return_type(self) -> Option<KtTypeReference<'a>> {
+        let mut after_arrow = false;
+        for c in children(self.syntax()) {
+            if c.kind == SyntaxKind::ARROW {
+                after_arrow = true;
+                continue;
+            }
+            if after_arrow && c.kind == SyntaxKind::TYPE_REFERENCE {
+                return KtTypeReference::cast(c);
+            }
+        }
+        None
+    }
+}
+
+impl<'a> KtFunctionTypeReceiver<'a> {
+    pub fn type_reference(self) -> Option<KtTypeReference<'a>> {
+        first_typed_child(self.syntax())
+    }
+}
+
+impl<'a> KtTypeArgumentList<'a> {
+    pub fn arguments(self) -> impl Iterator<Item = KtTypeProjection<'a>> + 'a {
+        typed_children(self.syntax())
+    }
+}
+
+impl<'a> KtTypeProjection<'a> {
+    pub fn type_reference(self) -> Option<KtTypeReference<'a>> {
+        first_typed_child(self.syntax())
+    }
+    /// `out T`, `in T`, or invariant (None).
+    pub fn variance(self) -> Option<SyntaxKind> {
+        children(self.syntax()).iter().find_map(|c| {
+            if matches!(c.kind, SyntaxKind::KW_OUT | SyntaxKind::KW_IN) {
+                Some(c.kind)
+            } else {
+                None
+            }
+        })
+    }
+}
+
+impl<'a> KtTypeParameterList<'a> {
+    pub fn parameters(self) -> impl Iterator<Item = KtTypeParameter<'a>> + 'a {
+        typed_children(self.syntax())
+    }
+}
+
+impl<'a> KtTypeParameter<'a> {
+    pub fn modifier_list(self) -> Option<KtModifierList<'a>> {
+        first_typed_child(self.syntax())
+    }
+    pub fn name(self) -> Option<&'a str> {
+        children(self.syntax()).iter().find_map(|c| {
+            if c.kind == SyntaxKind::IDENTIFIER {
+                if let SilData::Token { text } = &c.data {
+                    return Some(text.as_str());
+                }
+            }
+            None
+        })
+    }
+    pub fn upper_bound(self) -> Option<KtTypeReference<'a>> {
+        first_typed_child(self.syntax())
+    }
+    pub fn is_reified(self) -> bool {
+        self.modifier_list()
+            .map(|m| m.has_kind(SyntaxKind::KW_REIFIED))
+            .unwrap_or(false)
+    }
+}
+
+// ── Super-type list / entries ───────────────────────────────────────
+
+impl<'a> KtSuperTypeList<'a> {
+    pub fn entries(self) -> impl Iterator<Item = SuperTypeEntry<'a>> + 'a {
+        children(self.syntax()).iter().filter_map(SuperTypeEntry::cast)
+    }
+}
+
+/// Union of the three super-type-entry kinds.
+#[derive(Copy, Clone, Debug)]
+pub enum SuperTypeEntry<'a> {
+    /// Plain `SuperClass` clause.
+    Type(KtSuperTypeEntry<'a>),
+    /// `SuperClass(args)` constructor call.
+    Call(KtSuperTypeCallEntry<'a>),
+    /// `Interface by delegateExpr`.
+    Delegated(KtDelegatedSuperTypeEntry<'a>),
+}
+
+impl<'a> SuperTypeEntry<'a> {
+    pub fn cast(node: &'a SilNode) -> Option<Self> {
+        match node.kind {
+            SyntaxKind::SUPER_TYPE_ENTRY => KtSuperTypeEntry::cast(node).map(Self::Type),
+            SyntaxKind::SUPER_TYPE_CALL_ENTRY => KtSuperTypeCallEntry::cast(node).map(Self::Call),
+            SyntaxKind::DELEGATED_SUPER_TYPE_ENTRY => {
+                KtDelegatedSuperTypeEntry::cast(node).map(Self::Delegated)
+            }
+            _ => None,
+        }
+    }
+    pub fn type_reference(self) -> Option<KtTypeReference<'a>> {
+        match self {
+            Self::Type(e) => e.type_reference(),
+            Self::Call(e) => e.callee_type(),
+            Self::Delegated(e) => e.type_reference(),
+        }
+    }
+}
+
+impl<'a> KtSuperTypeEntry<'a> {
+    pub fn type_reference(self) -> Option<KtTypeReference<'a>> {
+        first_typed_child(self.syntax())
+    }
+}
+
+impl<'a> KtSuperTypeCallEntry<'a> {
+    /// The bare class type being invoked (`Base` in `Base(arg)`).
+    pub fn callee_type(self) -> Option<KtTypeReference<'a>> {
+        first_typed_child::<KtConstructorCallee>(self.syntax())
+            .and_then(|c| first_typed_child::<KtTypeReference>(c.syntax()))
+    }
+    pub fn value_argument_list(self) -> Option<KtValueArgumentList<'a>> {
+        first_typed_child(self.syntax())
+    }
+}
+
+impl<'a> KtDelegatedSuperTypeEntry<'a> {
+    pub fn type_reference(self) -> Option<KtTypeReference<'a>> {
+        first_typed_child(self.syntax())
+    }
+    pub fn delegate_expression(self) -> Option<KtExpr<'a>> {
+        // Expression appearing AFTER the `by` keyword.
+        let mut after_by = false;
+        for c in children(self.syntax()) {
+            if c.kind == SyntaxKind::KW_BY {
+                after_by = true;
+                continue;
+            }
+            if after_by {
+                if let Some(e) = KtExpr::cast(c) {
+                    return Some(e);
+                }
+            }
+        }
+        None
+    }
+}
+
+// ── KtEnumEntry ──────────────────────────────────────────────────────
+
+impl<'a> KtEnumEntry<'a> {
+    pub fn modifier_list(self) -> Option<KtModifierList<'a>> {
+        first_typed_child(self.syntax())
+    }
+    pub fn name(self) -> Option<&'a str> {
+        children(self.syntax()).iter().find_map(|c| {
+            if c.kind == SyntaxKind::IDENTIFIER {
+                if let SilData::Token { text } = &c.data {
+                    return Some(text.as_str());
+                }
+            }
+            None
+        })
+    }
+    pub fn value_argument_list(self) -> Option<KtValueArgumentList<'a>> {
+        first_typed_child(self.syntax())
+    }
+    pub fn body(self) -> Option<KtClassBody<'a>> {
+        first_typed_child(self.syntax())
+    }
+}
+
+// ── KtPropertyAccessor ──────────────────────────────────────────────
+
+impl<'a> KtPropertyAccessor<'a> {
+    pub fn modifier_list(self) -> Option<KtModifierList<'a>> {
+        first_typed_child(self.syntax())
+    }
+    pub fn is_getter(self) -> bool {
+        children(self.syntax())
+            .iter()
+            .any(|c| c.kind == SyntaxKind::KW_GET)
+    }
+    pub fn is_setter(self) -> bool {
+        children(self.syntax())
+            .iter()
+            .any(|c| c.kind == SyntaxKind::KW_SET)
+    }
+    pub fn value_parameter_list(self) -> Option<KtValueParameterList<'a>> {
+        first_typed_child(self.syntax())
+    }
+    pub fn body_block(self) -> Option<KtBlock<'a>> {
+        first_typed_child(self.syntax())
+    }
+    pub fn body_expression(self) -> Option<KtExpr<'a>> {
+        let mut after_eq = false;
+        for c in children(self.syntax()) {
+            if c.kind == SyntaxKind::EQ {
+                after_eq = true;
+                continue;
+            }
+            if after_eq {
+                if let Some(e) = KtExpr::cast(c) {
+                    return Some(e);
+                }
+            }
+        }
+        None
+    }
+    pub fn return_type(self) -> Option<KtTypeReference<'a>> {
+        first_typed_child(self.syntax())
+    }
+}
+
+// ── KtImportDirective helpers ───────────────────────────────────────
+
+impl<'a> KtImportDirective<'a> {
+    /// Split the dotted import path: `import com.foo.Bar` → ["com",
+    /// "foo", "Bar"].
+    pub fn name_parts(self) -> Vec<&'a str> {
+        let mut parts = Vec::new();
+        for c in children(self.syntax()) {
+            if c.kind == SyntaxKind::IDENTIFIER {
+                if let SilData::Token { text } = &c.data {
+                    parts.push(text.as_str());
+                }
+            }
+            if c.kind == SyntaxKind::IMPORT_ALIAS {
+                break;
+            }
+        }
+        parts
+    }
 }
 
 // SilData helper used by ValueArgument above.
@@ -887,5 +1733,121 @@ mod tests {
         let _ = children_of_kind(node, SyntaxKind::FUN).count();
         let _ = first_child_of_kind(node, SyntaxKind::FUN);
         let _ = first_typed_token::<KtIdentifier>(node);
+    }
+
+    #[test]
+    fn fun_modifiers_and_visibility() {
+        let src = "private inline suspend fun foo(): Int = 1";
+        let parsed = crate::parse("t.kt", src);
+        let file = parsed.file();
+        let f = match file.decls().next().unwrap() {
+            KtDecl::Fun(f) => f,
+            _ => panic!("expected fun"),
+        };
+        use skotch_syntax::Visibility;
+        assert_eq!(f.visibility(), Visibility::Private);
+        assert!(f.is_inline());
+        assert!(f.is_suspend());
+        assert!(!f.is_open());
+    }
+
+    #[test]
+    fn class_modifiers() {
+        let src = "data class P(val x: Int)";
+        let parsed = crate::parse("t.kt", src);
+        let file = parsed.file();
+        let c = match file.decls().next().unwrap() {
+            KtDecl::Class(c) => c,
+            _ => panic!("expected class"),
+        };
+        assert!(c.is_data());
+        assert!(!c.is_open());
+    }
+
+    #[test]
+    fn user_type_dotted_name() {
+        let src = "fun f(): kotlin.collections.List = TODO()";
+        let parsed = crate::parse("t.kt", src);
+        let file = parsed.file();
+        let f = match file.decls().next().unwrap() {
+            KtDecl::Fun(f) => f,
+            _ => panic!(),
+        };
+        let ret = f.return_type().expect("return type");
+        let ut = ret.user_type().expect("user type");
+        assert_eq!(ut.dotted_name(), "kotlin.collections.List");
+    }
+
+    #[test]
+    fn function_type_return_type() {
+        let src = "val f: (Int) -> String = TODO()";
+        let parsed = crate::parse("t.kt", src);
+        let file = parsed.file();
+        let p = match file.decls().next().unwrap() {
+            KtDecl::Property(p) => p,
+            _ => panic!(),
+        };
+        let ty = p.type_reference().expect("type ref");
+        let ft = ty.function_type().expect("function type");
+        let ret = ft.return_type().expect("return ty");
+        assert_eq!(
+            ret.user_type().and_then(|u| u.name()),
+            Some("String"),
+        );
+    }
+
+    fn dump(n: &SilNode, depth: usize) {
+        let indent = "  ".repeat(depth);
+        match &n.data {
+            SilData::Token { text } => println!("{}{:?} {:?}", indent, n.kind, text),
+            SilData::Composite { children: cs } => {
+                println!("{}{:?}", indent, n.kind);
+                for c in cs {
+                    dump(c, depth + 1);
+                }
+            }
+            _ => println!("{}<ERR>", indent),
+        }
+    }
+
+    #[test]
+    #[ignore]
+    fn debug_dump_user_type() {
+        let parsed = crate::parse(
+            "t.kt",
+            "fun f(): kotlin.collections.List = TODO()",
+        );
+        dump(parsed.file().syntax(), 0);
+    }
+
+    #[test]
+    #[ignore]
+    fn debug_dump_function_type() {
+        let parsed = crate::parse("t.kt", "val f: (Int) -> String = TODO()");
+        dump(parsed.file().syntax(), 0);
+    }
+
+    #[test]
+    #[ignore]
+    fn debug_dump_nullable() {
+        let parsed = crate::parse("t.kt", "fun f(x: Int?) {}");
+        dump(parsed.file().syntax(), 0);
+    }
+
+    #[test]
+    fn nullable_type_unwrap() {
+        let src = "fun f(x: Int?) {}";
+        let parsed = crate::parse("t.kt", src);
+        let file = parsed.file();
+        let f = match file.decls().next().unwrap() {
+            KtDecl::Fun(f) => f,
+            _ => panic!(),
+        };
+        let plist = f.value_parameter_list().expect("plist");
+        let p = plist.parameters().next().expect("p");
+        let ty = p.type_reference().expect("ty");
+        assert!(ty.is_nullable());
+        let inner = ty.nullable_type().unwrap().inner_user_type().unwrap();
+        assert_eq!(inner.name(), Some("Int"));
     }
 }
