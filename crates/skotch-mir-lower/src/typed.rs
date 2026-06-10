@@ -786,6 +786,29 @@ fn lower_simple_body(
     // Parenthesized passthrough: `(literal)` or `(a + b)`.
     let body_expr = unwrap_parens(body_expr);
 
+    // Identity function body: `fun id(x: Int): Int = x` returns the
+    // parameter directly with no intermediate slot. Just ReturnValue
+    // on the param's LocalId.
+    if let KtExpr::Reference(r) = &body_expr {
+        if let Some(name) = r.name() {
+            let param_names: Vec<String> = f
+                .value_parameter_list()
+                .map(|pl| {
+                    pl.parameters()
+                        .map(|p| p.name().unwrap_or("").to_string())
+                        .collect()
+                })
+                .unwrap_or_default();
+            if let Some(idx) = param_names.iter().position(|p| p == name) {
+                let blocks = vec![BasicBlock {
+                    stmts: Vec::new(),
+                    terminator: Terminator::ReturnValue(skotch_mir::LocalId(idx as u32)),
+                }];
+                return (blocks, Vec::new());
+            }
+        }
+    }
+
     // Binary arithmetic body where each operand is either a param
     // reference or a literal constant. Examples:
     //   fun add(a: Int, b: Int) = a + b
@@ -1779,6 +1802,20 @@ mod tests {
             }
         }
         assert!(matches!(block.terminator, Terminator::ReturnValue(_)));
+    }
+
+    #[test]
+    fn typed_lower_identity_function() {
+        let module = lower("fun id(x: Int): Int = x", "TestKt");
+        let f = &module.functions[0];
+        assert_eq!(f.return_ty, Ty::Int);
+        let block = &f.blocks[0];
+        // No intermediate slot — just ReturnValue on the param.
+        assert!(block.stmts.is_empty());
+        match &block.terminator {
+            Terminator::ReturnValue(local) => assert_eq!(local.0, 0),
+            other => panic!("expected ReturnValue, got {other:?}"),
+        }
     }
 
     #[test]
