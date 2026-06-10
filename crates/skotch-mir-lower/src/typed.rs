@@ -429,6 +429,81 @@ fn unwrap_parens<'a>(e: skotch_ast::KtExpr<'a>) -> skotch_ast::KtExpr<'a> {
     cur
 }
 
+/// Resolve the numeric Ty of an expression operand. Used by binary
+/// op lowering to pick the right AddI/AddL/AddD/etc variant.
+fn operand_numeric_ty(e: &skotch_ast::KtExpr<'_>, f: skotch_ast::KtFun<'_>) -> Ty {
+    use skotch_ast::KtExpr;
+    match e {
+        KtExpr::Integer(_) => {
+            // Suffix detection: 1L → Long, otherwise Int.
+            let text = skotch_ast::children(e.syntax()).iter().find_map(|c| {
+                if c.kind == skotch_syntax::SyntaxKind::INTEGER_LITERAL {
+                    if let skotch_sil::SilData::Token { text } = &c.data {
+                        return Some(text.as_str());
+                    }
+                }
+                None
+            });
+            match text {
+                Some(t) if t.ends_with('L') || t.ends_with('l') => Ty::Long,
+                _ => Ty::Int,
+            }
+        }
+        KtExpr::Float(_) => {
+            let text = skotch_ast::children(e.syntax()).iter().find_map(|c| {
+                if matches!(
+                    c.kind,
+                    skotch_syntax::SyntaxKind::FLOAT_LITERAL
+                        | skotch_syntax::SyntaxKind::DOUBLE_LITERAL
+                ) {
+                    if let skotch_sil::SilData::Token { text } = &c.data {
+                        return Some(text.as_str());
+                    }
+                }
+                None
+            });
+            match text {
+                Some(t) if t.ends_with('f') || t.ends_with('F') => Ty::Float,
+                _ => Ty::Double,
+            }
+        }
+        KtExpr::Reference(r) => {
+            let Some(name) = r.name() else { return Ty::Any };
+            f.value_parameter_list()
+                .and_then(|pl| {
+                    pl.parameters().find_map(|p| {
+                        if p.name() != Some(name) {
+                            return None;
+                        }
+                        let user_type = p
+                            .type_reference()
+                            .and_then(|tr| tr.user_type())
+                            .and_then(|u| u.name())?;
+                        skotch_types::ty_from_name(user_type)
+                    })
+                })
+                .unwrap_or(Ty::Any)
+        }
+        KtExpr::Parenthesized(p) => skotch_ast::children(p.syntax())
+            .iter()
+            .find_map(KtExpr::cast)
+            .map(|inner| operand_numeric_ty(&inner, f))
+            .unwrap_or(Ty::Any),
+        _ => Ty::Any,
+    }
+}
+
+/// Promote two operand Tys to the dominant numeric Ty per Kotlin's
+/// promotion rules: Double > Float > Long > Int.
+fn promote_numeric(a: &Ty, b: &Ty) -> Ty {
+    match (a, b) {
+        (Ty::Double, _) | (_, Ty::Double) => Ty::Double,
+        (Ty::Float, _) | (_, Ty::Float) => Ty::Float,
+        (Ty::Long, _) | (_, Ty::Long) => Ty::Long,
+        _ => Ty::Int,
+    }
+}
+
 /// Detect when an expression operand is statically a String — used
 /// by binary `+` lowering to choose ConcatStr instead of AddI.
 fn operand_is_string(e: &skotch_ast::KtExpr<'_>, f: skotch_ast::KtFun<'_>) -> bool {
@@ -828,27 +903,49 @@ fn lower_simple_body(
             })
             .unwrap_or_default();
         let op_text = b.operation().map(|o| o.text()).unwrap_or_default();
-        // For `+`, detect a String operand (literal OR a Ref to a
-        // String-typed parameter) and route to ConcatStr instead of
-        // AddI.
+        // Detect the dominant numeric Ty among operands (String wins
+        // for `+` via ConcatStr; otherwise Long/Float/Double bump
+        // the variant from AddI to AddL/AddF/AddD).
         let is_str_concat = op_text == "+" && {
             let lhs_str = b.lhs().is_some_and(|l| operand_is_string(&l, f));
             let rhs_str = b.rhs().is_some_and(|r| operand_is_string(&r, f));
             lhs_str || rhs_str
         };
-        let mir_op = match op_text.as_str() {
-            "+" if is_str_concat => Some(skotch_mir::BinOp::ConcatStr),
-            "+" => Some(skotch_mir::BinOp::AddI),
-            "-" => Some(skotch_mir::BinOp::SubI),
-            "*" => Some(skotch_mir::BinOp::MulI),
-            "/" => Some(skotch_mir::BinOp::DivI),
-            "%" => Some(skotch_mir::BinOp::ModI),
-            "==" => Some(skotch_mir::BinOp::CmpEq),
-            "!=" => Some(skotch_mir::BinOp::CmpNe),
-            "<" => Some(skotch_mir::BinOp::CmpLt),
-            ">" => Some(skotch_mir::BinOp::CmpGt),
-            "<=" => Some(skotch_mir::BinOp::CmpLe),
-            ">=" => Some(skotch_mir::BinOp::CmpGe),
+        let numeric_ty = if is_str_concat {
+            Ty::String
+        } else {
+            let lhs_ty = b.lhs().map(|l| operand_numeric_ty(&l, f)).unwrap_or(Ty::Int);
+            let rhs_ty = b.rhs().map(|r| operand_numeric_ty(&r, f)).unwrap_or(Ty::Int);
+            promote_numeric(&lhs_ty, &rhs_ty)
+        };
+        let mir_op = match (op_text.as_str(), &numeric_ty) {
+            ("+", Ty::String) => Some(skotch_mir::BinOp::ConcatStr),
+            ("+", Ty::Long) => Some(skotch_mir::BinOp::AddL),
+            ("-", Ty::Long) => Some(skotch_mir::BinOp::SubL),
+            ("*", Ty::Long) => Some(skotch_mir::BinOp::MulL),
+            ("/", Ty::Long) => Some(skotch_mir::BinOp::DivL),
+            ("%", Ty::Long) => Some(skotch_mir::BinOp::ModL),
+            ("+", Ty::Double) => Some(skotch_mir::BinOp::AddD),
+            ("-", Ty::Double) => Some(skotch_mir::BinOp::SubD),
+            ("*", Ty::Double) => Some(skotch_mir::BinOp::MulD),
+            ("/", Ty::Double) => Some(skotch_mir::BinOp::DivD),
+            ("%", Ty::Double) => Some(skotch_mir::BinOp::ModD),
+            ("+", Ty::Float) => Some(skotch_mir::BinOp::AddF),
+            ("-", Ty::Float) => Some(skotch_mir::BinOp::SubF),
+            ("*", Ty::Float) => Some(skotch_mir::BinOp::MulF),
+            ("/", Ty::Float) => Some(skotch_mir::BinOp::DivF),
+            ("%", Ty::Float) => Some(skotch_mir::BinOp::ModF),
+            ("+", _) => Some(skotch_mir::BinOp::AddI),
+            ("-", _) => Some(skotch_mir::BinOp::SubI),
+            ("*", _) => Some(skotch_mir::BinOp::MulI),
+            ("/", _) => Some(skotch_mir::BinOp::DivI),
+            ("%", _) => Some(skotch_mir::BinOp::ModI),
+            ("==", _) => Some(skotch_mir::BinOp::CmpEq),
+            ("!=", _) => Some(skotch_mir::BinOp::CmpNe),
+            ("<", _) => Some(skotch_mir::BinOp::CmpLt),
+            (">", _) => Some(skotch_mir::BinOp::CmpGt),
+            ("<=", _) => Some(skotch_mir::BinOp::CmpLe),
+            (">=", _) => Some(skotch_mir::BinOp::CmpGe),
             _ => None,
         };
         if let Some(op) = mir_op {
@@ -900,19 +997,24 @@ fn lower_simple_body(
                         | skotch_mir::BinOp::CmpLe
                         | skotch_mir::BinOp::CmpGe
                 );
-                let is_concat = matches!(op, skotch_mir::BinOp::ConcatStr);
                 let return_ty = if is_cmp {
                     Ty::Bool
-                } else if is_concat {
-                    Ty::String
                 } else {
-                    match f
-                        .return_type()
-                        .and_then(|tr| tr.user_type())
-                        .and_then(|u| u.name())
-                    {
-                        Some(name) => skotch_types::ty_from_name(name).unwrap_or(Ty::Int),
-                        None => Ty::Int,
+                    // Prefer the promoted numeric_ty when it's a
+                    // concrete numeric / String; fall back to the
+                    // function's declared return type otherwise.
+                    match &numeric_ty {
+                        Ty::Int | Ty::Long | Ty::Float | Ty::Double | Ty::String => {
+                            numeric_ty.clone()
+                        }
+                        _ => match f
+                            .return_type()
+                            .and_then(|tr| tr.user_type())
+                            .and_then(|u| u.name())
+                        {
+                            Some(name) => skotch_types::ty_from_name(name).unwrap_or(Ty::Int),
+                            None => Ty::Int,
+                        },
                     }
                 };
                 let result_slot = skotch_mir::LocalId(next_slot);
@@ -1802,6 +1904,51 @@ mod tests {
             }
         }
         assert!(matches!(block.terminator, Terminator::ReturnValue(_)));
+    }
+
+    #[test]
+    fn typed_lower_binary_long_uses_addl() {
+        let module = lower("fun add(a: Long, b: Long): Long = a + b", "TestKt");
+        let f = &module.functions[0];
+        assert_eq!(f.return_ty, Ty::Long);
+        match &f.blocks[0].stmts[0] {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::BinOp { op, .. } => {
+                    assert!(matches!(op, skotch_mir::BinOp::AddL));
+                }
+                _ => panic!("expected BinOp"),
+            },
+        }
+    }
+
+    #[test]
+    fn typed_lower_binary_double_uses_addd() {
+        let module = lower("fun add(a: Double, b: Double): Double = a + b", "TestKt");
+        let f = &module.functions[0];
+        assert_eq!(f.return_ty, Ty::Double);
+        match &f.blocks[0].stmts[0] {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::BinOp { op, .. } => {
+                    assert!(matches!(op, skotch_mir::BinOp::AddD));
+                }
+                _ => panic!("expected BinOp"),
+            },
+        }
+    }
+
+    #[test]
+    fn typed_lower_binary_int_long_promotes_to_long() {
+        // Mixed Int + Long should promote to Long.
+        let module = lower("fun add(a: Int, b: Long): Long = a + b", "TestKt");
+        let f = &module.functions[0];
+        match &f.blocks[0].stmts[0] {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::BinOp { op, .. } => {
+                    assert!(matches!(op, skotch_mir::BinOp::AddL));
+                }
+                _ => panic!("expected BinOp"),
+            },
+        }
     }
 
     #[test]
