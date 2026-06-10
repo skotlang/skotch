@@ -563,6 +563,175 @@ fn const_ty(c: &skotch_mir::MirConst) -> Ty {
     }
 }
 
+/// Try to lower a simple `when (subject) { v1 -> r1; v2 -> r2; else -> default }`
+/// expression body. Each arm becomes a 3-block chain:
+///   cmp_block: cmp_local = CmpEq(subject, v_i); Branch(then_i, next_cmp)
+///   then_block: result = r_i; Goto(join_block)
+/// The final block is the ReturnValue join.
+fn try_lower_when_expression(
+    w: &skotch_ast::KtWhen<'_>,
+    f: skotch_ast::KtFun<'_>,
+    strings: &mut Vec<String>,
+) -> Option<(Vec<BasicBlock>, Vec<Ty>)> {
+    use skotch_ast::KtExpr;
+    use skotch_mir::{LocalId, Rvalue, Stmt as MStmt};
+
+    let subject = w.subject().map(unwrap_parens)?;
+    let param_count = f
+        .value_parameter_list()
+        .map(|pl| pl.parameters().count())
+        .unwrap_or(0);
+    let outer_param_names: Vec<String> = f
+        .value_parameter_list()
+        .map(|pl| {
+            pl.parameters()
+                .map(|p| p.name().unwrap_or("").to_string())
+                .collect()
+        })
+        .unwrap_or_default();
+
+    // Subject must be a Reference to a parameter.
+    let subject_slot = match &subject {
+        KtExpr::Reference(r) => r
+            .name()
+            .and_then(|n| outer_param_names.iter().position(|p| p == n))
+            .map(|i| LocalId(i as u32))?,
+        _ => return None,
+    };
+
+    // Collect arms (and optional else).
+    let mut arms: Vec<(KtExpr<'_>, KtExpr<'_>)> = Vec::new();
+    let mut else_arm: Option<KtExpr<'_>> = None;
+    for entry in w.entries() {
+        if entry.is_else() {
+            else_arm = Some(entry.body()?);
+            continue;
+        }
+        let conds = entry.conditions();
+        if conds.len() != 1 {
+            return None;
+        }
+        // Condition must be WHEN_CONDITION_WITH_EXPRESSION carrying a literal.
+        if conds[0].kind != skotch_syntax::SyntaxKind::WHEN_CONDITION_WITH_EXPRESSION {
+            return None;
+        }
+        let cond_expr = skotch_ast::children(conds[0])
+            .iter()
+            .find_map(KtExpr::cast)
+            .map(unwrap_parens)?;
+        let body = entry.body().map(unwrap_parens)?;
+        arms.push((cond_expr, body));
+    }
+    let else_body = else_arm.map(unwrap_parens)?; // require else
+
+    let mut next_slot = param_count as u32;
+    let mut extra_locals: Vec<Ty> = Vec::new();
+    let result_slot = LocalId(next_slot);
+    next_slot += 1;
+    // Result type from else_body shape (best-effort).
+    let result_ty = match &else_body {
+        KtExpr::String(_) => Ty::String,
+        KtExpr::Integer(_) => Ty::Int,
+        KtExpr::Boolean(_) => Ty::Bool,
+        _ => Ty::Any,
+    };
+    extra_locals.push(result_ty);
+
+    let mut blocks: Vec<BasicBlock> = Vec::new();
+
+    // Each arm contributes: cmp_block (with stmts) + then_block.
+    // After all arms, an else_block, then join_block.
+    let n_arms = arms.len();
+    // Reserve indices: 0..(2N) for cmp/then alternation, 2N for else, 2N+1 for join.
+    let else_block_idx = (2 * n_arms) as u32;
+    let join_block_idx = else_block_idx + 1;
+
+    for (i, (cond_expr, body)) in arms.iter().enumerate() {
+        let mut cmp_stmts: Vec<MStmt> = Vec::new();
+        // Lower the literal to a Const slot.
+        let (k, ty) = literal_to_const(cond_expr, strings)?;
+        let lit_slot = LocalId(next_slot);
+        next_slot += 1;
+        extra_locals.push(ty);
+        cmp_stmts.push(MStmt::Assign {
+            dest: lit_slot,
+            value: Rvalue::Const(k),
+        });
+        let cmp_slot = LocalId(next_slot);
+        next_slot += 1;
+        extra_locals.push(Ty::Bool);
+        cmp_stmts.push(MStmt::Assign {
+            dest: cmp_slot,
+            value: Rvalue::BinOp {
+                op: skotch_mir::BinOp::CmpEq,
+                lhs: subject_slot,
+                rhs: lit_slot,
+            },
+        });
+        let then_block_idx = (2 * i + 1) as u32;
+        let next_cmp_block_idx = if i + 1 < n_arms {
+            (2 * (i + 1)) as u32
+        } else {
+            else_block_idx
+        };
+        blocks.push(BasicBlock {
+            stmts: cmp_stmts,
+            terminator: Terminator::Branch {
+                cond: cmp_slot,
+                then_block: then_block_idx,
+                else_block: next_cmp_block_idx,
+            },
+        });
+
+        // then_block: result_slot = literal_from_body; Goto join.
+        let (bk, bty) = literal_to_const(body, strings)?;
+        let body_slot = LocalId(next_slot);
+        next_slot += 1;
+        extra_locals.push(bty);
+        let then_stmts = vec![
+            MStmt::Assign {
+                dest: body_slot,
+                value: Rvalue::Const(bk),
+            },
+            MStmt::Assign {
+                dest: result_slot,
+                value: Rvalue::Local(body_slot),
+            },
+        ];
+        blocks.push(BasicBlock {
+            stmts: then_stmts,
+            terminator: Terminator::Goto(join_block_idx),
+        });
+    }
+
+    // else_block.
+    let (ek, ety) = literal_to_const(&else_body, strings)?;
+    let else_slot = LocalId(next_slot);
+    extra_locals.push(ety);
+    let else_stmts = vec![
+        MStmt::Assign {
+            dest: else_slot,
+            value: Rvalue::Const(ek),
+        },
+        MStmt::Assign {
+            dest: result_slot,
+            value: Rvalue::Local(else_slot),
+        },
+    ];
+    blocks.push(BasicBlock {
+        stmts: else_stmts,
+        terminator: Terminator::Goto(join_block_idx),
+    });
+
+    // join_block.
+    blocks.push(BasicBlock {
+        stmts: Vec::new(),
+        terminator: Terminator::ReturnValue(result_slot),
+    });
+
+    Some((blocks, extra_locals))
+}
+
 /// Try to lower a simple `if (cond) then-arm else else-arm` expression
 /// body. Returns None when the if's condition / arms / else are not
 /// simple binary-comparison + literal/ref arms.
@@ -1096,6 +1265,14 @@ fn lower_simple_body(
                     return (blocks, Vec::new());
                 }
             }
+        }
+    }
+
+    // when (subject) { v1 -> result1; v2 -> result2; else -> default }
+    // expression body. Lowers to a chain of comparison blocks.
+    if let KtExpr::When(w) = &body_expr {
+        if let Some(lowered) = try_lower_when_expression(w, f, strings) {
+            return lowered;
         }
     }
 
@@ -2333,6 +2510,29 @@ mod tests {
             }
         }
         assert!(matches!(block.terminator, Terminator::ReturnValue(_)));
+    }
+
+    #[test]
+    fn typed_lower_when_expression_two_arms() {
+        let module = lower(
+            "fun name(x: Int): String = when (x) { 1 -> \"one\"; 2 -> \"two\"; else -> \"other\" }",
+            "TestKt",
+        );
+        let f = &module.functions[0];
+        // 6 blocks: cmp_1, then_1, cmp_2, then_2, else, join
+        assert_eq!(f.blocks.len(), 6);
+        // join block is index 5: ReturnValue.
+        assert!(matches!(f.blocks[5].terminator, Terminator::ReturnValue(_)));
+        // First cmp block branches into then_1 (index 1) or cmp_2 (index 2).
+        assert!(matches!(
+            f.blocks[0].terminator,
+            Terminator::Branch { then_block: 1, else_block: 2, .. }
+        ));
+        // then blocks Goto(5) the join.
+        assert!(matches!(f.blocks[1].terminator, Terminator::Goto(5)));
+        assert!(matches!(f.blocks[3].terminator, Terminator::Goto(5)));
+        // else block (index 4) also Goto(5).
+        assert!(matches!(f.blocks[4].terminator, Terminator::Goto(5)));
     }
 
     #[test]
