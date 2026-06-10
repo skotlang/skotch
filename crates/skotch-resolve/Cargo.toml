@@ -11,6 +11,8 @@ skotch-intern      = { workspace = true }
 skotch-syntax      = { workspace = true }
 skotch-types       = { workspace = true }
 skotch-diagnostics = { workspace = true }
+skotch-sil         = { workspace = true }
+skotch-ast         = { workspace = true }
 rustc-hash       = { workspace = true }
 serde            = { workspace = true }
 

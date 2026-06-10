@@ -2520,10 +2520,12 @@ version = "0.41.0"
 dependencies = [
  "rustc-hash",
  "serde",
+ "skotch-ast",
  "skotch-diagnostics",
  "skotch-intern",
  "skotch-lexer",
  "skotch-parser",
+ "skotch-sil",
  "skotch-span",
  "skotch-syntax",
  "skotch-types",
