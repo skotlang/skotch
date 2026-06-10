@@ -1206,6 +1206,37 @@ pub fn resolve_file(
         }
     }
 
+    // ── Per-top-val ResolvedTopLevelVal with initializer ref walk ──
+    for decl in file.decls() {
+        if let KtDecl::Property(p) = decl {
+            let Some(name) = p.name() else { continue };
+            let name_sym = interner.intern(name);
+            let mut init_refs: Vec<crate::ResolvedRef> = Vec::new();
+            if let Some(init) = p.initializer() {
+                let scope: Vec<(Symbol, DefId)> = Vec::new();
+                let mut tmp_rf = ResolvedFunction {
+                    name: name_sym,
+                    params: Vec::new(),
+                    locals: Vec::new(),
+                    body_refs: Vec::new(),
+                };
+                resolve_expr(
+                    &init,
+                    u32::MAX,
+                    &mut scope.clone(),
+                    &mut tmp_rf,
+                    interner,
+                    &out.top_level,
+                );
+                init_refs = tmp_rf.body_refs;
+            }
+            out.top_vals.push(crate::ResolvedTopLevelVal {
+                name: name_sym,
+                init_refs,
+            });
+        }
+    }
+
     out
 }
 

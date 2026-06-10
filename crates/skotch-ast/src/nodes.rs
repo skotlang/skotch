@@ -14,6 +14,7 @@ use crate::{children, first_typed_child, typed_children, AstNode, AstToken};
 #[cfg(test)]
 use crate::{children_of_kind, first_child_of_kind, first_typed_token};
 use skotch_sil::{SilData, SilNode};
+use skotch_span::Span;
 use skotch_syntax::SyntaxKind;
 
 // ── macro: define a typed composite over one SyntaxKind ─────────────
@@ -589,6 +590,15 @@ impl<'a> KtClass<'a> {
         })
     }
 
+    /// Source span of the class-name IDENTIFIER token. Used by the
+    /// LSP for go-to-definition.
+    pub fn name_span(self) -> Option<Span> {
+        children(self.syntax())
+            .iter()
+            .find(|c| c.kind == SyntaxKind::IDENTIFIER)
+            .map(|c| c.span)
+    }
+
     pub fn type_parameter_list(self) -> Option<KtTypeParameterList<'a>> {
         first_typed_child(self.syntax())
     }
@@ -640,6 +650,22 @@ impl<'a> KtFun<'a> {
                 if let SilData::Token { text } = &c.data {
                     return Some(text.as_str());
                 }
+            }
+        }
+        None
+    }
+
+    /// Source span of the function-name IDENTIFIER token. Used by
+    /// the LSP for go-to-definition.
+    pub fn name_span(self) -> Option<Span> {
+        let mut after_fun = false;
+        for c in children(self.syntax()) {
+            if c.kind == SyntaxKind::KW_FUN {
+                after_fun = true;
+                continue;
+            }
+            if after_fun && c.kind == SyntaxKind::IDENTIFIER {
+                return Some(c.span);
             }
         }
         None
@@ -706,6 +732,21 @@ impl<'a> KtProperty<'a> {
         None
     }
 
+    /// Source span of the property-name IDENTIFIER token.
+    pub fn name_span(self) -> Option<Span> {
+        let mut after_kw = false;
+        for c in children(self.syntax()) {
+            if matches!(c.kind, SyntaxKind::KW_VAL | SyntaxKind::KW_VAR) {
+                after_kw = true;
+                continue;
+            }
+            if after_kw && c.kind == SyntaxKind::IDENTIFIER {
+                return Some(c.span);
+            }
+        }
+        None
+    }
+
     pub fn type_reference(self) -> Option<KtTypeReference<'a>> {
         first_typed_child(self.syntax())
     }
@@ -745,6 +786,14 @@ impl<'a> KtValueParameter<'a> {
             }
             None
         })
+    }
+
+    /// Source span of the parameter-name IDENTIFIER token.
+    pub fn name_span(self) -> Option<Span> {
+        children(self.syntax())
+            .iter()
+            .find(|c| c.kind == SyntaxKind::IDENTIFIER)
+            .map(|c| c.span)
     }
 
     pub fn type_reference(self) -> Option<KtTypeReference<'a>> {

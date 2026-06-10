@@ -51,9 +51,9 @@ pub fn lower_file(
         ..MirModule::default()
     };
 
-    // Top-level classes — emit minimal MirClass entries. Full body
-    // lowering (methods, init blocks, ctor synthesis, companion
-    // objects) lands in follow-up sessions; for now just the shape.
+    // Top-level classes — emit minimal MirClass entries. Body
+    // method shapes (empty Return bodies) populated below; method
+    // body lowering is deferred to follow-up sessions.
     for decl in file.decls() {
         if let KtDecl::Class(c) = decl {
             let name = match c.name() {
@@ -61,6 +61,9 @@ pub fn lower_file(
                 None => continue,
             };
             let (super_class, interfaces) = collect_class_super_iface(c.super_type_list());
+            let fields = collect_class_fields(c);
+            let methods = collect_class_methods(c, &name);
+            let constructor = constructor_from_primary(c, &name);
             let mir_class = skotch_mir::MirClass {
                 name: name.clone(),
                 super_class,
@@ -68,9 +71,9 @@ pub fn lower_file(
                 is_abstract: c.is_abstract() || c.is_sealed(),
                 is_interface: false,
                 interfaces,
-                fields: Vec::new(),
-                methods: Vec::new(),
-                constructor: empty_constructor(&name),
+                fields,
+                methods,
+                constructor,
                 secondary_constructors: Vec::new(),
                 is_suspend_lambda: false,
                 is_lambda: false,
@@ -309,6 +312,185 @@ pub fn lower_file(
     }
 
     module
+}
+
+/// Build an `<init>(P1, P2, ...)V` constructor from a class's
+/// primary-constructor parameter list. Parameter types come from
+/// each KtValueParameter's KtTypeReference (Ty::Any when missing).
+/// Body is an empty Return for now; field-init writebacks are a
+/// follow-up.
+fn constructor_from_primary(c: skotch_ast::KtClass<'_>, class_name: &str) -> MirFunction {
+    let Some(pc) = c.primary_constructor() else {
+        return empty_constructor(class_name);
+    };
+    let plist = match pc.value_parameter_list() {
+        Some(pl) => pl,
+        None => return empty_constructor(class_name),
+    };
+    let params_iter: Vec<_> = plist.parameters().collect();
+    let param_count = params_iter.len();
+    let param_names: Vec<String> = params_iter
+        .iter()
+        .map(|p| p.name().unwrap_or("").to_string())
+        .collect();
+    let param_tys: Vec<Ty> = params_iter
+        .iter()
+        .map(|p| {
+            p.type_reference()
+                .and_then(|tr| tr.user_type())
+                .and_then(|u| u.name())
+                .and_then(skotch_types::ty_from_name)
+                .unwrap_or(Ty::Any)
+        })
+        .collect();
+    let params: Vec<skotch_mir::LocalId> =
+        (0..param_count).map(|i| skotch_mir::LocalId(i as u32)).collect();
+    MirFunction {
+        id: FuncId(0),
+        name: "<init>".to_string(),
+        params,
+        locals: param_tys,
+        blocks: vec![BasicBlock {
+            stmts: Vec::new(),
+            terminator: Terminator::Return,
+        }],
+        return_ty: Ty::Unit,
+        required_params: param_count,
+        param_names,
+        param_receiver_types: Vec::new(),
+        param_defaults: Vec::new(),
+        is_abstract: false,
+        vararg_index: None,
+        exception_handlers: Vec::new(),
+        is_suspend: false,
+        is_inline: false,
+        has_type_params: false,
+        suspend_original_return_ty: None,
+        suspend_state_machine: None,
+        annotations: Vec::new(),
+        named_locals: Vec::new(),
+        is_private: false,
+        is_static: false,
+        default_call_masks: Vec::new(),
+        needs_leading_nop: false,
+        local_generic_args: rustc_hash::FxHashMap::default(),
+    }
+}
+
+/// Collect fields from a class body's `val`/`var` properties +
+/// primary-constructor `val`/`var` parameters.
+fn collect_class_fields(c: skotch_ast::KtClass<'_>) -> Vec<skotch_mir::MirField> {
+    let mut fields = Vec::new();
+    if let Some(pc) = c.primary_constructor() {
+        if let Some(plist) = pc.value_parameter_list() {
+            for p in plist.parameters() {
+                if p.is_val() || p.is_var() {
+                    if let Some(n) = p.name() {
+                        let ty = match p.type_reference().and_then(|tr| tr.user_type()).and_then(|u| u.name()) {
+                            Some(name) => skotch_types::ty_from_name(name).unwrap_or(Ty::Any),
+                            None => Ty::Any,
+                        };
+                        fields.push(skotch_mir::MirField {
+                            name: n.to_string(),
+                            ty,
+                            is_jvm_field: false,
+                        });
+                    }
+                }
+            }
+        }
+    }
+    if let Some(body) = c.body() {
+        for d in body.declarations() {
+            if let KtDecl::Property(p) = d {
+                if let Some(n) = p.name() {
+                    let ty = match p.type_reference().and_then(|tr| tr.user_type()).and_then(|u| u.name()) {
+                        Some(name) => skotch_types::ty_from_name(name).unwrap_or(Ty::Any),
+                        None => Ty::Any,
+                    };
+                    fields.push(skotch_mir::MirField {
+                        name: n.to_string(),
+                        ty,
+                        is_jvm_field: false,
+                    });
+                }
+            }
+        }
+    }
+    fields
+}
+
+/// Collect methods from a class body. Each becomes a MirFunction
+/// with an empty Return body — body lowering is deferred.
+fn collect_class_methods(c: skotch_ast::KtClass<'_>, _class_name: &str) -> Vec<MirFunction> {
+    let mut methods = Vec::new();
+    let Some(body) = c.body() else { return methods };
+    let mut method_idx = 0u32;
+    for d in body.declarations() {
+        if let KtDecl::Fun(f) = d {
+            let name = f.name().unwrap_or("<anon>").to_string();
+            let param_count = f
+                .value_parameter_list()
+                .map(|pl| pl.parameters().count())
+                .unwrap_or(0);
+            let params: Vec<skotch_mir::LocalId> = (0..param_count)
+                .map(|i| skotch_mir::LocalId(i as u32))
+                .collect();
+            let param_names: Vec<String> = f
+                .value_parameter_list()
+                .map(|pl| {
+                    pl.parameters()
+                        .map(|p| p.name().unwrap_or("").to_string())
+                        .collect()
+                })
+                .unwrap_or_default();
+            // Return type: pulled from KtTypeReference (simple name only here).
+            let return_ty = match f
+                .return_type()
+                .and_then(|tr| tr.user_type())
+                .and_then(|u| u.name())
+            {
+                Some(name) => skotch_types::ty_from_name(name).unwrap_or(Ty::Any),
+                None => Ty::Unit,
+            };
+            let locals: Vec<Ty> = (0..param_count).map(|_| Ty::Any).collect();
+            methods.push(MirFunction {
+                id: FuncId(method_idx),
+                name,
+                params,
+                locals,
+                blocks: vec![BasicBlock {
+                    stmts: Vec::new(),
+                    terminator: Terminator::Return,
+                }],
+                return_ty,
+                required_params: param_count,
+                param_names,
+                param_receiver_types: Vec::new(),
+                param_defaults: Vec::new(),
+                is_abstract: f.is_abstract(),
+                vararg_index: None,
+                exception_handlers: Vec::new(),
+                is_suspend: f.is_suspend(),
+                is_inline: f.is_inline(),
+                has_type_params: f
+                    .type_parameter_list()
+                    .map(|tpl| tpl.parameters().next().is_some())
+                    .unwrap_or(false),
+                suspend_original_return_ty: None,
+                suspend_state_machine: None,
+                annotations: Vec::new(),
+                named_locals: Vec::new(),
+                is_private: f.visibility() == skotch_syntax::Visibility::Private,
+                is_static: false,
+                default_call_masks: Vec::new(),
+                needs_leading_nop: false,
+                local_generic_args: rustc_hash::FxHashMap::default(),
+            });
+            method_idx += 1;
+        }
+    }
+    methods
 }
 
 /// Walk a `KtSuperTypeList` to extract (super_class, interfaces).
