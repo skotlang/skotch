@@ -413,82 +413,131 @@ pub fn lower_file(
     module
 }
 
-/// Try to lower `println(stringLiteral)` to the Println intrinsic.
-/// Returns None when the call isn't of this exact shape.
+/// Map a `MirConst` to its surface Ty.
+fn const_ty(c: &skotch_mir::MirConst) -> Ty {
+    match c {
+        skotch_mir::MirConst::Unit => Ty::Unit,
+        skotch_mir::MirConst::Bool(_) => Ty::Bool,
+        skotch_mir::MirConst::Int(_) => Ty::Int,
+        skotch_mir::MirConst::Long(_) => Ty::Long,
+        skotch_mir::MirConst::Float(_) => Ty::Float,
+        skotch_mir::MirConst::Double(_) => Ty::Double,
+        skotch_mir::MirConst::Null => Ty::Nullable(Box::new(Ty::Any)),
+        skotch_mir::MirConst::String(_) => Ty::String,
+    }
+}
+
+/// Try to lower `println(literal)` / `print(literal)` to the
+/// Println / Print intrinsic. Returns None when the call isn't of
+/// this exact shape.
 fn try_lower_println_call(
     call: &skotch_ast::KtCallExpression<'_>,
     strings: &mut Vec<String>,
 ) -> Option<Vec<BasicBlock>> {
     use skotch_ast::KtExpr;
-    // Callee must be a bare Reference named `println`.
+    // Callee must be a bare Reference named `println` or `print`.
     let name = match call.callee() {
         Some(KtExpr::Reference(r)) => r.name(),
         _ => None,
     }?;
-    if name != "println" {
-        return None;
-    }
+    let (kind, is_println) = match name {
+        "println" => (skotch_mir::CallKind::Println, true),
+        "print" => (skotch_mir::CallKind::Print, false),
+        _ => return None,
+    };
+    let _ = is_println;
     let args = call.value_argument_list()?;
     let arg_exprs: Vec<KtExpr<'_>> = args.arguments().filter_map(|a| a.expression()).collect();
     if arg_exprs.len() != 1 {
         return None;
     }
-    // Single arg must be a string literal (no interpolation).
-    let mut buf = String::new();
-    let mut interpolated = false;
-    if let KtExpr::String(_) = &arg_exprs[0] {
-        for child in skotch_ast::children(arg_exprs[0].syntax()) {
-            use skotch_syntax::SyntaxKind as S;
-            match child.kind {
-                S::LITERAL_STRING_TEMPLATE_ENTRY => {
-                    for cc in skotch_ast::children(child) {
-                        if cc.kind == S::STRING_CHUNK {
-                            if let skotch_sil::SilData::Token { text } = &cc.data {
-                                buf.push_str(text);
-                            }
-                        }
-                    }
-                }
-                S::STRING_START | S::STRING_END | S::WHITE_SPACE => {}
-                _ => interpolated = true,
-            }
-        }
-    } else {
-        return None;
-    }
-    if interpolated {
-        return None;
-    }
-    let sid = match strings.iter().position(|s| s == &buf) {
-        Some(i) => skotch_mir::StringId(i as u32),
-        None => {
-            let id = skotch_mir::StringId(strings.len() as u32);
-            strings.push(buf);
-            id
-        }
-    };
-    // Layout:
-    //   local 0: String (the arg)
-    //   local 1: Unit   (the unused println return)
-    let str_slot = skotch_mir::LocalId(0);
+    let (arg_const, arg_ty) = literal_to_const(&arg_exprs[0], strings)?;
+    // Layout: local 0 holds the arg, local 1 holds the unused return.
+    let arg_slot = skotch_mir::LocalId(0);
     let result_slot = skotch_mir::LocalId(1);
     let blocks = vec![BasicBlock {
         stmts: vec![
             skotch_mir::Stmt::Assign {
-                dest: str_slot,
-                value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::String(sid)),
+                dest: arg_slot,
+                value: skotch_mir::Rvalue::Const(arg_const),
             },
             skotch_mir::Stmt::Assign {
                 dest: result_slot,
                 value: skotch_mir::Rvalue::Call {
-                    kind: skotch_mir::CallKind::Println,
-                    args: vec![str_slot],
+                    kind,
+                    args: vec![arg_slot],
                 },
             },
         ],
         terminator: Terminator::Return,
     }];
+    let _ = arg_ty;
     Some(blocks)
+}
+
+/// Extract a `MirConst` from a literal-shaped `KtExpr`. Returns the
+/// const plus its `Ty`. Returns `None` for non-literal expressions
+/// or interpolated string templates.
+fn literal_to_const(
+    e: &skotch_ast::KtExpr<'_>,
+    strings: &mut Vec<String>,
+) -> Option<(skotch_mir::MirConst, Ty)> {
+    use skotch_ast::KtExpr;
+    use skotch_mir::MirConst;
+    use skotch_syntax::SyntaxKind as S;
+    match e {
+        KtExpr::Integer(_) => {
+            let text = skotch_ast::children(e.syntax()).iter().find_map(|c| {
+                if c.kind == S::INTEGER_LITERAL {
+                    if let skotch_sil::SilData::Token { text } = &c.data {
+                        return Some(text.as_str());
+                    }
+                }
+                None
+            })?;
+            let v: i64 = text.parse().ok()?;
+            Some((MirConst::Int(v as i32), Ty::Int))
+        }
+        KtExpr::Boolean(_) => {
+            let is_true = skotch_ast::children(e.syntax())
+                .iter()
+                .any(|c| c.kind == S::KW_TRUE);
+            Some((MirConst::Bool(is_true), Ty::Bool))
+        }
+        KtExpr::Null(_) => Some((MirConst::Null, Ty::Nullable(Box::new(Ty::Any)))),
+        KtExpr::String(_) => {
+            let mut buf = String::new();
+            let mut interpolated = false;
+            for child in skotch_ast::children(e.syntax()) {
+                match child.kind {
+                    S::LITERAL_STRING_TEMPLATE_ENTRY => {
+                        for cc in skotch_ast::children(child) {
+                            if cc.kind == S::STRING_CHUNK {
+                                if let skotch_sil::SilData::Token { text } = &cc.data {
+                                    buf.push_str(text);
+                                }
+                            }
+                        }
+                    }
+                    S::STRING_START | S::STRING_END | S::WHITE_SPACE => {}
+                    _ => interpolated = true,
+                }
+            }
+            if interpolated {
+                return None;
+            }
+            let sid = match strings.iter().position(|s| s == &buf) {
+                Some(i) => skotch_mir::StringId(i as u32),
+                None => {
+                    let id = skotch_mir::StringId(strings.len() as u32);
+                    strings.push(buf);
+                    id
+                }
+            };
+            Some((MirConst::String(sid), Ty::String))
+        }
+        _ => None,
+    }
 }
 
 /// Build a function body for an expression-bodied function when the
@@ -529,9 +578,20 @@ fn lower_simple_body(
             let stmts: Vec<KtExpr<'_>> = block.statements().collect();
             if stmts.len() == 1 {
                 if let KtExpr::Call(call) = &stmts[0] {
-                    // `println(stringLiteral)` → Println intrinsic.
+                    // `println(literal)` / `print(literal)` → Println/Print intrinsic.
                     if let Some(blocks) = try_lower_println_call(call, strings) {
-                        return (blocks, vec![Ty::String, Ty::Unit]);
+                        // Pull the arg's Ty from the first stmt's Const.
+                        let arg_ty = blocks
+                            .first()
+                            .and_then(|b| b.stmts.first())
+                            .and_then(|s| match s {
+                                skotch_mir::Stmt::Assign { value, .. } => match value {
+                                    skotch_mir::Rvalue::Const(c) => Some(const_ty(c)),
+                                    _ => None,
+                                },
+                            })
+                            .unwrap_or(Ty::Any);
+                        return (blocks, vec![arg_ty, Ty::Unit]);
                     }
                 }
             }
@@ -1431,6 +1491,44 @@ mod tests {
                     assert_eq!(module.strings[sid.0 as usize], "hi");
                 }
                 other => panic!("expected Const(String), got {other:?}"),
+            },
+        }
+    }
+
+    #[test]
+    fn typed_lower_println_int_literal() {
+        let module = lower("fun main() { println(42) }", "TestKt");
+        let f = &module.functions[0];
+        assert_eq!(f.blocks.len(), 1);
+        let block = &f.blocks[0];
+        assert_eq!(block.stmts.len(), 2);
+        match &block.stmts[0] {
+            skotch_mir::Stmt::Assign { value, .. } => {
+                assert!(matches!(value, skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(42))));
+            }
+        }
+        match &block.stmts[1] {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::Call { kind, .. } => {
+                    assert!(matches!(kind, skotch_mir::CallKind::Println));
+                }
+                _ => panic!("expected Call"),
+            },
+        }
+        assert_eq!(f.locals, vec![Ty::Int, Ty::Unit]);
+    }
+
+    #[test]
+    fn typed_lower_print_string_literal() {
+        let module = lower("fun main() { print(\"x\") }", "TestKt");
+        let f = &module.functions[0];
+        match &f.blocks[0].stmts[1] {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::Call { kind, .. } => {
+                    // print() (no newline) gets the Print intrinsic.
+                    assert!(matches!(kind, skotch_mir::CallKind::Print));
+                }
+                _ => panic!("expected Call"),
             },
         }
     }
