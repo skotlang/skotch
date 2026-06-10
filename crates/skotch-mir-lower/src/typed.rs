@@ -413,6 +413,22 @@ pub fn lower_file(
     module
 }
 
+/// Recursively unwrap KtExpr::Parenthesized layers.
+fn unwrap_parens<'a>(e: skotch_ast::KtExpr<'a>) -> skotch_ast::KtExpr<'a> {
+    use skotch_ast::KtExpr;
+    let mut cur = e;
+    while let KtExpr::Parenthesized(p) = cur {
+        let inner = skotch_ast::children(p.syntax())
+            .iter()
+            .find_map(KtExpr::cast);
+        match inner {
+            Some(i) => cur = i,
+            None => return cur,
+        }
+    }
+    cur
+}
+
 /// Detect when an expression operand is statically a String — used
 /// by binary `+` lowering to choose ConcatStr instead of AddI.
 fn operand_is_string(e: &skotch_ast::KtExpr<'_>, f: skotch_ast::KtFun<'_>) -> bool {
@@ -767,6 +783,9 @@ fn lower_simple_body(
             }
         }
     };
+    // Parenthesized passthrough: `(literal)` or `(a + b)`.
+    let body_expr = unwrap_parens(body_expr);
+
     // Binary arithmetic body where each operand is either a param
     // reference or a literal constant. Examples:
     //   fun add(a: Int, b: Int) = a + b
@@ -1760,6 +1779,37 @@ mod tests {
             }
         }
         assert!(matches!(block.terminator, Terminator::ReturnValue(_)));
+    }
+
+    #[test]
+    fn typed_lower_parenthesized_literal_body() {
+        let module = lower("fun pi() = (42)", "TestKt");
+        let f = &module.functions[0];
+        // Same shape as fun pi() = 42 — parens are transparent.
+        assert_eq!(f.return_ty, Ty::Int);
+        match &f.blocks[0].stmts[0] {
+            skotch_mir::Stmt::Assign { value, .. } => {
+                assert!(matches!(
+                    value,
+                    skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(42))
+                ));
+            }
+        }
+        assert!(matches!(f.blocks[0].terminator, Terminator::ReturnValue(_)));
+    }
+
+    #[test]
+    fn typed_lower_parenthesized_binary_body() {
+        let module = lower("fun pi(x: Int, y: Int): Int = (x + y)", "TestKt");
+        let f = &module.functions[0];
+        match &f.blocks[0].stmts[0] {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::BinOp { op, .. } => {
+                    assert!(matches!(op, skotch_mir::BinOp::AddI));
+                }
+                _ => panic!("expected BinOp"),
+            },
+        }
     }
 
     #[test]

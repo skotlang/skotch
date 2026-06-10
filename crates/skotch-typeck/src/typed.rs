@@ -1150,6 +1150,12 @@ fn literal_ty(e: &skotch_ast::KtExpr<'_>) -> Ty {
                 _ => Ty::Any,
             }
         }
+        // Pass through parenthesized expressions transparently.
+        KtExpr::Parenthesized(p) => skotch_ast::children(p.syntax())
+            .iter()
+            .find_map(KtExpr::cast)
+            .map(|inner| literal_ty(&inner))
+            .unwrap_or(Ty::Any),
         _ => Ty::Any,
     }
 }
