@@ -1067,6 +1067,38 @@ fn lower_simple_body(
     // Parenthesized passthrough: `(literal)` or `(a + b)`.
     let body_expr = unwrap_parens(body_expr);
 
+    // Throw expression body:
+    //   fun fail(): Nothing = throw e
+    // Where the thrown value is a Reference to a parameter, the
+    // body becomes:
+    //   block 0: Terminator::Throw(param_slot)
+    if let KtExpr::Throw(t) = &body_expr {
+        // Find the inner KtExpr (the thrown value).
+        let thrown = skotch_ast::children(t.syntax())
+            .iter()
+            .find_map(KtExpr::cast)
+            .map(unwrap_parens);
+        if let Some(KtExpr::Reference(r)) = thrown {
+            if let Some(name) = r.name() {
+                let param_names: Vec<String> = f
+                    .value_parameter_list()
+                    .map(|pl| {
+                        pl.parameters()
+                            .map(|p| p.name().unwrap_or("").to_string())
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                if let Some(idx) = param_names.iter().position(|p| p == name) {
+                    let blocks = vec![BasicBlock {
+                        stmts: Vec::new(),
+                        terminator: Terminator::Throw(skotch_mir::LocalId(idx as u32)),
+                    }];
+                    return (blocks, Vec::new());
+                }
+            }
+        }
+    }
+
     // if/else expression body:
     //   fun max(a: Int, b: Int): Int = if (a > b) a else b
     // Emits a 4-block CFG:
@@ -2301,6 +2333,22 @@ mod tests {
             }
         }
         assert!(matches!(block.terminator, Terminator::ReturnValue(_)));
+    }
+
+    #[test]
+    fn typed_lower_throw_param() {
+        let module = lower(
+            "fun fail(e: Throwable): Nothing = throw e",
+            "TestKt",
+        );
+        let f = &module.functions[0];
+        assert_eq!(f.blocks.len(), 1);
+        let block = &f.blocks[0];
+        assert!(block.stmts.is_empty());
+        match &block.terminator {
+            Terminator::Throw(local) => assert_eq!(local.0, 0),
+            other => panic!("expected Throw, got {other:?}"),
+        }
     }
 
     #[test]
