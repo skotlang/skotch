@@ -557,3 +557,31 @@ End-to-end shapes that lower correctly through typed pipeline:
 - `class Foo { companion object { ... } }`
 - `class Outer { class Inner }`
 - top-level vals: `const val MAX = 42`, `val PI = 3.14`
+
+### 2026-06-10 (session 5 — push 8)
+
+Further mir-lower body lowering shapes landed:
+
+- Nested binary operands: `fun sum3(a,b,c) = a + b + c` via
+  `resolve_operand_rec` which recursively lowers inner Binary
+  into its own slot before applying the outer operation. Each
+  level's MIR BinOp variant is chosen by promote_numeric.
+- Block-body return paths: `return a + b` and `return x` are now
+  fully covered (the binary path runs after the return extraction
+  identifies the body expression).
+- Throw expression body: `fun fail(e: Throwable): Nothing = throw e`
+  lowers to a single block with `Terminator::Throw(param_slot)`.
+- When expression body: `fun name(x: Int): String = when (x)
+  { 1 -> "one"; 2 -> "two"; else -> "other" }` lowers to a
+  6-block CFG (cmp_1 / then_1 / cmp_2 / then_2 / else / join)
+  with `Branch + Goto` terminators. Single-literal arm
+  conditions, literal arm bodies, required else clause.
+
+**Push 8 totals (focused tests, all green):**
+- mir-lower: 59 unit tests (up from 53)
+- All other crates unchanged
+- Sum: **171 tests** across migration surface, 0 failures
+
+All if/else, when, and throw flows now route through proper
+multi-block emission. Control flow shapes have a structural
+template that future loops (while/do-while/for) can mirror.
