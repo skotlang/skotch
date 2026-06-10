@@ -929,9 +929,9 @@ fn classify_input(line: &str) -> DeclKind {
 
     // Check for import statements first.
     if let Some(list) = file.import_list() {
-        if skotch_ast::typed_children::<skotch_ast::KtImportDirective>(
-            skotch_ast::AstNode::syntax(list),
-        )
+        if skotch_ast::typed_children::<skotch_ast::KtImportDirective>(skotch_ast::AstNode::syntax(
+            list,
+        ))
         .next()
         .is_some()
         {

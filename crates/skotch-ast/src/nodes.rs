@@ -534,7 +534,10 @@ impl<'a> KtImportDirective<'a> {
     pub fn name(self) -> String {
         let mut s = String::new();
         for c in children(self.syntax()) {
-            if matches!(c.kind, SyntaxKind::IDENTIFIER | SyntaxKind::DOT | SyntaxKind::MUL) {
+            if matches!(
+                c.kind,
+                SyntaxKind::IDENTIFIER | SyntaxKind::DOT | SyntaxKind::MUL
+            ) {
                 if let SilData::Token { text } = &c.data {
                     s.push_str(text);
                 }
@@ -810,19 +813,15 @@ impl<'a> KtValueArgumentList<'a> {
 impl<'a> KtValueArgument<'a> {
     pub fn name(self) -> Option<&'a str> {
         let name_node = first_typed_child::<KtValueArgumentName>(self.syntax())?;
-        name_node
-            .syntax()
-            .data
-            .as_composite()
-            .and_then(|children| {
-                children.iter().find_map(|c| {
-                    if c.kind == SyntaxKind::REFERENCE_EXPRESSION {
-                        KtReferenceExpression::cast(c)?.name()
-                    } else {
-                        None
-                    }
-                })
+        name_node.syntax().data.as_composite().and_then(|children| {
+            children.iter().find_map(|c| {
+                if c.kind == SyntaxKind::REFERENCE_EXPRESSION {
+                    KtReferenceExpression::cast(c)?.name()
+                } else {
+                    None
+                }
             })
+        })
     }
 
     pub fn expression(self) -> Option<KtExpr<'a>> {
@@ -928,11 +927,8 @@ impl<'a> KtModifierList<'a> {
     /// True when the modifier list has an `@Foo` annotation entry whose
     /// short name matches `name` (case-sensitive, FQ prefix stripped).
     pub fn has_annotation(self, name: &str) -> bool {
-        self.annotations().any(|a| {
-            a.short_name()
-                .map(|n| n == name)
-                .unwrap_or(false)
-        })
+        self.annotations()
+            .any(|a| a.short_name().map(|n| n == name).unwrap_or(false))
     }
 }
 
@@ -1311,7 +1307,11 @@ impl<'a> KtProperty<'a> {
                         }
                     }
                 }
-                return if saw_dot { KtTypeReference::cast(c) } else { None };
+                return if saw_dot {
+                    KtTypeReference::cast(c)
+                } else {
+                    None
+                };
             }
             if c.kind == SyntaxKind::IDENTIFIER {
                 return None;
@@ -1596,7 +1596,9 @@ impl<'a> KtTypeParameter<'a> {
 
 impl<'a> KtSuperTypeList<'a> {
     pub fn entries(self) -> impl Iterator<Item = SuperTypeEntry<'a>> + 'a {
-        children(self.syntax()).iter().filter_map(SuperTypeEntry::cast)
+        children(self.syntax())
+            .iter()
+            .filter_map(SuperTypeEntry::cast)
     }
 }
 
@@ -2021,10 +2023,7 @@ mod tests {
         let ty = p.type_reference().expect("type ref");
         let ft = ty.function_type().expect("function type");
         let ret = ft.return_type().expect("return ty");
-        assert_eq!(
-            ret.user_type().and_then(|u| u.name()),
-            Some("String"),
-        );
+        assert_eq!(ret.user_type().and_then(|u| u.name()), Some("String"),);
     }
 
     fn dump(n: &SilNode, depth: usize) {
@@ -2044,10 +2043,7 @@ mod tests {
     #[test]
     #[ignore]
     fn debug_dump_user_type() {
-        let parsed = crate::parse(
-            "t.kt",
-            "fun f(): kotlin.collections.List = TODO()",
-        );
+        let parsed = crate::parse("t.kt", "fun f(): kotlin.collections.List = TODO()");
         dump(parsed.file().syntax(), 0);
     }
 

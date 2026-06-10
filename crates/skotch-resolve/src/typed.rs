@@ -58,9 +58,8 @@ fn type_ref_to_descriptor(
     // Function type: `(P, ...) -> R` → `Lkotlin/jvm/functions/FunctionN;`
     if let Some(ft) = tr.function_type() {
         let base = ft.parameter_list().map_or(0, |pl| pl.parameters().count());
-        let arity = base
-            + if tr.is_composable() { 2 } else { 0 }
-            + if tr.is_suspend() { 1 } else { 0 };
+        let arity =
+            base + if tr.is_composable() { 2 } else { 0 } + if tr.is_suspend() { 1 } else { 0 };
         return format!("Lkotlin/jvm/functions/Function{arity};");
     }
     // Nullable wrapper — for typecheck-bound nullable types, fall back to
@@ -70,9 +69,8 @@ fn type_ref_to_descriptor(
         // so callers see the Function shape (matches legacy).
         if let Some(ft) = n.inner_function_type() {
             let base = ft.parameter_list().map_or(0, |pl| pl.parameters().count());
-            let arity = base
-                + if tr.is_composable() { 2 } else { 0 }
-                + if tr.is_suspend() { 1 } else { 0 };
+            let arity =
+                base + if tr.is_composable() { 2 } else { 0 } + if tr.is_suspend() { 1 } else { 0 };
             return format!("Lkotlin/jvm/functions/Function{arity};");
         }
         return "Ljava/lang/Object;".to_string();
@@ -477,7 +475,9 @@ fn build_ctor_shape(
     (fields, ctor_params)
 }
 
-fn collect_supertypes(class_super_type_list: Option<skotch_ast::KtSuperTypeList<'_>>) -> (Option<String>, Vec<String>) {
+fn collect_supertypes(
+    class_super_type_list: Option<skotch_ast::KtSuperTypeList<'_>>,
+) -> (Option<String>, Vec<String>) {
     let Some(list) = class_super_type_list else {
         return (None, Vec::new());
     };
@@ -589,8 +589,7 @@ fn gather_class_recursive(
     }
     let imports = &class_imports;
 
-    let (fields, ctor_params) =
-        build_ctor_shape(c.primary_constructor(), imports, aliases);
+    let (fields, ctor_params) = build_ctor_shape(c.primary_constructor(), imports, aliases);
     let (body_methods, body_props) = body_methods_and_props(c.body());
     let property_getters: Vec<ExternalMethod> = body_props
         .iter()
@@ -713,7 +712,12 @@ fn gather_object(
         enum_entries: Vec::new(),
         annotations: o
             .modifier_list()
-            .map(|m| m.annotations().filter_map(|a| a.short_name()).map(String::from).collect())
+            .map(|m| {
+                m.annotations()
+                    .filter_map(|a| a.short_name())
+                    .map(String::from)
+                    .collect()
+            })
             .unwrap_or_default(),
         has_type_params: false,
         has_init_blocks: o
@@ -769,7 +773,12 @@ fn gather_interface(
         enum_entries: Vec::new(),
         annotations: i
             .modifier_list()
-            .map(|m| m.annotations().filter_map(|a| a.short_name()).map(String::from).collect())
+            .map(|m| {
+                m.annotations()
+                    .filter_map(|a| a.short_name())
+                    .map(String::from)
+                    .collect()
+            })
             .unwrap_or_default(),
         has_type_params: i
             .type_parameter_list()
@@ -792,8 +801,7 @@ fn gather_enum(
     }
     let Some(name) = e.name() else { return };
     let jvm_name = format!("{pkg_prefix}{name}");
-    let (fields, ctor_params) =
-        build_ctor_shape(e.primary_constructor(), imports, aliases);
+    let (fields, ctor_params) = build_ctor_shape(e.primary_constructor(), imports, aliases);
     let (body_methods, body_props) = body_methods_and_props(e.body());
     let property_getters: Vec<ExternalMethod> = body_props
         .iter()
@@ -833,7 +841,12 @@ fn gather_enum(
         enum_entries,
         annotations: e
             .modifier_list()
-            .map(|m| m.annotations().filter_map(|a| a.short_name()).map(String::from).collect())
+            .map(|m| {
+                m.annotations()
+                    .filter_map(|a| a.short_name())
+                    .map(String::from)
+                    .collect()
+            })
             .unwrap_or_default(),
         has_type_params: false,
         has_init_blocks: e
@@ -907,7 +920,11 @@ pub fn gather_declarations<'a>(
                         .unwrap_or_else(|| infer_body_return_ty(f));
                     let has_default: Vec<bool> = f
                         .value_parameter_list()
-                        .map(|pl| pl.parameters().map(|p| p.default_value().is_some()).collect())
+                        .map(|pl| {
+                            pl.parameters()
+                                .map(|p| p.default_value().is_some())
+                                .collect()
+                        })
                         .unwrap_or_default();
                     let is_vararg: Vec<bool> = f
                         .value_parameter_list()
@@ -928,11 +945,7 @@ pub fn gather_declarations<'a>(
                         receiver_ty,
                         has_default,
                         is_vararg,
-                        annotations: f
-                            .annotation_names()
-                            .into_iter()
-                            .map(String::from)
-                            .collect(),
+                        annotations: f.annotation_names().into_iter().map(String::from).collect(),
                     };
                     table
                         .functions
@@ -1088,7 +1101,9 @@ fn pkg_prefix_for(file: KtFile<'_>) -> String {
 }
 
 fn pkg_path_for(file: KtFile<'_>) -> String {
-    file.package_directive().map(|p| p.name()).unwrap_or_default()
+    file.package_directive()
+        .map(|p| p.name())
+        .unwrap_or_default()
 }
 
 // ── resolve_file ────────────────────────────────────────────────────
@@ -1503,9 +1518,7 @@ fn resolve_expr(
                 }
             }
         }
-        KtExpr::Prefix(_)
-        | KtExpr::Postfix(_)
-        | KtExpr::Unary(_) => {
+        KtExpr::Prefix(_) | KtExpr::Postfix(_) | KtExpr::Unary(_) => {
             // Skip operator-only; the operand resolves via further KtExpr cast.
             for c in skotch_ast::children(e.syntax()) {
                 if let Some(child) = KtExpr::cast(c) {
@@ -1525,7 +1538,6 @@ fn resolve_expr(
         _ => {}
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -1671,9 +1683,7 @@ mod tests {
 
     #[test]
     fn nested_classes_inner_jvm_name() {
-        let p = parse(
-            "class Outer { class Inner }",
-        );
+        let p = parse("class Outer { class Inner }");
         let interner = Interner::new();
         let table = gather_declarations(&[(p.file(), "TestKt")], &interner);
         let outer = table.classes.get("Outer").expect("outer");
@@ -1704,7 +1714,11 @@ mod tests {
                 _ => {}
             }
         }
-        assert!(saw_a, "expected ref to a as Param(0,0); refs={:?}", f.body_refs);
+        assert!(
+            saw_a,
+            "expected ref to a as Param(0,0); refs={:?}",
+            f.body_refs
+        );
         assert!(saw_b, "expected ref to b as Param(0,1)");
         // Symbol IDs round-trip through the interner.
         let _ = (a, b);
@@ -1732,7 +1746,11 @@ mod tests {
         let f = &r.functions[0];
         // The local val `x` should be in f.locals.
         let x_sym = interner.intern("x");
-        assert!(f.locals.contains(&x_sym), "expected local x; locals={:?}", f.locals);
+        assert!(
+            f.locals.contains(&x_sym),
+            "expected local x; locals={:?}",
+            f.locals
+        );
         // The reference `x` inside println should resolve to Local(0,0).
         let x_ref = f
             .body_refs
@@ -1749,7 +1767,11 @@ mod tests {
         let r = resolve_file(p.file(), &mut interner, None);
         let f = &r.functions[0];
         let i_sym = interner.intern("i");
-        assert!(f.locals.contains(&i_sym), "expected loop var i; locals={:?}", f.locals);
+        assert!(
+            f.locals.contains(&i_sym),
+            "expected loop var i; locals={:?}",
+            f.locals
+        );
     }
 
     #[test]
@@ -1764,7 +1786,10 @@ mod tests {
             .iter()
             .filter(|rf| matches!(rf.def, DefId::Local(0, 0)))
             .count();
-        assert!(local_refs >= 2, "expected ≥2 refs to local x; got {local_refs}");
+        assert!(
+            local_refs >= 2,
+            "expected ≥2 refs to local x; got {local_refs}"
+        );
     }
 
     #[test]
@@ -1787,14 +1812,17 @@ mod tests {
 
     #[test]
     fn body_walk_try_catch_introduces_exception_var() {
-        let p = parse(
-            "fun main() {\n  try { println(\"hi\") } catch (e: Exception) { println(e) }\n}",
-        );
+        let p =
+            parse("fun main() {\n  try { println(\"hi\") } catch (e: Exception) { println(e) }\n}");
         let mut interner = Interner::new();
         let r = resolve_file(p.file(), &mut interner, None);
         let f = &r.functions[0];
         let e_sym = interner.intern("e");
-        assert!(f.locals.contains(&e_sym), "expected exception var e; locals={:?}", f.locals);
+        assert!(
+            f.locals.contains(&e_sym),
+            "expected exception var e; locals={:?}",
+            f.locals
+        );
     }
 
     #[test]
@@ -1815,20 +1843,12 @@ mod tests {
     #[test]
     fn cross_file_same_package_class_in_import_map() {
         let a = parse("package com.x\nclass A");
-        let b = parse(
-            "package com.x\nclass UsesA { fun f(): A = A() }",
-        );
+        let b = parse("package com.x\nclass UsesA { fun f(): A = A() }");
         let interner = Interner::new();
-        let table = gather_declarations(
-            &[(a.file(), "AKt"), (b.file(), "BKt")],
-            &interner,
-        );
+        let table = gather_declarations(&[(a.file(), "AKt"), (b.file(), "BKt")], &interner);
         // A should be imported into B's lookup map so its method
         // descriptor uses Lcom/x/A; not Ljava/lang/Object;.
-        let uses_a = table
-            .classes_by_fq
-            .get("com/x/UsesA")
-            .expect("UsesA");
+        let uses_a = table.classes_by_fq.get("com/x/UsesA").expect("UsesA");
         let m = uses_a.methods.iter().find(|m| m.name == "f").expect("f");
         // return type via type_ref_to_ty -> Ty::Class(com/x/A)
         match &m.return_ty {

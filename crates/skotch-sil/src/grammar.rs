@@ -601,27 +601,27 @@ fn looks_like_modifier_after_trivia(p: &Parser<'_, '_>) -> bool {
             && matches!(
                 p.text_at(i),
                 "public"
-                | "inner"
-                | "companion"
-                | "data"
-                | "sealed"
-                | "annotation"
-                | "open"
-                | "abstract"
-                | "override"
-                | "operator"
-                | "infix"
-                | "lateinit"
-                | "tailrec"
-                | "suspend"
-                | "expect"
-                | "actual"
-                | "crossinline"
-                | "noinline"
-                | "reified"
-                | "value"
-                | "vararg"
-                | "const"
+                    | "inner"
+                    | "companion"
+                    | "data"
+                    | "sealed"
+                    | "annotation"
+                    | "open"
+                    | "abstract"
+                    | "override"
+                    | "operator"
+                    | "infix"
+                    | "lateinit"
+                    | "tailrec"
+                    | "suspend"
+                    | "expect"
+                    | "actual"
+                    | "crossinline"
+                    | "noinline"
+                    | "reified"
+                    | "value"
+                    | "vararg"
+                    | "const"
             )
         {
             let mut j = i + 1;
@@ -652,27 +652,27 @@ fn looks_like_modifier_after_trivia(p: &Parser<'_, '_>) -> bool {
                         && matches!(
                             p.text_at(j),
                             "public"
-                | "inner"
-                | "companion"
-                | "data"
-                | "sealed"
-                | "annotation"
-                | "open"
-                | "abstract"
-                | "override"
-                | "operator"
-                | "infix"
-                | "lateinit"
-                | "tailrec"
-                | "suspend"
-                | "expect"
-                | "actual"
-                | "crossinline"
-                | "noinline"
-                | "reified"
-                | "value"
-                | "vararg"
-                | "const"
+                                | "inner"
+                                | "companion"
+                                | "data"
+                                | "sealed"
+                                | "annotation"
+                                | "open"
+                                | "abstract"
+                                | "override"
+                                | "operator"
+                                | "infix"
+                                | "lateinit"
+                                | "tailrec"
+                                | "suspend"
+                                | "expect"
+                                | "actual"
+                                | "crossinline"
+                                | "noinline"
+                                | "reified"
+                                | "value"
+                                | "vararg"
+                                | "const"
                         ));
             }
         }
@@ -766,27 +766,27 @@ fn soft_modifier_followed_by_decl(p: &Parser<'_, '_>) -> bool {
                 && matches!(
                     p.text_at(i),
                     "public"
-                | "inner"
-                | "companion"
-                | "data"
-                | "sealed"
-                | "annotation"
-                | "open"
-                | "abstract"
-                | "override"
-                | "operator"
-                | "infix"
-                | "lateinit"
-                | "tailrec"
-                | "suspend"
-                | "expect"
-                | "actual"
-                | "crossinline"
-                | "noinline"
-                | "reified"
-                | "value"
-                | "vararg"
-                | "const"
+                        | "inner"
+                        | "companion"
+                        | "data"
+                        | "sealed"
+                        | "annotation"
+                        | "open"
+                        | "abstract"
+                        | "override"
+                        | "operator"
+                        | "infix"
+                        | "lateinit"
+                        | "tailrec"
+                        | "suspend"
+                        | "expect"
+                        | "actual"
+                        | "crossinline"
+                        | "noinline"
+                        | "reified"
+                        | "value"
+                        | "vararg"
+                        | "const"
                 ));
     }
 }
@@ -975,8 +975,8 @@ fn parse_super_type_entry(p: &mut Parser<'_, '_>) {
     let m = p.start();
     let tref = parse_type_ref(p);
     let next = next_non_trivia(p, 0);
-    let by_at_next = next == S::KW_BY
-        || (next == S::IDENTIFIER && next_non_trivia_text_eq(p, 0, "by"));
+    let by_at_next =
+        next == S::KW_BY || (next == S::IDENTIFIER && next_non_trivia_text_eq(p, 0, "by"));
     if next == S::LPAR {
         // SUPER_TYPE_CALL_ENTRY: wrap the type-ref in CONSTRUCTOR_CALLEE.
         let callee = tref.precede(p);
@@ -1462,27 +1462,27 @@ fn looks_like_primary_constructor_with_modifiers(p: &Parser<'_, '_>) -> bool {
                 if matches!(
                     p.text_at(i),
                     "public"
-                | "inner"
-                | "companion"
-                | "data"
-                | "sealed"
-                | "annotation"
-                | "open"
-                | "abstract"
-                | "override"
-                | "operator"
-                | "infix"
-                | "lateinit"
-                | "tailrec"
-                | "suspend"
-                | "expect"
-                | "actual"
-                | "crossinline"
-                | "noinline"
-                | "reified"
-                | "value"
-                | "vararg"
-                | "const"
+                        | "inner"
+                        | "companion"
+                        | "data"
+                        | "sealed"
+                        | "annotation"
+                        | "open"
+                        | "abstract"
+                        | "override"
+                        | "operator"
+                        | "infix"
+                        | "lateinit"
+                        | "tailrec"
+                        | "suspend"
+                        | "expect"
+                        | "actual"
+                        | "crossinline"
+                        | "noinline"
+                        | "reified"
+                        | "value"
+                        | "vararg"
+                        | "const"
                 ) =>
             {
                 saw_mod = true;
@@ -2401,10 +2401,7 @@ fn parse_value_parameter(p: &mut Parser<'_, '_>) {
         let next_text = next_non_trivia_text(p, 0);
         let next_is_modifier_like = next == S::AT
             || is_modifier_keyword(next)
-            || matches!(
-                next_text,
-                "vararg" | "crossinline" | "noinline"
-            );
+            || matches!(next_text, "vararg" | "crossinline" | "noinline");
         if had_any {
             if next_is_modifier_like {
                 skip_trivia(p);

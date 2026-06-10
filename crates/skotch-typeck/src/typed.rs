@@ -193,34 +193,20 @@ fn walk_block_with_scope_and_fns(
         if let Some(expr) = KtExpr::cast(c) {
             match expr {
                 KtExpr::If(i) => {
-                    if let Some(KtExpr::Block(b)) =
-                        i.then_branch().and_then(|t| t.expression())
-                    {
+                    if let Some(KtExpr::Block(b)) = i.then_branch().and_then(|t| t.expression()) {
                         walk_block_with_scope_and_fns(
-                            b,
-                            imports,
-                            aliases,
-                            fn_returns,
-                            local_tys,
-                            scope,
+                            b, imports, aliases, fn_returns, local_tys, scope,
                         );
                     }
-                    if let Some(KtExpr::Block(b)) =
-                        i.else_branch().and_then(|e| e.expression())
-                    {
+                    if let Some(KtExpr::Block(b)) = i.else_branch().and_then(|e| e.expression()) {
                         walk_block_with_scope_and_fns(
-                            b,
-                            imports,
-                            aliases,
-                            fn_returns,
-                            local_tys,
-                            scope,
+                            b, imports, aliases, fn_returns, local_tys, scope,
                         );
                     }
                 }
-                KtExpr::Block(b) => walk_block_with_scope_and_fns(
-                    b, imports, aliases, fn_returns, local_tys, scope,
-                ),
+                KtExpr::Block(b) => {
+                    walk_block_with_scope_and_fns(b, imports, aliases, fn_returns, local_tys, scope)
+                }
                 _ => {}
             }
         }
@@ -337,9 +323,7 @@ fn synth_expr(
 fn collect_imports(file: KtFile<'_>) -> FxHashMap<String, String> {
     let mut out = FxHashMap::default();
     if let Some(list) = file.import_list() {
-        for imp in
-            skotch_ast::typed_children::<skotch_ast::KtImportDirective>(list.syntax())
-        {
+        for imp in skotch_ast::typed_children::<skotch_ast::KtImportDirective>(list.syntax()) {
             if imp.is_wildcard() {
                 continue;
             }
@@ -577,10 +561,7 @@ mod tests {
         let mut interner = Interner::new();
         let mut diags = Diagnostics::new();
         let typed = type_check(parsed.file(), &resolved, &mut interner, &mut diags, None);
-        assert!(matches!(
-            typed.functions[0].param_tys[0],
-            Ty::Nullable(_)
-        ));
+        assert!(matches!(typed.functions[0].param_tys[0], Ty::Nullable(_)));
         assert!(matches!(typed.functions[0].return_ty, Ty::Nullable(_)));
     }
 
@@ -652,10 +633,7 @@ mod tests {
 
     #[test]
     fn body_local_initialized_from_binary_op() {
-        let parsed = skotch_ast::parse(
-            "test.kt",
-            "fun main() {\n  val a = 1\n  val b = a + 2\n}",
-        );
+        let parsed = skotch_ast::parse("test.kt", "fun main() {\n  val a = 1\n  val b = a + 2\n}");
         let resolved = ResolvedFile::default();
         let mut interner = Interner::new();
         let mut diags = Diagnostics::new();
@@ -667,10 +645,7 @@ mod tests {
 
     #[test]
     fn body_local_initialized_from_comparison() {
-        let parsed = skotch_ast::parse(
-            "test.kt",
-            "fun main() {\n  val a = 1\n  val b = a > 0\n}",
-        );
+        let parsed = skotch_ast::parse("test.kt", "fun main() {\n  val a = 1\n  val b = a > 0\n}");
         let resolved = ResolvedFile::default();
         let mut interner = Interner::new();
         let mut diags = Diagnostics::new();

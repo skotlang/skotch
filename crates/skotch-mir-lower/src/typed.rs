@@ -15,9 +15,7 @@
 use skotch_ast::{KtDecl, KtFile};
 use skotch_diagnostics::Diagnostics;
 use skotch_intern::Interner;
-use skotch_mir::{
-    BasicBlock, FuncId, MirFunction, MirModule, Terminator,
-};
+use skotch_mir::{BasicBlock, FuncId, MirFunction, MirModule, Terminator};
 use skotch_resolve::{PackageSymbolTable, ResolvedFile};
 use skotch_typeck::TypedFile;
 use skotch_types::Ty;
@@ -61,9 +59,7 @@ pub fn lower_file(
             // Pull param/return Ty from the TypedFile pass-1 output if
             // the indices line up.
             let typed_fn = typed.functions.iter().find(|tf| tf.name_index == fn_id);
-            let return_ty = typed_fn
-                .map(|tf| tf.return_ty.clone())
-                .unwrap_or(Ty::Unit);
+            let return_ty = typed_fn.map(|tf| tf.return_ty.clone()).unwrap_or(Ty::Unit);
             let param_count = f
                 .value_parameter_list()
                 .map(|pl| pl.parameters().count())

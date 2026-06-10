@@ -26,13 +26,7 @@ pub fn compile_source(
     let parsed = skotch_ast::parse(file_name, source);
     let file = parsed.file();
     let resolved = resolve_file(file, interner, package_symbols);
-    let typed = skotch_typeck::typed::type_check(
-        file,
-        &resolved,
-        interner,
-        diags,
-        package_symbols,
-    );
+    let typed = skotch_typeck::typed::type_check(file, &resolved, interner, diags, package_symbols);
     skotch_mir_lower::typed::lower_file(
         file,
         &resolved,

@@ -19,8 +19,7 @@ fn run_legacy(src: &str) -> (TypedFile, Interner) {
     let mut diags = Diagnostics::default();
     let lexed = lex(FileId(0), src, &mut diags);
     let ast = parse_file(&lexed, &mut interner, &mut diags);
-    let resolved =
-        skotch_resolve::resolve_file(&ast, &mut interner, &mut diags, None);
+    let resolved = skotch_resolve::resolve_file(&ast, &mut interner, &mut diags, None);
     let table = PackageSymbolTable::default();
     let typed = legacy_check(&ast, &resolved, &mut interner, &mut diags, Some(&table));
     (typed, interner)

@@ -57,14 +57,14 @@ fn assert_top_level_keys_match(legacy: &PackageSymbolTable, typed: &PackageSymbo
     assert_eq!(lc, tc, "class-name key set differs");
 }
 
-fn assert_class_shape_match(
-    legacy: &ExternalClassDecl,
-    typed: &ExternalClassDecl,
-    name: &str,
-) {
+fn assert_class_shape_match(legacy: &ExternalClassDecl, typed: &ExternalClassDecl, name: &str) {
     assert_eq!(legacy.jvm_name, typed.jvm_name, "{name}: jvm_name");
     assert_eq!(legacy.kind, typed.kind, "{name}: kind");
-    assert_eq!(legacy.fields.len(), typed.fields.len(), "{name}: field count");
+    assert_eq!(
+        legacy.fields.len(),
+        typed.fields.len(),
+        "{name}: field count"
+    );
     // Field name + type equality, in order.
     for ((ln, lt), (tn, tt)) in legacy.fields.iter().zip(typed.fields.iter()) {
         assert_eq!(ln, tn, "{name}: field name");
@@ -155,12 +155,10 @@ fn parity_object_singleton() {
 
 #[test]
 fn parity_typealias_descriptor() {
-    let (l, t) = run_both(
-        "typealias Predicate = (Int) -> Boolean\nfun apply(p: Predicate): Boolean = true",
-    );
+    let (l, t) =
+        run_both("typealias Predicate = (Int) -> Boolean\nfun apply(p: Predicate): Boolean = true");
     assert_eq!(
-        l.functions["apply"][0].descriptor,
-        t.functions["apply"][0].descriptor,
+        l.functions["apply"][0].descriptor, t.functions["apply"][0].descriptor,
         "typealias must substitute in descriptor"
     );
 }
