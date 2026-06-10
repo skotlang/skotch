@@ -2456,6 +2456,7 @@ name = "skotch-mir-lower"
 version = "0.41.0"
 dependencies = [
  "rustc-hash",
+ "skotch-ast",
  "skotch-classinfo",
  "skotch-diagnostics",
  "skotch-intern",
@@ -2463,6 +2464,7 @@ dependencies = [
  "skotch-mir",
  "skotch-parser",
  "skotch-resolve",
+ "skotch-sil",
  "skotch-span",
  "skotch-stdlib-registry",
  "skotch-syntax",
@@ -2594,11 +2596,13 @@ name = "skotch-typeck"
 version = "0.41.0"
 dependencies = [
  "rustc-hash",
+ "skotch-ast",
  "skotch-diagnostics",
  "skotch-intern",
  "skotch-lexer",
  "skotch-parser",
  "skotch-resolve",
+ "skotch-sil",
  "skotch-span",
  "skotch-syntax",
  "skotch-types",

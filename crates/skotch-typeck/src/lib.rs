@@ -45,6 +45,8 @@ use skotch_syntax::{
 use skotch_types::intrinsics;
 use skotch_types::{ty_from_name, Ty};
 
+pub mod typed;
+
 /// Map well-known Kotlin source-level class names to their JVM internal names
 /// so that type descriptors use `Ljava/util/List;` rather than `LList;`.
 fn well_known_class_name(name: &str) -> Option<&'static str> {

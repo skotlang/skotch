@@ -16,6 +16,8 @@ skotch-mir         = { workspace = true }
 skotch-diagnostics = { workspace = true }
 skotch-classinfo       = { workspace = true }
 skotch-stdlib-registry = { workspace = true }
+skotch-sil         = { workspace = true }
+skotch-ast         = { workspace = true }
 rustc-hash       = { workspace = true }
 
 [dev-dependencies]

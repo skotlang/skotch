@@ -44,6 +44,7 @@ mod annotations;
 mod const_fold;
 mod descriptors;
 mod free_vars;
+pub mod typed;
 
 thread_local! {
     /// Hint set by `lower_val_stmt` while lowering the right-hand side
