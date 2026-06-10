@@ -292,3 +292,46 @@ after the body-walk and synth_expr additions; +7 from baseline.**
   `skotch_ast::parse` and regenerate ~1313 fixture goldens
 - Delete legacy parser + AST: `crates/skotch-syntax/src/ast.rs`
   (744 LOC) + `crates/skotch-parser/` (5606 LOC)
+
+### 2026-06-10 (session 5 — push 2)
+
+- Added comprehensive `TypeEnv` to `skotch_typeck::typed`:
+  per-class fields/methods/companion-methods, super-class +
+  interface chain walking via `lookup_method` / `lookup_field` /
+  `lookup_companion`, sealed-subclasses index, enum-entries map.
+  Populated from class/interface/enum/object decls walked at
+  `type_check` entry. Same-file class simple names auto-imported
+  so param types like `fun touch(p: P)` resolve to `Ty::Class(P)`.
+- Pass 2 `synth_expr` now resolves:
+  - DotQualified field/property access → field type from TypeEnv.
+  - DotQualified method calls → method return type from TypeEnv.
+  - Bare-callee constructor calls (`Box(7)`) → Ty::Class(Box).
+  - Enum entry references (`Color.RED`, `RED` in implicit
+    context) → Ty::Class(enum_name).
+  - Binary operators on Ty::Class receivers → plus/minus/times/
+    div/rem member lookup with receiver fallback when ret is Unit.
+- Added top-val cycle detection (`detect_top_val_cycles` +
+  `collect_top_val_refs`); diagnostic emission still pending
+  wiring through Diagnostics.
+- Expanded `skotch_mir_lower::typed::lower_file` to cover:
+  - Top-level `const val` → `module.top_level_consts` with
+    MirConst::Int/Long/Float/Double/Bool/Null literal lowering
+    via `lower_const_init_typed`.
+  - Top-level bare `val` → `module.top_level_props` + entry in
+    `top_level_prop_names`.
+  - Top-level KtClass → MirClass with super_class from
+    SUPER_TYPE_CALL_ENTRY, interfaces from bare entries,
+    is_open/is_abstract from modifiers (sealed implies both),
+    has_type_params, empty `<init>()V` placeholder constructor.
+  - Top-level KtInterface → MirClass with is_interface=true,
+    is_abstract=true.
+  - Top-level KtObjectDeclaration → MirClass with
+    is_object_singleton=true (backends emit static INSTANCE).
+  - Top-level KtEnumClass → MirClass with
+    super_class="java/lang/Enum" + module.enum_names entry.
+
+**Verification (this push, partial):**
+- skotch-typeck: 18 unit + 5 parity = 23 tests, green
+- skotch-mir-lower: 18 unit tests, green
+- skotch-resolve, skotch-ast, skotch-repl: unchanged from
+  push 1 (36 + 12 + 26 = 74 tests, all green)
