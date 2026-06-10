@@ -487,8 +487,8 @@ fn collect_class_fields(c: skotch_ast::KtClass<'_>) -> Vec<skotch_mir::MirField>
 fn collect_secondary_ctors(c: skotch_ast::KtClass<'_>) -> Vec<MirFunction> {
     let mut out = Vec::new();
     let Some(body) = c.body() else { return out };
-    let mut sc_idx = 0u32;
-    for sc in body.secondary_constructors() {
+    for (sc_idx, sc) in body.secondary_constructors().enumerate() {
+        let sc_idx = sc_idx as u32;
         let param_count = sc
             .value_parameter_list()
             .map(|pl| pl.parameters().count())
@@ -547,7 +547,6 @@ fn collect_secondary_ctors(c: skotch_ast::KtClass<'_>) -> Vec<MirFunction> {
             needs_leading_nop: false,
             local_generic_args: rustc_hash::FxHashMap::default(),
         });
-        sc_idx += 1;
     }
     out
 }
