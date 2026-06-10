@@ -503,3 +503,57 @@ The mir-lower port still has a long way to go for control flow
 method calls on user types, lambdas, suspend/coroutines, etc.
 But the foundation for body lowering is now in place and
 each shape can be added incrementally with confidence.
+
+### 2026-06-10 (session 5 — push 7)
+
+Substantial additions to typed mir-lower body lowering:
+
+- Static-call resolution within the same file via a `fn_lookup`
+  pass that maps `name → (FuncId, return Ty)`. Bare `inner()`
+  calls in expression bodies now route to `CallKind::Static`.
+- Static-call argument threading: each call arg is resolved
+  either as a literal Const or as a Reference to an outer
+  parameter. Multi-arg calls (`add(1, 2)`, `double(n)`) work
+  end-to-end.
+- Unit-returning callees get a plain `Terminator::Return` instead
+  of `ReturnValue`, matching legacy emit shape.
+- if/else expression body lowering with full 4-block CFG:
+  - block 0: cond computation + `Branch`
+  - block 1: then arm + `Goto`
+  - block 2: else arm + `Goto`
+  - block 3: `ReturnValue`
+  Conditions are binary comparisons; arms are literal/ref.
+
+**Push 7 totals (focused tests, all green):**
+- mir-lower: 53 unit tests (up from 48)
+- All other crates unchanged
+- Sum: **165 tests** across migration surface, 0 failures
+
+End-to-end shapes that lower correctly through typed pipeline:
+- `fun answer(): Int = 42`
+- `fun ok() = true`
+- `fun greet() = "hi"`
+- `fun never() = null`
+- `fun answer(): Int { return 7 }`
+- `fun pi() = (42)` (parenthesized)
+- `fun id(x: Int): Int = x` (identity)
+- `fun add(a: Int, b: Int): Int = a + b`
+- `fun addOne(x: Int) = x + 1`
+- `fun isPos(x: Int): Boolean = x > 0`
+- `fun greet(name: String): String = "Hello, " + name`
+- `fun add(a: Long, b: Long): Long = a + b` (proper Long dispatch)
+- `fun add(a: Double, b: Double): Double = a + b`
+- `fun outer() = inner()` (static call)
+- `fun foo(n: Int): Int = double(n)` (static call with param)
+- `fun main(): Int = add(1, 2)` (static call with literals)
+- `fun side() {}; fun caller() = side()` (Unit-returning call)
+- `fun max(a: Int, b: Int): Int = if (a > b) a else b` (if/else)
+- `fun main() { println("hello") }` (println intrinsic)
+- `fun main() { val x = 42; println(x) }` (multi-stmt block)
+- `class Foo(val x: Int) { ... }` (class with full shape)
+- `enum class Color { RED, GREEN, BLUE }`
+- `interface I { fun m(): String }`
+- `object S { fun greet(): String = "hi" }`
+- `class Foo { companion object { ... } }`
+- `class Outer { class Inner }`
+- top-level vals: `const val MAX = 42`, `val PI = 3.14`
