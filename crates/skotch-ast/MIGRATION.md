@@ -335,3 +335,39 @@ after the body-walk and synth_expr additions; +7 from baseline.**
 - skotch-mir-lower: 18 unit tests, green
 - skotch-resolve, skotch-ast, skotch-repl: unchanged from
   push 1 (36 + 12 + 26 = 74 tests, all green)
+
+### 2026-06-10 (session 5 — push 3)
+
+- ast: `name_span()` accessor on KtClass / KtFun / KtProperty /
+  KtValueParameter returns the source span of the IDENTIFIER
+  token. Needed by the LSP for go-to-definition once it migrates
+  to the typed AST.
+- resolve: typed resolve_file now populates `out.top_vals`
+  (Vec<ResolvedTopLevelVal>) with `name: Symbol` + `init_refs:
+  Vec<ResolvedRef>`. Each top-level KtProperty's initializer is
+  walked through `resolve_expr` so cross-val references are
+  tracked.
+- mir-lower: class lowering expanded:
+  - `<init>` constructor now built from primary-constructor param
+    list (param names, param types, required_params) via
+    `constructor_from_primary` instead of the empty-fallback.
+  - Body methods now include each declared KtFun as a MirFunction
+    with empty Return body, param names/types, modifier flags
+    (suspend / inline / private / abstract / has_type_params).
+  - Fields collected from both primary-ctor val/var params AND
+    body KtProperty entries.
+
+**Push 3 totals (focused tests, all green):**
+- ast: 8 unit + 4 ignored
+- resolve: 23 unit + 13 parity
+- typeck: 18 unit + 5 parity
+- mir-lower: 18 unit
+- repl: 26 unit
+- Sum: **115 tests** across the migration surface, 0 failures.
+
+Push 3 commits: 4
+- `mir-lower: typed class lowering shape (no body methods yet)`
+- `mir-lower: typed interface, object singleton, enum class shape`
+- `ast: MIGRATION.md updated with session-5/push-2 progress`
+- `ast,resolve,mir-lower: name_span accessors, top_vals, class
+  fields/methods/ctor`
