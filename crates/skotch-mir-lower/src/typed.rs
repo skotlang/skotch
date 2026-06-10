@@ -413,6 +413,32 @@ pub fn lower_file(
     module
 }
 
+/// Detect when an expression operand is statically a String — used
+/// by binary `+` lowering to choose ConcatStr instead of AddI.
+fn operand_is_string(e: &skotch_ast::KtExpr<'_>, f: skotch_ast::KtFun<'_>) -> bool {
+    use skotch_ast::KtExpr;
+    match e {
+        KtExpr::String(_) => true,
+        KtExpr::Reference(r) => {
+            // Check whether the named parameter has declared type
+            // String.
+            let Some(name) = r.name() else { return false };
+            f.value_parameter_list()
+                .map(|pl| {
+                    pl.parameters().any(|p| {
+                        p.name() == Some(name)
+                            && p.type_reference()
+                                .and_then(|tr| tr.user_type())
+                                .and_then(|u| u.name())
+                                == Some("String")
+                    })
+                })
+                .unwrap_or(false)
+        }
+        _ => false,
+    }
+}
+
 /// Map a `MirConst` to its surface Ty.
 fn const_ty(c: &skotch_mir::MirConst) -> Ty {
     match c {
@@ -760,7 +786,16 @@ fn lower_simple_body(
             })
             .unwrap_or_default();
         let op_text = b.operation().map(|o| o.text()).unwrap_or_default();
+        // For `+`, detect a String operand (literal OR a Ref to a
+        // String-typed parameter) and route to ConcatStr instead of
+        // AddI.
+        let is_str_concat = op_text == "+" && {
+            let lhs_str = b.lhs().is_some_and(|l| operand_is_string(&l, f));
+            let rhs_str = b.rhs().is_some_and(|r| operand_is_string(&r, f));
+            lhs_str || rhs_str
+        };
         let mir_op = match op_text.as_str() {
+            "+" if is_str_concat => Some(skotch_mir::BinOp::ConcatStr),
             "+" => Some(skotch_mir::BinOp::AddI),
             "-" => Some(skotch_mir::BinOp::SubI),
             "*" => Some(skotch_mir::BinOp::MulI),
@@ -823,8 +858,11 @@ fn lower_simple_body(
                         | skotch_mir::BinOp::CmpLe
                         | skotch_mir::BinOp::CmpGe
                 );
+                let is_concat = matches!(op, skotch_mir::BinOp::ConcatStr);
                 let return_ty = if is_cmp {
                     Ty::Bool
+                } else if is_concat {
+                    Ty::String
                 } else {
                     match f
                         .return_type()
@@ -1722,6 +1760,24 @@ mod tests {
             }
         }
         assert!(matches!(block.terminator, Terminator::ReturnValue(_)));
+    }
+
+    #[test]
+    fn typed_lower_string_concat_with_param() {
+        let module = lower(
+            "fun greet(name: String): String = \"Hello, \" + name",
+            "TestKt",
+        );
+        let f = &module.functions[0];
+        assert_eq!(f.return_ty, Ty::String);
+        match &f.blocks[0].stmts.last().unwrap() {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::BinOp { op, .. } => {
+                    assert!(matches!(op, skotch_mir::BinOp::ConcatStr));
+                }
+                _ => panic!("expected BinOp"),
+            },
+        }
     }
 
     #[test]
