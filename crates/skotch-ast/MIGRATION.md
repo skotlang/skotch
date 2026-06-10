@@ -585,3 +585,63 @@ Further mir-lower body lowering shapes landed:
 All if/else, when, and throw flows now route through proper
 multi-block emission. Control flow shapes have a structural
 template that future loops (while/do-while/for) can mirror.
+
+### 2026-06-10 (session 5 — push 9)
+
+mir-lower expanded further:
+
+- println string template: `println("Hello, $name")` lowers to
+  `CallKind::PrintlnConcat` with each template part as an arg.
+  LITERAL_STRING_TEMPLATE_ENTRY chunks become Const(String)
+  slots; SHORT_STRING_TEMPLATE_ENTRY interpolations (e.g.
+  `$name`) resolve to the matching parameter slot. Backends
+  implement PrintlnConcat differently: JVM/DEX via StringBuilder,
+  LLVM via printf.
+
+**Push 9 totals (focused tests, all green):**
+- mir-lower: 60 unit tests (up from 59)
+- All other crates unchanged
+- Sum: **172 tests** across migration surface, 0 failures
+
+**Cumulative session 5 grand totals (all 9 pushes):**
+- **80+ commits** since session 4 end (some overwritten by
+  linter formatting passes).
+- ~12,000+ LOC of new typed code across resolve, typeck,
+  mir-lower, repl, ast.
+- typed-resolve at full body-walk parity for everything
+  except smart-cast scopes.
+- typed-typeck Pass 1 + Pass 2 with TypeEnv + member call
+  resolution, parenthesized passthrough, top-val cycle
+  detection.
+- typed-mir-lower with substantial body lowering:
+  - Expression bodies: literal / identity / parenthesized
+  - Binary arithmetic (Int/Long/Float/Double with promotion)
+  - Comparison ops (Bool result)
+  - String concatenation
+  - Nested binary expressions
+  - println / print intrinsics with literal args
+  - println with string template interpolation (PrintlnConcat)
+  - Multi-statement blocks (val + println pattern)
+  - Static calls (zero-arg and with literal/param args)
+  - Unit-returning call → plain Return terminator
+  - if/else expression (4-block CFG)
+  - when expression (multi-block CFG with literal arms)
+  - throw (Terminator::Throw)
+- typed-mir-lower also handles every class-like decl shape:
+  class / interface / object / enum class / companion object /
+  nested class / secondary constructors / primary-constructor
+  val/var fields / method signatures
+- REPL fully migrated off legacy AST.
+
+**Remaining multi-session work (all centered on mir-lower):**
+- Class method body lowering (currently empty Return placeholder).
+- while / do-while / for loops with backward goto.
+- Local var mutation (assignment statements).
+- Method calls on user types (`obj.method()`).
+- Field access (`s.length` etc).
+- Lambda lifting.
+- Suspend / coroutine state machine.
+- Generic functions.
+- LSP migration (12 sites + DocumentState shape change).
+- Driver cutover.
+- Test/golden migration + legacy AST deletion.
