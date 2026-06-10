@@ -432,6 +432,7 @@ fn const_ty(c: &skotch_mir::MirConst) -> Ty {
 ///   - val <name> = <literal>            (KtProperty)
 ///   - println(<ref-or-literal>)         (single-arg println call)
 ///   - print(<ref-or-literal>)           (single-arg print call)
+///
 /// Returns None for any unsupported statement.
 fn try_lower_multi_stmt_block(
     block: skotch_ast::KtBlock<'_>,
@@ -467,7 +468,7 @@ fn try_lower_multi_stmt_block(
     for c in skotch_ast::children(block.syntax()) {
         if let Some(prop) = skotch_ast::KtProperty::cast(c) {
             // `val <name> = <literal>` — emit Assign + push local.
-            let Some(name) = prop.name() else { return None };
+            let name = prop.name()?;
             let init = prop.initializer()?;
             let (k, ty) = literal_to_const(&init, strings)?;
             let slot = LocalId(next_slot);
