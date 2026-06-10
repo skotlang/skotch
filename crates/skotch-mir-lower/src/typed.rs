@@ -1040,6 +1040,120 @@ fn try_lower_multi_stmt_block(
     Some((blocks, local_tys))
 }
 
+/// Try to lower `println("Hello, $name")` (a string template with
+/// interpolations) to CallKind::PrintlnConcat. Each part (literal
+/// chunk or interpolated identifier) becomes a separate arg. Returns
+/// None when the template doesn't fit this shape.
+fn try_lower_println_template(
+    call: &skotch_ast::KtCallExpression<'_>,
+    f: skotch_ast::KtFun<'_>,
+    strings: &mut Vec<String>,
+    next_slot: &mut u32,
+    pre_stmts: &mut Vec<skotch_mir::Stmt>,
+    extra_locals: &mut Vec<Ty>,
+) -> Option<(skotch_mir::CallKind, Vec<skotch_mir::LocalId>)> {
+    use skotch_ast::KtExpr;
+    use skotch_mir::{LocalId, Stmt as MStmt};
+    use skotch_syntax::SyntaxKind as S;
+
+    // Callee must be `println` or `print`.
+    let name = match call.callee() {
+        Some(KtExpr::Reference(r)) => r.name(),
+        _ => None,
+    }?;
+    if name != "println" && name != "print" {
+        return None;
+    }
+
+    let args = call.value_argument_list()?;
+    let arg_exprs: Vec<KtExpr<'_>> = args.arguments().filter_map(|a| a.expression()).collect();
+    if arg_exprs.len() != 1 {
+        return None;
+    }
+    let KtExpr::String(_) = &arg_exprs[0] else {
+        return None;
+    };
+    let template = &arg_exprs[0];
+
+    // Collect parts.
+    let outer_param_names: Vec<String> = f
+        .value_parameter_list()
+        .map(|pl| {
+            pl.parameters()
+                .map(|p| p.name().unwrap_or("").to_string())
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let mut part_slots: Vec<LocalId> = Vec::new();
+    let mut had_interp = false;
+
+    for child in skotch_ast::children(template.syntax()) {
+        match child.kind {
+            S::LITERAL_STRING_TEMPLATE_ENTRY => {
+                let mut buf = String::new();
+                for cc in skotch_ast::children(child) {
+                    if cc.kind == S::STRING_CHUNK {
+                        if let skotch_sil::SilData::Token { text } = &cc.data {
+                            buf.push_str(text);
+                        }
+                    }
+                }
+                let sid = match strings.iter().position(|s| s == &buf) {
+                    Some(i) => skotch_mir::StringId(i as u32),
+                    None => {
+                        let id = skotch_mir::StringId(strings.len() as u32);
+                        strings.push(buf);
+                        id
+                    }
+                };
+                let slot = LocalId(*next_slot);
+                *next_slot += 1;
+                extra_locals.push(Ty::String);
+                pre_stmts.push(MStmt::Assign {
+                    dest: slot,
+                    value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::String(sid)),
+                });
+                part_slots.push(slot);
+            }
+            S::SHORT_STRING_TEMPLATE_ENTRY => {
+                had_interp = true;
+                // SHORT_STRING_TEMPLATE_ENTRY has children:
+                //   STRING_IDENT_REF "$"
+                //   REFERENCE_EXPRESSION { IDENTIFIER "name" }
+                let name = skotch_ast::children(child).iter().find_map(|c| {
+                    if c.kind == S::REFERENCE_EXPRESSION {
+                        for cc in skotch_ast::children(c) {
+                            if cc.kind == S::IDENTIFIER {
+                                if let skotch_sil::SilData::Token { text } = &cc.data {
+                                    return Some(text.as_str().to_string());
+                                }
+                            }
+                        }
+                    }
+                    None
+                })?;
+                // Resolve against outer params.
+                let idx = outer_param_names.iter().position(|p| p == &name)?;
+                part_slots.push(LocalId(idx as u32));
+            }
+            S::STRING_START | S::STRING_END | S::WHITE_SPACE => {}
+            S::LONG_STRING_TEMPLATE_ENTRY | S::BLOCK_STRING_TEMPLATE_ENTRY => return None,
+            _ => return None,
+        }
+    }
+
+    if !had_interp {
+        return None;
+    }
+
+    let kind = match name {
+        "println" => skotch_mir::CallKind::PrintlnConcat,
+        _ => return None, // print() doesn't have a Concat variant
+    };
+    Some((kind, part_slots))
+}
+
 /// Try to lower `println(literal)` / `print(literal)` to the
 /// Println / Print intrinsic. Returns None when the call isn't of
 /// this exact shape.
@@ -1190,6 +1304,37 @@ fn lower_simple_body(
             };
             // Collect non-trivia statements.
             let stmts: Vec<KtExpr<'_>> = block.statements().collect();
+            // First try println("Hello, $name") template lowering.
+            if stmts.len() == 1 {
+                if let KtExpr::Call(call) = &stmts[0] {
+                    let mut next_slot = f
+                        .value_parameter_list()
+                        .map(|pl| pl.parameters().count())
+                        .unwrap_or(0) as u32;
+                    let mut pre_stmts: Vec<skotch_mir::Stmt> = Vec::new();
+                    let mut extra_locals: Vec<Ty> = Vec::new();
+                    if let Some((kind, args)) = try_lower_println_template(
+                        call,
+                        f,
+                        strings,
+                        &mut next_slot,
+                        &mut pre_stmts,
+                        &mut extra_locals,
+                    ) {
+                        let result_slot = skotch_mir::LocalId(next_slot);
+                        extra_locals.push(Ty::Unit);
+                        pre_stmts.push(skotch_mir::Stmt::Assign {
+                            dest: result_slot,
+                            value: skotch_mir::Rvalue::Call { kind, args },
+                        });
+                        let blocks = vec![BasicBlock {
+                            stmts: pre_stmts,
+                            terminator: Terminator::Return,
+                        }];
+                        return (blocks, extra_locals);
+                    }
+                }
+            }
             // Walk PROPERTY children + KtExpr stmts together via
             // try_lower_multi_stmt_block — this handles
             // `val x = 10; println(x)` and similar simple shapes.
@@ -2453,6 +2598,27 @@ mod tests {
                     assert_eq!(module.strings[sid.0 as usize], "hi");
                 }
                 other => panic!("expected Const(String), got {other:?}"),
+            },
+        }
+    }
+
+    #[test]
+    fn typed_lower_println_string_template_with_interp() {
+        let module = lower(
+            "fun greet(name: String) { println(\"Hello, $name\") }",
+            "TestKt",
+        );
+        let f = &module.functions[0];
+        // Last stmt should be Call(PrintlnConcat, [string_chunk, name]).
+        let block = &f.blocks[0];
+        match block.stmts.last().unwrap() {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::Call { kind, args } => {
+                    assert!(matches!(kind, skotch_mir::CallKind::PrintlnConcat));
+                    // 2 args: literal chunk + the $name reference.
+                    assert_eq!(args.len(), 2);
+                }
+                _ => panic!("expected Call"),
             },
         }
     }

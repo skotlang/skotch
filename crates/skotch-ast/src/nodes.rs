@@ -2132,6 +2132,16 @@ mod tests {
 
     #[test]
     #[ignore]
+    fn debug_dump_string_template() {
+        let parsed = crate::parse(
+            "t.kt",
+            "fun greet(name: String) { println(\"Hello, $name\") }",
+        );
+        dump(parsed.file().syntax(), 0);
+    }
+
+    #[test]
+    #[ignore]
     fn debug_dump_member_call() {
         let parsed = crate::parse(
             "t.kt",
