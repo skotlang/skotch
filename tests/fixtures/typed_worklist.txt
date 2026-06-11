@@ -347,7 +347,6 @@
 0.043	389-data-class-equals-hashcode-copy	69	3	17	2	1
 0.045	1299-stack-vm-sealed-when	358	16	34	18	12
 0.045	995-enum-cmp-lambda	44	2	18	3	2
-0.048	97-operator-plus	63	3	18	3	2
 0.050	1254-block-body-returns-unit	20	1	12	4	3
 0.051	1331-multi-arg-index-operator	59	3	14	4	3
 0.052	1219-let-implicit-it-element-type	58	3	19	3	2
@@ -363,7 +362,6 @@
 0.059	308-data-class-tostring	51	3	17	2	1
 0.059	373-destructuring-basic	51	3	17	2	1
 0.062	1221-remember-lambda-return-type	32	2	17	3	2
-0.062	21-data-class	48	3	17	2	1
 0.062	323-multiple-classes	96	6	26	3	1
 0.065	1220-generic-fn-class-arg-inference	31	2	16	3	1
 0.065	1293-var-field-stale-after-call	62	4	14	4	3
@@ -422,6 +420,7 @@
 0.167	1225-factory-vs-ctor	12	2	12	3	2
 0.167	1273-interface-extends-interface	18	3	16	9	6
 0.167	1298-explicit-unit-return-not-inferred	18	3	12	3	2
+0.167	21-data-class	48	8	17	2	0
 0.167	60-class-properties	18	3	12	3	2
 0.172	1210-value-class-arithmetic	29	5	14	6	3
 0.173	1269-when-is-smartcast-scope-leak	75	13	20	10	4
@@ -439,12 +438,12 @@
 0.200	236-class-method-chain	15	3	11	3	1
 0.200	864-suspend-call-static	5	1	10	3	2
 0.200	93-generic-class	15	3	11	3	1
+0.206	97-operator-plus	63	13	18	3	1
 0.211	1259-hof-multi-param-lambda-type	19	4	16	8	4
 0.211	1272-cross-file-sealed-class-kind-honored	38	8	17	8	4
 0.211	569-use-extension	19	4	13	4	1
 0.212	1267-multiple-interface-impl	33	7	18	8	5
 0.214	206-string-builder-loop	28	6	9	2	1
-0.214	237-class-as-param	14	3	12	4	2
 0.216	1248-fold-typed-lambda-params	37	8	17	7	3
 0.217	1278-object-extends-class	23	5	14	6	3
 0.217	348-inherited-field-method	23	5	14	5	2
@@ -524,7 +523,6 @@
 0.400	258-sum-range	20	8	9	2	1
 0.400	28-object-decl	5	2	10	3	2
 0.400	391-suspend-state-machine	5	2	13	2	1
-0.400	59-class-constructor	15	6	12	3	1
 0.400	623-suspend-noop-then-empty	5	2	13	2	1
 0.414	184-nested-when	29	12	9	2	1
 0.419	578-intersection-smart-cast	31	13	9	2	0
@@ -731,9 +729,11 @@
 0.700	331-is-negated-check	10	7	9	2	0
 0.708	205-math-functions	48	34	13	6	1
 0.714	124-guard-clause	21	15	9	2	0
+0.714	237-class-as-param	14	10	12	4	1
 0.714	674-suspend-int-bound	7	5	8	1	0
 0.722	125-recursive-function	18	13	9	2	0
 0.727	294-multiple-defaults	11	8	9	2	0
+0.733	59-class-constructor	15	11	12	3	0
 0.750	1037-suspend-arith-double	4	3	8	1	0
 0.750	1038-suspend-arith-long	4	3	8	1	0
 0.750	1046-suspend-int-divrem	4	3	8	1	0

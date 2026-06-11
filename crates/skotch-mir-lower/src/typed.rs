@@ -2486,6 +2486,111 @@ fn try_lower_multi_stmt_block_with_offset(
                 name_to_local.push((name.to_string(), slot));
                 continue;
             }
+            // Try Reference RHS: `val y = x` or `val y = SOME_VAL`.
+            if let KtExpr::Reference(rr) = &init {
+                if let Some(n) = rr.name() {
+                    if let Some(slot) = name_to_local
+                        .iter()
+                        .rev()
+                        .find(|(nm, _)| nm == n)
+                        .map(|(_, l)| *l)
+                    {
+                        // Alias: just bind the new name to the same slot.
+                        name_to_local.push((name.to_string(), slot));
+                        continue;
+                    }
+                    if let Some(val_ty) = val_lookup.get(n) {
+                        let slot = LocalId(next_slot);
+                        next_slot += 1;
+                        local_tys.push(val_ty.clone());
+                        stmts.push(MStmt::Assign {
+                            dest: slot,
+                            value: skotch_mir::Rvalue::GetStaticField {
+                                class_name: wrapper_class.to_string(),
+                                field_name: n.to_string(),
+                                descriptor: ty_to_descriptor(val_ty),
+                            },
+                        });
+                        name_to_local.push((name.to_string(), slot));
+                        continue;
+                    }
+                }
+            }
+            // Try class instantiation: `val p = P(args)`.
+            if let KtExpr::Call(call) = &init {
+                if let Some(KtExpr::Reference(rc)) = call.callee() {
+                    if let Some(cname) = rc.name() {
+                        if class_lookup.contains_key(cname) {
+                            let new_slot = LocalId(next_slot);
+                            next_slot += 1;
+                            local_tys.push(Ty::Class(cname.to_string()));
+                            stmts.push(MStmt::Assign {
+                                dest: new_slot,
+                                value: skotch_mir::Rvalue::NewInstance(cname.to_string()),
+                            });
+                            let mut arg_slots: Vec<LocalId> = vec![new_slot];
+                            let mut ok = true;
+                            if let Some(arg_list) = call.value_argument_list() {
+                                for arg in arg_list.arguments() {
+                                    let Some(arg_e) = arg.expression() else {
+                                        ok = false;
+                                        break;
+                                    };
+                                    match unwrap_parens(arg_e) {
+                                        KtExpr::Reference(rr) => {
+                                            let Some(an) = rr.name() else {
+                                                ok = false;
+                                                break;
+                                            };
+                                            if let Some(slot) = name_to_local
+                                                .iter()
+                                                .rev()
+                                                .find(|(n, _)| n == an)
+                                                .map(|(_, l)| *l)
+                                            {
+                                                arg_slots.push(slot);
+                                            } else {
+                                                ok = false;
+                                                break;
+                                            }
+                                        }
+                                        other => {
+                                            let Some((k, ty)) =
+                                                literal_to_const(&other, strings)
+                                            else {
+                                                ok = false;
+                                                break;
+                                            };
+                                            let slot = LocalId(next_slot);
+                                            next_slot += 1;
+                                            local_tys.push(ty);
+                                            stmts.push(MStmt::Assign {
+                                                dest: slot,
+                                                value: skotch_mir::Rvalue::Const(k),
+                                            });
+                                            arg_slots.push(slot);
+                                        }
+                                    }
+                                }
+                            }
+                            if ok {
+                                let dummy = LocalId(next_slot);
+                                next_slot += 1;
+                                local_tys.push(Ty::Unit);
+                                stmts.push(MStmt::Assign {
+                                    dest: dummy,
+                                    value: skotch_mir::Rvalue::Call {
+                                        kind: skotch_mir::CallKind::Constructor(cname.to_string()),
+                                        args: arg_slots,
+                                    },
+                                });
+                                name_to_local.push((name.to_string(), new_slot));
+                                continue;
+                            }
+                        }
+                    }
+                }
+            }
             // Try static call: `val x = helper(args)` where helper is
             // a top-level fn in fn_lookup. Args resolve as Reference
             // to a known local/param or literal Const.
