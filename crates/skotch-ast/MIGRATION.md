@@ -1559,3 +1559,31 @@ These two fixes unblock substantial categories of fixtures even
 when the typed pipeline's slot allocation differs from legacy's.
 
 Workspace tests + clippy clean.
+
+### 2026-06-11 (session 7 — push 30+: lower_loop_body coverage burst)
+
+After the structural fixes in push 30, several more shapes landed
+inside `lower_loop_body` so loops can hold the same stmt forms the
+outer walker accepts:
+
+- **Stmt-level method-call on local class instance**:
+  `localVar.method(args)` inside a for-in/while/do-while body now emits
+  `Call(Virtual)` instead of bailing. Resolves args as Reference or
+  literal Const, mirrors the outer walker's DotQualified handler.
+- **Stmt-level top-level fn call**: `helper(args)` inside a loop body
+  now emits a `Call(Static)` and discards the result. Required
+  threading `fn_lookup_ref` through `lower_loop_body`'s signature.
+- **var-reassign Call RHS in loop body**: `x = helper(args)` inside
+  a loop now lowers via fn_lookup instead of returning None on the
+  first such reassign.
+- **println string template in loop body**: `println("x=$i")` now
+  invokes `try_lower_println_template_with_lookup` before the
+  single-arg fallback. Loop-body PrintlnConcat with locals as
+  interpolation slots now works.
+
+Tests still at 180 (no new unit tests, structural changes).
+
+These pushes accept many additional stmts within loop bodies without
+flipping the fully-covered metric (legacy still emits more overhead
+per fixture). The internal coverage gain shows up as stmt-counts
+shifting from 0 to 4-9 across dozens of fixtures.
