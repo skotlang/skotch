@@ -5747,24 +5747,112 @@ fn method_simple_body_full(
         }
     }
 
-    // throw <param-ref> body for methods:
+    // throw body for methods:
     //   class X { fun fail(e: Throwable): Nothing = throw e }
+    //   class X { fun fail(): Nothing = throw IllegalStateException("oops") }
+    // The first emits Throw(param_slot). The second emits
+    // NewInstance + Constructor + Throw(new_slot).
     if let KtExpr::Throw(t) = &body_expr {
         let thrown = skotch_ast::children(t.syntax())
             .iter()
             .find_map(KtExpr::cast)
             .map(unwrap_parens);
-        if let Some(KtExpr::Reference(r)) = thrown {
-            if let Some(name) = r.name() {
-                if let Some(idx) = param_names.iter().position(|p| p == name) {
-                    let param_slot = skotch_mir::LocalId((1 + idx) as u32);
-                    let blocks = vec![BasicBlock {
-                        stmts: Vec::new(),
-                        terminator: Terminator::Throw(param_slot),
-                    }];
-                    return (blocks, Vec::new());
+        match thrown {
+            Some(KtExpr::Reference(r)) => {
+                if let Some(name) = r.name() {
+                    if let Some(idx) = param_names.iter().position(|p| p == name) {
+                        let param_slot = skotch_mir::LocalId((1 + idx) as u32);
+                        let blocks = vec![BasicBlock {
+                            stmts: Vec::new(),
+                            terminator: Terminator::Throw(param_slot),
+                        }];
+                        return (blocks, Vec::new());
+                    }
                 }
             }
+            Some(KtExpr::Call(call)) => {
+                let cls_name = match call.callee() {
+                    Some(KtExpr::Reference(r)) => r.name(),
+                    _ => None,
+                };
+                if let Some(cls) = cls_name {
+                    let jvm_cls = skotch_types::intrinsics::kotlin_exception_class(cls)
+                        .map(|s| s.to_string())
+                        .or_else(|| {
+                            skotch_types::intrinsics::kotlin_to_jvm_class(cls).map(|s| s.to_string())
+                        })
+                        .unwrap_or_else(|| cls.to_string());
+                    let mut next_slot = (1 + param_count) as u32;
+                    let mut stmts: Vec<skotch_mir::Stmt> = Vec::new();
+                    let mut extra_locals: Vec<Ty> = Vec::new();
+                    let new_slot = skotch_mir::LocalId(next_slot);
+                    next_slot += 1;
+                    extra_locals.push(Ty::Class(jvm_cls.clone()));
+                    stmts.push(skotch_mir::Stmt::Assign {
+                        dest: new_slot,
+                        value: skotch_mir::Rvalue::NewInstance(jvm_cls.clone()),
+                    });
+                    let mut arg_slots: Vec<skotch_mir::LocalId> = vec![new_slot];
+                    let mut ok = true;
+                    if let Some(arg_list) = call.value_argument_list() {
+                        for arg in arg_list.arguments() {
+                            let Some(arg_expr) = arg.expression() else {
+                                ok = false;
+                                break;
+                            };
+                            match arg_expr {
+                                KtExpr::Reference(rr) => {
+                                    let Some(an) = rr.name() else {
+                                        ok = false;
+                                        break;
+                                    };
+                                    if let Some(idx) =
+                                        param_names.iter().position(|p| p == an)
+                                    {
+                                        arg_slots.push(skotch_mir::LocalId((1 + idx) as u32));
+                                    } else {
+                                        ok = false;
+                                        break;
+                                    }
+                                }
+                                other => match literal_to_const(&other, strings) {
+                                    Some((k, ty)) => {
+                                        let slot = skotch_mir::LocalId(next_slot);
+                                        next_slot += 1;
+                                        extra_locals.push(ty);
+                                        stmts.push(skotch_mir::Stmt::Assign {
+                                            dest: slot,
+                                            value: skotch_mir::Rvalue::Const(k),
+                                        });
+                                        arg_slots.push(slot);
+                                    }
+                                    None => {
+                                        ok = false;
+                                        break;
+                                    }
+                                },
+                            }
+                        }
+                    }
+                    if ok {
+                        let dummy_slot = skotch_mir::LocalId(next_slot);
+                        extra_locals.push(Ty::Unit);
+                        stmts.push(skotch_mir::Stmt::Assign {
+                            dest: dummy_slot,
+                            value: skotch_mir::Rvalue::Call {
+                                kind: skotch_mir::CallKind::Constructor(jvm_cls),
+                                args: arg_slots,
+                            },
+                        });
+                        let blocks = vec![BasicBlock {
+                            stmts,
+                            terminator: Terminator::Throw(new_slot),
+                        }];
+                        return (blocks, extra_locals);
+                    }
+                }
+            }
+            _ => {}
         }
     }
 
@@ -7079,6 +7167,42 @@ mod tests {
                 _ => panic!("expected CheckCast"),
             },
         }
+    }
+
+    #[test]
+    fn typed_lower_method_throw_inline_exception_ctor() {
+        // `class P { fun fail(): Nothing = throw IllegalStateException(\"oops\") }`
+        let module = lower(
+            r#"class P { fun fail(): Nothing = throw IllegalStateException("oops") }"#,
+            "TestKt",
+        );
+        let cls = module.classes.iter().find(|c| c.name == "P").unwrap();
+        let f = cls.methods.iter().find(|m| m.name == "fail").unwrap();
+        let block = &f.blocks[0];
+        let has_new = block.stmts.iter().any(|s| {
+            matches!(
+                s,
+                skotch_mir::Stmt::Assign {
+                    value: skotch_mir::Rvalue::NewInstance(_),
+                    ..
+                }
+            )
+        });
+        let has_ctor = block.stmts.iter().any(|s| {
+            matches!(
+                s,
+                skotch_mir::Stmt::Assign {
+                    value: skotch_mir::Rvalue::Call {
+                        kind: skotch_mir::CallKind::Constructor(_),
+                        ..
+                    },
+                    ..
+                }
+            )
+        });
+        assert!(has_new);
+        assert!(has_ctor);
+        assert!(matches!(block.terminator, skotch_mir::Terminator::Throw(_)));
     }
 
     #[test]
