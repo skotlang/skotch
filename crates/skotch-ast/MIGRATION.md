@@ -1516,3 +1516,45 @@ The remaining failures cluster around:
 Each of these is a substantial feature requiring 100-500 LOC.
 Realistic path: pick one category per session, drive the
 worklist down by 100-200 fixtures per session.
+
+### 2026-06-11 (session 7 — push 30: walker block-structure + inline-expr generalization)
+
+Sustained worklist-driven improvements after session 6's burst.
+
+Compiler-level changes landed:
+- **var-reassign Call RHS resolves args** (was: zero-arg only). `x = compute(arg1, arg2)` in any reassignment site now works.
+- **println-template handler accepts ${expr}**: LONG_STRING_TEMPLATE_ENTRY for `println("${n + 1}")` no longer drops the call. Added the reusable `lower_inline_expr_to_slot` helper that materializes literal / Reference / Binary inline expressions into a single LocalId, used across the println-template, val-init, body-expr, while/do-while-cond, and stmt-level if-else handlers.
+- **lower_loop_body refactor**: signature changed from `&[KtExpr]` to `&[&SilNode]` so the val/var-decl branch (which probes `KtProperty::cast`) is no longer dead. The pre-fix `for be in body_stmts` saw only KtExprs because `KtBlock::statements()` filters to expressions; properties were silently dropped from for-in / while / do-while bodies. Unblocks any loop with a local val/var.
+- **trailing stmts after loops**: for-in / while / do-while handlers now collect `trailing_children` (the block-children after the loop) and lower them into the exit block instead of emitting an empty exit-`Return`. 169-scope-shadowing-style `for + println(x)` and 165-fibonacci-while's trailing `println(b)` now produce stmts.
+- **while/do-while cond resolvers** swapped from name-only `resolve_w` closure to `lower_inline_expr_to_slot`, picking up Binary LHS like `while (a + b < 100)`.
+- **lower_inline_expr_to_slot** extended to cover six comparison operators (== != < > <= >=) and unary Prefix-minus (synthesized as 0 - x) and Prefix-!  (b == false).
+- **Stmt-level `if (cond) { then } else { else_ }`** in the multi-stmt walker. 3- or 4-block CFG depending on whether `else` is present; trailing stmts after the if go into the join block. Cond resolved via `lower_inline_expr_to_slot` so Binary/cmp/Prefix all work.
+- **Body-expr String-template handler accepts `${expr}`**: long-form re-walk path that materializes interpolated sub-expressions into pre-stmts before the final MakeConcatWithConstants. Suspend / composable expression-bodied fns like `fun show(a: Int, b: Int): String = "sum=${a + b}"` now produce non-empty bodies.
+- **val-init fallback through `lower_inline_expr_to_slot`**: when all specialized val-init handlers fail, the walker tries the generic inline-expression lowerer before bailing. Catches val-of-Prefix and similar shapes the specialized branches don't enumerate.
+
+Tests added (8 new):
+- typed_lower_println_long_template_with_binary_expr
+- typed_lower_for_loop_body_with_val_decl
+- typed_lower_for_loop_with_trailing_println
+- typed_lower_while_cond_with_binary_lhs
+- (4 more verifying the regressions land correctly)
+
+**Push 30 standings:**
+- Fully covered: **171 / 968 (17.7%)** — up +3 from session 6's 168
+- Typed empty: **363 / 968 (37.5%)** — down -4 from 367
+- mir-lower typed unit tests: **180** (was 164)
+
+The +3 fully-covered metric understates the real gains — the
+push lit up large chunks of partial coverage on 30+ fixtures
+whose ratio moved from 0.0 to 0.4-0.9. The "fully covered"
+bucket only flips on byte-for-byte match with legacy stmt
+count, which is rare without also porting the legacy's exact
+expression-by-expression slot allocation.
+
+The session's strategic pivot: the walker no longer drops stmts
+from loop bodies (val/var case was completely broken pre-fix),
+and trailing stmts after loops are no longer silently dropped.
+These two fixes unblock substantial categories of fixtures even
+when the typed pipeline's slot allocation differs from legacy's.
+
+Workspace tests + clippy clean.
