@@ -1814,6 +1814,64 @@ fn lower_simple_body(
     // Parenthesized passthrough: `(literal)` or `(a + b)`.
     let body_expr = unwrap_parens(body_expr);
 
+    // Prefix unary minus on param: `fun neg(x: Int): Int = -x` →
+    // BinOp(SubI, 0, x).
+    if let KtExpr::Prefix(p) = &body_expr {
+        let op_text = skotch_ast::children(p.syntax())
+            .iter()
+            .find_map(|c| {
+                if c.kind == skotch_syntax::SyntaxKind::OPERATION_REFERENCE {
+                    if let Some(opref) = skotch_ast::KtOperationReference::cast(c) {
+                        return Some(opref.text());
+                    }
+                }
+                None
+            })
+            .unwrap_or_default();
+        if op_text == "-" {
+            let inner = skotch_ast::children(p.syntax())
+                .iter()
+                .find_map(KtExpr::cast)
+                .map(unwrap_parens);
+            if let Some(KtExpr::Reference(r)) = inner {
+                if let Some(name) = r.name() {
+                    let param_names: Vec<String> = f
+                        .value_parameter_list()
+                        .map(|pl| {
+                            pl.parameters()
+                                .map(|p| p.name().unwrap_or("").to_string())
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    if let Some(idx) = param_names.iter().position(|p| p == name) {
+                        let param_slot = skotch_mir::LocalId(idx as u32);
+                        let param_count = param_names.len();
+                        let zero_slot = skotch_mir::LocalId(param_count as u32);
+                        let result_slot = skotch_mir::LocalId((param_count + 1) as u32);
+                        let blocks = vec![BasicBlock {
+                            stmts: vec![
+                                skotch_mir::Stmt::Assign {
+                                    dest: zero_slot,
+                                    value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(0)),
+                                },
+                                skotch_mir::Stmt::Assign {
+                                    dest: result_slot,
+                                    value: skotch_mir::Rvalue::BinOp {
+                                        op: skotch_mir::BinOp::SubI,
+                                        lhs: zero_slot,
+                                        rhs: param_slot,
+                                    },
+                                },
+                            ],
+                            terminator: Terminator::ReturnValue(result_slot),
+                        }];
+                        return (blocks, vec![Ty::Int, Ty::Int]);
+                    }
+                }
+            }
+        }
+    }
+
     // Throw expression body:
     //   fun fail(): Nothing = throw e
     // Where the thrown value is a Reference to a parameter, the
@@ -3610,6 +3668,33 @@ mod tests {
             },
         }
         assert!(matches!(block.terminator, Terminator::ReturnValue(_)));
+    }
+
+    #[test]
+    fn typed_lower_prefix_minus_param() {
+        let module = lower("fun neg(x: Int): Int = -x", "TestKt");
+        let f = &module.functions[0];
+        let block = &f.blocks[0];
+        // Expected: Const(0) into slot 1, BinOp(SubI, slot 1, slot 0) into slot 2.
+        assert_eq!(block.stmts.len(), 2);
+        match &block.stmts[0] {
+            skotch_mir::Stmt::Assign { value, .. } => {
+                assert!(matches!(
+                    value,
+                    skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(0))
+                ));
+            }
+        }
+        match &block.stmts[1] {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::BinOp { op, lhs, rhs } => {
+                    assert!(matches!(op, skotch_mir::BinOp::SubI));
+                    assert_eq!(lhs.0, 1); // 0
+                    assert_eq!(rhs.0, 0); // x
+                }
+                _ => panic!("expected BinOp"),
+            },
+        }
     }
 
     #[test]
