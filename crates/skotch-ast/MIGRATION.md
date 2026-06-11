@@ -1531,6 +1531,7 @@ Compiler-level changes landed:
 - **Stmt-level `if (cond) { then } else { else_ }`** in the multi-stmt walker. 3- or 4-block CFG depending on whether `else` is present; trailing stmts after the if go into the join block. Cond resolved via `lower_inline_expr_to_slot` so Binary/cmp/Prefix all work.
 - **Body-expr String-template handler accepts `${expr}`**: long-form re-walk path that materializes interpolated sub-expressions into pre-stmts before the final MakeConcatWithConstants. Suspend / composable expression-bodied fns like `fun show(a: Int, b: Int): String = "sum=${a + b}"` now produce non-empty bodies.
 - **val-init fallback through `lower_inline_expr_to_slot`**: when all specialized val-init handlers fail, the walker tries the generic inline-expression lowerer before bailing. Catches val-of-Prefix and similar shapes the specialized branches don't enumerate.
+- **PutField stmt support**: `obj.field = value` where `obj` is a class-typed local now emits Assign(dummy, PutField). Reuses lower_inline_expr_to_slot for the RHS. Previously the walker had no handler and aborted on the first such stmt in any class-method body.
 
 Tests added (8 new):
 - typed_lower_println_long_template_with_binary_expr
