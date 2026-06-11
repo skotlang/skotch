@@ -3089,6 +3089,102 @@ fn try_lower_multi_stmt_block_with_offset(
                 Some(body_mstmts)
             }
 
+            // Method call on a local: `localVar.method(args)` as a
+            // statement (result discarded). Receiver's type comes
+            // from local_tys; must be Ty::Class(name).
+            if let KtExpr::DotQualified(dq) = &expr {
+                let exprs: Vec<KtExpr<'_>> = skotch_ast::children(dq.syntax())
+                    .iter()
+                    .filter_map(KtExpr::cast)
+                    .collect();
+                if exprs.len() == 2 {
+                    if let (KtExpr::Reference(recv_ref), KtExpr::Call(call)) =
+                        (&exprs[0], &exprs[1])
+                    {
+                        let method_name = match call.callee() {
+                            Some(KtExpr::Reference(r)) => r.name(),
+                            _ => None,
+                        };
+                        if let (Some(recv_name), Some(method_name)) =
+                            (recv_ref.name(), method_name)
+                        {
+                            if let Some(recv_slot) = name_to_local
+                                .iter()
+                                .rev()
+                                .find(|(n, _)| n == recv_name)
+                                .map(|(_, l)| *l)
+                            {
+                                let recv_ty = local_tys
+                                    .get(recv_slot.0 as usize)
+                                    .cloned();
+                                if let Some(Ty::Class(cname)) = recv_ty {
+                                    let mut arg_slots: Vec<LocalId> = vec![recv_slot];
+                                    let mut ok = true;
+                                    if let Some(arg_list) = call.value_argument_list() {
+                                        for arg in arg_list.arguments() {
+                                            let Some(arg_e) = arg.expression() else {
+                                                ok = false;
+                                                break;
+                                            };
+                                            match unwrap_parens(arg_e) {
+                                                KtExpr::Reference(rr) => {
+                                                    let Some(an) = rr.name() else {
+                                                        ok = false;
+                                                        break;
+                                                    };
+                                                    if let Some(slot) = name_to_local
+                                                        .iter()
+                                                        .rev()
+                                                        .find(|(n, _)| n == an)
+                                                        .map(|(_, l)| *l)
+                                                    {
+                                                        arg_slots.push(slot);
+                                                    } else {
+                                                        ok = false;
+                                                        break;
+                                                    }
+                                                }
+                                                other => {
+                                                    let Some((k, ty)) =
+                                                        literal_to_const(&other, strings)
+                                                    else {
+                                                        ok = false;
+                                                        break;
+                                                    };
+                                                    let slot = LocalId(next_slot);
+                                                    next_slot += 1;
+                                                    local_tys.push(ty);
+                                                    stmts.push(MStmt::Assign {
+                                                        dest: slot,
+                                                        value: skotch_mir::Rvalue::Const(k),
+                                                    });
+                                                    arg_slots.push(slot);
+                                                }
+                                            }
+                                        }
+                                    }
+                                    if ok {
+                                        let result_slot = LocalId(next_slot);
+                                        next_slot += 1;
+                                        local_tys.push(Ty::Any);
+                                        stmts.push(MStmt::Assign {
+                                            dest: result_slot,
+                                            value: skotch_mir::Rvalue::Call {
+                                                kind: skotch_mir::CallKind::Virtual {
+                                                    class_name: cname,
+                                                    method_name: method_name.to_string(),
+                                                },
+                                                args: arg_slots,
+                                            },
+                                        });
+                                        continue;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             // `do { body } while (cond)` as the last meaningful
             // statement. 4-block CFG:
             //   block 0 (pre): existing stmts + Goto(1)
@@ -4010,9 +4106,50 @@ fn try_lower_multi_stmt_block_with_offset(
                     }
                     // Arg is either a Reference to a known local /
                     // param, a top-level val (GetStaticField), a
-                    // literal, a Prefix-minus on Reference, or a
-                    // binary op on refs/literals.
+                    // literal, a field access on a local
+                    // (DotQualified(local, field)), a Prefix-minus
+                    // on Reference, or a binary op on refs/literals.
                     let arg_slot = match &arg_exprs[0] {
+                        KtExpr::DotQualified(dq) => {
+                            let exprs: Vec<KtExpr<'_>> =
+                                skotch_ast::children(dq.syntax())
+                                    .iter()
+                                    .filter_map(KtExpr::cast)
+                                    .collect();
+                            if exprs.len() != 2 {
+                                return None;
+                            }
+                            let (KtExpr::Reference(recv_ref), KtExpr::Reference(prop_ref)) =
+                                (&exprs[0], &exprs[1])
+                            else {
+                                return None;
+                            };
+                            let recv_n = recv_ref.name()?;
+                            let prop_n = prop_ref.name()?;
+                            let recv_slot = name_to_local
+                                .iter()
+                                .rev()
+                                .find(|(n, _)| n == recv_n)
+                                .map(|(_, l)| *l)?;
+                            let Ty::Class(cname) = local_tys
+                                .get(recv_slot.0 as usize)
+                                .cloned()?
+                            else {
+                                return None;
+                            };
+                            let slot = LocalId(next_slot);
+                            next_slot += 1;
+                            local_tys.push(Ty::Any);
+                            stmts.push(MStmt::Assign {
+                                dest: slot,
+                                value: skotch_mir::Rvalue::GetField {
+                                    receiver: recv_slot,
+                                    class_name: cname,
+                                    field_name: prop_n.to_string(),
+                                },
+                            });
+                            slot
+                        }
                         KtExpr::Prefix(p)
                             if skotch_ast::children(p.syntax())
                                 .iter()
