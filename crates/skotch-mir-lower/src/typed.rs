@@ -391,6 +391,10 @@ pub fn lower_file(
     // Constructor.
     let mut class_lookup: rustc_hash::FxHashMap<String, Vec<Ty>> =
         rustc_hash::FxHashMap::default();
+    // Top-level class fields: name → Vec<(field_name, declared type
+    // name)>. Used by body lowerers to resolve `obj.field` chains.
+    let mut class_fields: rustc_hash::FxHashMap<String, Vec<(String, String)>> =
+        rustc_hash::FxHashMap::default();
     for decl in file.decls() {
         if let KtDecl::Class(c) = decl {
             let Some(name) = c.name() else { continue };
@@ -410,6 +414,42 @@ pub fn lower_file(
                 })
                 .unwrap_or_default();
             class_lookup.insert(name.to_string(), param_tys);
+
+            // Collect fields (primary-ctor val/var + body val/var).
+            let mut fields: Vec<(String, String)> = Vec::new();
+            if let Some(pc) = c.primary_constructor() {
+                if let Some(plist) = pc.value_parameter_list() {
+                    for p in plist.parameters() {
+                        if !p.is_val() && !p.is_var() {
+                            continue;
+                        }
+                        let Some(fname) = p.name() else { continue };
+                        let type_name = p
+                            .type_reference()
+                            .and_then(|tr| tr.user_type())
+                            .and_then(|u| u.name())
+                            .unwrap_or("Any")
+                            .to_string();
+                        fields.push((fname.to_string(), type_name));
+                    }
+                }
+            }
+            if let Some(body) = c.body() {
+                for d in body.declarations() {
+                    if let KtDecl::Property(p) = d {
+                        if let Some(fname) = p.name() {
+                            let type_name = p
+                                .type_reference()
+                                .and_then(|tr| tr.user_type())
+                                .and_then(|u| u.name())
+                                .unwrap_or("Any")
+                                .to_string();
+                            fields.push((fname.to_string(), type_name));
+                        }
+                    }
+                }
+            }
+            class_fields.insert(name.to_string(), fields);
         }
     }
 
@@ -452,6 +492,7 @@ pub fn lower_file(
                 &fn_lookup,
                 &val_lookup,
                 &class_lookup,
+                &class_fields,
                 &wrapper_class,
                 &mut exception_handlers,
             );
@@ -2940,6 +2981,7 @@ fn lower_simple_body(
     fn_lookup: &rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)>,
     val_lookup: &rustc_hash::FxHashMap<String, Ty>,
     class_lookup: &rustc_hash::FxHashMap<String, Vec<Ty>>,
+    class_fields: &rustc_hash::FxHashMap<String, Vec<(String, String)>>,
     wrapper_class: &str,
     exception_handlers: &mut Vec<skotch_mir::ExceptionHandler>,
 ) -> (Vec<BasicBlock>, Vec<Ty>) {
@@ -3100,46 +3142,110 @@ fn lower_simple_body(
         }
     }
 
-    // Field access on a class-typed param: `fun getX(b: Box): Int = b.x`.
-    // Lowers to GetField(b_slot, Box, x). The class must be in
-    // class_lookup so we know its name.
-    if let KtExpr::DotQualified(dq) = &body_expr {
-        let exprs: Vec<KtExpr<'_>> = skotch_ast::children(dq.syntax())
-            .iter()
-            .filter_map(KtExpr::cast)
-            .collect();
-        if exprs.len() == 2 {
-            if let (KtExpr::Reference(recv_ref), KtExpr::Reference(prop_ref)) =
-                (&exprs[0], &exprs[1])
-            {
-                if let (Some(recv_name), Some(prop_name)) = (recv_ref.name(), prop_ref.name()) {
-                    let params: Vec<skotch_ast::KtValueParameter<'_>> = f
-                        .value_parameter_list()
-                        .map(|pl| pl.parameters().collect())
-                        .unwrap_or_default();
-                    if let Some((idx, param)) =
-                        params.iter().enumerate().find(|(_, p)| p.name() == Some(recv_name))
-                    {
-                        let class_name = param
-                            .type_reference()
-                            .and_then(|tr| tr.user_type())
-                            .and_then(|u| u.name());
-                        if let Some(cname) = class_name {
-                            if class_lookup.contains_key(cname) {
-                                let recv_slot = skotch_mir::LocalId(idx as u32);
-                                let result_slot = skotch_mir::LocalId(params.len() as u32);
+    // Field access chain on a class-typed param: `b.x` or `b.a.v`.
+    // Lowers to one GetField per `.field` step. The chain starts at
+    // a param Reference whose declared type is a class in class_lookup;
+    // each subsequent field's class is looked up via class_fields to
+    // discover the next field's containing class.
+    if let KtExpr::DotQualified(_) = &body_expr {
+        // Walk the chain from outermost (rightmost prop) down to the
+        // base Reference. Collect prop names rightmost-first.
+        let mut cursor = body_expr;
+        let mut chain: Vec<String> = Vec::new();
+        let base = loop {
+            match cursor {
+                KtExpr::DotQualified(dq2) => {
+                    let exprs: Vec<KtExpr<'_>> = skotch_ast::children(dq2.syntax())
+                        .iter()
+                        .filter_map(KtExpr::cast)
+                        .collect();
+                    if exprs.len() != 2 {
+                        break None;
+                    }
+                    if let KtExpr::Reference(prop_ref) = &exprs[1] {
+                        let Some(pname) = prop_ref.name() else { break None };
+                        chain.push(pname.to_string());
+                        cursor = exprs[0];
+                    } else {
+                        break None;
+                    }
+                }
+                KtExpr::Reference(rr) => break Some(rr),
+                _ => break None,
+            }
+        };
+        if let Some(base_ref) = base {
+            chain.reverse();
+            if !chain.is_empty() {
+                let Some(base_name) = base_ref.name() else {
+                    return make_placeholder();
+                };
+                let params: Vec<skotch_ast::KtValueParameter<'_>> = f
+                    .value_parameter_list()
+                    .map(|pl| pl.parameters().collect())
+                    .unwrap_or_default();
+                if let Some((idx, param)) =
+                    params.iter().enumerate().find(|(_, p)| p.name() == Some(base_name))
+                {
+                    let mut current_cls = param
+                        .type_reference()
+                        .and_then(|tr| tr.user_type())
+                        .and_then(|u| u.name())
+                        .map(String::from);
+                    if let Some(cn) = current_cls.clone() {
+                        if class_lookup.contains_key(&cn) {
+                            let mut stmts: Vec<skotch_mir::Stmt> = Vec::new();
+                            let mut extra_locals: Vec<Ty> = Vec::new();
+                            let mut recv_slot = skotch_mir::LocalId(idx as u32);
+                            let mut ok = true;
+                            let base_slot_count = params.len() as u32;
+                            #[allow(clippy::explicit_counter_loop)]
+                            for (step_i, prop_name) in chain.iter().enumerate() {
+                                let Some(cls_name) = current_cls.clone() else {
+                                    ok = false;
+                                    break;
+                                };
+                                let slot =
+                                    skotch_mir::LocalId(base_slot_count + step_i as u32);
+                                extra_locals.push(Ty::Any);
+                                stmts.push(skotch_mir::Stmt::Assign {
+                                    dest: slot,
+                                    value: skotch_mir::Rvalue::GetField {
+                                        receiver: recv_slot,
+                                        class_name: cls_name.clone(),
+                                        field_name: prop_name.clone(),
+                                    },
+                                });
+                                recv_slot = slot;
+                                // Determine the next class for the
+                                // subsequent step.
+                                let is_last = step_i + 1 == chain.len();
+                                if !is_last {
+                                    let next_cls_name = class_fields
+                                        .get(&cls_name)
+                                        .and_then(|fields| {
+                                            fields
+                                                .iter()
+                                                .find(|(n, _)| n == prop_name)
+                                                .map(|(_, ty_name)| ty_name.clone())
+                                        });
+                                    let Some(nn) = next_cls_name else {
+                                        ok = false;
+                                        break;
+                                    };
+                                    if !class_lookup.contains_key(&nn) {
+                                        ok = false;
+                                        break;
+                                    }
+                                    current_cls = Some(nn);
+                                }
+                            }
+                            if ok {
                                 let blocks = vec![BasicBlock {
-                                    stmts: vec![skotch_mir::Stmt::Assign {
-                                        dest: result_slot,
-                                        value: skotch_mir::Rvalue::GetField {
-                                            receiver: recv_slot,
-                                            class_name: cname.to_string(),
-                                            field_name: prop_name.to_string(),
-                                        },
-                                    }],
-                                    terminator: Terminator::ReturnValue(result_slot),
+                                    stmts,
+                                    terminator: Terminator::ReturnValue(recv_slot),
                                 }];
-                                return (blocks, vec![Ty::Any]);
+                                return (blocks, extra_locals);
                             }
                         }
                     }
@@ -6741,6 +6847,38 @@ mod tests {
                 _ => panic!("expected CheckCast"),
             },
         }
+    }
+
+    #[test]
+    fn typed_lower_nested_dot_qualified_two_level() {
+        // `class A(val v: Int)
+        //  class B(val a: A)
+        //  fun get(b: B): Int = b.a.v`
+        // Two-level chain: GetField(b, B, a) → slot1, GetField(slot1, A, v) → slot2.
+        let module = lower(
+            "class A(val v: Int)\nclass B(val a: A)\nfun get(b: B): Int = b.a.v",
+            "TestKt",
+        );
+        let f = module.functions.iter().find(|f| f.name == "get").unwrap();
+        let block = &f.blocks[0];
+        // Should have 2 GetField stmts.
+        let getfields: Vec<_> = block
+            .stmts
+            .iter()
+            .filter_map(|s| match s {
+                skotch_mir::Stmt::Assign { value, .. } => match value {
+                    skotch_mir::Rvalue::GetField {
+                        class_name,
+                        field_name,
+                        ..
+                    } => Some((class_name.clone(), field_name.clone())),
+                    _ => None,
+                },
+            })
+            .collect();
+        assert_eq!(getfields.len(), 2, "expected 2 GetFields: {block:?}");
+        assert_eq!(getfields[0], ("B".to_string(), "a".to_string()));
+        assert_eq!(getfields[1], ("A".to_string(), "v".to_string()));
     }
 
     #[test]
