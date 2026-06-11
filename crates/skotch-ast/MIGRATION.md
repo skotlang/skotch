@@ -1215,3 +1215,66 @@ Remaining for fixture parity (still multi-session work):
 - Object singletons with INSTANCE + clinit emission
 - when exhaustiveness for sealed hierarchies
 - Cross-file class resolution beyond single-file class_lookup
+
+### 2026-06-11 (session 6 — push 22 absolute final-final: val_lookup in methods + driver tests)
+
+**val_lookup threaded through method bodies:**
+- Built in the pre-pass alongside fn_lookup (was a post-class
+  pass before; reordered so class processing can use it).
+- collect_class_methods, method_from_fun_with_class,
+  method_simple_body_full all gain val_lookup + wrapper_class
+  parameters.
+- Method body's Reference handler resolves top-level vals →
+  GetStaticField after param + implicit-this field lookups.
+- Method binary handler resolves top-level val operands.
+- Method static-call, virtual-call, and throw-ctor arg resolvers
+  all fall through to val_lookup after param + implicit-this field.
+
+**skotch-driver typed integration tests:**
+- 3 new tests exercise the full typed pipeline (SIL parse → resolve
+  → typeck → mir-lower) on representative shapes: top-level val +
+  fn binary, class with method binary, if/else CFG.
+- Confirms the threading + body lowering work end-to-end through
+  the driver's `typed::compile_source` entry point.
+
+**Push 22 totals:**
+- mir-lower: **157 unit tests** (up from 153)
+- skotch-driver: 4 new typed-pipeline tests
+- Full workspace: **618 tests passing**, 0 failures
+- Workspace clippy: clean
+
+### Session 6 absolute-absolute final tally
+
+mir-lower typed unit tests **85 → 157** (+72 in session 6, +85% growth).
+Full workspace tests **576 → 618** (+42 net).
+Workspace clippy clean throughout.
+
+Common Kotlin idioms now lowering end-to-end through the typed
+pipeline:
+- Class instantiation with N-arg ctor
+- ctor body emission: super call + putfields for primary val/var
+  + class-body literal-init properties + zero-arg fn-call inits
+- Top-level val refs anywhere (binary operand, body, call args, etc.)
+- if/else-if chains with N arms, bool-param cond, !boolParam swap
+- when (subject) with literal + Reference arm bodies
+- try/catch with single OR multiple catch clauses
+- while, do-while loops
+- Multi-stmt blocks: val + var + reassignment + literal/binary/call RHS
+- Method bodies: identity/field-access (explicit + implicit this) /
+  virtual call on this / static call (with arg variants) / multi-stmt
+  block via offset-1 walker / ArrayAccess on implicit-this field /
+  string-template with field interpolation
+- String templates → MakeConcatWithConstants (top-level + method)
+- Param.field chains (N-level via class_fields side table)
+- ArrayAccess with binary index
+- Throw with param ref OR inline exception ctor (top-level + method)
+- Short-circuit && / ||
+- Char + Long + Float + Double literals (incl. constant-folding
+  unary +/-)
+
+Path to deleting ast.rs:
+1. Continue mir-lower expansion for fixture parity
+2. Complete typeck Pass 2 bidirectional inference
+3. Migrate LSP/REPL to typed
+4. Driver cutover (replace legacy `compile_source` with `typed::compile_source`)
+5. Delete `crates/skotch-syntax/src/ast.rs` + `crates/skotch-parser/`
