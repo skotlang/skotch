@@ -1965,7 +1965,6 @@ fn lower_simple_body(
 ) -> (Vec<BasicBlock>, Vec<Ty>) {
     use skotch_ast::KtExpr;
     use skotch_mir::{LocalId, MirConst};
-    let _ = class_lookup;
 
     let make_placeholder = || {
         (
@@ -2114,6 +2113,54 @@ fn lower_simple_body(
                                 terminator: Terminator::ReturnValue(result_slot),
                             }];
                             return (blocks, vec![Ty::Int]);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Field access on a class-typed param: `fun getX(b: Box): Int = b.x`.
+    // Lowers to GetField(b_slot, Box, x). The class must be in
+    // class_lookup so we know its name.
+    if let KtExpr::DotQualified(dq) = &body_expr {
+        let exprs: Vec<KtExpr<'_>> = skotch_ast::children(dq.syntax())
+            .iter()
+            .filter_map(KtExpr::cast)
+            .collect();
+        if exprs.len() == 2 {
+            if let (KtExpr::Reference(recv_ref), KtExpr::Reference(prop_ref)) =
+                (&exprs[0], &exprs[1])
+            {
+                if let (Some(recv_name), Some(prop_name)) = (recv_ref.name(), prop_ref.name()) {
+                    let params: Vec<skotch_ast::KtValueParameter<'_>> = f
+                        .value_parameter_list()
+                        .map(|pl| pl.parameters().collect())
+                        .unwrap_or_default();
+                    if let Some((idx, param)) =
+                        params.iter().enumerate().find(|(_, p)| p.name() == Some(recv_name))
+                    {
+                        let class_name = param
+                            .type_reference()
+                            .and_then(|tr| tr.user_type())
+                            .and_then(|u| u.name());
+                        if let Some(cname) = class_name {
+                            if class_lookup.contains_key(cname) {
+                                let recv_slot = skotch_mir::LocalId(idx as u32);
+                                let result_slot = skotch_mir::LocalId(params.len() as u32);
+                                let blocks = vec![BasicBlock {
+                                    stmts: vec![skotch_mir::Stmt::Assign {
+                                        dest: result_slot,
+                                        value: skotch_mir::Rvalue::GetField {
+                                            receiver: recv_slot,
+                                            class_name: cname.to_string(),
+                                            field_name: prop_name.to_string(),
+                                        },
+                                    }],
+                                    terminator: Terminator::ReturnValue(result_slot),
+                                }];
+                                return (blocks, vec![Ty::Any]);
+                            }
                         }
                     }
                 }
@@ -4722,6 +4769,33 @@ mod tests {
                     assert!(target_class == "java/lang/String" || target_class == "String");
                 }
                 _ => panic!("expected CheckCast"),
+            },
+        }
+    }
+
+    #[test]
+    fn typed_lower_fn_reads_param_field_via_dot_qualified() {
+        // `class Box(val x: Int)
+        //  fun getX(b: Box): Int = b.x`
+        let module = lower(
+            "class Box(val x: Int)\nfun getX(b: Box): Int = b.x",
+            "TestKt",
+        );
+        let f = module.functions.iter().find(|f| f.name == "getX").unwrap();
+        let block = &f.blocks[0];
+        assert_eq!(block.stmts.len(), 1);
+        match &block.stmts[0] {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::GetField {
+                    receiver,
+                    class_name,
+                    field_name,
+                } => {
+                    assert_eq!(receiver.0, 0);
+                    assert_eq!(class_name, "Box");
+                    assert_eq!(field_name, "x");
+                }
+                _ => panic!("expected GetField, got {value:?}"),
             },
         }
     }
