@@ -4969,6 +4969,32 @@ mod tests {
     }
 
     #[test]
+    fn typed_lower_if_else_with_string_arms() {
+        // `fun sign(x: Int): String = if (x > 0) "pos" else "neg"`
+        let module = lower(
+            r#"fun sign(x: Int): String = if (x > 0) "pos" else "neg""#,
+            "TestKt",
+        );
+        let f = module.functions.iter().find(|f| f.name == "sign").unwrap();
+        // 4-block CFG.
+        assert_eq!(f.blocks.len(), 4);
+        // Each arm should materialize a String const.
+        let mut string_count = 0;
+        for b in &f.blocks {
+            for s in &b.stmts {
+                if let skotch_mir::Stmt::Assign {
+                    value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::String(_)),
+                    ..
+                } = s
+                {
+                    string_count += 1;
+                }
+            }
+        }
+        assert_eq!(string_count, 2, "expected 2 String consts (one per arm)");
+    }
+
+    #[test]
     fn typed_lower_if_with_not_bool_param_cond() {
         // `fun pick(skip: Boolean, a: Int, b: Int): Int = if (!skip) a else b`
         // !x lowers to: branch on x with then/else swapped.
