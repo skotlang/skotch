@@ -1436,3 +1436,52 @@ the sorted worklist):
 The worklist approach is paying off. Each commit now targets a
 specific top-of-list pattern, with measurable impact visible in
 the next worklist run.
+
+### 2026-06-11 (session 6 — push 28: rapid worklist-driven shape additions)
+
+After landing the worklist tool (push 27), rapid-iterated through
+the top of the sorted gap list:
+
+**Shapes added this push:**
+- println(string template + LONG entry) — `\${expr}` in val init
+- Hex / binary / underscored numeric literals (`0xFF`, `0b1010`, `1_000_000`)
+- Prefix-minus on Reference in println arg
+- Multi-stmt block class instantiation as statement (`fun main() { Foo() }`)
+- Multi-stmt block top-level fn call as statement (`fun main() { helper() }`)
+- Multi-stmt block top-level compound assignment (`x += 5`, `-=`, `*=`, `/=`, `%=`)
+- Multi-stmt block val init Binary supports comparisons + recursion
+- Multi-stmt block val init = Reference (alias) + top-level val + class
+- Multi-stmt block stmt-level Reference → field via implicit-this
+- Multi-stmt block println-arg accepts Binary with cmp ops + DotQualified
+  (local.field)
+- Multi-stmt block stmt-level method call on local (`b.add(5)`)
+- For-in over range loop (4-block CFG) + lower_loop_body helper
+- While loop (4-block CFG) + reuses lower_loop_body
+- Do-while loop (4-block CFG with body-first ordering)
+- Loop body compound-assignment + plain assignment with binary RHS
+- if-fold: `val x = if (Bool literal) X else Y` folds to chosen arm
+- Constant-fold unary minus on numeric literals
+- Method body if/else with Bool param OR implicit-this Bool field
+- Method body `is` / `as` cast for param + implicit-this field
+- Method body throw inline exception ctor
+- class_name + field_names threaded through multi-stmt walker
+
+**Worklist progression in this session (push 27 → push 28):**
+- Start (after worklist landed): 125 fully covered (12%), 466 typed
+  empty (48%)
+- Push 27 end: 160 fully covered (16%), 380 typed empty (39%)
+- Push 28 end: **165 fully covered (17%), 367 typed empty (37%)**
+- Net: +40 covered, -99 typed empty per session — the output-driven
+  worklist substantially accelerated the shape additions vs. blind
+  guessing.
+
+**Push 28 totals:**
+- mir-lower: **164 unit tests**
+- Worklist tool: 1 new test runner + serialized worklist file
+- Fully covered: 165 / 968 (17%) — up from 125 at session start
+- Workspace tests: 637 passing
+- Workspace clippy: clean
+
+The worklist is now the primary driver. Each next session can pick
+the top-of-list pattern, write a few-line handler, and watch the
+covered-count jump.
