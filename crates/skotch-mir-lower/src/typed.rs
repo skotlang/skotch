@@ -6027,6 +6027,161 @@ fn method_simple_body_full(
         }
     }
 
+    // Simple if/else method body where cond is a Boolean param or
+    // implicit-this field, and both arms are literals or References
+    // (param or implicit-this field):
+    //   class P(val flag: Boolean) { fun pick(): Int = if (flag) 1 else 0 }
+    // CFG (4 blocks):
+    //   block 0: optional GetField + Branch
+    //   block 1: then arm result, Goto(3)
+    //   block 2: else arm result, Goto(3)
+    //   block 3: ReturnValue(result)
+    if let KtExpr::If(if_e) = &body_expr {
+        let cond_expr = if_e
+            .condition()
+            .and_then(|c| c.expression())
+            .map(unwrap_parens);
+        let then_expr = if_e
+            .then_branch()
+            .and_then(|t| t.expression())
+            .map(unwrap_parens);
+        let else_expr = if_e
+            .else_branch()
+            .and_then(|e| e.expression())
+            .map(unwrap_parens);
+        if let (Some(cond), Some(then_e), Some(else_e)) = (cond_expr, then_expr, else_expr) {
+            // Cond shape: Reference (param or field)
+            let mut pre0_stmts: Vec<skotch_mir::Stmt> = Vec::new();
+            let mut extra_locals: Vec<Ty> = Vec::new();
+            let mut next_slot = (1 + param_count) as u32;
+            let cond_slot: Option<skotch_mir::LocalId> = match cond {
+                KtExpr::Reference(r) => {
+                    let Some(n) = r.name() else {
+                        return make_placeholder();
+                    };
+                    if let Some(idx) = param_names.iter().position(|p| p == n) {
+                        Some(skotch_mir::LocalId((1 + idx) as u32))
+                    } else if let (Some(cname), Some((fname, fty))) =
+                        (class_name, field_names.iter().find(|(n2, _)| n2 == n))
+                    {
+                        let slot = skotch_mir::LocalId(next_slot);
+                        next_slot += 1;
+                        extra_locals.push(fty.clone());
+                        pre0_stmts.push(skotch_mir::Stmt::Assign {
+                            dest: slot,
+                            value: skotch_mir::Rvalue::GetField {
+                                receiver: skotch_mir::LocalId(0),
+                                class_name: cname.to_string(),
+                                field_name: fname.clone(),
+                            },
+                        });
+                        Some(slot)
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            };
+            if let Some(cond_slot) = cond_slot {
+                let result_slot = skotch_mir::LocalId(next_slot);
+                next_slot += 1;
+                extra_locals.push(Ty::Any);
+                let resolve_arm = |e: KtExpr<'_>,
+                                   stmts: &mut Vec<skotch_mir::Stmt>,
+                                   extra_locals: &mut Vec<Ty>,
+                                   next_slot: &mut u32,
+                                   strings: &mut Vec<String>|
+                 -> Option<skotch_mir::LocalId> {
+                    let e = unwrap_parens(e);
+                    if let Some((k, ty)) = literal_to_const(&e, strings) {
+                        let slot = skotch_mir::LocalId(*next_slot);
+                        *next_slot += 1;
+                        extra_locals.push(ty);
+                        stmts.push(skotch_mir::Stmt::Assign {
+                            dest: slot,
+                            value: skotch_mir::Rvalue::Const(k),
+                        });
+                        return Some(slot);
+                    }
+                    if let KtExpr::Reference(r) = e {
+                        let n = r.name()?;
+                        if let Some(idx) = param_names.iter().position(|p| p == n) {
+                            return Some(skotch_mir::LocalId((1 + idx) as u32));
+                        }
+                        if let (Some(cname), Some((fname, fty))) =
+                            (class_name, field_names.iter().find(|(n2, _)| n2 == n))
+                        {
+                            let slot = skotch_mir::LocalId(*next_slot);
+                            *next_slot += 1;
+                            extra_locals.push(fty.clone());
+                            stmts.push(skotch_mir::Stmt::Assign {
+                                dest: slot,
+                                value: skotch_mir::Rvalue::GetField {
+                                    receiver: skotch_mir::LocalId(0),
+                                    class_name: cname.to_string(),
+                                    field_name: fname.clone(),
+                                },
+                            });
+                            return Some(slot);
+                        }
+                    }
+                    None
+                };
+                let mut then_stmts: Vec<skotch_mir::Stmt> = Vec::new();
+                let Some(then_slot) = resolve_arm(
+                    then_e,
+                    &mut then_stmts,
+                    &mut extra_locals,
+                    &mut next_slot,
+                    strings,
+                ) else {
+                    return make_placeholder();
+                };
+                then_stmts.push(skotch_mir::Stmt::Assign {
+                    dest: result_slot,
+                    value: skotch_mir::Rvalue::Local(then_slot),
+                });
+                let mut else_stmts: Vec<skotch_mir::Stmt> = Vec::new();
+                let Some(else_slot) = resolve_arm(
+                    else_e,
+                    &mut else_stmts,
+                    &mut extra_locals,
+                    &mut next_slot,
+                    strings,
+                ) else {
+                    return make_placeholder();
+                };
+                else_stmts.push(skotch_mir::Stmt::Assign {
+                    dest: result_slot,
+                    value: skotch_mir::Rvalue::Local(else_slot),
+                });
+                let blocks = vec![
+                    BasicBlock {
+                        stmts: pre0_stmts,
+                        terminator: Terminator::Branch {
+                            cond: cond_slot,
+                            then_block: 1,
+                            else_block: 2,
+                        },
+                    },
+                    BasicBlock {
+                        stmts: then_stmts,
+                        terminator: Terminator::Goto(3),
+                    },
+                    BasicBlock {
+                        stmts: else_stmts,
+                        terminator: Terminator::Goto(3),
+                    },
+                    BasicBlock {
+                        stmts: Vec::new(),
+                        terminator: Terminator::ReturnValue(result_slot),
+                    },
+                ];
+                return (blocks, extra_locals);
+            }
+        }
+    }
+
     // throw body for methods:
     //   class X { fun fail(e: Throwable): Nothing = throw e }
     //   class X { fun fail(): Nothing = throw IllegalStateException("oops") }
@@ -7519,6 +7674,34 @@ mod tests {
                 _ => panic!("expected CheckCast"),
             },
         }
+    }
+
+    #[test]
+    fn typed_lower_method_if_else_with_bool_field_cond() {
+        // `class P(val flag: Boolean) { fun pick(): Int = if (flag) 1 else 0 }`
+        let module = lower(
+            "class P(val flag: Boolean) { fun pick(): Int = if (flag) 1 else 0 }",
+            "TestKt",
+        );
+        let cls = module.classes.iter().find(|c| c.name == "P").unwrap();
+        let f = cls.methods.iter().find(|m| m.name == "pick").unwrap();
+        // 4-block CFG.
+        assert_eq!(f.blocks.len(), 4);
+        // Block 0 must contain a GetField for flag and Branch terminator.
+        let has_getfield = f.blocks[0].stmts.iter().any(|s| {
+            matches!(
+                s,
+                skotch_mir::Stmt::Assign {
+                    value: skotch_mir::Rvalue::GetField { .. },
+                    ..
+                }
+            )
+        });
+        assert!(has_getfield, "block 0 should GetField flag");
+        assert!(matches!(
+            f.blocks[0].terminator,
+            skotch_mir::Terminator::Branch { .. }
+        ));
     }
 
     #[test]
