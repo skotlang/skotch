@@ -1119,41 +1119,63 @@ fn try_lower_when_expression(
             },
         });
 
-        // then_block: result_slot = literal_from_body; Goto join.
-        let (bk, bty) = literal_to_const(body, strings)?;
-        let body_slot = LocalId(next_slot);
-        next_slot += 1;
-        extra_locals.push(bty);
-        let then_stmts = vec![
-            MStmt::Assign {
-                dest: body_slot,
-                value: Rvalue::Const(bk),
-            },
-            MStmt::Assign {
+        // then_block: result_slot = (literal | param ref); Goto join.
+        let then_stmts = if let Some((bk, bty)) = literal_to_const(body, strings) {
+            let body_slot = LocalId(next_slot);
+            next_slot += 1;
+            extra_locals.push(bty);
+            vec![
+                MStmt::Assign {
+                    dest: body_slot,
+                    value: Rvalue::Const(bk),
+                },
+                MStmt::Assign {
+                    dest: result_slot,
+                    value: Rvalue::Local(body_slot),
+                },
+            ]
+        } else if let KtExpr::Reference(rr) = body {
+            let n = rr.name()?;
+            let idx = outer_param_names.iter().position(|p| p == n)?;
+            let param_slot = LocalId(idx as u32);
+            vec![MStmt::Assign {
                 dest: result_slot,
-                value: Rvalue::Local(body_slot),
-            },
-        ];
+                value: Rvalue::Local(param_slot),
+            }]
+        } else {
+            return None;
+        };
         blocks.push(BasicBlock {
             stmts: then_stmts,
             terminator: Terminator::Goto(join_block_idx),
         });
     }
 
-    // else_block.
-    let (ek, ety) = literal_to_const(&else_body, strings)?;
-    let else_slot = LocalId(next_slot);
-    extra_locals.push(ety);
-    let else_stmts = vec![
-        MStmt::Assign {
-            dest: else_slot,
-            value: Rvalue::Const(ek),
-        },
-        MStmt::Assign {
+    // else_block — same literal-or-param resolution.
+    let else_stmts = if let Some((ek, ety)) = literal_to_const(&else_body, strings) {
+        let else_slot = LocalId(next_slot);
+        extra_locals.push(ety);
+        vec![
+            MStmt::Assign {
+                dest: else_slot,
+                value: Rvalue::Const(ek),
+            },
+            MStmt::Assign {
+                dest: result_slot,
+                value: Rvalue::Local(else_slot),
+            },
+        ]
+    } else if let KtExpr::Reference(rr) = &else_body {
+        let n = rr.name()?;
+        let idx = outer_param_names.iter().position(|p| p == n)?;
+        let param_slot = LocalId(idx as u32);
+        vec![MStmt::Assign {
             dest: result_slot,
-            value: Rvalue::Local(else_slot),
-        },
-    ];
+            value: Rvalue::Local(param_slot),
+        }]
+    } else {
+        return None;
+    };
     blocks.push(BasicBlock {
         stmts: else_stmts,
         terminator: Terminator::Goto(join_block_idx),
@@ -6186,6 +6208,33 @@ mod tests {
                     assert!(target_class == "java/lang/String" || target_class == "String");
                 }
                 _ => panic!("expected CheckCast"),
+            },
+        }
+    }
+
+    #[test]
+    fn typed_lower_when_arms_return_param_refs() {
+        // `fun pick(x: Int, a: Int, b: Int): Int = when (x) {
+        //    1 -> a; 2 -> b; else -> 0 }`
+        let module = lower(
+            "fun pick(x: Int, a: Int, b: Int): Int = when (x) { 1 -> a; 2 -> b; else -> 0 }",
+            "TestKt",
+        );
+        let f = module.functions.iter().find(|f| f.name == "pick").unwrap();
+        // 2 arms * 2 blocks (cmp + body) + 1 else + 1 join = 6 blocks.
+        assert_eq!(f.blocks.len(), 6);
+        // Then arm 1 (block 1) should assign Local(a) (slot 1).
+        match &f.blocks[1].stmts[0] {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::Local(s) => assert_eq!(s.0, 1),
+                _ => panic!("expected Local(a), got {value:?}"),
+            },
+        }
+        // Then arm 2 (block 3) should assign Local(b) (slot 2).
+        match &f.blocks[3].stmts[0] {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::Local(s) => assert_eq!(s.0, 2),
+                _ => panic!("expected Local(b), got {value:?}"),
             },
         }
     }
