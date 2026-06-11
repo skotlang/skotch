@@ -386,6 +386,33 @@ pub fn lower_file(
         }
     }
 
+    // Top-level class lookup: name → constructor param types. Used by
+    // body lowerers to detect `P(args)` calls and emit NewInstance +
+    // Constructor.
+    let mut class_lookup: rustc_hash::FxHashMap<String, Vec<Ty>> =
+        rustc_hash::FxHashMap::default();
+    for decl in file.decls() {
+        if let KtDecl::Class(c) = decl {
+            let Some(name) = c.name() else { continue };
+            let param_tys: Vec<Ty> = c
+                .primary_constructor()
+                .and_then(|pc| pc.value_parameter_list())
+                .map(|pl| {
+                    pl.parameters()
+                        .map(|p| {
+                            p.type_reference()
+                                .and_then(|tr| tr.user_type())
+                                .and_then(|u| u.name())
+                                .and_then(skotch_types::ty_from_name)
+                                .unwrap_or(Ty::Any)
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            class_lookup.insert(name.to_string(), param_tys);
+        }
+    }
+
     // Top-level functions — one MirFunction per KtFun decl.
     let mut fn_id = 0u32;
     for decl in file.decls() {
@@ -423,6 +450,7 @@ pub fn lower_file(
                 &mut module.strings,
                 &fn_lookup,
                 &val_lookup,
+                &class_lookup,
                 &wrapper_class,
             );
 
@@ -1926,15 +1954,18 @@ fn literal_to_const(
 ///   Return value local N
 /// Block-bodied functions and non-literal expression bodies fall
 /// back to an empty Return placeholder.
+#[allow(clippy::too_many_arguments)]
 fn lower_simple_body(
     f: skotch_ast::KtFun<'_>,
     strings: &mut Vec<String>,
     fn_lookup: &rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)>,
     val_lookup: &rustc_hash::FxHashMap<String, Ty>,
+    class_lookup: &rustc_hash::FxHashMap<String, Vec<Ty>>,
     wrapper_class: &str,
 ) -> (Vec<BasicBlock>, Vec<Ty>) {
     use skotch_ast::KtExpr;
     use skotch_mir::{LocalId, MirConst};
+    let _ = class_lookup;
 
     let make_placeholder = || {
         (
@@ -2411,6 +2442,120 @@ fn lower_simple_body(
     if let KtExpr::If(if_e) = &body_expr {
         if let Some(blocks_and_locals) = try_lower_if_expression(if_e, f, strings, fn_lookup) {
             return blocks_and_locals;
+        }
+    }
+
+    // Constructor-call body: `fun make(): P = P(arg1, arg2)` where P
+    // is a top-level class declared in the same file. Emits:
+    //   slot N   = NewInstance("P")
+    //   each arg = const or param ref
+    //   slot N+1 = Call(Constructor("P"), [slot N, args...])
+    //   return value slot N
+    // (NewInstance is uninitialized; the Constructor call initializes
+    // it in place — the result of the expression is the same slot.)
+    if let KtExpr::Call(call) = &body_expr {
+        if let Some(KtExpr::Reference(r)) = call.callee() {
+            if let Some(name) = r.name() {
+                if let Some(ctor_param_tys) = class_lookup.get(name) {
+                    let _ = ctor_param_tys;
+                    let outer_param_names: Vec<String> = f
+                        .value_parameter_list()
+                        .map(|pl| {
+                            pl.parameters()
+                                .map(|p| p.name().unwrap_or("").to_string())
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    let outer_param_count = outer_param_names.len();
+                    let mut next_slot = outer_param_count as u32;
+                    let mut pre_stmts: Vec<skotch_mir::Stmt> = Vec::new();
+                    let mut extra_locals: Vec<Ty> = Vec::new();
+                    let class_ty = Ty::Class(name.to_string());
+
+                    // NewInstance slot — the receiver for the
+                    // Constructor call.
+                    let new_slot = skotch_mir::LocalId(next_slot);
+                    next_slot += 1;
+                    extra_locals.push(class_ty.clone());
+                    pre_stmts.push(skotch_mir::Stmt::Assign {
+                        dest: new_slot,
+                        value: skotch_mir::Rvalue::NewInstance(name.to_string()),
+                    });
+
+                    let mut arg_slots: Vec<skotch_mir::LocalId> = vec![new_slot];
+                    let mut ok = true;
+                    if let Some(arg_list) = call.value_argument_list() {
+                        for arg in arg_list.arguments() {
+                            let Some(arg_expr) = arg.expression() else {
+                                ok = false;
+                                break;
+                            };
+                            match arg_expr {
+                                KtExpr::Reference(rr) => {
+                                    let Some(an) = rr.name() else {
+                                        ok = false;
+                                        break;
+                                    };
+                                    if let Some(idx) =
+                                        outer_param_names.iter().position(|p| p == an)
+                                    {
+                                        arg_slots.push(skotch_mir::LocalId(idx as u32));
+                                    } else if let Some(val_ty) = val_lookup.get(an) {
+                                        let slot = skotch_mir::LocalId(next_slot);
+                                        next_slot += 1;
+                                        extra_locals.push(val_ty.clone());
+                                        pre_stmts.push(skotch_mir::Stmt::Assign {
+                                            dest: slot,
+                                            value: skotch_mir::Rvalue::GetStaticField {
+                                                class_name: wrapper_class.to_string(),
+                                                field_name: an.to_string(),
+                                                descriptor: ty_to_descriptor(val_ty),
+                                            },
+                                        });
+                                        arg_slots.push(slot);
+                                    } else {
+                                        ok = false;
+                                        break;
+                                    }
+                                }
+                                other => match literal_to_const(&other, strings) {
+                                    Some((k, ty)) => {
+                                        let slot = skotch_mir::LocalId(next_slot);
+                                        next_slot += 1;
+                                        extra_locals.push(ty);
+                                        pre_stmts.push(skotch_mir::Stmt::Assign {
+                                            dest: slot,
+                                            value: skotch_mir::Rvalue::Const(k),
+                                        });
+                                        arg_slots.push(slot);
+                                    }
+                                    None => {
+                                        ok = false;
+                                        break;
+                                    }
+                                },
+                            }
+                        }
+                    }
+                    if ok {
+                        // Constructor call writes into a dummy slot.
+                        let dummy_slot = skotch_mir::LocalId(next_slot);
+                        extra_locals.push(Ty::Unit);
+                        pre_stmts.push(skotch_mir::Stmt::Assign {
+                            dest: dummy_slot,
+                            value: skotch_mir::Rvalue::Call {
+                                kind: skotch_mir::CallKind::Constructor(name.to_string()),
+                                args: arg_slots,
+                            },
+                        });
+                        let blocks = vec![BasicBlock {
+                            stmts: pre_stmts,
+                            terminator: Terminator::ReturnValue(new_slot),
+                        }];
+                        return (blocks, extra_locals);
+                    }
+                }
+            }
         }
     }
 
@@ -4579,6 +4724,122 @@ mod tests {
                 _ => panic!("expected CheckCast"),
             },
         }
+    }
+
+    #[test]
+    fn typed_lower_fn_constructs_class_no_args() {
+        // `class P
+        //  fun make(): P = P()`
+        // Body lowers to NewInstance + Call(Constructor, [new_slot]),
+        // returning the new slot.
+        let module = lower("class P\nfun make(): P = P()", "TestKt");
+        let f = module.functions.iter().find(|f| f.name == "make").unwrap();
+        let block = &f.blocks[0];
+        let has_new = block.stmts.iter().any(|s| {
+            matches!(
+                s,
+                skotch_mir::Stmt::Assign {
+                    value: skotch_mir::Rvalue::NewInstance(_),
+                    ..
+                }
+            )
+        });
+        let has_ctor = block.stmts.iter().any(|s| {
+            matches!(
+                s,
+                skotch_mir::Stmt::Assign {
+                    value: skotch_mir::Rvalue::Call {
+                        kind: skotch_mir::CallKind::Constructor(_),
+                        ..
+                    },
+                    ..
+                }
+            )
+        });
+        assert!(has_new, "expected NewInstance, got block: {block:?}");
+        assert!(has_ctor, "expected Constructor call, got block: {block:?}");
+    }
+
+    #[test]
+    fn typed_lower_fn_constructs_class_with_args() {
+        // `class P(val x: Int, val y: Int)
+        //  fun mk(): P = P(1, 2)`
+        let module = lower(
+            "class P(val x: Int, val y: Int)\nfun mk(): P = P(1, 2)",
+            "TestKt",
+        );
+        let f = module.functions.iter().find(|f| f.name == "mk").unwrap();
+        let block = &f.blocks[0];
+        let new_count = block
+            .stmts
+            .iter()
+            .filter(|s| {
+                matches!(
+                    s,
+                    skotch_mir::Stmt::Assign {
+                        value: skotch_mir::Rvalue::NewInstance(_),
+                        ..
+                    }
+                )
+            })
+            .count();
+        assert_eq!(new_count, 1);
+        // The Constructor call should have 3 args: receiver + 2 literals.
+        let ctor_args = block.stmts.iter().find_map(|s| match s {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::Call {
+                    kind: skotch_mir::CallKind::Constructor(_),
+                    args,
+                } => Some(args.clone()),
+                _ => None,
+            },
+        });
+        let args = ctor_args.unwrap();
+        assert_eq!(args.len(), 3, "expected receiver + 2 args, got {args:?}");
+    }
+
+    #[test]
+    fn typed_lower_fn_returns_nested_binary() {
+        // `fun calc(x: Int): Int = x + 1 * 2`
+        // Outer = Binary(+, x, Binary(*, 1, 2)).
+        // Inner Binary recurses through resolve_operand_rec to a slot.
+        let module = lower("fun calc(x: Int): Int = x + 1 * 2", "TestKt");
+        let f = module.functions.iter().find(|f| f.name == "calc").unwrap();
+        let block = &f.blocks[0];
+        let n_mul = block
+            .stmts
+            .iter()
+            .filter(|s| {
+                matches!(
+                    s,
+                    skotch_mir::Stmt::Assign {
+                        value: skotch_mir::Rvalue::BinOp {
+                            op: skotch_mir::BinOp::MulI,
+                            ..
+                        },
+                        ..
+                    }
+                )
+            })
+            .count();
+        let n_add = block
+            .stmts
+            .iter()
+            .filter(|s| {
+                matches!(
+                    s,
+                    skotch_mir::Stmt::Assign {
+                        value: skotch_mir::Rvalue::BinOp {
+                            op: skotch_mir::BinOp::AddI,
+                            ..
+                        },
+                        ..
+                    }
+                )
+            })
+            .count();
+        assert_eq!(n_mul, 1, "expected 1 MulI, body: {block:?}");
+        assert_eq!(n_add, 1, "expected 1 AddI, body: {block:?}");
     }
 
     #[test]
