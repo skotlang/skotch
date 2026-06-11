@@ -2312,7 +2312,139 @@ fn try_lower_multi_stmt_block_with_offset(
                             recipe.push('\x01');
                         }
                         S::STRING_START | S::STRING_END | S::WHITE_SPACE => {}
-                        S::LONG_STRING_TEMPLATE_ENTRY | S::BLOCK_STRING_TEMPLATE_ENTRY => {
+                        S::LONG_STRING_TEMPLATE_ENTRY => {
+                            // `${expr}` — expression interp. Find
+                            // the inner KtExpr, resolve to a slot,
+                            // append \\x01 + descriptor.
+                            let inner = skotch_ast::children(child)
+                                .iter()
+                                .find_map(KtExpr::cast)
+                                .map(unwrap_parens);
+                            let Some(inner) = inner else {
+                                ok = false;
+                                break;
+                            };
+                            // Resolver: literal → Const; Reference →
+                            // local OR val; Binary → recurse.
+                            fn resolve_template_expr<'a>(
+                                e: KtExpr<'a>,
+                                name_to_local: &[(String, LocalId)],
+                                local_tys: &mut Vec<Ty>,
+                                next_slot: &mut u32,
+                                stmts: &mut Vec<MStmt>,
+                                strings: &mut Vec<String>,
+                                val_lookup: &rustc_hash::FxHashMap<String, Ty>,
+                                wrapper_class: &str,
+                            ) -> Option<(LocalId, Ty)> {
+                                let e = unwrap_parens(e);
+                                if let Some((k, ty)) =
+                                    literal_to_const(&e, strings)
+                                {
+                                    let slot = LocalId(*next_slot);
+                                    *next_slot += 1;
+                                    local_tys.push(ty.clone());
+                                    stmts.push(MStmt::Assign {
+                                        dest: slot,
+                                        value: skotch_mir::Rvalue::Const(k),
+                                    });
+                                    return Some((slot, ty));
+                                }
+                                match e {
+                                    KtExpr::Reference(r) => {
+                                        let n = r.name()?;
+                                        if let Some(slot) = name_to_local
+                                            .iter()
+                                            .rev()
+                                            .find(|(name, _)| name == n)
+                                            .map(|(_, l)| *l)
+                                        {
+                                            let ty = local_tys
+                                                .get(slot.0 as usize)
+                                                .cloned()
+                                                .unwrap_or(Ty::Any);
+                                            return Some((slot, ty));
+                                        }
+                                        if let Some(val_ty) = val_lookup.get(n) {
+                                            let slot = LocalId(*next_slot);
+                                            *next_slot += 1;
+                                            local_tys.push(val_ty.clone());
+                                            stmts.push(MStmt::Assign {
+                                                dest: slot,
+                                                value: skotch_mir::Rvalue::GetStaticField {
+                                                    class_name: wrapper_class.to_string(),
+                                                    field_name: n.to_string(),
+                                                    descriptor: ty_to_descriptor(val_ty),
+                                                },
+                                            });
+                                            return Some((slot, val_ty.clone()));
+                                        }
+                                        None
+                                    }
+                                    KtExpr::Binary(b) => {
+                                        let op_text = b.operation().map(|o| o.text()).unwrap_or_default();
+                                        let mir_op = match op_text.as_str() {
+                                            "+" => Some(skotch_mir::BinOp::AddI),
+                                            "-" => Some(skotch_mir::BinOp::SubI),
+                                            "*" => Some(skotch_mir::BinOp::MulI),
+                                            "/" => Some(skotch_mir::BinOp::DivI),
+                                            "%" => Some(skotch_mir::BinOp::ModI),
+                                            _ => None,
+                                        }?;
+                                        let (lhs, _) = resolve_template_expr(
+                                            b.lhs()?,
+                                            name_to_local,
+                                            local_tys,
+                                            next_slot,
+                                            stmts,
+                                            strings,
+                                            val_lookup,
+                                            wrapper_class,
+                                        )?;
+                                        let (rhs, _) = resolve_template_expr(
+                                            b.rhs()?,
+                                            name_to_local,
+                                            local_tys,
+                                            next_slot,
+                                            stmts,
+                                            strings,
+                                            val_lookup,
+                                            wrapper_class,
+                                        )?;
+                                        let slot = LocalId(*next_slot);
+                                        *next_slot += 1;
+                                        local_tys.push(Ty::Int);
+                                        stmts.push(MStmt::Assign {
+                                            dest: slot,
+                                            value: skotch_mir::Rvalue::BinOp {
+                                                op: mir_op,
+                                                lhs,
+                                                rhs,
+                                            },
+                                        });
+                                        Some((slot, Ty::Int))
+                                    }
+                                    _ => None,
+                                }
+                            }
+                            let Some((slot, ty)) = resolve_template_expr(
+                                inner,
+                                &name_to_local,
+                                &mut local_tys,
+                                &mut next_slot,
+                                &mut stmts,
+                                strings,
+                                val_lookup,
+                                wrapper_class,
+                            ) else {
+                                ok = false;
+                                break;
+                            };
+                            arg_slots.push(slot);
+                            arg_descs.push(ty_to_descriptor(&ty));
+                            recipe.push('\x01');
+                            had_interp = true;
+                        }
+                        S::BLOCK_STRING_TEMPLATE_ENTRY => {
                             ok = false;
                             break;
                         }
