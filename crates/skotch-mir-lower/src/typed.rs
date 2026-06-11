@@ -5664,6 +5664,31 @@ mod tests {
     }
 
     #[test]
+    fn typed_lower_block_multiple_println_calls() {
+        // `fun show(x: Int) { println(x); println(x) }`
+        let module = lower("fun show(x: Int) { println(x); println(x) }", "TestKt");
+        let f = module.functions.iter().find(|f| f.name == "show").unwrap();
+        let block = &f.blocks[0];
+        let n_println = block
+            .stmts
+            .iter()
+            .filter(|s| {
+                matches!(
+                    s,
+                    skotch_mir::Stmt::Assign {
+                        value: skotch_mir::Rvalue::Call {
+                            kind: skotch_mir::CallKind::Println,
+                            ..
+                        },
+                        ..
+                    }
+                )
+            })
+            .count();
+        assert_eq!(n_println, 2, "expected 2 Println calls");
+    }
+
+    #[test]
     fn typed_lower_if_else_arm_calls_top_level_fn() {
         // `fun double(x: Int): Int = x * 2
         //  fun cond(x: Int): Int = if (x > 0) double(x) else x`
