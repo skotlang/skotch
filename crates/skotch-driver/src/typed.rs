@@ -92,6 +92,26 @@ mod tests {
     }
 
     #[test]
+    fn typed_compile_source_handles_class_with_field_method() {
+        let mut interner = Interner::new();
+        let mut diags = Diagnostics::new();
+        let module = compile_source(
+            r#"class P(val name: String) {
+                fun greet(): String = "Hello, $name"
+                fun len(): Int = name.length
+            }"#,
+            "test.kt",
+            "TestKt",
+            &mut interner,
+            &mut diags,
+            None,
+        );
+        let cls = module.classes.iter().find(|c| c.name == "P").unwrap();
+        // The greet method should exist.
+        assert!(cls.methods.iter().any(|m| m.name == "greet"));
+    }
+
+    #[test]
     fn typed_compile_source_handles_block_with_var_reassign() {
         let mut interner = Interner::new();
         let mut diags = Diagnostics::new();
