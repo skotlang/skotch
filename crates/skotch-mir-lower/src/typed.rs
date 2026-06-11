@@ -5277,6 +5277,12 @@ fn lower_inline_expr_to_slot(
                 "*" => Some(skotch_mir::BinOp::MulI),
                 "/" => Some(skotch_mir::BinOp::DivI),
                 "%" => Some(skotch_mir::BinOp::ModI),
+                "==" => Some(skotch_mir::BinOp::CmpEq),
+                "!=" => Some(skotch_mir::BinOp::CmpNe),
+                "<" => Some(skotch_mir::BinOp::CmpLt),
+                ">" => Some(skotch_mir::BinOp::CmpGt),
+                "<=" => Some(skotch_mir::BinOp::CmpLe),
+                ">=" => Some(skotch_mir::BinOp::CmpGe),
                 _ => None,
             }?;
             let lhs = lower_inline_expr_to_slot(
@@ -5297,12 +5303,97 @@ fn lower_inline_expr_to_slot(
             )?;
             let slot = LocalId(*next_slot);
             *next_slot += 1;
-            extra_locals.push(Ty::Int);
+            let is_cmp = matches!(
+                mir_op,
+                skotch_mir::BinOp::CmpEq
+                    | skotch_mir::BinOp::CmpNe
+                    | skotch_mir::BinOp::CmpLt
+                    | skotch_mir::BinOp::CmpGt
+                    | skotch_mir::BinOp::CmpLe
+                    | skotch_mir::BinOp::CmpGe
+            );
+            extra_locals.push(if is_cmp { Ty::Bool } else { Ty::Int });
             pre_stmts.push(MStmt::Assign {
                 dest: slot,
                 value: skotch_mir::Rvalue::BinOp { op: mir_op, lhs, rhs },
             });
             Some(slot)
+        }
+        KtExpr::Prefix(p) => {
+            // Unary prefix: `-x`, `!b`.
+            let op_text = skotch_ast::children(p.syntax())
+                .iter()
+                .find_map(|c| {
+                    if c.kind == skotch_syntax::SyntaxKind::OPERATION_REFERENCE {
+                        skotch_ast::KtOperationReference::cast(c).map(|o| o.text())
+                    } else {
+                        None
+                    }
+                })
+                .unwrap_or_default();
+            let inner = skotch_ast::children(p.syntax())
+                .iter()
+                .find_map(KtExpr::cast)
+                .map(unwrap_parens)?;
+            let inner_slot = lower_inline_expr_to_slot(
+                inner,
+                lookup_name,
+                next_slot,
+                pre_stmts,
+                extra_locals,
+                strings,
+            )?;
+            match op_text.as_str() {
+                "-" => {
+                    // 0 - x
+                    let zero_slot = LocalId(*next_slot);
+                    *next_slot += 1;
+                    extra_locals.push(Ty::Int);
+                    pre_stmts.push(MStmt::Assign {
+                        dest: zero_slot,
+                        value: skotch_mir::Rvalue::Const(
+                            skotch_mir::MirConst::Int(0),
+                        ),
+                    });
+                    let result = LocalId(*next_slot);
+                    *next_slot += 1;
+                    extra_locals.push(Ty::Int);
+                    pre_stmts.push(MStmt::Assign {
+                        dest: result,
+                        value: skotch_mir::Rvalue::BinOp {
+                            op: skotch_mir::BinOp::SubI,
+                            lhs: zero_slot,
+                            rhs: inner_slot,
+                        },
+                    });
+                    Some(result)
+                }
+                "!" => {
+                    // x == false
+                    let false_slot = LocalId(*next_slot);
+                    *next_slot += 1;
+                    extra_locals.push(Ty::Bool);
+                    pre_stmts.push(MStmt::Assign {
+                        dest: false_slot,
+                        value: skotch_mir::Rvalue::Const(
+                            skotch_mir::MirConst::Bool(false),
+                        ),
+                    });
+                    let result = LocalId(*next_slot);
+                    *next_slot += 1;
+                    extra_locals.push(Ty::Bool);
+                    pre_stmts.push(MStmt::Assign {
+                        dest: result,
+                        value: skotch_mir::Rvalue::BinOp {
+                            op: skotch_mir::BinOp::CmpEq,
+                            lhs: inner_slot,
+                            rhs: false_slot,
+                        },
+                    });
+                    Some(result)
+                }
+                _ => None,
+            }
         }
         _ => None,
     }
