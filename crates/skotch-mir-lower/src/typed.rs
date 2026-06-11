@@ -4836,53 +4836,99 @@ fn method_simple_body_full(
         }
     }
 
-    // Virtual call on `this` to a sibling no-arg method:
-    //   class P { fun a() = 1; fun b() = a() }
-    // Emits Call(Virtual { class, method: "a" }, [this]).
-    // We check fn_lookup first below so top-level fn calls take
-    // priority over virtual dispatch (the legacy lookup order).
+    // Virtual call on `this` to a sibling method, with N param or
+    // literal args:
+    //   class P { fun a(x: Int) = x; fun b(y: Int) = a(y) }
+    // Emits Call(Virtual { class, method: "a" }, [this, y_slot]).
+    // We skip virtual emission if the name resolves as a top-level
+    // fn (handled below) so top-level dispatch takes priority over
+    // virtual.
     if let KtExpr::Call(call) = &body_expr {
         if let Some(KtExpr::Reference(r)) = call.callee() {
             if let Some(name) = r.name() {
-                let no_args = call
-                    .value_argument_list()
-                    .map(|a| a.arguments().count() == 0)
-                    .unwrap_or(true);
-                if no_args && name != "println" && name != "print"
-                    // Skip virtual emission if the name resolves as a
-                    // top-level fn — that's handled below.
+                if name != "println"
+                    && name != "print"
                     && !fn_lookup.contains_key(name)
                 {
                     if let Some(cname) = class_name {
                         let this_slot = skotch_mir::LocalId(0);
-                        let result_slot = skotch_mir::LocalId((1 + param_count) as u32);
-                        // Determine return type from f.return_type when present.
-                        let ret_ty = match f
-                            .return_type()
-                            .and_then(|tr| tr.user_type())
-                            .and_then(|u| u.name())
-                        {
-                            Some(rn) => skotch_types::ty_from_name(rn).unwrap_or(Ty::Any),
-                            None => Ty::Any,
-                        };
-                        let blocks = vec![BasicBlock {
-                            stmts: vec![skotch_mir::Stmt::Assign {
+                        let mut next_slot = (1 + param_count) as u32;
+                        let mut pre_stmts: Vec<skotch_mir::Stmt> = Vec::new();
+                        let mut extra_locals: Vec<Ty> = Vec::new();
+                        let mut arg_slots: Vec<skotch_mir::LocalId> = vec![this_slot];
+                        let mut ok = true;
+                        if let Some(arg_list) = call.value_argument_list() {
+                            for arg in arg_list.arguments() {
+                                let Some(arg_expr) = arg.expression() else {
+                                    ok = false;
+                                    break;
+                                };
+                                match arg_expr {
+                                    KtExpr::Reference(rr) => {
+                                        let Some(an) = rr.name() else {
+                                            ok = false;
+                                            break;
+                                        };
+                                        if let Some(idx) =
+                                            param_names.iter().position(|p| p == an)
+                                        {
+                                            arg_slots.push(skotch_mir::LocalId((1 + idx) as u32));
+                                        } else {
+                                            ok = false;
+                                            break;
+                                        }
+                                    }
+                                    other => match literal_to_const(&other, strings) {
+                                        Some((k, ty)) => {
+                                            let slot = skotch_mir::LocalId(next_slot);
+                                            next_slot += 1;
+                                            extra_locals.push(ty);
+                                            pre_stmts.push(skotch_mir::Stmt::Assign {
+                                                dest: slot,
+                                                value: skotch_mir::Rvalue::Const(k),
+                                            });
+                                            arg_slots.push(slot);
+                                        }
+                                        None => {
+                                            ok = false;
+                                            break;
+                                        }
+                                    },
+                                }
+                            }
+                        }
+                        if ok {
+                            // Determine return type from f.return_type when present.
+                            let ret_ty = match f
+                                .return_type()
+                                .and_then(|tr| tr.user_type())
+                                .and_then(|u| u.name())
+                            {
+                                Some(rn) => skotch_types::ty_from_name(rn).unwrap_or(Ty::Any),
+                                None => Ty::Any,
+                            };
+                            let result_slot = skotch_mir::LocalId(next_slot);
+                            extra_locals.push(ret_ty.clone());
+                            pre_stmts.push(skotch_mir::Stmt::Assign {
                                 dest: result_slot,
                                 value: skotch_mir::Rvalue::Call {
                                     kind: skotch_mir::CallKind::Virtual {
                                         class_name: cname.to_string(),
                                         method_name: name.to_string(),
                                     },
-                                    args: vec![this_slot],
+                                    args: arg_slots,
                                 },
-                            }],
-                            terminator: if ret_ty == Ty::Unit {
-                                Terminator::Return
-                            } else {
-                                Terminator::ReturnValue(result_slot)
-                            },
-                        }];
-                        return (blocks, vec![ret_ty]);
+                            });
+                            let blocks = vec![BasicBlock {
+                                stmts: pre_stmts,
+                                terminator: if ret_ty == Ty::Unit {
+                                    Terminator::Return
+                                } else {
+                                    Terminator::ReturnValue(result_slot)
+                                },
+                            }];
+                            return (blocks, extra_locals);
+                        }
                     }
                 }
             }
@@ -5972,6 +6018,42 @@ mod tests {
                 }
                 _ => panic!("expected CheckCast"),
             },
+        }
+    }
+
+    #[test]
+    fn typed_lower_method_virtual_call_on_this_with_param_arg() {
+        // `class P { fun a(x: Int): Int = x; fun b(y: Int): Int = a(y) }`
+        // Implicit-this virtual call with a param arg.
+        let module = lower(
+            "class P { fun a(x: Int): Int = x; fun b(y: Int): Int = a(y) }",
+            "TestKt",
+        );
+        let cls = module.classes.iter().find(|c| c.name == "P").unwrap();
+        let f = cls.methods.iter().find(|m| m.name == "b").unwrap();
+        let block = &f.blocks[0];
+        match block.stmts.iter().find_map(|s| match s {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::Call {
+                    kind:
+                        skotch_mir::CallKind::Virtual {
+                            class_name,
+                            method_name,
+                        },
+                    args,
+                } => Some((class_name.clone(), method_name.clone(), args.clone())),
+                _ => None,
+            },
+        }) {
+            Some((cname, mname, args)) => {
+                assert_eq!(cname, "P");
+                assert_eq!(mname, "a");
+                // args = [this=0, y_param=1]
+                assert_eq!(args.len(), 2);
+                assert_eq!(args[0].0, 0);
+                assert_eq!(args[1].0, 1);
+            }
+            None => panic!("expected Virtual call, body: {block:?}"),
         }
     }
 
