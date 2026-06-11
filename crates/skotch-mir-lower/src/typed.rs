@@ -5394,6 +5394,103 @@ fn method_simple_body_full(
         }
     }
 
+    // Explicit `this.method(args)` body for class methods. Same emit
+    // as the implicit-this virtual call below, but the receiver is
+    // explicitly `this` inside a DotQualified.
+    if let KtExpr::DotQualified(dq) = &body_expr {
+        let exprs: Vec<KtExpr<'_>> = skotch_ast::children(dq.syntax())
+            .iter()
+            .filter_map(KtExpr::cast)
+            .collect();
+        if exprs.len() == 2 {
+            if let (KtExpr::This(_), KtExpr::Call(call)) = (&exprs[0], &exprs[1]) {
+                let meth_name = match call.callee() {
+                    Some(KtExpr::Reference(r)) => r.name(),
+                    _ => None,
+                };
+                if let (Some(cname), Some(meth_name)) = (class_name, meth_name) {
+                    let this_slot = skotch_mir::LocalId(0);
+                    let mut next_slot = (1 + param_count) as u32;
+                    let mut pre_stmts: Vec<skotch_mir::Stmt> = Vec::new();
+                    let mut extra_locals: Vec<Ty> = Vec::new();
+                    let mut arg_slots: Vec<skotch_mir::LocalId> = vec![this_slot];
+                    let mut ok = true;
+                    if let Some(arg_list) = call.value_argument_list() {
+                        for arg in arg_list.arguments() {
+                            let Some(arg_expr) = arg.expression() else {
+                                ok = false;
+                                break;
+                            };
+                            match arg_expr {
+                                KtExpr::Reference(rr) => {
+                                    let Some(an) = rr.name() else {
+                                        ok = false;
+                                        break;
+                                    };
+                                    if let Some(idx) =
+                                        param_names.iter().position(|p| p == an)
+                                    {
+                                        arg_slots.push(skotch_mir::LocalId((1 + idx) as u32));
+                                    } else {
+                                        ok = false;
+                                        break;
+                                    }
+                                }
+                                other => match literal_to_const(&other, strings) {
+                                    Some((k, ty)) => {
+                                        let slot = skotch_mir::LocalId(next_slot);
+                                        next_slot += 1;
+                                        extra_locals.push(ty);
+                                        pre_stmts.push(skotch_mir::Stmt::Assign {
+                                            dest: slot,
+                                            value: skotch_mir::Rvalue::Const(k),
+                                        });
+                                        arg_slots.push(slot);
+                                    }
+                                    None => {
+                                        ok = false;
+                                        break;
+                                    }
+                                },
+                            }
+                        }
+                    }
+                    if ok {
+                        let ret_ty = match f
+                            .return_type()
+                            .and_then(|tr| tr.user_type())
+                            .and_then(|u| u.name())
+                        {
+                            Some(rn) => skotch_types::ty_from_name(rn).unwrap_or(Ty::Any),
+                            None => Ty::Any,
+                        };
+                        let result_slot = skotch_mir::LocalId(next_slot);
+                        extra_locals.push(ret_ty.clone());
+                        pre_stmts.push(skotch_mir::Stmt::Assign {
+                            dest: result_slot,
+                            value: skotch_mir::Rvalue::Call {
+                                kind: skotch_mir::CallKind::Virtual {
+                                    class_name: cname.to_string(),
+                                    method_name: meth_name.to_string(),
+                                },
+                                args: arg_slots,
+                            },
+                        });
+                        let blocks = vec![BasicBlock {
+                            stmts: pre_stmts,
+                            terminator: if ret_ty == Ty::Unit {
+                                Terminator::Return
+                            } else {
+                                Terminator::ReturnValue(result_slot)
+                            },
+                        }];
+                        return (blocks, extra_locals);
+                    }
+                }
+            }
+        }
+    }
+
     // Virtual call on `this` to a sibling method, with N param or
     // literal args:
     //   class P { fun a(x: Int) = x; fun b(y: Int) = a(y) }
@@ -6577,6 +6674,36 @@ mod tests {
                 _ => panic!("expected CheckCast"),
             },
         }
+    }
+
+    #[test]
+    fn typed_lower_method_explicit_this_virtual_call() {
+        // `class P { fun a(): Int = 1; fun b(): Int = this.a() }`
+        let module = lower(
+            "class P { fun a(): Int = 1; fun b(): Int = this.a() }",
+            "TestKt",
+        );
+        let cls = module.classes.iter().find(|c| c.name == "P").unwrap();
+        let f = cls.methods.iter().find(|m| m.name == "b").unwrap();
+        let block = &f.blocks[0];
+        let virt = block.stmts.iter().find_map(|s| match s {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::Call {
+                    kind:
+                        skotch_mir::CallKind::Virtual {
+                            class_name,
+                            method_name,
+                        },
+                    args,
+                } => Some((class_name.clone(), method_name.clone(), args.clone())),
+                _ => None,
+            },
+        });
+        let (cn, mn, args) = virt.expect("expected Virtual call");
+        assert_eq!(cn, "P");
+        assert_eq!(mn, "a");
+        assert_eq!(args.len(), 1);
+        assert_eq!(args[0].0, 0); // this at slot 0
     }
 
     #[test]
