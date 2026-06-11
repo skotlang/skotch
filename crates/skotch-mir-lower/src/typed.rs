@@ -5096,6 +5096,42 @@ mod tests {
     }
 
     #[test]
+    fn typed_lower_method_binary_implicit_this_field_plus_param() {
+        // `class Box(val x: Int) { fun add(y: Int): Int = x + y }`
+        // The lhs `x` is an implicit-this field; rhs `y` is a param.
+        let module = lower(
+            "class Box(val x: Int) { fun add(y: Int): Int = x + y }",
+            "TestKt",
+        );
+        let cls = module.classes.iter().find(|c| c.name == "Box").unwrap();
+        let f = cls.methods.iter().find(|m| m.name == "add").unwrap();
+        let block = &f.blocks[0];
+        let has_getfield = block.stmts.iter().any(|s| {
+            matches!(
+                s,
+                skotch_mir::Stmt::Assign {
+                    value: skotch_mir::Rvalue::GetField { .. },
+                    ..
+                }
+            )
+        });
+        let has_add = block.stmts.iter().any(|s| {
+            matches!(
+                s,
+                skotch_mir::Stmt::Assign {
+                    value: skotch_mir::Rvalue::BinOp {
+                        op: skotch_mir::BinOp::AddI,
+                        ..
+                    },
+                    ..
+                }
+            )
+        });
+        assert!(has_getfield, "expected GetField for x: {block:?}");
+        assert!(has_add, "expected AddI for x+y: {block:?}");
+    }
+
+    #[test]
     fn typed_lower_block_var_reassignment() {
         // `fun acc(): Int { var sum = 0; sum = sum + 1; return sum }`
         let module = lower(
