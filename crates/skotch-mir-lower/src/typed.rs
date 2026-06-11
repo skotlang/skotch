@@ -2888,6 +2888,192 @@ fn try_lower_multi_stmt_block_with_offset(
             return None;
         }
         if let Some(expr) = KtExpr::cast(c) {
+            // `while (cond) { body }` as the last meaningful
+            // statement in the block. Same 4-block CFG shape as for-in
+            // below, except the cond is the user's binary comparison.
+            if let KtExpr::While(w) = &expr {
+                let cond_expr = w
+                    .condition()
+                    .and_then(|c| c.expression())
+                    .map(unwrap_parens)?;
+                let KtExpr::Binary(cmp_b) = cond_expr else {
+                    return None;
+                };
+                let cmp_text = cmp_b.operation().map(|o| o.text()).unwrap_or_default();
+                let cmp_mir = match cmp_text.as_str() {
+                    "==" => Some(skotch_mir::BinOp::CmpEq),
+                    "!=" => Some(skotch_mir::BinOp::CmpNe),
+                    "<" => Some(skotch_mir::BinOp::CmpLt),
+                    ">" => Some(skotch_mir::BinOp::CmpGt),
+                    "<=" => Some(skotch_mir::BinOp::CmpLe),
+                    ">=" => Some(skotch_mir::BinOp::CmpGe),
+                    _ => None,
+                }?;
+                let resolve_w =
+                    |e: KtExpr<'_>,
+                     name_to_local: &Vec<(String, LocalId)>,
+                     next_slot: &mut u32,
+                     local_tys: &mut Vec<Ty>,
+                     stmts: &mut Vec<MStmt>,
+                     strings: &mut Vec<String>|
+                     -> Option<LocalId> {
+                        let e = unwrap_parens(e);
+                        if let Some((k, ty)) = literal_to_const(&e, strings) {
+                            let slot = LocalId(*next_slot);
+                            *next_slot += 1;
+                            local_tys.push(ty);
+                            stmts.push(MStmt::Assign {
+                                dest: slot,
+                                value: skotch_mir::Rvalue::Const(k),
+                            });
+                            return Some(slot);
+                        }
+                        if let KtExpr::Reference(rr) = e {
+                            let n = rr.name()?;
+                            return name_to_local
+                                .iter()
+                                .rev()
+                                .find(|(name, _)| name == n)
+                                .map(|(_, l)| *l);
+                        }
+                        None
+                    };
+                let mut cond_stmts: Vec<MStmt> = Vec::new();
+                let lhs_slot = resolve_w(
+                    cmp_b.lhs()?,
+                    &name_to_local,
+                    &mut next_slot,
+                    &mut local_tys,
+                    &mut cond_stmts,
+                    strings,
+                )?;
+                let rhs_slot = resolve_w(
+                    cmp_b.rhs()?,
+                    &name_to_local,
+                    &mut next_slot,
+                    &mut local_tys,
+                    &mut cond_stmts,
+                    strings,
+                )?;
+                let cmp_slot = LocalId(next_slot);
+                next_slot += 1;
+                local_tys.push(Ty::Bool);
+                cond_stmts.push(MStmt::Assign {
+                    dest: cmp_slot,
+                    value: skotch_mir::Rvalue::BinOp {
+                        op: cmp_mir,
+                        lhs: lhs_slot,
+                        rhs: rhs_slot,
+                    },
+                });
+                // Resolve body stmts (only println/print supported).
+                let body_block_opt = w.body().and_then(|b| b.expression());
+                let body_stmts: Vec<KtExpr<'_>> = match body_block_opt {
+                    Some(KtExpr::Block(bl)) => bl.statements().collect(),
+                    Some(other) => vec![other],
+                    None => vec![],
+                };
+                let mut body_mstmts: Vec<MStmt> = Vec::new();
+                let mut ok = true;
+                for be in &body_stmts {
+                    if let KtExpr::Call(call) = be {
+                        let name = match call.callee() {
+                            Some(KtExpr::Reference(r)) => r.name(),
+                            _ => None,
+                        };
+                        if name == Some("println") || name == Some("print") {
+                            let kind = if name == Some("println") {
+                                skotch_mir::CallKind::Println
+                            } else {
+                                skotch_mir::CallKind::Print
+                            };
+                            let Some(args) = call.value_argument_list() else {
+                                ok = false;
+                                break;
+                            };
+                            let arg_exprs: Vec<KtExpr<'_>> =
+                                args.arguments().filter_map(|a| a.expression()).collect();
+                            if arg_exprs.len() != 1 {
+                                ok = false;
+                                break;
+                            }
+                            let arg_slot = match &arg_exprs[0] {
+                                KtExpr::Reference(rr) => {
+                                    let Some(an) = rr.name() else {
+                                        ok = false;
+                                        break;
+                                    };
+                                    let Some(slot) = name_to_local
+                                        .iter()
+                                        .rev()
+                                        .find(|(name, _)| name == an)
+                                        .map(|(_, l)| *l)
+                                    else {
+                                        ok = false;
+                                        break;
+                                    };
+                                    slot
+                                }
+                                other => {
+                                    let Some((k, ty)) = literal_to_const(other, strings)
+                                    else {
+                                        ok = false;
+                                        break;
+                                    };
+                                    let slot = LocalId(next_slot);
+                                    next_slot += 1;
+                                    local_tys.push(ty);
+                                    body_mstmts.push(MStmt::Assign {
+                                        dest: slot,
+                                        value: skotch_mir::Rvalue::Const(k),
+                                    });
+                                    slot
+                                }
+                            };
+                            let result_slot = LocalId(next_slot);
+                            next_slot += 1;
+                            local_tys.push(Ty::Unit);
+                            body_mstmts.push(MStmt::Assign {
+                                dest: result_slot,
+                                value: skotch_mir::Rvalue::Call {
+                                    kind,
+                                    args: vec![arg_slot],
+                                },
+                            });
+                            continue;
+                        }
+                    }
+                    ok = false;
+                    break;
+                }
+                if !ok {
+                    return None;
+                }
+                let pre_block = BasicBlock {
+                    stmts: std::mem::take(&mut stmts),
+                    terminator: Terminator::Goto(1),
+                };
+                let cond_block = BasicBlock {
+                    stmts: cond_stmts,
+                    terminator: Terminator::Branch {
+                        cond: cmp_slot,
+                        then_block: 2,
+                        else_block: 3,
+                    },
+                };
+                let body_blk = BasicBlock {
+                    stmts: body_mstmts,
+                    terminator: Terminator::Goto(1),
+                };
+                let exit_block = BasicBlock {
+                    stmts: Vec::new(),
+                    terminator: Terminator::Return,
+                };
+                return Some((
+                    vec![pre_block, cond_block, body_blk, exit_block],
+                    local_tys,
+                ));
+            }
             // `for (i in lo..hi) { body }` as the last meaningful
             // statement in the block. Emits a 4-block CFG:
             //   block 0 (pre): pre-stmts + i = lo + end = hi, Goto(1)
