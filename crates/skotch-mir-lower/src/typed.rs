@@ -2213,7 +2213,29 @@ fn try_lower_multi_stmt_block_with_offset(
             // `val <name> = <a + b>` — emit BinOp Assign.
             let name = prop.name()?;
             let init = prop.initializer()?;
-            let init = unwrap_parens(init);
+            let mut init = unwrap_parens(init);
+            // Constant-fold `if (Bool literal) X else Y` to the
+            // matching arm before the regular init handlers see it.
+            // Chains through nested ifs as long as the cond is a
+            // boolean literal.
+            loop {
+                let KtExpr::If(if_e) = init else { break };
+                let cond_expr = if_e.condition().and_then(|c| c.expression()).map(unwrap_parens);
+                let then_expr = if_e.then_branch().and_then(|t| t.expression()).map(unwrap_parens);
+                let else_expr = if_e.else_branch().and_then(|e| e.expression()).map(unwrap_parens);
+                let cond_bool = match cond_expr {
+                    Some(KtExpr::Boolean(b)) => Some(
+                        skotch_ast::children(b.syntax())
+                            .iter()
+                            .any(|c| c.kind == skotch_syntax::SyntaxKind::KW_TRUE),
+                    ),
+                    _ => None,
+                };
+                let Some(cond_b) = cond_bool else { break };
+                let chosen = if cond_b { then_expr } else { else_expr };
+                let Some(chosen) = chosen else { break };
+                init = chosen;
+            }
             // Try literal first.
             if let Some((k, ty)) = literal_to_const(&init, strings) {
                 let slot = LocalId(next_slot);
