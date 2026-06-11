@@ -562,6 +562,142 @@ fn const_ty(c: &skotch_mir::MirConst) -> Ty {
     }
 }
 
+/// Try to lower `fun f() { while (cond) { /* empty */ } }` to a
+/// simple 3-block loop CFG:
+///   block 0: cond eval + Branch(then=1, exit=2)
+///   block 1: Goto(0) — backward jump back to the condition
+///   block 2: Return — loop exit
+fn try_lower_while_loop(
+    block: skotch_ast::KtBlock<'_>,
+    f: skotch_ast::KtFun<'_>,
+    strings: &mut Vec<String>,
+    _fn_lookup: &rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)>,
+) -> Option<(Vec<BasicBlock>, Vec<Ty>)> {
+    use skotch_ast::KtExpr;
+    use skotch_mir::{LocalId, Rvalue, Stmt as MStmt};
+
+    let stmts: Vec<KtExpr<'_>> = block.statements().collect();
+    if stmts.len() != 1 {
+        return None;
+    }
+    let KtExpr::While(w) = &stmts[0] else {
+        return None;
+    };
+    let cond_expr = w.condition().and_then(|c| c.expression()).map(unwrap_parens)?;
+    // Loop body must be an empty block.
+    let body_block = w.body().and_then(|b| match b.expression()? {
+        KtExpr::Block(bl) => Some(bl),
+        _ => None,
+    })?;
+    if body_block.statements().next().is_some() {
+        return None;
+    }
+
+    let param_count = f
+        .value_parameter_list()
+        .map(|pl| pl.parameters().count())
+        .unwrap_or(0);
+    let outer_param_names: Vec<String> = f
+        .value_parameter_list()
+        .map(|pl| {
+            pl.parameters()
+                .map(|p| p.name().unwrap_or("").to_string())
+                .collect()
+        })
+        .unwrap_or_default();
+
+    // Condition must be a binary comparison literal/ref operands.
+    let KtExpr::Binary(b) = cond_expr else {
+        return None;
+    };
+    let cmp_op = b.operation().map(|o| o.text()).unwrap_or_default();
+    let mir_op = match cmp_op.as_str() {
+        "==" => skotch_mir::BinOp::CmpEq,
+        "!=" => skotch_mir::BinOp::CmpNe,
+        "<" => skotch_mir::BinOp::CmpLt,
+        ">" => skotch_mir::BinOp::CmpGt,
+        "<=" => skotch_mir::BinOp::CmpLe,
+        ">=" => skotch_mir::BinOp::CmpGe,
+        _ => return None,
+    };
+
+    let mut next_slot = param_count as u32;
+    let mut extra_locals: Vec<Ty> = Vec::new();
+    let mut cond_stmts: Vec<MStmt> = Vec::new();
+
+    let resolve_op = |e: KtExpr<'_>,
+                      next_slot: &mut u32,
+                      pre: &mut Vec<MStmt>,
+                      locals: &mut Vec<Ty>,
+                      strings: &mut Vec<String>|
+     -> Option<LocalId> {
+        let e = unwrap_parens(e);
+        match e {
+            KtExpr::Reference(r) => {
+                let n = r.name()?;
+                let idx = outer_param_names.iter().position(|p| p == n)?;
+                Some(LocalId(idx as u32))
+            }
+            other => {
+                let (k, ty) = literal_to_const(&other, strings)?;
+                let slot = LocalId(*next_slot);
+                *next_slot += 1;
+                locals.push(ty);
+                pre.push(MStmt::Assign {
+                    dest: slot,
+                    value: Rvalue::Const(k),
+                });
+                Some(slot)
+            }
+        }
+    };
+
+    let lhs = resolve_op(
+        b.lhs()?,
+        &mut next_slot,
+        &mut cond_stmts,
+        &mut extra_locals,
+        strings,
+    )?;
+    let rhs = resolve_op(
+        b.rhs()?,
+        &mut next_slot,
+        &mut cond_stmts,
+        &mut extra_locals,
+        strings,
+    )?;
+    let cmp_slot = LocalId(next_slot);
+    extra_locals.push(Ty::Bool);
+    cond_stmts.push(MStmt::Assign {
+        dest: cmp_slot,
+        value: Rvalue::BinOp {
+            op: mir_op,
+            lhs,
+            rhs,
+        },
+    });
+
+    let blocks = vec![
+        BasicBlock {
+            stmts: cond_stmts,
+            terminator: Terminator::Branch {
+                cond: cmp_slot,
+                then_block: 1,
+                else_block: 2,
+            },
+        },
+        BasicBlock {
+            stmts: Vec::new(),
+            terminator: Terminator::Goto(0),
+        },
+        BasicBlock {
+            stmts: Vec::new(),
+            terminator: Terminator::Return,
+        },
+    ];
+    Some((blocks, extra_locals))
+}
+
 /// Try to lower a simple `when (subject) { v1 -> r1; v2 -> r2; else -> default }`
 /// expression body. Each arm becomes a 3-block chain:
 ///   cmp_block: cmp_local = CmpEq(subject, v_i); Branch(then_i, next_cmp)
@@ -1301,6 +1437,17 @@ fn lower_simple_body(
                 return make_placeholder();
             };
             // Collect non-trivia statements.
+            // Try `while (cond) { body }` with comparison cond + empty body.
+            // Emits a 3-block CFG:
+            //   block 0: cmp; Branch(then=1, exit=2)
+            //   block 1: (empty body); Goto(0)
+            //   block 2: Return
+            if let Some(blocks_and_locals) =
+                try_lower_while_loop(block, f, strings, fn_lookup)
+            {
+                return blocks_and_locals;
+            }
+
             let stmts: Vec<KtExpr<'_>> = block.statements().collect();
             // First try println("Hello, $name") template lowering.
             if stmts.len() == 1 {
@@ -3103,6 +3250,27 @@ mod tests {
                 _ => panic!("expected BinOp"),
             },
         }
+    }
+
+    #[test]
+    fn typed_lower_while_loop_empty_body() {
+        let module = lower(
+            "fun loop(n: Int) { while (n > 0) {} }",
+            "TestKt",
+        );
+        let f = &module.functions[0];
+        // 3 blocks: cond, body, exit.
+        assert_eq!(f.blocks.len(), 3);
+        // Block 0: cond computation + Branch.
+        assert!(matches!(
+            f.blocks[0].terminator,
+            Terminator::Branch { then_block: 1, else_block: 2, .. }
+        ));
+        // Block 1: empty body, backward Goto(0).
+        assert!(f.blocks[1].stmts.is_empty());
+        assert!(matches!(f.blocks[1].terminator, Terminator::Goto(0)));
+        // Block 2: exit, Return.
+        assert!(matches!(f.blocks[2].terminator, Terminator::Return));
     }
 
     #[test]
