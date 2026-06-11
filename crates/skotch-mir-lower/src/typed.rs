@@ -3037,6 +3037,39 @@ fn method_simple_body_full(
         })
         .unwrap_or_default();
 
+    // Explicit `this.field` body for class methods: same emit as
+    // implicit-this field access.
+    if let KtExpr::DotQualified(dq) = &body_expr {
+        let exprs: Vec<KtExpr<'_>> = skotch_ast::children(dq.syntax())
+            .iter()
+            .filter_map(KtExpr::cast)
+            .collect();
+        if exprs.len() == 2 {
+            if let (KtExpr::This(_), KtExpr::Reference(prop_ref)) = (&exprs[0], &exprs[1]) {
+                if let (Some(cname), Some(prop_name)) = (class_name, prop_ref.name()) {
+                    if let Some((fname, fty)) =
+                        field_names.iter().find(|(n, _)| n == prop_name)
+                    {
+                        let this_slot = skotch_mir::LocalId(0);
+                        let result_slot = skotch_mir::LocalId((1 + param_count) as u32);
+                        let blocks = vec![BasicBlock {
+                            stmts: vec![skotch_mir::Stmt::Assign {
+                                dest: result_slot,
+                                value: skotch_mir::Rvalue::GetField {
+                                    receiver: this_slot,
+                                    class_name: cname.to_string(),
+                                    field_name: fname.clone(),
+                                },
+                            }],
+                            terminator: Terminator::ReturnValue(result_slot),
+                        }];
+                        return (blocks, vec![fty.clone()]);
+                    }
+                }
+            }
+        }
+    }
+
     // `this` reference body: `fun self(): T = this` returns slot 0.
     if let KtExpr::This(_) = &body_expr {
         let blocks = vec![BasicBlock {
@@ -4231,6 +4264,32 @@ mod tests {
                     assert!(target_class == "java/lang/String" || target_class == "String");
                 }
                 _ => panic!("expected CheckCast"),
+            },
+        }
+    }
+
+    #[test]
+    fn typed_lower_class_method_returns_explicit_this_field() {
+        let module = lower(
+            "class Box(val x: Int) { fun get(): Int = this.x }",
+            "TestKt",
+        );
+        let cls = module.classes.iter().find(|c| c.name == "Box").unwrap();
+        let f = cls.methods.iter().find(|f| f.name == "get").unwrap();
+        let block = &f.blocks[0];
+        assert_eq!(block.stmts.len(), 1);
+        match &block.stmts[0] {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::GetField {
+                    receiver,
+                    class_name,
+                    field_name,
+                } => {
+                    assert_eq!(receiver.0, 0);
+                    assert_eq!(class_name, "Box");
+                    assert_eq!(field_name, "x");
+                }
+                _ => panic!("expected GetField"),
             },
         }
     }
