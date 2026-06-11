@@ -2144,23 +2144,37 @@ fn try_lower_if_expression(
 ///   - print(<ref-or-literal>)           (single-arg print call)
 ///
 /// Returns None for any unsupported statement.
+#[allow(clippy::too_many_arguments)]
 fn try_lower_multi_stmt_block_inner(
     block: skotch_ast::KtBlock<'_>,
     f: skotch_ast::KtFun<'_>,
     strings: &mut Vec<String>,
     fn_lookup: &rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)>,
+    val_lookup: &rustc_hash::FxHashMap<String, Ty>,
+    wrapper_class: &str,
 ) -> Option<(Vec<BasicBlock>, Vec<Ty>)> {
-    try_lower_multi_stmt_block_with_offset(block, f, strings, fn_lookup, 0)
+    try_lower_multi_stmt_block_with_offset(
+        block,
+        f,
+        strings,
+        fn_lookup,
+        val_lookup,
+        wrapper_class,
+        0,
+    )
 }
 
 /// Like try_lower_multi_stmt_block_inner but parameters can start at a
 /// non-zero slot. Class methods set `slot_offset = 1` so `this` occupies
 /// LocalId(0) and the user params shift to slots 1..=N.
+#[allow(clippy::too_many_arguments)]
 fn try_lower_multi_stmt_block_with_offset(
     block: skotch_ast::KtBlock<'_>,
     f: skotch_ast::KtFun<'_>,
     strings: &mut Vec<String>,
     fn_lookup: &rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)>,
+    val_lookup: &rustc_hash::FxHashMap<String, Ty>,
+    wrapper_class: &str,
     slot_offset: u32,
 ) -> Option<(Vec<BasicBlock>, Vec<Ty>)> {
     use skotch_ast::KtExpr;
@@ -2673,6 +2687,44 @@ fn try_lower_multi_stmt_block_with_offset(
                         "print" => skotch_mir::CallKind::Print,
                         _ => return None,
                     };
+                    // First try string-template lowering with
+                    // local-aware identifier resolution.
+                    {
+                        let snapshot = name_to_local.clone();
+                        let mut probe_next = next_slot;
+                        let mut probe_extra: Vec<Ty> = Vec::new();
+                        let mut probe_stmts: Vec<MStmt> = Vec::new();
+                        let lookup = |n: &str| -> Option<LocalId> {
+                            snapshot
+                                .iter()
+                                .rev()
+                                .find(|(name, _)| name == n)
+                                .map(|(_, l)| *l)
+                        };
+                        if let Some((concat_kind, parts)) = try_lower_println_template_with_lookup(
+                            &call,
+                            strings,
+                            &mut probe_next,
+                            &mut probe_stmts,
+                            &mut probe_extra,
+                            &lookup,
+                        ) {
+                            next_slot = probe_next;
+                            local_tys.extend(probe_extra);
+                            stmts.extend(probe_stmts);
+                            let result_slot = LocalId(next_slot);
+                            next_slot += 1;
+                            local_tys.push(Ty::Unit);
+                            stmts.push(MStmt::Assign {
+                                dest: result_slot,
+                                value: skotch_mir::Rvalue::Call {
+                                    kind: concat_kind,
+                                    args: parts,
+                                },
+                            });
+                            continue;
+                        }
+                    }
                     let args = call.value_argument_list()?;
                     let arg_exprs: Vec<KtExpr<'_>> =
                         args.arguments().filter_map(|a| a.expression()).collect();
@@ -2680,15 +2732,34 @@ fn try_lower_multi_stmt_block_with_offset(
                         return None;
                     }
                     // Arg is either a Reference to a known local /
-                    // param, a literal, or a binary op on refs/literals.
+                    // param, a top-level val (GetStaticField), a
+                    // literal, or a binary op on refs/literals.
                     let arg_slot = match &arg_exprs[0] {
                         KtExpr::Reference(r) => {
                             let n = r.name()?;
-                            name_to_local
+                            if let Some(slot) = name_to_local
                                 .iter()
                                 .rev()
                                 .find(|(name, _)| name == n)
-                                .map(|(_, l)| *l)?
+                                .map(|(_, l)| *l)
+                            {
+                                slot
+                            } else if let Some(val_ty) = val_lookup.get(n) {
+                                let slot = LocalId(next_slot);
+                                next_slot += 1;
+                                local_tys.push(val_ty.clone());
+                                stmts.push(MStmt::Assign {
+                                    dest: slot,
+                                    value: skotch_mir::Rvalue::GetStaticField {
+                                        class_name: wrapper_class.to_string(),
+                                        field_name: n.to_string(),
+                                        descriptor: ty_to_descriptor(val_ty),
+                                    },
+                                });
+                                slot
+                            } else {
+                                return None;
+                            }
                         }
                         KtExpr::Binary(b) => {
                             let op_text = b.operation().map(|o| o.text()).unwrap_or_default();
@@ -2700,13 +2771,14 @@ fn try_lower_multi_stmt_block_with_offset(
                                 "%" => Some(skotch_mir::BinOp::ModI),
                                 _ => None,
                             }?;
-                            let resolve = |e: KtExpr<'_>,
-                                           name_to_local: &Vec<(String, LocalId)>,
-                                           next_slot: &mut u32,
-                                           local_tys: &mut Vec<Ty>,
-                                           stmts: &mut Vec<MStmt>,
-                                           strings: &mut Vec<String>|
-                             -> Option<LocalId> {
+                            fn resolve_block_arg(
+                                e: KtExpr<'_>,
+                                name_to_local: &Vec<(String, LocalId)>,
+                                next_slot: &mut u32,
+                                local_tys: &mut Vec<Ty>,
+                                stmts: &mut Vec<MStmt>,
+                                strings: &mut Vec<String>,
+                            ) -> Option<LocalId> {
                                 match unwrap_parens(e) {
                                     KtExpr::Reference(rr) => {
                                         let n = rr.name()?;
@@ -2715,6 +2787,45 @@ fn try_lower_multi_stmt_block_with_offset(
                                             .rev()
                                             .find(|(name, _)| name == n)
                                             .map(|(_, l)| *l)
+                                    }
+                                    KtExpr::Binary(inner_b) => {
+                                        let inner_op = inner_b.operation().map(|o| o.text()).unwrap_or_default();
+                                        let inner_mir = match inner_op.as_str() {
+                                            "+" => Some(skotch_mir::BinOp::AddI),
+                                            "-" => Some(skotch_mir::BinOp::SubI),
+                                            "*" => Some(skotch_mir::BinOp::MulI),
+                                            "/" => Some(skotch_mir::BinOp::DivI),
+                                            "%" => Some(skotch_mir::BinOp::ModI),
+                                            _ => None,
+                                        }?;
+                                        let lhs = resolve_block_arg(
+                                            inner_b.lhs()?,
+                                            name_to_local,
+                                            next_slot,
+                                            local_tys,
+                                            stmts,
+                                            strings,
+                                        )?;
+                                        let rhs = resolve_block_arg(
+                                            inner_b.rhs()?,
+                                            name_to_local,
+                                            next_slot,
+                                            local_tys,
+                                            stmts,
+                                            strings,
+                                        )?;
+                                        let slot = LocalId(*next_slot);
+                                        *next_slot += 1;
+                                        local_tys.push(Ty::Int);
+                                        stmts.push(MStmt::Assign {
+                                            dest: slot,
+                                            value: skotch_mir::Rvalue::BinOp {
+                                                op: inner_mir,
+                                                lhs,
+                                                rhs,
+                                            },
+                                        });
+                                        Some(slot)
                                     }
                                     other => {
                                         let (k, ty) = literal_to_const(&other, strings)?;
@@ -2728,8 +2839,8 @@ fn try_lower_multi_stmt_block_with_offset(
                                         Some(slot)
                                     }
                                 }
-                            };
-                            let lhs = resolve(
+                            }
+                            let lhs = resolve_block_arg(
                                 b.lhs()?,
                                 &name_to_local,
                                 &mut next_slot,
@@ -2737,7 +2848,7 @@ fn try_lower_multi_stmt_block_with_offset(
                                 &mut stmts,
                                 strings,
                             )?;
-                            let rhs = resolve(
+                            let rhs = resolve_block_arg(
                                 b.rhs()?,
                                 &name_to_local,
                                 &mut next_slot,
@@ -2809,6 +2920,40 @@ fn try_lower_println_template(
     pre_stmts: &mut Vec<skotch_mir::Stmt>,
     extra_locals: &mut Vec<Ty>,
 ) -> Option<(skotch_mir::CallKind, Vec<skotch_mir::LocalId>)> {
+    let outer_param_names: Vec<String> = f
+        .value_parameter_list()
+        .map(|pl| {
+            pl.parameters()
+                .map(|p| p.name().unwrap_or("").to_string())
+                .collect()
+        })
+        .unwrap_or_default();
+    try_lower_println_template_with_lookup(
+        call,
+        strings,
+        next_slot,
+        pre_stmts,
+        extra_locals,
+        &|n| {
+            outer_param_names
+                .iter()
+                .position(|p| p == n)
+                .map(|idx| skotch_mir::LocalId(idx as u32))
+        },
+    )
+}
+
+/// Variant of `try_lower_println_template` that takes a closure for
+/// resolving interpolated identifiers, letting multi-stmt block
+/// walkers route the lookup through their own `name_to_local`.
+fn try_lower_println_template_with_lookup(
+    call: &skotch_ast::KtCallExpression<'_>,
+    strings: &mut Vec<String>,
+    next_slot: &mut u32,
+    pre_stmts: &mut Vec<skotch_mir::Stmt>,
+    extra_locals: &mut Vec<Ty>,
+    lookup_name: &dyn Fn(&str) -> Option<skotch_mir::LocalId>,
+) -> Option<(skotch_mir::CallKind, Vec<skotch_mir::LocalId>)> {
     use skotch_ast::KtExpr;
     use skotch_mir::{LocalId, Stmt as MStmt};
     use skotch_syntax::SyntaxKind as S;
@@ -2831,16 +2976,6 @@ fn try_lower_println_template(
         return None;
     };
     let template = &arg_exprs[0];
-
-    // Collect parts.
-    let outer_param_names: Vec<String> = f
-        .value_parameter_list()
-        .map(|pl| {
-            pl.parameters()
-                .map(|p| p.name().unwrap_or("").to_string())
-                .collect()
-        })
-        .unwrap_or_default();
 
     let mut part_slots: Vec<LocalId> = Vec::new();
     let mut had_interp = false;
@@ -2875,9 +3010,6 @@ fn try_lower_println_template(
             }
             S::SHORT_STRING_TEMPLATE_ENTRY => {
                 had_interp = true;
-                // SHORT_STRING_TEMPLATE_ENTRY has children:
-                //   STRING_IDENT_REF "$"
-                //   REFERENCE_EXPRESSION { IDENTIFIER "name" }
                 let name = skotch_ast::children(child).iter().find_map(|c| {
                     if c.kind == S::REFERENCE_EXPRESSION {
                         for cc in skotch_ast::children(c) {
@@ -2890,9 +3022,8 @@ fn try_lower_println_template(
                     }
                     None
                 })?;
-                // Resolve against outer params.
-                let idx = outer_param_names.iter().position(|p| p == &name)?;
-                part_slots.push(LocalId(idx as u32));
+                let slot = lookup_name(&name)?;
+                part_slots.push(slot);
             }
             S::STRING_START | S::STRING_END | S::WHITE_SPACE => {}
             S::LONG_STRING_TEMPLATE_ENTRY | S::BLOCK_STRING_TEMPLATE_ENTRY => return None,
@@ -2906,7 +3037,7 @@ fn try_lower_println_template(
 
     let kind = match name {
         "println" => skotch_mir::CallKind::PrintlnConcat,
-        _ => return None, // print() doesn't have a Concat variant
+        _ => return None,
     };
     Some((kind, part_slots))
 }
@@ -3220,7 +3351,14 @@ fn lower_simple_body(
             // try_lower_multi_stmt_block — this handles
             // `val x = 10; println(x)` and similar simple shapes.
             if let Some((blocks, locals)) =
-                try_lower_multi_stmt_block_inner(block, f, strings, fn_lookup)
+                try_lower_multi_stmt_block_inner(
+                    block,
+                    f,
+                    strings,
+                    fn_lookup,
+                    val_lookup,
+                    wrapper_class,
+                )
             {
                 return (blocks, locals);
             }
@@ -5558,7 +5696,15 @@ fn method_simple_body_full(
             // `val x = ...; return x` and `var x = 0; x = x + 1; return x`
             // shapes that the single-return path below can't.
             if let Some((blocks, locals)) =
-                try_lower_multi_stmt_block_with_offset(block, f, strings, fn_lookup, 1)
+                try_lower_multi_stmt_block_with_offset(
+                    block,
+                    f,
+                    strings,
+                    fn_lookup,
+                    val_lookup,
+                    wrapper_class,
+                    1,
+                )
             {
                 return (blocks, locals);
             }
