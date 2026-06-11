@@ -2015,6 +2015,8 @@ fn lower_simple_body(
 
     // Prefix unary minus on param: `fun neg(x: Int): Int = -x` →
     // BinOp(SubI, 0, x).
+    // Prefix logical not on param: `fun not(x: Boolean) = !x` →
+    // BinOp(CmpEq, x, false).
     if let KtExpr::Prefix(p) = &body_expr {
         let op_text = skotch_ast::children(p.syntax())
             .iter()
@@ -2027,6 +2029,50 @@ fn lower_simple_body(
                 None
             })
             .unwrap_or_default();
+        if op_text == "!" {
+            let inner = skotch_ast::children(p.syntax())
+                .iter()
+                .find_map(KtExpr::cast)
+                .map(unwrap_parens);
+            if let Some(KtExpr::Reference(r)) = inner {
+                if let Some(name) = r.name() {
+                    let param_names: Vec<String> = f
+                        .value_parameter_list()
+                        .map(|pl| {
+                            pl.parameters()
+                                .map(|p| p.name().unwrap_or("").to_string())
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    if let Some(idx) = param_names.iter().position(|p| p == name) {
+                        let param_slot = skotch_mir::LocalId(idx as u32);
+                        let param_count = param_names.len();
+                        let false_slot = skotch_mir::LocalId(param_count as u32);
+                        let result_slot = skotch_mir::LocalId((param_count + 1) as u32);
+                        let blocks = vec![BasicBlock {
+                            stmts: vec![
+                                skotch_mir::Stmt::Assign {
+                                    dest: false_slot,
+                                    value: skotch_mir::Rvalue::Const(
+                                        skotch_mir::MirConst::Bool(false),
+                                    ),
+                                },
+                                skotch_mir::Stmt::Assign {
+                                    dest: result_slot,
+                                    value: skotch_mir::Rvalue::BinOp {
+                                        op: skotch_mir::BinOp::CmpEq,
+                                        lhs: param_slot,
+                                        rhs: false_slot,
+                                    },
+                                },
+                            ],
+                            terminator: Terminator::ReturnValue(result_slot),
+                        }];
+                        return (blocks, vec![Ty::Bool, Ty::Bool]);
+                    }
+                }
+            }
+        }
         if op_text == "-" {
             let inner = skotch_ast::children(p.syntax())
                 .iter()
@@ -4011,6 +4057,34 @@ mod tests {
                     );
                 }
                 _ => panic!("expected InstanceOf"),
+            },
+        }
+    }
+
+    #[test]
+    fn typed_lower_prefix_not_param() {
+        let module = lower("fun not(x: Boolean): Boolean = !x", "TestKt");
+        let f = &module.functions[0];
+        assert_eq!(f.return_ty, Ty::Bool);
+        let block = &f.blocks[0];
+        // Const(false) into slot 1, CmpEq(x, false) into slot 2.
+        assert_eq!(block.stmts.len(), 2);
+        match &block.stmts[0] {
+            skotch_mir::Stmt::Assign { value, .. } => {
+                assert!(matches!(
+                    value,
+                    skotch_mir::Rvalue::Const(skotch_mir::MirConst::Bool(false))
+                ));
+            }
+        }
+        match &block.stmts[1] {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::BinOp { op, lhs, rhs } => {
+                    assert!(matches!(op, skotch_mir::BinOp::CmpEq));
+                    assert_eq!(lhs.0, 0); // x
+                    assert_eq!(rhs.0, 1); // false
+                }
+                _ => panic!("expected BinOp"),
             },
         }
     }
