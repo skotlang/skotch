@@ -1278,3 +1278,46 @@ Path to deleting ast.rs:
 3. Migrate LSP/REPL to typed
 4. Driver cutover (replace legacy `compile_source` with `typed::compile_source`)
 5. Delete `crates/skotch-syntax/src/ast.rs` + `crates/skotch-parser/`
+
+### 2026-06-11 (session 6 — push 23+24: method is/as/if + driver tests)
+
+**Method body `is` check (on param or implicit-this field):**
+- `class P(val x: Any) { fun isStr(): Boolean = x is String }` lowers
+  to GetField + InstanceOf + ReturnValue. Mirrors the top-level fn
+  shape but with offset-1 slot layout.
+
+**Method body `as` cast (on param or implicit-this field):**
+- `class P(val x: Any) { fun str(): String = x as String }` lowers to
+  GetField + CheckCast + ReturnValue.
+
+**Method body simple if/else (4-block CFG):**
+- `class P(val flag: Boolean) { fun pick(): Int = if (flag) 1 else 0 }`
+  lowers to GetField(flag) + Branch + then-arm + else-arm + exit.
+  Cond accepts Boolean param OR implicit-this Boolean field. Arms
+  accept literals + Reference (param + field).
+
+**Ctor-call body args accept inline Binary:**
+- `class P(val x: Int); fun mk(): P = P(1 + 2)` — Binary args resolve
+  to a BinOp into a fresh slot before passing to Constructor.
+
+**skotch-driver typed pipeline integration:**
+- 10 typed::compile_source tests now exercise the full pipeline:
+  scaffold, val + fn binary, class method, if/else, try/catch, string
+  template, class instantiation, when, var reassign, throw inline ctor.
+
+**Push 23 + 24 totals:**
+- mir-lower: **161 unit tests** (up from 158)
+- skotch-driver: **10 typed integration tests** (up from 7)
+- Workspace clippy: clean
+
+### Session 6 final-absolute-definitive tally
+
+mir-lower typed unit tests **85 → 161** (+76 in session 6, +89% growth).
+skotch-driver typed tests **1 → 10** (+9, +900% growth from scaffold).
+Full workspace tests **576 → 618+** (last verified).
+Workspace clippy clean throughout the entire session.
+
+This session was an end-to-end push on typed mir-lower shape coverage
+plus driver-level integration testing. Common Kotlin idioms now
+lower through the full typed pipeline (SIL parse → resolve → typeck
+→ mir-lower) successfully.
