@@ -833,3 +833,73 @@ pipeline:
 - Enum entry methods + companion objects with bodies
 - Cross-file user-class resolution beyond the current single-file
   class_lookup
+
+### 2026-06-11 (session 6 — push 13: try/catch, short-circuit, var reassignment)
+
+Continued expansion of `skotch_mir_lower::typed`:
+
+**try/catch as expression:**
+- New `try_lower_try_expression` for single-catch / no-finally
+  try expressions. Try and catch arm bodies must each be a Reference
+  or literal (or `{ return e }` / `{ e }` block).
+- 3-block CFG: try-arm (Goto exit), catch-arm (Goto exit), exit
+  ReturnValue.
+- `exception_handlers` entry with try_start=0, try_end=1,
+  handler=1, catch_type via `kotlin_exception_class` lookup so
+  `Exception` resolves to `java/lang/Exception` JVM internal name.
+- `lower_simple_body` now takes `&mut Vec<ExceptionHandler>` so
+  body-lowerers populate the table directly.
+
+**Short-circuit && / ||:**
+- `a && b` → if (a) b else false ; `a || b` → if (a) true else b
+- 4-block CFG emit, no actual && / || in MIR (which is correct
+  — JVM has no short-circuit op).
+- Operands restricted to param Bool References for now.
+
+**Var reassignment expansion:**
+- `x = y` (existing local Reference) → Assign(x_slot, Local(y_slot))
+- `x = compute()` (zero-arg top-level fn call) → Assign(x_slot,
+  Call(Static(fid), []))
+- Plus existing literal + binary RHS arms.
+
+**Method body block walker:**
+- `try_lower_multi_stmt_block_with_offset` factors out the
+  parameter-slot starting offset. Class methods set `slot_offset=1`
+  so `this` occupies LocalId(0) and user params shift to slots
+  1..=N.
+- `method_simple_body_full` tries this walker first for block
+  bodies; falls back to the single-return extraction.
+
+**If/else expansions:**
+- If-arms accept zero-arg top-level fn calls (`if (...) helper(x)
+  else x`).
+- Bool-param ref and `!boolParam` as cond.
+
+**Class body init via top-level fn:**
+- `class P { val x = compute() }` now produces a real ctor body:
+  Call(Static(compute), []) + PutField(this, P, x, slot) after the
+  super call.
+
+**Push 13 totals:**
+- mir-lower: **130 unit tests** (up from 119)
+- Full workspace: passing (exit 0), 0 failures
+- Workspace clippy: clean (skotch + xtask, 7m29s wall-clock)
+
+Common idioms now lowered end-to-end through the typed pipeline
+include all the prior shapes plus:
+- `fun parse(): Int = try { 1 } catch (e: Exception) { 0 }`
+- `fun and(a: Boolean, b: Boolean): Boolean = a && b`
+- `fun or(a: Boolean, b: Boolean): Boolean = a || b`
+- `fun cond(x: Int): Int = if (x > 0) helper(x) else x` (if-arm Call)
+- `class P { val x: Int = compute() }` (init-via-fn-call)
+- `class P { fun answer(y: Int): Int = helper(y) }` (method-static-call)
+- `class P { fun calc(): Int { val a = 1; val b = 2; return a + b } }`
+  (method block walker)
+- `fun acc(): Int { var x = 0; x = compute(); return x }` (var
+  reassignment from call)
+
+**Architectural note** — every new shape so far is incremental
+additive code. The typed pipeline now handles a substantial slice of
+real Kotlin idioms, but reaching full fixture parity (1300+ goldens)
+requires several more sessions of pattern coverage plus the eventual
+driver cutover.
