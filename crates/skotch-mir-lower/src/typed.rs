@@ -1405,6 +1405,12 @@ fn try_lower_multi_stmt_block_inner(
                     "*" => Some(skotch_mir::BinOp::MulI),
                     "/" => Some(skotch_mir::BinOp::DivI),
                     "%" => Some(skotch_mir::BinOp::ModI),
+                    "==" => Some(skotch_mir::BinOp::CmpEq),
+                    "!=" => Some(skotch_mir::BinOp::CmpNe),
+                    "<" => Some(skotch_mir::BinOp::CmpLt),
+                    ">" => Some(skotch_mir::BinOp::CmpGt),
+                    "<=" => Some(skotch_mir::BinOp::CmpLe),
+                    ">=" => Some(skotch_mir::BinOp::CmpGe),
                     _ => None,
                 };
                 if let Some(op) = mir_op {
@@ -1427,7 +1433,16 @@ fn try_lower_multi_stmt_block_inner(
                     let rhs = resolve(b.rhs()?, &name_to_local)?;
                     let slot = LocalId(next_slot);
                     next_slot += 1;
-                    local_tys.push(Ty::Int);
+                    let is_cmp = matches!(
+                        op,
+                        skotch_mir::BinOp::CmpEq
+                            | skotch_mir::BinOp::CmpNe
+                            | skotch_mir::BinOp::CmpLt
+                            | skotch_mir::BinOp::CmpGt
+                            | skotch_mir::BinOp::CmpLe
+                            | skotch_mir::BinOp::CmpGe
+                    );
+                    local_tys.push(if is_cmp { Ty::Bool } else { Ty::Int });
                     stmts.push(MStmt::Assign {
                         dest: slot,
                         value: skotch_mir::Rvalue::BinOp { op, lhs, rhs },
@@ -4347,6 +4362,35 @@ mod tests {
                 }
                 _ => panic!("expected Call"),
             },
+        }
+    }
+
+    #[test]
+    fn typed_lower_val_comparison_then_return_ref() {
+        let module = lower(
+            "fun isEq(a: Int, b: Int): Boolean {\n  val eq = a == b\n  return eq\n}",
+            "TestKt",
+        );
+        let f = &module.functions[0];
+        let block = &f.blocks[0];
+        // val eq = a == b → BinOp(CmpEq) into slot 2 (after params 0,1).
+        assert_eq!(block.stmts.len(), 1);
+        match &block.stmts[0] {
+            skotch_mir::Stmt::Assign { dest, value } => {
+                assert_eq!(dest.0, 2);
+                match value {
+                    skotch_mir::Rvalue::BinOp { op, .. } => {
+                        assert!(matches!(op, skotch_mir::BinOp::CmpEq));
+                    }
+                    _ => panic!("expected BinOp"),
+                }
+            }
+        }
+        // Local type of eq is Bool.
+        assert_eq!(f.locals[2], Ty::Bool);
+        match &block.terminator {
+            Terminator::ReturnValue(slot) => assert_eq!(slot.0, 2),
+            other => panic!("expected ReturnValue, got {other:?}"),
         }
     }
 
