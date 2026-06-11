@@ -5716,6 +5716,21 @@ fn method_simple_body_full(
                             });
                             return Some(slot);
                         }
+                        // Top-level val: GetStaticField on wrapper class.
+                        if let Some(val_ty) = val_lookup.get(n) {
+                            let slot = skotch_mir::LocalId(*next_slot);
+                            *next_slot += 1;
+                            locals.push(val_ty.clone());
+                            pre.push(skotch_mir::Stmt::Assign {
+                                dest: slot,
+                                value: skotch_mir::Rvalue::GetStaticField {
+                                    class_name: wrapper_class.to_string(),
+                                    field_name: n.to_string(),
+                                    descriptor: ty_to_descriptor(val_ty),
+                                },
+                            });
+                            return Some(slot);
+                        }
                         None
                     }
                     other => {
@@ -7212,6 +7227,51 @@ mod tests {
                 _ => panic!("expected CheckCast"),
             },
         }
+    }
+
+    #[test]
+    fn typed_lower_method_binary_with_top_level_val_operand() {
+        // `val MAX: Int = 100
+        //  class P(val n: Int) { fun isOverMax(): Boolean = n > MAX }`
+        // The lhs `n` is implicit-this field; rhs `MAX` is a top-level val.
+        let module = lower(
+            "val MAX: Int = 100\nclass P(val n: Int) { fun isOverMax(): Boolean = n > MAX }",
+            "TestKt",
+        );
+        let cls = module.classes.iter().find(|c| c.name == "P").unwrap();
+        let f = cls
+            .methods
+            .iter()
+            .find(|m| m.name == "isOverMax")
+            .unwrap();
+        let block = &f.blocks[0];
+        let has_getfield = block.stmts.iter().any(|s| match s {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::GetField { field_name, .. } => field_name == "n",
+                _ => false,
+            },
+        });
+        let has_getstatic = block.stmts.iter().any(|s| match s {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::GetStaticField { field_name, .. } => field_name == "MAX",
+                _ => false,
+            },
+        });
+        let has_cmp_gt = block.stmts.iter().any(|s| {
+            matches!(
+                s,
+                skotch_mir::Stmt::Assign {
+                    value: skotch_mir::Rvalue::BinOp {
+                        op: skotch_mir::BinOp::CmpGt,
+                        ..
+                    },
+                    ..
+                }
+            )
+        });
+        assert!(has_getfield, "expected GetField for n: {block:?}");
+        assert!(has_getstatic, "expected GetStaticField for MAX: {block:?}");
+        assert!(has_cmp_gt, "expected CmpGt: {block:?}");
     }
 
     #[test]
