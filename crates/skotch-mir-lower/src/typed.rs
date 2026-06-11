@@ -4815,6 +4815,119 @@ fn method_simple_body_full(
         })
         .unwrap_or_default();
 
+    // String-template body with interpolations in method context.
+    // Interpolated names resolve as either an outer param (slot 1+idx,
+    // since `this` is at slot 0) OR an implicit-this field (GetField
+    // into a fresh slot).
+    if let KtExpr::String(_) = &body_expr {
+        use skotch_syntax::SyntaxKind as S;
+        let mut recipe = String::new();
+        let mut arg_slots: Vec<skotch_mir::LocalId> = Vec::new();
+        let mut arg_descs: Vec<String> = Vec::new();
+        let mut pre_stmts: Vec<skotch_mir::Stmt> = Vec::new();
+        let mut extra_locals: Vec<Ty> = Vec::new();
+        let mut next_slot = (1 + param_count) as u32;
+        let mut had_interp = false;
+        let mut ok = true;
+        for child in skotch_ast::children(body_expr.syntax()) {
+            match child.kind {
+                S::LITERAL_STRING_TEMPLATE_ENTRY => {
+                    for cc in skotch_ast::children(child) {
+                        if cc.kind == S::STRING_CHUNK {
+                            if let skotch_sil::SilData::Token { text } = &cc.data {
+                                recipe.push_str(text);
+                            }
+                        }
+                    }
+                }
+                S::SHORT_STRING_TEMPLATE_ENTRY => {
+                    had_interp = true;
+                    let name_opt = skotch_ast::children(child).iter().find_map(|cc| {
+                        if cc.kind == S::REFERENCE_EXPRESSION {
+                            for ccc in skotch_ast::children(cc) {
+                                if ccc.kind == S::IDENTIFIER {
+                                    if let skotch_sil::SilData::Token { text } = &ccc.data {
+                                        return Some(text.as_str().to_string());
+                                    }
+                                }
+                            }
+                        }
+                        None
+                    });
+                    let Some(name) = name_opt else {
+                        ok = false;
+                        break;
+                    };
+                    // Try outer param first.
+                    if let Some(idx) = param_names.iter().position(|p| p == &name) {
+                        let param_ty = f
+                            .value_parameter_list()
+                            .and_then(|pl| {
+                                pl.parameters().nth(idx).and_then(|p| {
+                                    p.type_reference()
+                                        .and_then(|tr| tr.user_type())
+                                        .and_then(|u| u.name())
+                                        .and_then(skotch_types::ty_from_name)
+                                })
+                            })
+                            .unwrap_or(Ty::Any);
+                        arg_descs.push(ty_to_descriptor(&param_ty));
+                        arg_slots.push(skotch_mir::LocalId((1 + idx) as u32));
+                        recipe.push('\x01');
+                        continue;
+                    }
+                    // Try implicit-this field.
+                    if let (Some(cname), Some((fname, fty))) =
+                        (class_name, field_names.iter().find(|(n, _)| n == &name))
+                    {
+                        let slot = skotch_mir::LocalId(next_slot);
+                        next_slot += 1;
+                        extra_locals.push(fty.clone());
+                        pre_stmts.push(skotch_mir::Stmt::Assign {
+                            dest: slot,
+                            value: skotch_mir::Rvalue::GetField {
+                                receiver: skotch_mir::LocalId(0),
+                                class_name: cname.to_string(),
+                                field_name: fname.clone(),
+                            },
+                        });
+                        arg_descs.push(ty_to_descriptor(fty));
+                        arg_slots.push(slot);
+                        recipe.push('\x01');
+                        continue;
+                    }
+                    ok = false;
+                    break;
+                }
+                S::STRING_START | S::STRING_END | S::WHITE_SPACE => {}
+                _ => {
+                    ok = false;
+                    break;
+                }
+            }
+        }
+        if ok && had_interp {
+            let descriptor = format!("({})Ljava/lang/String;", arg_descs.join(""));
+            let result_slot = skotch_mir::LocalId(next_slot);
+            extra_locals.push(Ty::String);
+            pre_stmts.push(skotch_mir::Stmt::Assign {
+                dest: result_slot,
+                value: skotch_mir::Rvalue::Call {
+                    kind: skotch_mir::CallKind::MakeConcatWithConstants {
+                        recipe,
+                        descriptor,
+                    },
+                    args: arg_slots,
+                },
+            });
+            let blocks = vec![BasicBlock {
+                stmts: pre_stmts,
+                terminator: Terminator::ReturnValue(result_slot),
+            }];
+            return (blocks, extra_locals);
+        }
+    }
+
     // Explicit `this.field` body for class methods: same emit as
     // implicit-this field access.
     if let KtExpr::DotQualified(dq) = &body_expr {
@@ -6286,6 +6399,46 @@ mod tests {
                 _ => panic!("expected CheckCast"),
             },
         }
+    }
+
+    #[test]
+    fn typed_lower_method_string_template_with_implicit_this_field() {
+        // `class P(val name: String) { fun greet(): String = "Hello, $name" }`
+        // Interpolation resolves the field via implicit-this:
+        //   GetField(this, P, name) + Call(MakeConcat..., args=[field_slot])
+        let module = lower(
+            r#"class P(val name: String) { fun greet(): String = "Hello, $name" }"#,
+            "TestKt",
+        );
+        let cls = module.classes.iter().find(|c| c.name == "P").unwrap();
+        let f = cls.methods.iter().find(|m| m.name == "greet").unwrap();
+        let block = &f.blocks[0];
+        let has_getfield = block.stmts.iter().any(|s| {
+            matches!(
+                s,
+                skotch_mir::Stmt::Assign {
+                    value: skotch_mir::Rvalue::GetField { .. },
+                    ..
+                }
+            )
+        });
+        let has_concat = block.stmts.iter().any(|s| {
+            matches!(
+                s,
+                skotch_mir::Stmt::Assign {
+                    value: skotch_mir::Rvalue::Call {
+                        kind: skotch_mir::CallKind::MakeConcatWithConstants { .. },
+                        ..
+                    },
+                    ..
+                }
+            )
+        });
+        assert!(has_getfield, "expected GetField for name: {block:?}");
+        assert!(
+            has_concat,
+            "expected MakeConcatWithConstants Call: {block:?}"
+        );
     }
 
     #[test]
