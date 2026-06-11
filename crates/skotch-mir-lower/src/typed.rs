@@ -1657,6 +1657,102 @@ fn try_lower_multi_stmt_block_inner(
                 }
                 return None;
             }
+            // Re-assignment: `name = <rhs>` where LHS is a Reference
+            // to an existing local. The local's slot is reused (TAC
+            // semantics — same slot, new value). Supports literal RHS
+            // and binary-op RHS.
+            if let KtExpr::Binary(b) = &expr {
+                let op_text = b.operation().map(|o| o.text()).unwrap_or_default();
+                if op_text == "=" {
+                    let lhs = b.lhs().map(unwrap_parens);
+                    let rhs = b.rhs().map(unwrap_parens);
+                    if let (Some(KtExpr::Reference(lref)), Some(rhs_expr)) = (lhs, rhs) {
+                        let lname = lref.name()?;
+                        let lhs_slot = name_to_local
+                            .iter()
+                            .rev()
+                            .find(|(n, _)| n == lname)
+                            .map(|(_, l)| *l)?;
+                        // Try literal RHS.
+                        if let Some((k, _ty)) = literal_to_const(&rhs_expr, strings) {
+                            stmts.push(MStmt::Assign {
+                                dest: lhs_slot,
+                                value: skotch_mir::Rvalue::Const(k),
+                            });
+                            continue;
+                        }
+                        // Try binary RHS: `sum = sum + 1`.
+                        if let KtExpr::Binary(rb) = &rhs_expr {
+                            let rop_text = rb.operation().map(|o| o.text()).unwrap_or_default();
+                            let mir_op = match rop_text.as_str() {
+                                "+" => Some(skotch_mir::BinOp::AddI),
+                                "-" => Some(skotch_mir::BinOp::SubI),
+                                "*" => Some(skotch_mir::BinOp::MulI),
+                                "/" => Some(skotch_mir::BinOp::DivI),
+                                "%" => Some(skotch_mir::BinOp::ModI),
+                                _ => None,
+                            };
+                            if let Some(op) = mir_op {
+                                let resolve = |e: KtExpr<'_>,
+                                               name_to_local: &Vec<(String, LocalId)>,
+                                               next_slot: &mut u32,
+                                               local_tys: &mut Vec<Ty>,
+                                               stmts: &mut Vec<MStmt>,
+                                               strings: &mut Vec<String>|
+                                 -> Option<LocalId> {
+                                    match unwrap_parens(e) {
+                                        KtExpr::Reference(rr) => {
+                                            let n = rr.name()?;
+                                            name_to_local
+                                                .iter()
+                                                .rev()
+                                                .find(|(name, _)| name == n)
+                                                .map(|(_, l)| *l)
+                                        }
+                                        other => {
+                                            let (k, ty) = literal_to_const(&other, strings)?;
+                                            let slot = LocalId(*next_slot);
+                                            *next_slot += 1;
+                                            local_tys.push(ty);
+                                            stmts.push(MStmt::Assign {
+                                                dest: slot,
+                                                value: skotch_mir::Rvalue::Const(k),
+                                            });
+                                            Some(slot)
+                                        }
+                                    }
+                                };
+                                let lhs_op = resolve(
+                                    rb.lhs()?,
+                                    &name_to_local,
+                                    &mut next_slot,
+                                    &mut local_tys,
+                                    &mut stmts,
+                                    strings,
+                                )?;
+                                let rhs_op = resolve(
+                                    rb.rhs()?,
+                                    &name_to_local,
+                                    &mut next_slot,
+                                    &mut local_tys,
+                                    &mut stmts,
+                                    strings,
+                                )?;
+                                stmts.push(MStmt::Assign {
+                                    dest: lhs_slot,
+                                    value: skotch_mir::Rvalue::BinOp {
+                                        op,
+                                        lhs: lhs_op,
+                                        rhs: rhs_op,
+                                    },
+                                });
+                                continue;
+                            }
+                        }
+                        return None;
+                    }
+                }
+            }
             // Currently only handle `println(...)` / `print(...)` calls.
             match expr {
                 KtExpr::Call(call) => {
@@ -4997,6 +5093,72 @@ mod tests {
                 _ => panic!("expected CheckCast"),
             },
         }
+    }
+
+    #[test]
+    fn typed_lower_block_var_reassignment() {
+        // `fun acc(): Int { var sum = 0; sum = sum + 1; return sum }`
+        let module = lower(
+            "fun acc(): Int { var sum = 0; sum = sum + 1; return sum }",
+            "TestKt",
+        );
+        let f = module.functions.iter().find(|f| f.name == "acc").unwrap();
+        let block = &f.blocks[0];
+        // Should have: Const(0), Const(1), BinOp(AddI, sum, 1) [writing back to sum].
+        let n_const_0 = block
+            .stmts
+            .iter()
+            .filter(|s| {
+                matches!(
+                    s,
+                    skotch_mir::Stmt::Assign {
+                        value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(0)),
+                        ..
+                    }
+                )
+            })
+            .count();
+        let n_const_1 = block
+            .stmts
+            .iter()
+            .filter(|s| {
+                matches!(
+                    s,
+                    skotch_mir::Stmt::Assign {
+                        value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(1)),
+                        ..
+                    }
+                )
+            })
+            .count();
+        let n_add = block
+            .stmts
+            .iter()
+            .filter(|s| {
+                matches!(
+                    s,
+                    skotch_mir::Stmt::Assign {
+                        value: skotch_mir::Rvalue::BinOp {
+                            op: skotch_mir::BinOp::AddI,
+                            ..
+                        },
+                        ..
+                    }
+                )
+            })
+            .count();
+        assert_eq!(n_const_0, 1);
+        assert_eq!(n_const_1, 1);
+        assert_eq!(n_add, 1);
+        // The AddI stmt should write back to slot 0 (same slot as sum).
+        let add_dest = block.stmts.iter().find_map(|s| match s {
+            skotch_mir::Stmt::Assign {
+                dest,
+                value: skotch_mir::Rvalue::BinOp { .. },
+            } => Some(*dest),
+            _ => None,
+        });
+        assert_eq!(add_dest.unwrap().0, 0, "AddI should write back to sum slot");
     }
 
     #[test]
