@@ -1321,3 +1321,23 @@ This session was an end-to-end push on typed mir-lower shape coverage
 plus driver-level integration testing. Common Kotlin idioms now
 lower through the full typed pipeline (SIL parse → resolve → typeck
 → mir-lower) successfully.
+
+### 2026-06-11 (session 6 — push 25 truly-final: return-call shape)
+
+**Multi-stmt block return accepts top-level fn call:**
+- `fun calc(): Int { return double(5) }` now lowers — the return
+  handler's match gains a KtExpr::Call arm that dispatches via
+  fn_lookup, resolves args (Reference + literal), uses the result
+  slot as explicit_return_slot.
+
+**Push 25 totals:**
+- mir-lower: **162 unit tests**
+- Full workspace: **633 tests passing**, 0 failures
+- Workspace clippy: clean
+
+### Session 6 truly-final tally
+
+mir-lower typed unit tests **85 → 162** (+77 in session 6, +90% growth).
+skotch-driver typed tests **1 → 10**.
+Full workspace tests **576 → 633** (+57 net).
+Workspace clippy clean throughout.
