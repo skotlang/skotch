@@ -1132,6 +1132,7 @@ fn try_lower_multi_stmt_block(
     let mut stmts: Vec<MStmt> = Vec::new();
     let mut next_slot: u32 = param_count as u32;
 
+    let mut explicit_return_slot: Option<LocalId> = None;
     for c in skotch_ast::children(block.syntax()) {
         if let Some(prop) = skotch_ast::KtProperty::cast(c) {
             // `val <name> = <literal>` — emit Assign + push local.
@@ -1149,6 +1150,25 @@ fn try_lower_multi_stmt_block(
             continue;
         }
         if let Some(expr) = KtExpr::cast(c) {
+            // Handle trailing `return <ref>`. The ref must be in
+            // name_to_local (a known local/param).
+            if let KtExpr::Return(r) = &expr {
+                let inner = skotch_ast::children(r.syntax())
+                    .iter()
+                    .find_map(KtExpr::cast)
+                    .map(unwrap_parens);
+                if let Some(KtExpr::Reference(rr)) = inner {
+                    let rn = rr.name()?;
+                    let slot = name_to_local
+                        .iter()
+                        .rev()
+                        .find(|(n, _)| n == rn)
+                        .map(|(_, l)| *l)?;
+                    explicit_return_slot = Some(slot);
+                    continue;
+                }
+                return None;
+            }
             // Currently only handle `println(...)` / `print(...)` calls.
             match expr {
                 KtExpr::Call(call) => {
@@ -1209,10 +1229,11 @@ fn try_lower_multi_stmt_block(
     if stmts.is_empty() {
         return None;
     }
-    let blocks = vec![BasicBlock {
-        stmts,
-        terminator: Terminator::Return,
-    }];
+    let terminator = match explicit_return_slot {
+        Some(slot) => Terminator::ReturnValue(slot),
+        None => Terminator::Return,
+    };
+    let blocks = vec![BasicBlock { stmts, terminator }];
     Some((blocks, local_tys))
 }
 
@@ -3367,6 +3388,33 @@ mod tests {
         assert!(matches!(block.terminator, Terminator::Return));
         // locals: x (Int), println-result (Unit)
         assert_eq!(f.locals, vec![Ty::Int, Ty::Unit]);
+    }
+
+    #[test]
+    fn typed_lower_val_then_return_ref() {
+        let module = lower(
+            "fun foo(): Int {\n  val x = 42\n  return x\n}",
+            "TestKt",
+        );
+        let f = &module.functions[0];
+        assert_eq!(f.blocks.len(), 1);
+        let block = &f.blocks[0];
+        // 1 stmt: Const(Int(42)) into local 0
+        assert_eq!(block.stmts.len(), 1);
+        match &block.stmts[0] {
+            skotch_mir::Stmt::Assign { dest, value } => {
+                assert_eq!(dest.0, 0);
+                assert!(matches!(
+                    value,
+                    skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(42))
+                ));
+            }
+        }
+        // Terminator: ReturnValue(local 0) — the val's slot.
+        match &block.terminator {
+            Terminator::ReturnValue(slot) => assert_eq!(slot.0, 0),
+            other => panic!("expected ReturnValue, got {other:?}"),
+        }
     }
 
     #[test]
