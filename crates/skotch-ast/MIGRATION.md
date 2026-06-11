@@ -690,9 +690,43 @@ now include (in addition to all previous):
 - `class P { fun show() = println("hi") }` (intrinsic in method)
 - `class P { fun fail(e: Throwable): Nothing = throw e }`
 - `class P { fun a(): Int = 1; fun b(): Int = a() }` (virtual call)
+- `class Box { fun self(): Box = this }` (return this)
 - `fun loop(n: Int) { while (n > 0) { println("hi") } }`
 - `fun loop(n: Int) { do { println("hi") } while (n > 0) }`
 - `fun foo(): Int { val x = 42; return x }` (return ref)
 - `fun calc(a, b, c): Int { val ab = a + b; val sum = ab + c; return sum }`
 - `fun neg(x: Int): Int = -x` (unary minus)
+- `fun not(x: Boolean): Boolean = !x` (unary not as CmpEq(x, false))
 - `fun main() { val x = answer(); println(x) }` (val from static call)
+- `fun isStr(x: Any): Boolean = x is String` (InstanceOf)
+- `fun toS(x: Any): String = x as String` (CheckCast)
+- `val GREETING: String = "hi"; fun greet(): String = GREETING` (GetStaticField on wrapper class)
+- `fun isEq(a: Int, b: Int): Boolean { val eq = a == b; return eq }` (val with comparison)
+
+### 2026-06-10 (session 5 — push 11)
+
+Mir-lower body lowering continues:
+- `KtExpr::This` body lowering for class methods (returns slot 0).
+- `KtExpr::Is` body lowering: `x is Int` → `Rvalue::InstanceOf`
+  with kotlin_to_jvm_class descriptor mapping.
+- `KtExpr::BinaryWithTypeRhs` body lowering: `x as Int` →
+  `Rvalue::CheckCast` with target class descriptor.
+- `KtExpr::Prefix` with `!` for Bool negation: emitted as
+  `BinOp(CmpEq, x, Const(Bool(false)))`.
+- Top-level val reference body via `GetStaticField` on the
+  wrapper class. New `val_lookup` map collects top-level
+  KtProperty names + their Ty; `ty_to_descriptor` helper
+  generates JVM field descriptors.
+- Multi-stmt block val init now supports comparison binary ops
+  (`val eq = a == b`) producing Bool-typed locals.
+
+**Push 11 totals (focused tests, all green):**
+- mir-lower: 85 unit tests (up from 79)
+- All other crates unchanged
+- Sum: **197 tests** across migration surface, 0 failures
+
+Each additional shape continues to be incrementally additive on
+the existing body-lowering scaffolding. Common mid-complexity
+Kotlin idioms are now covered; the remaining gaps are
+control-flow inside loop bodies, lambdas, coroutines, and
+generic methods.
