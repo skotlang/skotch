@@ -92,6 +92,62 @@ mod tests {
     }
 
     #[test]
+    fn typed_compile_source_handles_class_instantiation() {
+        let mut interner = Interner::new();
+        let mut diags = Diagnostics::new();
+        let module = compile_source(
+            "class P(val x: Int)\nfun mk(): P = P(42)",
+            "test.kt",
+            "TestKt",
+            &mut interner,
+            &mut diags,
+            None,
+        );
+        let f = module.functions.iter().find(|f| f.name == "mk").unwrap();
+        // Body should have NewInstance + Constructor call.
+        let has_new = f.blocks[0].stmts.iter().any(|s| {
+            matches!(
+                s,
+                skotch_mir::Stmt::Assign {
+                    value: skotch_mir::Rvalue::NewInstance(_),
+                    ..
+                }
+            )
+        });
+        let has_ctor = f.blocks[0].stmts.iter().any(|s| {
+            matches!(
+                s,
+                skotch_mir::Stmt::Assign {
+                    value: skotch_mir::Rvalue::Call {
+                        kind: skotch_mir::CallKind::Constructor(_),
+                        ..
+                    },
+                    ..
+                }
+            )
+        });
+        assert!(has_new);
+        assert!(has_ctor);
+    }
+
+    #[test]
+    fn typed_compile_source_handles_when_expression() {
+        let mut interner = Interner::new();
+        let mut diags = Diagnostics::new();
+        let module = compile_source(
+            r#"fun lookup(x: Int): String = when (x) { 1 -> "one"; 2 -> "two"; else -> "other" }"#,
+            "test.kt",
+            "TestKt",
+            &mut interner,
+            &mut diags,
+            None,
+        );
+        let f = module.functions.iter().find(|f| f.name == "lookup").unwrap();
+        // 2 arms × 2 blocks + 1 else + 1 join = 6 blocks.
+        assert_eq!(f.blocks.len(), 6);
+    }
+
+    #[test]
     fn typed_compile_source_handles_try_catch() {
         let mut interner = Interner::new();
         let mut diags = Diagnostics::new();
