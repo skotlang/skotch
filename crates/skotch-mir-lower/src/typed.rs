@@ -6191,6 +6191,40 @@ mod tests {
     }
 
     #[test]
+    fn typed_lower_fn_returns_string_template_two_interps() {
+        // `fun fmt(a: Int, b: Int): String = "a=$a, b=$b"`
+        // → recipe = "a=\x01, b=\x01", descriptor = "(II)Ljava/lang/String;"
+        let module = lower(
+            r#"fun fmt(a: Int, b: Int): String = "a=$a, b=$b""#,
+            "TestKt",
+        );
+        let f = module.functions.iter().find(|f| f.name == "fmt").unwrap();
+        let block = &f.blocks[0];
+        match block.stmts.iter().find_map(|s| match s {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::Call {
+                    kind:
+                        skotch_mir::CallKind::MakeConcatWithConstants {
+                            recipe,
+                            descriptor,
+                        },
+                    args,
+                } => Some((recipe.clone(), descriptor.clone(), args.clone())),
+                _ => None,
+            },
+        }) {
+            Some((recipe, descriptor, args)) => {
+                assert_eq!(recipe, "a=\x01, b=\x01");
+                assert_eq!(descriptor, "(II)Ljava/lang/String;");
+                assert_eq!(args.len(), 2);
+                assert_eq!(args[0].0, 0); // a
+                assert_eq!(args[1].0, 1); // b
+            }
+            None => panic!("expected MakeConcatWithConstants, body: {block:?}"),
+        }
+    }
+
+    #[test]
     fn typed_lower_block_println_binary_arg() {
         // `fun show(x: Int) { println(x); println(x + 1) }`
         let module = lower(
