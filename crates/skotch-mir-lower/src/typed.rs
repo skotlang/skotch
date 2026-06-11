@@ -3512,6 +3512,62 @@ fn try_lower_multi_stmt_block_with_offset(
                     _ => return None,
                 }
             }
+            // Compound assignment: `name += <rhs>` etc. Reduces to
+            // `name = name op rhs` and writes back to the LHS slot.
+            if let KtExpr::Binary(b) = &expr {
+                let op_text = b.operation().map(|o| o.text()).unwrap_or_default();
+                let compound_op = match op_text.as_str() {
+                    "+=" => Some(skotch_mir::BinOp::AddI),
+                    "-=" => Some(skotch_mir::BinOp::SubI),
+                    "*=" => Some(skotch_mir::BinOp::MulI),
+                    "/=" => Some(skotch_mir::BinOp::DivI),
+                    "%=" => Some(skotch_mir::BinOp::ModI),
+                    _ => None,
+                };
+                if let Some(op) = compound_op {
+                    let lhs = b.lhs().map(unwrap_parens);
+                    let rhs = b.rhs().map(unwrap_parens);
+                    if let (Some(KtExpr::Reference(lref)), Some(rhs_expr)) = (lhs, rhs) {
+                        let lname = lref.name()?;
+                        let lhs_slot = name_to_local
+                            .iter()
+                            .rev()
+                            .find(|(n, _)| n == lname)
+                            .map(|(_, l)| *l)?;
+                        // Resolve RHS: literal, Reference, or short Binary.
+                        let rhs_slot = if let Some((k, ty)) =
+                            literal_to_const(&rhs_expr, strings)
+                        {
+                            let slot = LocalId(next_slot);
+                            next_slot += 1;
+                            local_tys.push(ty);
+                            stmts.push(MStmt::Assign {
+                                dest: slot,
+                                value: skotch_mir::Rvalue::Const(k),
+                            });
+                            slot
+                        } else if let KtExpr::Reference(rr) = &rhs_expr {
+                            let n = rr.name()?;
+                            name_to_local
+                                .iter()
+                                .rev()
+                                .find(|(name, _)| name == n)
+                                .map(|(_, l)| *l)?
+                        } else {
+                            return None;
+                        };
+                        stmts.push(MStmt::Assign {
+                            dest: lhs_slot,
+                            value: skotch_mir::Rvalue::BinOp {
+                                op,
+                                lhs: lhs_slot,
+                                rhs: rhs_slot,
+                            },
+                        });
+                        continue;
+                    }
+                }
+            }
             // Re-assignment: `name = <rhs>` where LHS is a Reference
             // to an existing local. The local's slot is reused (TAC
             // semantics — same slot, new value). Supports literal RHS
