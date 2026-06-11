@@ -3254,8 +3254,10 @@ fn lower_simple_body(
         }
     }
 
-    // Array index access: `fun get(arr: IntArray, i: Int): Int = arr[i]`.
-    // Emits Rvalue::ArrayLoad with the array and index slots.
+    // Array index access:
+    //   `fun get(arr: IntArray, i: Int): Int = arr[i]`
+    //   `fun get(arr: IntArray, i: Int): Int = arr[i + 1]` (binary idx)
+    // Emits Rvalue::ArrayLoad with the array slot and an index slot.
     if let KtExpr::ArrayAccess(aa) = &body_expr {
         let children: Vec<_> = skotch_ast::children(aa.syntax()).iter().collect();
         let array_ref = children
@@ -3272,6 +3274,146 @@ fn lower_simple_body(
                 None
             }
         });
+        if let (Some(KtExpr::Reference(ar)), Some(index_e)) = (array_ref, index_expr) {
+            if let Some(an) = ar.name() {
+                let param_names: Vec<String> = f
+                    .value_parameter_list()
+                    .map(|pl| {
+                        pl.parameters()
+                            .map(|p| p.name().unwrap_or("").to_string())
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let param_count = param_names.len();
+                if let Some(a_idx) = param_names.iter().position(|p| p == an) {
+                    let array_slot = skotch_mir::LocalId(a_idx as u32);
+                    let mut next_slot = param_count as u32;
+                    let mut pre_stmts: Vec<skotch_mir::Stmt> = Vec::new();
+                    let mut extra_locals: Vec<Ty> = Vec::new();
+                    // Resolve index: Reference (param) / literal / binary.
+                    let resolve_idx = |e: KtExpr<'_>,
+                                       next_slot: &mut u32,
+                                       pre_stmts: &mut Vec<skotch_mir::Stmt>,
+                                       extra_locals: &mut Vec<Ty>,
+                                       strings: &mut Vec<String>|
+                     -> Option<skotch_mir::LocalId> {
+                        let e = unwrap_parens(e);
+                        if let Some((k, ty)) = literal_to_const(&e, strings) {
+                            let slot = skotch_mir::LocalId(*next_slot);
+                            *next_slot += 1;
+                            extra_locals.push(ty);
+                            pre_stmts.push(skotch_mir::Stmt::Assign {
+                                dest: slot,
+                                value: skotch_mir::Rvalue::Const(k),
+                            });
+                            return Some(slot);
+                        }
+                        match e {
+                            KtExpr::Reference(ir) => {
+                                let n = ir.name()?;
+                                let idx = param_names.iter().position(|p| p == n)?;
+                                Some(skotch_mir::LocalId(idx as u32))
+                            }
+                            KtExpr::Binary(b) => {
+                                let op_text = b.operation().map(|o| o.text()).unwrap_or_default();
+                                let mir_op = match op_text.as_str() {
+                                    "+" => Some(skotch_mir::BinOp::AddI),
+                                    "-" => Some(skotch_mir::BinOp::SubI),
+                                    "*" => Some(skotch_mir::BinOp::MulI),
+                                    "/" => Some(skotch_mir::BinOp::DivI),
+                                    "%" => Some(skotch_mir::BinOp::ModI),
+                                    _ => None,
+                                }?;
+                                // Recurse: lhs / rhs each resolve via
+                                // the same resolver shape. Just inline
+                                // a small Reference/literal check here.
+                                let resolve_inner =
+                                    |inner: KtExpr<'_>,
+                                     next_slot: &mut u32,
+                                     pre_stmts: &mut Vec<skotch_mir::Stmt>,
+                                     extra_locals: &mut Vec<Ty>,
+                                     strings: &mut Vec<String>|
+                                     -> Option<skotch_mir::LocalId> {
+                                        let inner = unwrap_parens(inner);
+                                        if let Some((k, ty)) =
+                                            literal_to_const(&inner, strings)
+                                        {
+                                            let slot = skotch_mir::LocalId(*next_slot);
+                                            *next_slot += 1;
+                                            extra_locals.push(ty);
+                                            pre_stmts.push(skotch_mir::Stmt::Assign {
+                                                dest: slot,
+                                                value: skotch_mir::Rvalue::Const(k),
+                                            });
+                                            return Some(slot);
+                                        }
+                                        if let KtExpr::Reference(rr) = inner {
+                                            let n = rr.name()?;
+                                            let idx = param_names
+                                                .iter()
+                                                .position(|p| p == n)?;
+                                            return Some(skotch_mir::LocalId(idx as u32));
+                                        }
+                                        None
+                                    };
+                                let lhs = resolve_inner(
+                                    b.lhs()?,
+                                    next_slot,
+                                    pre_stmts,
+                                    extra_locals,
+                                    strings,
+                                )?;
+                                let rhs = resolve_inner(
+                                    b.rhs()?,
+                                    next_slot,
+                                    pre_stmts,
+                                    extra_locals,
+                                    strings,
+                                )?;
+                                let slot = skotch_mir::LocalId(*next_slot);
+                                *next_slot += 1;
+                                extra_locals.push(Ty::Int);
+                                pre_stmts.push(skotch_mir::Stmt::Assign {
+                                    dest: slot,
+                                    value: skotch_mir::Rvalue::BinOp {
+                                        op: mir_op,
+                                        lhs,
+                                        rhs,
+                                    },
+                                });
+                                Some(slot)
+                            }
+                            _ => None,
+                        }
+                    };
+                    let Some(index_slot) = resolve_idx(
+                        index_e,
+                        &mut next_slot,
+                        &mut pre_stmts,
+                        &mut extra_locals,
+                        strings,
+                    ) else {
+                        return make_placeholder();
+                    };
+                    let result_slot = skotch_mir::LocalId(next_slot);
+                    extra_locals.push(Ty::Int);
+                    pre_stmts.push(skotch_mir::Stmt::Assign {
+                        dest: result_slot,
+                        value: skotch_mir::Rvalue::ArrayLoad {
+                            array: array_slot,
+                            index: index_slot,
+                        },
+                    });
+                    let blocks = vec![BasicBlock {
+                        stmts: pre_stmts,
+                        terminator: Terminator::ReturnValue(result_slot),
+                    }];
+                    return (blocks, extra_locals);
+                }
+            }
+        }
+        // (Legacy fall-through path no longer reachable since the
+        // new path either returns or falls to make_placeholder above.)
         if let (Some(KtExpr::Reference(ar)), Some(KtExpr::Reference(ir))) = (array_ref, index_expr)
         {
             if let (Some(an), Some(in_)) = (ar.name(), ir.name()) {
@@ -6937,6 +7079,40 @@ mod tests {
                 _ => panic!("expected CheckCast"),
             },
         }
+    }
+
+    #[test]
+    fn typed_lower_array_access_with_binary_index() {
+        // `fun get(arr: IntArray, i: Int): Int = arr[i + 1]`
+        let module = lower(
+            "fun get(arr: IntArray, i: Int): Int = arr[i + 1]",
+            "TestKt",
+        );
+        let f = module.functions.iter().find(|f| f.name == "get").unwrap();
+        let block = &f.blocks[0];
+        let has_add = block.stmts.iter().any(|s| {
+            matches!(
+                s,
+                skotch_mir::Stmt::Assign {
+                    value: skotch_mir::Rvalue::BinOp {
+                        op: skotch_mir::BinOp::AddI,
+                        ..
+                    },
+                    ..
+                }
+            )
+        });
+        let has_arrayload = block.stmts.iter().any(|s| {
+            matches!(
+                s,
+                skotch_mir::Stmt::Assign {
+                    value: skotch_mir::Rvalue::ArrayLoad { .. },
+                    ..
+                }
+            )
+        });
+        assert!(has_add);
+        assert!(has_arrayload);
     }
 
     #[test]
