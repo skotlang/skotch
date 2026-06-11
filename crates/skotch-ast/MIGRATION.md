@@ -903,3 +903,53 @@ additive code. The typed pipeline now handles a substantial slice of
 real Kotlin idioms, but reaching full fixture parity (1300+ goldens)
 requires several more sessions of pattern coverage plus the eventual
 driver cutover.
+
+### 2026-06-11 (session 6 — push 14: string templates + when ref arms)
+
+**String-template body emission:**
+- `fun greet(name: String): String = "Hello, $name"` →
+  `Call(MakeConcatWithConstants{recipe, descriptor}, args)` matching
+  JVM 9+ invokedynamic shape kotlinc emits.
+- Recipe: `"Hello, \x01"` (literal chunks interleaved with `\x01`
+  placeholders).
+- Descriptor: `(arg_jvm_types)Ljava/lang/String;` built from each
+  interpolated arg's param type.
+- Multi-interp shapes like `"a=$a, b=$b"` produce
+  `(II)Ljava/lang/String;`.
+
+**when arm body via Reference:**
+- `when (x) { 1 -> a; 2 -> b; else -> 0 }` where a, b are outer params
+  now lowers. Previously arm bodies were restricted to literals.
+- Both arm bodies and else body fall through Reference resolution
+  against the outer param list when literal_to_const returns None.
+
+**Multi-stmt println arg via Binary:**
+- `println(x + 1)` in a block body now materializes the BinOp into a
+  fresh slot before the Println intrinsic call.
+
+**Implicit-this virtual call with args:**
+- `class P { fun a(x: Int) = x; fun b(y: Int): Int = a(y) }` →
+  Call(Virtual{P, a}, [this, y_slot]). Previously zero-arg only.
+
+**Method block walker offset-1:**
+- `try_lower_multi_stmt_block_with_offset` factored out the
+  parameter-slot starting offset so class methods can reuse the
+  whole walker (var reassignment, val init, return shapes) with
+  `this` at slot 0 + params at 1..=N.
+
+**Push 14 totals:**
+- mir-lower: **136 unit tests** (up from 130)
+- Full workspace: **593 tests passing**, 0 failures
+- Workspace clippy: clean
+
+Common idioms now lowered end-to-end through the typed pipeline now
+also include:
+- `fun greet(name: String): String = "Hello, $name"` (single interp)
+- `fun fmt(a: Int, b: Int): String = "a=$a, b=$b"` (multi interp)
+- `fun pick(x: Int, a: Int, b: Int): Int = when (x) { 1 -> a;
+  2 -> b; else -> 0 }` (when ref arms)
+- `fun show(x: Int) { println(x); println(x + 1) }` (Binary arg)
+- `class P { fun a(x: Int) = x; fun b(y: Int): Int = a(y) }`
+  (implicit-this virtual call with args)
+- `class P { fun acc(): Int { var sum = 0; sum = sum + 1; return sum } }`
+  (method block + var)
