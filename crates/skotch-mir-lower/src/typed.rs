@@ -3008,6 +3008,55 @@ fn try_lower_multi_stmt_block_with_offset(
                             });
                             slot
                         }
+                        KtExpr::Call(inner_call) => {
+                            // Inner call: top-level fn dispatched via
+                            // fn_lookup. Args resolve as Reference
+                            // (local) or literal.
+                            let callee_name = match inner_call.callee() {
+                                Some(KtExpr::Reference(r)) => r.name(),
+                                _ => None,
+                            }?;
+                            let (fid, ret_ty) = fn_lookup.get(callee_name)?;
+                            let mut inner_args: Vec<LocalId> = Vec::new();
+                            if let Some(arg_list) = inner_call.value_argument_list() {
+                                for arg in arg_list.arguments() {
+                                    let arg_e = arg.expression()?;
+                                    match unwrap_parens(arg_e) {
+                                        KtExpr::Reference(rr) => {
+                                            let an = rr.name()?;
+                                            let slot = name_to_local
+                                                .iter()
+                                                .rev()
+                                                .find(|(name, _)| name == an)
+                                                .map(|(_, l)| *l)?;
+                                            inner_args.push(slot);
+                                        }
+                                        other => {
+                                            let (k, ty) = literal_to_const(&other, strings)?;
+                                            let slot = LocalId(next_slot);
+                                            next_slot += 1;
+                                            local_tys.push(ty);
+                                            stmts.push(MStmt::Assign {
+                                                dest: slot,
+                                                value: skotch_mir::Rvalue::Const(k),
+                                            });
+                                            inner_args.push(slot);
+                                        }
+                                    }
+                                }
+                            }
+                            let slot = LocalId(next_slot);
+                            next_slot += 1;
+                            local_tys.push(ret_ty.clone());
+                            stmts.push(MStmt::Assign {
+                                dest: slot,
+                                value: skotch_mir::Rvalue::Call {
+                                    kind: skotch_mir::CallKind::Static(*fid),
+                                    args: inner_args,
+                                },
+                            });
+                            slot
+                        }
                         other => {
                             let (k, ty) = literal_to_const(other, strings)?;
                             let slot = LocalId(next_slot);
