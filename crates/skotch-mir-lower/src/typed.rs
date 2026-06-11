@@ -4978,7 +4978,25 @@ fn try_lower_println_template_with_lookup(
                 part_slots.push(slot);
             }
             S::STRING_START | S::STRING_END | S::WHITE_SPACE => {}
-            S::LONG_STRING_TEMPLATE_ENTRY | S::BLOCK_STRING_TEMPLATE_ENTRY => return None,
+            S::LONG_STRING_TEMPLATE_ENTRY => {
+                // `${expr}` — eval expr to a slot. Supports
+                // literal / Reference / Binary on Reference+literal.
+                had_interp = true;
+                let inner = skotch_ast::children(child)
+                    .iter()
+                    .find_map(KtExpr::cast)
+                    .map(unwrap_parens)?;
+                let slot = lower_inline_expr_to_slot(
+                    inner,
+                    lookup_name,
+                    next_slot,
+                    pre_stmts,
+                    extra_locals,
+                    strings,
+                )?;
+                part_slots.push(slot);
+            }
+            S::BLOCK_STRING_TEMPLATE_ENTRY => return None,
             _ => return None,
         }
     }
@@ -4992,6 +5010,75 @@ fn try_lower_println_template_with_lookup(
         _ => return None,
     };
     Some((kind, part_slots))
+}
+
+/// Lower a simple expression (literal / Reference / Binary / Prefix-minus)
+/// to a single LocalId slot, emitting any intermediate stmts into
+/// `pre_stmts`. Used by string-template lowering to materialize
+/// `${expr}` operands. Returns None for unsupported shapes.
+fn lower_inline_expr_to_slot(
+    e: skotch_ast::KtExpr<'_>,
+    lookup_name: &dyn Fn(&str) -> Option<skotch_mir::LocalId>,
+    next_slot: &mut u32,
+    pre_stmts: &mut Vec<skotch_mir::Stmt>,
+    extra_locals: &mut Vec<Ty>,
+    strings: &mut Vec<String>,
+) -> Option<skotch_mir::LocalId> {
+    use skotch_ast::KtExpr;
+    use skotch_mir::{LocalId, Stmt as MStmt};
+    let e = unwrap_parens(e);
+    if let Some((k, ty)) = literal_to_const(&e, strings) {
+        let slot = LocalId(*next_slot);
+        *next_slot += 1;
+        extra_locals.push(ty);
+        pre_stmts.push(MStmt::Assign {
+            dest: slot,
+            value: skotch_mir::Rvalue::Const(k),
+        });
+        return Some(slot);
+    }
+    match e {
+        KtExpr::Reference(r) => {
+            let n = r.name()?;
+            lookup_name(n)
+        }
+        KtExpr::Binary(b) => {
+            let op_text = b.operation().map(|o| o.text()).unwrap_or_default();
+            let mir_op = match op_text.as_str() {
+                "+" => Some(skotch_mir::BinOp::AddI),
+                "-" => Some(skotch_mir::BinOp::SubI),
+                "*" => Some(skotch_mir::BinOp::MulI),
+                "/" => Some(skotch_mir::BinOp::DivI),
+                "%" => Some(skotch_mir::BinOp::ModI),
+                _ => None,
+            }?;
+            let lhs = lower_inline_expr_to_slot(
+                b.lhs()?,
+                lookup_name,
+                next_slot,
+                pre_stmts,
+                extra_locals,
+                strings,
+            )?;
+            let rhs = lower_inline_expr_to_slot(
+                b.rhs()?,
+                lookup_name,
+                next_slot,
+                pre_stmts,
+                extra_locals,
+                strings,
+            )?;
+            let slot = LocalId(*next_slot);
+            *next_slot += 1;
+            extra_locals.push(Ty::Int);
+            pre_stmts.push(MStmt::Assign {
+                dest: slot,
+                value: skotch_mir::Rvalue::BinOp { op: mir_op, lhs, rhs },
+            });
+            Some(slot)
+        }
+        _ => None,
+    }
 }
 
 /// Try to lower `println(literal)` / `print(literal)` to the
@@ -9354,6 +9441,33 @@ mod tests {
         assert_eq!(f.return_ty, Ty::Unit);
         assert_eq!(f.blocks.len(), 1);
         assert!(matches!(f.blocks[0].terminator, Terminator::Return));
+    }
+
+    #[test]
+    fn typed_lower_println_long_template_with_binary_expr() {
+        // `println("${n + 1}")` — LONG_STRING_TEMPLATE_ENTRY with Binary
+        // expression. Pre-fix the println template handler returned None
+        // for LONG entries, producing 0 stmts.
+        let module = lower(
+            "fun main() {\n    val n = 42\n    println(\"${n + 1}\")\n}",
+            "InputKt",
+        );
+        let f = module.functions.iter().find(|f| f.name == "main").unwrap();
+        let stmts: usize = f.blocks.iter().map(|b| b.stmts.len()).sum();
+        assert_eq!(stmts, 4, "expected 4 stmts (n=42, lit=1, n+1, PrintlnConcat)");
+        let has_println_concat = f.blocks[0].stmts.iter().any(|s| {
+            matches!(
+                s,
+                skotch_mir::Stmt::Assign {
+                    value: skotch_mir::Rvalue::Call {
+                        kind: skotch_mir::CallKind::PrintlnConcat,
+                        ..
+                    },
+                    ..
+                }
+            )
+        });
+        assert!(has_println_concat);
     }
 
     #[test]
