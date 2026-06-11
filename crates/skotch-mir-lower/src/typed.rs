@@ -1194,6 +1194,69 @@ fn try_lower_if_expression(
                 let idx = outer_param_names.iter().position(|p| p == n)?;
                 Some(LocalId(idx as u32))
             }
+            // Unary minus on a param ref: `-x` lowers to `0 - x_slot`.
+            KtExpr::Prefix(p) => {
+                let op_text = skotch_ast::children(p.syntax())
+                    .iter()
+                    .find_map(|c| {
+                        if c.kind == skotch_syntax::SyntaxKind::OPERATION_REFERENCE {
+                            skotch_ast::KtOperationReference::cast(c).map(|o| o.text())
+                        } else {
+                            None
+                        }
+                    })
+                    .unwrap_or_default();
+                if op_text != "-" {
+                    return None;
+                }
+                let inner = skotch_ast::children(p.syntax())
+                    .iter()
+                    .find_map(KtExpr::cast)
+                    .map(unwrap_parens)?;
+                let KtExpr::Reference(r) = inner else {
+                    return None;
+                };
+                let n = r.name()?;
+                let idx = outer_param_names.iter().position(|p| p == n)?;
+                let param_slot = LocalId(idx as u32);
+                // Look up the param type for the zero literal/result type.
+                let param_ty = f
+                    .value_parameter_list()
+                    .and_then(|pl| {
+                        pl.parameters().nth(idx).and_then(|p| {
+                            p.type_reference()
+                                .and_then(|tr| tr.user_type())
+                                .and_then(|u| u.name())
+                                .and_then(skotch_types::ty_from_name)
+                        })
+                    })
+                    .unwrap_or(Ty::Int);
+                let (zero_const, op) = match param_ty {
+                    Ty::Long => (skotch_mir::MirConst::Long(0), skotch_mir::BinOp::SubL),
+                    Ty::Float => (skotch_mir::MirConst::Float(0.0), skotch_mir::BinOp::SubF),
+                    Ty::Double => (skotch_mir::MirConst::Double(0.0), skotch_mir::BinOp::SubD),
+                    _ => (skotch_mir::MirConst::Int(0), skotch_mir::BinOp::SubI),
+                };
+                let zero_slot = LocalId(*next_slot);
+                *next_slot += 1;
+                extra_locals.push(param_ty.clone());
+                pre_stmts.push(MStmt::Assign {
+                    dest: zero_slot,
+                    value: Rvalue::Const(zero_const),
+                });
+                let res_slot = LocalId(*next_slot);
+                *next_slot += 1;
+                extra_locals.push(param_ty);
+                pre_stmts.push(MStmt::Assign {
+                    dest: res_slot,
+                    value: Rvalue::BinOp {
+                        op,
+                        lhs: zero_slot,
+                        rhs: param_slot,
+                    },
+                });
+                Some(res_slot)
+            }
             other => {
                 let (k, ty) = literal_to_const(&other, strings)?;
                 let slot = LocalId(*next_slot);
@@ -4247,6 +4310,37 @@ mod tests {
                 _ => panic!("expected CheckCast"),
             },
         }
+    }
+
+    #[test]
+    fn typed_lower_if_else_returns_negated_param() {
+        // `fun absVal(x: Int): Int = if (x < 0) -x else x`
+        // Then-arm `-x` is a Prefix-minus on a param ref. Else-arm is the
+        // bare param. The CFG must have the then-block emit `0 - x_slot`
+        // and write the result into the shared result slot.
+        let module = lower(
+            "fun absVal(x: Int): Int = if (x < 0) -x else x",
+            "TestKt",
+        );
+        let f = module
+            .functions
+            .iter()
+            .find(|f| f.name == "absVal")
+            .unwrap();
+        // Block 0 = condition; block 1 = then; block 2 = else; block 3 = ret.
+        assert_eq!(f.blocks.len(), 4);
+        // Then-block must contain a SubI BinOp.
+        let then = &f.blocks[1];
+        let has_sub = then.stmts.iter().any(|s| match s {
+            skotch_mir::Stmt::Assign { value, .. } => matches!(
+                value,
+                skotch_mir::Rvalue::BinOp {
+                    op: skotch_mir::BinOp::SubI,
+                    ..
+                }
+            ),
+        });
+        assert!(has_sub, "then block missing SubI: {then:?}");
     }
 
     #[test]
