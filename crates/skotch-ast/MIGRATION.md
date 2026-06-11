@@ -1092,3 +1092,29 @@ The biggest remaining gaps for fixture parity:
 - Object singletons with INSTANCE + clinit
 - For-in range/iterable loops
 - Cross-file class resolution beyond single-file class_lookup
+
+### 2026-06-11 (session 6 — push 19 cleanup)
+
+149 typed mir-lower unit tests, 612 workspace tests passing.
+
+Session 6 churn:
+- ~30+ small Edit-driven commits in `crates/skotch-mir-lower/src/typed.rs`
+- Net +64 typed mir-lower unit tests (85 → 149)
+- Net +36 workspace tests (576 → 612)
+- Workspace clippy clean throughout
+
+The typed mir-lower port has been the major focus of session 6.
+Next session priorities (subject to user direction):
+- typed mir-lower: extend lookups so binary handler can resolve
+  `param.field` for class-typed params (requires class_fields side
+  table)
+- typeck Pass 2: smart casts after `is` checks, when exhaustiveness
+- LSP migration: replace skotch-syntax::ast consumers with typed
+- Driver cutover (small change once mir-lower has enough parity)
+
+This session has moved the typed pipeline from "barely functional"
+to "handles the bulk of common Kotlin idioms". The remaining gap
+to fixture parity (1300+ goldens) is mostly in patterns we haven't
+touched (lambdas, coroutines, generics, custom property accessors,
+object singletons with INSTANCE+clinit, for-in loops, smart casts,
+cross-file class resolution).
