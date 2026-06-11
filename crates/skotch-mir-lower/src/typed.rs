@@ -2798,6 +2798,53 @@ fn method_simple_body_with_class(
         }
     }
 
+    // Virtual call on `this` to a sibling no-arg method:
+    //   class P { fun a() = 1; fun b() = a() }
+    // Emits Call(Virtual { class, method: "a" }, [this]).
+    if let KtExpr::Call(call) = &body_expr {
+        if let Some(KtExpr::Reference(r)) = call.callee() {
+            if let Some(name) = r.name() {
+                let no_args = call
+                    .value_argument_list()
+                    .map(|a| a.arguments().count() == 0)
+                    .unwrap_or(true);
+                if no_args && name != "println" && name != "print" {
+                    if let Some(cname) = class_name {
+                        let this_slot = skotch_mir::LocalId(0);
+                        let result_slot = skotch_mir::LocalId((1 + param_count) as u32);
+                        // Determine return type from f.return_type when present.
+                        let ret_ty = match f
+                            .return_type()
+                            .and_then(|tr| tr.user_type())
+                            .and_then(|u| u.name())
+                        {
+                            Some(rn) => skotch_types::ty_from_name(rn).unwrap_or(Ty::Any),
+                            None => Ty::Any,
+                        };
+                        let blocks = vec![BasicBlock {
+                            stmts: vec![skotch_mir::Stmt::Assign {
+                                dest: result_slot,
+                                value: skotch_mir::Rvalue::Call {
+                                    kind: skotch_mir::CallKind::Virtual {
+                                        class_name: cname.to_string(),
+                                        method_name: name.to_string(),
+                                    },
+                                    args: vec![this_slot],
+                                },
+                            }],
+                            terminator: if ret_ty == Ty::Unit {
+                                Terminator::Return
+                            } else {
+                                Terminator::ReturnValue(result_slot)
+                            },
+                        }];
+                        return (blocks, vec![ret_ty]);
+                    }
+                }
+            }
+        }
+    }
+
     // println(literal) / print(literal) call body for methods (often
     // appears as `fun show() = println("hi")`).
     if let KtExpr::Call(call) = &body_expr {
@@ -4286,6 +4333,35 @@ mod tests {
         assert_eq!(c.methods.len(), 1);
         assert_eq!(c.methods[0].name, "greet");
         assert_eq!(c.methods[0].return_ty, Ty::String);
+    }
+
+    #[test]
+    fn typed_lower_class_method_virtual_call_sibling() {
+        let module = lower(
+            "class P { fun a(): Int = 1; fun b(): Int = a() }",
+            "TestKt",
+        );
+        let p = module.classes.iter().find(|c| c.name == "P").unwrap();
+        let m = p.methods.iter().find(|m| m.name == "b").unwrap();
+        let block = &m.blocks[0];
+        assert_eq!(block.stmts.len(), 1);
+        match &block.stmts[0] {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::Call { kind, args } => {
+                    match kind {
+                        skotch_mir::CallKind::Virtual { class_name, method_name } => {
+                            assert_eq!(class_name, "P");
+                            assert_eq!(method_name, "a");
+                        }
+                        _ => panic!("expected Virtual"),
+                    }
+                    assert_eq!(args.len(), 1);
+                    assert_eq!(args[0].0, 0); // this
+                }
+                _ => panic!("expected Call"),
+            },
+        }
+        assert!(matches!(block.terminator, Terminator::ReturnValue(_)));
     }
 
     #[test]
