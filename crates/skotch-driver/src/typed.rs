@@ -92,6 +92,45 @@ mod tests {
     }
 
     #[test]
+    fn typed_compile_source_handles_block_with_var_reassign() {
+        let mut interner = Interner::new();
+        let mut diags = Diagnostics::new();
+        let module = compile_source(
+            "fun acc(): Int { var sum = 0; sum = sum + 1; return sum }",
+            "test.kt",
+            "TestKt",
+            &mut interner,
+            &mut diags,
+            None,
+        );
+        let f = module.functions.iter().find(|f| f.name == "acc").unwrap();
+        // 2 Const Assigns (0, 1) + 1 AddI = 3 stmts; ReturnValue terminator.
+        assert!(matches!(
+            f.blocks[0].terminator,
+            skotch_mir::Terminator::ReturnValue(_)
+        ));
+    }
+
+    #[test]
+    fn typed_compile_source_handles_throw_inline_ctor() {
+        let mut interner = Interner::new();
+        let mut diags = Diagnostics::new();
+        let module = compile_source(
+            "fun fail(): Nothing = throw IllegalStateException()",
+            "test.kt",
+            "TestKt",
+            &mut interner,
+            &mut diags,
+            None,
+        );
+        let f = module.functions.iter().find(|f| f.name == "fail").unwrap();
+        assert!(matches!(
+            f.blocks[0].terminator,
+            skotch_mir::Terminator::Throw(_)
+        ));
+    }
+
+    #[test]
     fn typed_compile_source_handles_class_instantiation() {
         let mut interner = Interner::new();
         let mut diags = Diagnostics::new();
