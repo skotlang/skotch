@@ -4109,22 +4109,64 @@ fn try_lower_multi_stmt_block_with_offset(
                                 }
                             }
                         }
-                        // Try Call RHS: `x = compute()` (zero-arg
-                        // top-level fn).
+                        // Try Call RHS: `x = compute(args)` (top-level fn).
                         if let KtExpr::Call(call) = &rhs_expr {
                             if let Some(KtExpr::Reference(rc)) = call.callee() {
                                 if let Some(callee_name) = rc.name() {
                                     if let Some((fid, _)) = fn_lookup.get(callee_name) {
-                                        let arg_count = call
-                                            .value_argument_list()
-                                            .map(|a| a.arguments().count())
-                                            .unwrap_or(0);
-                                        if arg_count == 0 {
+                                        let mut arg_slots: Vec<LocalId> = Vec::new();
+                                        let mut ok = true;
+                                        if let Some(arg_list) =
+                                            call.value_argument_list()
+                                        {
+                                            for arg in arg_list.arguments() {
+                                                let Some(arg_e) = arg.expression() else {
+                                                    ok = false;
+                                                    break;
+                                                };
+                                                match unwrap_parens(arg_e) {
+                                                    KtExpr::Reference(rr) => {
+                                                        let Some(an) = rr.name() else {
+                                                            ok = false;
+                                                            break;
+                                                        };
+                                                        if let Some(s) = name_to_local
+                                                            .iter()
+                                                            .rev()
+                                                            .find(|(n, _)| n == an)
+                                                            .map(|(_, l)| *l)
+                                                        {
+                                                            arg_slots.push(s);
+                                                        } else {
+                                                            ok = false;
+                                                            break;
+                                                        }
+                                                    }
+                                                    other => {
+                                                        let Some((k, ty)) =
+                                                            literal_to_const(&other, strings)
+                                                        else {
+                                                            ok = false;
+                                                            break;
+                                                        };
+                                                        let s = LocalId(next_slot);
+                                                        next_slot += 1;
+                                                        local_tys.push(ty);
+                                                        stmts.push(MStmt::Assign {
+                                                            dest: s,
+                                                            value: skotch_mir::Rvalue::Const(k),
+                                                        });
+                                                        arg_slots.push(s);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        if ok {
                                             stmts.push(MStmt::Assign {
                                                 dest: lhs_slot,
                                                 value: skotch_mir::Rvalue::Call {
                                                     kind: skotch_mir::CallKind::Static(*fid),
-                                                    args: Vec::new(),
+                                                    args: arg_slots,
                                                 },
                                             });
                                             continue;
