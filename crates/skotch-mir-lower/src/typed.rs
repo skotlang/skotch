@@ -1904,6 +1904,58 @@ fn lower_simple_body(
     // Parenthesized passthrough: `(literal)` or `(a + b)`.
     let body_expr = unwrap_parens(body_expr);
 
+    // Array index access: `fun get(arr: IntArray, i: Int): Int = arr[i]`.
+    // Emits Rvalue::ArrayLoad with the array and index slots.
+    if let KtExpr::ArrayAccess(aa) = &body_expr {
+        let children: Vec<_> = skotch_ast::children(aa.syntax()).iter().collect();
+        let array_ref = children
+            .iter()
+            .find_map(|c| KtExpr::cast(c))
+            .map(unwrap_parens);
+        let index_expr = children.iter().find_map(|c| {
+            if c.kind == skotch_syntax::SyntaxKind::INDICES {
+                skotch_ast::children(c)
+                    .iter()
+                    .find_map(KtExpr::cast)
+                    .map(unwrap_parens)
+            } else {
+                None
+            }
+        });
+        if let (Some(KtExpr::Reference(ar)), Some(KtExpr::Reference(ir))) = (array_ref, index_expr) {
+            if let (Some(an), Some(in_)) = (ar.name(), ir.name()) {
+                let param_names: Vec<String> = f
+                    .value_parameter_list()
+                    .map(|pl| {
+                        pl.parameters()
+                            .map(|p| p.name().unwrap_or("").to_string())
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                if let (Some(a_idx), Some(i_idx)) = (
+                    param_names.iter().position(|p| p == an),
+                    param_names.iter().position(|p| p == in_),
+                ) {
+                    let array_slot = skotch_mir::LocalId(a_idx as u32);
+                    let index_slot = skotch_mir::LocalId(i_idx as u32);
+                    let param_count = param_names.len();
+                    let result_slot = skotch_mir::LocalId(param_count as u32);
+                    let blocks = vec![BasicBlock {
+                        stmts: vec![skotch_mir::Stmt::Assign {
+                            dest: result_slot,
+                            value: skotch_mir::Rvalue::ArrayLoad {
+                                array: array_slot,
+                                index: index_slot,
+                            },
+                        }],
+                        terminator: Terminator::ReturnValue(result_slot),
+                    }];
+                    return (blocks, vec![Ty::Int]);
+                }
+            }
+        }
+    }
+
     // `as` type cast: `fun toS(x: Any): String = x as String`.
     // Emits Rvalue::CheckCast with the target class descriptor.
     if let KtExpr::BinaryWithTypeRhs(b) = &body_expr {
@@ -3985,6 +4037,27 @@ mod tests {
                     assert!(matches!(op, skotch_mir::BinOp::MulI));
                 }
                 _ => panic!("expected BinOp"),
+            },
+        }
+        assert!(matches!(block.terminator, Terminator::ReturnValue(_)));
+    }
+
+    #[test]
+    fn typed_lower_array_access_body() {
+        let module = lower(
+            "fun get(arr: IntArray, i: Int): Int = arr[i]",
+            "TestKt",
+        );
+        let f = &module.functions[0];
+        let block = &f.blocks[0];
+        assert_eq!(block.stmts.len(), 1);
+        match &block.stmts[0] {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::ArrayLoad { array, index } => {
+                    assert_eq!(array.0, 0);
+                    assert_eq!(index.0, 1);
+                }
+                _ => panic!("expected ArrayLoad"),
             },
         }
         assert!(matches!(block.terminator, Terminator::ReturnValue(_)));
