@@ -56,4 +56,56 @@ mod tests {
         );
         assert_eq!(module.wrapper_class, "TestKt");
     }
+
+    #[test]
+    fn typed_compile_source_handles_top_level_val_and_fn() {
+        let mut interner = Interner::new();
+        let mut diags = Diagnostics::new();
+        let module = compile_source(
+            "val MAX: Int = 100\nfun overflow(x: Int): Boolean = x > MAX",
+            "test.kt",
+            "TestKt",
+            &mut interner,
+            &mut diags,
+            None,
+        );
+        // Confirm at least one fn made it through.
+        assert!(module.functions.iter().any(|f| f.name == "overflow"));
+    }
+
+    #[test]
+    fn typed_compile_source_handles_class_with_method() {
+        let mut interner = Interner::new();
+        let mut diags = Diagnostics::new();
+        let module = compile_source(
+            "class P(val n: Int) { fun double(): Int = n * 2 }",
+            "test.kt",
+            "TestKt",
+            &mut interner,
+            &mut diags,
+            None,
+        );
+        let cls = module.classes.iter().find(|c| c.name == "P");
+        assert!(cls.is_some(), "expected class P");
+        let cls = cls.unwrap();
+        assert!(cls.methods.iter().any(|m| m.name == "double"));
+    }
+
+    #[test]
+    fn typed_compile_source_handles_if_else() {
+        let mut interner = Interner::new();
+        let mut diags = Diagnostics::new();
+        let module = compile_source(
+            "fun absVal(x: Int): Int = if (x < 0) -x else x",
+            "test.kt",
+            "TestKt",
+            &mut interner,
+            &mut diags,
+            None,
+        );
+        let f = module.functions.iter().find(|f| f.name == "absVal");
+        assert!(f.is_some());
+        // 4-block CFG for if/else.
+        assert_eq!(f.unwrap().blocks.len(), 4);
+    }
 }
