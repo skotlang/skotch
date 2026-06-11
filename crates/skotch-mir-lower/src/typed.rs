@@ -4892,6 +4892,82 @@ fn method_simple_body_full(
         }
     }
 
+    // ArrayAccess on implicit-this field:
+    //   `class P(val arr: IntArray) { fun first(): Int = arr[0] }`
+    // → GetField(this, P, arr) + Const(0) + ArrayLoad(slot, slot).
+    if let KtExpr::ArrayAccess(aa) = &body_expr {
+        let children: Vec<_> = skotch_ast::children(aa.syntax()).iter().collect();
+        let array_ref = children
+            .iter()
+            .find_map(|c| KtExpr::cast(c))
+            .map(unwrap_parens);
+        let index_expr = children.iter().find_map(|c| {
+            if c.kind == skotch_syntax::SyntaxKind::INDICES {
+                skotch_ast::children(c)
+                    .iter()
+                    .find_map(KtExpr::cast)
+                    .map(unwrap_parens)
+            } else {
+                None
+            }
+        });
+        if let (Some(KtExpr::Reference(ar)), Some(index)) = (array_ref, index_expr) {
+            if let (Some(an), Some(cname)) = (ar.name(), class_name) {
+                if let Some((fname, _fty)) = field_names.iter().find(|(n, _)| n == an) {
+                    let this_slot = skotch_mir::LocalId(0);
+                    let mut next_slot = (1 + param_count) as u32;
+                    let mut stmts: Vec<skotch_mir::Stmt> = Vec::new();
+                    let mut extra_locals: Vec<Ty> = Vec::new();
+                    let arr_slot = skotch_mir::LocalId(next_slot);
+                    next_slot += 1;
+                    extra_locals.push(Ty::Any);
+                    stmts.push(skotch_mir::Stmt::Assign {
+                        dest: arr_slot,
+                        value: skotch_mir::Rvalue::GetField {
+                            receiver: this_slot,
+                            class_name: cname.to_string(),
+                            field_name: fname.clone(),
+                        },
+                    });
+                    // Resolve index — Reference (param) or literal.
+                    let idx_slot = match index {
+                        KtExpr::Reference(ir) => {
+                            let in_ = ir.name();
+                            in_.and_then(|n| param_names.iter().position(|p| p == n))
+                                .map(|i| skotch_mir::LocalId((1 + i) as u32))
+                        }
+                        other => literal_to_const(&other, strings).map(|(k, ty)| {
+                            let slot = skotch_mir::LocalId(next_slot);
+                            next_slot += 1;
+                            extra_locals.push(ty);
+                            stmts.push(skotch_mir::Stmt::Assign {
+                                dest: slot,
+                                value: skotch_mir::Rvalue::Const(k),
+                            });
+                            slot
+                        }),
+                    };
+                    if let Some(idx_slot) = idx_slot {
+                        let result_slot = skotch_mir::LocalId(next_slot);
+                        extra_locals.push(Ty::Int);
+                        stmts.push(skotch_mir::Stmt::Assign {
+                            dest: result_slot,
+                            value: skotch_mir::Rvalue::ArrayLoad {
+                                array: arr_slot,
+                                index: idx_slot,
+                            },
+                        });
+                        let blocks = vec![BasicBlock {
+                            stmts,
+                            terminator: Terminator::ReturnValue(result_slot),
+                        }];
+                        return (blocks, extra_locals);
+                    }
+                }
+            }
+        }
+    }
+
     // Binary op on param/field refs or literals:
     //   fun add(a: Int, b: Int) = a + b
     //   fun double() = x * 2      (x is a field)
@@ -6210,6 +6286,38 @@ mod tests {
                 _ => panic!("expected CheckCast"),
             },
         }
+    }
+
+    #[test]
+    fn typed_lower_method_array_access_on_implicit_this_field() {
+        // `class P(val arr: IntArray) { fun first(): Int = arr[0] }`
+        let module = lower(
+            "class P(val arr: IntArray) { fun first(): Int = arr[0] }",
+            "TestKt",
+        );
+        let cls = module.classes.iter().find(|c| c.name == "P").unwrap();
+        let f = cls.methods.iter().find(|m| m.name == "first").unwrap();
+        let block = &f.blocks[0];
+        let has_getfield = block.stmts.iter().any(|s| {
+            matches!(
+                s,
+                skotch_mir::Stmt::Assign {
+                    value: skotch_mir::Rvalue::GetField { .. },
+                    ..
+                }
+            )
+        });
+        let has_arrayload = block.stmts.iter().any(|s| {
+            matches!(
+                s,
+                skotch_mir::Stmt::Assign {
+                    value: skotch_mir::Rvalue::ArrayLoad { .. },
+                    ..
+                }
+            )
+        });
+        assert!(has_getfield, "expected GetField for arr: {block:?}");
+        assert!(has_arrayload, "expected ArrayLoad for arr[0]: {block:?}");
     }
 
     #[test]
