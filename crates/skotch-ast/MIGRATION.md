@@ -1018,3 +1018,30 @@ The legacy mir-lower is still ~25k LOC of dense Decl/Expr/Stmt
 matching. The typed lowerer has roughly 6.5k LOC now and covers a
 useful but not yet complete subset. Continued sessions will keep
 expanding incrementally toward fixture parity.
+
+### 2026-06-11 (session 6 — push 17: nested call args + final session count)
+
+**Multi-stmt val init via static call with args:**
+- `val d = double(x)` in a block body now resolves args
+  recursively (param Reference or literal) and emits
+  Call(Static(fid), args). Previously zero-arg only.
+
+**Static-call body arg accepts nested Call:**
+- `fun outer(x: Int): Int = double(triple(x))` now lowers the
+  top-level Call body and recurses one level into nested Call args.
+- Useful for the common composition pattern.
+
+**Combined-shape regression test:**
+- val + if/else + binary in a single fixture — verifies GetStaticField
+  for the val ref + the rest of the if/else CFG.
+
+**Push 17 totals:**
+- mir-lower: **144 unit tests** (up from 140)
+- Full workspace: **603 tests passing**, 0 failures
+- Workspace clippy: clean
+
+### Session 6 grand totals (revised)
+
+mir-lower typed unit tests **85 → 144** (+59 across the session).
+Full workspace tests **576 → 603** (+27 net). Workspace clippy
+clean throughout.
