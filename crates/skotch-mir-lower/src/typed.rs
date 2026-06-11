@@ -3246,6 +3246,45 @@ fn try_lower_multi_stmt_block_with_offset(
                             } else {
                                 skotch_mir::CallKind::Print
                             };
+                            // Try string-template lowering first
+                            // (`println("hello $x")` shape).
+                            {
+                                let snap = name_to_local.clone();
+                                let lookup = |n: &str| -> Option<LocalId> {
+                                    snap.iter()
+                                        .rev()
+                                        .find(|(name, _)| name == n)
+                                        .map(|(_, l)| *l)
+                                };
+                                let mut probe_slot = *next_slot;
+                                let mut probe_stmts: Vec<MStmt> = Vec::new();
+                                let mut probe_extra: Vec<Ty> = Vec::new();
+                                if let Some((concat_kind, parts)) =
+                                    try_lower_println_template_with_lookup(
+                                        &call,
+                                        strings,
+                                        &mut probe_slot,
+                                        &mut probe_stmts,
+                                        &mut probe_extra,
+                                        &lookup,
+                                    )
+                                {
+                                    *next_slot = probe_slot;
+                                    local_tys.extend(probe_extra);
+                                    body_mstmts.extend(probe_stmts);
+                                    let result_slot = LocalId(*next_slot);
+                                    *next_slot += 1;
+                                    local_tys.push(Ty::Unit);
+                                    body_mstmts.push(MStmt::Assign {
+                                        dest: result_slot,
+                                        value: skotch_mir::Rvalue::Call {
+                                            kind: concat_kind,
+                                            args: parts,
+                                        },
+                                    });
+                                    continue;
+                                }
+                            }
                             let args = call.value_argument_list()?;
                             let arg_exprs: Vec<KtExpr<'_>> =
                                 args.arguments().filter_map(|a| a.expression()).collect();
