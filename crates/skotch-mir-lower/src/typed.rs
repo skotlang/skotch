@@ -1166,6 +1166,283 @@ fn try_lower_when_expression(
     Some((blocks, extra_locals))
 }
 
+/// Flatten an `if/else if/else` chain into a list of `(cond, then_arm)`
+/// pairs plus a final else expression. Returns None when the else
+/// branch is missing (else-less ifs aren't supported here — they need
+/// a fall-through Unit result).
+fn flatten_if_chain<'a>(
+    if_e: &skotch_ast::KtIf<'a>,
+) -> Option<(
+    Vec<(skotch_ast::KtExpr<'a>, skotch_ast::KtExpr<'a>)>,
+    skotch_ast::KtExpr<'a>,
+)> {
+    use skotch_ast::KtExpr;
+    let mut arms: Vec<(KtExpr<'a>, KtExpr<'a>)> = Vec::new();
+    let mut current: skotch_ast::KtIf<'a> = *if_e;
+    loop {
+        let cond = current.condition().and_then(|c| c.expression())?;
+        let then_expr = current.then_branch().and_then(|t| t.expression())?;
+        let else_expr = current.else_branch().and_then(|e| e.expression())?;
+        arms.push((unwrap_parens(cond), unwrap_parens(then_expr)));
+        let else_expr = unwrap_parens(else_expr);
+        match else_expr {
+            KtExpr::If(inner_if) => current = inner_if,
+            _ => return Some((arms, else_expr)),
+        }
+    }
+}
+
+/// Lower an N-arm `if (cond1) v1 else if (cond2) v2 ... else vN+1`
+/// chain (N ≥ 2). CFG layout for N arms:
+///   block 0..N-1:   cond_i eval, Branch(cond_i, N+i, i+1 OR else_block)
+///   block N..2N-1:  arm_i stmts (writes result), Goto(exit)
+///   block 2N:       else stmts (writes result), Goto(exit)
+///   block 2N+1:     ReturnValue(result)
+fn try_lower_if_chain(
+    arms: &[(skotch_ast::KtExpr<'_>, skotch_ast::KtExpr<'_>)],
+    else_expr: &skotch_ast::KtExpr<'_>,
+    f: skotch_ast::KtFun<'_>,
+    strings: &mut Vec<String>,
+) -> Option<(Vec<BasicBlock>, Vec<Ty>)> {
+    use skotch_ast::KtExpr;
+    use skotch_mir::{LocalId, Rvalue, Stmt as MStmt};
+
+    let param_count = f
+        .value_parameter_list()
+        .map(|pl| pl.parameters().count())
+        .unwrap_or(0);
+    let outer_param_names: Vec<String> = f
+        .value_parameter_list()
+        .map(|pl| {
+            pl.parameters()
+                .map(|p| p.name().unwrap_or("").to_string())
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let n = arms.len();
+    let arm_block_base = n;
+    let else_block = 2 * n;
+    let exit_block = 2 * n + 1;
+
+    let mut next_slot = param_count as u32;
+    let mut extra_locals: Vec<Ty> = Vec::new();
+
+    // Reserve result_slot up front so all arms share it.
+    let result_slot = LocalId(next_slot);
+    next_slot += 1;
+    extra_locals.push(Ty::Any);
+
+    // Operand resolver: param Reference, Prefix-minus on param, or
+    // literal via literal_to_const. literal_to_const handles
+    // Prefix-minus on numeric literals via constant folding so this
+    // arm is tried FIRST.
+    let resolve_operand = |e: KtExpr<'_>,
+                           next_slot: &mut u32,
+                           pre_stmts: &mut Vec<MStmt>,
+                           extra_locals: &mut Vec<Ty>,
+                           strings: &mut Vec<String>|
+     -> Option<LocalId> {
+        let e = unwrap_parens(e);
+        if let Some((k, ty)) = literal_to_const(&e, strings) {
+            let slot = LocalId(*next_slot);
+            *next_slot += 1;
+            extra_locals.push(ty);
+            pre_stmts.push(MStmt::Assign {
+                dest: slot,
+                value: Rvalue::Const(k),
+            });
+            return Some(slot);
+        }
+        match e {
+            KtExpr::Reference(r) => {
+                let n = r.name()?;
+                let idx = outer_param_names.iter().position(|p| p == n)?;
+                Some(LocalId(idx as u32))
+            }
+            KtExpr::Prefix(p) => {
+                let op_text = skotch_ast::children(p.syntax())
+                    .iter()
+                    .find_map(|c| {
+                        if c.kind == skotch_syntax::SyntaxKind::OPERATION_REFERENCE {
+                            skotch_ast::KtOperationReference::cast(c).map(|o| o.text())
+                        } else {
+                            None
+                        }
+                    })
+                    .unwrap_or_default();
+                if op_text != "-" {
+                    return None;
+                }
+                let inner = skotch_ast::children(p.syntax())
+                    .iter()
+                    .find_map(KtExpr::cast)
+                    .map(unwrap_parens)?;
+                let KtExpr::Reference(r) = inner else {
+                    return None;
+                };
+                let n = r.name()?;
+                let idx = outer_param_names.iter().position(|p| p == n)?;
+                let param_slot = LocalId(idx as u32);
+                let zero_slot = LocalId(*next_slot);
+                *next_slot += 1;
+                extra_locals.push(Ty::Int);
+                pre_stmts.push(MStmt::Assign {
+                    dest: zero_slot,
+                    value: Rvalue::Const(skotch_mir::MirConst::Int(0)),
+                });
+                let res_slot = LocalId(*next_slot);
+                *next_slot += 1;
+                extra_locals.push(Ty::Int);
+                pre_stmts.push(MStmt::Assign {
+                    dest: res_slot,
+                    value: Rvalue::BinOp {
+                        op: skotch_mir::BinOp::SubI,
+                        lhs: zero_slot,
+                        rhs: param_slot,
+                    },
+                });
+                Some(res_slot)
+            }
+            other => {
+                let (k, ty) = literal_to_const(&other, strings)?;
+                let slot = LocalId(*next_slot);
+                *next_slot += 1;
+                extra_locals.push(ty);
+                pre_stmts.push(MStmt::Assign {
+                    dest: slot,
+                    value: Rvalue::Const(k),
+                });
+                Some(slot)
+            }
+        }
+    };
+
+    // Lower a condition to (cond_slot, optional_swap_branches). Bool
+    // refs/!ref get direct dispatch; binary comparisons get a BinOp.
+    let lower_cond = |cond_expr: KtExpr<'_>,
+                      pre_stmts: &mut Vec<MStmt>,
+                      next_slot: &mut u32,
+                      extra_locals: &mut Vec<Ty>,
+                      strings: &mut Vec<String>|
+     -> Option<(LocalId, bool)> {
+        let cond_expr = unwrap_parens(cond_expr);
+        match cond_expr {
+            KtExpr::Binary(b) => {
+                let op = b.operation().map(|o| o.text()).unwrap_or_default();
+                let mir_op = match op.as_str() {
+                    "==" => skotch_mir::BinOp::CmpEq,
+                    "!=" => skotch_mir::BinOp::CmpNe,
+                    "<" => skotch_mir::BinOp::CmpLt,
+                    ">" => skotch_mir::BinOp::CmpGt,
+                    "<=" => skotch_mir::BinOp::CmpLe,
+                    ">=" => skotch_mir::BinOp::CmpGe,
+                    _ => return None,
+                };
+                let lhs = resolve_operand(
+                    b.lhs()?,
+                    next_slot,
+                    pre_stmts,
+                    extra_locals,
+                    strings,
+                )?;
+                let rhs = resolve_operand(
+                    b.rhs()?,
+                    next_slot,
+                    pre_stmts,
+                    extra_locals,
+                    strings,
+                )?;
+                let slot = LocalId(*next_slot);
+                *next_slot += 1;
+                extra_locals.push(Ty::Bool);
+                pre_stmts.push(MStmt::Assign {
+                    dest: slot,
+                    value: Rvalue::BinOp { op: mir_op, lhs, rhs },
+                });
+                Some((slot, false))
+            }
+            KtExpr::Reference(r) => {
+                let n = r.name()?;
+                let idx = outer_param_names.iter().position(|p| p == n)?;
+                Some((LocalId(idx as u32), false))
+            }
+            _ => None,
+        }
+    };
+
+    let mut cond_blocks: Vec<BasicBlock> = Vec::new();
+    let mut arm_blocks: Vec<BasicBlock> = Vec::new();
+    // Lower each cond + arm.
+    for (i, (cond_expr, arm_expr)) in arms.iter().enumerate() {
+        // Cond eval block.
+        let mut b_cond: Vec<MStmt> = Vec::new();
+        let (cond_slot, _swap) = lower_cond(
+            *cond_expr,
+            &mut b_cond,
+            &mut next_slot,
+            &mut extra_locals,
+            strings,
+        )?;
+        let then_block = (arm_block_base + i) as u32;
+        // If not last cond: fall through to next cond block (i+1).
+        // If last cond: fall through to else_block.
+        let next_else = if i + 1 < n { (i + 1) as u32 } else { else_block as u32 };
+        cond_blocks.push(BasicBlock {
+            stmts: b_cond,
+            terminator: Terminator::Branch {
+                cond: cond_slot,
+                then_block,
+                else_block: next_else,
+            },
+        });
+        // Arm body block.
+        let mut b_arm: Vec<MStmt> = Vec::new();
+        let arm_slot = resolve_operand(
+            *arm_expr,
+            &mut next_slot,
+            &mut b_arm,
+            &mut extra_locals,
+            strings,
+        )?;
+        b_arm.push(MStmt::Assign {
+            dest: result_slot,
+            value: Rvalue::Local(arm_slot),
+        });
+        arm_blocks.push(BasicBlock {
+            stmts: b_arm,
+            terminator: Terminator::Goto(exit_block as u32),
+        });
+    }
+    // Else block.
+    let mut b_else: Vec<MStmt> = Vec::new();
+    let else_slot = resolve_operand(
+        *else_expr,
+        &mut next_slot,
+        &mut b_else,
+        &mut extra_locals,
+        strings,
+    )?;
+    b_else.push(MStmt::Assign {
+        dest: result_slot,
+        value: Rvalue::Local(else_slot),
+    });
+
+    let mut blocks: Vec<BasicBlock> = Vec::with_capacity(2 * n + 2);
+    blocks.extend(cond_blocks);
+    blocks.extend(arm_blocks);
+    blocks.push(BasicBlock {
+        stmts: b_else,
+        terminator: Terminator::Goto(exit_block as u32),
+    });
+    blocks.push(BasicBlock {
+        stmts: Vec::new(),
+        terminator: Terminator::ReturnValue(result_slot),
+    });
+
+    Some((blocks, extra_locals))
+}
+
 /// Try to lower a simple `if (cond) then-arm else else-arm` expression
 /// body. Returns None when the if's condition / arms / else are not
 /// simple binary-comparison + literal/ref arms.
@@ -1177,6 +1454,15 @@ fn try_lower_if_expression(
 ) -> Option<(Vec<BasicBlock>, Vec<Ty>)> {
     use skotch_ast::KtExpr;
     use skotch_mir::{LocalId, Rvalue, Stmt as MStmt};
+
+    // Multi-arm if-else-if chain → dedicated lowerer with a
+    // 2N+2 block CFG. Single-arm if/else (chain length 1) falls
+    // through to the existing 4-block code below.
+    if let Some((arms, else_expr)) = flatten_if_chain(if_e) {
+        if arms.len() >= 2 {
+            return try_lower_if_chain(&arms, &else_expr, f, strings);
+        }
+    }
 
     let param_count = f
         .value_parameter_list()
@@ -5207,6 +5493,55 @@ mod tests {
                 _ => panic!("expected CheckCast"),
             },
         }
+    }
+
+    #[test]
+    fn typed_lower_if_else_if_chain_three_arms() {
+        // `fun signOf(x: Int): Int = if (x > 0) 1 else if (x < 0) -1 else 0`
+        // 2 arms (>0, <0) + else. Chain CFG: 2N+2 = 6 blocks.
+        let module = lower(
+            "fun signOf(x: Int): Int = if (x > 0) 1 else if (x < 0) -1 else 0",
+            "TestKt",
+        );
+        let f = module
+            .functions
+            .iter()
+            .find(|f| f.name == "signOf")
+            .unwrap();
+        assert_eq!(f.blocks.len(), 6, "expected 2N+2=6 blocks for N=2 arms");
+        // Block 0: cond for arm 0 (x > 0)
+        // Block 1: cond for arm 1 (x < 0)
+        // Block 2: arm 0 result (=1)
+        // Block 3: arm 1 result (=-1)
+        // Block 4: else (=0)
+        // Block 5: ReturnValue
+        match &f.blocks[0].terminator {
+            skotch_mir::Terminator::Branch {
+                then_block,
+                else_block,
+                ..
+            } => {
+                assert_eq!(*then_block, 2);
+                assert_eq!(*else_block, 1);
+            }
+            other => panic!("block 0 should Branch, got {other:?}"),
+        }
+        match &f.blocks[1].terminator {
+            skotch_mir::Terminator::Branch {
+                then_block,
+                else_block,
+                ..
+            } => {
+                assert_eq!(*then_block, 3);
+                assert_eq!(*else_block, 4);
+            }
+            other => panic!("block 1 should Branch, got {other:?}"),
+        }
+        // Block 5 = exit, ReturnValue.
+        assert!(matches!(
+            f.blocks[5].terminator,
+            skotch_mir::Terminator::ReturnValue(_)
+        ));
     }
 
     #[test]
