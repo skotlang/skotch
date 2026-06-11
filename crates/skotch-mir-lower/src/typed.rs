@@ -2059,17 +2059,59 @@ fn try_lower_multi_stmt_block_with_offset(
                 name_to_local.push((name.to_string(), slot));
                 continue;
             }
-            // Try static call: `val x = helper()` where helper is a
-            // top-level fn in fn_lookup. Only zero-arg calls.
+            // Try static call: `val x = helper(args)` where helper is
+            // a top-level fn in fn_lookup. Args resolve as Reference
+            // to a known local/param or literal Const.
             if let KtExpr::Call(call) = &init {
                 if let Some(KtExpr::Reference(rc)) = call.callee() {
                     if let Some(callee_name) = rc.name() {
                         if let Some((fid, ret)) = fn_lookup.get(callee_name) {
-                            let arg_count = call
-                                .value_argument_list()
-                                .map(|a| a.arguments().count())
-                                .unwrap_or(0);
-                            if arg_count == 0 {
+                            let mut arg_slots: Vec<LocalId> = Vec::new();
+                            let mut ok = true;
+                            if let Some(arg_list) = call.value_argument_list() {
+                                for arg in arg_list.arguments() {
+                                    let Some(arg_expr) = arg.expression() else {
+                                        ok = false;
+                                        break;
+                                    };
+                                    match unwrap_parens(arg_expr) {
+                                        KtExpr::Reference(rr) => {
+                                            let Some(an) = rr.name() else {
+                                                ok = false;
+                                                break;
+                                            };
+                                            if let Some(slot) = name_to_local
+                                                .iter()
+                                                .rev()
+                                                .find(|(name, _)| name == an)
+                                                .map(|(_, l)| *l)
+                                            {
+                                                arg_slots.push(slot);
+                                            } else {
+                                                ok = false;
+                                                break;
+                                            }
+                                        }
+                                        other => match literal_to_const(&other, strings) {
+                                            Some((k, ty)) => {
+                                                let slot = LocalId(next_slot);
+                                                next_slot += 1;
+                                                local_tys.push(ty);
+                                                stmts.push(MStmt::Assign {
+                                                    dest: slot,
+                                                    value: skotch_mir::Rvalue::Const(k),
+                                                });
+                                                arg_slots.push(slot);
+                                            }
+                                            None => {
+                                                ok = false;
+                                                break;
+                                            }
+                                        },
+                                    }
+                                }
+                            }
+                            if ok {
                                 let slot = LocalId(next_slot);
                                 next_slot += 1;
                                 local_tys.push(ret.clone());
@@ -2077,7 +2119,7 @@ fn try_lower_multi_stmt_block_with_offset(
                                     dest: slot,
                                     value: skotch_mir::Rvalue::Call {
                                         kind: skotch_mir::CallKind::Static(*fid),
-                                        args: Vec::new(),
+                                        args: arg_slots,
                                     },
                                 });
                                 name_to_local.push((name.to_string(), slot));
@@ -6453,6 +6495,30 @@ mod tests {
                 _ => panic!("expected CheckCast"),
             },
         }
+    }
+
+    #[test]
+    fn typed_lower_block_val_init_call_with_args() {
+        // `fun double(x: Int): Int = x * 2
+        //  fun calc(x: Int): Int { val d = double(x); return d }`
+        let module = lower(
+            "fun double(x: Int): Int = x * 2\nfun calc(x: Int): Int { val d = double(x); return d }",
+            "TestKt",
+        );
+        let f = module.functions.iter().find(|f| f.name == "calc").unwrap();
+        let block = &f.blocks[0];
+        let call_stmt = block.stmts.iter().find_map(|s| match s {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::Call {
+                    kind: skotch_mir::CallKind::Static(_),
+                    args,
+                } => Some(args.clone()),
+                _ => None,
+            },
+        });
+        let args = call_stmt.expect("expected Static Call for double(x)");
+        assert_eq!(args.len(), 1);
+        assert_eq!(args[0].0, 0); // x at slot 0
     }
 
     #[test]
