@@ -730,3 +730,106 @@ the existing body-lowering scaffolding. Common mid-complexity
 Kotlin idioms are now covered; the remaining gaps are
 control-flow inside loop bodies, lambdas, coroutines, and
 generic methods.
+
+### 2026-06-11 (session 6 — push 12: ctor + class instantiation + chains)
+
+Substantial new coverage in `skotch_mir_lower::typed`:
+
+**Class instantiation + class call sites:**
+- `class_lookup` map (name → primary-ctor param types) built in
+  pre-pass alongside `fn_lookup` and `val_lookup`. Threaded into
+  `lower_simple_body`.
+- `fun make(): P = P()` and `fun mk(): P = P(a, b)` lower to
+  `NewInstance(P)` + `Call(Constructor(P), [new_slot, args...])` —
+  args resolve through the same param/val/literal ladder.
+- `fun useIt(b: Box): R = b.method(args)` — method call on a
+  param of class type. Detects the `DotQualified(Reference,
+  Call)` shape (NOT `Call(DotQualified, ...)` — kotlinc parses
+  it as the former). Emits `Call(Virtual{class, method}, [recv,
+  args...])`.
+- `fun getX(b: Box): Int = b.x` — direct field access through a
+  param of class type. Emits `GetField(recv, ClassName, field)`.
+
+**Primary constructor body:**
+- `constructor_from_primary` now produces a real body instead of
+  empty Return:
+  1. Locals: `this` at slot 0, user params at slots 1..=N
+  2. Super call via `Call(Constructor(parent_or_Object), [this])`
+     — super class found via `super_type_list().entries()` and
+     mapped through `kotlin_to_jvm_class` so stdlib
+     `RuntimeException` resolves to `java/lang/RuntimeException`.
+  3. PutField for each `val`/`var` primary param.
+  4. PutField for each class-body literal-init property (Int/
+     Long/Float/Double/Bool — String deferred until shared
+     strings table is plumbed).
+
+**If/else-if chain support:**
+- `flatten_if_chain` walks an arbitrarily-nested else-if chain
+  into `[(cond, then), ...]` + final else.
+- When chain ≥ 2 arms, dispatch to `try_lower_if_chain` which
+  builds a 2N+2 block CFG (N cond blocks, N arm blocks, 1 else,
+  1 exit).
+- Operand resolver tries `literal_to_const` FIRST so
+  `Prefix(-, lit)` folds via the constant-folding path instead
+  of falling through to the Prefix-Reference arm.
+- Bool-param conditions also accepted as the cond itself
+  (no comparison needed); `!boolParam` swaps then/else block
+  targets.
+
+**Body lowering expansions:**
+- Numeric literals: Long (`100L`), Float (`0.5f`), Double
+  (`0.5`) via `literal_to_const` extension. Used by both
+  expression-body return path and BinOp operand resolution.
+- Char literal (`'A'` → `MirConst::Int(65)`); recognizes `\n`,
+  `\t`, `\r`, `\\`, `\'`, `\"`, `\0`.
+- Constant folding: `-42` → `MirConst::Int(-42)`; `-0.5` →
+  `MirConst::Double(-0.5)`.
+- Explicit `this.field` body for class methods (mirrors implicit
+  `field` body's GetField emission).
+- Binary operand resolver gets `KtExpr::Prefix(-, x)` support:
+  `0 - x` emit, typed to match the inner operand.
+- `if/else` arms accept Bool-param ref as cond + `!boolParam`
+  with branch swap; arms accept Prefix-minus on param (`-x`).
+- Multi-stmt block val-init binary now resolves literal
+  operands via materialized Const slots.
+- Multi-stmt block `return <literal>` and `return a + b`
+  shapes (previously only `return <ref>`).
+- Multi-stmt block var reassignment: `var x = 0; x = x + 1`
+  reuses the same slot.
+- Static-call body args accept top-level val refs (GetStaticField
+  threaded through the arg resolver).
+
+**Push 12 totals:**
+- mir-lower: **119 unit tests** (up from 85 at start of session)
+- Full workspace: **576 tests passing**, 0 failures
+- Clippy: clean across changed crates
+
+Common Kotlin idioms now lowering end-to-end through typed
+pipeline:
+- `class P(val x: Int)` — full ctor body with super + putfields
+- `class P { val x: Int = 100 }` — class-body init in ctor
+- `fun make(): P = P()` / `fun mk(): P = P(1, 2)` — class
+  instantiation
+- `fun get(b: Box): Int = b.x` — param.field access
+- `fun call(b: Box): Int = b.method()` — virtual method call
+- `fun signOf(x: Int): Int = if (x > 0) 1 else if (x < 0) -1 else 0`
+  — if-else-if chain
+- `fun absVal(x: Int): Int = if (x < 0) -x else x` — unary minus arm
+- `fun pick(b: Boolean, a: Int, c: Int): Int = if (b) a else c`
+  — bool-param cond
+- `fun calc(): Int { val a = 1; val b = 2; return a + b }`
+  — block with return-binary
+- `fun acc(): Int { var sum = 0; sum = sum + 1; return sum }`
+  — var reassignment
+- `fun big(): Long = 100L`, `fun pi(): Float = 0.5f`, `fun a():
+  Char = 'A'` — wide numeric + char literals
+
+**Remaining for parity:**
+- Complex control flow: for-in loops, try/catch, smart casts,
+  when with subjects, lambdas
+- Generic methods + type parameter erasure
+- Coroutine state machine
+- Custom property accessors with bodies
+- Enum entry methods + companion objects with bodies
+- Cross-file user-class resolution beyond the current single-file
+  class_lookup
