@@ -1904,6 +1904,46 @@ fn lower_simple_body(
     // Parenthesized passthrough: `(literal)` or `(a + b)`.
     let body_expr = unwrap_parens(body_expr);
 
+    // Array length access: `fun len(arr: IntArray): Int = arr.size`.
+    // Emits Rvalue::ArrayLength on the array param slot.
+    if let KtExpr::DotQualified(dq) = &body_expr {
+        let children: Vec<_> = skotch_ast::children(dq.syntax()).iter().collect();
+        let exprs: Vec<KtExpr<'_>> =
+            children.iter().filter_map(|c| KtExpr::cast(c)).collect();
+        if exprs.len() == 2 {
+            if let (KtExpr::Reference(arr_ref), KtExpr::Reference(prop_ref)) =
+                (&exprs[0], &exprs[1])
+            {
+                let prop_name = prop_ref.name();
+                if prop_name == Some("size") {
+                    if let Some(arr_name) = arr_ref.name() {
+                        let param_names: Vec<String> = f
+                            .value_parameter_list()
+                            .map(|pl| {
+                                pl.parameters()
+                                    .map(|p| p.name().unwrap_or("").to_string())
+                                    .collect()
+                            })
+                            .unwrap_or_default();
+                        if let Some(idx) = param_names.iter().position(|p| p == arr_name) {
+                            let arr_slot = skotch_mir::LocalId(idx as u32);
+                            let param_count = param_names.len();
+                            let result_slot = skotch_mir::LocalId(param_count as u32);
+                            let blocks = vec![BasicBlock {
+                                stmts: vec![skotch_mir::Stmt::Assign {
+                                    dest: result_slot,
+                                    value: skotch_mir::Rvalue::ArrayLength(arr_slot),
+                                }],
+                                terminator: Terminator::ReturnValue(result_slot),
+                            }];
+                            return (blocks, vec![Ty::Int]);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // Array index access: `fun get(arr: IntArray, i: Int): Int = arr[i]`.
     // Emits Rvalue::ArrayLoad with the array and index slots.
     if let KtExpr::ArrayAccess(aa) = &body_expr {
@@ -4040,6 +4080,24 @@ mod tests {
             },
         }
         assert!(matches!(block.terminator, Terminator::ReturnValue(_)));
+    }
+
+    #[test]
+    fn typed_lower_array_size_body() {
+        let module = lower(
+            "fun len(arr: IntArray): Int = arr.size",
+            "TestKt",
+        );
+        let f = &module.functions[0];
+        let block = &f.blocks[0];
+        match &block.stmts[0] {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::ArrayLength(slot) => {
+                    assert_eq!(slot.0, 0);
+                }
+                _ => panic!("expected ArrayLength"),
+            },
+        }
     }
 
     #[test]
