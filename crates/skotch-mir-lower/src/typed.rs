@@ -1688,11 +1688,14 @@ fn try_lower_try_expression(
 /// Try to lower a simple `if (cond) then-arm else else-arm` expression
 /// body. Returns None when the if's condition / arms / else are not
 /// simple binary-comparison + literal/ref arms.
+#[allow(clippy::too_many_arguments)]
 fn try_lower_if_expression(
     if_e: &skotch_ast::KtIf<'_>,
     f: skotch_ast::KtFun<'_>,
     strings: &mut Vec<String>,
     fn_lookup: &rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)>,
+    val_lookup: &rustc_hash::FxHashMap<String, Ty>,
+    wrapper_class: &str,
 ) -> Option<(Vec<BasicBlock>, Vec<Ty>)> {
     use skotch_ast::KtExpr;
     use skotch_mir::{LocalId, Rvalue, Stmt as MStmt};
@@ -1778,8 +1781,25 @@ fn try_lower_if_expression(
         match e {
             KtExpr::Reference(r) => {
                 let n = r.name()?;
-                let idx = outer_param_names.iter().position(|p| p == n)?;
-                Some(LocalId(idx as u32))
+                if let Some(idx) = outer_param_names.iter().position(|p| p == n) {
+                    return Some(LocalId(idx as u32));
+                }
+                // Top-level val ref → GetStaticField.
+                if let Some(val_ty) = val_lookup.get(n) {
+                    let slot = LocalId(*next_slot);
+                    *next_slot += 1;
+                    extra_locals.push(val_ty.clone());
+                    pre_stmts.push(MStmt::Assign {
+                        dest: slot,
+                        value: Rvalue::GetStaticField {
+                            class_name: wrapper_class.to_string(),
+                            field_name: n.to_string(),
+                            descriptor: ty_to_descriptor(val_ty),
+                        },
+                    });
+                    return Some(slot);
+                }
+                None
             }
             // Top-level fn call as an arm: `helper(x)` or `helper()`.
             // Args resolve as param Reference (existing locals) or
@@ -3964,7 +3984,14 @@ fn lower_simple_body(
     //   block 2: result_local = else-arm; Goto(3)
     //   block 3: ReturnValue(result_local)
     if let KtExpr::If(if_e) = &body_expr {
-        if let Some(blocks_and_locals) = try_lower_if_expression(if_e, f, strings, fn_lookup) {
+        if let Some(blocks_and_locals) = try_lower_if_expression(
+            if_e,
+            f,
+            strings,
+            fn_lookup,
+            val_lookup,
+            wrapper_class,
+        ) {
             return blocks_and_locals;
         }
     }
@@ -7724,6 +7751,27 @@ mod tests {
                 _ => panic!("expected CheckCast"),
             },
         }
+    }
+
+    #[test]
+    fn typed_lower_if_arm_top_level_val_ref() {
+        // `val MAX: Int = 100
+        //  fun clamp(x: Int): Int = if (x > 0) MAX else x`
+        // Then-arm is a top-level val Reference → should GetStaticField.
+        let module = lower(
+            "val MAX: Int = 100\nfun clamp(x: Int): Int = if (x > 0) MAX else x",
+            "TestKt",
+        );
+        let f = module.functions.iter().find(|f| f.name == "clamp").unwrap();
+        // Block 1 is the then arm.
+        let then = &f.blocks[1];
+        let has_getstatic = then.stmts.iter().any(|s| match s {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::GetStaticField { field_name, .. } => field_name == "MAX",
+                _ => false,
+            },
+        });
+        assert!(has_getstatic, "expected GetStaticField for MAX in then arm: {then:?}");
     }
 
     #[test]
