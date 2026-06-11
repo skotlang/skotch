@@ -4132,6 +4132,7 @@ fn lower_simple_body(
                 f: skotch_ast::KtFun<'_>,
                 param_names: &[String],
                 val_lookup: &rustc_hash::FxHashMap<String, Ty>,
+                fn_lookup: &rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)>,
                 wrapper_class: &str,
                 next_slot: &mut u32,
                 pre_stmts: &mut Vec<skotch_mir::Stmt>,
@@ -4163,6 +4164,45 @@ fn lower_simple_body(
                         }
                         None
                     }
+                    KtExpr::Call(call) => {
+                        // Top-level fn call as a binary operand. Args
+                        // resolve recursively through resolve_operand_rec.
+                        let callee_name = match call.callee() {
+                            Some(KtExpr::Reference(r)) => r.name()?,
+                            _ => return None,
+                        };
+                        let (fid, ret_ty) = fn_lookup.get(callee_name)?;
+                        let mut arg_slots: Vec<skotch_mir::LocalId> = Vec::new();
+                        if let Some(arg_list) = call.value_argument_list() {
+                            for arg in arg_list.arguments() {
+                                let arg_expr = arg.expression()?;
+                                let slot = resolve_operand_rec(
+                                    arg_expr,
+                                    f,
+                                    param_names,
+                                    val_lookup,
+                                    fn_lookup,
+                                    wrapper_class,
+                                    next_slot,
+                                    pre_stmts,
+                                    extra_locals,
+                                    strings,
+                                )?;
+                                arg_slots.push(slot);
+                            }
+                        }
+                        let result_slot = skotch_mir::LocalId(*next_slot);
+                        *next_slot += 1;
+                        extra_locals.push(ret_ty.clone());
+                        pre_stmts.push(skotch_mir::Stmt::Assign {
+                            dest: result_slot,
+                            value: skotch_mir::Rvalue::Call {
+                                kind: skotch_mir::CallKind::Static(*fid),
+                                args: arg_slots,
+                            },
+                        });
+                        Some(result_slot)
+                    }
                     KtExpr::Binary(inner_b) => {
                         // Recurse: lower the inner binary into its own slot.
                         let inner_lhs = resolve_operand_rec(
@@ -4170,6 +4210,7 @@ fn lower_simple_body(
                             f,
                             param_names,
                             val_lookup,
+                            fn_lookup,
                             wrapper_class,
                             next_slot,
                             pre_stmts,
@@ -4181,6 +4222,7 @@ fn lower_simple_body(
                             f,
                             param_names,
                             val_lookup,
+                            fn_lookup,
                             wrapper_class,
                             next_slot,
                             pre_stmts,
@@ -4253,6 +4295,7 @@ fn lower_simple_body(
                             f,
                             param_names,
                             val_lookup,
+                            fn_lookup,
                             wrapper_class,
                             next_slot,
                             pre_stmts,
@@ -4311,6 +4354,7 @@ fn lower_simple_body(
                     f,
                     &param_names,
                     val_lookup,
+                    fn_lookup,
                     wrapper_class,
                     next_slot,
                     pre_stmts,
@@ -6409,6 +6453,45 @@ mod tests {
                 _ => panic!("expected CheckCast"),
             },
         }
+    }
+
+    #[test]
+    fn typed_lower_binary_with_call_operand() {
+        // `fun double(x: Int): Int = x * 2
+        //  fun calc(x: Int): Int = double(x) + 1`
+        // The lhs of the outer Binary is a Call to a top-level fn.
+        let module = lower(
+            "fun double(x: Int): Int = x * 2\nfun calc(x: Int): Int = double(x) + 1",
+            "TestKt",
+        );
+        let f = module.functions.iter().find(|f| f.name == "calc").unwrap();
+        let block = &f.blocks[0];
+        let has_static_call = block.stmts.iter().any(|s| {
+            matches!(
+                s,
+                skotch_mir::Stmt::Assign {
+                    value: skotch_mir::Rvalue::Call {
+                        kind: skotch_mir::CallKind::Static(_),
+                        ..
+                    },
+                    ..
+                }
+            )
+        });
+        let has_add = block.stmts.iter().any(|s| {
+            matches!(
+                s,
+                skotch_mir::Stmt::Assign {
+                    value: skotch_mir::Rvalue::BinOp {
+                        op: skotch_mir::BinOp::AddI,
+                        ..
+                    },
+                    ..
+                }
+            )
+        });
+        assert!(has_static_call, "expected Static call to double: {block:?}");
+        assert!(has_add, "expected AddI for (double_result) + 1: {block:?}");
     }
 
     #[test]
