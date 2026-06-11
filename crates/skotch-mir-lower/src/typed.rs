@@ -5265,19 +5265,55 @@ fn method_simple_body_full(
     //   fun bump() = x + 1
     if let KtExpr::Binary(b) = &body_expr {
         let op_text = b.operation().map(|o| o.text()).unwrap_or_default();
-        let mir_op = match op_text.as_str() {
-            "+" => Some(skotch_mir::BinOp::AddI),
-            "-" => Some(skotch_mir::BinOp::SubI),
-            "*" => Some(skotch_mir::BinOp::MulI),
-            "/" => Some(skotch_mir::BinOp::DivI),
-            "%" => Some(skotch_mir::BinOp::ModI),
-            "==" => Some(skotch_mir::BinOp::CmpEq),
-            "!=" => Some(skotch_mir::BinOp::CmpNe),
-            "<" => Some(skotch_mir::BinOp::CmpLt),
-            ">" => Some(skotch_mir::BinOp::CmpGt),
-            "<=" => Some(skotch_mir::BinOp::CmpLe),
-            ">=" => Some(skotch_mir::BinOp::CmpGe),
-            _ => None,
+        // Check whether either operand is String-typed (literal or
+        // String-typed param/field) to select ConcatStr for `+`.
+        let operand_is_str = |e: &KtExpr<'_>| -> bool {
+            let e = unwrap_parens(*e);
+            match e {
+                KtExpr::String(_) => true,
+                KtExpr::Reference(rr) => {
+                    let Some(n) = rr.name() else { return false };
+                    // Param with String type?
+                    if let Some(idx) = param_names.iter().position(|p| p == n) {
+                        let pt = f.value_parameter_list().and_then(|pl| {
+                            pl.parameters().nth(idx).and_then(|p| {
+                                p.type_reference()
+                                    .and_then(|tr| tr.user_type())
+                                    .and_then(|u| u.name())
+                                    .and_then(skotch_types::ty_from_name)
+                            })
+                        });
+                        return pt == Some(Ty::String);
+                    }
+                    // Implicit-this field with String type?
+                    if let Some((_, fty)) = field_names.iter().find(|(n2, _)| n2 == n) {
+                        return fty == &Ty::String;
+                    }
+                    false
+                }
+                _ => false,
+            }
+        };
+        let is_str_concat = op_text == "+"
+            && (b.lhs().as_ref().map(operand_is_str).unwrap_or(false)
+                || b.rhs().as_ref().map(operand_is_str).unwrap_or(false));
+        let mir_op = if is_str_concat {
+            Some(skotch_mir::BinOp::ConcatStr)
+        } else {
+            match op_text.as_str() {
+                "+" => Some(skotch_mir::BinOp::AddI),
+                "-" => Some(skotch_mir::BinOp::SubI),
+                "*" => Some(skotch_mir::BinOp::MulI),
+                "/" => Some(skotch_mir::BinOp::DivI),
+                "%" => Some(skotch_mir::BinOp::ModI),
+                "==" => Some(skotch_mir::BinOp::CmpEq),
+                "!=" => Some(skotch_mir::BinOp::CmpNe),
+                "<" => Some(skotch_mir::BinOp::CmpLt),
+                ">" => Some(skotch_mir::BinOp::CmpGt),
+                "<=" => Some(skotch_mir::BinOp::CmpLe),
+                ">=" => Some(skotch_mir::BinOp::CmpGe),
+                _ => None,
+            }
         };
         if let Some(op) = mir_op {
             let mut next_slot = (1 + param_count) as u32;
@@ -6674,6 +6710,42 @@ mod tests {
                 _ => panic!("expected CheckCast"),
             },
         }
+    }
+
+    #[test]
+    fn typed_lower_method_binary_concat_literal_plus_implicit_this_field() {
+        // `class P(val str: String) { fun greet(): String = "Hi, " + str }`
+        let module = lower(
+            r#"class P(val str: String) { fun greet(): String = "Hi, " + str }"#,
+            "TestKt",
+        );
+        let cls = module.classes.iter().find(|c| c.name == "P").unwrap();
+        let f = cls.methods.iter().find(|m| m.name == "greet").unwrap();
+        let block = &f.blocks[0];
+        // Body should contain GetField (for str) + ConcatStr.
+        let has_getfield = block.stmts.iter().any(|s| {
+            matches!(
+                s,
+                skotch_mir::Stmt::Assign {
+                    value: skotch_mir::Rvalue::GetField { .. },
+                    ..
+                }
+            )
+        });
+        let has_concat = block.stmts.iter().any(|s| {
+            matches!(
+                s,
+                skotch_mir::Stmt::Assign {
+                    value: skotch_mir::Rvalue::BinOp {
+                        op: skotch_mir::BinOp::ConcatStr,
+                        ..
+                    },
+                    ..
+                }
+            )
+        });
+        assert!(has_getfield, "expected GetField for str: {block:?}");
+        assert!(has_concat, "expected ConcatStr: {block:?}");
     }
 
     #[test]
