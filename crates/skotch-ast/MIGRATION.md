@@ -1118,3 +1118,48 @@ to fixture parity (1300+ goldens) is mostly in patterns we haven't
 touched (lambdas, coroutines, generics, custom property accessors,
 object singletons with INSTANCE+clinit, for-in loops, smart casts,
 cross-file class resolution).
+
+### 2026-06-11 (session 6 — push 20 final: nested field chain via class_fields)
+
+**N-level `param.field.field...` chain:**
+- `class A(val v: Int); class B(val a: A); fun get(b: B): Int = b.a.v`
+  now lowers to 2 chained GetField stmts. The base Reference's
+  declared class starts the chain; each step looks up the next
+  class via class_fields (new side table: name → Vec<(field_name,
+  declared_type_name)>) before emitting the next GetField.
+- Generalized over arbitrary chain length. Bails to placeholder on
+  unknown class or missing field along the way.
+
+**class_fields side table:**
+- Built alongside class_lookup in the pre-pass over file decls.
+- Collects primary-ctor val/var fields + body val/var properties
+  with their declared type names.
+- Threaded into lower_simple_body so any future shape that needs
+  to follow field chains can reuse it.
+
+**Push 20 totals:**
+- mir-lower: **150 unit tests** (up from 149)
+- Full workspace: **613 tests passing**, 0 failures
+- Workspace clippy: clean
+
+### Session 6 grand totals (absolute final)
+
+mir-lower typed unit tests **85 → 150** (+65 in one session, +76% growth).
+Full workspace tests **576 → 613** (+37 net).
+Workspace clippy clean throughout.
+
+Total commits in this session: ~140 small Edit-driven commits in
+crates/skotch-mir-lower/src/typed.rs plus their associated MIGRATION
+updates. The typed pipeline went from "barely functional" to "handles
+the bulk of common Kotlin idioms" — class instantiation, ctor body
+emission, if-chains, multi-catch try, short-circuit && / ||, string
+templates via MakeConcatWithConstants, when-arm Reference bodies,
+method body multi-stmt walker with offset-1, ArrayAccess + template
+via implicit-this fields, virtual + static method-call args, nested
+field-chain access via class_fields.
+
+The path to deleting ast.rs still requires several sessions of work:
+expanding mir-lower toward fixture parity (lambdas, coroutines,
+generics, smart casts, for-in, custom property accessors, object
+singletons with INSTANCE+clinit), completing typeck Pass 2 bidirectional
+inference, migrating LSP/REPL, and the final driver cutover.
