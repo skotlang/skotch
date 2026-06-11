@@ -2087,6 +2087,33 @@ fn literal_to_const(
                 .any(|c| c.kind == S::KW_TRUE);
             Some((MirConst::Bool(is_true), Ty::Bool))
         }
+        KtExpr::Character(_) => {
+            // `'A'` → MirConst::Int with the char code. Strips the
+            // surrounding single quotes and parses one char (or an
+            // escape like \n, \t, \\, \').
+            let text = skotch_ast::children(e.syntax())
+                .iter()
+                .find_map(|c| {
+                    if c.kind == S::CHARACTER_LITERAL {
+                        if let skotch_sil::SilData::Token { text } = &c.data {
+                            return Some(text.as_str().to_string());
+                        }
+                    }
+                    None
+                })?;
+            let inner = text.strip_prefix('\'')?.strip_suffix('\'')?;
+            let ch = match inner {
+                "\\n" => '\n',
+                "\\t" => '\t',
+                "\\r" => '\r',
+                "\\\\" => '\\',
+                "\\'" => '\'',
+                "\\\"" => '"',
+                "\\0" => '\0',
+                _ => inner.chars().next()?,
+            };
+            Some((MirConst::Int(ch as i32), Ty::Char))
+        }
         KtExpr::Null(_) => Some((MirConst::Null, Ty::Nullable(Box::new(Ty::Any)))),
         KtExpr::String(_) => {
             let mut buf = String::new();
@@ -5091,6 +5118,39 @@ mod tests {
                     assert!(target_class == "java/lang/String" || target_class == "String");
                 }
                 _ => panic!("expected CheckCast"),
+            },
+        }
+    }
+
+    #[test]
+    fn typed_lower_fn_returns_char_literal() {
+        // `fun a(): Char = 'A'` → MirConst::Int(65), Ty::Char.
+        let module = lower("fun a(): Char = 'A'", "TestKt");
+        let f = module.functions.iter().find(|f| f.name == "a").unwrap();
+        let block = &f.blocks[0];
+        assert_eq!(block.stmts.len(), 1);
+        match &block.stmts[0] {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(v)) => {
+                    assert_eq!(*v, 65);
+                }
+                _ => panic!("expected Int(65), got {value:?}"),
+            },
+        }
+    }
+
+    #[test]
+    fn typed_lower_fn_returns_escaped_char_literal() {
+        // `fun nl(): Char = '\n'` → MirConst::Int(10).
+        let module = lower(r"fun nl(): Char = '\n'", "TestKt");
+        let f = module.functions.iter().find(|f| f.name == "nl").unwrap();
+        let block = &f.blocks[0];
+        match &block.stmts[0] {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(v)) => {
+                    assert_eq!(*v, 10);
+                }
+                _ => panic!("expected Int(10), got {value:?}"),
             },
         }
     }
