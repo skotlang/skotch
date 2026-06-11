@@ -2418,12 +2418,28 @@ fn lower_simple_body(
                                         ok = false;
                                         break;
                                     };
-                                    let Some(idx) = outer_param_names.iter().position(|p| p == an)
-                                    else {
+                                    if let Some(idx) =
+                                        outer_param_names.iter().position(|p| p == an)
+                                    {
+                                        arg_slots.push(skotch_mir::LocalId(idx as u32));
+                                    } else if let Some(val_ty) = val_lookup.get(an) {
+                                        // Top-level val arg: emit GetStaticField.
+                                        let slot = skotch_mir::LocalId(next_slot);
+                                        next_slot += 1;
+                                        extra_locals.push(val_ty.clone());
+                                        pre_stmts.push(skotch_mir::Stmt::Assign {
+                                            dest: slot,
+                                            value: skotch_mir::Rvalue::GetStaticField {
+                                                class_name: wrapper_class.to_string(),
+                                                field_name: an.to_string(),
+                                                descriptor: ty_to_descriptor(val_ty),
+                                            },
+                                        });
+                                        arg_slots.push(slot);
+                                    } else {
                                         ok = false;
                                         break;
-                                    };
-                                    arg_slots.push(skotch_mir::LocalId(idx as u32));
+                                    }
                                 }
                                 other => match literal_to_const(&other, strings) {
                                     Some((k, ty)) => {
@@ -4368,6 +4384,47 @@ mod tests {
                     assert!(target_class == "java/lang/String" || target_class == "String");
                 }
                 _ => panic!("expected CheckCast"),
+            },
+        }
+    }
+
+    #[test]
+    fn typed_lower_static_call_with_top_level_val_arg() {
+        // `val DEFAULT: Int = 10
+        //  fun double(x: Int): Int = x * 2
+        //  fun useDefault(): Int = double(DEFAULT)`
+        // The arg is a top-level val ref → should be loaded via
+        // GetStaticField + passed to the Static call.
+        let module = lower(
+            "val DEFAULT: Int = 10\nfun double(x: Int): Int = x * 2\nfun useDefault(): Int = double(DEFAULT)",
+            "TestKt",
+        );
+        let f = module
+            .functions
+            .iter()
+            .find(|f| f.name == "useDefault")
+            .unwrap();
+        let block = &f.blocks[0];
+        // Expected: 2 stmts:
+        //   slot 0 = GetStaticField(TestKt.DEFAULT:I)
+        //   slot 1 = Call(Static(double), [slot 0])
+        assert_eq!(block.stmts.len(), 2, "stmts: {block:?}");
+        match &block.stmts[0] {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::GetStaticField { field_name, .. } => {
+                    assert_eq!(field_name, "DEFAULT");
+                }
+                _ => panic!("expected GetStaticField, got {value:?}"),
+            },
+        }
+        match &block.stmts[1] {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::Call { kind, args } => {
+                    assert!(matches!(kind, skotch_mir::CallKind::Static(_)));
+                    assert_eq!(args.len(), 1);
+                    assert_eq!(args[0].0, 0);
+                }
+                _ => panic!("expected Static Call, got {value:?}"),
             },
         }
     }
