@@ -584,12 +584,14 @@ fn try_lower_while_loop(
         return None;
     };
     let cond_expr = w.condition().and_then(|c| c.expression()).map(unwrap_parens)?;
-    // Loop body must be an empty block.
+    // Loop body must be a block. We support either empty or a single
+    // println / print call with a literal arg.
     let body_block = w.body().and_then(|b| match b.expression()? {
         KtExpr::Block(bl) => Some(bl),
         _ => None,
     })?;
-    if body_block.statements().next().is_some() {
+    let body_stmts: Vec<KtExpr<'_>> = body_block.statements().collect();
+    if body_stmts.len() > 1 {
         return None;
     }
 
@@ -677,6 +679,46 @@ fn try_lower_while_loop(
         },
     });
 
+    // Body stmts (println-call or empty).
+    let mut body_stmts_mir: Vec<MStmt> = Vec::new();
+    if !body_stmts.is_empty() {
+        let KtExpr::Call(call) = &body_stmts[0] else {
+            return None;
+        };
+        let name = match call.callee() {
+            Some(KtExpr::Reference(r)) => r.name(),
+            _ => None,
+        }?;
+        let kind = match name {
+            "println" => skotch_mir::CallKind::Println,
+            "print" => skotch_mir::CallKind::Print,
+            _ => return None,
+        };
+        let args = call.value_argument_list()?;
+        let arg_exprs: Vec<KtExpr<'_>> =
+            args.arguments().filter_map(|a| a.expression()).collect();
+        if arg_exprs.len() != 1 {
+            return None;
+        }
+        let (k, ty) = literal_to_const(&arg_exprs[0], strings)?;
+        let arg_slot = LocalId(next_slot + 1);
+        next_slot += 1;
+        extra_locals.push(ty);
+        body_stmts_mir.push(MStmt::Assign {
+            dest: arg_slot,
+            value: Rvalue::Const(k),
+        });
+        let result_slot = LocalId(next_slot + 1);
+        extra_locals.push(Ty::Unit);
+        body_stmts_mir.push(MStmt::Assign {
+            dest: result_slot,
+            value: Rvalue::Call {
+                kind,
+                args: vec![arg_slot],
+            },
+        });
+    }
+
     let blocks = vec![
         BasicBlock {
             stmts: cond_stmts,
@@ -687,7 +729,7 @@ fn try_lower_while_loop(
             },
         },
         BasicBlock {
-            stmts: Vec::new(),
+            stmts: body_stmts_mir,
             terminator: Terminator::Goto(0),
         },
         BasicBlock {
@@ -3250,6 +3292,28 @@ mod tests {
                 _ => panic!("expected BinOp"),
             },
         }
+    }
+
+    #[test]
+    fn typed_lower_while_loop_with_println() {
+        let module = lower(
+            "fun loop(n: Int) { while (n > 0) { println(\"hi\") } }",
+            "TestKt",
+        );
+        let f = &module.functions[0];
+        assert_eq!(f.blocks.len(), 3);
+        // Body block has Assign(arg, Const("hi")) + Assign(_, Call(Println, _))
+        let body = &f.blocks[1];
+        assert_eq!(body.stmts.len(), 2);
+        match &body.stmts[1] {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::Call { kind, .. } => {
+                    assert!(matches!(kind, skotch_mir::CallKind::Println));
+                }
+                _ => panic!("expected Call"),
+            },
+        }
+        assert!(matches!(body.terminator, Terminator::Goto(0)));
     }
 
     #[test]
