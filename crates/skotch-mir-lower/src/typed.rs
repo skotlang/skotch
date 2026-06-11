@@ -1728,16 +1728,59 @@ fn literal_to_const(
     use skotch_syntax::SyntaxKind as S;
     match e {
         KtExpr::Integer(_) => {
-            let text = skotch_ast::children(e.syntax()).iter().find_map(|c| {
-                if c.kind == S::INTEGER_LITERAL {
-                    if let skotch_sil::SilData::Token { text } = &c.data {
-                        return Some(text.as_str());
+            // Either INTEGER_LITERAL → Int or LONG_LITERAL → Long.
+            let (text, is_long) = skotch_ast::children(e.syntax()).iter().find_map(|c| {
+                match c.kind {
+                    S::INTEGER_LITERAL => {
+                        if let skotch_sil::SilData::Token { text } = &c.data {
+                            return Some((text.as_str().to_string(), false));
+                        }
+                        None
                     }
+                    S::LONG_LITERAL => {
+                        if let skotch_sil::SilData::Token { text } = &c.data {
+                            return Some((text.as_str().to_string(), true));
+                        }
+                        None
+                    }
+                    _ => None,
                 }
-                None
             })?;
-            let v: i64 = text.parse().ok()?;
-            Some((MirConst::Int(v as i32), Ty::Int))
+            if is_long {
+                let trimmed = text.trim_end_matches(['L', 'l']);
+                let v: i64 = trimmed.parse().ok()?;
+                Some((MirConst::Long(v), Ty::Long))
+            } else {
+                let v: i64 = text.parse().ok()?;
+                Some((MirConst::Int(v as i32), Ty::Int))
+            }
+        }
+        KtExpr::Float(_) => {
+            let (text, is_float) = skotch_ast::children(e.syntax()).iter().find_map(|c| {
+                match c.kind {
+                    S::FLOAT_LITERAL => {
+                        if let skotch_sil::SilData::Token { text } = &c.data {
+                            return Some((text.as_str().to_string(), true));
+                        }
+                        None
+                    }
+                    S::DOUBLE_LITERAL => {
+                        if let skotch_sil::SilData::Token { text } = &c.data {
+                            return Some((text.as_str().to_string(), false));
+                        }
+                        None
+                    }
+                    _ => None,
+                }
+            })?;
+            if is_float {
+                let trimmed = text.trim_end_matches(['f', 'F']);
+                let v: f32 = trimmed.parse().ok()?;
+                Some((MirConst::Float(v), Ty::Float))
+            } else {
+                let v: f64 = text.parse().ok()?;
+                Some((MirConst::Double(v), Ty::Double))
+            }
         }
         KtExpr::Boolean(_) => {
             let is_true = skotch_ast::children(e.syntax())
@@ -2670,72 +2713,10 @@ fn lower_simple_body(
             }
         }
     }
-    let (c, ty) = match &body_expr {
-        KtExpr::Integer(_) => {
-            let text = skotch_ast::children(body_expr.syntax())
-                .iter()
-                .find_map(|cc| {
-                    if cc.kind == skotch_syntax::SyntaxKind::INTEGER_LITERAL {
-                        if let skotch_sil::SilData::Token { text } = &cc.data {
-                            return Some(text.as_str());
-                        }
-                    }
-                    None
-                });
-            let Some(text) = text else {
-                return make_placeholder();
-            };
-            let Ok(v) = text.parse::<i64>() else {
-                return make_placeholder();
-            };
-            (MirConst::Int(v as i32), Ty::Int)
-        }
-        KtExpr::Boolean(_) => {
-            let is_true = skotch_ast::children(body_expr.syntax())
-                .iter()
-                .any(|cc| cc.kind == skotch_syntax::SyntaxKind::KW_TRUE);
-            (MirConst::Bool(is_true), Ty::Bool)
-        }
-        KtExpr::Null(_) => (MirConst::Null, Ty::Nullable(Box::new(Ty::Any))),
-        KtExpr::String(_) => {
-            // Build the string from the LITERAL_STRING_TEMPLATE_ENTRY
-            // children: a plain literal with no $ interpolation has
-            // exactly one entry whose child is a STRING_CHUNK token.
-            let mut buf = String::new();
-            let mut interpolated = false;
-            for child in skotch_ast::children(body_expr.syntax()) {
-                use skotch_syntax::SyntaxKind as S;
-                match child.kind {
-                    S::LITERAL_STRING_TEMPLATE_ENTRY => {
-                        for cc in skotch_ast::children(child) {
-                            if cc.kind == S::STRING_CHUNK {
-                                if let skotch_sil::SilData::Token { text } = &cc.data {
-                                    buf.push_str(text);
-                                }
-                            }
-                        }
-                    }
-                    S::STRING_START | S::STRING_END | S::WHITE_SPACE => {}
-                    _ => {
-                        interpolated = true;
-                    }
-                }
-            }
-            if interpolated {
-                return make_placeholder();
-            }
-            let sid = match strings.iter().position(|s| s == &buf) {
-                Some(i) => skotch_mir::StringId(i as u32),
-                None => {
-                    let id = skotch_mir::StringId(strings.len() as u32);
-                    strings.push(buf);
-                    id
-                }
-            };
-            (MirConst::String(sid), Ty::String)
-        }
-        _ => return make_placeholder(),
+    let Some((c, ty)) = literal_to_const(&body_expr, strings) else {
+        return make_placeholder();
     };
+    let _ = MirConst::Unit; // keep MirConst import in scope
 
     // Decide the result local slot. With no params, the result lives
     // in local 0; otherwise it's the next slot after the params.
@@ -4264,6 +4245,54 @@ mod tests {
                     assert!(target_class == "java/lang/String" || target_class == "String");
                 }
                 _ => panic!("expected CheckCast"),
+            },
+        }
+    }
+
+    #[test]
+    fn typed_lower_fn_returns_long_literal() {
+        let module = lower("fun big(): Long = 100L", "TestKt");
+        let f = module.functions.iter().find(|f| f.name == "big").unwrap();
+        let block = &f.blocks[0];
+        assert_eq!(block.stmts.len(), 1);
+        match &block.stmts[0] {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::Const(skotch_mir::MirConst::Long(v)) => {
+                    assert_eq!(*v, 100);
+                }
+                _ => panic!("expected Long const, got {value:?}"),
+            },
+        }
+    }
+
+    #[test]
+    fn typed_lower_fn_returns_float_literal() {
+        let module = lower("fun pi(): Float = 0.5f", "TestKt");
+        let f = module.functions.iter().find(|f| f.name == "pi").unwrap();
+        let block = &f.blocks[0];
+        assert_eq!(block.stmts.len(), 1);
+        match &block.stmts[0] {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::Const(skotch_mir::MirConst::Float(v)) => {
+                    assert!((*v - 0.5_f32).abs() < 1e-6);
+                }
+                _ => panic!("expected Float const, got {value:?}"),
+            },
+        }
+    }
+
+    #[test]
+    fn typed_lower_fn_returns_double_literal() {
+        let module = lower("fun pi(): Double = 0.5", "TestKt");
+        let f = module.functions.iter().find(|f| f.name == "pi").unwrap();
+        let block = &f.blocks[0];
+        assert_eq!(block.stmts.len(), 1);
+        match &block.stmts[0] {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::Const(skotch_mir::MirConst::Double(v)) => {
+                    assert!((*v - 0.5_f64).abs() < 1e-12);
+                }
+                _ => panic!("expected Double const, got {value:?}"),
             },
         }
     }
