@@ -5657,6 +5657,22 @@ fn method_simple_body_full(
                                         {
                                             // User param: slot 1 + idx (this at 0).
                                             arg_slots.push(skotch_mir::LocalId((1 + idx) as u32));
+                                        } else if let (Some(cname), Some((fname, fty))) =
+                                            (class_name, field_names.iter().find(|(n, _)| n == an))
+                                        {
+                                            // Implicit-this field arg.
+                                            let slot = skotch_mir::LocalId(next_slot);
+                                            next_slot += 1;
+                                            extra_locals.push(fty.clone());
+                                            pre_stmts.push(skotch_mir::Stmt::Assign {
+                                                dest: slot,
+                                                value: skotch_mir::Rvalue::GetField {
+                                                    receiver: skotch_mir::LocalId(0),
+                                                    class_name: cname.to_string(),
+                                                    field_name: fname.clone(),
+                                                },
+                                            });
+                                            arg_slots.push(slot);
                                         } else {
                                             ok = false;
                                             break;
@@ -6710,6 +6726,42 @@ mod tests {
                 _ => panic!("expected CheckCast"),
             },
         }
+    }
+
+    #[test]
+    fn typed_lower_method_static_call_with_implicit_this_field_arg() {
+        // `fun doubleIt(x: Int): Int = x * 2
+        //  class P(val n: Int) { fun double(): Int = doubleIt(n) }`
+        let module = lower(
+            "fun doubleIt(x: Int): Int = x * 2\nclass P(val n: Int) { fun double(): Int = doubleIt(n) }",
+            "TestKt",
+        );
+        let cls = module.classes.iter().find(|c| c.name == "P").unwrap();
+        let f = cls.methods.iter().find(|m| m.name == "double").unwrap();
+        let block = &f.blocks[0];
+        let has_getfield = block.stmts.iter().any(|s| {
+            matches!(
+                s,
+                skotch_mir::Stmt::Assign {
+                    value: skotch_mir::Rvalue::GetField { .. },
+                    ..
+                }
+            )
+        });
+        let has_static_call = block.stmts.iter().any(|s| {
+            matches!(
+                s,
+                skotch_mir::Stmt::Assign {
+                    value: skotch_mir::Rvalue::Call {
+                        kind: skotch_mir::CallKind::Static(_),
+                        ..
+                    },
+                    ..
+                }
+            )
+        });
+        assert!(has_getfield, "expected GetField for n: {block:?}");
+        assert!(has_static_call, "expected Static call: {block:?}");
     }
 
     #[test]
