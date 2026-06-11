@@ -645,3 +645,54 @@ mir-lower expanded further:
 - LSP migration (12 sites + DocumentState shape change).
 - Driver cutover.
 - Test/golden migration + legacy AST deletion.
+
+### 2026-06-10 (session 5 — push 10)
+
+Major expansion of mir-lower body lowering coverage:
+
+**Class method body lowering**:
+- collect_class_methods / collect_interface_methods /
+  collect_object_methods now route through a unified
+  method_from_fun_with_class that calls method_simple_body_with_class.
+- Class methods handle: literal returns, identity-ref to params
+  (offset 1 past `this`), binary ops on params, field access via
+  implicit `this` (GetField rvalue), binary ops mixing param/field
+  refs and literals, println/print intrinsics, throw <param-ref>,
+  virtual sibling calls (no-arg).
+- field_names collected from primary-ctor val/var params + body
+  KtProperty entries; threaded through method body lowering so
+  bare refs to fields resolve to GetField.
+
+**Top-level fn body lowering expansions**:
+- while loops: 3-block CFG with comparison cond + empty body OR
+  body with single println/print call.
+- do-while loops: 3-block CFG with body-first then cond.
+- Block-bodied return ref / return binary: trailing
+  `return <local>` switches terminator from Return to
+  ReturnValue(local).
+- Multi-stmt block val init from static call: `val x = helper()`
+  resolves through fn_lookup to Call(Static(FuncId), []).
+- Multi-stmt val with binary init: `val sum = a + b` emits
+  BinOp Assign with param/local refs resolved.
+- Prefix unary minus: `-x` emits BinOp(SubI, 0, x).
+
+**Push 10 totals (focused tests, all green):**
+- mir-lower: 79 unit tests (up from 60)
+- All other crates unchanged
+- Sum: **191 tests** across migration surface, 0 failures
+
+End-to-end shapes lowering correctly through the typed pipeline
+now include (in addition to all previous):
+- `class Box(val x: Int) { fun get(): Int = x }` (field access)
+- `class Box { fun double(): Int = x * 2 }` (field + binary)
+- `class P { fun id(x: Int): Int = x }` (identity)
+- `class P { fun add(a: Int, b: Int): Int = a + b }` (binary on params)
+- `class P { fun show() = println("hi") }` (intrinsic in method)
+- `class P { fun fail(e: Throwable): Nothing = throw e }`
+- `class P { fun a(): Int = 1; fun b(): Int = a() }` (virtual call)
+- `fun loop(n: Int) { while (n > 0) { println("hi") } }`
+- `fun loop(n: Int) { do { println("hi") } while (n > 0) }`
+- `fun foo(): Int { val x = 42; return x }` (return ref)
+- `fun calc(a, b, c): Int { val ab = a + b; val sum = ab + c; return sum }`
+- `fun neg(x: Int): Int = -x` (unary minus)
+- `fun main() { val x = answer(); println(x) }` (val from static call)
