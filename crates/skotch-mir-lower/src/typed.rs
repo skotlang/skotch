@@ -6498,6 +6498,35 @@ mod tests {
     }
 
     #[test]
+    fn typed_lower_complex_combined_shape() {
+        // Exercise multiple landed features in one fixture:
+        //   val MAX: Int = 100
+        //   fun clamp(x: Int): Int = if (x > 0) x else 0
+        //   fun overflow(x: Int): Boolean = x > MAX
+        let module = lower(
+            "val MAX: Int = 100\nfun clamp(x: Int): Int = if (x > 0) x else 0\nfun overflow(x: Int): Boolean = x > MAX",
+            "TestKt",
+        );
+        assert!(module.functions.iter().any(|f| f.name == "clamp"));
+        let overflow = module
+            .functions
+            .iter()
+            .find(|f| f.name == "overflow")
+            .unwrap();
+        // overflow's body should have GetStaticField for MAX.
+        let has_getstatic = overflow.blocks[0].stmts.iter().any(|s| {
+            matches!(
+                s,
+                skotch_mir::Stmt::Assign {
+                    value: skotch_mir::Rvalue::GetStaticField { .. },
+                    ..
+                }
+            )
+        });
+        assert!(has_getstatic);
+    }
+
+    #[test]
     fn typed_lower_block_val_init_call_with_args() {
         // `fun double(x: Int): Int = x * 2
         //  fun calc(x: Int): Int { val d = double(x); return d }`
