@@ -3277,6 +3277,107 @@ fn lower_simple_body(
         }
     }
 
+    // String-template body with interpolations:
+    //   fun greet(name: String): String = "Hello, $name"
+    // Emits Rvalue::Call with CallKind::MakeConcatWithConstants. The
+    // recipe interleaves literal text chunks with `\x01` placeholders,
+    // one per interpolated arg. Descriptor reflects the arg types.
+    if let KtExpr::String(_) = &body_expr {
+        use skotch_syntax::SyntaxKind as S;
+        let outer_param_names: Vec<String> = f
+            .value_parameter_list()
+            .map(|pl| {
+                pl.parameters()
+                    .map(|p| p.name().unwrap_or("").to_string())
+                    .collect()
+            })
+            .unwrap_or_default();
+        // Pre-walk: build the recipe + arg slot list + arg descriptor list.
+        let mut recipe = String::new();
+        let mut arg_slots: Vec<skotch_mir::LocalId> = Vec::new();
+        let mut arg_descs: Vec<String> = Vec::new();
+        let mut had_interp = false;
+        let mut ok = true;
+        for child in skotch_ast::children(body_expr.syntax()) {
+            match child.kind {
+                S::LITERAL_STRING_TEMPLATE_ENTRY => {
+                    for cc in skotch_ast::children(child) {
+                        if cc.kind == S::STRING_CHUNK {
+                            if let skotch_sil::SilData::Token { text } = &cc.data {
+                                recipe.push_str(text);
+                            }
+                        }
+                    }
+                }
+                S::SHORT_STRING_TEMPLATE_ENTRY => {
+                    had_interp = true;
+                    let name_opt = skotch_ast::children(child).iter().find_map(|cc| {
+                        if cc.kind == S::REFERENCE_EXPRESSION {
+                            for ccc in skotch_ast::children(cc) {
+                                if ccc.kind == S::IDENTIFIER {
+                                    if let skotch_sil::SilData::Token { text } = &ccc.data {
+                                        return Some(text.as_str().to_string());
+                                    }
+                                }
+                            }
+                        }
+                        None
+                    });
+                    let Some(name) = name_opt else {
+                        ok = false;
+                        break;
+                    };
+                    let Some(idx) = outer_param_names.iter().position(|p| p == &name) else {
+                        ok = false;
+                        break;
+                    };
+                    // Determine the param's JVM descriptor.
+                    let param_ty = f
+                        .value_parameter_list()
+                        .and_then(|pl| {
+                            pl.parameters().nth(idx).and_then(|p| {
+                                p.type_reference()
+                                    .and_then(|tr| tr.user_type())
+                                    .and_then(|u| u.name())
+                                    .and_then(skotch_types::ty_from_name)
+                            })
+                        })
+                        .unwrap_or(Ty::Any);
+                    arg_descs.push(ty_to_descriptor(&param_ty));
+                    arg_slots.push(skotch_mir::LocalId(idx as u32));
+                    recipe.push('\x01');
+                }
+                S::STRING_START | S::STRING_END | S::WHITE_SPACE => {}
+                _ => {
+                    ok = false;
+                    break;
+                }
+            }
+        }
+        if ok && had_interp {
+            let descriptor = format!("({})Ljava/lang/String;", arg_descs.join(""));
+            let param_count = f
+                .value_parameter_list()
+                .map(|pl| pl.parameters().count())
+                .unwrap_or(0);
+            let result_slot = skotch_mir::LocalId(param_count as u32);
+            let blocks = vec![BasicBlock {
+                stmts: vec![skotch_mir::Stmt::Assign {
+                    dest: result_slot,
+                    value: skotch_mir::Rvalue::Call {
+                        kind: skotch_mir::CallKind::MakeConcatWithConstants {
+                            recipe,
+                            descriptor,
+                        },
+                        args: arg_slots,
+                    },
+                }],
+                terminator: Terminator::ReturnValue(result_slot),
+            }];
+            return (blocks, vec![Ty::String]);
+        }
+    }
+
     // Throw expression body:
     //   fun fail(): Nothing = throw e
     // Where the thrown value is a Reference to a parameter, the
@@ -6018,6 +6119,41 @@ mod tests {
                 }
                 _ => panic!("expected CheckCast"),
             },
+        }
+    }
+
+    #[test]
+    fn typed_lower_fn_returns_string_template_with_interp() {
+        // `fun greet(name: String): String = "Hello, $name"`
+        // → Call(MakeConcatWithConstants{recipe="Hello, \x01",
+        //   descriptor="(Ljava/lang/String;)Ljava/lang/String;"},
+        //   args=[name_slot])
+        let module = lower(
+            r#"fun greet(name: String): String = "Hello, $name""#,
+            "TestKt",
+        );
+        let f = module.functions.iter().find(|f| f.name == "greet").unwrap();
+        let block = &f.blocks[0];
+        match block.stmts.iter().find_map(|s| match s {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::Call {
+                    kind:
+                        skotch_mir::CallKind::MakeConcatWithConstants {
+                            recipe,
+                            descriptor,
+                        },
+                    args,
+                } => Some((recipe.clone(), descriptor.clone(), args.clone())),
+                _ => None,
+            },
+        }) {
+            Some((recipe, descriptor, args)) => {
+                assert_eq!(recipe, "Hello, \x01");
+                assert_eq!(descriptor, "(Ljava/lang/String;)Ljava/lang/String;");
+                assert_eq!(args.len(), 1);
+                assert_eq!(args[0].0, 0); // name at slot 0
+            }
+            None => panic!("expected MakeConcatWithConstants, body: {block:?}"),
         }
     }
 
