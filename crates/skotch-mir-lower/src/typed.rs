@@ -3197,6 +3197,12 @@ fn try_lower_multi_stmt_block_with_offset(
                             "*" => Some(skotch_mir::BinOp::MulI),
                             "/" => Some(skotch_mir::BinOp::DivI),
                             "%" => Some(skotch_mir::BinOp::ModI),
+                            "==" => Some(skotch_mir::BinOp::CmpEq),
+                            "!=" => Some(skotch_mir::BinOp::CmpNe),
+                            "<" => Some(skotch_mir::BinOp::CmpLt),
+                            ">" => Some(skotch_mir::BinOp::CmpGt),
+                            "<=" => Some(skotch_mir::BinOp::CmpLe),
+                            ">=" => Some(skotch_mir::BinOp::CmpGe),
                             _ => None,
                         }?;
                         let resolve = |e: KtExpr<'_>,
@@ -3702,6 +3708,12 @@ fn try_lower_multi_stmt_block_with_offset(
                                 "*" => Some(skotch_mir::BinOp::MulI),
                                 "/" => Some(skotch_mir::BinOp::DivI),
                                 "%" => Some(skotch_mir::BinOp::ModI),
+                                "==" => Some(skotch_mir::BinOp::CmpEq),
+                                "!=" => Some(skotch_mir::BinOp::CmpNe),
+                                "<" => Some(skotch_mir::BinOp::CmpLt),
+                                ">" => Some(skotch_mir::BinOp::CmpGt),
+                                "<=" => Some(skotch_mir::BinOp::CmpLe),
+                                ">=" => Some(skotch_mir::BinOp::CmpGe),
                                 _ => None,
                             }?;
                             fn resolve_block_arg(
@@ -3791,7 +3803,16 @@ fn try_lower_multi_stmt_block_with_offset(
                             )?;
                             let slot = LocalId(next_slot);
                             next_slot += 1;
-                            local_tys.push(Ty::Int);
+                            let is_cmp = matches!(
+                                mir_op,
+                                skotch_mir::BinOp::CmpEq
+                                    | skotch_mir::BinOp::CmpNe
+                                    | skotch_mir::BinOp::CmpLt
+                                    | skotch_mir::BinOp::CmpGt
+                                    | skotch_mir::BinOp::CmpLe
+                                    | skotch_mir::BinOp::CmpGe
+                            );
+                            local_tys.push(if is_cmp { Ty::Bool } else { Ty::Int });
                             stmts.push(MStmt::Assign {
                                 dest: slot,
                                 value: skotch_mir::Rvalue::BinOp {
