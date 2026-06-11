@@ -3484,6 +3484,70 @@ fn try_lower_multi_stmt_block_with_offset(
                             });
                             continue;
                         }
+                        // Call RHS: `x = helper(args)`.
+                        if let KtExpr::Call(call) = &rhs {
+                            if let Some(KtExpr::Reference(rc)) = call.callee() {
+                                if let Some(callee_n) = rc.name() {
+                                    if let Some((fid, _)) = fn_lookup_ref.get(callee_n) {
+                                        let mut arg_slots: Vec<LocalId> = Vec::new();
+                                        let mut ok = true;
+                                        if let Some(arg_list) = call.value_argument_list() {
+                                            for arg in arg_list.arguments() {
+                                                let Some(arg_e) = arg.expression() else {
+                                                    ok = false;
+                                                    break;
+                                                };
+                                                match unwrap_parens(arg_e) {
+                                                    KtExpr::Reference(rr) => {
+                                                        let Some(an) = rr.name() else {
+                                                            ok = false;
+                                                            break;
+                                                        };
+                                                        if let Some(s) = name_to_local
+                                                            .iter()
+                                                            .rev()
+                                                            .find(|(n, _)| n == an)
+                                                            .map(|(_, l)| *l)
+                                                        {
+                                                            arg_slots.push(s);
+                                                        } else {
+                                                            ok = false;
+                                                            break;
+                                                        }
+                                                    }
+                                                    other => {
+                                                        let Some((k, ty)) =
+                                                            literal_to_const(&other, strings)
+                                                        else {
+                                                            ok = false;
+                                                            break;
+                                                        };
+                                                        let s = LocalId(*next_slot);
+                                                        *next_slot += 1;
+                                                        local_tys.push(ty);
+                                                        body_mstmts.push(MStmt::Assign {
+                                                            dest: s,
+                                                            value: skotch_mir::Rvalue::Const(k),
+                                                        });
+                                                        arg_slots.push(s);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        if ok {
+                                            body_mstmts.push(MStmt::Assign {
+                                                dest: lhs_slot,
+                                                value: skotch_mir::Rvalue::Call {
+                                                    kind: skotch_mir::CallKind::Static(*fid),
+                                                    args: arg_slots,
+                                                },
+                                            });
+                                            continue;
+                                        }
+                                    }
+                                }
+                            }
+                        }
                         return None;
                     }
                     // Method call on a local class instance:
