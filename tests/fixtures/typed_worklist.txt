@@ -335,7 +335,6 @@
 0.045	1299-stack-vm-sealed-when	358	16	34	18	12
 0.045	995-enum-cmp-lambda	44	2	18	3	2
 0.051	1331-multi-arg-index-operator	59	3	14	4	3
-0.052	1219-let-implicit-it-element-type	58	3	19	3	2
 0.054	305-data-class-rgb	74	4	19	2	1
 0.056	1308-mandelbrot-ascii	108	6	11	4	2
 0.056	304-data-class-person	54	3	17	2	1
@@ -343,7 +342,6 @@
 0.058	64-data-class-destructuring	52	3	17	2	1
 0.059	116-suspend-basic	17	1	15	2	1
 0.059	1249-suspend-with-template-tail	17	1	15	2	1
-0.059	308-data-class-tostring	51	3	17	2	1
 0.059	373-destructuring-basic	51	3	17	2	1
 0.062	1221-remember-lambda-return-type	32	2	17	3	2
 0.062	323-multiple-classes	96	6	26	3	1
@@ -382,6 +380,7 @@
 0.143	1222-smart-cast-is-narrowing	21	3	12	4	2
 0.148	425-sealed-interface	27	4	14	5	3
 0.154	367-star-projection	13	2	11	3	2
+0.155	1219-let-implicit-it-element-type	58	9	19	3	1
 0.166	1304-calculator-parser	332	55	50	35	22
 0.167	1225-factory-vs-ctor	12	2	12	3	2
 0.167	21-data-class	48	8	17	2	0
@@ -396,6 +395,7 @@
 0.190	324-all-range-types	42	8	8	1	0
 0.190	407-suspend-chain	21	4	20	3	1
 0.195	214-when-println	41	8	9	2	1
+0.196	308-data-class-tostring	51	10	17	2	0
 0.200	105-secondary-constructor	20	4	13	5	3
 0.200	236-class-method-chain	15	3	11	3	1
 0.200	864-suspend-call-static	5	1	10	3	2
@@ -416,7 +416,6 @@
 0.235	1247-for-loop-virtual-dispatch	34	8	16	7	3
 0.238	1268-object-implements-sealed-interface	21	5	15	7	4
 0.250	1234-jvmstatic-companion	8	2	12	4	2
-0.250	1301-generic-class-method-return-unbox	20	5	13	5	2
 0.250	31-null-safety-elvis	8	2	9	2	1
 0.250	326-multiple-objects	12	3	12	5	3
 0.250	341-interface-default	12	3	13	6	3
@@ -722,6 +721,7 @@
 0.750	1091-suspend-tail-call-int-arg	4	3	9	2	0
 0.750	1095-suspend-tail-call-three-args	4	3	9	2	0
 0.750	1113-suspend-print-mixed	4	3	8	1	0
+0.750	1301-generic-class-method-return-unbox	20	15	13	5	0
 0.750	24-generic-function	4	3	9	2	0
 0.750	390-suspend-signature	4	3	9	2	0
 0.750	615-suspend-int-max	4	3	8	1	0
