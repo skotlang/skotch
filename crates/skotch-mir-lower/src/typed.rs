@@ -5853,6 +5853,34 @@ fn method_simple_body_full(
                                         param_names.iter().position(|p| p == an)
                                     {
                                         arg_slots.push(skotch_mir::LocalId((1 + idx) as u32));
+                                    } else if let (Some(cname), Some((fname, fty))) =
+                                        (class_name, field_names.iter().find(|(n, _)| n == an))
+                                    {
+                                        let slot = skotch_mir::LocalId(next_slot);
+                                        next_slot += 1;
+                                        extra_locals.push(fty.clone());
+                                        stmts.push(skotch_mir::Stmt::Assign {
+                                            dest: slot,
+                                            value: skotch_mir::Rvalue::GetField {
+                                                receiver: skotch_mir::LocalId(0),
+                                                class_name: cname.to_string(),
+                                                field_name: fname.clone(),
+                                            },
+                                        });
+                                        arg_slots.push(slot);
+                                    } else if let Some(val_ty) = val_lookup.get(an) {
+                                        let slot = skotch_mir::LocalId(next_slot);
+                                        next_slot += 1;
+                                        extra_locals.push(val_ty.clone());
+                                        stmts.push(skotch_mir::Stmt::Assign {
+                                            dest: slot,
+                                            value: skotch_mir::Rvalue::GetStaticField {
+                                                class_name: wrapper_class.to_string(),
+                                                field_name: an.to_string(),
+                                                descriptor: ty_to_descriptor(val_ty),
+                                            },
+                                        });
+                                        arg_slots.push(slot);
                                     } else {
                                         ok = false;
                                         break;
