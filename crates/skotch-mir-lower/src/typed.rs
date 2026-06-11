@@ -1054,6 +1054,131 @@ fn try_lower_do_while_loop(
 ///   then_block: result = r_i; Goto(join_block)
 /// The final block is the ReturnValue join.
 #[allow(clippy::too_many_arguments)]
+/// Subject-less when: `when { cond1 -> body1; cond2 -> body2; else -> body_else }`.
+/// Lowers as a chain of cmp / branch / arm blocks ending in a join
+/// that returns the result slot. Each cond expr is materialized via
+/// lower_inline_expr_to_slot (so cmp ops + param/local refs work);
+/// each arm body must be a literal-shaped expression (Int/String/Bool).
+fn try_lower_when_subjectless(
+    w: &skotch_ast::KtWhen<'_>,
+    outer_param_names: &[String],
+    param_count: usize,
+    strings: &mut Vec<String>,
+    val_lookup: &rustc_hash::FxHashMap<String, Ty>,
+    wrapper_class: &str,
+) -> Option<(Vec<BasicBlock>, Vec<Ty>)> {
+    use skotch_ast::KtExpr;
+    use skotch_mir::{LocalId, Stmt as MStmt};
+
+    // Collect arms.
+    let mut arms: Vec<(KtExpr<'_>, KtExpr<'_>)> = Vec::new();
+    let mut else_arm: Option<KtExpr<'_>> = None;
+    for entry in w.entries() {
+        if entry.is_else() {
+            else_arm = Some(entry.body()?);
+            continue;
+        }
+        let conds = entry.conditions();
+        if conds.len() != 1 {
+            return None;
+        }
+        if conds[0].kind != skotch_syntax::SyntaxKind::WHEN_CONDITION_WITH_EXPRESSION {
+            return None;
+        }
+        let cond_expr = skotch_ast::children(conds[0])
+            .iter()
+            .find_map(KtExpr::cast)
+            .map(unwrap_parens)?;
+        let body = entry.body().map(unwrap_parens)?;
+        arms.push((cond_expr, body));
+    }
+    let else_body = else_arm.map(unwrap_parens)?;
+
+    let mut next_slot = param_count as u32;
+    let mut extra_locals: Vec<Ty> = Vec::new();
+    let result_slot = LocalId(next_slot);
+    next_slot += 1;
+    let result_ty = match &else_body {
+        KtExpr::String(_) => Ty::String,
+        KtExpr::Integer(_) => Ty::Int,
+        KtExpr::Boolean(_) => Ty::Bool,
+        _ => Ty::Any,
+    };
+    extra_locals.push(result_ty);
+
+    let n_arms = arms.len();
+    let else_block_idx = (2 * n_arms) as u32;
+    let join_block_idx = else_block_idx + 1;
+    let mut blocks: Vec<BasicBlock> = Vec::new();
+
+    let lookup = |n: &str| -> Option<LocalId> {
+        outer_param_names
+            .iter()
+            .position(|p| p == n)
+            .map(|i| LocalId(i as u32))
+    };
+
+    for (i, (cond_expr, body)) in arms.iter().enumerate() {
+        let mut cmp_stmts: Vec<MStmt> = Vec::new();
+        let cmp_slot = lower_inline_expr_to_slot(
+            *cond_expr,
+            &lookup,
+            &mut next_slot,
+            &mut cmp_stmts,
+            &mut extra_locals,
+            strings,
+        )?;
+        let then_idx = (2 * i + 1) as u32;
+        let next_cmp_or_else = if i + 1 < n_arms {
+            (2 * (i + 1)) as u32
+        } else {
+            else_block_idx
+        };
+        blocks.push(BasicBlock {
+            stmts: cmp_stmts,
+            terminator: Terminator::Branch {
+                cond: cmp_slot,
+                then_block: then_idx,
+                else_block: next_cmp_or_else,
+            },
+        });
+        // Arm body block: assign result.
+        let mut arm_stmts: Vec<MStmt> = Vec::new();
+        let (k, ty) = literal_to_const(body, strings)?;
+        let _ = ty;
+        arm_stmts.push(MStmt::Assign {
+            dest: result_slot,
+            value: skotch_mir::Rvalue::Const(k),
+        });
+        blocks.push(BasicBlock {
+            stmts: arm_stmts,
+            terminator: Terminator::Goto(join_block_idx),
+        });
+    }
+
+    // Else block.
+    let mut else_stmts: Vec<MStmt> = Vec::new();
+    let (k, _ty) = literal_to_const(&else_body, strings)?;
+    else_stmts.push(MStmt::Assign {
+        dest: result_slot,
+        value: skotch_mir::Rvalue::Const(k),
+    });
+    blocks.push(BasicBlock {
+        stmts: else_stmts,
+        terminator: Terminator::Goto(join_block_idx),
+    });
+
+    // Join block.
+    blocks.push(BasicBlock {
+        stmts: Vec::new(),
+        terminator: Terminator::ReturnValue(result_slot),
+    });
+
+    let _ = val_lookup;
+    let _ = wrapper_class;
+    Some((blocks, extra_locals))
+}
+
 fn try_lower_when_expression(
     w: &skotch_ast::KtWhen<'_>,
     f: skotch_ast::KtFun<'_>,
@@ -1064,7 +1189,6 @@ fn try_lower_when_expression(
     use skotch_ast::KtExpr;
     use skotch_mir::{LocalId, Rvalue, Stmt as MStmt};
 
-    let subject = w.subject().map(unwrap_parens)?;
     let param_count = f
         .value_parameter_list()
         .map(|pl| pl.parameters().count())
@@ -1077,6 +1201,22 @@ fn try_lower_when_expression(
                 .collect()
         })
         .unwrap_or_default();
+
+    // Subject-less when: route to dedicated handler. When { cond -> body ; ... }
+    // is essentially an if-else chain.
+    let subject = match w.subject().map(unwrap_parens) {
+        Some(s) => s,
+        None => {
+            return try_lower_when_subjectless(
+                w,
+                &outer_param_names,
+                param_count,
+                strings,
+                val_lookup,
+                wrapper_class,
+            );
+        }
+    };
 
     // Subject must be a Reference to a parameter.
     let subject_slot = match &subject {
