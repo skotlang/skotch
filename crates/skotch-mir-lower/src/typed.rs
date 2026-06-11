@@ -2719,6 +2719,51 @@ fn method_simple_body_with_class(
         }
     }
 
+    // println(literal) / print(literal) call body for methods (often
+    // appears as `fun show() = println("hi")`).
+    if let KtExpr::Call(call) = &body_expr {
+        if let Some(KtExpr::Reference(r)) = call.callee() {
+            if let Some(name) = r.name() {
+                if name == "println" || name == "print" {
+                    let kind = if name == "println" {
+                        skotch_mir::CallKind::Println
+                    } else {
+                        skotch_mir::CallKind::Print
+                    };
+                    if let Some(args) = call.value_argument_list() {
+                        let arg_exprs: Vec<KtExpr<'_>> =
+                            args.arguments().filter_map(|a| a.expression()).collect();
+                        if arg_exprs.len() == 1 {
+                            if let Some((k, ty)) = literal_to_const(&arg_exprs[0], strings) {
+                                let arg_slot =
+                                    skotch_mir::LocalId((1 + param_count) as u32);
+                                let result_slot =
+                                    skotch_mir::LocalId((1 + param_count + 1) as u32);
+                                let blocks = vec![BasicBlock {
+                                    stmts: vec![
+                                        skotch_mir::Stmt::Assign {
+                                            dest: arg_slot,
+                                            value: skotch_mir::Rvalue::Const(k),
+                                        },
+                                        skotch_mir::Stmt::Assign {
+                                            dest: result_slot,
+                                            value: skotch_mir::Rvalue::Call {
+                                                kind,
+                                                args: vec![arg_slot],
+                                            },
+                                        },
+                                    ],
+                                    terminator: Terminator::Return,
+                                }];
+                                return (blocks, vec![ty, Ty::Unit]);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     let Some((c, ty)) = literal_to_const(&body_expr, strings) else {
         return make_placeholder();
     };
@@ -4135,6 +4180,28 @@ mod tests {
         assert_eq!(c.methods.len(), 1);
         assert_eq!(c.methods[0].name, "greet");
         assert_eq!(c.methods[0].return_ty, Ty::String);
+    }
+
+    #[test]
+    fn typed_lower_class_method_println_literal() {
+        let module = lower(
+            "class P { fun show(): Unit = println(\"hi\") }",
+            "TestKt",
+        );
+        let p = module.classes.iter().find(|c| c.name == "P").unwrap();
+        let m = p.methods.iter().find(|m| m.name == "show").unwrap();
+        let block = &m.blocks[0];
+        // 2 stmts: Const(arg) + Call(Println, [arg])
+        assert_eq!(block.stmts.len(), 2);
+        match &block.stmts[1] {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::Call { kind, .. } => {
+                    assert!(matches!(kind, skotch_mir::CallKind::Println));
+                }
+                _ => panic!("expected Call"),
+            },
+        }
+        assert!(matches!(block.terminator, Terminator::Return));
     }
 
     #[test]
