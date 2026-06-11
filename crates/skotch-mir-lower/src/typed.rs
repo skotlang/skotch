@@ -3459,12 +3459,24 @@ fn literal_to_const(
                     _ => None,
                 }
             })?;
+            // Parse text supporting hex (0x), binary (0b), underscores,
+            // and the trailing 'L' suffix.
+            let parse_int = |s: &str| -> Option<i64> {
+                let s = s.replace('_', "");
+                if let Some(hex) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
+                    return i64::from_str_radix(hex, 16).ok();
+                }
+                if let Some(bin) = s.strip_prefix("0b").or_else(|| s.strip_prefix("0B")) {
+                    return i64::from_str_radix(bin, 2).ok();
+                }
+                s.parse().ok()
+            };
             if is_long {
                 let trimmed = text.trim_end_matches(['L', 'l']);
-                let v: i64 = trimmed.parse().ok()?;
+                let v = parse_int(trimmed)?;
                 Some((MirConst::Long(v), Ty::Long))
             } else {
-                let v: i64 = text.parse().ok()?;
+                let v = parse_int(&text)?;
                 Some((MirConst::Int(v as i32), Ty::Int))
             }
         }
