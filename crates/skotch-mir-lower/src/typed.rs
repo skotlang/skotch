@@ -2522,14 +2522,14 @@ fn collect_object_methods(
 }
 
 /// Lower a class/interface method body when it has a recognizable
-/// shape that doesn't reference user params. The receiver `this` is
-/// at slot 0; user params at 1..N+1. We support:
-/// - Expression body: literal → Assign(result_slot, Const) + ReturnValue
-/// - Block body: single `return literal` → same shape
-/// - Empty / unrecognized body → empty Return placeholder
-fn method_simple_body(
+/// shape. The receiver `this` is at slot 0; user params at 1..N+1.
+/// `class_name` and `field_names` are needed for `Reference(field)`
+/// in the body to emit GetField on `this`.
+fn method_simple_body_with_class(
     f: skotch_ast::KtFun<'_>,
     strings: &mut Vec<String>,
+    class_name: Option<&str>,
+    field_names: &[(String, Ty)],
 ) -> (Vec<BasicBlock>, Vec<Ty>) {
     use skotch_ast::KtExpr;
 
@@ -2591,6 +2591,27 @@ fn method_simple_body(
                     terminator: Terminator::ReturnValue(param_slot),
                 }];
                 return (blocks, Vec::new());
+            }
+            // Field access via implicit this: `fun get() = x` where
+            // x is a primary-ctor val/var on the enclosing class.
+            if let (Some(cname), Some((fname, fty))) = (
+                class_name,
+                field_names.iter().find(|(n, _)| n == name),
+            ) {
+                let this_slot = skotch_mir::LocalId(0);
+                let result_slot = skotch_mir::LocalId((1 + param_count) as u32);
+                let blocks = vec![BasicBlock {
+                    stmts: vec![skotch_mir::Stmt::Assign {
+                        dest: result_slot,
+                        value: skotch_mir::Rvalue::GetField {
+                            receiver: this_slot,
+                            class_name: cname.to_string(),
+                            field_name: fname.clone(),
+                        },
+                    }],
+                    terminator: Terminator::ReturnValue(result_slot),
+                }];
+                return (blocks, vec![fty.clone()]);
             }
         }
     }
@@ -2685,6 +2706,18 @@ fn method_from_fun(
     is_abstract_default: bool,
     strings: &mut Vec<String>,
 ) -> MirFunction {
+    method_from_fun_with_class(f, method_idx, is_abstract_default, strings, None, &[])
+}
+
+#[allow(clippy::too_many_arguments)]
+fn method_from_fun_with_class(
+    f: skotch_ast::KtFun<'_>,
+    method_idx: u32,
+    is_abstract_default: bool,
+    strings: &mut Vec<String>,
+    class_name: Option<&str>,
+    field_names: &[(String, Ty)],
+) -> MirFunction {
     let name = f.name().unwrap_or("<anon>").to_string();
     let param_count = f
         .value_parameter_list()
@@ -2716,7 +2749,7 @@ fn method_from_fun(
     // result. Bodies that can't be lowered fall back to an empty
     // Return placeholder.
     let (blocks, extra_locals) = if !is_abstract {
-        method_simple_body(f, strings)
+        method_simple_body_with_class(f, strings, class_name, field_names)
     } else {
         (
             vec![BasicBlock {
@@ -2770,11 +2803,45 @@ fn method_from_fun(
 /// with an empty Return body — body lowering is deferred.
 fn collect_class_methods(
     c: skotch_ast::KtClass<'_>,
-    _class_name: &str,
+    class_name: &str,
     strings: &mut Vec<String>,
 ) -> Vec<MirFunction> {
     let mut methods = Vec::new();
     let Some(body) = c.body() else { return methods };
+    // Collect (name, Ty) for primary-ctor val/var params — methods
+    // can reference them as `this.x` (implicit) or bare `x`.
+    let mut field_names: Vec<(String, Ty)> = Vec::new();
+    if let Some(pc) = c.primary_constructor() {
+        if let Some(plist) = pc.value_parameter_list() {
+            for p in plist.parameters() {
+                if p.is_val() || p.is_var() {
+                    if let Some(n) = p.name() {
+                        let ty = p
+                            .type_reference()
+                            .and_then(|tr| tr.user_type())
+                            .and_then(|u| u.name())
+                            .and_then(skotch_types::ty_from_name)
+                            .unwrap_or(Ty::Any);
+                        field_names.push((n.to_string(), ty));
+                    }
+                }
+            }
+        }
+    }
+    // Also include body properties.
+    for d in body.declarations() {
+        if let KtDecl::Property(p) = d {
+            if let Some(n) = p.name() {
+                let ty = p
+                    .type_reference()
+                    .and_then(|tr| tr.user_type())
+                    .and_then(|u| u.name())
+                    .and_then(skotch_types::ty_from_name)
+                    .unwrap_or(Ty::Any);
+                field_names.push((n.to_string(), ty));
+            }
+        }
+    }
     for (method_idx, f) in body
         .declarations()
         .filter_map(|d| match d {
@@ -2783,7 +2850,14 @@ fn collect_class_methods(
         })
         .enumerate()
     {
-        methods.push(method_from_fun(f, method_idx as u32, false, strings));
+        methods.push(method_from_fun_with_class(
+            f,
+            method_idx as u32,
+            false,
+            strings,
+            Some(class_name),
+            &field_names,
+        ));
     }
     methods
 }
@@ -4020,6 +4094,35 @@ mod tests {
         assert_eq!(c.methods.len(), 1);
         assert_eq!(c.methods[0].name, "greet");
         assert_eq!(c.methods[0].return_ty, Ty::String);
+    }
+
+    #[test]
+    fn typed_lower_class_method_field_access() {
+        let module = lower(
+            "class Box(val x: Int) { fun get(): Int = x }",
+            "TestKt",
+        );
+        let box_class = module.classes.iter().find(|c| c.name == "Box").unwrap();
+        let get_m = box_class.methods.iter().find(|m| m.name == "get").unwrap();
+        // locals: this, result
+        assert_eq!(get_m.locals.len(), 2);
+        let block = &get_m.blocks[0];
+        assert_eq!(block.stmts.len(), 1);
+        match &block.stmts[0] {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::GetField {
+                    receiver,
+                    class_name,
+                    field_name,
+                } => {
+                    assert_eq!(receiver.0, 0); // this
+                    assert_eq!(class_name, "Box");
+                    assert_eq!(field_name, "x");
+                }
+                _ => panic!("expected GetField"),
+            },
+        }
+        assert!(matches!(block.terminator, Terminator::ReturnValue(_)));
     }
 
     #[test]
