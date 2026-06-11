@@ -2606,6 +2606,152 @@ fn lower_simple_body(
         }
     }
 
+    // Virtual-call body: `fun useIt(b: Box): R = b.method(arg1, arg2)`.
+    // Receiver must be a Reference to a param whose type is a class in
+    // class_lookup. Args follow the same param-ref / val-ref / literal
+    // resolution as static calls.
+    //
+    // Shape: `b.m(args)` parses as DotQualified(Reference(b), Call(m, args)),
+    // NOT Call(DotQualified(b, m), args).
+    if let KtExpr::DotQualified(dq) = &body_expr {
+        let dq_exprs: Vec<KtExpr<'_>> = skotch_ast::children(dq.syntax())
+            .iter()
+            .filter_map(KtExpr::cast)
+            .collect();
+        if dq_exprs.len() == 2 {
+            if let (KtExpr::Reference(recv_ref), KtExpr::Call(call)) = (&dq_exprs[0], &dq_exprs[1])
+            {
+                let meth_name = match call.callee() {
+                    Some(KtExpr::Reference(r)) => r.name(),
+                    _ => None,
+                };
+                if let (Some(recv_name), Some(meth_name)) = (recv_ref.name(), meth_name) {
+                        let params: Vec<skotch_ast::KtValueParameter<'_>> = f
+                            .value_parameter_list()
+                            .map(|pl| pl.parameters().collect())
+                            .unwrap_or_default();
+                        let outer_param_names: Vec<String> = params
+                            .iter()
+                            .map(|p| p.name().unwrap_or("").to_string())
+                            .collect();
+                        if let Some((idx, param)) =
+                            params.iter().enumerate().find(|(_, p)| p.name() == Some(recv_name))
+                        {
+                            let recv_class = param
+                                .type_reference()
+                                .and_then(|tr| tr.user_type())
+                                .and_then(|u| u.name());
+                            if let Some(cname) = recv_class {
+                                if class_lookup.contains_key(cname) {
+                                    let recv_slot = skotch_mir::LocalId(idx as u32);
+                                    let mut next_slot = params.len() as u32;
+                                    let mut pre_stmts: Vec<skotch_mir::Stmt> = Vec::new();
+                                    let mut extra_locals: Vec<Ty> = Vec::new();
+                                    let mut arg_slots: Vec<skotch_mir::LocalId> = vec![recv_slot];
+                                    let mut ok = true;
+                                    if let Some(arg_list) = call.value_argument_list() {
+                                        for arg in arg_list.arguments() {
+                                            let Some(arg_expr) = arg.expression() else {
+                                                ok = false;
+                                                break;
+                                            };
+                                            match arg_expr {
+                                                KtExpr::Reference(rr) => {
+                                                    let Some(an) = rr.name() else {
+                                                        ok = false;
+                                                        break;
+                                                    };
+                                                    if let Some(pidx) = outer_param_names
+                                                        .iter()
+                                                        .position(|p| p == an)
+                                                    {
+                                                        arg_slots.push(skotch_mir::LocalId(
+                                                            pidx as u32,
+                                                        ));
+                                                    } else if let Some(val_ty) =
+                                                        val_lookup.get(an)
+                                                    {
+                                                        let slot =
+                                                            skotch_mir::LocalId(next_slot);
+                                                        next_slot += 1;
+                                                        extra_locals.push(val_ty.clone());
+                                                        pre_stmts.push(
+                                                            skotch_mir::Stmt::Assign {
+                                                                dest: slot,
+                                                                value:
+                                                                    skotch_mir::Rvalue::GetStaticField {
+                                                                        class_name: wrapper_class
+                                                                            .to_string(),
+                                                                        field_name: an
+                                                                            .to_string(),
+                                                                        descriptor:
+                                                                            ty_to_descriptor(
+                                                                                val_ty,
+                                                                            ),
+                                                                    },
+                                                            },
+                                                        );
+                                                        arg_slots.push(slot);
+                                                    } else {
+                                                        ok = false;
+                                                        break;
+                                                    }
+                                                }
+                                                other => {
+                                                    match literal_to_const(&other, strings) {
+                                                        Some((k, ty)) => {
+                                                            let slot =
+                                                                skotch_mir::LocalId(next_slot);
+                                                            next_slot += 1;
+                                                            extra_locals.push(ty);
+                                                            pre_stmts.push(
+                                                                skotch_mir::Stmt::Assign {
+                                                                    dest: slot,
+                                                                    value:
+                                                                        skotch_mir::Rvalue::Const(
+                                                                            k,
+                                                                        ),
+                                                                },
+                                                            );
+                                                            arg_slots.push(slot);
+                                                        }
+                                                        None => {
+                                                            ok = false;
+                                                            break;
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    if ok {
+                                        let result_slot = skotch_mir::LocalId(next_slot);
+                                        extra_locals.push(Ty::Any);
+                                        pre_stmts.push(skotch_mir::Stmt::Assign {
+                                            dest: result_slot,
+                                            value: skotch_mir::Rvalue::Call {
+                                                kind: skotch_mir::CallKind::Virtual {
+                                                    class_name: cname.to_string(),
+                                                    method_name: meth_name.to_string(),
+                                                },
+                                                args: arg_slots,
+                                            },
+                                        });
+                                        let blocks = vec![BasicBlock {
+                                            stmts: pre_stmts,
+                                            terminator: Terminator::ReturnValue(result_slot),
+                                        }];
+                                        return (blocks, extra_locals);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    // end DotQualified virtual-call body
+
     // Static-call body: `fun outer() = inner(arg1, arg2)` where
     // inner is a top-level fn in the same file. Args may be either
     // literal constants or References to the outer's parameters.
@@ -4769,6 +4915,40 @@ mod tests {
                     assert!(target_class == "java/lang/String" || target_class == "String");
                 }
                 _ => panic!("expected CheckCast"),
+            },
+        }
+    }
+
+    #[test]
+    fn typed_lower_fn_calls_method_on_param_class() {
+        // `class Box(val x: Int) { fun get(): Int = x }
+        //  fun useIt(b: Box): Int = b.get()`
+        let module = lower(
+            "class Box(val x: Int) { fun get(): Int = x }\nfun useIt(b: Box): Int = b.get()",
+            "TestKt",
+        );
+        let f = module
+            .functions
+            .iter()
+            .find(|f| f.name == "useIt")
+            .unwrap();
+        let block = &f.blocks[0];
+        assert_eq!(block.stmts.len(), 1);
+        match &block.stmts[0] {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::Call { kind, args } => match kind {
+                    skotch_mir::CallKind::Virtual {
+                        class_name,
+                        method_name,
+                    } => {
+                        assert_eq!(class_name, "Box");
+                        assert_eq!(method_name, "get");
+                        assert_eq!(args.len(), 1, "receiver only");
+                        assert_eq!(args[0].0, 0);
+                    }
+                    _ => panic!("expected Virtual, got {kind:?}"),
+                },
+                _ => panic!("expected Call, got {value:?}"),
             },
         }
     }
