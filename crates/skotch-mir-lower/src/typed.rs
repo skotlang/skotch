@@ -6580,6 +6580,31 @@ mod tests {
     }
 
     #[test]
+    fn typed_lower_fn_returns_string_concat_two_literals() {
+        // `fun hello(): String = "hi" + " there"`
+        // Should detect both operands as String and pick ConcatStr.
+        let module = lower(
+            r#"fun hello(): String = "hi" + " there""#,
+            "TestKt",
+        );
+        let f = module.functions.iter().find(|f| f.name == "hello").unwrap();
+        let block = &f.blocks[0];
+        let has_concat = block.stmts.iter().any(|s| {
+            matches!(
+                s,
+                skotch_mir::Stmt::Assign {
+                    value: skotch_mir::Rvalue::BinOp {
+                        op: skotch_mir::BinOp::ConcatStr,
+                        ..
+                    },
+                    ..
+                }
+            )
+        });
+        assert!(has_concat, "expected ConcatStr: {block:?}");
+    }
+
+    #[test]
     fn typed_lower_static_call_with_nested_call_arg() {
         // `fun double(x: Int): Int = x * 2
         //  fun triple(x: Int): Int = x * 3
