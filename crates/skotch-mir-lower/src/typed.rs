@@ -2916,13 +2916,102 @@ fn try_lower_multi_stmt_block_with_offset(
             // (`x = x + 1`, `x += 1`, simple binary RHS).
             fn lower_loop_body(
                 body_stmts: &[KtExpr<'_>],
-                name_to_local: &[(String, LocalId)],
+                name_to_local: &mut Vec<(String, LocalId)>,
                 next_slot: &mut u32,
                 local_tys: &mut Vec<Ty>,
                 strings: &mut Vec<String>,
             ) -> Option<Vec<MStmt>> {
                 let mut body_mstmts: Vec<MStmt> = Vec::new();
                 for be in body_stmts {
+                    // val/var declaration: `val y = expr`.
+                    if let Some(prop) = skotch_ast::KtProperty::cast(be.syntax()) {
+                        let pname = prop.name()?;
+                        let init = prop.initializer()?;
+                        let init = unwrap_parens(init);
+                        if let Some((k, ty)) = literal_to_const(&init, strings) {
+                            let slot = LocalId(*next_slot);
+                            *next_slot += 1;
+                            local_tys.push(ty);
+                            body_mstmts.push(MStmt::Assign {
+                                dest: slot,
+                                value: skotch_mir::Rvalue::Const(k),
+                            });
+                            name_to_local.push((pname.to_string(), slot));
+                            continue;
+                        }
+                        // Binary RHS like `i * 100`.
+                        if let KtExpr::Binary(b) = &init {
+                            let op = b.operation().map(|o| o.text()).unwrap_or_default();
+                            let mir_op = match op.as_str() {
+                                "+" => Some(skotch_mir::BinOp::AddI),
+                                "-" => Some(skotch_mir::BinOp::SubI),
+                                "*" => Some(skotch_mir::BinOp::MulI),
+                                "/" => Some(skotch_mir::BinOp::DivI),
+                                "%" => Some(skotch_mir::BinOp::ModI),
+                                _ => None,
+                            };
+                            if let Some(op) = mir_op {
+                                let resolve = |e: KtExpr<'_>,
+                                               name_to_local: &Vec<(String, LocalId)>,
+                                               next_slot: &mut u32,
+                                               local_tys: &mut Vec<Ty>,
+                                               stmts: &mut Vec<MStmt>,
+                                               strings: &mut Vec<String>|
+                                 -> Option<LocalId> {
+                                    let e = unwrap_parens(e);
+                                    if let Some((k, ty)) = literal_to_const(&e, strings) {
+                                        let slot = LocalId(*next_slot);
+                                        *next_slot += 1;
+                                        local_tys.push(ty);
+                                        stmts.push(MStmt::Assign {
+                                            dest: slot,
+                                            value: skotch_mir::Rvalue::Const(k),
+                                        });
+                                        return Some(slot);
+                                    }
+                                    if let KtExpr::Reference(rr) = e {
+                                        let n = rr.name()?;
+                                        return name_to_local
+                                            .iter()
+                                            .rev()
+                                            .find(|(nm, _)| nm == n)
+                                            .map(|(_, l)| *l);
+                                    }
+                                    None
+                                };
+                                let lhs = resolve(
+                                    b.lhs()?,
+                                    name_to_local,
+                                    next_slot,
+                                    local_tys,
+                                    &mut body_mstmts,
+                                    strings,
+                                )?;
+                                let rhs = resolve(
+                                    b.rhs()?,
+                                    name_to_local,
+                                    next_slot,
+                                    local_tys,
+                                    &mut body_mstmts,
+                                    strings,
+                                )?;
+                                let slot = LocalId(*next_slot);
+                                *next_slot += 1;
+                                local_tys.push(Ty::Int);
+                                body_mstmts.push(MStmt::Assign {
+                                    dest: slot,
+                                    value: skotch_mir::Rvalue::BinOp {
+                                        op,
+                                        lhs,
+                                        rhs,
+                                    },
+                                });
+                                name_to_local.push((pname.to_string(), slot));
+                                continue;
+                            }
+                        }
+                        return None;
+                    }
                     // println/print
                     if let KtExpr::Call(call) = be {
                         let name = match call.callee() {
@@ -3297,7 +3386,7 @@ fn try_lower_multi_stmt_block_with_offset(
                 };
                 let body_mstmts = lower_loop_body(
                     &body_stmts,
-                    &name_to_local,
+                    &mut name_to_local,
                     &mut next_slot,
                     &mut local_tys,
                     strings,
@@ -3414,7 +3503,7 @@ fn try_lower_multi_stmt_block_with_offset(
                 };
                 let body_mstmts = lower_loop_body(
                     &body_stmts,
-                    &name_to_local,
+                    &mut name_to_local,
                     &mut next_slot,
                     &mut local_tys,
                     strings,
@@ -3527,7 +3616,7 @@ fn try_lower_multi_stmt_block_with_offset(
                 // Lower body via shared helper.
                 let mut body_mstmts = lower_loop_body(
                     &body_stmts,
-                    &name_to_local,
+                    &mut name_to_local,
                     &mut next_slot,
                     &mut local_tys,
                     strings,
