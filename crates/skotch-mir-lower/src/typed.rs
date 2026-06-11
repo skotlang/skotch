@@ -1843,6 +1843,65 @@ fn lower_simple_body(
     // Parenthesized passthrough: `(literal)` or `(a + b)`.
     let body_expr = unwrap_parens(body_expr);
 
+    // `as` type cast: `fun toS(x: Any): String = x as String`.
+    // Emits Rvalue::CheckCast with the target class descriptor.
+    if let KtExpr::BinaryWithTypeRhs(b) = &body_expr {
+        let children: Vec<_> = skotch_ast::children(b.syntax()).iter().collect();
+        let operand = children.iter().find_map(|c| KtExpr::cast(c)).map(unwrap_parens);
+        let type_name = children.iter().find_map(|c| {
+            if c.kind == skotch_syntax::SyntaxKind::TYPE_REFERENCE {
+                if let Some(tr) = skotch_ast::KtTypeReference::cast(c) {
+                    return tr.user_type().and_then(|u| u.name()).map(String::from);
+                }
+            }
+            None
+        });
+        // Operation must be `as` (KW_AS). The keyword is wrapped in
+        // an OPERATION_REFERENCE composite, so check one level deep.
+        let is_as = children.iter().any(|c| {
+            if c.kind == skotch_syntax::SyntaxKind::OPERATION_REFERENCE {
+                skotch_ast::children(c)
+                    .iter()
+                    .any(|cc| cc.kind == skotch_syntax::SyntaxKind::KW_AS)
+            } else {
+                false
+            }
+        });
+        if is_as {
+            if let (Some(KtExpr::Reference(r)), Some(tname)) = (operand, type_name) {
+                if let Some(name) = r.name() {
+                    let param_names: Vec<String> = f
+                        .value_parameter_list()
+                        .map(|pl| {
+                            pl.parameters()
+                                .map(|p| p.name().unwrap_or("").to_string())
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    if let Some(idx) = param_names.iter().position(|p| p == name) {
+                        let target_class = skotch_types::intrinsics::kotlin_to_jvm_class(&tname)
+                            .map(|s| s.to_string())
+                            .unwrap_or(tname.clone());
+                        let ret_ty = skotch_types::ty_from_name(&tname).unwrap_or(Ty::Any);
+                        let param_count = param_names.len();
+                        let result_slot = skotch_mir::LocalId(param_count as u32);
+                        let blocks = vec![BasicBlock {
+                            stmts: vec![skotch_mir::Stmt::Assign {
+                                dest: result_slot,
+                                value: skotch_mir::Rvalue::CheckCast {
+                                    obj: skotch_mir::LocalId(idx as u32),
+                                    target_class,
+                                },
+                            }],
+                            terminator: Terminator::ReturnValue(result_slot),
+                        }];
+                        return (blocks, vec![ret_ty]);
+                    }
+                }
+            }
+        }
+    }
+
     // `is` type check: `fun isInt(x: Any): Boolean = x is Int`.
     // Emits Rvalue::InstanceOf with the param slot and the type
     // descriptor (e.g. "java/lang/Integer" for Int).
@@ -3794,6 +3853,27 @@ mod tests {
             },
         }
         assert!(matches!(block.terminator, Terminator::ReturnValue(_)));
+    }
+
+    #[test]
+    fn typed_lower_as_cast_string() {
+        let module = lower("fun toS(x: Any): String = x as String", "TestKt");
+        let f = &module.functions[0];
+        assert_eq!(f.return_ty, Ty::String);
+        let block = &f.blocks[0];
+        assert_eq!(block.stmts.len(), 1);
+        match &block.stmts[0] {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::CheckCast { obj, target_class } => {
+                    assert_eq!(obj.0, 0);
+                    assert!(
+                        target_class == "java/lang/String"
+                            || target_class == "String"
+                    );
+                }
+                _ => panic!("expected CheckCast"),
+            },
+        }
     }
 
     #[test]

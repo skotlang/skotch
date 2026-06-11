@@ -2132,6 +2132,13 @@ mod tests {
 
     #[test]
     #[ignore]
+    fn debug_dump_as_cast() {
+        let parsed = crate::parse("t.kt", "fun toS(x: Any): String = x as String");
+        dump(parsed.file().syntax(), 0);
+    }
+
+    #[test]
+    #[ignore]
     fn debug_dump_string_template() {
         let parsed = crate::parse(
             "t.kt",
