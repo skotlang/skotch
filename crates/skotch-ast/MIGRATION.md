@@ -1163,3 +1163,55 @@ expanding mir-lower toward fixture parity (lambdas, coroutines,
 generics, smart casts, for-in, custom property accessors, object
 singletons with INSTANCE+clinit), completing typeck Pass 2 bidirectional
 inference, migrating LSP/REPL, and the final driver cutover.
+
+### 2026-06-11 (session 6 — push 21 final-final)
+
+**throw with inline exception construction (top-level + method):**
+- `throw IllegalStateException("oops")` lowers to NewInstance +
+  Constructor + Throw(new_slot). Class name resolves via
+  kotlin_exception_class → JVM internal name. Both the top-level
+  fn body handler and the class method body handler support this.
+
+**Array access with binary index:**
+- `arr[i + 1]` in a body — index resolver tries literal first
+  (handles Prefix folding), then param Reference, then Binary on
+  literals/references. Pre-fix only bare Reference indices worked.
+
+**Push 21 totals:**
+- mir-lower: **153 unit tests** (up from 150)
+- Workspace clippy: clean
+
+### Session 6 absolute-final tally
+
+mir-lower typed unit tests **85 → 153** (+68 in session 6, +80% growth).
+Full workspace tests **576 → 613** (+37 net) — last verified count.
+Workspace clippy clean throughout the session.
+
+The typed pipeline now handles the broadest slice of Kotlin idioms
+yet, covering:
+- All numeric + Char + String literals (including unary +/- folding)
+- Binary arithmetic + comparison + ConcatStr + short-circuit && / ||
+- if/else with bool param / !boolParam / N-arm chains + Call arms
+- when (subject) with literal + Reference arms
+- try/catch with single OR multiple catch clauses
+- while + do-while + for-in (loops)
+- Multi-stmt block: val + var + reassignment + return-binary
+- Class instantiation: NewInstance + Constructor with args
+- Class body: ctor super + putfields + literal-init + fn-call-init
+- Method bodies: identity / field (explicit + implicit this) /
+  virtual call on this / static call (with args) / multi-stmt block
+- String templates → MakeConcatWithConstants (top-level + method)
+- Param.field access (1-level + N-level chains via class_fields)
+- ArrayAccess (param + implicit-this field + binary index)
+- Throw with param ref OR inline exception ctor (top-level + method)
+- GetStaticField for top-level val refs (anywhere)
+
+Remaining for fixture parity (still multi-session work):
+- Lambdas + LambdaMetafactory emit
+- Coroutine state machine
+- Generic methods + type-parameter erasure
+- Smart casts after `is` checks
+- Custom property accessors with bodies
+- Object singletons with INSTANCE + clinit emission
+- when exhaustiveness for sealed hierarchies
+- Cross-file class resolution beyond single-file class_lookup
