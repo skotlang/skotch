@@ -1274,10 +1274,11 @@ fn try_lower_if_expression(
 ///   - print(<ref-or-literal>)           (single-arg print call)
 ///
 /// Returns None for any unsupported statement.
-fn try_lower_multi_stmt_block(
+fn try_lower_multi_stmt_block_inner(
     block: skotch_ast::KtBlock<'_>,
     f: skotch_ast::KtFun<'_>,
     strings: &mut Vec<String>,
+    fn_lookup: &rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)>,
 ) -> Option<(Vec<BasicBlock>, Vec<Ty>)> {
     use skotch_ast::KtExpr;
     use skotch_mir::{LocalId, Stmt as MStmt};
@@ -1324,6 +1325,32 @@ fn try_lower_multi_stmt_block(
                 });
                 name_to_local.push((name.to_string(), slot));
                 continue;
+            }
+            // Try static call: `val x = helper()` where helper is a
+            // top-level fn in fn_lookup. Only zero-arg calls.
+            if let KtExpr::Call(call) = &init {
+                if let Some(KtExpr::Reference(rc)) = call.callee() {
+                    if let Some(callee_name) = rc.name() {
+                        if let Some((fid, ret)) = fn_lookup.get(callee_name) {
+                            let arg_count =
+                                call.value_argument_list().map(|a| a.arguments().count()).unwrap_or(0);
+                            if arg_count == 0 {
+                                let slot = LocalId(next_slot);
+                                next_slot += 1;
+                                local_tys.push(ret.clone());
+                                stmts.push(MStmt::Assign {
+                                    dest: slot,
+                                    value: skotch_mir::Rvalue::Call {
+                                        kind: skotch_mir::CallKind::Static(*fid),
+                                        args: Vec::new(),
+                                    },
+                                });
+                                name_to_local.push((name.to_string(), slot));
+                                continue;
+                            }
+                        }
+                    }
+                }
             }
             // Try binary op on refs/literals.
             if let KtExpr::Binary(b) = &init {
@@ -1773,7 +1800,9 @@ fn lower_simple_body(
             // Walk PROPERTY children + KtExpr stmts together via
             // try_lower_multi_stmt_block — this handles
             // `val x = 10; println(x)` and similar simple shapes.
-            if let Some((blocks, locals)) = try_lower_multi_stmt_block(block, f, strings) {
+            if let Some((blocks, locals)) =
+                try_lower_multi_stmt_block_inner(block, f, strings, fn_lookup)
+            {
                 return (blocks, locals);
             }
             if stmts.len() == 1 {
@@ -4061,6 +4090,39 @@ mod tests {
                 skotch_mir::Rvalue::Call { kind, args } => {
                     assert!(matches!(kind, skotch_mir::CallKind::Println));
                     assert_eq!(args[0].0, 2); // sum is at slot 2 (after params 0,1)
+                }
+                _ => panic!("expected Call"),
+            },
+        }
+    }
+
+    #[test]
+    fn typed_lower_val_from_static_call_then_println() {
+        let module = lower(
+            "fun answer(): Int = 42\nfun main() {\n  val x = answer()\n  println(x)\n}",
+            "TestKt",
+        );
+        let main = module.functions.iter().find(|m| m.name == "main").unwrap();
+        let block = &main.blocks[0];
+        // First stmt: Call(Static(answer)) into slot 0.
+        assert_eq!(block.stmts.len(), 2);
+        match &block.stmts[0] {
+            skotch_mir::Stmt::Assign { dest, value } => {
+                assert_eq!(dest.0, 0);
+                match value {
+                    skotch_mir::Rvalue::Call { kind, .. } => {
+                        assert!(matches!(kind, skotch_mir::CallKind::Static(_)));
+                    }
+                    _ => panic!("expected Call"),
+                }
+            }
+        }
+        // Second stmt: Call(Println, [slot 0])
+        match &block.stmts[1] {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::Call { kind, args } => {
+                    assert!(matches!(kind, skotch_mir::CallKind::Println));
+                    assert_eq!(args[0].0, 0); // x's slot
                 }
                 _ => panic!("expected Call"),
             },
