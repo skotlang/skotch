@@ -92,6 +92,52 @@ mod tests {
     }
 
     #[test]
+    fn typed_compile_source_handles_try_catch() {
+        let mut interner = Interner::new();
+        let mut diags = Diagnostics::new();
+        let module = compile_source(
+            "fun parse(): Int = try { 1 } catch (e: Exception) { 0 }",
+            "test.kt",
+            "TestKt",
+            &mut interner,
+            &mut diags,
+            None,
+        );
+        let f = module.functions.iter().find(|f| f.name == "parse").unwrap();
+        assert_eq!(f.blocks.len(), 3);
+        assert_eq!(f.exception_handlers.len(), 1);
+    }
+
+    #[test]
+    fn typed_compile_source_handles_string_template() {
+        let mut interner = Interner::new();
+        let mut diags = Diagnostics::new();
+        let module = compile_source(
+            r#"fun greet(name: String): String = "Hello, $name""#,
+            "test.kt",
+            "TestKt",
+            &mut interner,
+            &mut diags,
+            None,
+        );
+        let f = module.functions.iter().find(|f| f.name == "greet").unwrap();
+        // Should contain MakeConcatWithConstants Call.
+        let has_concat = f.blocks[0].stmts.iter().any(|s| {
+            matches!(
+                s,
+                skotch_mir::Stmt::Assign {
+                    value: skotch_mir::Rvalue::Call {
+                        kind: skotch_mir::CallKind::MakeConcatWithConstants { .. },
+                        ..
+                    },
+                    ..
+                }
+            )
+        });
+        assert!(has_concat);
+    }
+
+    #[test]
     fn typed_compile_source_handles_if_else() {
         let mut interner = Interner::new();
         let mut diags = Diagnostics::new();
