@@ -2218,8 +2218,7 @@ fn try_lower_multi_stmt_block_with_offset(
             // matching arm before the regular init handlers see it.
             // Chains through nested ifs as long as the cond is a
             // boolean literal.
-            loop {
-                let KtExpr::If(if_e) = init else { break };
+            while let KtExpr::If(if_e) = init {
                 let cond_expr = if_e.condition().and_then(|c| c.expression()).map(unwrap_parens);
                 let then_expr = if_e.then_branch().and_then(|t| t.expression()).map(unwrap_parens);
                 let else_expr = if_e.else_branch().and_then(|e| e.expression()).map(unwrap_parens);
