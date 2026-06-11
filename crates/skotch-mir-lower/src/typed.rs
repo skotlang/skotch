@@ -5878,6 +5878,87 @@ fn method_simple_body_full(
         }
     }
 
+    // `as` type cast on a param or implicit-this field:
+    //   class P(val x: Any) { fun str(): String = x as String }
+    if let KtExpr::BinaryWithTypeRhs(b) = &body_expr {
+        let children: Vec<_> = skotch_ast::children(b.syntax()).iter().collect();
+        let operand = children
+            .iter()
+            .find_map(|c| KtExpr::cast(c))
+            .map(unwrap_parens);
+        let type_name = children.iter().find_map(|c| {
+            if c.kind == skotch_syntax::SyntaxKind::TYPE_REFERENCE {
+                if let Some(tr) = skotch_ast::KtTypeReference::cast(c) {
+                    return tr.user_type().and_then(|u| u.name()).map(String::from);
+                }
+            }
+            None
+        });
+        // Op must be `as` (KW_AS wrapped in OPERATION_REFERENCE).
+        let is_as = children.iter().any(|c| {
+            if c.kind == skotch_syntax::SyntaxKind::OPERATION_REFERENCE {
+                skotch_ast::children(c)
+                    .iter()
+                    .any(|cc| cc.kind == skotch_syntax::SyntaxKind::KW_AS)
+            } else {
+                false
+            }
+        });
+        if is_as {
+            if let (Some(KtExpr::Reference(r)), Some(tname)) = (operand, type_name) {
+                if let Some(name) = r.name() {
+                    let target_class = skotch_types::intrinsics::kotlin_to_jvm_class(&tname)
+                        .map(|s| s.to_string())
+                        .unwrap_or(tname.clone());
+                    let ret_ty = skotch_types::ty_from_name(&tname).unwrap_or(Ty::Any);
+                    // Param first.
+                    if let Some(idx) = param_names.iter().position(|p| p == name) {
+                        let result_slot = skotch_mir::LocalId((1 + param_count) as u32);
+                        let blocks = vec![BasicBlock {
+                            stmts: vec![skotch_mir::Stmt::Assign {
+                                dest: result_slot,
+                                value: skotch_mir::Rvalue::CheckCast {
+                                    obj: skotch_mir::LocalId((1 + idx) as u32),
+                                    target_class,
+                                },
+                            }],
+                            terminator: Terminator::ReturnValue(result_slot),
+                        }];
+                        return (blocks, vec![ret_ty]);
+                    }
+                    // Implicit-this field.
+                    if let (Some(cname), Some((fname, fty))) =
+                        (class_name, field_names.iter().find(|(n, _)| n == name))
+                    {
+                        let field_slot = skotch_mir::LocalId((1 + param_count) as u32);
+                        let result_slot = skotch_mir::LocalId((1 + param_count + 1) as u32);
+                        let blocks = vec![BasicBlock {
+                            stmts: vec![
+                                skotch_mir::Stmt::Assign {
+                                    dest: field_slot,
+                                    value: skotch_mir::Rvalue::GetField {
+                                        receiver: skotch_mir::LocalId(0),
+                                        class_name: cname.to_string(),
+                                        field_name: fname.clone(),
+                                    },
+                                },
+                                skotch_mir::Stmt::Assign {
+                                    dest: result_slot,
+                                    value: skotch_mir::Rvalue::CheckCast {
+                                        obj: field_slot,
+                                        target_class,
+                                    },
+                                },
+                            ],
+                            terminator: Terminator::ReturnValue(result_slot),
+                        }];
+                        return (blocks, vec![fty.clone(), ret_ty]);
+                    }
+                }
+            }
+        }
+    }
+
     // `is` type check on a param or implicit-this field:
     //   class P(val x: Any) { fun isStr(): Boolean = x is String }
     if let KtExpr::Is(is_e) = &body_expr {
@@ -7438,6 +7519,38 @@ mod tests {
                 _ => panic!("expected CheckCast"),
             },
         }
+    }
+
+    #[test]
+    fn typed_lower_method_as_cast_on_implicit_this_field() {
+        // `class P(val x: Any) { fun str(): String = x as String }`
+        let module = lower(
+            "class P(val x: Any) { fun str(): String = x as String }",
+            "TestKt",
+        );
+        let cls = module.classes.iter().find(|c| c.name == "P").unwrap();
+        let f = cls.methods.iter().find(|m| m.name == "str").unwrap();
+        let block = &f.blocks[0];
+        let has_getfield = block.stmts.iter().any(|s| {
+            matches!(
+                s,
+                skotch_mir::Stmt::Assign {
+                    value: skotch_mir::Rvalue::GetField { .. },
+                    ..
+                }
+            )
+        });
+        let has_checkcast = block.stmts.iter().any(|s| {
+            matches!(
+                s,
+                skotch_mir::Stmt::Assign {
+                    value: skotch_mir::Rvalue::CheckCast { .. },
+                    ..
+                }
+            )
+        });
+        assert!(has_getfield);
+        assert!(has_checkcast);
     }
 
     #[test]
