@@ -5564,6 +5564,21 @@ fn method_simple_body_full(
                                             param_names.iter().position(|p| p == an)
                                         {
                                             arg_slots.push(skotch_mir::LocalId((1 + idx) as u32));
+                                        } else if let (Some(cname), Some((fname, fty))) =
+                                            (class_name, field_names.iter().find(|(n, _)| n == an))
+                                        {
+                                            let slot = skotch_mir::LocalId(next_slot);
+                                            next_slot += 1;
+                                            extra_locals.push(fty.clone());
+                                            pre_stmts.push(skotch_mir::Stmt::Assign {
+                                                dest: slot,
+                                                value: skotch_mir::Rvalue::GetField {
+                                                    receiver: this_slot,
+                                                    class_name: cname.to_string(),
+                                                    field_name: fname.clone(),
+                                                },
+                                            });
+                                            arg_slots.push(slot);
                                         } else {
                                             ok = false;
                                             break;
@@ -6726,6 +6741,40 @@ mod tests {
                 _ => panic!("expected CheckCast"),
             },
         }
+    }
+
+    #[test]
+    fn typed_lower_method_virtual_call_with_implicit_this_field_arg() {
+        // `class P(val n: Int) { fun a(x: Int): Int = x; fun b(): Int = a(n) }`
+        // n is an implicit-this field; the virtual call to a should
+        // GetField n then pass it as the 2nd arg (this is the 1st).
+        let module = lower(
+            "class P(val n: Int) { fun a(x: Int): Int = x; fun b(): Int = a(n) }",
+            "TestKt",
+        );
+        let cls = module.classes.iter().find(|c| c.name == "P").unwrap();
+        let f = cls.methods.iter().find(|m| m.name == "b").unwrap();
+        let block = &f.blocks[0];
+        let has_getfield = block.stmts.iter().any(|s| match s {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::GetField { field_name, .. } => field_name == "n",
+                _ => false,
+            },
+        });
+        let has_virtual = block.stmts.iter().any(|s| {
+            matches!(
+                s,
+                skotch_mir::Stmt::Assign {
+                    value: skotch_mir::Rvalue::Call {
+                        kind: skotch_mir::CallKind::Virtual { .. },
+                        ..
+                    },
+                    ..
+                }
+            )
+        });
+        assert!(has_getfield, "expected GetField for n: {block:?}");
+        assert!(has_virtual, "expected Virtual call: {block:?}");
     }
 
     #[test]
