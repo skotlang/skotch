@@ -740,6 +740,179 @@ fn try_lower_while_loop(
     Some((blocks, extra_locals))
 }
 
+/// Try to lower `do { body } while (cond)` to a 3-block loop CFG
+/// where the body block runs first, then the cond block branches
+/// back to the body or out to the exit.
+fn try_lower_do_while_loop(
+    block: skotch_ast::KtBlock<'_>,
+    f: skotch_ast::KtFun<'_>,
+    strings: &mut Vec<String>,
+) -> Option<(Vec<BasicBlock>, Vec<Ty>)> {
+    use skotch_ast::KtExpr;
+    use skotch_mir::{LocalId, Rvalue, Stmt as MStmt};
+
+    let stmts: Vec<KtExpr<'_>> = block.statements().collect();
+    if stmts.len() != 1 {
+        return None;
+    }
+    let KtExpr::DoWhile(dw) = &stmts[0] else {
+        return None;
+    };
+    let cond_expr = dw.condition().and_then(|c| c.expression()).map(unwrap_parens)?;
+    let body_block = dw.body().and_then(|b| match b.expression()? {
+        KtExpr::Block(bl) => Some(bl),
+        _ => None,
+    })?;
+    let body_stmts: Vec<KtExpr<'_>> = body_block.statements().collect();
+    if body_stmts.len() > 1 {
+        return None;
+    }
+
+    let param_count = f
+        .value_parameter_list()
+        .map(|pl| pl.parameters().count())
+        .unwrap_or(0);
+    let outer_param_names: Vec<String> = f
+        .value_parameter_list()
+        .map(|pl| {
+            pl.parameters()
+                .map(|p| p.name().unwrap_or("").to_string())
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let KtExpr::Binary(b) = cond_expr else {
+        return None;
+    };
+    let cmp_op = b.operation().map(|o| o.text()).unwrap_or_default();
+    let mir_op = match cmp_op.as_str() {
+        "==" => skotch_mir::BinOp::CmpEq,
+        "!=" => skotch_mir::BinOp::CmpNe,
+        "<" => skotch_mir::BinOp::CmpLt,
+        ">" => skotch_mir::BinOp::CmpGt,
+        "<=" => skotch_mir::BinOp::CmpLe,
+        ">=" => skotch_mir::BinOp::CmpGe,
+        _ => return None,
+    };
+
+    let mut next_slot = param_count as u32;
+    let mut extra_locals: Vec<Ty> = Vec::new();
+
+    // Body stmts.
+    let mut body_stmts_mir: Vec<MStmt> = Vec::new();
+    if !body_stmts.is_empty() {
+        let KtExpr::Call(call) = &body_stmts[0] else {
+            return None;
+        };
+        let name = match call.callee() {
+            Some(KtExpr::Reference(r)) => r.name(),
+            _ => None,
+        }?;
+        let kind = match name {
+            "println" => skotch_mir::CallKind::Println,
+            "print" => skotch_mir::CallKind::Print,
+            _ => return None,
+        };
+        let args = call.value_argument_list()?;
+        let arg_exprs: Vec<KtExpr<'_>> =
+            args.arguments().filter_map(|a| a.expression()).collect();
+        if arg_exprs.len() != 1 {
+            return None;
+        }
+        let (k, ty) = literal_to_const(&arg_exprs[0], strings)?;
+        let arg_slot = LocalId(next_slot);
+        next_slot += 1;
+        extra_locals.push(ty);
+        body_stmts_mir.push(MStmt::Assign {
+            dest: arg_slot,
+            value: Rvalue::Const(k),
+        });
+        let result_slot = LocalId(next_slot);
+        next_slot += 1;
+        extra_locals.push(Ty::Unit);
+        body_stmts_mir.push(MStmt::Assign {
+            dest: result_slot,
+            value: Rvalue::Call {
+                kind,
+                args: vec![arg_slot],
+            },
+        });
+    }
+
+    // Cond stmts (block 1).
+    let mut cond_stmts: Vec<MStmt> = Vec::new();
+    let resolve_op = |e: KtExpr<'_>,
+                      next_slot: &mut u32,
+                      pre: &mut Vec<MStmt>,
+                      locals: &mut Vec<Ty>,
+                      strings: &mut Vec<String>|
+     -> Option<LocalId> {
+        let e = unwrap_parens(e);
+        match e {
+            KtExpr::Reference(r) => {
+                let n = r.name()?;
+                let idx = outer_param_names.iter().position(|p| p == n)?;
+                Some(LocalId(idx as u32))
+            }
+            other => {
+                let (k, ty) = literal_to_const(&other, strings)?;
+                let slot = LocalId(*next_slot);
+                *next_slot += 1;
+                locals.push(ty);
+                pre.push(MStmt::Assign {
+                    dest: slot,
+                    value: Rvalue::Const(k),
+                });
+                Some(slot)
+            }
+        }
+    };
+    let lhs = resolve_op(
+        b.lhs()?,
+        &mut next_slot,
+        &mut cond_stmts,
+        &mut extra_locals,
+        strings,
+    )?;
+    let rhs = resolve_op(
+        b.rhs()?,
+        &mut next_slot,
+        &mut cond_stmts,
+        &mut extra_locals,
+        strings,
+    )?;
+    let cmp_slot = LocalId(next_slot);
+    extra_locals.push(Ty::Bool);
+    cond_stmts.push(MStmt::Assign {
+        dest: cmp_slot,
+        value: Rvalue::BinOp {
+            op: mir_op,
+            lhs,
+            rhs,
+        },
+    });
+
+    let blocks = vec![
+        BasicBlock {
+            stmts: body_stmts_mir,
+            terminator: Terminator::Goto(1),
+        },
+        BasicBlock {
+            stmts: cond_stmts,
+            terminator: Terminator::Branch {
+                cond: cmp_slot,
+                then_block: 0,
+                else_block: 2,
+            },
+        },
+        BasicBlock {
+            stmts: Vec::new(),
+            terminator: Terminator::Return,
+        },
+    ];
+    Some((blocks, extra_locals))
+}
+
 /// Try to lower a simple `when (subject) { v1 -> r1; v2 -> r2; else -> default }`
 /// expression body. Each arm becomes a 3-block chain:
 ///   cmp_block: cmp_local = CmpEq(subject, v_i); Branch(then_i, next_cmp)
@@ -1552,6 +1725,15 @@ fn lower_simple_body(
             //   block 2: Return
             if let Some(blocks_and_locals) =
                 try_lower_while_loop(block, f, strings, fn_lookup)
+            {
+                return blocks_and_locals;
+            }
+            // do { body } while (cond) — body runs first.
+            //   block 0: body; Goto(1)
+            //   block 1: cmp; Branch(then=0, exit=2)
+            //   block 2: Return
+            if let Some(blocks_and_locals) =
+                try_lower_do_while_loop(block, f, strings)
             {
                 return blocks_and_locals;
             }
@@ -3358,6 +3540,27 @@ mod tests {
                 _ => panic!("expected BinOp"),
             },
         }
+    }
+
+    #[test]
+    fn typed_lower_do_while_loop_with_println() {
+        let module = lower(
+            "fun loop(n: Int) { do { println(\"hi\") } while (n > 0) }",
+            "TestKt",
+        );
+        let f = &module.functions[0];
+        assert_eq!(f.blocks.len(), 3);
+        // Block 0: body (println), Goto(1).
+        let body = &f.blocks[0];
+        assert_eq!(body.stmts.len(), 2);
+        assert!(matches!(body.terminator, Terminator::Goto(1)));
+        // Block 1: cond, Branch(then=0, else=2).
+        assert!(matches!(
+            f.blocks[1].terminator,
+            Terminator::Branch { then_block: 0, else_block: 2, .. }
+        ));
+        // Block 2: exit, Return.
+        assert!(matches!(f.blocks[2].terminator, Terminator::Return));
     }
 
     #[test]
