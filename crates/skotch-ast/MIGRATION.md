@@ -1045,3 +1045,50 @@ expanding incrementally toward fixture parity.
 mir-lower typed unit tests **85 → 144** (+59 across the session).
 Full workspace tests **576 → 603** (+27 net). Workspace clippy
 clean throughout.
+
+### 2026-06-11 (session 6 — push 18 final: method call args via implicit-this fields)
+
+**Method binary picks ConcatStr for String operands:**
+- Pre-fix the method binary handler always selected the integer op
+  for `+`. \`class P(val str: String) { fun greet(): String = "Hi, "
+  + str }` came out as AddI → JVM verifier rejects.
+- New `operand_is_str` detects String literals + String-typed
+  params + String-typed fields. Any `+` with a String operand
+  picks ConcatStr.
+
+**Method static-call args accept implicit-this field refs:**
+- \`class P(val n: Int) { fun double(): Int = doubleIt(n) }\` →
+  GetField(this, P, n) + Call(Static(doubleIt), [slot]).
+
+**Method virtual-call args accept implicit-this field refs:**
+- Same fall-through for implicit-this virtual calls:
+  \`class P(val n: Int) { fun a(x: Int) = x; fun b(): Int = a(n) }\`
+  → GetField for n + Call(Virtual{P, a}, [this, n_slot]).
+
+**Method explicit `this.method(args)`:**
+- \`class P { fun a() = 1; fun b(): Int = this.a() }\` lowers via a
+  dedicated DotQualified(this, Call) branch. Same emit as the
+  implicit-this Call below.
+
+**Push 18 totals:**
+- mir-lower: **148 unit tests** (up from 144)
+- Full workspace: **607 tests passing**, 0 failures
+- Workspace clippy: clean
+
+### Session 6 grand totals (final)
+
+mir-lower typed unit tests **85 → 148** (+63 in one session).
+Full workspace tests **576 → 607** (+31 net).
+Workspace clippy clean throughout.
+
+The typed pipeline now handles the bulk of common Kotlin idioms.
+The biggest remaining gaps for fixture parity:
+- Smart casts after `is` checks (typeck Pass 2)
+- when exhaustiveness for sealed hierarchies
+- Lambdas + closures + LambdaMetafactory emit
+- Coroutine state machine
+- Generic methods + type-parameter erasure
+- Custom property accessors with bodies
+- Object singletons with INSTANCE + clinit
+- For-in range/iterable loops
+- Cross-file class resolution beyond single-file class_lookup
