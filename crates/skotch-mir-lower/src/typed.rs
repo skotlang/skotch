@@ -5210,6 +5210,49 @@ mod tests {
     }
 
     #[test]
+    fn typed_lower_method_binary_both_implicit_this_fields() {
+        // `class P(val a: Int, val b: Int) { fun sum(): Int = a + b }`
+        let module = lower(
+            "class P(val a: Int, val b: Int) { fun sum(): Int = a + b }",
+            "TestKt",
+        );
+        let cls = module.classes.iter().find(|c| c.name == "P").unwrap();
+        let f = cls.methods.iter().find(|m| m.name == "sum").unwrap();
+        let block = &f.blocks[0];
+        let n_getfield = block
+            .stmts
+            .iter()
+            .filter(|s| {
+                matches!(
+                    s,
+                    skotch_mir::Stmt::Assign {
+                        value: skotch_mir::Rvalue::GetField { .. },
+                        ..
+                    }
+                )
+            })
+            .count();
+        let n_add = block
+            .stmts
+            .iter()
+            .filter(|s| {
+                matches!(
+                    s,
+                    skotch_mir::Stmt::Assign {
+                        value: skotch_mir::Rvalue::BinOp {
+                            op: skotch_mir::BinOp::AddI,
+                            ..
+                        },
+                        ..
+                    }
+                )
+            })
+            .count();
+        assert_eq!(n_getfield, 2);
+        assert_eq!(n_add, 1);
+    }
+
+    #[test]
     fn typed_lower_block_return_binary() {
         // `fun calc(): Int { val a = 1; val b = 2; return a + b }`
         let module = lower(
