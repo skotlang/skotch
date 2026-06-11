@@ -141,8 +141,7 @@ pub fn lower_file(
                             let nested_qname = format!("{}${}", name, nested_simple);
                             let nested_fields = collect_class_fields(nested);
                             let nested_methods = collect_class_methods(nested, &nested_qname);
-                            let nested_ctor =
-                                constructor_from_primary(nested, &nested_qname);
+                            let nested_ctor = constructor_from_primary(nested, &nested_qname);
                             let (n_super, n_ifaces) =
                                 collect_class_super_iface(nested.super_type_list());
                             let nested_mir = skotch_mir::MirClass {
@@ -390,8 +389,7 @@ pub fn lower_file(
             // expression now emit MStmt::Assign + ReturnValue. Block
             // bodies and non-literal expression bodies still emit an
             // empty Return placeholder.
-            let (blocks, extra_locals) =
-                lower_simple_body(f, &mut module.strings, &fn_lookup);
+            let (blocks, extra_locals) = lower_simple_body(f, &mut module.strings, &fn_lookup);
 
             let mut locals = param_tys;
             locals.extend(extra_locals);
@@ -844,23 +842,22 @@ fn try_lower_if_expression(
     next_slot += 1;
     // Pick the arm type from the then-branch (best effort).
     let arm_ty = match &then_expr {
-        KtExpr::Reference(rr) => {
-            rr.name()
-                .and_then(|n| {
-                    f.value_parameter_list().and_then(|pl| {
-                        pl.parameters().find_map(|p| {
-                            if p.name() != Some(n) {
-                                return None;
-                            }
-                            p.type_reference()
-                                .and_then(|tr| tr.user_type())
-                                .and_then(|u| u.name())
-                                .and_then(skotch_types::ty_from_name)
-                        })
+        KtExpr::Reference(rr) => rr
+            .name()
+            .and_then(|n| {
+                f.value_parameter_list().and_then(|pl| {
+                    pl.parameters().find_map(|p| {
+                        if p.name() != Some(n) {
+                            return None;
+                        }
+                        p.type_reference()
+                            .and_then(|tr| tr.user_type())
+                            .and_then(|u| u.name())
+                            .and_then(skotch_types::ty_from_name)
                     })
                 })
-                .unwrap_or(Ty::Any)
-        }
+            })
+            .unwrap_or(Ty::Any),
         _ => Ty::Any,
     };
     extra_locals.push(arm_ty.clone());
@@ -1338,9 +1335,7 @@ fn lower_simple_body(
             // Walk PROPERTY children + KtExpr stmts together via
             // try_lower_multi_stmt_block — this handles
             // `val x = 10; println(x)` and similar simple shapes.
-            if let Some((blocks, locals)) =
-                try_lower_multi_stmt_block(block, f, strings)
-            {
+            if let Some((blocks, locals)) = try_lower_multi_stmt_block(block, f, strings) {
                 return (blocks, locals);
             }
             if stmts.len() == 1 {
@@ -1429,9 +1424,7 @@ fn lower_simple_body(
     //   block 2: result_local = else-arm; Goto(3)
     //   block 3: ReturnValue(result_local)
     if let KtExpr::If(if_e) = &body_expr {
-        if let Some(blocks_and_locals) =
-            try_lower_if_expression(if_e, f, strings, fn_lookup)
-        {
+        if let Some(blocks_and_locals) = try_lower_if_expression(if_e, f, strings, fn_lookup) {
             return blocks_and_locals;
         }
     }
@@ -1472,8 +1465,7 @@ fn lower_simple_body(
                                         ok = false;
                                         break;
                                     };
-                                    let Some(idx) =
-                                        outer_param_names.iter().position(|p| p == an)
+                                    let Some(idx) = outer_param_names.iter().position(|p| p == an)
                                     else {
                                         ok = false;
                                         break;
@@ -1577,8 +1569,14 @@ fn lower_simple_body(
         let numeric_ty = if is_str_concat {
             Ty::String
         } else {
-            let lhs_ty = b.lhs().map(|l| operand_numeric_ty(&l, f)).unwrap_or(Ty::Int);
-            let rhs_ty = b.rhs().map(|r| operand_numeric_ty(&r, f)).unwrap_or(Ty::Int);
+            let lhs_ty = b
+                .lhs()
+                .map(|l| operand_numeric_ty(&l, f))
+                .unwrap_or(Ty::Int);
+            let rhs_ty = b
+                .rhs()
+                .map(|r| operand_numeric_ty(&r, f))
+                .unwrap_or(Ty::Int);
             promote_numeric(&lhs_ty, &rhs_ty)
         };
         let mir_op = match (op_text.as_str(), &numeric_ty) {
@@ -1659,10 +1657,7 @@ fn lower_simple_body(
                             extra_locals,
                             strings,
                         )?;
-                        let op_text = inner_b
-                            .operation()
-                            .map(|o| o.text())
-                            .unwrap_or_default();
+                        let op_text = inner_b.operation().map(|o| o.text()).unwrap_or_default();
                         let lhs_ty = operand_numeric_ty(&inner_b.lhs()?, f);
                         let rhs_ty = operand_numeric_ty(&inner_b.rhs()?, f);
                         let ty = promote_numeric(&lhs_ty, &rhs_ty);
@@ -1717,9 +1712,9 @@ fn lower_simple_body(
             }
 
             let mut resolve_operand = |e: skotch_ast::KtExpr<'_>,
-                                   next_slot: &mut u32,
-                                   pre_stmts: &mut Vec<skotch_mir::Stmt>,
-                                   extra_locals: &mut Vec<Ty>|
+                                       next_slot: &mut u32,
+                                       pre_stmts: &mut Vec<skotch_mir::Stmt>,
+                                       extra_locals: &mut Vec<Ty>|
              -> Option<skotch_mir::LocalId> {
                 resolve_operand_rec(
                     e,
@@ -1794,8 +1789,12 @@ fn lower_simple_body(
                     }
                     None
                 });
-            let Some(text) = text else { return make_placeholder() };
-            let Ok(v) = text.parse::<i64>() else { return make_placeholder() };
+            let Some(text) = text else {
+                return make_placeholder();
+            };
+            let Ok(v) = text.parse::<i64>() else {
+                return make_placeholder();
+            };
             (MirConst::Int(v as i32), Ty::Int)
         }
         KtExpr::Boolean(_) => {
@@ -1892,8 +1891,9 @@ fn constructor_from_primary(c: skotch_ast::KtClass<'_>, class_name: &str) -> Mir
                 .unwrap_or(Ty::Any)
         })
         .collect();
-    let params: Vec<skotch_mir::LocalId> =
-        (0..param_count).map(|i| skotch_mir::LocalId(i as u32)).collect();
+    let params: Vec<skotch_mir::LocalId> = (0..param_count)
+        .map(|i| skotch_mir::LocalId(i as u32))
+        .collect();
     MirFunction {
         id: FuncId(0),
         name: "<init>".to_string(),
@@ -1935,7 +1935,11 @@ fn collect_class_fields(c: skotch_ast::KtClass<'_>) -> Vec<skotch_mir::MirField>
             for p in plist.parameters() {
                 if p.is_val() || p.is_var() {
                     if let Some(n) = p.name() {
-                        let ty = match p.type_reference().and_then(|tr| tr.user_type()).and_then(|u| u.name()) {
+                        let ty = match p
+                            .type_reference()
+                            .and_then(|tr| tr.user_type())
+                            .and_then(|u| u.name())
+                        {
                             Some(name) => skotch_types::ty_from_name(name).unwrap_or(Ty::Any),
                             None => Ty::Any,
                         };
@@ -1953,7 +1957,11 @@ fn collect_class_fields(c: skotch_ast::KtClass<'_>) -> Vec<skotch_mir::MirField>
         for d in body.declarations() {
             if let KtDecl::Property(p) = d {
                 if let Some(n) = p.name() {
-                    let ty = match p.type_reference().and_then(|tr| tr.user_type()).and_then(|u| u.name()) {
+                    let ty = match p
+                        .type_reference()
+                        .and_then(|tr| tr.user_type())
+                        .and_then(|u| u.name())
+                    {
                         Some(name) => skotch_types::ty_from_name(name).unwrap_or(Ty::Any),
                         None => Ty::Any,
                     };
@@ -1982,8 +1990,9 @@ fn collect_secondary_ctors(c: skotch_ast::KtClass<'_>) -> Vec<MirFunction> {
             .value_parameter_list()
             .map(|pl| pl.parameters().count())
             .unwrap_or(0);
-        let params: Vec<skotch_mir::LocalId> =
-            (0..param_count).map(|i| skotch_mir::LocalId(i as u32)).collect();
+        let params: Vec<skotch_mir::LocalId> = (0..param_count)
+            .map(|i| skotch_mir::LocalId(i as u32))
+            .collect();
         let param_names: Vec<String> = sc
             .value_parameter_list()
             .map(|pl| {
@@ -2081,8 +2090,9 @@ fn method_from_fun(
         .value_parameter_list()
         .map(|pl| pl.parameters().count())
         .unwrap_or(0);
-    let params: Vec<skotch_mir::LocalId> =
-        (0..param_count).map(|i| skotch_mir::LocalId(i as u32)).collect();
+    let params: Vec<skotch_mir::LocalId> = (0..param_count)
+        .map(|i| skotch_mir::LocalId(i as u32))
+        .collect();
     let param_names: Vec<String> = f
         .value_parameter_list()
         .map(|pl| {
@@ -2538,16 +2548,16 @@ mod tests {
         assert_eq!(field_names, vec!["x", "y"]);
         // Constructor signature.
         assert_eq!(c.constructor.required_params, 2);
-        assert_eq!(c.constructor.param_names, vec!["x".to_string(), "y".to_string()]);
+        assert_eq!(
+            c.constructor.param_names,
+            vec!["x".to_string(), "y".to_string()]
+        );
         assert_eq!(c.constructor.locals, vec![Ty::Int, Ty::Int]);
     }
 
     #[test]
     fn typed_lower_interface_with_methods_marks_abstract() {
-        let module = lower(
-            "interface Printable { fun pretty(): String }",
-            "TestKt",
-        );
+        let module = lower("interface Printable { fun pretty(): String }", "TestKt");
         let c = &module.classes[0];
         assert_eq!(c.methods.len(), 1);
         let m = &c.methods[0];
@@ -2568,7 +2578,10 @@ mod tests {
         match &block.stmts[0] {
             skotch_mir::Stmt::Assign { dest, value } => {
                 assert_eq!(dest.0, 0);
-                assert!(matches!(value, skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(42))));
+                assert!(matches!(
+                    value,
+                    skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(42))
+                ));
             }
         }
         assert!(matches!(block.terminator, Terminator::ReturnValue(_)));
@@ -2582,7 +2595,10 @@ mod tests {
         assert_eq!(f.return_ty, Ty::Bool);
         match &f.blocks[0].stmts[0] {
             skotch_mir::Stmt::Assign { value, .. } => {
-                assert!(matches!(value, skotch_mir::Rvalue::Const(skotch_mir::MirConst::Bool(true))));
+                assert!(matches!(
+                    value,
+                    skotch_mir::Rvalue::Const(skotch_mir::MirConst::Bool(true))
+                ));
             }
         }
     }
@@ -2632,7 +2648,10 @@ mod tests {
         assert_eq!(block.stmts.len(), 2);
         match &block.stmts[0] {
             skotch_mir::Stmt::Assign { value, .. } => {
-                assert!(matches!(value, skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(42))));
+                assert!(matches!(
+                    value,
+                    skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(42))
+                ));
             }
         }
         match &block.stmts[1] {
@@ -2692,7 +2711,11 @@ mod tests {
         // First cmp block branches into then_1 (index 1) or cmp_2 (index 2).
         assert!(matches!(
             f.blocks[0].terminator,
-            Terminator::Branch { then_block: 1, else_block: 2, .. }
+            Terminator::Branch {
+                then_block: 1,
+                else_block: 2,
+                ..
+            }
         ));
         // then blocks Goto(5) the join.
         assert!(matches!(f.blocks[1].terminator, Terminator::Goto(5)));
@@ -2703,10 +2726,7 @@ mod tests {
 
     #[test]
     fn typed_lower_throw_param() {
-        let module = lower(
-            "fun fail(e: Throwable): Nothing = throw e",
-            "TestKt",
-        );
+        let module = lower("fun fail(e: Throwable): Nothing = throw e", "TestKt");
         let f = &module.functions[0];
         assert_eq!(f.blocks.len(), 1);
         let block = &f.blocks[0];
@@ -2719,14 +2739,21 @@ mod tests {
 
     #[test]
     fn typed_lower_if_expression_max_of_two() {
-        let module = lower("fun max(a: Int, b: Int): Int = if (a > b) a else b", "TestKt");
+        let module = lower(
+            "fun max(a: Int, b: Int): Int = if (a > b) a else b",
+            "TestKt",
+        );
         let f = &module.functions[0];
         // 4 blocks: cond, then, else, join.
         assert_eq!(f.blocks.len(), 4);
         // Block 0: cond computation + Branch.
         assert!(matches!(
             f.blocks[0].terminator,
-            Terminator::Branch { then_block: 1, else_block: 2, .. }
+            Terminator::Branch {
+                then_block: 1,
+                else_block: 2,
+                ..
+            }
         ));
         // Block 1: then arm, Goto(3).
         assert!(matches!(f.blocks[1].terminator, Terminator::Goto(3)));
@@ -2756,7 +2783,10 @@ mod tests {
                 _ => panic!("expected Call"),
             },
         }
-        assert!(matches!(outer.blocks[0].terminator, Terminator::ReturnValue(_)));
+        assert!(matches!(
+            outer.blocks[0].terminator,
+            Terminator::ReturnValue(_)
+        ));
     }
 
     #[test]
@@ -2803,10 +2833,7 @@ mod tests {
 
     #[test]
     fn typed_lower_static_call_unit_return_uses_plain_return() {
-        let module = lower(
-            "fun side() {}\nfun caller() = side()",
-            "TestKt",
-        );
+        let module = lower("fun side() {}\nfun caller() = side()", "TestKt");
         let caller = &module.functions[1];
         // Unit-returning callee → Terminator is plain Return, not ReturnValue.
         assert!(matches!(caller.blocks[0].terminator, Terminator::Return));
@@ -2838,7 +2865,10 @@ mod tests {
 
     #[test]
     fn typed_lower_chained_binary_add() {
-        let module = lower("fun sum3(a: Int, b: Int, c: Int): Int = a + b + c", "TestKt");
+        let module = lower(
+            "fun sum3(a: Int, b: Int, c: Int): Int = a + b + c",
+            "TestKt",
+        );
         let f = &module.functions[0];
         let block = &f.blocks[0];
         // 2 BinOp stmts: inner (a + b), outer (inner + c).
@@ -3012,7 +3042,10 @@ mod tests {
         let block = &f.blocks[0];
         match &block.stmts[0] {
             skotch_mir::Stmt::Assign { value, .. } => {
-                assert!(matches!(value, skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(0))));
+                assert!(matches!(
+                    value,
+                    skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(0))
+                ));
             }
         }
         match &block.stmts[1] {
@@ -3029,10 +3062,7 @@ mod tests {
 
     #[test]
     fn typed_lower_local_val_then_println() {
-        let module = lower(
-            "fun main() {\n  val x = 42\n  println(x)\n}",
-            "TestKt",
-        );
+        let module = lower("fun main() {\n  val x = 42\n  println(x)\n}", "TestKt");
         let f = &module.functions[0];
         let block = &f.blocks[0];
         // 3 stmts: Assign val x, Assign println-result, ...
@@ -3041,7 +3071,10 @@ mod tests {
         match &block.stmts[0] {
             skotch_mir::Stmt::Assign { dest, value } => {
                 assert_eq!(dest.0, 0); // val x → local 0 (no params)
-                assert!(matches!(value, skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(42))));
+                assert!(matches!(
+                    value,
+                    skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(42))
+                ));
             }
         }
         match &block.stmts[1] {
@@ -3165,10 +3198,7 @@ mod tests {
 
     #[test]
     fn typed_lower_block_bodied_return_with_binary() {
-        let module = lower(
-            "fun add(a: Int, b: Int): Int { return a + b }",
-            "TestKt",
-        );
+        let module = lower("fun add(a: Int, b: Int): Int { return a + b }", "TestKt");
         let f = &module.functions[0];
         assert_eq!(f.return_ty, Ty::Int);
         let block = &f.blocks[0];
@@ -3186,10 +3216,7 @@ mod tests {
 
     #[test]
     fn typed_lower_block_bodied_return_with_param_ref() {
-        let module = lower(
-            "fun identity(x: Int): Int { return x }",
-            "TestKt",
-        );
+        let module = lower("fun identity(x: Int): Int { return x }", "TestKt");
         let f = &module.functions[0];
         assert_eq!(f.return_ty, Ty::Int);
         let block = &f.blocks[0];
@@ -3210,7 +3237,10 @@ mod tests {
         assert_eq!(block.stmts.len(), 1);
         match &block.stmts[0] {
             skotch_mir::Stmt::Assign { value, .. } => {
-                assert!(matches!(value, skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(7))));
+                assert!(matches!(
+                    value,
+                    skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(7))
+                ));
             }
         }
         assert!(matches!(block.terminator, Terminator::ReturnValue(_)));
@@ -3220,10 +3250,7 @@ mod tests {
     fn typed_lower_nested_class_emits_outer_dollar_inner() {
         let module = lower("class Outer { class Inner }", "TestKt");
         assert!(module.classes.iter().any(|c| c.name == "Outer"));
-        assert!(module
-            .classes
-            .iter()
-            .any(|c| c.name == "Outer$Inner"));
+        assert!(module.classes.iter().any(|c| c.name == "Outer$Inner"));
     }
 
     #[test]
@@ -3232,7 +3259,11 @@ mod tests {
             "class Foo(val x: Int) { constructor(s: String) : this(s.length) {} }",
             "TestKt",
         );
-        let foo = module.classes.iter().find(|c| c.name == "Foo").expect("Foo");
+        let foo = module
+            .classes
+            .iter()
+            .find(|c| c.name == "Foo")
+            .expect("Foo");
         assert_eq!(foo.secondary_constructors.len(), 1);
         let sc = &foo.secondary_constructors[0];
         assert_eq!(sc.name, "<init>");
@@ -3247,7 +3278,11 @@ mod tests {
             "class Foo { companion object { fun create(): Foo = TODO() } }",
             "TestKt",
         );
-        let foo = module.classes.iter().find(|c| c.name == "Foo").expect("Foo");
+        let foo = module
+            .classes
+            .iter()
+            .find(|c| c.name == "Foo")
+            .expect("Foo");
         assert_eq!(foo.companion_class_name.as_deref(), Some("Foo$Companion"));
         let comp = module
             .classes
@@ -3261,10 +3296,7 @@ mod tests {
 
     #[test]
     fn typed_lower_object_with_methods_emits_method_list() {
-        let module = lower(
-            "object S { fun greet(): String = \"hi\" }",
-            "TestKt",
-        );
+        let module = lower("object S { fun greet(): String = \"hi\" }", "TestKt");
         let c = &module.classes[0];
         assert!(c.is_object_singleton);
         assert_eq!(c.methods.len(), 1);
@@ -3284,10 +3316,7 @@ mod tests {
             .iter()
             .map(|m| (m.name.as_str(), &m.return_ty))
             .collect();
-        assert_eq!(
-            methods,
-            vec![("double", &Ty::Int), ("greet", &Ty::String)],
-        );
+        assert_eq!(methods, vec![("double", &Ty::Int), ("greet", &Ty::String)],);
     }
 
     #[test]

@@ -2143,10 +2143,7 @@ mod tests {
     #[test]
     #[ignore]
     fn debug_dump_member_call() {
-        let parsed = crate::parse(
-            "t.kt",
-            "fun main() {\n  val b = X(7)\n  val s = b.foo()\n}",
-        );
+        let parsed = crate::parse("t.kt", "fun main() {\n  val b = X(7)\n  val s = b.foo()\n}");
         dump(parsed.file().syntax(), 0);
     }
 

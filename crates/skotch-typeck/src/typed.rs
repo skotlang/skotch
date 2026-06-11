@@ -147,22 +147,30 @@ pub fn type_check(
         match d {
             KtDecl::Class(c) => {
                 if let Some(n) = c.name() {
-                    imports.entry(n.to_string()).or_insert_with(|| n.to_string());
+                    imports
+                        .entry(n.to_string())
+                        .or_insert_with(|| n.to_string());
                 }
             }
             KtDecl::Interface(i) => {
                 if let Some(n) = i.name() {
-                    imports.entry(n.to_string()).or_insert_with(|| n.to_string());
+                    imports
+                        .entry(n.to_string())
+                        .or_insert_with(|| n.to_string());
                 }
             }
             KtDecl::Object(o) => {
                 if let Some(n) = o.name() {
-                    imports.entry(n.to_string()).or_insert_with(|| n.to_string());
+                    imports
+                        .entry(n.to_string())
+                        .or_insert_with(|| n.to_string());
                 }
             }
             KtDecl::EnumClass(e) => {
                 if let Some(n) = e.name() {
-                    imports.entry(n.to_string()).or_insert_with(|| n.to_string());
+                    imports
+                        .entry(n.to_string())
+                        .or_insert_with(|| n.to_string());
                 }
             }
             _ => {}
@@ -434,12 +442,7 @@ fn register_class(
     }
     // Add as a subclass to the parent's sealed list if the parent is sealed.
     if let Some(sc) = &super_class {
-        if env
-            .types
-            .get(sc)
-            .map(|d| d.is_sealed)
-            .unwrap_or(false)
-        {
+        if env.types.get(sc).map(|d| d.is_sealed).unwrap_or(false) {
             env.sealed_subclasses
                 .entry(sc.clone())
                 .or_default()
@@ -564,8 +567,7 @@ fn register_enum(
         })
         .unwrap_or_default();
     for entry in &enum_entry_names {
-        env.enum_entries
-            .insert(entry.clone(), name.to_string());
+        env.enum_entries.insert(entry.clone(), name.to_string());
     }
     env.types.insert(
         name.to_string(),
