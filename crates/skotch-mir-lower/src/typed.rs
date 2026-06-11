@@ -1818,6 +1818,38 @@ fn literal_to_const(
                 Some((MirConst::Int(v as i32), Ty::Int))
             }
         }
+        KtExpr::Prefix(p) => {
+            // Constant folding: unary `-` on a numeric literal becomes
+            // the negated literal. `+lit` reduces to lit.
+            let op_text = skotch_ast::children(p.syntax())
+                .iter()
+                .find_map(|c| {
+                    if c.kind == S::OPERATION_REFERENCE {
+                        skotch_ast::KtOperationReference::cast(c).map(|o| o.text())
+                    } else {
+                        None
+                    }
+                })
+                .unwrap_or_default();
+            if op_text != "-" && op_text != "+" {
+                return None;
+            }
+            let inner = skotch_ast::children(p.syntax())
+                .iter()
+                .find_map(KtExpr::cast)?;
+            let (inner_c, inner_ty) = literal_to_const(&inner, strings)?;
+            if op_text == "+" {
+                return Some((inner_c, inner_ty));
+            }
+            // Negate.
+            match inner_c {
+                MirConst::Int(v) => Some((MirConst::Int(-v), Ty::Int)),
+                MirConst::Long(v) => Some((MirConst::Long(-v), Ty::Long)),
+                MirConst::Float(v) => Some((MirConst::Float(-v), Ty::Float)),
+                MirConst::Double(v) => Some((MirConst::Double(-v), Ty::Double)),
+                _ => None,
+            }
+        }
         KtExpr::Float(_) => {
             let (text, is_float) = skotch_ast::children(e.syntax()).iter().find_map(|c| {
                 match c.kind {
@@ -4384,6 +4416,39 @@ mod tests {
                     assert!(target_class == "java/lang/String" || target_class == "String");
                 }
                 _ => panic!("expected CheckCast"),
+            },
+        }
+    }
+
+    #[test]
+    fn typed_lower_fn_returns_negative_int_literal() {
+        // `fun bad(): Int = -42` — should constant-fold the unary minus
+        // into MirConst::Int(-42).
+        let module = lower("fun bad(): Int = -42", "TestKt");
+        let f = module.functions.iter().find(|f| f.name == "bad").unwrap();
+        let block = &f.blocks[0];
+        assert_eq!(block.stmts.len(), 1);
+        match &block.stmts[0] {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(v)) => {
+                    assert_eq!(*v, -42);
+                }
+                _ => panic!("expected folded Int(-42), got {value:?}"),
+            },
+        }
+    }
+
+    #[test]
+    fn typed_lower_fn_returns_negative_double_literal() {
+        let module = lower("fun half(): Double = -0.5", "TestKt");
+        let f = module.functions.iter().find(|f| f.name == "half").unwrap();
+        let block = &f.blocks[0];
+        match &block.stmts[0] {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::Const(skotch_mir::MirConst::Double(v)) => {
+                    assert!((*v + 0.5).abs() < 1e-12);
+                }
+                _ => panic!("expected folded Double(-0.5), got {value:?}"),
             },
         }
     }
