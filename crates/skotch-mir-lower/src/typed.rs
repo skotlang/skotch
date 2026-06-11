@@ -2918,14 +2918,11 @@ fn lower_simple_body(
 /// Layout: locals 0..N hold `this` + the N user params. Field writeback
 /// reads each param slot in declaration order.
 fn constructor_from_primary(c: skotch_ast::KtClass<'_>, class_name: &str) -> MirFunction {
-    let Some(pc) = c.primary_constructor() else {
-        return empty_constructor(class_name);
-    };
-    let plist = match pc.value_parameter_list() {
-        Some(pl) => pl,
-        None => return empty_constructor(class_name),
-    };
-    let params_iter: Vec<_> = plist.parameters().collect();
+    let params_iter: Vec<_> = c
+        .primary_constructor()
+        .and_then(|pc| pc.value_parameter_list())
+        .map(|pl| pl.parameters().collect())
+        .unwrap_or_default();
     let user_param_count = params_iter.len();
     let user_param_names: Vec<String> = params_iter
         .iter()
@@ -2990,6 +2987,44 @@ fn constructor_from_primary(c: skotch_ast::KtClass<'_>, class_name: &str) -> Mir
                 value: param_slot,
             },
         });
+    }
+
+    // 3. PutField for each class-body property with a literal initializer.
+    //    `class P { val x: Int = 100 }` → Const(100) + PutField(this, P, x, slot).
+    let mut next_slot = (1 + user_param_count) as u32;
+    let mut strings: Vec<String> = Vec::new();
+    if let Some(body) = c.body() {
+        for d in body.declarations() {
+            let KtDecl::Property(prop) = d else { continue };
+            let Some(field_name) = prop.name() else { continue };
+            let Some(init) = prop.initializer() else { continue };
+            let init = unwrap_parens(init);
+            let Some((const_val, ty)) = literal_to_const(&init, &mut strings) else {
+                continue;
+            };
+            // String literal initializers aren't supported until we plumb
+            // a shared strings table into class lowering — interned IDs
+            // would collide with the module's table.
+            if matches!(const_val, skotch_mir::MirConst::String(_)) {
+                continue;
+            }
+            let val_slot = skotch_mir::LocalId(next_slot);
+            next_slot += 1;
+            locals.push(ty);
+            stmts.push(skotch_mir::Stmt::Assign {
+                dest: val_slot,
+                value: skotch_mir::Rvalue::Const(const_val),
+            });
+            stmts.push(skotch_mir::Stmt::Assign {
+                dest: this_slot,
+                value: skotch_mir::Rvalue::PutField {
+                    receiver: this_slot,
+                    class_name: class_name.to_string(),
+                    field_name: field_name.to_string(),
+                    value: val_slot,
+                },
+            });
+        }
     }
 
     MirFunction {
@@ -4149,6 +4184,42 @@ mod tests {
             })
             .count();
         assert_eq!(n_super, 1, "expected super Constructor call");
+    }
+
+    #[test]
+    fn typed_lower_class_body_property_init_emits_putfield() {
+        // `class P { val x: Int = 100 }` — class-body val with literal
+        // init. The ctor should emit Const(100) + PutField(this, P, x, val).
+        let module = lower("class P { val x: Int = 100 }", "TestKt");
+        let c = module.classes.iter().find(|c| c.name == "P").unwrap();
+        let field_names: Vec<&str> = c.fields.iter().map(|f| f.name.as_str()).collect();
+        assert_eq!(field_names, vec!["x"]);
+        let block = &c.constructor.blocks[0];
+        let n_putfield = block
+            .stmts
+            .iter()
+            .filter(|s| {
+                matches!(
+                    s,
+                    skotch_mir::Stmt::Assign {
+                        value: skotch_mir::Rvalue::PutField { .. },
+                        ..
+                    }
+                )
+            })
+            .count();
+        assert_eq!(n_putfield, 1, "expected 1 PutField for x, body: {block:?}");
+        // The matching Const(100) must come before the PutField.
+        let const_100 = block.stmts.iter().any(|s| {
+            matches!(
+                s,
+                skotch_mir::Stmt::Assign {
+                    value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(100)),
+                    ..
+                }
+            )
+        });
+        assert!(const_100, "expected Const(100), body: {block:?}");
     }
 
     #[test]
