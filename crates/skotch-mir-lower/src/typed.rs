@@ -4373,6 +4373,32 @@ mod tests {
     }
 
     #[test]
+    fn typed_lower_string_concat_literal_plus_param() {
+        // `fun greet(name: String): String = "Hello, " + name`
+        // Outer Binary { lhs: String("Hello, "), rhs: Ref(name), op: + }
+        // Should detect lhs as String and pick ConcatStr.
+        let module = lower(
+            r#"fun greet(name: String): String = "Hello, " + name"#,
+            "TestKt",
+        );
+        let f = module.functions.iter().find(|f| f.name == "greet").unwrap();
+        let block = &f.blocks[0];
+        let has_concat = block.stmts.iter().any(|s| {
+            matches!(
+                s,
+                skotch_mir::Stmt::Assign {
+                    value: skotch_mir::Rvalue::BinOp {
+                        op: skotch_mir::BinOp::ConcatStr,
+                        ..
+                    },
+                    ..
+                }
+            )
+        });
+        assert!(has_concat, "expected ConcatStr BinOp, got block: {block:?}");
+    }
+
+    #[test]
     fn typed_lower_binary_with_unary_minus_operand() {
         // `fun calc(a: Int, b: Int): Int = -a + b`
         // The lhs of the outer Binary is Prefix-minus on `a`.
