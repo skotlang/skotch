@@ -2616,7 +2616,10 @@ fn method_simple_body_with_class(
         }
     }
 
-    // Binary op on param refs: `fun add(a: Int, b: Int) = a + b`.
+    // Binary op on param/field refs or literals:
+    //   fun add(a: Int, b: Int) = a + b
+    //   fun double() = x * 2      (x is a field)
+    //   fun bump() = x + 1
     if let KtExpr::Binary(b) = &body_expr {
         let op_text = b.operation().map(|o| o.text()).unwrap_or_default();
         let mir_op = match op_text.as_str() {
@@ -2634,25 +2637,61 @@ fn method_simple_body_with_class(
             _ => None,
         };
         if let Some(op) = mir_op {
-            let lhs_slot = b.lhs().and_then(|l| match unwrap_parens(l) {
-                KtExpr::Reference(rr) => {
-                    let n = rr.name()?;
-                    param_names
-                        .iter()
-                        .position(|p| p == n)
-                        .map(|i| skotch_mir::LocalId((1 + i) as u32))
+            let mut next_slot = (1 + param_count) as u32;
+            let mut pre_stmts: Vec<skotch_mir::Stmt> = Vec::new();
+            let mut extra_locals: Vec<Ty> = Vec::new();
+
+            let resolve = |e: KtExpr<'_>,
+                           next_slot: &mut u32,
+                           pre: &mut Vec<skotch_mir::Stmt>,
+                           locals: &mut Vec<Ty>,
+                           strings: &mut Vec<String>|
+             -> Option<skotch_mir::LocalId> {
+                let e = unwrap_parens(e);
+                match e {
+                    KtExpr::Reference(rr) => {
+                        let n = rr.name()?;
+                        if let Some(idx) = param_names.iter().position(|p| p == n) {
+                            return Some(skotch_mir::LocalId((1 + idx) as u32));
+                        }
+                        // Field via implicit this.
+                        if let (Some(cname), Some((fname, fty))) = (
+                            class_name,
+                            field_names.iter().find(|(n2, _)| n2 == n),
+                        ) {
+                            let slot = skotch_mir::LocalId(*next_slot);
+                            *next_slot += 1;
+                            locals.push(fty.clone());
+                            pre.push(skotch_mir::Stmt::Assign {
+                                dest: slot,
+                                value: skotch_mir::Rvalue::GetField {
+                                    receiver: skotch_mir::LocalId(0),
+                                    class_name: cname.to_string(),
+                                    field_name: fname.clone(),
+                                },
+                            });
+                            return Some(slot);
+                        }
+                        None
+                    }
+                    other => {
+                        let (k, ty) = literal_to_const(&other, strings)?;
+                        let slot = skotch_mir::LocalId(*next_slot);
+                        *next_slot += 1;
+                        locals.push(ty);
+                        pre.push(skotch_mir::Stmt::Assign {
+                            dest: slot,
+                            value: skotch_mir::Rvalue::Const(k),
+                        });
+                        Some(slot)
+                    }
                 }
-                _ => None,
+            };
+            let lhs_slot = b.lhs().and_then(|l| {
+                resolve(l, &mut next_slot, &mut pre_stmts, &mut extra_locals, strings)
             });
-            let rhs_slot = b.rhs().and_then(|r| match unwrap_parens(r) {
-                KtExpr::Reference(rr) => {
-                    let n = rr.name()?;
-                    param_names
-                        .iter()
-                        .position(|p| p == n)
-                        .map(|i| skotch_mir::LocalId((1 + i) as u32))
-                }
-                _ => None,
+            let rhs_slot = b.rhs().and_then(|r| {
+                resolve(r, &mut next_slot, &mut pre_stmts, &mut extra_locals, strings)
             });
             if let (Some(lhs), Some(rhs)) = (lhs_slot, rhs_slot) {
                 let is_cmp = matches!(
@@ -2665,15 +2704,17 @@ fn method_simple_body_with_class(
                         | skotch_mir::BinOp::CmpGe
                 );
                 let result_ty = if is_cmp { Ty::Bool } else { Ty::Int };
-                let result_slot = skotch_mir::LocalId((1 + param_count) as u32);
+                let result_slot = skotch_mir::LocalId(next_slot);
+                extra_locals.push(result_ty);
+                pre_stmts.push(skotch_mir::Stmt::Assign {
+                    dest: result_slot,
+                    value: skotch_mir::Rvalue::BinOp { op, lhs, rhs },
+                });
                 let blocks = vec![BasicBlock {
-                    stmts: vec![skotch_mir::Stmt::Assign {
-                        dest: result_slot,
-                        value: skotch_mir::Rvalue::BinOp { op, lhs, rhs },
-                    }],
+                    stmts: pre_stmts,
                     terminator: Terminator::ReturnValue(result_slot),
                 }];
-                return (blocks, vec![result_ty]);
+                return (blocks, extra_locals);
             }
         }
     }
@@ -4094,6 +4135,42 @@ mod tests {
         assert_eq!(c.methods.len(), 1);
         assert_eq!(c.methods[0].name, "greet");
         assert_eq!(c.methods[0].return_ty, Ty::String);
+    }
+
+    #[test]
+    fn typed_lower_class_method_binary_field_op_literal() {
+        let module = lower(
+            "class Box(val x: Int) { fun double(): Int = x * 2 }",
+            "TestKt",
+        );
+        let box_class = module.classes.iter().find(|c| c.name == "Box").unwrap();
+        let m = box_class.methods.iter().find(|m| m.name == "double").unwrap();
+        let block = &m.blocks[0];
+        // Expected stmts: GetField for x (slot 2), Const(2) (slot 3),
+        // BinOp(MulI, slot 2, slot 3) (slot 4).
+        assert_eq!(block.stmts.len(), 3);
+        match &block.stmts[0] {
+            skotch_mir::Stmt::Assign { value, .. } => {
+                assert!(matches!(value, skotch_mir::Rvalue::GetField { .. }));
+            }
+        }
+        match &block.stmts[1] {
+            skotch_mir::Stmt::Assign { value, .. } => {
+                assert!(matches!(
+                    value,
+                    skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(2))
+                ));
+            }
+        }
+        match &block.stmts[2] {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::BinOp { op, .. } => {
+                    assert!(matches!(op, skotch_mir::BinOp::MulI));
+                }
+                _ => panic!("expected BinOp"),
+            },
+        }
+        assert!(matches!(block.terminator, Terminator::ReturnValue(_)));
     }
 
     #[test]
