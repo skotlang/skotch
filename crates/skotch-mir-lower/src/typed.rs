@@ -5878,6 +5878,74 @@ fn method_simple_body_full(
         }
     }
 
+    // `is` type check on a param or implicit-this field:
+    //   class P(val x: Any) { fun isStr(): Boolean = x is String }
+    if let KtExpr::Is(is_e) = &body_expr {
+        let children: Vec<_> = skotch_ast::children(is_e.syntax()).iter().collect();
+        let operand = children
+            .iter()
+            .find_map(|c| KtExpr::cast(c))
+            .map(unwrap_parens);
+        let type_name = children.iter().find_map(|c| {
+            if c.kind == skotch_syntax::SyntaxKind::TYPE_REFERENCE {
+                if let Some(tr) = skotch_ast::KtTypeReference::cast(c) {
+                    return tr.user_type().and_then(|u| u.name()).map(String::from);
+                }
+            }
+            None
+        });
+        if let (Some(KtExpr::Reference(r)), Some(tname)) = (operand, type_name) {
+            if let Some(name) = r.name() {
+                let descriptor = skotch_types::intrinsics::kotlin_to_jvm_class(&tname)
+                    .map(|s| s.to_string())
+                    .unwrap_or(tname.clone());
+                // Try param first.
+                if let Some(idx) = param_names.iter().position(|p| p == name) {
+                    let result_slot = skotch_mir::LocalId((1 + param_count) as u32);
+                    let blocks = vec![BasicBlock {
+                        stmts: vec![skotch_mir::Stmt::Assign {
+                            dest: result_slot,
+                            value: skotch_mir::Rvalue::InstanceOf {
+                                obj: skotch_mir::LocalId((1 + idx) as u32),
+                                type_descriptor: descriptor,
+                            },
+                        }],
+                        terminator: Terminator::ReturnValue(result_slot),
+                    }];
+                    return (blocks, vec![Ty::Bool]);
+                }
+                // Then implicit-this field.
+                if let (Some(cname), Some((fname, _fty))) =
+                    (class_name, field_names.iter().find(|(n, _)| n == name))
+                {
+                    let field_slot = skotch_mir::LocalId((1 + param_count) as u32);
+                    let result_slot = skotch_mir::LocalId((1 + param_count + 1) as u32);
+                    let blocks = vec![BasicBlock {
+                        stmts: vec![
+                            skotch_mir::Stmt::Assign {
+                                dest: field_slot,
+                                value: skotch_mir::Rvalue::GetField {
+                                    receiver: skotch_mir::LocalId(0),
+                                    class_name: cname.to_string(),
+                                    field_name: fname.clone(),
+                                },
+                            },
+                            skotch_mir::Stmt::Assign {
+                                dest: result_slot,
+                                value: skotch_mir::Rvalue::InstanceOf {
+                                    obj: field_slot,
+                                    type_descriptor: descriptor,
+                                },
+                            },
+                        ],
+                        terminator: Terminator::ReturnValue(result_slot),
+                    }];
+                    return (blocks, vec![Ty::Any, Ty::Bool]);
+                }
+            }
+        }
+    }
+
     // throw body for methods:
     //   class X { fun fail(e: Throwable): Nothing = throw e }
     //   class X { fun fail(): Nothing = throw IllegalStateException("oops") }
@@ -7370,6 +7438,38 @@ mod tests {
                 _ => panic!("expected CheckCast"),
             },
         }
+    }
+
+    #[test]
+    fn typed_lower_method_is_check_on_implicit_this_field() {
+        // `class P(val x: Any) { fun isStr(): Boolean = x is String }`
+        let module = lower(
+            "class P(val x: Any) { fun isStr(): Boolean = x is String }",
+            "TestKt",
+        );
+        let cls = module.classes.iter().find(|c| c.name == "P").unwrap();
+        let f = cls.methods.iter().find(|m| m.name == "isStr").unwrap();
+        let block = &f.blocks[0];
+        let has_getfield = block.stmts.iter().any(|s| {
+            matches!(
+                s,
+                skotch_mir::Stmt::Assign {
+                    value: skotch_mir::Rvalue::GetField { .. },
+                    ..
+                }
+            )
+        });
+        let has_instanceof = block.stmts.iter().any(|s| {
+            matches!(
+                s,
+                skotch_mir::Stmt::Assign {
+                    value: skotch_mir::Rvalue::InstanceOf { .. },
+                    ..
+                }
+            )
+        });
+        assert!(has_getfield);
+        assert!(has_instanceof);
     }
 
     #[test]
