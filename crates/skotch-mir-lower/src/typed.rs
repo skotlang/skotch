@@ -5496,6 +5496,27 @@ mod tests {
     }
 
     #[test]
+    fn typed_lower_when_subject_int_literal_arms() {
+        // `fun lookup(x: Int): String = when (x) { 1 -> "one"; 2 -> "two"; else -> "other" }`
+        let module = lower(
+            r#"fun lookup(x: Int): String = when (x) { 1 -> "one"; 2 -> "two"; else -> "other" }"#,
+            "TestKt",
+        );
+        let f = module
+            .functions
+            .iter()
+            .find(|f| f.name == "lookup")
+            .unwrap();
+        // 2 arms + else + join = 2*2 + 1 + 1 = 6 blocks.
+        assert_eq!(f.blocks.len(), 6);
+        // The last block should be ReturnValue.
+        assert!(matches!(
+            f.blocks[5].terminator,
+            skotch_mir::Terminator::ReturnValue(_)
+        ));
+    }
+
+    #[test]
     fn typed_lower_if_else_if_chain_three_arms() {
         // `fun signOf(x: Int): Int = if (x > 0) 1 else if (x < 0) -1 else 0`
         // 2 arms (>0, <0) + else. Chain CFG: 2N+2 = 6 blocks.
