@@ -1762,6 +1762,19 @@ fn try_lower_multi_stmt_block_inner(
     strings: &mut Vec<String>,
     fn_lookup: &rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)>,
 ) -> Option<(Vec<BasicBlock>, Vec<Ty>)> {
+    try_lower_multi_stmt_block_with_offset(block, f, strings, fn_lookup, 0)
+}
+
+/// Like try_lower_multi_stmt_block_inner but parameters can start at a
+/// non-zero slot. Class methods set `slot_offset = 1` so `this` occupies
+/// LocalId(0) and the user params shift to slots 1..=N.
+fn try_lower_multi_stmt_block_with_offset(
+    block: skotch_ast::KtBlock<'_>,
+    f: skotch_ast::KtFun<'_>,
+    strings: &mut Vec<String>,
+    fn_lookup: &rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)>,
+    slot_offset: u32,
+) -> Option<(Vec<BasicBlock>, Vec<Ty>)> {
     use skotch_ast::KtExpr;
     use skotch_mir::{LocalId, Stmt as MStmt};
 
@@ -1769,7 +1782,7 @@ fn try_lower_multi_stmt_block_inner(
         .value_parameter_list()
         .map(|pl| pl.parameters().count())
         .unwrap_or(0);
-    // Param names → their slots.
+    // Param names → their slots (shifted by slot_offset).
     let param_names: Vec<String> = f
         .value_parameter_list()
         .map(|pl| {
@@ -1781,12 +1794,12 @@ fn try_lower_multi_stmt_block_inner(
     let mut name_to_local: Vec<(String, LocalId)> = param_names
         .iter()
         .enumerate()
-        .map(|(i, n)| (n.clone(), LocalId(i as u32)))
+        .map(|(i, n)| (n.clone(), LocalId(i as u32 + slot_offset)))
         .collect();
 
     let mut local_tys: Vec<Ty> = Vec::new();
     let mut stmts: Vec<MStmt> = Vec::new();
-    let mut next_slot: u32 = param_count as u32;
+    let mut next_slot: u32 = param_count as u32 + slot_offset;
 
     let mut explicit_return_slot: Option<LocalId> = None;
     for c in skotch_ast::children(block.syntax()) {
@@ -4160,6 +4173,14 @@ fn method_simple_body_full(
             let Some(block) = f.body_block() else {
                 return make_placeholder();
             };
+            // First try a proper multi-stmt block walk. This handles
+            // `val x = ...; return x` and `var x = 0; x = x + 1; return x`
+            // shapes that the single-return path below can't.
+            if let Some((blocks, locals)) =
+                try_lower_multi_stmt_block_with_offset(block, f, strings, fn_lookup, 1)
+            {
+                return (blocks, locals);
+            }
             let mut returned: Option<KtExpr<'_>> = None;
             for stmt in block.statements() {
                 if let KtExpr::Return(r) = stmt {
@@ -5540,6 +5561,55 @@ mod tests {
                 _ => panic!("expected CheckCast"),
             },
         }
+    }
+
+    #[test]
+    fn typed_lower_method_block_body_val_then_return() {
+        // `class P { fun calc(): Int { val a = 1; val b = 2; return a + b } }`
+        // Methods with multi-stmt blocks now use the offset-1 walker.
+        let module = lower(
+            "class P { fun calc(): Int { val a = 1; val b = 2; return a + b } }",
+            "TestKt",
+        );
+        let cls = module.classes.iter().find(|c| c.name == "P").unwrap();
+        let f = cls.methods.iter().find(|m| m.name == "calc").unwrap();
+        let block = &f.blocks[0];
+        // Must contain 2 Const Assigns (1, 2) and one AddI.
+        let n_const = block
+            .stmts
+            .iter()
+            .filter(|s| {
+                matches!(
+                    s,
+                    skotch_mir::Stmt::Assign {
+                        value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(_)),
+                        ..
+                    }
+                )
+            })
+            .count();
+        let n_add = block
+            .stmts
+            .iter()
+            .filter(|s| {
+                matches!(
+                    s,
+                    skotch_mir::Stmt::Assign {
+                        value: skotch_mir::Rvalue::BinOp {
+                            op: skotch_mir::BinOp::AddI,
+                            ..
+                        },
+                        ..
+                    }
+                )
+            })
+            .count();
+        assert_eq!(n_const, 2);
+        assert_eq!(n_add, 1);
+        assert!(matches!(
+            block.terminator,
+            skotch_mir::Terminator::ReturnValue(_)
+        ));
     }
 
     #[test]
