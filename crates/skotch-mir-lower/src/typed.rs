@@ -3901,6 +3901,88 @@ fn lower_simple_body(
                                         break;
                                     }
                                 }
+                                KtExpr::Call(nested_call) => {
+                                    // Nested static call as an arg:
+                                    // `outer(double(x))`.
+                                    let inner_name = match nested_call.callee() {
+                                        Some(KtExpr::Reference(rr)) => rr.name(),
+                                        _ => None,
+                                    };
+                                    let lookup =
+                                        inner_name.and_then(|n| fn_lookup.get(n).cloned());
+                                    let Some((inner_fid, inner_ret)) = lookup else {
+                                        ok = false;
+                                        break;
+                                    };
+                                    let mut inner_arg_slots: Vec<skotch_mir::LocalId> =
+                                        Vec::new();
+                                    let mut inner_ok = true;
+                                    if let Some(inner_args) = nested_call.value_argument_list() {
+                                        for inner_arg in inner_args.arguments() {
+                                            let Some(inner_e) = inner_arg.expression() else {
+                                                inner_ok = false;
+                                                break;
+                                            };
+                                            match inner_e {
+                                                KtExpr::Reference(irr) => {
+                                                    let Some(in_) = irr.name() else {
+                                                        inner_ok = false;
+                                                        break;
+                                                    };
+                                                    if let Some(idx) = outer_param_names
+                                                        .iter()
+                                                        .position(|p| p == in_)
+                                                    {
+                                                        inner_arg_slots
+                                                            .push(skotch_mir::LocalId(idx as u32));
+                                                    } else {
+                                                        inner_ok = false;
+                                                        break;
+                                                    }
+                                                }
+                                                inner_other => {
+                                                    match literal_to_const(&inner_other, strings) {
+                                                        Some((k, ty)) => {
+                                                            let slot =
+                                                                skotch_mir::LocalId(next_slot);
+                                                            next_slot += 1;
+                                                            extra_locals.push(ty);
+                                                            pre_stmts.push(
+                                                                skotch_mir::Stmt::Assign {
+                                                                    dest: slot,
+                                                                    value:
+                                                                        skotch_mir::Rvalue::Const(
+                                                                            k,
+                                                                        ),
+                                                                },
+                                                            );
+                                                            inner_arg_slots.push(slot);
+                                                        }
+                                                        None => {
+                                                            inner_ok = false;
+                                                            break;
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    if !inner_ok {
+                                        ok = false;
+                                        break;
+                                    }
+                                    let inner_slot = skotch_mir::LocalId(next_slot);
+                                    next_slot += 1;
+                                    extra_locals.push(inner_ret);
+                                    pre_stmts.push(skotch_mir::Stmt::Assign {
+                                        dest: inner_slot,
+                                        value: skotch_mir::Rvalue::Call {
+                                            kind: skotch_mir::CallKind::Static(inner_fid),
+                                            args: inner_arg_slots,
+                                        },
+                                    });
+                                    arg_slots.push(inner_slot);
+                                }
                                 other => match literal_to_const(&other, strings) {
                                     Some((k, ty)) => {
                                         let slot = skotch_mir::LocalId(next_slot);
@@ -6495,6 +6577,37 @@ mod tests {
                 _ => panic!("expected CheckCast"),
             },
         }
+    }
+
+    #[test]
+    fn typed_lower_static_call_with_nested_call_arg() {
+        // `fun double(x: Int): Int = x * 2
+        //  fun triple(x: Int): Int = x * 3
+        //  fun outer(x: Int): Int = double(triple(x))`
+        let module = lower(
+            "fun double(x: Int): Int = x * 2\nfun triple(x: Int): Int = x * 3\nfun outer(x: Int): Int = double(triple(x))",
+            "TestKt",
+        );
+        let f = module.functions.iter().find(|f| f.name == "outer").unwrap();
+        let block = &f.blocks[0];
+        // Should have 2 Static Calls in body (triple then double).
+        let n_calls = block
+            .stmts
+            .iter()
+            .filter(|s| {
+                matches!(
+                    s,
+                    skotch_mir::Stmt::Assign {
+                        value: skotch_mir::Rvalue::Call {
+                            kind: skotch_mir::CallKind::Static(_),
+                            ..
+                        },
+                        ..
+                    }
+                )
+            })
+            .count();
+        assert_eq!(n_calls, 2, "expected 2 Static calls: {block:?}");
     }
 
     #[test]
