@@ -2719,6 +2719,27 @@ fn method_simple_body_with_class(
         }
     }
 
+    // throw <param-ref> body for methods:
+    //   class X { fun fail(e: Throwable): Nothing = throw e }
+    if let KtExpr::Throw(t) = &body_expr {
+        let thrown = skotch_ast::children(t.syntax())
+            .iter()
+            .find_map(KtExpr::cast)
+            .map(unwrap_parens);
+        if let Some(KtExpr::Reference(r)) = thrown {
+            if let Some(name) = r.name() {
+                if let Some(idx) = param_names.iter().position(|p| p == name) {
+                    let param_slot = skotch_mir::LocalId((1 + idx) as u32);
+                    let blocks = vec![BasicBlock {
+                        stmts: Vec::new(),
+                        terminator: Terminator::Throw(param_slot),
+                    }];
+                    return (blocks, Vec::new());
+                }
+            }
+        }
+    }
+
     // println(literal) / print(literal) call body for methods (often
     // appears as `fun show() = println("hi")`).
     if let KtExpr::Call(call) = &body_expr {
@@ -4180,6 +4201,22 @@ mod tests {
         assert_eq!(c.methods.len(), 1);
         assert_eq!(c.methods[0].name, "greet");
         assert_eq!(c.methods[0].return_ty, Ty::String);
+    }
+
+    #[test]
+    fn typed_lower_class_method_throw_param() {
+        let module = lower(
+            "class P { fun fail(e: Throwable): Nothing = throw e }",
+            "TestKt",
+        );
+        let p = module.classes.iter().find(|c| c.name == "P").unwrap();
+        let m = p.methods.iter().find(|m| m.name == "fail").unwrap();
+        let block = &m.blocks[0];
+        assert!(block.stmts.is_empty());
+        match &block.terminator {
+            Terminator::Throw(slot) => assert_eq!(slot.0, 1), // e is at slot 1 (past this)
+            other => panic!("expected Throw, got {other:?}"),
+        }
     }
 
     #[test]
