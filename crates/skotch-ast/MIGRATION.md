@@ -970,3 +970,51 @@ also include:
 **Push 15 totals:**
 - mir-lower: **138 unit tests** (up from 136)
 - Workspace clippy: clean
+
+### 2026-06-11 (session 6 — push 16 final: multi-catch + binary Call operand)
+
+**Multi-catch try-catch:**
+- `try { ... } catch (e: NumberFormatException) { ... } catch (e:
+  Exception) { ... }` now lowers to (1 + N + 1) blocks with N
+  exception handlers, one per catch clause. Every handler covers
+  block 0 with its own handler_block.
+
+**Binary operand can be top-level fn Call:**
+- resolve_operand_rec (binary handler) gains a KtExpr::Call arm
+  resolved through fn_lookup. Args resolve recursively so nested
+  shapes work — `double(x + 1) + helper(y)` etc.
+- fn_lookup threaded through the inner fn + wrapping closure.
+
+**Push 16 totals:**
+- mir-lower: **140 unit tests** (up from 138)
+- Full workspace: **599 tests passing**, 0 failures
+- Workspace clippy: clean
+
+### Session 6 grand totals
+
+Started session 6 at 85 typed mir-lower unit tests. Pushes 12–16
+landed substantial new coverage and ended at **140**. Each push
+documented above (12, 13, 14, 15, 16). Full workspace count rose
+from 576 → 599 tests passing.
+
+Key shape categories now lowered by the typed pipeline:
+- Literal expression bodies for all numeric types + Char + String
+- Binary arithmetic + comparison + ConcatStr + short-circuit && / ||
+- if/else with bool param / !bool param / N-arm chains
+- when (subject) { ... } with literal + Reference arms
+- try/catch with single OR multiple catch clauses
+- Multi-stmt block with val + var + reassignment + return-binary
+- Class instantiation (NewInstance + Constructor) + ctor body super
+  + field putfields
+- Method bodies: identity / field access (explicit + implicit this)
+  / virtual call on this (zero-arg + N-arg) / static call to top-
+  level / multi-stmt block with offset-1 walker / ArrayAccess on
+  implicit-this field / string template with field interpolation
+- String templates emit MakeConcatWithConstants with proper recipe
+  + descriptor
+- Top-level val refs as GetStaticField from anywhere in any body
+
+The legacy mir-lower is still ~25k LOC of dense Decl/Expr/Stmt
+matching. The typed lowerer has roughly 6.5k LOC now and covers a
+useful but not yet complete subset. Continued sessions will keep
+expanding incrementally toward fixture parity.
