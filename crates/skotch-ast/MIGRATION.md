@@ -1485,3 +1485,34 @@ the top of the sorted gap list:
 The worklist is now the primary driver. Each next session can pick
 the top-of-list pattern, write a few-line handler, and watch the
 covered-count jump.
+
+### 2026-06-11 (session 6 — push 29 final session burst)
+
+Continued worklist-driven additions. Latest:
+- println-arg DotQualified accepts method calls (was: field only)
+- class_name + field_names threaded through multi-stmt walker
+- val-init Reference resolves implicit-this fields
+
+**Final session 6 worklist standings:**
+- Fully covered: **168 / 968 (17%)** — up from baseline 125
+- Typed empty: **367 / 968 (37%)** — down from baseline 466
+- Net delta: +43 fully covered, -99 typed empty
+
+**Push 29 totals:**
+- mir-lower: **164 typed unit tests**
+- Fully covered fixtures: **168 / 968**
+
+The remaining failures cluster around:
+- Lambdas + LambdaMetafactory (~150 fixtures)
+- Coroutines / suspend state machines (~80 fixtures)
+- Java interop (`java.lang.*` calls, getters/properties)
+- Object singletons + companion objects (INSTANCE patterns)
+- Collections + lambdas (listOf + map/filter/forEach)
+- For-in body shapes beyond println/assigns
+- Multi-arm if-expressions with multi-stmt arm bodies
+- Nested method calls (a.b().c())
+- Smart casts after `is`
+
+Each of these is a substantial feature requiring 100-500 LOC.
+Realistic path: pick one category per session, drive the
+worklist down by 100-200 fixtures per session.
