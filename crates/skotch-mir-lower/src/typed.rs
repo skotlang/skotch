@@ -82,7 +82,7 @@ pub fn lower_file(
             let (super_class, interfaces) = collect_class_super_iface(c.super_type_list());
             let fields = collect_class_fields(c);
             let methods = collect_class_methods(c, &name, &mut module.strings, &fn_lookup);
-            let constructor = constructor_from_primary(c, &name);
+            let constructor = constructor_from_primary_with_fn_lookup(c, &name, &fn_lookup);
             // Companion object handling: if the class body has a
             // `companion object [Name] { ... }`, emit a sibling
             // MirClass `<Outer>$<Companion>` and point the outer's
@@ -3844,7 +3844,23 @@ fn lower_simple_body(
 ///
 /// Layout: locals 0..N hold `this` + the N user params. Field writeback
 /// reads each param slot in declaration order.
+fn constructor_from_primary_with_fn_lookup(
+    c: skotch_ast::KtClass<'_>,
+    class_name: &str,
+    fn_lookup: &rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)>,
+) -> MirFunction {
+    constructor_from_primary_impl(c, class_name, fn_lookup)
+}
+
 fn constructor_from_primary(c: skotch_ast::KtClass<'_>, class_name: &str) -> MirFunction {
+    constructor_from_primary_impl(c, class_name, &rustc_hash::FxHashMap::default())
+}
+
+fn constructor_from_primary_impl(
+    c: skotch_ast::KtClass<'_>,
+    class_name: &str,
+    fn_lookup: &rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)>,
+) -> MirFunction {
     let params_iter: Vec<_> = c
         .primary_constructor()
         .and_then(|pc| pc.value_parameter_list())
@@ -3916,8 +3932,11 @@ fn constructor_from_primary(c: skotch_ast::KtClass<'_>, class_name: &str) -> Mir
         });
     }
 
-    // 3. PutField for each class-body property with a literal initializer.
-    //    `class P { val x: Int = 100 }` → Const(100) + PutField(this, P, x, slot).
+    // 3. PutField for each class-body property with a recognized
+    //    initializer. Supports:
+    //      - literal init: `val x: Int = 100` → Const + PutField
+    //      - zero-arg top-level fn call: `val y = compute()` →
+    //        Call(Static) + PutField
     let mut next_slot = (1 + user_param_count) as u32;
     let mut strings: Vec<String> = Vec::new();
     if let Some(body) = c.body() {
@@ -3926,31 +3945,67 @@ fn constructor_from_primary(c: skotch_ast::KtClass<'_>, class_name: &str) -> Mir
             let Some(field_name) = prop.name() else { continue };
             let Some(init) = prop.initializer() else { continue };
             let init = unwrap_parens(init);
-            let Some((const_val, ty)) = literal_to_const(&init, &mut strings) else {
-                continue;
-            };
-            // String literal initializers aren't supported until we plumb
-            // a shared strings table into class lowering — interned IDs
-            // would collide with the module's table.
-            if matches!(const_val, skotch_mir::MirConst::String(_)) {
+            // 3a. Literal init.
+            if let Some((const_val, ty)) = literal_to_const(&init, &mut strings) {
+                // String literal initializers aren't supported until we plumb
+                // a shared strings table into class lowering — interned IDs
+                // would collide with the module's table.
+                if matches!(const_val, skotch_mir::MirConst::String(_)) {
+                    continue;
+                }
+                let val_slot = skotch_mir::LocalId(next_slot);
+                next_slot += 1;
+                locals.push(ty);
+                stmts.push(skotch_mir::Stmt::Assign {
+                    dest: val_slot,
+                    value: skotch_mir::Rvalue::Const(const_val),
+                });
+                stmts.push(skotch_mir::Stmt::Assign {
+                    dest: this_slot,
+                    value: skotch_mir::Rvalue::PutField {
+                        receiver: this_slot,
+                        class_name: class_name.to_string(),
+                        field_name: field_name.to_string(),
+                        value: val_slot,
+                    },
+                });
                 continue;
             }
-            let val_slot = skotch_mir::LocalId(next_slot);
-            next_slot += 1;
-            locals.push(ty);
-            stmts.push(skotch_mir::Stmt::Assign {
-                dest: val_slot,
-                value: skotch_mir::Rvalue::Const(const_val),
-            });
-            stmts.push(skotch_mir::Stmt::Assign {
-                dest: this_slot,
-                value: skotch_mir::Rvalue::PutField {
-                    receiver: this_slot,
-                    class_name: class_name.to_string(),
-                    field_name: field_name.to_string(),
-                    value: val_slot,
-                },
-            });
+            // 3b. Zero-arg top-level fn call init.
+            if let skotch_ast::KtExpr::Call(call) = &init {
+                if let Some(skotch_ast::KtExpr::Reference(r)) = call.callee() {
+                    if let Some(callee_name) = r.name() {
+                        if let Some((fid, ret_ty)) = fn_lookup.get(callee_name) {
+                            let arg_count = call
+                                .value_argument_list()
+                                .map(|a| a.arguments().count())
+                                .unwrap_or(0);
+                            if arg_count == 0 {
+                                let val_slot = skotch_mir::LocalId(next_slot);
+                                next_slot += 1;
+                                locals.push(ret_ty.clone());
+                                stmts.push(skotch_mir::Stmt::Assign {
+                                    dest: val_slot,
+                                    value: skotch_mir::Rvalue::Call {
+                                        kind: skotch_mir::CallKind::Static(*fid),
+                                        args: Vec::new(),
+                                    },
+                                });
+                                stmts.push(skotch_mir::Stmt::Assign {
+                                    dest: this_slot,
+                                    value: skotch_mir::Rvalue::PutField {
+                                        receiver: this_slot,
+                                        class_name: class_name.to_string(),
+                                        field_name: field_name.to_string(),
+                                        value: val_slot,
+                                    },
+                                });
+                                continue;
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -5561,6 +5616,47 @@ mod tests {
                 _ => panic!("expected CheckCast"),
             },
         }
+    }
+
+    #[test]
+    fn typed_lower_class_body_val_init_from_top_level_fn() {
+        // `fun compute(): Int = 42
+        //  class P { val x: Int = compute() }`
+        // The init `compute()` is a zero-arg top-level fn call. The
+        // ctor should emit Call(Static(compute), []) + PutField(this, P, x, slot).
+        let module = lower(
+            "fun compute(): Int = 42\nclass P { val x: Int = compute() }",
+            "TestKt",
+        );
+        let cls = module.classes.iter().find(|c| c.name == "P").unwrap();
+        let block = &cls.constructor.blocks[0];
+        let has_static_call = block.stmts.iter().any(|s| {
+            matches!(
+                s,
+                skotch_mir::Stmt::Assign {
+                    value: skotch_mir::Rvalue::Call {
+                        kind: skotch_mir::CallKind::Static(_),
+                        ..
+                    },
+                    ..
+                }
+            )
+        });
+        let n_putfield = block
+            .stmts
+            .iter()
+            .filter(|s| {
+                matches!(
+                    s,
+                    skotch_mir::Stmt::Assign {
+                        value: skotch_mir::Rvalue::PutField { .. },
+                        ..
+                    }
+                )
+            })
+            .count();
+        assert!(has_static_call, "expected Static call to compute()");
+        assert_eq!(n_putfield, 1, "expected one PutField for x");
     }
 
     #[test]
