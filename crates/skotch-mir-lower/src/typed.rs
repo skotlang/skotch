@@ -3133,6 +3133,7 @@ fn try_lower_multi_stmt_block_with_offset(
                 next_slot: &mut u32,
                 local_tys: &mut Vec<Ty>,
                 strings: &mut Vec<String>,
+                fn_lookup_ref: &rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)>,
             ) -> Option<Vec<MStmt>> {
                 let mut body_mstmts: Vec<MStmt> = Vec::new();
                 for bn in body_children {
@@ -3283,6 +3284,74 @@ fn try_lower_multi_stmt_block_with_offset(
                                 },
                             });
                             continue;
+                        }
+                    }
+                    // Top-level fn call as stmt (result discarded). Args
+                    // resolve as Reference (local) or literal.
+                    if let KtExpr::Call(call) = be {
+                        if let Some(KtExpr::Reference(rc)) = call.callee() {
+                            if let Some(callee_n) = rc.name() {
+                                if let Some((fid, ret_ty)) = fn_lookup_ref.get(callee_n) {
+                                    let mut arg_slots: Vec<LocalId> = Vec::new();
+                                    let mut ok = true;
+                                    if let Some(arg_list) = call.value_argument_list() {
+                                        for arg in arg_list.arguments() {
+                                            let Some(arg_e) = arg.expression() else {
+                                                ok = false;
+                                                break;
+                                            };
+                                            match unwrap_parens(arg_e) {
+                                                KtExpr::Reference(rr) => {
+                                                    let Some(an) = rr.name() else {
+                                                        ok = false;
+                                                        break;
+                                                    };
+                                                    if let Some(s) = name_to_local
+                                                        .iter()
+                                                        .rev()
+                                                        .find(|(n, _)| n == an)
+                                                        .map(|(_, l)| *l)
+                                                    {
+                                                        arg_slots.push(s);
+                                                    } else {
+                                                        ok = false;
+                                                        break;
+                                                    }
+                                                }
+                                                other => {
+                                                    let Some((k, ty)) =
+                                                        literal_to_const(&other, strings)
+                                                    else {
+                                                        ok = false;
+                                                        break;
+                                                    };
+                                                    let s = LocalId(*next_slot);
+                                                    *next_slot += 1;
+                                                    local_tys.push(ty);
+                                                    body_mstmts.push(MStmt::Assign {
+                                                        dest: s,
+                                                        value: skotch_mir::Rvalue::Const(k),
+                                                    });
+                                                    arg_slots.push(s);
+                                                }
+                                            }
+                                        }
+                                    }
+                                    if ok {
+                                        let result_slot = LocalId(*next_slot);
+                                        *next_slot += 1;
+                                        local_tys.push(ret_ty.clone());
+                                        body_mstmts.push(MStmt::Assign {
+                                            dest: result_slot,
+                                            value: skotch_mir::Rvalue::Call {
+                                                kind: skotch_mir::CallKind::Static(*fid),
+                                                args: arg_slots,
+                                            },
+                                        });
+                                        continue;
+                                    }
+                                }
+                            }
                         }
                     }
                     // var-reassign: `x = expr` or `x += expr` style.
@@ -3714,6 +3783,7 @@ fn try_lower_multi_stmt_block_with_offset(
                     &mut next_slot,
                     &mut local_tys,
                     strings,
+                    fn_lookup,
                 )?;
                 let exit_stmts = if trailing_children.is_empty() {
                     Vec::new()
@@ -3724,6 +3794,7 @@ fn try_lower_multi_stmt_block_with_offset(
                         &mut next_slot,
                         &mut local_tys,
                         strings,
+                        fn_lookup,
                     )?
                 };
                 let pre_block = BasicBlock {
@@ -3851,6 +3922,7 @@ fn try_lower_multi_stmt_block_with_offset(
                     &mut next_slot,
                     &mut local_tys,
                     strings,
+                    fn_lookup,
                 )?;
                 let exit_stmts = if trailing_children.is_empty() {
                     Vec::new()
@@ -3861,6 +3933,7 @@ fn try_lower_multi_stmt_block_with_offset(
                         &mut next_slot,
                         &mut local_tys,
                         strings,
+                        fn_lookup,
                     )?
                 };
                 let pre_block = BasicBlock {
@@ -3977,6 +4050,7 @@ fn try_lower_multi_stmt_block_with_offset(
                     &mut next_slot,
                     &mut local_tys,
                     strings,
+                    fn_lookup,
                 )?;
                 // i = i + 1 at end of body.
                 let one_slot = LocalId(next_slot);
@@ -4020,6 +4094,7 @@ fn try_lower_multi_stmt_block_with_offset(
                         &mut next_slot,
                         &mut local_tys,
                         strings,
+                        fn_lookup,
                     )?
                 };
                 let pre_block = BasicBlock {
@@ -4121,6 +4196,7 @@ fn try_lower_multi_stmt_block_with_offset(
                     &mut next_slot,
                     &mut local_tys,
                     strings,
+                    fn_lookup,
                 )?;
                 // Lower else-branch children (may be missing).
                 let else_expr = if_e.else_branch().and_then(|t| t.expression());
@@ -4139,6 +4215,7 @@ fn try_lower_multi_stmt_block_with_offset(
                         &mut next_slot,
                         &mut local_tys,
                         strings,
+                        fn_lookup,
                     )?)
                 } else {
                     None
@@ -4152,6 +4229,7 @@ fn try_lower_multi_stmt_block_with_offset(
                         &mut next_slot,
                         &mut local_tys,
                         strings,
+                        fn_lookup,
                     )?
                 };
                 let pre_block_stmts = std::mem::take(&mut stmts);
