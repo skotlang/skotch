@@ -1372,3 +1372,67 @@ improvements + driver tests + MIGRATION updates. The typed
 pipeline went from "barely functional" to "handles the bulk of
 common Kotlin idioms" with full end-to-end integration test
 coverage at the driver level.
+
+### 2026-06-11 (session 6 — push 27: worklist tool + worklist-driven shapes)
+
+**Output-driven worklist tool:**
+- New `crates/skotch-driver/tests/typed_vs_legacy_worklist.rs` runs
+  every supported fixture through both the legacy and typed pipelines,
+  computes a per-fixture "typed coverage" ratio, and emits a sorted
+  worklist to `tests/fixtures/typed_worklist.txt`.
+- Hidden behind `#[ignore]` since it's a reporting tool. Run with
+  `cargo test -p skotch-driver --test typed_vs_legacy_worklist --
+  --ignored --nocapture`.
+- Baseline before any worklist-driven additions:
+  Total: 968 | Fully covered: 125 | Typed empty: 466
+
+**Worklist-driven shape additions** (each landed against the top of
+the sorted worklist):
+
+1. Multi-stmt block walker now threads val_lookup + class_lookup +
+   wrapper_class. Printlns, val inits, bare-stmt calls, and val
+   binary ops all reach top-level vals + class instantiation.
+
+2. Multi-stmt block println / val init Binary now recurses on
+   nested Binary operands (`println(1 + 2 * 3)`).
+
+3. Multi-stmt block println arg accepts nested Call (`println(helper())`)
+   — biggest single unblock, +17 fixtures.
+
+4. Multi-stmt block val init Binary detects ConcatStr when any
+   operand reaches a String literal, String-typed local, or
+   String-typed top-level val.
+
+5. Multi-stmt block stmt-level Call handles class instantiation
+   (`Foo()` as a statement) + top-level fn call as a statement
+   (`helper()` as a statement, result discarded).
+
+6. Multi-stmt block val init = `if (Bool literal) X else Y` is
+   constant-folded to the chosen arm before init handlers see it.
+
+7. Method body now has `is` / `as` handlers on param + implicit-this
+   field; the existing offset-1 walker reuses everything multi-stmt.
+
+8. Method body if/else for Bool param OR implicit-this Bool field cond.
+
+9. `literal_to_const` parses hex (0x), binary (0b), and underscored
+   numeric literals.
+
+10. String-template println-arg in multi-stmt block resolves
+    interpolated identifiers against local names (was: param-only).
+
+**Worklist progression in this session:**
+- Start: 125 fully covered (12%), 466 typed empty (48%)
+- End:   160 fully covered (16%), 380 typed empty (39%)
+- Delta: +35 covered, -86 typed empty in one session — significantly
+  faster than blind shape-by-shape additions.
+
+**Push 27 totals:**
+- mir-lower: **164 unit tests**
+- skotch-driver: **11 typed integration tests** + worklist tool
+- Fully covered fixtures: **160 / 968 (16%)** (up from 125/968)
+- Workspace clippy: clean
+
+The worklist approach is paying off. Each commit now targets a
+specific top-of-list pattern, with measurable impact visible in
+the next worklist run.
