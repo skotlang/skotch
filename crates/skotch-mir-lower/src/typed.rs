@@ -1197,6 +1197,7 @@ fn try_lower_if_expression(
     enum CondShape<'b> {
         Binary(skotch_ast::KtBinaryExpression<'b>, skotch_mir::BinOp),
         BoolRef(skotch_ast::KtReferenceExpression<'b>),
+        NotBoolRef(skotch_ast::KtReferenceExpression<'b>),
     }
     let cond_shape = match &cond_expr {
         KtExpr::Binary(b) => {
@@ -1213,6 +1214,29 @@ fn try_lower_if_expression(
             CondShape::Binary(*b, mir_op)
         }
         KtExpr::Reference(r) => CondShape::BoolRef(*r),
+        KtExpr::Prefix(p) => {
+            let op_text = skotch_ast::children(p.syntax())
+                .iter()
+                .find_map(|c| {
+                    if c.kind == skotch_syntax::SyntaxKind::OPERATION_REFERENCE {
+                        skotch_ast::KtOperationReference::cast(c).map(|o| o.text())
+                    } else {
+                        None
+                    }
+                })
+                .unwrap_or_default();
+            if op_text != "!" {
+                return None;
+            }
+            let inner = skotch_ast::children(p.syntax())
+                .iter()
+                .find_map(KtExpr::cast)
+                .map(unwrap_parens)?;
+            match inner {
+                KtExpr::Reference(r) => CondShape::NotBoolRef(r),
+                _ => return None,
+            }
+        }
         _ => return None,
     };
 
@@ -1316,6 +1340,7 @@ fn try_lower_if_expression(
 
     // Build the condition statements.
     let mut b0_stmts: Vec<MStmt> = Vec::new();
+    let mut swap_branches = false;
     let cond_slot = match cond_shape {
         CondShape::Binary(cmp, cmp_mir_op) => {
             let lhs = resolve_operand(
@@ -1348,6 +1373,12 @@ fn try_lower_if_expression(
         CondShape::BoolRef(r) => {
             let n = r.name()?;
             let idx = outer_param_names.iter().position(|p| p == n)?;
+            LocalId(idx as u32)
+        }
+        CondShape::NotBoolRef(r) => {
+            let n = r.name()?;
+            let idx = outer_param_names.iter().position(|p| p == n)?;
+            swap_branches = true;
             LocalId(idx as u32)
         }
     };
@@ -1406,13 +1437,14 @@ fn try_lower_if_expression(
         value: Rvalue::Local(else_slot),
     });
 
+    let (then_block, else_block) = if swap_branches { (2, 1) } else { (1, 2) };
     let blocks = vec![
         BasicBlock {
             stmts: b0_stmts,
             terminator: Terminator::Branch {
                 cond: cond_slot,
-                then_block: 1,
-                else_block: 2,
+                then_block,
+                else_block,
             },
         },
         BasicBlock {
@@ -4933,6 +4965,29 @@ mod tests {
                 }
                 _ => panic!("expected CheckCast"),
             },
+        }
+    }
+
+    #[test]
+    fn typed_lower_if_with_not_bool_param_cond() {
+        // `fun pick(skip: Boolean, a: Int, b: Int): Int = if (!skip) a else b`
+        // !x lowers to: branch on x with then/else swapped.
+        let module = lower(
+            "fun pick(skip: Boolean, a: Int, b: Int): Int = if (!skip) a else b",
+            "TestKt",
+        );
+        let f = module.functions.iter().find(|f| f.name == "pick").unwrap();
+        match &f.blocks[0].terminator {
+            skotch_mir::Terminator::Branch {
+                cond,
+                then_block,
+                else_block,
+            } => {
+                assert_eq!(cond.0, 0, "cond_slot = skip param");
+                assert_eq!(*then_block, 2, "swapped: skip=true → else");
+                assert_eq!(*else_block, 1, "swapped: skip=false → then");
+            }
+            other => panic!("expected Branch, got {other:?}"),
         }
     }
 
