@@ -3417,6 +3417,100 @@ fn try_lower_multi_stmt_block_with_offset(
                         }
                         return None;
                     }
+                    // Method call on a local class instance:
+                    // `localVar.method(args)` as a stmt (result discarded).
+                    if let KtExpr::DotQualified(dq) = be {
+                        let exprs: Vec<KtExpr<'_>> = skotch_ast::children(dq.syntax())
+                            .iter()
+                            .filter_map(KtExpr::cast)
+                            .collect();
+                        if exprs.len() == 2 {
+                            if let (KtExpr::Reference(recv_ref), KtExpr::Call(call)) =
+                                (&exprs[0], &exprs[1])
+                            {
+                                let method_name = match call.callee() {
+                                    Some(KtExpr::Reference(r)) => r.name(),
+                                    _ => None,
+                                };
+                                if let (Some(recv_n), Some(method_n)) =
+                                    (recv_ref.name(), method_name)
+                                {
+                                    if let Some(recv_slot) = name_to_local
+                                        .iter()
+                                        .rev()
+                                        .find(|(n, _)| n == recv_n)
+                                        .map(|(_, l)| *l)
+                                    {
+                                        if let Some(Ty::Class(cname)) =
+                                            local_tys.get(recv_slot.0 as usize).cloned()
+                                        {
+                                            let mut arg_slots: Vec<LocalId> = vec![recv_slot];
+                                            let mut ok = true;
+                                            if let Some(arg_list) = call.value_argument_list() {
+                                                for arg in arg_list.arguments() {
+                                                    let Some(arg_e) = arg.expression() else {
+                                                        ok = false;
+                                                        break;
+                                                    };
+                                                    match unwrap_parens(arg_e) {
+                                                        KtExpr::Reference(rr) => {
+                                                            let Some(an) = rr.name() else {
+                                                                ok = false;
+                                                                break;
+                                                            };
+                                                            if let Some(s) = name_to_local
+                                                                .iter()
+                                                                .rev()
+                                                                .find(|(n, _)| n == an)
+                                                                .map(|(_, l)| *l)
+                                                            {
+                                                                arg_slots.push(s);
+                                                            } else {
+                                                                ok = false;
+                                                                break;
+                                                            }
+                                                        }
+                                                        other => {
+                                                            let Some((k, ty)) =
+                                                                literal_to_const(&other, strings)
+                                                            else {
+                                                                ok = false;
+                                                                break;
+                                                            };
+                                                            let s = LocalId(*next_slot);
+                                                            *next_slot += 1;
+                                                            local_tys.push(ty);
+                                                            body_mstmts.push(MStmt::Assign {
+                                                                dest: s,
+                                                                value: skotch_mir::Rvalue::Const(k),
+                                                            });
+                                                            arg_slots.push(s);
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            if ok {
+                                                let result_slot = LocalId(*next_slot);
+                                                *next_slot += 1;
+                                                local_tys.push(Ty::Any);
+                                                body_mstmts.push(MStmt::Assign {
+                                                    dest: result_slot,
+                                                    value: skotch_mir::Rvalue::Call {
+                                                        kind: skotch_mir::CallKind::Virtual {
+                                                            class_name: cname,
+                                                            method_name: method_n.to_string(),
+                                                        },
+                                                        args: arg_slots,
+                                                    },
+                                                });
+                                                continue;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                     return None;
                 }
                 Some(body_mstmts)
