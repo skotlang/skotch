@@ -2776,6 +2776,15 @@ fn method_simple_body_with_class(
         })
         .unwrap_or_default();
 
+    // `this` reference body: `fun self(): T = this` returns slot 0.
+    if let KtExpr::This(_) = &body_expr {
+        let blocks = vec![BasicBlock {
+            stmts: Vec::new(),
+            terminator: Terminator::ReturnValue(skotch_mir::LocalId(0)),
+        }];
+        return (blocks, Vec::new());
+    }
+
     // Identity-ref body: `fun id(x: Int): Int = x` returns the
     // parameter slot directly (1-indexed past `this`).
     if let KtExpr::Reference(r) = &body_expr {
@@ -4593,6 +4602,22 @@ mod tests {
         assert_eq!(c.methods.len(), 1);
         assert_eq!(c.methods[0].name, "greet");
         assert_eq!(c.methods[0].return_ty, Ty::String);
+    }
+
+    #[test]
+    fn typed_lower_class_method_returns_this() {
+        let module = lower(
+            "class Box { fun self(): Box = this }",
+            "TestKt",
+        );
+        let box_class = module.classes.iter().find(|c| c.name == "Box").unwrap();
+        let m = box_class.methods.iter().find(|m| m.name == "self").unwrap();
+        let block = &m.blocks[0];
+        assert!(block.stmts.is_empty());
+        match &block.terminator {
+            Terminator::ReturnValue(slot) => assert_eq!(slot.0, 0), // this
+            other => panic!("expected ReturnValue(0), got {other:?}"),
+        }
     }
 
     #[test]
