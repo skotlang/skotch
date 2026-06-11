@@ -4456,34 +4456,81 @@ fn method_simple_body_full(
         }
     }
 
-    // Static call to a top-level fn (zero-arg) from a class method:
-    //   fun helper(): Int = 42
-    //   class P { fun answer(): Int = helper() }
+    // Static call to a top-level fn from a class method, with N
+    // params or literal args. `this` lives at slot 0, user params
+    // at 1..=N. Args resolve as param Reference or literal Const.
+    //   class P { fun answer(x: Int): Int = helper(x) }
     if let KtExpr::Call(call) = &body_expr {
         if let Some(KtExpr::Reference(r)) = call.callee() {
             if let Some(name) = r.name() {
-                let no_args = call
-                    .value_argument_list()
-                    .map(|a| a.arguments().count() == 0)
-                    .unwrap_or(true);
-                if no_args && name != "println" && name != "print" {
+                if name != "println" && name != "print" {
                     if let Some((callee_id, callee_ret)) = fn_lookup.get(name) {
-                        let result_slot = skotch_mir::LocalId((1 + param_count) as u32);
-                        let blocks = vec![BasicBlock {
-                            stmts: vec![skotch_mir::Stmt::Assign {
+                        let mut next_slot = (1 + param_count) as u32;
+                        let mut pre_stmts: Vec<skotch_mir::Stmt> = Vec::new();
+                        let mut extra_locals: Vec<Ty> = Vec::new();
+                        let mut arg_slots: Vec<skotch_mir::LocalId> = Vec::new();
+                        let mut ok = true;
+                        if let Some(arg_list) = call.value_argument_list() {
+                            for arg in arg_list.arguments() {
+                                let Some(arg_expr) = arg.expression() else {
+                                    ok = false;
+                                    break;
+                                };
+                                match arg_expr {
+                                    KtExpr::Reference(rr) => {
+                                        let Some(an) = rr.name() else {
+                                            ok = false;
+                                            break;
+                                        };
+                                        if let Some(idx) =
+                                            param_names.iter().position(|p| p == an)
+                                        {
+                                            // User param: slot 1 + idx (this at 0).
+                                            arg_slots.push(skotch_mir::LocalId((1 + idx) as u32));
+                                        } else {
+                                            ok = false;
+                                            break;
+                                        }
+                                    }
+                                    other => match literal_to_const(&other, strings) {
+                                        Some((k, ty)) => {
+                                            let slot = skotch_mir::LocalId(next_slot);
+                                            next_slot += 1;
+                                            extra_locals.push(ty);
+                                            pre_stmts.push(skotch_mir::Stmt::Assign {
+                                                dest: slot,
+                                                value: skotch_mir::Rvalue::Const(k),
+                                            });
+                                            arg_slots.push(slot);
+                                        }
+                                        None => {
+                                            ok = false;
+                                            break;
+                                        }
+                                    },
+                                }
+                            }
+                        }
+                        if ok {
+                            let result_slot = skotch_mir::LocalId(next_slot);
+                            extra_locals.push(callee_ret.clone());
+                            pre_stmts.push(skotch_mir::Stmt::Assign {
                                 dest: result_slot,
                                 value: skotch_mir::Rvalue::Call {
                                     kind: skotch_mir::CallKind::Static(*callee_id),
-                                    args: Vec::new(),
+                                    args: arg_slots,
                                 },
-                            }],
-                            terminator: if callee_ret == &Ty::Unit {
-                                Terminator::Return
-                            } else {
-                                Terminator::ReturnValue(result_slot)
-                            },
-                        }];
-                        return (blocks, vec![callee_ret.clone()]);
+                            });
+                            let blocks = vec![BasicBlock {
+                                stmts: pre_stmts,
+                                terminator: if callee_ret == &Ty::Unit {
+                                    Terminator::Return
+                                } else {
+                                    Terminator::ReturnValue(result_slot)
+                                },
+                            }];
+                            return (blocks, extra_locals);
+                        }
                     }
                 }
             }
@@ -5492,6 +5539,36 @@ mod tests {
                 }
                 _ => panic!("expected CheckCast"),
             },
+        }
+    }
+
+    #[test]
+    fn typed_lower_method_calls_top_level_fn_with_param_arg() {
+        // `fun helper(x: Int): Int = x * 2
+        //  class P { fun answer(y: Int): Int = helper(y) }`
+        // Method calls top-level fn with a param arg.
+        let module = lower(
+            "fun helper(x: Int): Int = x * 2\nclass P { fun answer(y: Int): Int = helper(y) }",
+            "TestKt",
+        );
+        let cls = module.classes.iter().find(|c| c.name == "P").unwrap();
+        let f = cls.methods.iter().find(|m| m.name == "answer").unwrap();
+        let block = &f.blocks[0];
+        match block.stmts.iter().find_map(|s| match s {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::Call {
+                    kind: skotch_mir::CallKind::Static(_),
+                    args,
+                } => Some(args.clone()),
+                _ => None,
+            },
+        }) {
+            Some(args) => {
+                assert_eq!(args.len(), 1);
+                // y is at slot 1 (this at 0).
+                assert_eq!(args[0].0, 1);
+            }
+            None => panic!("expected Static Call, body: {block:?}"),
         }
     }
 
