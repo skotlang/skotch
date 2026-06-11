@@ -3584,8 +3584,90 @@ fn try_lower_multi_stmt_block_with_offset(
                     }
                     // Arg is either a Reference to a known local /
                     // param, a top-level val (GetStaticField), a
-                    // literal, or a binary op on refs/literals.
+                    // literal, a Prefix-minus on Reference, or a
+                    // binary op on refs/literals.
                     let arg_slot = match &arg_exprs[0] {
+                        KtExpr::Prefix(p)
+                            if skotch_ast::children(p.syntax())
+                                .iter()
+                                .any(|c| {
+                                    c.kind == skotch_syntax::SyntaxKind::OPERATION_REFERENCE
+                                        && skotch_ast::children(c)
+                                            .iter()
+                                            .any(|cc| {
+                                                cc.kind == skotch_syntax::SyntaxKind::MINUS
+                                            })
+                                }) =>
+                        {
+                            let inner = skotch_ast::children(p.syntax())
+                                .iter()
+                                .find_map(KtExpr::cast)
+                                .map(unwrap_parens)?;
+                            // Try literal fold first (handles -Int/-Long/etc).
+                            if let Some((k, ty)) = literal_to_const(
+                                &KtExpr::Prefix(*p),
+                                strings,
+                            ) {
+                                let slot = LocalId(next_slot);
+                                next_slot += 1;
+                                local_tys.push(ty);
+                                stmts.push(MStmt::Assign {
+                                    dest: slot,
+                                    value: skotch_mir::Rvalue::Const(k),
+                                });
+                                slot
+                            } else if let KtExpr::Reference(rr) = inner {
+                                let n = rr.name()?;
+                                let inner_slot = name_to_local
+                                    .iter()
+                                    .rev()
+                                    .find(|(name, _)| name == n)
+                                    .map(|(_, l)| *l)?;
+                                let inner_ty = local_tys
+                                    .get(inner_slot.0 as usize)
+                                    .cloned()
+                                    .unwrap_or(Ty::Int);
+                                let (zero, op) = match inner_ty {
+                                    Ty::Long => (
+                                        skotch_mir::MirConst::Long(0),
+                                        skotch_mir::BinOp::SubL,
+                                    ),
+                                    Ty::Float => (
+                                        skotch_mir::MirConst::Float(0.0),
+                                        skotch_mir::BinOp::SubF,
+                                    ),
+                                    Ty::Double => (
+                                        skotch_mir::MirConst::Double(0.0),
+                                        skotch_mir::BinOp::SubD,
+                                    ),
+                                    _ => (
+                                        skotch_mir::MirConst::Int(0),
+                                        skotch_mir::BinOp::SubI,
+                                    ),
+                                };
+                                let zero_slot = LocalId(next_slot);
+                                next_slot += 1;
+                                local_tys.push(inner_ty.clone());
+                                stmts.push(MStmt::Assign {
+                                    dest: zero_slot,
+                                    value: skotch_mir::Rvalue::Const(zero),
+                                });
+                                let res_slot = LocalId(next_slot);
+                                next_slot += 1;
+                                local_tys.push(inner_ty);
+                                stmts.push(MStmt::Assign {
+                                    dest: res_slot,
+                                    value: skotch_mir::Rvalue::BinOp {
+                                        op,
+                                        lhs: zero_slot,
+                                        rhs: inner_slot,
+                                    },
+                                });
+                                res_slot
+                            } else {
+                                return None;
+                            }
+                        }
                         KtExpr::Reference(r) => {
                             let n = r.name()?;
                             if let Some(slot) = name_to_local
