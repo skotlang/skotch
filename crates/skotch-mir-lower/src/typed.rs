@@ -2694,6 +2694,66 @@ fn lower_simple_body(
                         });
                         Some(slot)
                     }
+                    KtExpr::Prefix(p) => {
+                        // Unary minus on a param/literal/nested: lower
+                        // to `0 - inner`. Type follows the inner operand.
+                        let op_text = skotch_ast::children(p.syntax())
+                            .iter()
+                            .find_map(|c| {
+                                if c.kind == skotch_syntax::SyntaxKind::OPERATION_REFERENCE {
+                                    skotch_ast::KtOperationReference::cast(c).map(|o| o.text())
+                                } else {
+                                    None
+                                }
+                            })
+                            .unwrap_or_default();
+                        if op_text != "-" {
+                            return None;
+                        }
+                        let inner = skotch_ast::children(p.syntax())
+                            .iter()
+                            .find_map(KtExpr::cast)
+                            .map(unwrap_parens)?;
+                        let inner_ty = operand_numeric_ty(&inner, f);
+                        let inner_slot = resolve_operand_rec(
+                            inner,
+                            f,
+                            param_names,
+                            val_lookup,
+                            wrapper_class,
+                            next_slot,
+                            pre_stmts,
+                            extra_locals,
+                            strings,
+                        )?;
+                        let (zero, op) = match inner_ty {
+                            Ty::Long => (skotch_mir::MirConst::Long(0), skotch_mir::BinOp::SubL),
+                            Ty::Float => (skotch_mir::MirConst::Float(0.0), skotch_mir::BinOp::SubF),
+                            Ty::Double => {
+                                (skotch_mir::MirConst::Double(0.0), skotch_mir::BinOp::SubD)
+                            }
+                            _ => (skotch_mir::MirConst::Int(0), skotch_mir::BinOp::SubI),
+                        };
+                        let zero_slot = skotch_mir::LocalId(*next_slot);
+                        *next_slot += 1;
+                        extra_locals.push(inner_ty.clone());
+                        pre_stmts.push(skotch_mir::Stmt::Assign {
+                            dest: zero_slot,
+                            value: skotch_mir::Rvalue::Const(zero),
+                        });
+                        let res_slot = skotch_mir::LocalId(*next_slot);
+                        *next_slot += 1;
+                        extra_locals.push(inner_ty);
+                        pre_stmts.push(skotch_mir::Stmt::Assign {
+                            dest: res_slot,
+                            value: skotch_mir::Rvalue::BinOp {
+                                op,
+                                lhs: zero_slot,
+                                rhs: inner_slot,
+                            },
+                        });
+                        Some(res_slot)
+                    }
                     other => {
                         let (k, ty) = literal_to_const(&other, strings)?;
                         let slot = skotch_mir::LocalId(*next_slot);
@@ -4310,6 +4370,50 @@ mod tests {
                 _ => panic!("expected CheckCast"),
             },
         }
+    }
+
+    #[test]
+    fn typed_lower_binary_with_unary_minus_operand() {
+        // `fun calc(a: Int, b: Int): Int = -a + b`
+        // The lhs of the outer Binary is Prefix-minus on `a`.
+        let module = lower("fun calc(a: Int, b: Int): Int = -a + b", "TestKt");
+        let f = module.functions.iter().find(|f| f.name == "calc").unwrap();
+        // Expect at least: zero_const, sub(0,a), add(sub,b) → 3 BinOp/Const stmts.
+        let block = &f.blocks[0];
+        let n_sub = block
+            .stmts
+            .iter()
+            .filter(|s| {
+                matches!(
+                    s,
+                    skotch_mir::Stmt::Assign {
+                        value: skotch_mir::Rvalue::BinOp {
+                            op: skotch_mir::BinOp::SubI,
+                            ..
+                        },
+                        ..
+                    }
+                )
+            })
+            .count();
+        let n_add = block
+            .stmts
+            .iter()
+            .filter(|s| {
+                matches!(
+                    s,
+                    skotch_mir::Stmt::Assign {
+                        value: skotch_mir::Rvalue::BinOp {
+                            op: skotch_mir::BinOp::AddI,
+                            ..
+                        },
+                        ..
+                    }
+                )
+            })
+            .count();
+        assert_eq!(n_sub, 1, "expected one SubI for -a");
+        assert_eq!(n_add, 1, "expected one AddI for sub + b");
     }
 
     #[test]
