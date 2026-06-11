@@ -4068,6 +4068,49 @@ mod tests {
     }
 
     #[test]
+    fn typed_lower_chained_val_then_return() {
+        let module = lower(
+            "fun calc(a: Int, b: Int, c: Int): Int {\n  val ab = a + b\n  val sum = ab + c\n  return sum\n}",
+            "TestKt",
+        );
+        let f = &module.functions[0];
+        let block = &f.blocks[0];
+        // Two BinOp stmts (ab and sum).
+        assert_eq!(block.stmts.len(), 2);
+        // First: ab = a + b → BinOp(0, 1) → slot 3.
+        match &block.stmts[0] {
+            skotch_mir::Stmt::Assign { dest, value } => {
+                assert_eq!(dest.0, 3);
+                match value {
+                    skotch_mir::Rvalue::BinOp { lhs, rhs, .. } => {
+                        assert_eq!(lhs.0, 0);
+                        assert_eq!(rhs.0, 1);
+                    }
+                    _ => panic!("expected BinOp"),
+                }
+            }
+        }
+        // Second: sum = ab + c → BinOp(3, 2) → slot 4.
+        match &block.stmts[1] {
+            skotch_mir::Stmt::Assign { dest, value } => {
+                assert_eq!(dest.0, 4);
+                match value {
+                    skotch_mir::Rvalue::BinOp { lhs, rhs, .. } => {
+                        assert_eq!(lhs.0, 3); // ab
+                        assert_eq!(rhs.0, 2); // c
+                    }
+                    _ => panic!("expected BinOp"),
+                }
+            }
+        }
+        // Return slot 4 (sum).
+        match &block.terminator {
+            Terminator::ReturnValue(slot) => assert_eq!(slot.0, 4),
+            other => panic!("expected ReturnValue(4), got {other:?}"),
+        }
+    }
+
+    #[test]
     fn typed_lower_val_binary_init_then_return_ref() {
         let module = lower(
             "fun foo(a: Int, b: Int): Int {\n  val sum = a + b\n  return sum\n}",
