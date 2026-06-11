@@ -5146,6 +5146,25 @@ mod tests {
     }
 
     #[test]
+    fn typed_lower_class_method_block_return_literal() {
+        let module = lower(
+            "class P { fun answer(): Int { return 42 } }",
+            "TestKt",
+        );
+        let p = module.classes.iter().find(|c| c.name == "P").unwrap();
+        let m = p.methods.iter().find(|m| m.name == "answer").unwrap();
+        match &m.blocks[0].stmts[0] {
+            skotch_mir::Stmt::Assign { value, .. } => {
+                assert!(matches!(
+                    value,
+                    skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(42))
+                ));
+            }
+        }
+        assert!(matches!(m.blocks[0].terminator, Terminator::ReturnValue(_)));
+    }
+
+    #[test]
     fn typed_lower_class_method_string_field_access() {
         let module = lower(
             "class Box(val name: String) { fun get(): String = name }",
