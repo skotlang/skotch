@@ -2298,6 +2298,56 @@ fn try_lower_multi_stmt_block_with_offset(
                         explicit_return_slot = Some(slot);
                         continue;
                     }
+                    // `return helper(args)` — top-level fn Call.
+                    KtExpr::Call(call) => {
+                        let callee_name = match call.callee() {
+                            Some(KtExpr::Reference(r)) => r.name(),
+                            _ => return None,
+                        };
+                        let callee_name = callee_name?;
+                        let (fid, ret_ty) = fn_lookup.get(callee_name)?;
+                        let mut arg_slots: Vec<LocalId> = Vec::new();
+                        if let Some(arg_list) = call.value_argument_list() {
+                            for arg in arg_list.arguments() {
+                                let arg_expr = arg.expression()?;
+                                match unwrap_parens(arg_expr) {
+                                    KtExpr::Reference(rr) => {
+                                        let an = rr.name()?;
+                                        let slot = name_to_local
+                                            .iter()
+                                            .rev()
+                                            .find(|(name, _)| name == an)
+                                            .map(|(_, l)| *l)?;
+                                        arg_slots.push(slot);
+                                    }
+                                    other => {
+                                        let (k, ty) =
+                                            literal_to_const(&other, strings)?;
+                                        let slot = LocalId(next_slot);
+                                        next_slot += 1;
+                                        local_tys.push(ty);
+                                        stmts.push(MStmt::Assign {
+                                            dest: slot,
+                                            value: skotch_mir::Rvalue::Const(k),
+                                        });
+                                        arg_slots.push(slot);
+                                    }
+                                }
+                            }
+                        }
+                        let result_slot = LocalId(next_slot);
+                        next_slot += 1;
+                        local_tys.push(ret_ty.clone());
+                        stmts.push(MStmt::Assign {
+                            dest: result_slot,
+                            value: skotch_mir::Rvalue::Call {
+                                kind: skotch_mir::CallKind::Static(*fid),
+                                args: arg_slots,
+                            },
+                        });
+                        explicit_return_slot = Some(result_slot);
+                        continue;
+                    }
                     // `return a + b` — materialize BinOp on existing
                     // locals / literals + return the result slot.
                     KtExpr::Binary(b) => {
@@ -7674,6 +7724,35 @@ mod tests {
                 _ => panic!("expected CheckCast"),
             },
         }
+    }
+
+    #[test]
+    fn typed_lower_block_return_static_call() {
+        // `fun double(x: Int): Int = x * 2
+        //  fun calc(): Int { return double(5) }`
+        let module = lower(
+            "fun double(x: Int): Int = x * 2\nfun calc(): Int { return double(5) }",
+            "TestKt",
+        );
+        let f = module.functions.iter().find(|f| f.name == "calc").unwrap();
+        let block = &f.blocks[0];
+        let has_static_call = block.stmts.iter().any(|s| {
+            matches!(
+                s,
+                skotch_mir::Stmt::Assign {
+                    value: skotch_mir::Rvalue::Call {
+                        kind: skotch_mir::CallKind::Static(_),
+                        ..
+                    },
+                    ..
+                }
+            )
+        });
+        assert!(has_static_call);
+        assert!(matches!(
+            block.terminator,
+            skotch_mir::Terminator::ReturnValue(_)
+        ));
     }
 
     #[test]
