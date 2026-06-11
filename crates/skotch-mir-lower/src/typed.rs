@@ -2330,6 +2330,7 @@ fn try_lower_multi_stmt_block_with_offset(
                             };
                             // Resolver: literal → Const; Reference →
                             // local OR val; Binary → recurse.
+                            #[allow(clippy::too_many_arguments)]
                             fn resolve_template_expr<'a>(
                                 e: KtExpr<'a>,
                                 name_to_local: &[(String, LocalId)],
@@ -2338,6 +2339,7 @@ fn try_lower_multi_stmt_block_with_offset(
                                 stmts: &mut Vec<MStmt>,
                                 strings: &mut Vec<String>,
                                 val_lookup: &rustc_hash::FxHashMap<String, Ty>,
+                                fn_lookup: &rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)>,
                                 wrapper_class: &str,
                             ) -> Option<(LocalId, Ty)> {
                                 let e = unwrap_parens(e);
@@ -2402,6 +2404,7 @@ fn try_lower_multi_stmt_block_with_offset(
                                             stmts,
                                             strings,
                                             val_lookup,
+                                            fn_lookup,
                                             wrapper_class,
                                         )?;
                                         let (rhs, _) = resolve_template_expr(
@@ -2412,6 +2415,7 @@ fn try_lower_multi_stmt_block_with_offset(
                                             stmts,
                                             strings,
                                             val_lookup,
+                                            fn_lookup,
                                             wrapper_class,
                                         )?;
                                         let slot = LocalId(*next_slot);
@@ -2427,6 +2431,42 @@ fn try_lower_multi_stmt_block_with_offset(
                                         });
                                         Some((slot, Ty::Int))
                                     }
+                                    KtExpr::Call(call) => {
+                                        let callee = match call.callee() {
+                                            Some(KtExpr::Reference(r)) => r.name()?,
+                                            _ => return None,
+                                        };
+                                        let (fid, ret_ty) = fn_lookup.get(callee)?;
+                                        let mut arg_slots: Vec<LocalId> = Vec::new();
+                                        if let Some(arg_list) = call.value_argument_list() {
+                                            for arg in arg_list.arguments() {
+                                                let arg_e = arg.expression()?;
+                                                let (s, _) = resolve_template_expr(
+                                                    arg_e,
+                                                    name_to_local,
+                                                    local_tys,
+                                                    next_slot,
+                                                    stmts,
+                                                    strings,
+                                                    val_lookup,
+                                                    fn_lookup,
+                                                    wrapper_class,
+                                                )?;
+                                                arg_slots.push(s);
+                                            }
+                                        }
+                                        let slot = LocalId(*next_slot);
+                                        *next_slot += 1;
+                                        local_tys.push(ret_ty.clone());
+                                        stmts.push(MStmt::Assign {
+                                            dest: slot,
+                                            value: skotch_mir::Rvalue::Call {
+                                                kind: skotch_mir::CallKind::Static(*fid),
+                                                args: arg_slots,
+                                            },
+                                        });
+                                        Some((slot, ret_ty.clone()))
+                                    }
                                     _ => None,
                                 }
                             }
@@ -2438,6 +2478,7 @@ fn try_lower_multi_stmt_block_with_offset(
                                 &mut stmts,
                                 strings,
                                 val_lookup,
+                                fn_lookup,
                                 wrapper_class,
                             ) else {
                                 ok = false;
