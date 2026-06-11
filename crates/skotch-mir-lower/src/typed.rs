@@ -2235,6 +2235,113 @@ fn try_lower_multi_stmt_block_with_offset(
                 let Some(chosen) = chosen else { break };
                 init = chosen;
             }
+            // Try string template init: `val s = "Hello, $name"`.
+            // Emits MakeConcatWithConstants with the interleaved
+            // recipe + descriptor.
+            if let KtExpr::String(_) = &init {
+                use skotch_syntax::SyntaxKind as S;
+                let mut recipe = String::new();
+                let mut arg_slots: Vec<LocalId> = Vec::new();
+                let mut arg_descs: Vec<String> = Vec::new();
+                let mut had_interp = false;
+                let mut ok = true;
+                for child in skotch_ast::children(init.syntax()) {
+                    match child.kind {
+                        S::LITERAL_STRING_TEMPLATE_ENTRY => {
+                            for cc in skotch_ast::children(child) {
+                                if cc.kind == S::STRING_CHUNK {
+                                    if let skotch_sil::SilData::Token { text } = &cc.data {
+                                        recipe.push_str(text);
+                                    }
+                                }
+                            }
+                        }
+                        S::SHORT_STRING_TEMPLATE_ENTRY => {
+                            had_interp = true;
+                            let id_name =
+                                skotch_ast::children(child).iter().find_map(|c| {
+                                    if c.kind == S::REFERENCE_EXPRESSION {
+                                        for cc in skotch_ast::children(c) {
+                                            if cc.kind == S::IDENTIFIER {
+                                                if let skotch_sil::SilData::Token { text } =
+                                                    &cc.data
+                                                {
+                                                    return Some(text.as_str().to_string());
+                                                }
+                                            }
+                                        }
+                                    }
+                                    None
+                                });
+                            let Some(id_name) = id_name else {
+                                ok = false;
+                                break;
+                            };
+                            // Resolve against locals first, then vals.
+                            if let Some(slot) = name_to_local
+                                .iter()
+                                .rev()
+                                .find(|(n, _)| n == &id_name)
+                                .map(|(_, l)| *l)
+                            {
+                                arg_slots.push(slot);
+                                // Best-effort: peek the local's type.
+                                let ty = local_tys
+                                    .get(slot.0 as usize)
+                                    .cloned()
+                                    .unwrap_or(Ty::Any);
+                                arg_descs.push(ty_to_descriptor(&ty));
+                            } else if let Some(val_ty) = val_lookup.get(&id_name) {
+                                let slot = LocalId(next_slot);
+                                next_slot += 1;
+                                local_tys.push(val_ty.clone());
+                                stmts.push(MStmt::Assign {
+                                    dest: slot,
+                                    value: skotch_mir::Rvalue::GetStaticField {
+                                        class_name: wrapper_class.to_string(),
+                                        field_name: id_name.clone(),
+                                        descriptor: ty_to_descriptor(val_ty),
+                                    },
+                                });
+                                arg_slots.push(slot);
+                                arg_descs.push(ty_to_descriptor(val_ty));
+                            } else {
+                                ok = false;
+                                break;
+                            }
+                            recipe.push('\x01');
+                        }
+                        S::STRING_START | S::STRING_END | S::WHITE_SPACE => {}
+                        S::LONG_STRING_TEMPLATE_ENTRY | S::BLOCK_STRING_TEMPLATE_ENTRY => {
+                            ok = false;
+                            break;
+                        }
+                        _ => {
+                            ok = false;
+                            break;
+                        }
+                    }
+                }
+                if ok && had_interp {
+                    let descriptor =
+                        format!("({})Ljava/lang/String;", arg_descs.join(""));
+                    let result_slot = LocalId(next_slot);
+                    next_slot += 1;
+                    local_tys.push(Ty::String);
+                    stmts.push(MStmt::Assign {
+                        dest: result_slot,
+                        value: skotch_mir::Rvalue::Call {
+                            kind: skotch_mir::CallKind::MakeConcatWithConstants {
+                                recipe,
+                                descriptor,
+                            },
+                            args: arg_slots,
+                        },
+                    });
+                    name_to_local.push((name.to_string(), result_slot));
+                    continue;
+                }
+            }
             // Try literal first.
             if let Some((k, ty)) = literal_to_const(&init, strings) {
                 let slot = LocalId(next_slot);
