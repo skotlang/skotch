@@ -2595,6 +2595,68 @@ fn method_simple_body(
         }
     }
 
+    // Binary op on param refs: `fun add(a: Int, b: Int) = a + b`.
+    if let KtExpr::Binary(b) = &body_expr {
+        let op_text = b.operation().map(|o| o.text()).unwrap_or_default();
+        let mir_op = match op_text.as_str() {
+            "+" => Some(skotch_mir::BinOp::AddI),
+            "-" => Some(skotch_mir::BinOp::SubI),
+            "*" => Some(skotch_mir::BinOp::MulI),
+            "/" => Some(skotch_mir::BinOp::DivI),
+            "%" => Some(skotch_mir::BinOp::ModI),
+            "==" => Some(skotch_mir::BinOp::CmpEq),
+            "!=" => Some(skotch_mir::BinOp::CmpNe),
+            "<" => Some(skotch_mir::BinOp::CmpLt),
+            ">" => Some(skotch_mir::BinOp::CmpGt),
+            "<=" => Some(skotch_mir::BinOp::CmpLe),
+            ">=" => Some(skotch_mir::BinOp::CmpGe),
+            _ => None,
+        };
+        if let Some(op) = mir_op {
+            let lhs_slot = b.lhs().and_then(|l| match unwrap_parens(l) {
+                KtExpr::Reference(rr) => {
+                    let n = rr.name()?;
+                    param_names
+                        .iter()
+                        .position(|p| p == n)
+                        .map(|i| skotch_mir::LocalId((1 + i) as u32))
+                }
+                _ => None,
+            });
+            let rhs_slot = b.rhs().and_then(|r| match unwrap_parens(r) {
+                KtExpr::Reference(rr) => {
+                    let n = rr.name()?;
+                    param_names
+                        .iter()
+                        .position(|p| p == n)
+                        .map(|i| skotch_mir::LocalId((1 + i) as u32))
+                }
+                _ => None,
+            });
+            if let (Some(lhs), Some(rhs)) = (lhs_slot, rhs_slot) {
+                let is_cmp = matches!(
+                    op,
+                    skotch_mir::BinOp::CmpEq
+                        | skotch_mir::BinOp::CmpNe
+                        | skotch_mir::BinOp::CmpLt
+                        | skotch_mir::BinOp::CmpGt
+                        | skotch_mir::BinOp::CmpLe
+                        | skotch_mir::BinOp::CmpGe
+                );
+                let result_ty = if is_cmp { Ty::Bool } else { Ty::Int };
+                let result_slot = skotch_mir::LocalId((1 + param_count) as u32);
+                let blocks = vec![BasicBlock {
+                    stmts: vec![skotch_mir::Stmt::Assign {
+                        dest: result_slot,
+                        value: skotch_mir::Rvalue::BinOp { op, lhs, rhs },
+                    }],
+                    terminator: Terminator::ReturnValue(result_slot),
+                }];
+                return (blocks, vec![result_ty]);
+            }
+        }
+    }
+
     let Some((c, ty)) = literal_to_const(&body_expr, strings) else {
         return make_placeholder();
     };
@@ -3958,6 +4020,34 @@ mod tests {
         assert_eq!(c.methods.len(), 1);
         assert_eq!(c.methods[0].name, "greet");
         assert_eq!(c.methods[0].return_ty, Ty::String);
+    }
+
+    #[test]
+    fn typed_lower_class_method_binary_op_of_params() {
+        let module = lower(
+            "class P { fun add(a: Int, b: Int): Int = a + b }",
+            "TestKt",
+        );
+        let p = module.classes.iter().find(|c| c.name == "P").unwrap();
+        let m = p.methods.iter().find(|m| m.name == "add").unwrap();
+        // locals: this (Any), a (Any), b (Any), result (Int)
+        assert_eq!(m.locals, vec![Ty::Any, Ty::Any, Ty::Any, Ty::Int]);
+        let block = &m.blocks[0];
+        assert_eq!(block.stmts.len(), 1);
+        match &block.stmts[0] {
+            skotch_mir::Stmt::Assign { dest, value } => {
+                assert_eq!(dest.0, 3);
+                match value {
+                    skotch_mir::Rvalue::BinOp { op, lhs, rhs } => {
+                        assert!(matches!(op, skotch_mir::BinOp::AddI));
+                        assert_eq!(lhs.0, 1); // a (1-indexed after this)
+                        assert_eq!(rhs.0, 2); // b
+                    }
+                    _ => panic!("expected BinOp"),
+                }
+            }
+        }
+        assert!(matches!(block.terminator, Terminator::ReturnValue(_)));
     }
 
     #[test]
