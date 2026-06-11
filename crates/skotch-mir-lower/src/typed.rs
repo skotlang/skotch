@@ -2910,8 +2910,13 @@ fn lower_simple_body(
 /// Build an `<init>(P1, P2, ...)V` constructor from a class's
 /// primary-constructor parameter list. Parameter types come from
 /// each KtValueParameter's KtTypeReference (Ty::Any when missing).
-/// Body is an empty Return for now; field-init writebacks are a
-/// follow-up.
+///
+/// The constructor body:
+///   1. Super call: `Call(Constructor(parent_or_Object), [this])`
+///   2. For each `val`/`var` primary param: `PutField(this, class, name, param)`
+///
+/// Layout: locals 0..N hold `this` + the N user params. Field writeback
+/// reads each param slot in declaration order.
 fn constructor_from_primary(c: skotch_ast::KtClass<'_>, class_name: &str) -> MirFunction {
     let Some(pc) = c.primary_constructor() else {
         return empty_constructor(class_name);
@@ -2921,12 +2926,12 @@ fn constructor_from_primary(c: skotch_ast::KtClass<'_>, class_name: &str) -> Mir
         None => return empty_constructor(class_name),
     };
     let params_iter: Vec<_> = plist.parameters().collect();
-    let param_count = params_iter.len();
-    let param_names: Vec<String> = params_iter
+    let user_param_count = params_iter.len();
+    let user_param_names: Vec<String> = params_iter
         .iter()
         .map(|p| p.name().unwrap_or("").to_string())
         .collect();
-    let param_tys: Vec<Ty> = params_iter
+    let user_param_tys: Vec<Ty> = params_iter
         .iter()
         .map(|p| {
             p.type_reference()
@@ -2936,21 +2941,69 @@ fn constructor_from_primary(c: skotch_ast::KtClass<'_>, class_name: &str) -> Mir
                 .unwrap_or(Ty::Any)
         })
         .collect();
-    let params: Vec<skotch_mir::LocalId> = (0..param_count)
-        .map(|i| skotch_mir::LocalId(i as u32))
-        .collect();
+    // local 0 = `this`; locals 1..=N hold user params.
+    let mut locals: Vec<Ty> = Vec::with_capacity(1 + user_param_count);
+    locals.push(Ty::Class(class_name.to_string()));
+    locals.extend(user_param_tys);
+    let this_slot = skotch_mir::LocalId(0);
+    let params: Vec<skotch_mir::LocalId> =
+        (0..=user_param_count).map(|i| skotch_mir::LocalId(i as u32)).collect();
+
+    let mut stmts: Vec<skotch_mir::Stmt> = Vec::new();
+    // 1. Super call.
+    let super_class = c
+        .super_type_list()
+        .and_then(|stl| {
+            stl.entries().find_map(|e| {
+                e.type_reference()
+                    .and_then(|tr| tr.user_type())
+                    .and_then(|u| u.name())
+                    .map(|n| {
+                        skotch_types::intrinsics::kotlin_to_jvm_class(n)
+                            .map(|s| s.to_string())
+                            .unwrap_or_else(|| n.to_string())
+                    })
+            })
+        })
+        .unwrap_or_else(|| "java/lang/Object".to_string());
+    stmts.push(skotch_mir::Stmt::Assign {
+        dest: this_slot,
+        value: skotch_mir::Rvalue::Call {
+            kind: skotch_mir::CallKind::Constructor(super_class),
+            args: vec![this_slot],
+        },
+    });
+
+    // 2. PutField for each val/var primary param.
+    for (i, p) in params_iter.iter().enumerate() {
+        if !p.is_val() && !p.is_var() {
+            continue;
+        }
+        let Some(field_name) = p.name() else { continue };
+        let param_slot = skotch_mir::LocalId((i + 1) as u32);
+        stmts.push(skotch_mir::Stmt::Assign {
+            dest: this_slot, // dummy dest (side effect)
+            value: skotch_mir::Rvalue::PutField {
+                receiver: this_slot,
+                class_name: class_name.to_string(),
+                field_name: field_name.to_string(),
+                value: param_slot,
+            },
+        });
+    }
+
     MirFunction {
         id: FuncId(0),
         name: "<init>".to_string(),
         params,
-        locals: param_tys,
+        locals,
         blocks: vec![BasicBlock {
-            stmts: Vec::new(),
+            stmts,
             terminator: Terminator::Return,
         }],
         return_ty: Ty::Unit,
-        required_params: param_count,
-        param_names,
+        required_params: user_param_count,
+        param_names: user_param_names,
         param_receiver_types: Vec::new(),
         param_defaults: Vec::new(),
         is_abstract: false,
@@ -4058,7 +4111,44 @@ mod tests {
             c.constructor.param_names,
             vec!["x".to_string(), "y".to_string()]
         );
-        assert_eq!(c.constructor.locals, vec![Ty::Int, Ty::Int]);
+        // locals: this @ slot 0, then x, y at slots 1, 2.
+        assert_eq!(
+            c.constructor.locals,
+            vec![Ty::Class("Box".to_string()), Ty::Int, Ty::Int]
+        );
+        // Constructor body now emits: super-call + putfield x + putfield y.
+        let block = &c.constructor.blocks[0];
+        let n_putfield = block
+            .stmts
+            .iter()
+            .filter(|s| {
+                matches!(
+                    s,
+                    skotch_mir::Stmt::Assign {
+                        value: skotch_mir::Rvalue::PutField { .. },
+                        ..
+                    }
+                )
+            })
+            .count();
+        assert_eq!(n_putfield, 2, "expected 2 PutFields, body: {block:?}");
+        let n_super = block
+            .stmts
+            .iter()
+            .filter(|s| {
+                matches!(
+                    s,
+                    skotch_mir::Stmt::Assign {
+                        value: skotch_mir::Rvalue::Call {
+                            kind: skotch_mir::CallKind::Constructor(_),
+                            ..
+                        },
+                        ..
+                    }
+                )
+            })
+            .count();
+        assert_eq!(n_super, 1, "expected super Constructor call");
     }
 
     #[test]
