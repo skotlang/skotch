@@ -1136,18 +1136,63 @@ fn try_lower_multi_stmt_block(
     for c in skotch_ast::children(block.syntax()) {
         if let Some(prop) = skotch_ast::KtProperty::cast(c) {
             // `val <name> = <literal>` — emit Assign + push local.
+            // `val <name> = <a + b>` — emit BinOp Assign.
             let name = prop.name()?;
             let init = prop.initializer()?;
-            let (k, ty) = literal_to_const(&init, strings)?;
-            let slot = LocalId(next_slot);
-            next_slot += 1;
-            local_tys.push(ty);
-            stmts.push(MStmt::Assign {
-                dest: slot,
-                value: skotch_mir::Rvalue::Const(k),
-            });
-            name_to_local.push((name.to_string(), slot));
-            continue;
+            let init = unwrap_parens(init);
+            // Try literal first.
+            if let Some((k, ty)) = literal_to_const(&init, strings) {
+                let slot = LocalId(next_slot);
+                next_slot += 1;
+                local_tys.push(ty);
+                stmts.push(MStmt::Assign {
+                    dest: slot,
+                    value: skotch_mir::Rvalue::Const(k),
+                });
+                name_to_local.push((name.to_string(), slot));
+                continue;
+            }
+            // Try binary op on refs/literals.
+            if let KtExpr::Binary(b) = &init {
+                let op_text = b.operation().map(|o| o.text()).unwrap_or_default();
+                let mir_op = match op_text.as_str() {
+                    "+" => Some(skotch_mir::BinOp::AddI),
+                    "-" => Some(skotch_mir::BinOp::SubI),
+                    "*" => Some(skotch_mir::BinOp::MulI),
+                    "/" => Some(skotch_mir::BinOp::DivI),
+                    "%" => Some(skotch_mir::BinOp::ModI),
+                    _ => None,
+                };
+                if let Some(op) = mir_op {
+                    let resolve = |e: KtExpr<'_>,
+                                   name_to_local: &[(String, LocalId)]|
+                     -> Option<LocalId> {
+                        match unwrap_parens(e) {
+                            KtExpr::Reference(rr) => {
+                                let n = rr.name()?;
+                                name_to_local
+                                    .iter()
+                                    .rev()
+                                    .find(|(name, _)| name == n)
+                                    .map(|(_, l)| *l)
+                            }
+                            _ => None,
+                        }
+                    };
+                    let lhs = resolve(b.lhs()?, &name_to_local)?;
+                    let rhs = resolve(b.rhs()?, &name_to_local)?;
+                    let slot = LocalId(next_slot);
+                    next_slot += 1;
+                    local_tys.push(Ty::Int);
+                    stmts.push(MStmt::Assign {
+                        dest: slot,
+                        value: skotch_mir::Rvalue::BinOp { op, lhs, rhs },
+                    });
+                    name_to_local.push((name.to_string(), slot));
+                    continue;
+                }
+            }
+            return None;
         }
         if let Some(expr) = KtExpr::cast(c) {
             // Handle trailing `return <ref>`. The ref must be in
@@ -3388,6 +3433,35 @@ mod tests {
         assert!(matches!(block.terminator, Terminator::Return));
         // locals: x (Int), println-result (Unit)
         assert_eq!(f.locals, vec![Ty::Int, Ty::Unit]);
+    }
+
+    #[test]
+    fn typed_lower_val_binary_init_then_return_ref() {
+        let module = lower(
+            "fun foo(a: Int, b: Int): Int {\n  val sum = a + b\n  return sum\n}",
+            "TestKt",
+        );
+        let f = &module.functions[0];
+        let block = &f.blocks[0];
+        // val sum = a + b → BinOp(AddI, a=0, b=1) → slot 2.
+        assert_eq!(block.stmts.len(), 1);
+        match &block.stmts[0] {
+            skotch_mir::Stmt::Assign { dest, value } => {
+                assert_eq!(dest.0, 2);
+                match value {
+                    skotch_mir::Rvalue::BinOp { op, lhs, rhs } => {
+                        assert!(matches!(op, skotch_mir::BinOp::AddI));
+                        assert_eq!(lhs.0, 0);
+                        assert_eq!(rhs.0, 1);
+                    }
+                    _ => panic!("expected BinOp"),
+                }
+            }
+        }
+        match &block.terminator {
+            Terminator::ReturnValue(slot) => assert_eq!(slot.0, 2),
+            other => panic!("expected ReturnValue(2), got {other:?}"),
+        }
     }
 
     #[test]
