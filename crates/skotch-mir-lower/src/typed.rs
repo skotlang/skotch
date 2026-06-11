@@ -2163,6 +2163,8 @@ fn try_lower_multi_stmt_block_inner(
         class_lookup,
         wrapper_class,
         0,
+        None,
+        &[],
     )
 }
 
@@ -2179,6 +2181,8 @@ fn try_lower_multi_stmt_block_with_offset(
     class_lookup: &rustc_hash::FxHashMap<String, Vec<Ty>>,
     wrapper_class: &str,
     slot_offset: u32,
+    class_name: Option<&str>,
+    field_names: &[(String, Ty)],
 ) -> Option<(Vec<BasicBlock>, Vec<Ty>)> {
     use skotch_ast::KtExpr;
     use skotch_mir::{LocalId, Stmt as MStmt};
@@ -2486,7 +2490,8 @@ fn try_lower_multi_stmt_block_with_offset(
                 name_to_local.push((name.to_string(), slot));
                 continue;
             }
-            // Try Reference RHS: `val y = x` or `val y = SOME_VAL`.
+            // Try Reference RHS: `val y = x`, `val y = SOME_VAL`, or
+            // `val y = thisField` (implicit-this field).
             if let KtExpr::Reference(rr) = &init {
                 if let Some(n) = rr.name() {
                     if let Some(slot) = name_to_local
@@ -2509,6 +2514,24 @@ fn try_lower_multi_stmt_block_with_offset(
                                 class_name: wrapper_class.to_string(),
                                 field_name: n.to_string(),
                                 descriptor: ty_to_descriptor(val_ty),
+                            },
+                        });
+                        name_to_local.push((name.to_string(), slot));
+                        continue;
+                    }
+                    // Implicit-this field: read via GetField.
+                    if let (Some(cname), Some((fname, fty))) =
+                        (class_name, field_names.iter().find(|(nm, _)| nm == n))
+                    {
+                        let slot = LocalId(next_slot);
+                        next_slot += 1;
+                        local_tys.push(fty.clone());
+                        stmts.push(MStmt::Assign {
+                            dest: slot,
+                            value: skotch_mir::Rvalue::GetField {
+                                receiver: LocalId(0),
+                                class_name: cname.to_string(),
+                                field_name: fname.clone(),
                             },
                         });
                         name_to_local.push((name.to_string(), slot));
@@ -7278,6 +7301,8 @@ fn method_simple_body_full(
                     &rustc_hash::FxHashMap::default(),
                     wrapper_class,
                     1,
+                    class_name,
+                    field_names,
                 )
             {
                 return (blocks, locals);
