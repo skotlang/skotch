@@ -51,6 +51,25 @@ pub fn lower_file(
         ..MirModule::default()
     };
 
+    // Pre-pass: collect top-level fn name → (FuncId, ret Ty). Built
+    // before classes/funs are processed so class method bodies can
+    // resolve sibling top-level fn calls via fn_lookup.
+    let mut fn_lookup: rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)> =
+        rustc_hash::FxHashMap::default();
+    {
+        let mut idx = 0u32;
+        for decl in file.decls() {
+            if let KtDecl::Fun(f) = decl {
+                if let Some(name) = f.name() {
+                    let typed_fn = typed.functions.iter().find(|tf| tf.name_index == idx);
+                    let ret = typed_fn.map(|tf| tf.return_ty.clone()).unwrap_or(Ty::Unit);
+                    fn_lookup.insert(name.to_string(), (FuncId(idx), ret));
+                }
+                idx += 1;
+            }
+        }
+    }
+
     // Top-level classes — emit minimal MirClass entries. Body
     // method shapes (empty Return bodies) populated below; method
     // body lowering is deferred to follow-up sessions.
@@ -62,7 +81,7 @@ pub fn lower_file(
             };
             let (super_class, interfaces) = collect_class_super_iface(c.super_type_list());
             let fields = collect_class_fields(c);
-            let methods = collect_class_methods(c, &name, &mut module.strings);
+            let methods = collect_class_methods(c, &name, &mut module.strings, &fn_lookup);
             let constructor = constructor_from_primary(c, &name);
             // Companion object handling: if the class body has a
             // `companion object [Name] { ... }`, emit a sibling
@@ -140,8 +159,12 @@ pub fn lower_file(
                         if let Some(nested_simple) = nested.name() {
                             let nested_qname = format!("{}${}", name, nested_simple);
                             let nested_fields = collect_class_fields(nested);
-                            let nested_methods =
-                                collect_class_methods(nested, &nested_qname, &mut module.strings);
+                            let nested_methods = collect_class_methods(
+                                nested,
+                                &nested_qname,
+                                &mut module.strings,
+                                &fn_lookup,
+                            );
                             let nested_ctor = constructor_from_primary(nested, &nested_qname);
                             let (n_super, n_ifaces) =
                                 collect_class_super_iface(nested.super_type_list());
@@ -341,23 +364,9 @@ pub fn lower_file(
         }
     }
 
-    // First pass: collect all top-level fn names → (FuncId, ret Ty).
-    // Needed so body lowering can resolve bare `inner()` calls.
-    let mut fn_lookup: rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)> =
-        rustc_hash::FxHashMap::default();
-    {
-        let mut idx = 0u32;
-        for decl in file.decls() {
-            if let KtDecl::Fun(f) = decl {
-                if let Some(name) = f.name() {
-                    let typed_fn = typed.functions.iter().find(|tf| tf.name_index == idx);
-                    let ret = typed_fn.map(|tf| tf.return_ty.clone()).unwrap_or(Ty::Unit);
-                    fn_lookup.insert(name.to_string(), (FuncId(idx), ret));
-                }
-                idx += 1;
-            }
-        }
-    }
+    // fn_lookup is already built earlier (pre-pass). Now build the
+    // val_lookup so body lowering can resolve top-level val refs to
+    // GetStaticField.
 
     // Top-level val lookup: name → Ty.
     let mut val_lookup: rustc_hash::FxHashMap<String, Ty> =
@@ -2939,11 +2948,13 @@ fn collect_object_methods(
 /// shape. The receiver `this` is at slot 0; user params at 1..N+1.
 /// `class_name` and `field_names` are needed for `Reference(field)`
 /// in the body to emit GetField on `this`.
-fn method_simple_body_with_class(
+#[allow(clippy::too_many_arguments)]
+fn method_simple_body_full(
     f: skotch_ast::KtFun<'_>,
     strings: &mut Vec<String>,
     class_name: Option<&str>,
     field_names: &[(String, Ty)],
+    fn_lookup: &rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)>,
 ) -> (Vec<BasicBlock>, Vec<Ty>) {
     use skotch_ast::KtExpr;
 
@@ -3166,6 +3177,8 @@ fn method_simple_body_with_class(
     // Virtual call on `this` to a sibling no-arg method:
     //   class P { fun a() = 1; fun b() = a() }
     // Emits Call(Virtual { class, method: "a" }, [this]).
+    // We check fn_lookup first below so top-level fn calls take
+    // priority over virtual dispatch (the legacy lookup order).
     if let KtExpr::Call(call) = &body_expr {
         if let Some(KtExpr::Reference(r)) = call.callee() {
             if let Some(name) = r.name() {
@@ -3173,7 +3186,11 @@ fn method_simple_body_with_class(
                     .value_argument_list()
                     .map(|a| a.arguments().count() == 0)
                     .unwrap_or(true);
-                if no_args && name != "println" && name != "print" {
+                if no_args && name != "println" && name != "print"
+                    // Skip virtual emission if the name resolves as a
+                    // top-level fn — that's handled below.
+                    && !fn_lookup.contains_key(name)
+                {
                     if let Some(cname) = class_name {
                         let this_slot = skotch_mir::LocalId(0);
                         let result_slot = skotch_mir::LocalId((1 + param_count) as u32);
@@ -3204,6 +3221,40 @@ fn method_simple_body_with_class(
                             },
                         }];
                         return (blocks, vec![ret_ty]);
+                    }
+                }
+            }
+        }
+    }
+
+    // Static call to a top-level fn (zero-arg) from a class method:
+    //   fun helper(): Int = 42
+    //   class P { fun answer(): Int = helper() }
+    if let KtExpr::Call(call) = &body_expr {
+        if let Some(KtExpr::Reference(r)) = call.callee() {
+            if let Some(name) = r.name() {
+                let no_args = call
+                    .value_argument_list()
+                    .map(|a| a.arguments().count() == 0)
+                    .unwrap_or(true);
+                if no_args && name != "println" && name != "print" {
+                    if let Some((callee_id, callee_ret)) = fn_lookup.get(name) {
+                        let result_slot = skotch_mir::LocalId((1 + param_count) as u32);
+                        let blocks = vec![BasicBlock {
+                            stmts: vec![skotch_mir::Stmt::Assign {
+                                dest: result_slot,
+                                value: skotch_mir::Rvalue::Call {
+                                    kind: skotch_mir::CallKind::Static(*callee_id),
+                                    args: Vec::new(),
+                                },
+                            }],
+                            terminator: if callee_ret == &Ty::Unit {
+                                Terminator::Return
+                            } else {
+                                Terminator::ReturnValue(result_slot)
+                            },
+                        }];
+                        return (blocks, vec![callee_ret.clone()]);
                     }
                 }
             }
@@ -3283,7 +3334,15 @@ fn method_from_fun(
     is_abstract_default: bool,
     strings: &mut Vec<String>,
 ) -> MirFunction {
-    method_from_fun_with_class(f, method_idx, is_abstract_default, strings, None, &[])
+    method_from_fun_with_class(
+        f,
+        method_idx,
+        is_abstract_default,
+        strings,
+        None,
+        &[],
+        &rustc_hash::FxHashMap::default(),
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -3294,6 +3353,7 @@ fn method_from_fun_with_class(
     strings: &mut Vec<String>,
     class_name: Option<&str>,
     field_names: &[(String, Ty)],
+    fn_lookup: &rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)>,
 ) -> MirFunction {
     let name = f.name().unwrap_or("<anon>").to_string();
     let param_count = f
@@ -3326,7 +3386,7 @@ fn method_from_fun_with_class(
     // result. Bodies that can't be lowered fall back to an empty
     // Return placeholder.
     let (blocks, extra_locals) = if !is_abstract {
-        method_simple_body_with_class(f, strings, class_name, field_names)
+        method_simple_body_full(f, strings, class_name, field_names, fn_lookup)
     } else {
         (
             vec![BasicBlock {
@@ -3382,6 +3442,7 @@ fn collect_class_methods(
     c: skotch_ast::KtClass<'_>,
     class_name: &str,
     strings: &mut Vec<String>,
+    fn_lookup: &rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)>,
 ) -> Vec<MirFunction> {
     let mut methods = Vec::new();
     let Some(body) = c.body() else { return methods };
@@ -3434,6 +3495,7 @@ fn collect_class_methods(
             strings,
             Some(class_name),
             &field_names,
+            fn_lookup,
         ));
     }
     methods
@@ -4941,6 +5003,26 @@ mod tests {
         assert_eq!(c.methods.len(), 1);
         assert_eq!(c.methods[0].name, "greet");
         assert_eq!(c.methods[0].return_ty, Ty::String);
+    }
+
+    #[test]
+    fn typed_lower_class_method_calls_top_level_fn() {
+        let module = lower(
+            "fun helper(): Int = 42\nclass P { fun answer(): Int = helper() }",
+            "TestKt",
+        );
+        let p = module.classes.iter().find(|c| c.name == "P").unwrap();
+        let m = p.methods.iter().find(|m| m.name == "answer").unwrap();
+        let block = &m.blocks[0];
+        match &block.stmts[0] {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::Call { kind, args } => {
+                    assert!(matches!(kind, skotch_mir::CallKind::Static(_)));
+                    assert!(args.is_empty());
+                }
+                _ => panic!("expected Static Call"),
+            },
+        }
     }
 
     #[test]
