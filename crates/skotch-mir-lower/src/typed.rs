@@ -6157,6 +6157,20 @@ fn method_simple_body_full(
                                                 },
                                             });
                                             arg_slots.push(slot);
+                                        } else if let Some(val_ty) = val_lookup.get(an) {
+                                            // Top-level val arg.
+                                            let slot = skotch_mir::LocalId(next_slot);
+                                            next_slot += 1;
+                                            extra_locals.push(val_ty.clone());
+                                            pre_stmts.push(skotch_mir::Stmt::Assign {
+                                                dest: slot,
+                                                value: skotch_mir::Rvalue::GetStaticField {
+                                                    class_name: wrapper_class.to_string(),
+                                                    field_name: an.to_string(),
+                                                    descriptor: ty_to_descriptor(val_ty),
+                                                },
+                                            });
+                                            arg_slots.push(slot);
                                         } else {
                                             ok = false;
                                             break;
@@ -7227,6 +7241,40 @@ mod tests {
                 _ => panic!("expected CheckCast"),
             },
         }
+    }
+
+    #[test]
+    fn typed_lower_method_static_call_with_top_level_val_arg() {
+        // `val DEFAULT: Int = 10
+        //  fun doubleIt(x: Int): Int = x * 2
+        //  class P { fun work(): Int = doubleIt(DEFAULT) }`
+        let module = lower(
+            "val DEFAULT: Int = 10\nfun doubleIt(x: Int): Int = x * 2\nclass P { fun work(): Int = doubleIt(DEFAULT) }",
+            "TestKt",
+        );
+        let cls = module.classes.iter().find(|c| c.name == "P").unwrap();
+        let f = cls.methods.iter().find(|m| m.name == "work").unwrap();
+        let block = &f.blocks[0];
+        let has_getstatic = block.stmts.iter().any(|s| match s {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::GetStaticField { field_name, .. } => field_name == "DEFAULT",
+                _ => false,
+            },
+        });
+        let has_static_call = block.stmts.iter().any(|s| {
+            matches!(
+                s,
+                skotch_mir::Stmt::Assign {
+                    value: skotch_mir::Rvalue::Call {
+                        kind: skotch_mir::CallKind::Static(_),
+                        ..
+                    },
+                    ..
+                }
+            )
+        });
+        assert!(has_getstatic, "expected GetStaticField for DEFAULT: {block:?}");
+        assert!(has_static_call, "expected Static call: {block:?}");
     }
 
     #[test]
