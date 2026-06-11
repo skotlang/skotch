@@ -70,6 +70,25 @@ pub fn lower_file(
         }
     }
 
+    // Pre-pass: top-level val lookup so class method bodies can resolve
+    // sibling top-level val refs to GetStaticField on the wrapper class.
+    let mut val_lookup: rustc_hash::FxHashMap<String, Ty> = rustc_hash::FxHashMap::default();
+    for decl in file.decls() {
+        if let KtDecl::Property(p) = decl {
+            if let Some(name) = p.name() {
+                let ty = match p
+                    .type_reference()
+                    .and_then(|tr| tr.user_type())
+                    .and_then(|u| u.name())
+                {
+                    Some(name) => skotch_types::ty_from_name(name).unwrap_or(Ty::Any),
+                    None => Ty::Any,
+                };
+                val_lookup.insert(name.to_string(), ty);
+            }
+        }
+    }
+
     // Top-level classes — emit minimal MirClass entries. Body
     // method shapes (empty Return bodies) populated below; method
     // body lowering is deferred to follow-up sessions.
@@ -81,7 +100,14 @@ pub fn lower_file(
             };
             let (super_class, interfaces) = collect_class_super_iface(c.super_type_list());
             let fields = collect_class_fields(c);
-            let methods = collect_class_methods(c, &name, &mut module.strings, &fn_lookup);
+            let methods = collect_class_methods(
+                c,
+                &name,
+                &mut module.strings,
+                &fn_lookup,
+                &val_lookup,
+                &module.wrapper_class,
+            );
             let constructor = constructor_from_primary_with_fn_lookup(c, &name, &fn_lookup);
             // Companion object handling: if the class body has a
             // `companion object [Name] { ... }`, emit a sibling
@@ -164,6 +190,8 @@ pub fn lower_file(
                                 &nested_qname,
                                 &mut module.strings,
                                 &fn_lookup,
+                                &val_lookup,
+                                &module.wrapper_class,
                             );
                             let nested_ctor = constructor_from_primary(nested, &nested_qname);
                             let (n_super, n_ifaces) =
@@ -364,27 +392,7 @@ pub fn lower_file(
         }
     }
 
-    // fn_lookup is already built earlier (pre-pass). Now build the
-    // val_lookup so body lowering can resolve top-level val refs to
-    // GetStaticField.
-
-    // Top-level val lookup: name → Ty.
-    let mut val_lookup: rustc_hash::FxHashMap<String, Ty> = rustc_hash::FxHashMap::default();
-    for decl in file.decls() {
-        if let KtDecl::Property(p) = decl {
-            if let Some(name) = p.name() {
-                let ty = match p
-                    .type_reference()
-                    .and_then(|tr| tr.user_type())
-                    .and_then(|u| u.name())
-                {
-                    Some(name) => skotch_types::ty_from_name(name).unwrap_or(Ty::Any),
-                    None => Ty::Any,
-                };
-                val_lookup.insert(name.to_string(), ty);
-            }
-        }
-    }
+    // val_lookup is already built earlier (pre-pass).
 
     // Top-level class lookup: name → constructor param types. Used by
     // body lowerers to detect `P(args)` calls and emit NewInstance +
@@ -5273,6 +5281,8 @@ fn method_simple_body_full(
     class_name: Option<&str>,
     field_names: &[(String, Ty)],
     fn_lookup: &rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)>,
+    val_lookup: &rustc_hash::FxHashMap<String, Ty>,
+    wrapper_class: &str,
 ) -> (Vec<BasicBlock>, Vec<Ty>) {
     use skotch_ast::KtExpr;
 
@@ -5517,6 +5527,24 @@ fn method_simple_body_full(
                     terminator: Terminator::ReturnValue(result_slot),
                 }];
                 return (blocks, vec![fty.clone()]);
+            }
+            // Top-level val reference: emit GetStaticField on the
+            // wrapper class. `class P { fun limit(): Int = MAX }`.
+            if let Some(val_ty) = val_lookup.get(name) {
+                let result_slot = skotch_mir::LocalId((1 + param_count) as u32);
+                let descriptor = ty_to_descriptor(val_ty);
+                let blocks = vec![BasicBlock {
+                    stmts: vec![skotch_mir::Stmt::Assign {
+                        dest: result_slot,
+                        value: skotch_mir::Rvalue::GetStaticField {
+                            class_name: wrapper_class.to_string(),
+                            field_name: name.to_string(),
+                            descriptor,
+                        },
+                    }],
+                    terminator: Terminator::ReturnValue(result_slot),
+                }];
+                return (blocks, vec![val_ty.clone()]);
             }
         }
     }
@@ -6243,6 +6271,8 @@ fn method_from_fun(
         None,
         &[],
         &rustc_hash::FxHashMap::default(),
+        &rustc_hash::FxHashMap::default(),
+        "",
     )
 }
 
@@ -6255,6 +6285,8 @@ fn method_from_fun_with_class(
     class_name: Option<&str>,
     field_names: &[(String, Ty)],
     fn_lookup: &rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)>,
+    val_lookup: &rustc_hash::FxHashMap<String, Ty>,
+    wrapper_class: &str,
 ) -> MirFunction {
     let name = f.name().unwrap_or("<anon>").to_string();
     let param_count = f
@@ -6287,7 +6319,15 @@ fn method_from_fun_with_class(
     // result. Bodies that can't be lowered fall back to an empty
     // Return placeholder.
     let (blocks, extra_locals) = if !is_abstract {
-        method_simple_body_full(f, strings, class_name, field_names, fn_lookup)
+        method_simple_body_full(
+            f,
+            strings,
+            class_name,
+            field_names,
+            fn_lookup,
+            val_lookup,
+            wrapper_class,
+        )
     } else {
         (
             vec![BasicBlock {
@@ -6339,11 +6379,14 @@ fn method_from_fun_with_class(
 
 /// Collect methods from a class body. Each becomes a MirFunction
 /// with an empty Return body — body lowering is deferred.
+#[allow(clippy::too_many_arguments)]
 fn collect_class_methods(
     c: skotch_ast::KtClass<'_>,
     class_name: &str,
     strings: &mut Vec<String>,
     fn_lookup: &rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)>,
+    val_lookup: &rustc_hash::FxHashMap<String, Ty>,
+    wrapper_class: &str,
 ) -> Vec<MirFunction> {
     let mut methods = Vec::new();
     let Some(body) = c.body() else { return methods };
@@ -6397,6 +6440,8 @@ fn collect_class_methods(
             Some(class_name),
             &field_names,
             fn_lookup,
+            val_lookup,
+            wrapper_class,
         ));
     }
     methods
@@ -7167,6 +7212,31 @@ mod tests {
                 _ => panic!("expected CheckCast"),
             },
         }
+    }
+
+    #[test]
+    fn typed_lower_method_body_returns_top_level_val() {
+        // `val MAX: Int = 100
+        //  class P { fun limit(): Int = MAX }`
+        // Method body returns a top-level val → GetStaticField on
+        // the wrapper class.
+        let module = lower(
+            "val MAX: Int = 100\nclass P { fun limit(): Int = MAX }",
+            "TestKt",
+        );
+        let cls = module.classes.iter().find(|c| c.name == "P").unwrap();
+        let f = cls.methods.iter().find(|m| m.name == "limit").unwrap();
+        let block = &f.blocks[0];
+        let has_getstatic = block.stmts.iter().any(|s| match s {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::GetStaticField { field_name, .. } => field_name == "MAX",
+                _ => false,
+            },
+        });
+        assert!(
+            has_getstatic,
+            "expected GetStaticField for MAX: {block:?}"
+        );
     }
 
     #[test]
