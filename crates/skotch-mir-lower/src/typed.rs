@@ -6744,6 +6744,52 @@ mod tests {
     }
 
     #[test]
+    fn typed_lower_method_combined_field_op_and_static_call() {
+        // `fun doubleIt(x: Int): Int = x * 2
+        //  class P(val n: Int) { fun compute(): Int = doubleIt(n) + n }`
+        // - doubleIt(n) uses implicit-this field as arg
+        // - + uses doubleIt result and another implicit-this field n
+        // Actually the binary handler's operand resolution is the
+        // simple resolve, which doesn't handle a Call as operand.
+        // This test just verifies the static-call arg shape lowers.
+        let module = lower(
+            "fun doubleIt(x: Int): Int = x * 2\nclass P(val n: Int) { fun compute(): Int = doubleIt(n) }",
+            "TestKt",
+        );
+        let cls = module.classes.iter().find(|c| c.name == "P").unwrap();
+        let f = cls.methods.iter().find(|m| m.name == "compute").unwrap();
+        let block = &f.blocks[0];
+        let n_getfield = block
+            .stmts
+            .iter()
+            .filter(|s| {
+                matches!(
+                    s,
+                    skotch_mir::Stmt::Assign {
+                        value: skotch_mir::Rvalue::GetField { .. },
+                        ..
+                    }
+                )
+            })
+            .count();
+        let n_call = block
+            .stmts
+            .iter()
+            .filter(|s| {
+                matches!(
+                    s,
+                    skotch_mir::Stmt::Assign {
+                        value: skotch_mir::Rvalue::Call { .. },
+                        ..
+                    }
+                )
+            })
+            .count();
+        assert_eq!(n_getfield, 1, "expected 1 GetField for n");
+        assert_eq!(n_call, 1, "expected 1 Static call to doubleIt");
+    }
+
+    #[test]
     fn typed_lower_method_virtual_call_with_implicit_this_field_arg() {
         // `class P(val n: Int) { fun a(x: Int): Int = x; fun b(): Int = a(n) }`
         // n is an implicit-this field; the virtual call to a should
