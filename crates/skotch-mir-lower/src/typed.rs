@@ -4092,11 +4092,28 @@ fn try_lower_multi_stmt_block_with_offset(
                     strings,
                     fn_lookup,
                 )?;
-                let exit_stmts = if trailing_children.is_empty() {
+                // Trailing-return splitting (same shape as for-in).
+                let before_ret: Vec<&skotch_sil::SilNode> = {
+                    let mut ret_idx: Option<usize> = None;
+                    for (i, c) in trailing_children.iter().enumerate().rev() {
+                        if let Some(KtExpr::Return(_)) = KtExpr::cast(c) {
+                            ret_idx = Some(i);
+                            break;
+                        }
+                        if KtExpr::cast(c).is_some() {
+                            break;
+                        }
+                    }
+                    match ret_idx {
+                        Some(idx) => trailing_children[..idx].iter().copied().collect(),
+                        None => trailing_children.iter().copied().collect(),
+                    }
+                };
+                let mut exit_stmts = if before_ret.is_empty() {
                     Vec::new()
                 } else {
                     lower_loop_body(
-                        trailing_children,
+                        &before_ret,
                         &mut name_to_local,
                         &mut next_slot,
                         &mut local_tys,
@@ -4104,6 +4121,37 @@ fn try_lower_multi_stmt_block_with_offset(
                         fn_lookup,
                     )?
                 };
+                let mut trailing_return_slot: Option<LocalId> = None;
+                {
+                    let mut ret_expr_inner: Option<KtExpr<'_>> = None;
+                    for c in trailing_children.iter().rev() {
+                        if let Some(KtExpr::Return(r)) = KtExpr::cast(c) {
+                            ret_expr_inner = skotch_ast::children(r.syntax())
+                                .iter()
+                                .find_map(KtExpr::cast)
+                                .map(unwrap_parens);
+                            break;
+                        }
+                        if KtExpr::cast(c).is_some() {
+                            break;
+                        }
+                    }
+                    if let Some(re) = ret_expr_inner {
+                        let snap = name_to_local.clone();
+                        let lookup = |n: &str| -> Option<LocalId> {
+                            snap.iter().rev().find(|(name, _)| name == n).map(|(_, l)| *l)
+                        };
+                        let slot = lower_inline_expr_to_slot(
+                            re,
+                            &lookup,
+                            &mut next_slot,
+                            &mut exit_stmts,
+                            &mut local_tys,
+                            strings,
+                        )?;
+                        trailing_return_slot = Some(slot);
+                    }
+                }
                 let pre_block = BasicBlock {
                     stmts: std::mem::take(&mut stmts),
                     terminator: Terminator::Goto(1),
@@ -4120,9 +4168,13 @@ fn try_lower_multi_stmt_block_with_offset(
                         else_block: 3,
                     },
                 };
+                let exit_terminator = match trailing_return_slot {
+                    Some(slot) => Terminator::ReturnValue(slot),
+                    None => Terminator::Return,
+                };
                 let exit_block = BasicBlock {
                     stmts: exit_stmts,
-                    terminator: Terminator::Return,
+                    terminator: exit_terminator,
                 };
                 return Some((
                     vec![pre_block, body_blk, cond_block, exit_block],
@@ -4231,11 +4283,28 @@ fn try_lower_multi_stmt_block_with_offset(
                     strings,
                     fn_lookup,
                 )?;
-                let exit_stmts = if trailing_children.is_empty() {
+                // Trailing-return splitting (same shape as for-in).
+                let before_ret: Vec<&skotch_sil::SilNode> = {
+                    let mut ret_idx: Option<usize> = None;
+                    for (i, c) in trailing_children.iter().enumerate().rev() {
+                        if let Some(KtExpr::Return(_)) = KtExpr::cast(c) {
+                            ret_idx = Some(i);
+                            break;
+                        }
+                        if KtExpr::cast(c).is_some() {
+                            break;
+                        }
+                    }
+                    match ret_idx {
+                        Some(idx) => trailing_children[..idx].iter().copied().collect(),
+                        None => trailing_children.iter().copied().collect(),
+                    }
+                };
+                let mut exit_stmts = if before_ret.is_empty() {
                     Vec::new()
                 } else {
                     lower_loop_body(
-                        trailing_children,
+                        &before_ret,
                         &mut name_to_local,
                         &mut next_slot,
                         &mut local_tys,
@@ -4243,6 +4312,37 @@ fn try_lower_multi_stmt_block_with_offset(
                         fn_lookup,
                     )?
                 };
+                let mut trailing_return_slot: Option<LocalId> = None;
+                {
+                    let mut ret_expr_inner: Option<KtExpr<'_>> = None;
+                    for c in trailing_children.iter().rev() {
+                        if let Some(KtExpr::Return(r)) = KtExpr::cast(c) {
+                            ret_expr_inner = skotch_ast::children(r.syntax())
+                                .iter()
+                                .find_map(KtExpr::cast)
+                                .map(unwrap_parens);
+                            break;
+                        }
+                        if KtExpr::cast(c).is_some() {
+                            break;
+                        }
+                    }
+                    if let Some(re) = ret_expr_inner {
+                        let snap = name_to_local.clone();
+                        let lookup = |n: &str| -> Option<LocalId> {
+                            snap.iter().rev().find(|(name, _)| name == n).map(|(_, l)| *l)
+                        };
+                        let slot = lower_inline_expr_to_slot(
+                            re,
+                            &lookup,
+                            &mut next_slot,
+                            &mut exit_stmts,
+                            &mut local_tys,
+                            strings,
+                        )?;
+                        trailing_return_slot = Some(slot);
+                    }
+                }
                 let pre_block = BasicBlock {
                     stmts: std::mem::take(&mut stmts),
                     terminator: Terminator::Goto(1),
@@ -4259,9 +4359,13 @@ fn try_lower_multi_stmt_block_with_offset(
                     stmts: body_mstmts,
                     terminator: Terminator::Goto(1),
                 };
+                let exit_terminator = match trailing_return_slot {
+                    Some(slot) => Terminator::ReturnValue(slot),
+                    None => Terminator::Return,
+                };
                 let exit_block = BasicBlock {
                     stmts: exit_stmts,
-                    terminator: Terminator::Return,
+                    terminator: exit_terminator,
                 };
                 return Some((
                     vec![pre_block, cond_block, body_blk, exit_block],
