@@ -359,6 +359,25 @@ pub fn lower_file(
         }
     }
 
+    // Top-level val lookup: name → Ty.
+    let mut val_lookup: rustc_hash::FxHashMap<String, Ty> =
+        rustc_hash::FxHashMap::default();
+    for decl in file.decls() {
+        if let KtDecl::Property(p) = decl {
+            if let Some(name) = p.name() {
+                let ty = match p
+                    .type_reference()
+                    .and_then(|tr| tr.user_type())
+                    .and_then(|u| u.name())
+                {
+                    Some(name) => skotch_types::ty_from_name(name).unwrap_or(Ty::Any),
+                    None => Ty::Any,
+                };
+                val_lookup.insert(name.to_string(), ty);
+            }
+        }
+    }
+
     // Top-level functions — one MirFunction per KtFun decl.
     let mut fn_id = 0u32;
     for decl in file.decls() {
@@ -390,7 +409,14 @@ pub fn lower_file(
             // expression now emit MStmt::Assign + ReturnValue. Block
             // bodies and non-literal expression bodies still emit an
             // empty Return placeholder.
-            let (blocks, extra_locals) = lower_simple_body(f, &mut module.strings, &fn_lookup);
+            let wrapper_class = module.wrapper_class.clone();
+            let (blocks, extra_locals) = lower_simple_body(
+                f,
+                &mut module.strings,
+                &fn_lookup,
+                &val_lookup,
+                &wrapper_class,
+            );
 
             let mut locals = param_tys;
             locals.extend(extra_locals);
@@ -545,6 +571,24 @@ fn operand_is_string(e: &skotch_ast::KtExpr<'_>, f: skotch_ast::KtFun<'_>) -> bo
                 .unwrap_or(false)
         }
         _ => false,
+    }
+}
+
+/// Map a `Ty` to a JVM field descriptor.
+fn ty_to_descriptor(ty: &Ty) -> String {
+    match ty {
+        Ty::Int => "I".to_string(),
+        Ty::Long => "J".to_string(),
+        Ty::Float => "F".to_string(),
+        Ty::Double => "D".to_string(),
+        Ty::Bool => "Z".to_string(),
+        Ty::Char => "C".to_string(),
+        Ty::Byte => "B".to_string(),
+        Ty::Short => "S".to_string(),
+        Ty::Unit => "V".to_string(),
+        Ty::String => "Ljava/lang/String;".to_string(),
+        Ty::Class(name) => format!("L{name};"),
+        _ => "Ljava/lang/Object;".to_string(),
     }
 }
 
@@ -1720,6 +1764,8 @@ fn lower_simple_body(
     f: skotch_ast::KtFun<'_>,
     strings: &mut Vec<String>,
     fn_lookup: &rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)>,
+    val_lookup: &rustc_hash::FxHashMap<String, Ty>,
+    wrapper_class: &str,
 ) -> (Vec<BasicBlock>, Vec<Ty>) {
     use skotch_ast::KtExpr;
     use skotch_mir::{LocalId, MirConst};
@@ -2169,6 +2215,25 @@ fn lower_simple_body(
                     terminator: Terminator::ReturnValue(skotch_mir::LocalId(idx as u32)),
                 }];
                 return (blocks, Vec::new());
+            }
+            // Top-level val reference: emit GetStaticField on the
+            // wrapper class.
+            if let Some(val_ty) = val_lookup.get(name) {
+                let param_count = param_names.len();
+                let result_slot = skotch_mir::LocalId(param_count as u32);
+                let descriptor = ty_to_descriptor(val_ty);
+                let blocks = vec![BasicBlock {
+                    stmts: vec![skotch_mir::Stmt::Assign {
+                        dest: result_slot,
+                        value: skotch_mir::Rvalue::GetStaticField {
+                            class_name: wrapper_class.to_string(),
+                            field_name: name.to_string(),
+                            descriptor,
+                        },
+                    }],
+                    terminator: Terminator::ReturnValue(result_slot),
+                }];
+                return (blocks, vec![val_ty.clone()]);
             }
         }
     }
@@ -3881,6 +3946,31 @@ mod tests {
                     );
                 }
                 _ => panic!("expected CheckCast"),
+            },
+        }
+    }
+
+    #[test]
+    fn typed_lower_fn_returns_top_level_val() {
+        let module = lower(
+            "val GREETING: String = \"hi\"\nfun greet(): String = GREETING",
+            "TestKt",
+        );
+        let f = module.functions.iter().find(|f| f.name == "greet").unwrap();
+        let block = &f.blocks[0];
+        assert_eq!(block.stmts.len(), 1);
+        match &block.stmts[0] {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::GetStaticField {
+                    class_name,
+                    field_name,
+                    descriptor,
+                } => {
+                    assert_eq!(class_name, "TestKt");
+                    assert_eq!(field_name, "GREETING");
+                    assert_eq!(descriptor, "Ljava/lang/String;");
+                }
+                _ => panic!("expected GetStaticField"),
             },
         }
     }
