@@ -2112,6 +2112,48 @@ fn try_lower_multi_stmt_block_with_offset(
                             });
                             continue;
                         }
+                        // Try Reference RHS: `x = y` where y is an
+                        // existing local/param.
+                        if let KtExpr::Reference(rr) = &rhs_expr {
+                            if let Some(rname) = rr.name() {
+                                if let Some(rhs_slot) = name_to_local
+                                    .iter()
+                                    .rev()
+                                    .find(|(n, _)| n == rname)
+                                    .map(|(_, l)| *l)
+                                {
+                                    stmts.push(MStmt::Assign {
+                                        dest: lhs_slot,
+                                        value: skotch_mir::Rvalue::Local(rhs_slot),
+                                    });
+                                    continue;
+                                }
+                            }
+                        }
+                        // Try Call RHS: `x = compute()` (zero-arg
+                        // top-level fn).
+                        if let KtExpr::Call(call) = &rhs_expr {
+                            if let Some(KtExpr::Reference(rc)) = call.callee() {
+                                if let Some(callee_name) = rc.name() {
+                                    if let Some((fid, _)) = fn_lookup.get(callee_name) {
+                                        let arg_count = call
+                                            .value_argument_list()
+                                            .map(|a| a.arguments().count())
+                                            .unwrap_or(0);
+                                        if arg_count == 0 {
+                                            stmts.push(MStmt::Assign {
+                                                dest: lhs_slot,
+                                                value: skotch_mir::Rvalue::Call {
+                                                    kind: skotch_mir::CallKind::Static(*fid),
+                                                    args: Vec::new(),
+                                                },
+                                            });
+                                            continue;
+                                        }
+                                    }
+                                }
+                            }
+                        }
                         // Try binary RHS: `sum = sum + 1`.
                         if let KtExpr::Binary(rb) = &rhs_expr {
                             let rop_text = rb.operation().map(|o| o.text()).unwrap_or_default();
@@ -5760,6 +5802,52 @@ mod tests {
                 _ => panic!("expected CheckCast"),
             },
         }
+    }
+
+    #[test]
+    fn typed_lower_block_var_reassign_from_top_level_fn() {
+        // `fun compute(): Int = 42
+        //  fun work(): Int { var x = 0; x = compute(); return x }`
+        let module = lower(
+            "fun compute(): Int = 42\nfun work(): Int { var x = 0; x = compute(); return x }",
+            "TestKt",
+        );
+        let f = module.functions.iter().find(|f| f.name == "work").unwrap();
+        let block = &f.blocks[0];
+        let has_static_call = block.stmts.iter().any(|s| {
+            matches!(
+                s,
+                skotch_mir::Stmt::Assign {
+                    value: skotch_mir::Rvalue::Call {
+                        kind: skotch_mir::CallKind::Static(_),
+                        ..
+                    },
+                    ..
+                }
+            )
+        });
+        assert!(has_static_call, "expected Static call to compute()");
+    }
+
+    #[test]
+    fn typed_lower_block_var_reassign_from_ref() {
+        // `fun pair(): Int { var x = 0; var y = 10; x = y; return x }`
+        let module = lower(
+            "fun pair(): Int { var x = 0; var y = 10; x = y; return x }",
+            "TestKt",
+        );
+        let f = module.functions.iter().find(|f| f.name == "pair").unwrap();
+        let block = &f.blocks[0];
+        let has_local_assign = block.stmts.iter().any(|s| {
+            matches!(
+                s,
+                skotch_mir::Stmt::Assign {
+                    value: skotch_mir::Rvalue::Local(_),
+                    ..
+                }
+            )
+        });
+        assert!(has_local_assign, "expected Local rvalue for x = y");
     }
 
     #[test]
