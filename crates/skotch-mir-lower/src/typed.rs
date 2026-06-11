@@ -3531,6 +3531,105 @@ fn lower_simple_body(
         }
     }
 
+    // Short-circuit logical && / || body.
+    //
+    // `fun and(a: Boolean, b: Boolean): Boolean = a && b`
+    //   → if (a) b else false
+    // `fun or(a: Boolean, b: Boolean): Boolean = a || b`
+    //   → if (a) true else b
+    //
+    // Operands must be param References or Bool literals; anything
+    // else (nested binary, etc.) is deferred.
+    if let KtExpr::Binary(b) = &body_expr {
+        let op_text = b.operation().map(|o| o.text()).unwrap_or_default();
+        if op_text == "&&" || op_text == "||" {
+            let param_count = f
+                .value_parameter_list()
+                .map(|pl| pl.parameters().count())
+                .unwrap_or(0);
+            let param_names: Vec<String> = f
+                .value_parameter_list()
+                .map(|pl| {
+                    pl.parameters()
+                        .map(|p| p.name().unwrap_or("").to_string())
+                        .collect()
+                })
+                .unwrap_or_default();
+            let resolve_bool = |e: KtExpr<'_>| -> Option<(skotch_mir::LocalId, bool)> {
+                let e = unwrap_parens(e);
+                match e {
+                    KtExpr::Reference(r) => {
+                        let n = r.name()?;
+                        let idx = param_names.iter().position(|p| p == n)?;
+                        // (slot, is_param)
+                        Some((skotch_mir::LocalId(idx as u32), true))
+                    }
+                    _ => None,
+                }
+            };
+            let lhs = b.lhs().and_then(resolve_bool);
+            let rhs = b.rhs().and_then(resolve_bool);
+            if let (Some((lhs_slot, _)), Some((rhs_slot, _))) = (lhs, rhs) {
+                let result_slot = skotch_mir::LocalId(param_count as u32);
+                let const_slot = skotch_mir::LocalId((param_count + 1) as u32);
+                let (const_val, then_uses_rhs) = if op_text == "&&" {
+                    // a && b: then = b, else = false
+                    (skotch_mir::MirConst::Bool(false), true)
+                } else {
+                    // a || b: then = true, else = b
+                    (skotch_mir::MirConst::Bool(true), false)
+                };
+                let block_then_uses_rhs = then_uses_rhs;
+                // Block 0: Branch on lhs.
+                let b0 = BasicBlock {
+                    stmts: Vec::new(),
+                    terminator: Terminator::Branch {
+                        cond: lhs_slot,
+                        then_block: 1,
+                        else_block: 2,
+                    },
+                };
+                // Block 1: then arm.
+                let b1 = BasicBlock {
+                    stmts: vec![if block_then_uses_rhs {
+                        skotch_mir::Stmt::Assign {
+                            dest: result_slot,
+                            value: skotch_mir::Rvalue::Local(rhs_slot),
+                        }
+                    } else {
+                        skotch_mir::Stmt::Assign {
+                            dest: result_slot,
+                            value: skotch_mir::Rvalue::Const(const_val.clone()),
+                        }
+                    }],
+                    terminator: Terminator::Goto(3),
+                };
+                // Block 2: else arm.
+                let b2 = BasicBlock {
+                    stmts: vec![if !block_then_uses_rhs {
+                        skotch_mir::Stmt::Assign {
+                            dest: result_slot,
+                            value: skotch_mir::Rvalue::Local(rhs_slot),
+                        }
+                    } else {
+                        skotch_mir::Stmt::Assign {
+                            dest: result_slot,
+                            value: skotch_mir::Rvalue::Const(const_val),
+                        }
+                    }],
+                    terminator: Terminator::Goto(3),
+                };
+                // Block 3: exit.
+                let b3 = BasicBlock {
+                    stmts: Vec::new(),
+                    terminator: Terminator::ReturnValue(result_slot),
+                };
+                let _ = const_slot;
+                return (vec![b0, b1, b2, b3], vec![Ty::Bool]);
+            }
+        }
+    }
+
     // Binary arithmetic body where each operand is either a param
     // reference or a literal constant. Examples:
     //   fun add(a: Int, b: Int) = a + b
@@ -5659,6 +5758,71 @@ mod tests {
                     assert!(target_class == "java/lang/String" || target_class == "String");
                 }
                 _ => panic!("expected CheckCast"),
+            },
+        }
+    }
+
+    #[test]
+    fn typed_lower_fn_returns_short_circuit_and() {
+        // `fun and(a: Boolean, b: Boolean): Boolean = a && b`
+        // → if (a) b else false. 4-block CFG.
+        let module = lower(
+            "fun and(a: Boolean, b: Boolean): Boolean = a && b",
+            "TestKt",
+        );
+        let f = module.functions.iter().find(|f| f.name == "and").unwrap();
+        assert_eq!(f.blocks.len(), 4);
+        // Block 0 branches on a (slot 0).
+        match &f.blocks[0].terminator {
+            skotch_mir::Terminator::Branch {
+                cond,
+                then_block,
+                else_block,
+            } => {
+                assert_eq!(cond.0, 0);
+                assert_eq!(*then_block, 1);
+                assert_eq!(*else_block, 2);
+            }
+            other => panic!("expected Branch, got {other:?}"),
+        }
+        // Block 1 (then) should assign b (slot 1).
+        match &f.blocks[1].stmts[0] {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::Local(slot) => assert_eq!(slot.0, 1),
+                _ => panic!("expected Local(b), got {value:?}"),
+            },
+        }
+        // Block 2 (else) should assign false.
+        match &f.blocks[2].stmts[0] {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::Const(skotch_mir::MirConst::Bool(false)) => {}
+                _ => panic!("expected Const(Bool(false)), got {value:?}"),
+            },
+        }
+    }
+
+    #[test]
+    fn typed_lower_fn_returns_short_circuit_or() {
+        // `fun or(a: Boolean, b: Boolean): Boolean = a || b`
+        // → if (a) true else b. 4-block CFG.
+        let module = lower(
+            "fun or(a: Boolean, b: Boolean): Boolean = a || b",
+            "TestKt",
+        );
+        let f = module.functions.iter().find(|f| f.name == "or").unwrap();
+        assert_eq!(f.blocks.len(), 4);
+        // Block 1 (then): assign true.
+        match &f.blocks[1].stmts[0] {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::Const(skotch_mir::MirConst::Bool(true)) => {}
+                _ => panic!("expected Const(Bool(true)), got {value:?}"),
+            },
+        }
+        // Block 2 (else): assign b.
+        match &f.blocks[2].stmts[0] {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::Local(slot) => assert_eq!(slot.0, 1),
+                _ => panic!("expected Local(b), got {value:?}"),
             },
         }
     }
