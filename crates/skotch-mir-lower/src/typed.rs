@@ -1486,15 +1486,13 @@ fn try_lower_try_expression(
     use skotch_ast::KtExpr;
 
     let catches: Vec<_> = t.catches().collect();
-    if catches.len() != 1 {
+    if catches.is_empty() {
         return None;
     }
     if t.finally().is_some() {
         return None;
     }
     let try_body = t.try_block()?;
-    let catch = catches[0];
-    let catch_body = catch.body()?;
 
     let outer_param_names: Vec<String> = f
         .value_parameter_list()
@@ -1506,20 +1504,27 @@ fn try_lower_try_expression(
         .unwrap_or_default();
     let param_count = outer_param_names.len();
 
-    // Catch exception class name → JVM internal form.
-    let catch_type = catch
-        .parameter()
-        .and_then(|p| p.type_reference())
-        .and_then(|tr| tr.user_type())
-        .and_then(|u| u.name())
-        .map(|n| {
-            skotch_types::intrinsics::kotlin_exception_class(n)
-                .map(|s| s.to_string())
-                .or_else(|| {
-                    skotch_types::intrinsics::kotlin_to_jvm_class(n).map(|s| s.to_string())
-                })
-                .unwrap_or_else(|| n.to_string())
-        });
+    // Map each catch's exception class name → JVM internal form, plus
+    // its body expression.
+    let mut catch_specs: Vec<(Option<String>, skotch_ast::KtExpr<'_>)> = Vec::new();
+    for c in &catches {
+        let catch_type = c
+            .parameter()
+            .and_then(|p| p.type_reference())
+            .and_then(|tr| tr.user_type())
+            .and_then(|u| u.name())
+            .map(|n| {
+                skotch_types::intrinsics::kotlin_exception_class(n)
+                    .map(|s| s.to_string())
+                    .or_else(|| {
+                        skotch_types::intrinsics::kotlin_to_jvm_class(n).map(|s| s.to_string())
+                    })
+                    .unwrap_or_else(|| n.to_string())
+            });
+        let body_block = c.body()?;
+        let body_expr = body_result_expr(body_block)?;
+        catch_specs.push((catch_type, body_expr));
+    }
 
     // Extract the single return expression from a body block. The body
     // can be either a single expression (no `return`) or `{ return e }`
@@ -1540,7 +1545,6 @@ fn try_lower_try_expression(
     }
 
     let try_expr = body_result_expr(try_body)?;
-    let catch_expr = body_result_expr(catch_body)?;
 
     let resolve = |e: KtExpr<'_>,
                    next_slot: &mut u32,
@@ -1573,6 +1577,9 @@ fn try_lower_try_expression(
     next_slot += 1;
     extra_locals.push(Ty::Any);
 
+    let n_catches = catch_specs.len();
+    let exit_block = (1 + n_catches) as u32;
+
     // Block 0: try arm.
     let mut try_stmts: Vec<skotch_mir::Stmt> = Vec::new();
     let try_slot = resolve(
@@ -1587,41 +1594,44 @@ fn try_lower_try_expression(
         value: skotch_mir::Rvalue::Local(try_slot),
     });
 
-    // Block 1: catch arm.
-    let mut catch_stmts: Vec<skotch_mir::Stmt> = Vec::new();
-    let catch_slot = resolve(
-        catch_expr,
-        &mut next_slot,
-        &mut catch_stmts,
-        &mut extra_locals,
-        strings,
-    )?;
-    catch_stmts.push(skotch_mir::Stmt::Assign {
-        dest: result_slot,
-        value: skotch_mir::Rvalue::Local(catch_slot),
-    });
-
-    let blocks = vec![
-        BasicBlock {
-            stmts: try_stmts,
-            terminator: Terminator::Goto(2),
-        },
-        BasicBlock {
-            stmts: catch_stmts,
-            terminator: Terminator::Goto(2),
-        },
-        BasicBlock {
-            stmts: Vec::new(),
-            terminator: Terminator::ReturnValue(result_slot),
-        },
-    ];
-
-    let handlers = vec![skotch_mir::ExceptionHandler {
-        try_start_block: 0,
-        try_end_block: 1,
-        handler_block: 1,
-        catch_type,
+    let mut blocks: Vec<BasicBlock> = vec![BasicBlock {
+        stmts: try_stmts,
+        terminator: Terminator::Goto(exit_block),
     }];
+
+    // Blocks 1..N: catch arms.
+    let mut handlers: Vec<skotch_mir::ExceptionHandler> = Vec::new();
+    for (i, (catch_type, catch_expr)) in catch_specs.iter().enumerate() {
+        let mut catch_stmts: Vec<skotch_mir::Stmt> = Vec::new();
+        let catch_slot = resolve(
+            *catch_expr,
+            &mut next_slot,
+            &mut catch_stmts,
+            &mut extra_locals,
+            strings,
+        )?;
+        catch_stmts.push(skotch_mir::Stmt::Assign {
+            dest: result_slot,
+            value: skotch_mir::Rvalue::Local(catch_slot),
+        });
+        let handler_block = (1 + i) as u32;
+        blocks.push(BasicBlock {
+            stmts: catch_stmts,
+            terminator: Terminator::Goto(exit_block),
+        });
+        handlers.push(skotch_mir::ExceptionHandler {
+            try_start_block: 0,
+            try_end_block: 1,
+            handler_block,
+            catch_type: catch_type.clone(),
+        });
+    }
+
+    // Exit block.
+    blocks.push(BasicBlock {
+        stmts: Vec::new(),
+        terminator: Terminator::ReturnValue(result_slot),
+    });
 
     Some((blocks, extra_locals, handlers))
 }
@@ -6399,6 +6409,37 @@ mod tests {
                 _ => panic!("expected CheckCast"),
             },
         }
+    }
+
+    #[test]
+    fn typed_lower_fn_returns_try_multi_catch() {
+        // `fun parse(): Int = try { 1 } catch (e: NumberFormatException) { 2 }
+        //                                catch (e: Exception) { 3 }`
+        // CFG: try, catch1, catch2, exit = 4 blocks. 2 handlers, both
+        // pointing back to block 0.
+        let module = lower(
+            "fun parse(): Int = try { 1 } catch (e: NumberFormatException) { 2 } catch (e: Exception) { 3 }",
+            "TestKt",
+        );
+        let f = module
+            .functions
+            .iter()
+            .find(|f| f.name == "parse")
+            .unwrap();
+        assert_eq!(f.blocks.len(), 4);
+        assert_eq!(f.exception_handlers.len(), 2);
+        assert_eq!(
+            f.exception_handlers[0].catch_type.as_deref(),
+            Some("java/lang/NumberFormatException")
+        );
+        assert_eq!(
+            f.exception_handlers[1].catch_type.as_deref(),
+            Some("java/lang/Exception")
+        );
+        // Both handlers cover block 0 (try-start, try-end=1) but
+        // their handler_block points at distinct catch blocks.
+        assert_eq!(f.exception_handlers[0].handler_block, 1);
+        assert_eq!(f.exception_handlers[1].handler_block, 2);
     }
 
     #[test]
