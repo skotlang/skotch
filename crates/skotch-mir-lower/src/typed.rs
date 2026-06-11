@@ -3436,6 +3436,36 @@ mod tests {
     }
 
     #[test]
+    fn typed_lower_val_binary_init_then_println() {
+        let module = lower(
+            "fun show(a: Int, b: Int) {\n  val sum = a + b\n  println(sum)\n}",
+            "TestKt",
+        );
+        let f = &module.functions[0];
+        let block = &f.blocks[0];
+        // 3 stmts: BinOp(sum), then Println call (no Const since arg is ref)
+        // Actually since arg is a ref, no extra Const slot is needed.
+        // stmts: [Assign(sum), Assign(result, Call(Println, [sum]))]
+        assert_eq!(block.stmts.len(), 2);
+        // First: val sum = a + b
+        match &block.stmts[0] {
+            skotch_mir::Stmt::Assign { value, .. } => {
+                assert!(matches!(value, skotch_mir::Rvalue::BinOp { .. }));
+            }
+        }
+        // Second: println(sum) — arg is the sum local.
+        match &block.stmts[1] {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::Call { kind, args } => {
+                    assert!(matches!(kind, skotch_mir::CallKind::Println));
+                    assert_eq!(args[0].0, 2); // sum is at slot 2 (after params 0,1)
+                }
+                _ => panic!("expected Call"),
+            },
+        }
+    }
+
+    #[test]
     fn typed_lower_val_binary_init_then_return_ref() {
         let module = lower(
             "fun foo(a: Int, b: Int): Int {\n  val sum = a + b\n  return sum\n}",
