@@ -2151,6 +2151,7 @@ fn try_lower_multi_stmt_block_inner(
     strings: &mut Vec<String>,
     fn_lookup: &rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)>,
     val_lookup: &rustc_hash::FxHashMap<String, Ty>,
+    class_lookup: &rustc_hash::FxHashMap<String, Vec<Ty>>,
     wrapper_class: &str,
 ) -> Option<(Vec<BasicBlock>, Vec<Ty>)> {
     try_lower_multi_stmt_block_with_offset(
@@ -2159,6 +2160,7 @@ fn try_lower_multi_stmt_block_inner(
         strings,
         fn_lookup,
         val_lookup,
+        class_lookup,
         wrapper_class,
         0,
     )
@@ -2174,6 +2176,7 @@ fn try_lower_multi_stmt_block_with_offset(
     strings: &mut Vec<String>,
     fn_lookup: &rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)>,
     val_lookup: &rustc_hash::FxHashMap<String, Ty>,
+    class_lookup: &rustc_hash::FxHashMap<String, Vec<Ty>>,
     wrapper_class: &str,
     slot_offset: u32,
 ) -> Option<(Vec<BasicBlock>, Vec<Ty>)> {
@@ -2814,13 +2817,140 @@ fn try_lower_multi_stmt_block_with_offset(
                     }
                 }
             }
-            // Currently only handle `println(...)` / `print(...)` calls.
+            // Handle `println(...)` / `print(...)`, class
+            // instantiation (`Foo()` as a statement), top-level fn
+            // calls (`helper(args)` as a statement), and discard
+            // their result.
             match expr {
                 KtExpr::Call(call) => {
                     let name = match call.callee() {
                         Some(KtExpr::Reference(r)) => r.name(),
                         _ => None,
                     }?;
+                    // Class instantiation as a statement:
+                    //   class Foo
+                    //   fun main() { Foo() }
+                    if class_lookup.contains_key(name) {
+                        let new_slot = LocalId(next_slot);
+                        next_slot += 1;
+                        local_tys.push(Ty::Class(name.to_string()));
+                        stmts.push(MStmt::Assign {
+                            dest: new_slot,
+                            value: skotch_mir::Rvalue::NewInstance(name.to_string()),
+                        });
+                        let mut arg_slots: Vec<LocalId> = vec![new_slot];
+                        if let Some(arg_list) = call.value_argument_list() {
+                            for arg in arg_list.arguments() {
+                                let arg_e = arg.expression()?;
+                                match unwrap_parens(arg_e) {
+                                    KtExpr::Reference(rr) => {
+                                        let an = rr.name()?;
+                                        let slot = name_to_local
+                                            .iter()
+                                            .rev()
+                                            .find(|(n, _)| n == an)
+                                            .map(|(_, l)| *l)?;
+                                        arg_slots.push(slot);
+                                    }
+                                    other => {
+                                        let (k, ty) = literal_to_const(&other, strings)?;
+                                        let slot = LocalId(next_slot);
+                                        next_slot += 1;
+                                        local_tys.push(ty);
+                                        stmts.push(MStmt::Assign {
+                                            dest: slot,
+                                            value: skotch_mir::Rvalue::Const(k),
+                                        });
+                                        arg_slots.push(slot);
+                                    }
+                                }
+                            }
+                        }
+                        let dummy = LocalId(next_slot);
+                        next_slot += 1;
+                        local_tys.push(Ty::Unit);
+                        stmts.push(MStmt::Assign {
+                            dest: dummy,
+                            value: skotch_mir::Rvalue::Call {
+                                kind: skotch_mir::CallKind::Constructor(name.to_string()),
+                                args: arg_slots,
+                            },
+                        });
+                        continue;
+                    }
+                    // Top-level fn call as a statement (result discarded).
+                    if let Some((fid, ret)) = fn_lookup.get(name) {
+                        let mut arg_slots: Vec<LocalId> = Vec::new();
+                        let mut ok = true;
+                        if let Some(arg_list) = call.value_argument_list() {
+                            for arg in arg_list.arguments() {
+                                let Some(arg_e) = arg.expression() else {
+                                    ok = false;
+                                    break;
+                                };
+                                match unwrap_parens(arg_e) {
+                                    KtExpr::Reference(rr) => {
+                                        let Some(an) = rr.name() else {
+                                            ok = false;
+                                            break;
+                                        };
+                                        if let Some(slot) = name_to_local
+                                            .iter()
+                                            .rev()
+                                            .find(|(n, _)| n == an)
+                                            .map(|(_, l)| *l)
+                                        {
+                                            arg_slots.push(slot);
+                                        } else if let Some(val_ty) = val_lookup.get(an) {
+                                            let slot = LocalId(next_slot);
+                                            next_slot += 1;
+                                            local_tys.push(val_ty.clone());
+                                            stmts.push(MStmt::Assign {
+                                                dest: slot,
+                                                value: skotch_mir::Rvalue::GetStaticField {
+                                                    class_name: wrapper_class.to_string(),
+                                                    field_name: an.to_string(),
+                                                    descriptor: ty_to_descriptor(val_ty),
+                                                },
+                                            });
+                                            arg_slots.push(slot);
+                                        } else {
+                                            ok = false;
+                                            break;
+                                        }
+                                    }
+                                    other => {
+                                        let Some((k, ty)) = literal_to_const(&other, strings)
+                                        else {
+                                            ok = false;
+                                            break;
+                                        };
+                                        let slot = LocalId(next_slot);
+                                        next_slot += 1;
+                                        local_tys.push(ty);
+                                        stmts.push(MStmt::Assign {
+                                            dest: slot,
+                                            value: skotch_mir::Rvalue::Const(k),
+                                        });
+                                        arg_slots.push(slot);
+                                    }
+                                }
+                            }
+                        }
+                        if ok {
+                            let slot = LocalId(next_slot);
+                            next_slot += 1;
+                            local_tys.push(ret.clone());
+                            stmts.push(MStmt::Assign {
+                                dest: slot,
+                                value: skotch_mir::Rvalue::Call {
+                                    kind: skotch_mir::CallKind::Static(*fid),
+                                    args: arg_slots,
+                                },
+                            });
+                            continue;
+                        }
+                    }
                     let kind = match name {
                         "println" => skotch_mir::CallKind::Println,
                         "print" => skotch_mir::CallKind::Print,
@@ -3545,6 +3675,7 @@ fn lower_simple_body(
                     strings,
                     fn_lookup,
                     val_lookup,
+                    class_lookup,
                     wrapper_class,
                 )
             {
@@ -5890,6 +6021,7 @@ fn method_simple_body_full(
                     strings,
                     fn_lookup,
                     val_lookup,
+                    &rustc_hash::FxHashMap::default(),
                     wrapper_class,
                     1,
                 )
