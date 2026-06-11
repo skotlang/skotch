@@ -1568,22 +1568,53 @@ fn try_lower_multi_stmt_block_inner(
                     _ => None,
                 };
                 if let Some(op) = mir_op {
-                    let resolve =
-                        |e: KtExpr<'_>, name_to_local: &[(String, LocalId)]| -> Option<LocalId> {
-                            match unwrap_parens(e) {
-                                KtExpr::Reference(rr) => {
-                                    let n = rr.name()?;
-                                    name_to_local
-                                        .iter()
-                                        .rev()
-                                        .find(|(name, _)| name == n)
-                                        .map(|(_, l)| *l)
-                                }
-                                _ => None,
+                    // Resolve operand to a slot. Reference → existing
+                    // local; literal → materialize Const into a new slot.
+                    let resolve = |e: KtExpr<'_>,
+                                       name_to_local: &mut Vec<(String, LocalId)>,
+                                       next_slot: &mut u32,
+                                       local_tys: &mut Vec<Ty>,
+                                       stmts: &mut Vec<MStmt>,
+                                       strings: &mut Vec<String>|
+                     -> Option<LocalId> {
+                        match unwrap_parens(e) {
+                            KtExpr::Reference(rr) => {
+                                let n = rr.name()?;
+                                name_to_local
+                                    .iter()
+                                    .rev()
+                                    .find(|(name, _)| name == n)
+                                    .map(|(_, l)| *l)
                             }
-                        };
-                    let lhs = resolve(b.lhs()?, &name_to_local)?;
-                    let rhs = resolve(b.rhs()?, &name_to_local)?;
+                            other => {
+                                let (k, ty) = literal_to_const(&other, strings)?;
+                                let slot = LocalId(*next_slot);
+                                *next_slot += 1;
+                                local_tys.push(ty);
+                                stmts.push(MStmt::Assign {
+                                    dest: slot,
+                                    value: skotch_mir::Rvalue::Const(k),
+                                });
+                                Some(slot)
+                            }
+                        }
+                    };
+                    let lhs = resolve(
+                        b.lhs()?,
+                        &mut name_to_local,
+                        &mut next_slot,
+                        &mut local_tys,
+                        &mut stmts,
+                        strings,
+                    )?;
+                    let rhs = resolve(
+                        b.rhs()?,
+                        &mut name_to_local,
+                        &mut next_slot,
+                        &mut local_tys,
+                        &mut stmts,
+                        strings,
+                    )?;
                     let slot = LocalId(next_slot);
                     next_slot += 1;
                     let is_cmp = matches!(
@@ -4966,6 +4997,42 @@ mod tests {
                 _ => panic!("expected CheckCast"),
             },
         }
+    }
+
+    #[test]
+    fn typed_lower_block_val_init_binary_with_literal() {
+        // `fun n(x: Int): Int { val y = x + 1; return y }`
+        // val init binary now resolves literal operands (1) via
+        // a fresh Const slot.
+        let module = lower(
+            "fun n(x: Int): Int { val y = x + 1; return y }",
+            "TestKt",
+        );
+        let f = module.functions.iter().find(|f| f.name == "n").unwrap();
+        let block = &f.blocks[0];
+        let has_const_1 = block.stmts.iter().any(|s| {
+            matches!(
+                s,
+                skotch_mir::Stmt::Assign {
+                    value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(1)),
+                    ..
+                }
+            )
+        });
+        let has_add = block.stmts.iter().any(|s| {
+            matches!(
+                s,
+                skotch_mir::Stmt::Assign {
+                    value: skotch_mir::Rvalue::BinOp {
+                        op: skotch_mir::BinOp::AddI,
+                        ..
+                    },
+                    ..
+                }
+            )
+        });
+        assert!(has_const_1, "expected Const(1): {block:?}");
+        assert!(has_add, "expected AddI: {block:?}");
     }
 
     #[test]
