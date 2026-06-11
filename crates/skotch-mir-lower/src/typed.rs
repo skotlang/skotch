@@ -5146,6 +5146,27 @@ mod tests {
     }
 
     #[test]
+    fn typed_lower_class_method_string_field_access() {
+        let module = lower(
+            "class Box(val name: String) { fun get(): String = name }",
+            "TestKt",
+        );
+        let box_class = module.classes.iter().find(|c| c.name == "Box").unwrap();
+        let get_m = box_class.methods.iter().find(|m| m.name == "get").unwrap();
+        // locals: this (Any), result (String).
+        assert_eq!(get_m.locals.len(), 2);
+        assert_eq!(get_m.locals[1], Ty::String);
+        match &get_m.blocks[0].stmts[0] {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::GetField { field_name, .. } => {
+                    assert_eq!(field_name, "name");
+                }
+                _ => panic!("expected GetField"),
+            },
+        }
+    }
+
+    #[test]
     fn typed_lower_class_method_field_access() {
         let module = lower("class Box(val x: Int) { fun get(): Int = x }", "TestKt");
         let box_class = module.classes.iter().find(|c| c.name == "Box").unwrap();
