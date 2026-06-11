@@ -6022,6 +6022,54 @@ mod tests {
     }
 
     #[test]
+    fn typed_lower_method_block_var_reassignment() {
+        // `class P { fun acc(): Int { var sum = 0; sum = sum + 1; return sum } }`
+        // Method body uses var reassignment through the offset-1 walker.
+        let module = lower(
+            "class P { fun acc(): Int { var sum = 0; sum = sum + 1; return sum } }",
+            "TestKt",
+        );
+        let cls = module.classes.iter().find(|c| c.name == "P").unwrap();
+        let f = cls.methods.iter().find(|m| m.name == "acc").unwrap();
+        let block = &f.blocks[0];
+        let n_const = block
+            .stmts
+            .iter()
+            .filter(|s| {
+                matches!(
+                    s,
+                    skotch_mir::Stmt::Assign {
+                        value: skotch_mir::Rvalue::Const(_),
+                        ..
+                    }
+                )
+            })
+            .count();
+        let n_add = block
+            .stmts
+            .iter()
+            .filter(|s| {
+                matches!(
+                    s,
+                    skotch_mir::Stmt::Assign {
+                        value: skotch_mir::Rvalue::BinOp {
+                            op: skotch_mir::BinOp::AddI,
+                            ..
+                        },
+                        ..
+                    }
+                )
+            })
+            .count();
+        assert_eq!(n_const, 2);
+        assert_eq!(n_add, 1);
+        assert!(matches!(
+            block.terminator,
+            skotch_mir::Terminator::ReturnValue(_)
+        ));
+    }
+
+    #[test]
     fn typed_lower_method_virtual_call_on_this_with_param_arg() {
         // `class P { fun a(x: Int): Int = x; fun b(y: Int): Int = a(y) }`
         // Implicit-this virtual call with a param arg.
