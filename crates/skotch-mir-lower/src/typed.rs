@@ -369,8 +369,7 @@ pub fn lower_file(
     // GetStaticField.
 
     // Top-level val lookup: name → Ty.
-    let mut val_lookup: rustc_hash::FxHashMap<String, Ty> =
-        rustc_hash::FxHashMap::default();
+    let mut val_lookup: rustc_hash::FxHashMap<String, Ty> = rustc_hash::FxHashMap::default();
     for decl in file.decls() {
         if let KtDecl::Property(p) = decl {
             if let Some(name) = p.name() {
@@ -636,7 +635,10 @@ fn try_lower_while_loop(
     let KtExpr::While(w) = &stmts[0] else {
         return None;
     };
-    let cond_expr = w.condition().and_then(|c| c.expression()).map(unwrap_parens)?;
+    let cond_expr = w
+        .condition()
+        .and_then(|c| c.expression())
+        .map(unwrap_parens)?;
     // Loop body must be a block. We support either empty or a single
     // println / print call with a literal arg.
     let body_block = w.body().and_then(|b| match b.expression()? {
@@ -748,8 +750,7 @@ fn try_lower_while_loop(
             _ => return None,
         };
         let args = call.value_argument_list()?;
-        let arg_exprs: Vec<KtExpr<'_>> =
-            args.arguments().filter_map(|a| a.expression()).collect();
+        let arg_exprs: Vec<KtExpr<'_>> = args.arguments().filter_map(|a| a.expression()).collect();
         if arg_exprs.len() != 1 {
             return None;
         }
@@ -811,7 +812,10 @@ fn try_lower_do_while_loop(
     let KtExpr::DoWhile(dw) = &stmts[0] else {
         return None;
     };
-    let cond_expr = dw.condition().and_then(|c| c.expression()).map(unwrap_parens)?;
+    let cond_expr = dw
+        .condition()
+        .and_then(|c| c.expression())
+        .map(unwrap_parens)?;
     let body_block = dw.body().and_then(|b| match b.expression()? {
         KtExpr::Block(bl) => Some(bl),
         _ => None,
@@ -867,8 +871,7 @@ fn try_lower_do_while_loop(
             _ => return None,
         };
         let args = call.value_argument_list()?;
-        let arg_exprs: Vec<KtExpr<'_>> =
-            args.arguments().filter_map(|a| a.expression()).collect();
+        let arg_exprs: Vec<KtExpr<'_>> = args.arguments().filter_map(|a| a.expression()).collect();
         if arg_exprs.len() != 1 {
             return None;
         }
@@ -1385,8 +1388,10 @@ fn try_lower_multi_stmt_block_inner(
                 if let Some(KtExpr::Reference(rc)) = call.callee() {
                     if let Some(callee_name) = rc.name() {
                         if let Some((fid, ret)) = fn_lookup.get(callee_name) {
-                            let arg_count =
-                                call.value_argument_list().map(|a| a.arguments().count()).unwrap_or(0);
+                            let arg_count = call
+                                .value_argument_list()
+                                .map(|a| a.arguments().count())
+                                .unwrap_or(0);
                             if arg_count == 0 {
                                 let slot = LocalId(next_slot);
                                 next_slot += 1;
@@ -1423,21 +1428,20 @@ fn try_lower_multi_stmt_block_inner(
                     _ => None,
                 };
                 if let Some(op) = mir_op {
-                    let resolve = |e: KtExpr<'_>,
-                                   name_to_local: &[(String, LocalId)]|
-                     -> Option<LocalId> {
-                        match unwrap_parens(e) {
-                            KtExpr::Reference(rr) => {
-                                let n = rr.name()?;
-                                name_to_local
-                                    .iter()
-                                    .rev()
-                                    .find(|(name, _)| name == n)
-                                    .map(|(_, l)| *l)
+                    let resolve =
+                        |e: KtExpr<'_>, name_to_local: &[(String, LocalId)]| -> Option<LocalId> {
+                            match unwrap_parens(e) {
+                                KtExpr::Reference(rr) => {
+                                    let n = rr.name()?;
+                                    name_to_local
+                                        .iter()
+                                        .rev()
+                                        .find(|(name, _)| name == n)
+                                        .map(|(_, l)| *l)
+                                }
+                                _ => None,
                             }
-                            _ => None,
-                        }
-                    };
+                        };
                     let lhs = resolve(b.lhs()?, &name_to_local)?;
                     let rhs = resolve(b.rhs()?, &name_to_local)?;
                     let slot = LocalId(next_slot);
@@ -1820,18 +1824,14 @@ fn lower_simple_body(
             //   block 0: cmp; Branch(then=1, exit=2)
             //   block 1: (empty body); Goto(0)
             //   block 2: Return
-            if let Some(blocks_and_locals) =
-                try_lower_while_loop(block, f, strings, fn_lookup)
-            {
+            if let Some(blocks_and_locals) = try_lower_while_loop(block, f, strings, fn_lookup) {
                 return blocks_and_locals;
             }
             // do { body } while (cond) — body runs first.
             //   block 0: body; Goto(1)
             //   block 1: cmp; Branch(then=0, exit=2)
             //   block 2: Return
-            if let Some(blocks_and_locals) =
-                try_lower_do_while_loop(block, f, strings)
-            {
+            if let Some(blocks_and_locals) = try_lower_do_while_loop(block, f, strings) {
                 return blocks_and_locals;
             }
 
@@ -1917,8 +1917,7 @@ fn lower_simple_body(
     // Emits Rvalue::ArrayLength on the array param slot.
     if let KtExpr::DotQualified(dq) = &body_expr {
         let children: Vec<_> = skotch_ast::children(dq.syntax()).iter().collect();
-        let exprs: Vec<KtExpr<'_>> =
-            children.iter().filter_map(|c| KtExpr::cast(c)).collect();
+        let exprs: Vec<KtExpr<'_>> = children.iter().filter_map(|c| KtExpr::cast(c)).collect();
         if exprs.len() == 2 {
             if let (KtExpr::Reference(arr_ref), KtExpr::Reference(prop_ref)) =
                 (&exprs[0], &exprs[1])
@@ -1971,7 +1970,8 @@ fn lower_simple_body(
                 None
             }
         });
-        if let (Some(KtExpr::Reference(ar)), Some(KtExpr::Reference(ir))) = (array_ref, index_expr) {
+        if let (Some(KtExpr::Reference(ar)), Some(KtExpr::Reference(ir))) = (array_ref, index_expr)
+        {
             if let (Some(an), Some(in_)) = (ar.name(), ir.name()) {
                 let param_names: Vec<String> = f
                     .value_parameter_list()
@@ -2009,7 +2009,10 @@ fn lower_simple_body(
     // Emits Rvalue::CheckCast with the target class descriptor.
     if let KtExpr::BinaryWithTypeRhs(b) = &body_expr {
         let children: Vec<_> = skotch_ast::children(b.syntax()).iter().collect();
-        let operand = children.iter().find_map(|c| KtExpr::cast(c)).map(unwrap_parens);
+        let operand = children
+            .iter()
+            .find_map(|c| KtExpr::cast(c))
+            .map(unwrap_parens);
         let type_name = children.iter().find_map(|c| {
             if c.kind == skotch_syntax::SyntaxKind::TYPE_REFERENCE {
                 if let Some(tr) = skotch_ast::KtTypeReference::cast(c) {
@@ -2071,7 +2074,10 @@ fn lower_simple_body(
         // First child is the operand (Reference); the IS keyword and
         // the type follow.
         let children: Vec<_> = skotch_ast::children(is_e.syntax()).iter().collect();
-        let operand = children.iter().find_map(|c| KtExpr::cast(c)).map(unwrap_parens);
+        let operand = children
+            .iter()
+            .find_map(|c| KtExpr::cast(c))
+            .map(unwrap_parens);
         let type_name = children.iter().find_map(|c| {
             if c.kind == skotch_syntax::SyntaxKind::TYPE_REFERENCE {
                 if let Some(tr) = skotch_ast::KtTypeReference::cast(c) {
@@ -2092,10 +2098,9 @@ fn lower_simple_body(
                     .unwrap_or_default();
                 if let Some(idx) = param_names.iter().position(|p| p == name) {
                     // Boxed JVM type descriptor for primitive types
-                    let descriptor =
-                        skotch_types::intrinsics::kotlin_to_jvm_class(&tname)
-                            .map(|s| s.to_string())
-                            .unwrap_or(tname.clone());
+                    let descriptor = skotch_types::intrinsics::kotlin_to_jvm_class(&tname)
+                        .map(|s| s.to_string())
+                        .unwrap_or(tname.clone());
                     let param_count = param_names.len();
                     let result_slot = skotch_mir::LocalId(param_count as u32);
                     let blocks = vec![BasicBlock {
@@ -2154,9 +2159,9 @@ fn lower_simple_body(
                             stmts: vec![
                                 skotch_mir::Stmt::Assign {
                                     dest: false_slot,
-                                    value: skotch_mir::Rvalue::Const(
-                                        skotch_mir::MirConst::Bool(false),
-                                    ),
+                                    value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Bool(
+                                        false,
+                                    )),
                                 },
                                 skotch_mir::Stmt::Assign {
                                     dest: result_slot,
@@ -3028,10 +3033,9 @@ fn method_simple_body_full(
             }
             // Field access via implicit this: `fun get() = x` where
             // x is a primary-ctor val/var on the enclosing class.
-            if let (Some(cname), Some((fname, fty))) = (
-                class_name,
-                field_names.iter().find(|(n, _)| n == name),
-            ) {
+            if let (Some(cname), Some((fname, fty))) =
+                (class_name, field_names.iter().find(|(n, _)| n == name))
+            {
                 let this_slot = skotch_mir::LocalId(0);
                 let result_slot = skotch_mir::LocalId((1 + param_count) as u32);
                 let blocks = vec![BasicBlock {
@@ -3089,10 +3093,9 @@ fn method_simple_body_full(
                             return Some(skotch_mir::LocalId((1 + idx) as u32));
                         }
                         // Field via implicit this.
-                        if let (Some(cname), Some((fname, fty))) = (
-                            class_name,
-                            field_names.iter().find(|(n2, _)| n2 == n),
-                        ) {
+                        if let (Some(cname), Some((fname, fty))) =
+                            (class_name, field_names.iter().find(|(n2, _)| n2 == n))
+                        {
                             let slot = skotch_mir::LocalId(*next_slot);
                             *next_slot += 1;
                             locals.push(fty.clone());
@@ -3122,10 +3125,22 @@ fn method_simple_body_full(
                 }
             };
             let lhs_slot = b.lhs().and_then(|l| {
-                resolve(l, &mut next_slot, &mut pre_stmts, &mut extra_locals, strings)
+                resolve(
+                    l,
+                    &mut next_slot,
+                    &mut pre_stmts,
+                    &mut extra_locals,
+                    strings,
+                )
             });
             let rhs_slot = b.rhs().and_then(|r| {
-                resolve(r, &mut next_slot, &mut pre_stmts, &mut extra_locals, strings)
+                resolve(
+                    r,
+                    &mut next_slot,
+                    &mut pre_stmts,
+                    &mut extra_locals,
+                    strings,
+                )
             });
             if let (Some(lhs), Some(rhs)) = (lhs_slot, rhs_slot) {
                 let is_cmp = matches!(
@@ -3277,10 +3292,8 @@ fn method_simple_body_full(
                             args.arguments().filter_map(|a| a.expression()).collect();
                         if arg_exprs.len() == 1 {
                             if let Some((k, ty)) = literal_to_const(&arg_exprs[0], strings) {
-                                let arg_slot =
-                                    skotch_mir::LocalId((1 + param_count) as u32);
-                                let result_slot =
-                                    skotch_mir::LocalId((1 + param_count + 1) as u32);
+                                let arg_slot = skotch_mir::LocalId((1 + param_count) as u32);
+                                let result_slot = skotch_mir::LocalId((1 + param_count + 1) as u32);
                                 let blocks = vec![BasicBlock {
                                     stmts: vec![
                                         skotch_mir::Stmt::Assign {
@@ -4146,10 +4159,7 @@ mod tests {
 
     #[test]
     fn typed_lower_array_size_body() {
-        let module = lower(
-            "fun len(arr: IntArray): Int = arr.size",
-            "TestKt",
-        );
+        let module = lower("fun len(arr: IntArray): Int = arr.size", "TestKt");
         let f = &module.functions[0];
         let block = &f.blocks[0];
         match &block.stmts[0] {
@@ -4164,10 +4174,7 @@ mod tests {
 
     #[test]
     fn typed_lower_array_access_body() {
-        let module = lower(
-            "fun get(arr: IntArray, i: Int): Int = arr[i]",
-            "TestKt",
-        );
+        let module = lower("fun get(arr: IntArray, i: Int): Int = arr[i]", "TestKt");
         let f = &module.functions[0];
         let block = &f.blocks[0];
         assert_eq!(block.stmts.len(), 1);
@@ -4194,10 +4201,7 @@ mod tests {
             skotch_mir::Stmt::Assign { value, .. } => match value {
                 skotch_mir::Rvalue::CheckCast { obj, target_class } => {
                     assert_eq!(obj.0, 0);
-                    assert!(
-                        target_class == "java/lang/String"
-                            || target_class == "String"
-                    );
+                    assert!(target_class == "java/lang/String" || target_class == "String");
                 }
                 _ => panic!("expected CheckCast"),
             },
@@ -4231,23 +4235,20 @@ mod tests {
 
     #[test]
     fn typed_lower_is_expression_string_check() {
-        let module = lower(
-            "fun isStr(x: Any): Boolean = x is String",
-            "TestKt",
-        );
+        let module = lower("fun isStr(x: Any): Boolean = x is String", "TestKt");
         let f = &module.functions[0];
         assert_eq!(f.return_ty, Ty::Bool);
         let block = &f.blocks[0];
         assert_eq!(block.stmts.len(), 1);
         match &block.stmts[0] {
             skotch_mir::Stmt::Assign { value, .. } => match value {
-                skotch_mir::Rvalue::InstanceOf { obj, type_descriptor } => {
+                skotch_mir::Rvalue::InstanceOf {
+                    obj,
+                    type_descriptor,
+                } => {
                     assert_eq!(obj.0, 0); // x param
-                    // String maps to java/lang/String.
-                    assert!(
-                        type_descriptor == "java/lang/String"
-                            || type_descriptor == "String"
-                    );
+                                          // String maps to java/lang/String.
+                    assert!(type_descriptor == "java/lang/String" || type_descriptor == "String");
                 }
                 _ => panic!("expected InstanceOf"),
             },
@@ -4521,7 +4522,11 @@ mod tests {
         // Block 1: cond, Branch(then=0, else=2).
         assert!(matches!(
             f.blocks[1].terminator,
-            Terminator::Branch { then_block: 0, else_block: 2, .. }
+            Terminator::Branch {
+                then_block: 0,
+                else_block: 2,
+                ..
+            }
         ));
         // Block 2: exit, Return.
         assert!(matches!(f.blocks[2].terminator, Terminator::Return));
@@ -4551,17 +4556,18 @@ mod tests {
 
     #[test]
     fn typed_lower_while_loop_empty_body() {
-        let module = lower(
-            "fun loop(n: Int) { while (n > 0) {} }",
-            "TestKt",
-        );
+        let module = lower("fun loop(n: Int) { while (n > 0) {} }", "TestKt");
         let f = &module.functions[0];
         // 3 blocks: cond, body, exit.
         assert_eq!(f.blocks.len(), 3);
         // Block 0: cond computation + Branch.
         assert!(matches!(
             f.blocks[0].terminator,
-            Terminator::Branch { then_block: 1, else_block: 2, .. }
+            Terminator::Branch {
+                then_block: 1,
+                else_block: 2,
+                ..
+            }
         ));
         // Block 1: empty body, backward Goto(0).
         assert!(f.blocks[1].stmts.is_empty());
@@ -4768,10 +4774,7 @@ mod tests {
 
     #[test]
     fn typed_lower_val_then_return_ref() {
-        let module = lower(
-            "fun foo(): Int {\n  val x = 42\n  return x\n}",
-            "TestKt",
-        );
+        let module = lower("fun foo(): Int {\n  val x = 42\n  return x\n}", "TestKt");
         let f = &module.functions[0];
         assert_eq!(f.blocks.len(), 1);
         let block = &f.blocks[0];
@@ -5027,10 +5030,7 @@ mod tests {
 
     #[test]
     fn typed_lower_class_method_returns_this() {
-        let module = lower(
-            "class Box { fun self(): Box = this }",
-            "TestKt",
-        );
+        let module = lower("class Box { fun self(): Box = this }", "TestKt");
         let box_class = module.classes.iter().find(|c| c.name == "Box").unwrap();
         let m = box_class.methods.iter().find(|m| m.name == "self").unwrap();
         let block = &m.blocks[0];
@@ -5043,10 +5043,7 @@ mod tests {
 
     #[test]
     fn typed_lower_class_method_virtual_call_sibling() {
-        let module = lower(
-            "class P { fun a(): Int = 1; fun b(): Int = a() }",
-            "TestKt",
-        );
+        let module = lower("class P { fun a(): Int = 1; fun b(): Int = a() }", "TestKt");
         let p = module.classes.iter().find(|c| c.name == "P").unwrap();
         let m = p.methods.iter().find(|m| m.name == "b").unwrap();
         let block = &m.blocks[0];
@@ -5055,7 +5052,10 @@ mod tests {
             skotch_mir::Stmt::Assign { value, .. } => match value {
                 skotch_mir::Rvalue::Call { kind, args } => {
                     match kind {
-                        skotch_mir::CallKind::Virtual { class_name, method_name } => {
+                        skotch_mir::CallKind::Virtual {
+                            class_name,
+                            method_name,
+                        } => {
                             assert_eq!(class_name, "P");
                             assert_eq!(method_name, "a");
                         }
@@ -5088,10 +5088,7 @@ mod tests {
 
     #[test]
     fn typed_lower_class_method_println_literal() {
-        let module = lower(
-            "class P { fun show(): Unit = println(\"hi\") }",
-            "TestKt",
-        );
+        let module = lower("class P { fun show(): Unit = println(\"hi\") }", "TestKt");
         let p = module.classes.iter().find(|c| c.name == "P").unwrap();
         let m = p.methods.iter().find(|m| m.name == "show").unwrap();
         let block = &m.blocks[0];
@@ -5115,7 +5112,11 @@ mod tests {
             "TestKt",
         );
         let box_class = module.classes.iter().find(|c| c.name == "Box").unwrap();
-        let m = box_class.methods.iter().find(|m| m.name == "double").unwrap();
+        let m = box_class
+            .methods
+            .iter()
+            .find(|m| m.name == "double")
+            .unwrap();
         let block = &m.blocks[0];
         // Expected stmts: GetField for x (slot 2), Const(2) (slot 3),
         // BinOp(MulI, slot 2, slot 3) (slot 4).
@@ -5146,10 +5147,7 @@ mod tests {
 
     #[test]
     fn typed_lower_class_method_field_access() {
-        let module = lower(
-            "class Box(val x: Int) { fun get(): Int = x }",
-            "TestKt",
-        );
+        let module = lower("class Box(val x: Int) { fun get(): Int = x }", "TestKt");
         let box_class = module.classes.iter().find(|c| c.name == "Box").unwrap();
         let get_m = box_class.methods.iter().find(|m| m.name == "get").unwrap();
         // locals: this, result
@@ -5175,10 +5173,7 @@ mod tests {
 
     #[test]
     fn typed_lower_class_method_binary_op_of_params() {
-        let module = lower(
-            "class P { fun add(a: Int, b: Int): Int = a + b }",
-            "TestKt",
-        );
+        let module = lower("class P { fun add(a: Int, b: Int): Int = a + b }", "TestKt");
         let p = module.classes.iter().find(|c| c.name == "P").unwrap();
         let m = p.methods.iter().find(|m| m.name == "add").unwrap();
         // locals: this (Any), a (Any), b (Any), result (Int)
@@ -5203,10 +5198,7 @@ mod tests {
 
     #[test]
     fn typed_lower_class_method_identity_param() {
-        let module = lower(
-            "class P { fun id(x: Int): Int = x }",
-            "TestKt",
-        );
+        let module = lower("class P { fun id(x: Int): Int = x }", "TestKt");
         let p = module.classes.iter().find(|c| c.name == "P").unwrap();
         let m = p.methods.iter().find(|m| m.name == "id").unwrap();
         assert!(m.blocks[0].stmts.is_empty());
@@ -5221,12 +5213,13 @@ mod tests {
     fn typed_lower_class_method_with_literal_body() {
         // Class methods with literal expression bodies now get real
         // bodies (Assign + ReturnValue) via method_simple_body.
-        let module = lower(
-            "class P(val x: Int) { fun answer(): Int = 42 }",
-            "TestKt",
-        );
+        let module = lower("class P(val x: Int) { fun answer(): Int = 42 }", "TestKt");
         let p = module.classes.iter().find(|c| c.name == "P").expect("P");
-        let m = p.methods.iter().find(|m| m.name == "answer").expect("answer");
+        let m = p
+            .methods
+            .iter()
+            .find(|m| m.name == "answer")
+            .expect("answer");
         // local 0: this, local 1: result (Int) — answer() has 0 params.
         assert_eq!(m.locals, vec![Ty::Any, Ty::Int]);
         assert_eq!(m.blocks.len(), 1);
@@ -5246,10 +5239,7 @@ mod tests {
 
     #[test]
     fn typed_lower_interface_abstract_method_keeps_empty_body() {
-        let module = lower(
-            "interface I { fun pretty(): String }",
-            "TestKt",
-        );
+        let module = lower("interface I { fun pretty(): String }", "TestKt");
         let i = module.classes.iter().find(|c| c.name == "I").expect("I");
         let m = &i.methods[0];
         assert!(m.is_abstract);
@@ -5260,10 +5250,7 @@ mod tests {
 
     #[test]
     fn typed_lower_object_method_with_string_literal() {
-        let module = lower(
-            "object S { fun greet(): String = \"hi\" }",
-            "TestKt",
-        );
+        let module = lower("object S { fun greet(): String = \"hi\" }", "TestKt");
         let s = module.classes.iter().find(|c| c.name == "S").expect("S");
         let m = &s.methods[0];
         assert_eq!(m.locals, vec![Ty::Any, Ty::String]);
