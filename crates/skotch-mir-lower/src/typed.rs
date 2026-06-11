@@ -1450,7 +1450,7 @@ fn try_lower_if_expression(
     if_e: &skotch_ast::KtIf<'_>,
     f: skotch_ast::KtFun<'_>,
     strings: &mut Vec<String>,
-    _fn_lookup: &rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)>,
+    fn_lookup: &rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)>,
 ) -> Option<(Vec<BasicBlock>, Vec<Ty>)> {
     use skotch_ast::KtExpr;
     use skotch_mir::{LocalId, Rvalue, Stmt as MStmt};
@@ -1538,6 +1538,51 @@ fn try_lower_if_expression(
                 let n = r.name()?;
                 let idx = outer_param_names.iter().position(|p| p == n)?;
                 Some(LocalId(idx as u32))
+            }
+            // Top-level fn call as an arm: `helper(x)` or `helper()`.
+            // Args resolve as param Reference (existing locals) or
+            // literal Const.
+            KtExpr::Call(call) => {
+                let callee_name = match call.callee() {
+                    Some(KtExpr::Reference(r)) => r.name()?,
+                    _ => return None,
+                };
+                let (fid, ret_ty) = fn_lookup.get(callee_name)?;
+                let mut arg_slots: Vec<LocalId> = Vec::new();
+                if let Some(arg_list) = call.value_argument_list() {
+                    for arg in arg_list.arguments() {
+                        let arg_expr = arg.expression()?;
+                        match unwrap_parens(arg_expr) {
+                            KtExpr::Reference(rr) => {
+                                let an = rr.name()?;
+                                let idx = outer_param_names.iter().position(|p| p == an)?;
+                                arg_slots.push(LocalId(idx as u32));
+                            }
+                            other => {
+                                let (k, ty) = literal_to_const(&other, strings)?;
+                                let slot = LocalId(*next_slot);
+                                *next_slot += 1;
+                                extra_locals.push(ty);
+                                pre_stmts.push(MStmt::Assign {
+                                    dest: slot,
+                                    value: Rvalue::Const(k),
+                                });
+                                arg_slots.push(slot);
+                            }
+                        }
+                    }
+                }
+                let result_slot = LocalId(*next_slot);
+                *next_slot += 1;
+                extra_locals.push(ret_ty.clone());
+                pre_stmts.push(MStmt::Assign {
+                    dest: result_slot,
+                    value: Rvalue::Call {
+                        kind: skotch_mir::CallKind::Static(*fid),
+                        args: arg_slots,
+                    },
+                });
+                Some(result_slot)
             }
             // Unary minus on a param ref: `-x` lowers to `0 - x_slot`.
             KtExpr::Prefix(p) => {
@@ -5616,6 +5661,35 @@ mod tests {
                 _ => panic!("expected CheckCast"),
             },
         }
+    }
+
+    #[test]
+    fn typed_lower_if_else_arm_calls_top_level_fn() {
+        // `fun double(x: Int): Int = x * 2
+        //  fun cond(x: Int): Int = if (x > 0) double(x) else x`
+        let module = lower(
+            "fun double(x: Int): Int = x * 2\nfun cond(x: Int): Int = if (x > 0) double(x) else x",
+            "TestKt",
+        );
+        let f = module.functions.iter().find(|f| f.name == "cond").unwrap();
+        // Block 1 (the then arm) should contain the Static call to double.
+        let then = &f.blocks[1];
+        let has_static_call = then.stmts.iter().any(|s| {
+            matches!(
+                s,
+                skotch_mir::Stmt::Assign {
+                    value: skotch_mir::Rvalue::Call {
+                        kind: skotch_mir::CallKind::Static(_),
+                        ..
+                    },
+                    ..
+                }
+            )
+        });
+        assert!(
+            has_static_call,
+            "expected Static call to double in then arm: {then:?}"
+        );
     }
 
     #[test]
