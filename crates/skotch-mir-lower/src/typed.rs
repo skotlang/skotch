@@ -2211,7 +2211,18 @@ fn try_lower_multi_stmt_block_with_offset(
     let mut next_slot: u32 = param_count as u32 + slot_offset;
 
     let mut explicit_return_slot: Option<LocalId> = None;
-    for c in skotch_ast::children(block.syntax()) {
+    let block_children: Vec<&skotch_sil::SilNode> =
+        skotch_ast::children(block.syntax()).iter().collect();
+    let mut child_idx: usize = 0;
+    while child_idx < block_children.len() {
+        let c = block_children[child_idx];
+        child_idx += 1;
+        // Trailing post-loop children (used by loop emitters to lower
+        // stmts that follow the loop in the source block into the
+        // exit block instead of dropping them).
+        let trailing_children: &[&skotch_sil::SilNode] = &block_children[child_idx..];
+        let _ = trailing_children;
+        let _block_children = &block_children;
         if let Some(prop) = skotch_ast::KtProperty::cast(c) {
             // `val <name> = <literal>` — emit Assign + push local.
             // `val <name> = <a + b>` — emit BinOp Assign.
@@ -3087,16 +3098,17 @@ fn try_lower_multi_stmt_block_with_offset(
             // into a Vec<MStmt>. Supports println/print + var-reassign
             // (`x = x + 1`, `x += 1`, simple binary RHS).
             fn lower_loop_body(
-                body_stmts: &[KtExpr<'_>],
+                body_children: &[&skotch_sil::SilNode],
                 name_to_local: &mut Vec<(String, LocalId)>,
                 next_slot: &mut u32,
                 local_tys: &mut Vec<Ty>,
                 strings: &mut Vec<String>,
             ) -> Option<Vec<MStmt>> {
                 let mut body_mstmts: Vec<MStmt> = Vec::new();
-                for be in body_stmts {
+                for bn in body_children {
+                    let bn: &skotch_sil::SilNode = bn;
                     // val/var declaration: `val y = expr`.
-                    if let Some(prop) = skotch_ast::KtProperty::cast(be.syntax()) {
+                    if let Some(prop) = skotch_ast::KtProperty::cast(bn) {
                         let pname = prop.name()?;
                         let init = prop.initializer()?;
                         let init = unwrap_parens(init);
@@ -3184,6 +3196,13 @@ fn try_lower_multi_stmt_block_with_offset(
                         }
                         return None;
                     }
+                    let be: KtExpr<'_> = match KtExpr::cast(bn) {
+                        Some(e) => e,
+                        // Non-expression, non-property node (whitespace,
+                        // semicolon trivia) — skip without failing the
+                        // walker.
+                        None => continue,
+                    };
                     // println/print
                     if let KtExpr::Call(call) = be {
                         let name = match call.callee() {
@@ -3522,21 +3541,28 @@ fn try_lower_multi_stmt_block_with_offset(
                         }
                         None
                     };
+                let _ = resolve_w; // superseded by lower_inline_expr_to_slot
                 let mut cond_stmts: Vec<MStmt> = Vec::new();
-                let lhs_slot = resolve_w(
+                let cond_lookup = {
+                    let snap = name_to_local.clone();
+                    move |n: &str| -> Option<LocalId> {
+                        snap.iter().rev().find(|(name, _)| name == n).map(|(_, l)| *l)
+                    }
+                };
+                let lhs_slot = lower_inline_expr_to_slot(
                     cmp_b.lhs()?,
-                    &name_to_local,
+                    &cond_lookup,
                     &mut next_slot,
-                    &mut local_tys,
                     &mut cond_stmts,
+                    &mut local_tys,
                     strings,
                 )?;
-                let rhs_slot = resolve_w(
+                let rhs_slot = lower_inline_expr_to_slot(
                     cmp_b.rhs()?,
-                    &name_to_local,
+                    &cond_lookup,
                     &mut next_slot,
-                    &mut local_tys,
                     &mut cond_stmts,
+                    &mut local_tys,
                     strings,
                 )?;
                 let cmp_slot = LocalId(next_slot);
@@ -3551,18 +3577,31 @@ fn try_lower_multi_stmt_block_with_offset(
                     },
                 });
                 let body_block_opt = dw.body().and_then(|b| b.expression());
-                let body_stmts: Vec<KtExpr<'_>> = match body_block_opt {
-                    Some(KtExpr::Block(bl)) => bl.statements().collect(),
-                    Some(other) => vec![other],
+                let body_children: Vec<&skotch_sil::SilNode> = match body_block_opt {
+                    Some(KtExpr::Block(bl)) => {
+                        skotch_ast::children(bl.syntax()).iter().collect()
+                    }
+                    Some(other) => vec![other.syntax()],
                     None => vec![],
                 };
                 let body_mstmts = lower_loop_body(
-                    &body_stmts,
+                    &body_children,
                     &mut name_to_local,
                     &mut next_slot,
                     &mut local_tys,
                     strings,
                 )?;
+                let exit_stmts = if trailing_children.is_empty() {
+                    Vec::new()
+                } else {
+                    lower_loop_body(
+                        trailing_children,
+                        &mut name_to_local,
+                        &mut next_slot,
+                        &mut local_tys,
+                        strings,
+                    )?
+                };
                 let pre_block = BasicBlock {
                     stmts: std::mem::take(&mut stmts),
                     terminator: Terminator::Goto(1),
@@ -3580,7 +3619,7 @@ fn try_lower_multi_stmt_block_with_offset(
                     },
                 };
                 let exit_block = BasicBlock {
-                    stmts: Vec::new(),
+                    stmts: exit_stmts,
                     terminator: Terminator::Return,
                 };
                 return Some((
@@ -3638,21 +3677,28 @@ fn try_lower_multi_stmt_block_with_offset(
                         }
                         None
                     };
+                let _ = resolve_w; // superseded by lower_inline_expr_to_slot
                 let mut cond_stmts: Vec<MStmt> = Vec::new();
-                let lhs_slot = resolve_w(
+                let cond_lookup = {
+                    let snap = name_to_local.clone();
+                    move |n: &str| -> Option<LocalId> {
+                        snap.iter().rev().find(|(name, _)| name == n).map(|(_, l)| *l)
+                    }
+                };
+                let lhs_slot = lower_inline_expr_to_slot(
                     cmp_b.lhs()?,
-                    &name_to_local,
+                    &cond_lookup,
                     &mut next_slot,
-                    &mut local_tys,
                     &mut cond_stmts,
+                    &mut local_tys,
                     strings,
                 )?;
-                let rhs_slot = resolve_w(
+                let rhs_slot = lower_inline_expr_to_slot(
                     cmp_b.rhs()?,
-                    &name_to_local,
+                    &cond_lookup,
                     &mut next_slot,
-                    &mut local_tys,
                     &mut cond_stmts,
+                    &mut local_tys,
                     strings,
                 )?;
                 let cmp_slot = LocalId(next_slot);
@@ -3668,18 +3714,31 @@ fn try_lower_multi_stmt_block_with_offset(
                 });
                 // Resolve body stmts via shared helper.
                 let body_block_opt = w.body().and_then(|b| b.expression());
-                let body_stmts: Vec<KtExpr<'_>> = match body_block_opt {
-                    Some(KtExpr::Block(bl)) => bl.statements().collect(),
-                    Some(other) => vec![other],
+                let body_children: Vec<&skotch_sil::SilNode> = match body_block_opt {
+                    Some(KtExpr::Block(bl)) => {
+                        skotch_ast::children(bl.syntax()).iter().collect()
+                    }
+                    Some(other) => vec![other.syntax()],
                     None => vec![],
                 };
                 let body_mstmts = lower_loop_body(
-                    &body_stmts,
+                    &body_children,
                     &mut name_to_local,
                     &mut next_slot,
                     &mut local_tys,
                     strings,
                 )?;
+                let exit_stmts = if trailing_children.is_empty() {
+                    Vec::new()
+                } else {
+                    lower_loop_body(
+                        trailing_children,
+                        &mut name_to_local,
+                        &mut next_slot,
+                        &mut local_tys,
+                        strings,
+                    )?
+                };
                 let pre_block = BasicBlock {
                     stmts: std::mem::take(&mut stmts),
                     terminator: Terminator::Goto(1),
@@ -3697,7 +3756,7 @@ fn try_lower_multi_stmt_block_with_offset(
                     terminator: Terminator::Goto(1),
                 };
                 let exit_block = BasicBlock {
-                    stmts: Vec::new(),
+                    stmts: exit_stmts,
                     terminator: Terminator::Return,
                 };
                 return Some((
@@ -3780,14 +3839,16 @@ fn try_lower_multi_stmt_block_with_offset(
 
                 // Resolve the body.
                 let body_block = for_e.body().and_then(|b| b.expression());
-                let body_stmts: Vec<KtExpr<'_>> = match body_block {
-                    Some(KtExpr::Block(bl)) => bl.statements().collect(),
-                    Some(other) => vec![other],
+                let body_children: Vec<&skotch_sil::SilNode> = match body_block {
+                    Some(KtExpr::Block(bl)) => {
+                        skotch_ast::children(bl.syntax()).iter().collect()
+                    }
+                    Some(other) => vec![other.syntax()],
                     None => vec![],
                 };
                 // Lower body via shared helper.
                 let mut body_mstmts = lower_loop_body(
-                    &body_stmts,
+                    &body_children,
                     &mut name_to_local,
                     &mut next_slot,
                     &mut local_tys,
@@ -3823,7 +3884,20 @@ fn try_lower_multi_stmt_block_with_offset(
                 // Pre block: existing stmts. Goto cond block (index 1).
                 // Cond block (index 1): single cond_stmt + Branch.
                 // Body block (index 2): body_mstmts + Goto(1).
-                // Exit block (index 3): empty + Return.
+                // Exit block (index 3): trailing stmts (if any) + Return.
+                // Pop the loop var so post-loop stmts don't see it.
+                name_to_local.pop();
+                let exit_stmts = if trailing_children.is_empty() {
+                    Vec::new()
+                } else {
+                    lower_loop_body(
+                        trailing_children,
+                        &mut name_to_local,
+                        &mut next_slot,
+                        &mut local_tys,
+                        strings,
+                    )?
+                };
                 let pre_block = BasicBlock {
                     stmts: std::mem::take(&mut stmts),
                     terminator: Terminator::Goto(1),
@@ -3841,13 +3915,166 @@ fn try_lower_multi_stmt_block_with_offset(
                     terminator: Terminator::Goto(1),
                 };
                 let exit_block = BasicBlock {
-                    stmts: Vec::new(),
+                    stmts: exit_stmts,
                     terminator: Terminator::Return,
                 };
                 return Some((
                     vec![pre_block, cond_block, body_blk, exit_block],
                     local_tys,
                 ));
+            }
+            // `if (cond) { then } else { else_ }` (or just then) as a
+            // statement (result discarded). 4- or 3-block CFG:
+            //   block 0 (pre): existing stmts + Branch(then=1, else=2or3)
+            //   block 1 (then): then_mstmts + Goto(join)
+            //   block 2 (else, optional): else_mstmts + Goto(join)
+            //   block N (join, exit): trailing stmts + Return
+            // The cond must be a binary comparison whose operands lower
+            // via lower_inline_expr_to_slot.
+            if let KtExpr::If(if_e) = &expr {
+                let cond_expr = if_e
+                    .condition()
+                    .and_then(|c| c.expression())
+                    .map(unwrap_parens)?;
+                let KtExpr::Binary(cmp_b) = cond_expr else {
+                    return None;
+                };
+                let cmp_text = cmp_b.operation().map(|o| o.text()).unwrap_or_default();
+                let cmp_mir = match cmp_text.as_str() {
+                    "==" => Some(skotch_mir::BinOp::CmpEq),
+                    "!=" => Some(skotch_mir::BinOp::CmpNe),
+                    "<" => Some(skotch_mir::BinOp::CmpLt),
+                    ">" => Some(skotch_mir::BinOp::CmpGt),
+                    "<=" => Some(skotch_mir::BinOp::CmpLe),
+                    ">=" => Some(skotch_mir::BinOp::CmpGe),
+                    _ => None,
+                }?;
+                let if_cond_lookup = {
+                    let snap = name_to_local.clone();
+                    move |n: &str| -> Option<LocalId> {
+                        snap.iter().rev().find(|(name, _)| name == n).map(|(_, l)| *l)
+                    }
+                };
+                let lhs_slot = lower_inline_expr_to_slot(
+                    cmp_b.lhs()?,
+                    &if_cond_lookup,
+                    &mut next_slot,
+                    &mut stmts,
+                    &mut local_tys,
+                    strings,
+                )?;
+                let rhs_slot = lower_inline_expr_to_slot(
+                    cmp_b.rhs()?,
+                    &if_cond_lookup,
+                    &mut next_slot,
+                    &mut stmts,
+                    &mut local_tys,
+                    strings,
+                )?;
+                let cmp_slot = LocalId(next_slot);
+                next_slot += 1;
+                local_tys.push(Ty::Bool);
+                stmts.push(MStmt::Assign {
+                    dest: cmp_slot,
+                    value: skotch_mir::Rvalue::BinOp {
+                        op: cmp_mir,
+                        lhs: lhs_slot,
+                        rhs: rhs_slot,
+                    },
+                });
+                // Lower then-branch children.
+                let then_expr = if_e.then_branch().and_then(|t| t.expression());
+                let then_children: Vec<&skotch_sil::SilNode> = match then_expr {
+                    Some(KtExpr::Block(bl)) => {
+                        skotch_ast::children(bl.syntax()).iter().collect()
+                    }
+                    Some(other) => vec![other.syntax()],
+                    None => vec![],
+                };
+                let then_mstmts = lower_loop_body(
+                    &then_children,
+                    &mut name_to_local,
+                    &mut next_slot,
+                    &mut local_tys,
+                    strings,
+                )?;
+                // Lower else-branch children (may be missing).
+                let else_expr = if_e.else_branch().and_then(|t| t.expression());
+                let has_else = else_expr.is_some();
+                let else_children: Vec<&skotch_sil::SilNode> = match else_expr {
+                    Some(KtExpr::Block(bl)) => {
+                        skotch_ast::children(bl.syntax()).iter().collect()
+                    }
+                    Some(other) => vec![other.syntax()],
+                    None => vec![],
+                };
+                let else_mstmts = if has_else {
+                    Some(lower_loop_body(
+                        &else_children,
+                        &mut name_to_local,
+                        &mut next_slot,
+                        &mut local_tys,
+                        strings,
+                    )?)
+                } else {
+                    None
+                };
+                let exit_stmts = if trailing_children.is_empty() {
+                    Vec::new()
+                } else {
+                    lower_loop_body(
+                        trailing_children,
+                        &mut name_to_local,
+                        &mut next_slot,
+                        &mut local_tys,
+                        strings,
+                    )?
+                };
+                let pre_block_stmts = std::mem::take(&mut stmts);
+                let (blocks, _) = if let Some(else_mstmts) = else_mstmts {
+                    // 4-block CFG: pre / then / else / join
+                    let pre_block = BasicBlock {
+                        stmts: pre_block_stmts,
+                        terminator: Terminator::Branch {
+                            cond: cmp_slot,
+                            then_block: 1,
+                            else_block: 2,
+                        },
+                    };
+                    let then_block = BasicBlock {
+                        stmts: then_mstmts,
+                        terminator: Terminator::Goto(3),
+                    };
+                    let else_block = BasicBlock {
+                        stmts: else_mstmts,
+                        terminator: Terminator::Goto(3),
+                    };
+                    let join_block = BasicBlock {
+                        stmts: exit_stmts,
+                        terminator: Terminator::Return,
+                    };
+                    (vec![pre_block, then_block, else_block, join_block], ())
+                } else {
+                    // 3-block CFG: pre / then / join
+                    let pre_block = BasicBlock {
+                        stmts: pre_block_stmts,
+                        terminator: Terminator::Branch {
+                            cond: cmp_slot,
+                            then_block: 1,
+                            else_block: 2,
+                        },
+                    };
+                    let then_block = BasicBlock {
+                        stmts: then_mstmts,
+                        terminator: Terminator::Goto(2),
+                    };
+                    let join_block = BasicBlock {
+                        stmts: exit_stmts,
+                        terminator: Terminator::Return,
+                    };
+                    (vec![pre_block, then_block, join_block], ())
+                };
+                return Some((blocks, local_tys));
             }
             // Handle trailing `return <ref>`. The ref must be in
             // name_to_local (a known local/param).
@@ -9441,6 +9668,69 @@ mod tests {
         assert_eq!(f.return_ty, Ty::Unit);
         assert_eq!(f.blocks.len(), 1);
         assert!(matches!(f.blocks[0].terminator, Terminator::Return));
+    }
+
+    #[test]
+    fn typed_lower_for_loop_body_with_val_decl() {
+        // `for (i in 1..3) { val y = i * 100; println(y) }`
+        // Pre-fix: KtBlock::statements() returns KtExpr only, so val
+        // decls were silently dropped from the loop body — the for-in
+        // walker emitted an empty body and the whole fn fell back to a
+        // placeholder.
+        let module = lower(
+            "fun main() {\n    for (i in 1..3) {\n        val y = i * 100\n        println(y)\n    }\n}",
+            "InputKt",
+        );
+        let f = module.functions.iter().find(|f| f.name == "main").unwrap();
+        assert_eq!(f.blocks.len(), 4, "expected 4-block for-in CFG");
+        let body_stmt_count = f.blocks[2].stmts.len();
+        assert!(
+            body_stmt_count >= 4,
+            "expected ≥4 body stmts (val y init, println, i++), got {body_stmt_count}"
+        );
+    }
+
+    #[test]
+    fn typed_lower_for_loop_with_trailing_println() {
+        // for-in followed by println("done") — the post-loop stmt used
+        // to be dropped (the for-in handler returned the 4-block CFG
+        // and left the trailing stmts unwalked).
+        let module = lower(
+            "fun main() {\n    for (i in 1..3) { println(i) }\n    println(\"done\")\n}",
+            "InputKt",
+        );
+        let f = module.functions.iter().find(|f| f.name == "main").unwrap();
+        assert_eq!(f.blocks.len(), 4);
+        // The exit block (index 3) should contain the println("done").
+        assert!(!f.blocks[3].stmts.is_empty());
+    }
+
+    #[test]
+    fn typed_lower_while_cond_with_binary_lhs() {
+        // `while (a + b < 100)` — pre-fix the while-cond resolver only
+        // accepted Reference/literal, not Binary on the LHS, so this
+        // shape never produced a CFG and fell back to a placeholder.
+        let module = lower(
+            "fun main() {\n    var a = 1\n    var b = 1\n    while (a + b < 100) {\n        val temp = a + b\n        a = b\n        b = temp\n    }\n    println(b)\n}",
+            "InputKt",
+        );
+        let f = module.functions.iter().find(|f| f.name == "main").unwrap();
+        assert_eq!(f.blocks.len(), 4);
+        // The cond block must have an AddI before the CmpLt.
+        let cond_stmts = &f.blocks[1].stmts;
+        let has_add = cond_stmts.iter().any(|s| {
+            matches!(
+                s,
+                skotch_mir::Stmt::Assign {
+                    value: skotch_mir::Rvalue::BinOp {
+                        op: skotch_mir::BinOp::AddI,
+                        ..
+                    },
+                    ..
+                }
+            )
+        });
+        assert!(has_add, "expected AddI in cond block");
     }
 
     #[test]
