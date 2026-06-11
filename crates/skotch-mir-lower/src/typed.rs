@@ -3325,6 +3325,70 @@ fn try_lower_multi_stmt_block_with_offset(
                             continue;
                         }
                     }
+                    // PutField stmt in loop body: `obj.field = value`.
+                    if let KtExpr::Binary(b) = be {
+                        if b.operation().map(|o| o.text()).as_deref() == Some("=") {
+                            if let Some(KtExpr::DotQualified(dq)) =
+                                b.lhs().map(unwrap_parens)
+                            {
+                                let exprs: Vec<KtExpr<'_>> = skotch_ast::children(dq.syntax())
+                                    .iter()
+                                    .filter_map(KtExpr::cast)
+                                    .collect();
+                                if exprs.len() == 2 {
+                                    if let (
+                                        KtExpr::Reference(rcv_ref),
+                                        KtExpr::Reference(prop_ref),
+                                    ) = (&exprs[0], &exprs[1])
+                                    {
+                                        if let (Some(rcv_n), Some(prop_n)) =
+                                            (rcv_ref.name(), prop_ref.name())
+                                        {
+                                            if let Some(rcv_slot) = name_to_local
+                                                .iter()
+                                                .rev()
+                                                .find(|(n, _)| n == rcv_n)
+                                                .map(|(_, l)| *l)
+                                            {
+                                                if let Some(Ty::Class(cname)) =
+                                                    local_tys.get(rcv_slot.0 as usize).cloned()
+                                                {
+                                                    let rhs_expr =
+                                                        b.rhs().map(unwrap_parens)?;
+                                                    let snap = name_to_local.clone();
+                                                    let lookup =
+                                                        |n: &str| -> Option<LocalId> {
+                                                            snap.iter()
+                                                                .rev()
+                                                                .find(|(name, _)| name == n)
+                                                                .map(|(_, l)| *l)
+                                                        };
+                                                    let value_slot = lower_inline_expr_to_slot(
+                                                        rhs_expr,
+                                                        &lookup,
+                                                        next_slot,
+                                                        &mut body_mstmts,
+                                                        local_tys,
+                                                        strings,
+                                                    )?;
+                                                    body_mstmts.push(MStmt::Assign {
+                                                        dest: rcv_slot,
+                                                        value: skotch_mir::Rvalue::PutField {
+                                                            receiver: rcv_slot,
+                                                            class_name: cname,
+                                                            field_name: prop_n.to_string(),
+                                                            value: value_slot,
+                                                        },
+                                                    });
+                                                    continue;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                     // Top-level fn call as stmt (result discarded). Args
                     // resolve as Reference (local) or literal.
                     if let KtExpr::Call(call) = be {
