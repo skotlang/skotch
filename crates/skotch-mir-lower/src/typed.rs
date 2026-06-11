@@ -2484,12 +2484,16 @@ fn lower_simple_body(
             let mut extra_locals: Vec<Ty> = Vec::new();
 
             // resolve_operand handles Reference / literal / nested
-            // Binary. Nested Binary recurses to emit the inner
-            // BinOp into its own slot, then returns that slot.
+            // Binary / top-level val. Nested Binary recurses to emit
+            // the inner BinOp into its own slot, then returns that
+            // slot.
+            #[allow(clippy::too_many_arguments)]
             fn resolve_operand_rec(
                 e: skotch_ast::KtExpr<'_>,
                 f: skotch_ast::KtFun<'_>,
                 param_names: &[String],
+                val_lookup: &rustc_hash::FxHashMap<String, Ty>,
+                wrapper_class: &str,
                 next_slot: &mut u32,
                 pre_stmts: &mut Vec<skotch_mir::Stmt>,
                 extra_locals: &mut Vec<Ty>,
@@ -2500,8 +2504,25 @@ fn lower_simple_body(
                 match e {
                     KtExpr::Reference(r) => {
                         let n = r.name()?;
-                        let idx = param_names.iter().position(|p| p == n)?;
-                        Some(skotch_mir::LocalId(idx as u32))
+                        if let Some(idx) = param_names.iter().position(|p| p == n) {
+                            return Some(skotch_mir::LocalId(idx as u32));
+                        }
+                        // Top-level val ref → GetStaticField.
+                        if let Some(val_ty) = val_lookup.get(n) {
+                            let slot = skotch_mir::LocalId(*next_slot);
+                            *next_slot += 1;
+                            extra_locals.push(val_ty.clone());
+                            pre_stmts.push(skotch_mir::Stmt::Assign {
+                                dest: slot,
+                                value: skotch_mir::Rvalue::GetStaticField {
+                                    class_name: wrapper_class.to_string(),
+                                    field_name: n.to_string(),
+                                    descriptor: ty_to_descriptor(val_ty),
+                                },
+                            });
+                            return Some(slot);
+                        }
+                        None
                     }
                     KtExpr::Binary(inner_b) => {
                         // Recurse: lower the inner binary into its own slot.
@@ -2509,6 +2530,8 @@ fn lower_simple_body(
                             inner_b.lhs()?,
                             f,
                             param_names,
+                            val_lookup,
+                            wrapper_class,
                             next_slot,
                             pre_stmts,
                             extra_locals,
@@ -2518,6 +2541,8 @@ fn lower_simple_body(
                             inner_b.rhs()?,
                             f,
                             param_names,
+                            val_lookup,
+                            wrapper_class,
                             next_slot,
                             pre_stmts,
                             extra_locals,
@@ -2586,6 +2611,8 @@ fn lower_simple_body(
                     e,
                     f,
                     &param_names,
+                    val_lookup,
+                    wrapper_class,
                     next_slot,
                     pre_stmts,
                     extra_locals,
@@ -4204,6 +4231,42 @@ mod tests {
                     assert!(target_class == "java/lang/String" || target_class == "String");
                 }
                 _ => panic!("expected CheckCast"),
+            },
+        }
+    }
+
+    #[test]
+    fn typed_lower_binary_with_top_level_val_operand() {
+        let module = lower(
+            "val MAX: Int = 100\nfun overflow(x: Int): Boolean = x > MAX",
+            "TestKt",
+        );
+        let f = module
+            .functions
+            .iter()
+            .find(|f| f.name == "overflow")
+            .unwrap();
+        let block = &f.blocks[0];
+        // Expected stmts:
+        //   slot 1 = GetStaticField(TestKt.MAX:I)
+        //   slot 2 = CmpGt(slot 0, slot 1)
+        assert_eq!(block.stmts.len(), 2);
+        match &block.stmts[0] {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::GetStaticField { field_name, .. } => {
+                    assert_eq!(field_name, "MAX");
+                }
+                _ => panic!("expected GetStaticField"),
+            },
+        }
+        match &block.stmts[1] {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::BinOp { op, lhs, rhs } => {
+                    assert!(matches!(op, skotch_mir::BinOp::CmpGt));
+                    assert_eq!(lhs.0, 0); // x
+                    assert_eq!(rhs.0, 1); // MAX slot
+                }
+                _ => panic!("expected BinOp"),
             },
         }
     }
