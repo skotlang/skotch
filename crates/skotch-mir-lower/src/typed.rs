@@ -4001,6 +4001,94 @@ fn lower_simple_body(
                                         break;
                                     }
                                 }
+                                KtExpr::Binary(b) => {
+                                    // Inline Binary arg — resolve lhs +
+                                    // rhs as Reference (outer param) or
+                                    // literal, then emit BinOp.
+                                    let op_text =
+                                        b.operation().map(|o| o.text()).unwrap_or_default();
+                                    let mir_op = match op_text.as_str() {
+                                        "+" => Some(skotch_mir::BinOp::AddI),
+                                        "-" => Some(skotch_mir::BinOp::SubI),
+                                        "*" => Some(skotch_mir::BinOp::MulI),
+                                        "/" => Some(skotch_mir::BinOp::DivI),
+                                        "%" => Some(skotch_mir::BinOp::ModI),
+                                        _ => None,
+                                    };
+                                    let Some(mir_op) = mir_op else {
+                                        ok = false;
+                                        break;
+                                    };
+                                    let resolve_in =
+                                        |e: KtExpr<'_>,
+                                         next_slot: &mut u32,
+                                         pre_stmts: &mut Vec<skotch_mir::Stmt>,
+                                         extra_locals: &mut Vec<Ty>,
+                                         strings: &mut Vec<String>|
+                                         -> Option<skotch_mir::LocalId> {
+                                            let e = unwrap_parens(e);
+                                            if let Some((k, ty)) =
+                                                literal_to_const(&e, strings)
+                                            {
+                                                let slot =
+                                                    skotch_mir::LocalId(*next_slot);
+                                                *next_slot += 1;
+                                                extra_locals.push(ty);
+                                                pre_stmts.push(
+                                                    skotch_mir::Stmt::Assign {
+                                                        dest: slot,
+                                                        value:
+                                                            skotch_mir::Rvalue::Const(
+                                                                k,
+                                                            ),
+                                                    },
+                                                );
+                                                return Some(slot);
+                                            }
+                                            if let KtExpr::Reference(rr) = e {
+                                                let n = rr.name()?;
+                                                let idx = outer_param_names
+                                                    .iter()
+                                                    .position(|p| p == n)?;
+                                                return Some(skotch_mir::LocalId(
+                                                    idx as u32,
+                                                ));
+                                            }
+                                            None
+                                        };
+                                    let Some(lhs) = resolve_in(
+                                        b.lhs().unwrap(),
+                                        &mut next_slot,
+                                        &mut pre_stmts,
+                                        &mut extra_locals,
+                                        strings,
+                                    ) else {
+                                        ok = false;
+                                        break;
+                                    };
+                                    let Some(rhs) = resolve_in(
+                                        b.rhs().unwrap(),
+                                        &mut next_slot,
+                                        &mut pre_stmts,
+                                        &mut extra_locals,
+                                        strings,
+                                    ) else {
+                                        ok = false;
+                                        break;
+                                    };
+                                    let slot = skotch_mir::LocalId(next_slot);
+                                    next_slot += 1;
+                                    extra_locals.push(Ty::Int);
+                                    pre_stmts.push(skotch_mir::Stmt::Assign {
+                                        dest: slot,
+                                        value: skotch_mir::Rvalue::BinOp {
+                                            op: mir_op,
+                                            lhs,
+                                            rhs,
+                                        },
+                                    });
+                                    arg_slots.push(slot);
+                                }
                                 other => match literal_to_const(&other, strings) {
                                     Some((k, ty)) => {
                                         let slot = skotch_mir::LocalId(next_slot);
@@ -7282,6 +7370,53 @@ mod tests {
                 _ => panic!("expected CheckCast"),
             },
         }
+    }
+
+    #[test]
+    fn typed_lower_constructor_call_with_binary_arg() {
+        // `class P(val x: Int) ; fun mk(): P = P(1 + 2)`
+        let module = lower(
+            "class P(val x: Int)\nfun mk(): P = P(1 + 2)",
+            "TestKt",
+        );
+        let f = module.functions.iter().find(|f| f.name == "mk").unwrap();
+        let block = &f.blocks[0];
+        let has_add = block.stmts.iter().any(|s| {
+            matches!(
+                s,
+                skotch_mir::Stmt::Assign {
+                    value: skotch_mir::Rvalue::BinOp {
+                        op: skotch_mir::BinOp::AddI,
+                        ..
+                    },
+                    ..
+                }
+            )
+        });
+        let has_new = block.stmts.iter().any(|s| {
+            matches!(
+                s,
+                skotch_mir::Stmt::Assign {
+                    value: skotch_mir::Rvalue::NewInstance(_),
+                    ..
+                }
+            )
+        });
+        let has_ctor = block.stmts.iter().any(|s| {
+            matches!(
+                s,
+                skotch_mir::Stmt::Assign {
+                    value: skotch_mir::Rvalue::Call {
+                        kind: skotch_mir::CallKind::Constructor(_),
+                        ..
+                    },
+                    ..
+                }
+            )
+        });
+        assert!(has_add, "expected AddI for binary arg: {block:?}");
+        assert!(has_new);
+        assert!(has_ctor);
     }
 
     #[test]
