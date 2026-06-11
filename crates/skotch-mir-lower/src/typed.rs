@@ -1053,10 +1053,13 @@ fn try_lower_do_while_loop(
 ///   cmp_block: cmp_local = CmpEq(subject, v_i); Branch(then_i, next_cmp)
 ///   then_block: result = r_i; Goto(join_block)
 /// The final block is the ReturnValue join.
+#[allow(clippy::too_many_arguments)]
 fn try_lower_when_expression(
     w: &skotch_ast::KtWhen<'_>,
     f: skotch_ast::KtFun<'_>,
     strings: &mut Vec<String>,
+    val_lookup: &rustc_hash::FxHashMap<String, Ty>,
+    wrapper_class: &str,
 ) -> Option<(Vec<BasicBlock>, Vec<Ty>)> {
     use skotch_ast::KtExpr;
     use skotch_mir::{LocalId, Rvalue, Stmt as MStmt};
@@ -1185,12 +1188,33 @@ fn try_lower_when_expression(
             ]
         } else if let KtExpr::Reference(rr) = body {
             let n = rr.name()?;
-            let idx = outer_param_names.iter().position(|p| p == n)?;
-            let param_slot = LocalId(idx as u32);
-            vec![MStmt::Assign {
-                dest: result_slot,
-                value: Rvalue::Local(param_slot),
-            }]
+            if let Some(idx) = outer_param_names.iter().position(|p| p == n) {
+                let param_slot = LocalId(idx as u32);
+                vec![MStmt::Assign {
+                    dest: result_slot,
+                    value: Rvalue::Local(param_slot),
+                }]
+            } else if let Some(val_ty) = val_lookup.get(n) {
+                let slot = LocalId(next_slot);
+                next_slot += 1;
+                extra_locals.push(val_ty.clone());
+                vec![
+                    MStmt::Assign {
+                        dest: slot,
+                        value: Rvalue::GetStaticField {
+                            class_name: wrapper_class.to_string(),
+                            field_name: n.to_string(),
+                            descriptor: ty_to_descriptor(val_ty),
+                        },
+                    },
+                    MStmt::Assign {
+                        dest: result_slot,
+                        value: Rvalue::Local(slot),
+                    },
+                ]
+            } else {
+                return None;
+            }
         } else {
             return None;
         };
@@ -1216,6 +1240,37 @@ fn try_lower_when_expression(
         ]
     } else if let KtExpr::Reference(rr) = &else_body {
         let n = rr.name()?;
+        if let Some(val_ty) = val_lookup.get(n) {
+            let slot = LocalId(next_slot);
+            extra_locals.push(val_ty.clone());
+            return Some((
+                {
+                    blocks.push(BasicBlock {
+                        stmts: vec![
+                            MStmt::Assign {
+                                dest: slot,
+                                value: Rvalue::GetStaticField {
+                                    class_name: wrapper_class.to_string(),
+                                    field_name: n.to_string(),
+                                    descriptor: ty_to_descriptor(val_ty),
+                                },
+                            },
+                            MStmt::Assign {
+                                dest: result_slot,
+                                value: Rvalue::Local(slot),
+                            },
+                        ],
+                        terminator: Terminator::Goto(join_block_idx),
+                    });
+                    blocks.push(BasicBlock {
+                        stmts: Vec::new(),
+                        terminator: Terminator::ReturnValue(result_slot),
+                    });
+                    blocks
+                },
+                extra_locals,
+            ));
+        }
         let idx = outer_param_names.iter().position(|p| p == n)?;
         let param_slot = LocalId(idx as u32);
         vec![MStmt::Assign {
@@ -3997,7 +4052,13 @@ fn lower_simple_body(
     // when (subject) { v1 -> result1; v2 -> result2; else -> default }
     // expression body. Lowers to a chain of comparison blocks.
     if let KtExpr::When(w) = &body_expr {
-        if let Some(lowered) = try_lower_when_expression(w, f, strings) {
+        if let Some(lowered) = try_lower_when_expression(
+            w,
+            f,
+            strings,
+            val_lookup,
+            wrapper_class,
+        ) {
             return lowered;
         }
     }
