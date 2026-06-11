@@ -6314,6 +6314,13 @@ fn lower_simple_body(
                     recipe.push('\x01');
                 }
                 S::STRING_START | S::STRING_END | S::WHITE_SPACE => {}
+                S::LONG_STRING_TEMPLATE_ENTRY => {
+                    // The short-walk path above can't materialize
+                    // sub-expressions, so abandon it and let the
+                    // long-form re-walk below handle the template.
+                    ok = false;
+                    break;
+                }
                 _ => {
                     ok = false;
                     break;
@@ -6341,6 +6348,156 @@ fn lower_simple_body(
                 terminator: Terminator::ReturnValue(result_slot),
             }];
             return (blocks, vec![Ty::String]);
+        }
+        // Long-form fallback: if we saw a LONG entry, re-walk the
+        // template with pre_stmts so `${expr}` can be materialized.
+        if let KtExpr::String(_) = &body_expr {
+            let mut recipe = String::new();
+            let mut arg_slots: Vec<skotch_mir::LocalId> = Vec::new();
+            let mut arg_descs: Vec<String> = Vec::new();
+            let mut pre_stmts: Vec<skotch_mir::Stmt> = Vec::new();
+            let mut extra_locals: Vec<Ty> = Vec::new();
+            let param_count = f
+                .value_parameter_list()
+                .map(|pl| pl.parameters().count())
+                .unwrap_or(0);
+            let mut next_slot = param_count as u32;
+            let mut had_long = false;
+            let mut had_interp = false;
+            let mut ok = true;
+            // Lookup: outer params only (no `this`).
+            let lookup = |n: &str| -> Option<skotch_mir::LocalId> {
+                outer_param_names
+                    .iter()
+                    .position(|p| p == n)
+                    .map(|idx| skotch_mir::LocalId(idx as u32))
+            };
+            for child in skotch_ast::children(body_expr.syntax()) {
+                match child.kind {
+                    S::LITERAL_STRING_TEMPLATE_ENTRY => {
+                        for cc in skotch_ast::children(child) {
+                            if cc.kind == S::STRING_CHUNK {
+                                if let skotch_sil::SilData::Token { text } = &cc.data {
+                                    recipe.push_str(text);
+                                }
+                            }
+                        }
+                    }
+                    S::SHORT_STRING_TEMPLATE_ENTRY => {
+                        had_interp = true;
+                        let name_opt = skotch_ast::children(child).iter().find_map(|cc| {
+                            if cc.kind == S::REFERENCE_EXPRESSION {
+                                for ccc in skotch_ast::children(cc) {
+                                    if ccc.kind == S::IDENTIFIER {
+                                        if let skotch_sil::SilData::Token { text } = &ccc.data {
+                                            return Some(text.as_str().to_string());
+                                        }
+                                    }
+                                }
+                            }
+                            None
+                        });
+                        let Some(name) = name_opt else {
+                            ok = false;
+                            break;
+                        };
+                        let Some(idx) = outer_param_names.iter().position(|p| p == &name) else {
+                            ok = false;
+                            break;
+                        };
+                        let param_ty = f
+                            .value_parameter_list()
+                            .and_then(|pl| {
+                                pl.parameters().nth(idx).and_then(|p| {
+                                    p.type_reference()
+                                        .and_then(|tr| tr.user_type())
+                                        .and_then(|u| u.name())
+                                        .and_then(skotch_types::ty_from_name)
+                                })
+                            })
+                            .unwrap_or(Ty::Any);
+                        arg_descs.push(ty_to_descriptor(&param_ty));
+                        arg_slots.push(skotch_mir::LocalId(idx as u32));
+                        recipe.push('\x01');
+                    }
+                    S::LONG_STRING_TEMPLATE_ENTRY => {
+                        had_long = true;
+                        had_interp = true;
+                        let inner = skotch_ast::children(child)
+                            .iter()
+                            .find_map(KtExpr::cast)
+                            .map(unwrap_parens);
+                        let Some(inner) = inner else {
+                            ok = false;
+                            break;
+                        };
+                        let slot = lower_inline_expr_to_slot(
+                            inner,
+                            &lookup,
+                            &mut next_slot,
+                            &mut pre_stmts,
+                            &mut extra_locals,
+                            strings,
+                        );
+                        let Some(slot) = slot else {
+                            ok = false;
+                            break;
+                        };
+                        // Best-effort descriptor — pull from the local's Ty.
+                        let ty_idx = slot.0 as usize;
+                        let ty = if ty_idx < param_count {
+                            f.value_parameter_list()
+                                .and_then(|pl| {
+                                    pl.parameters().nth(ty_idx).and_then(|p| {
+                                        p.type_reference()
+                                            .and_then(|tr| tr.user_type())
+                                            .and_then(|u| u.name())
+                                            .and_then(skotch_types::ty_from_name)
+                                    })
+                                })
+                                .unwrap_or(Ty::Any)
+                        } else {
+                            extra_locals
+                                .get(ty_idx - param_count)
+                                .cloned()
+                                .unwrap_or(Ty::Int)
+                        };
+                        arg_descs.push(ty_to_descriptor(&ty));
+                        arg_slots.push(slot);
+                        recipe.push('\x01');
+                    }
+                    S::STRING_START | S::STRING_END | S::WHITE_SPACE => {}
+                    S::BLOCK_STRING_TEMPLATE_ENTRY => {
+                        ok = false;
+                        break;
+                    }
+                    _ => {
+                        ok = false;
+                        break;
+                    }
+                }
+            }
+            if ok && had_interp && had_long {
+                let descriptor =
+                    format!("({})Ljava/lang/String;", arg_descs.join(""));
+                let result_slot = skotch_mir::LocalId(next_slot);
+                extra_locals.push(Ty::String);
+                pre_stmts.push(skotch_mir::Stmt::Assign {
+                    dest: result_slot,
+                    value: skotch_mir::Rvalue::Call {
+                        kind: skotch_mir::CallKind::MakeConcatWithConstants {
+                            recipe,
+                            descriptor,
+                        },
+                        args: arg_slots,
+                    },
+                });
+                let blocks = vec![BasicBlock {
+                    stmts: pre_stmts,
+                    terminator: Terminator::ReturnValue(result_slot),
+                }];
+                return (blocks, extra_locals);
+            }
         }
     }
 
