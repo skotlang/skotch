@@ -1271,11 +1271,14 @@ fn flatten_if_chain<'a>(
 ///   block N..2N-1:  arm_i stmts (writes result), Goto(exit)
 ///   block 2N:       else stmts (writes result), Goto(exit)
 ///   block 2N+1:     ReturnValue(result)
+#[allow(clippy::too_many_arguments)]
 fn try_lower_if_chain(
     arms: &[(skotch_ast::KtExpr<'_>, skotch_ast::KtExpr<'_>)],
     else_expr: &skotch_ast::KtExpr<'_>,
     f: skotch_ast::KtFun<'_>,
     strings: &mut Vec<String>,
+    val_lookup: &rustc_hash::FxHashMap<String, Ty>,
+    wrapper_class: &str,
 ) -> Option<(Vec<BasicBlock>, Vec<Ty>)> {
     use skotch_ast::KtExpr;
     use skotch_mir::{LocalId, Rvalue, Stmt as MStmt};
@@ -1330,8 +1333,24 @@ fn try_lower_if_chain(
         match e {
             KtExpr::Reference(r) => {
                 let n = r.name()?;
-                let idx = outer_param_names.iter().position(|p| p == n)?;
-                Some(LocalId(idx as u32))
+                if let Some(idx) = outer_param_names.iter().position(|p| p == n) {
+                    return Some(LocalId(idx as u32));
+                }
+                if let Some(val_ty) = val_lookup.get(n) {
+                    let slot = LocalId(*next_slot);
+                    *next_slot += 1;
+                    extra_locals.push(val_ty.clone());
+                    pre_stmts.push(MStmt::Assign {
+                        dest: slot,
+                        value: Rvalue::GetStaticField {
+                            class_name: wrapper_class.to_string(),
+                            field_name: n.to_string(),
+                            descriptor: ty_to_descriptor(val_ty),
+                        },
+                    });
+                    return Some(slot);
+                }
+                None
             }
             KtExpr::Prefix(p) => {
                 let op_text = skotch_ast::children(p.syntax())
@@ -1705,7 +1724,14 @@ fn try_lower_if_expression(
     // through to the existing 4-block code below.
     if let Some((arms, else_expr)) = flatten_if_chain(if_e) {
         if arms.len() >= 2 {
-            return try_lower_if_chain(&arms, &else_expr, f, strings);
+            return try_lower_if_chain(
+                &arms,
+                &else_expr,
+                f,
+                strings,
+                val_lookup,
+                wrapper_class,
+            );
         }
     }
 
@@ -7751,6 +7777,36 @@ mod tests {
                 _ => panic!("expected CheckCast"),
             },
         }
+    }
+
+    #[test]
+    fn typed_lower_if_chain_arms_accept_top_level_val() {
+        // 3-arm chain referencing top-level vals.
+        let module = lower(
+            "val A: Int = 1\nval B: Int = 2\nfun pick(x: Int): Int = if (x > 0) A else if (x < 0) B else 0",
+            "TestKt",
+        );
+        let f = module.functions.iter().find(|f| f.name == "pick").unwrap();
+        // 2 arms × 2 + 1 else + 1 exit = 6 blocks.
+        assert_eq!(f.blocks.len(), 6);
+        // Arm 1 (block 2) should GetStaticField A.
+        // Arm 2 (block 3) should GetStaticField B.
+        let a_arm = &f.blocks[2];
+        let has_a = a_arm.stmts.iter().any(|s| match s {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::GetStaticField { field_name, .. } => field_name == "A",
+                _ => false,
+            },
+        });
+        let b_arm = &f.blocks[3];
+        let has_b = b_arm.stmts.iter().any(|s| match s {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::GetStaticField { field_name, .. } => field_name == "B",
+                _ => false,
+            },
+        });
+        assert!(has_a, "expected GetStaticField A in arm 1: {a_arm:?}");
+        assert!(has_b, "expected GetStaticField B in arm 2: {b_arm:?}");
     }
 
     #[test]
