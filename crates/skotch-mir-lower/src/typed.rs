@@ -1194,18 +1194,25 @@ fn try_lower_if_expression(
     // Condition must be a binary comparison between two refs / literals.
     let cond_expr = if_e.condition().and_then(|c| c.expression())?;
     let cond_expr = unwrap_parens(cond_expr);
-    let cmp = match cond_expr {
-        KtExpr::Binary(b) => b,
-        _ => return None,
-    };
-    let cmp_op = cmp.operation().map(|o| o.text()).unwrap_or_default();
-    let cmp_mir_op = match cmp_op.as_str() {
-        "==" => skotch_mir::BinOp::CmpEq,
-        "!=" => skotch_mir::BinOp::CmpNe,
-        "<" => skotch_mir::BinOp::CmpLt,
-        ">" => skotch_mir::BinOp::CmpGt,
-        "<=" => skotch_mir::BinOp::CmpLe,
-        ">=" => skotch_mir::BinOp::CmpGe,
+    enum CondShape<'b> {
+        Binary(skotch_ast::KtBinaryExpression<'b>, skotch_mir::BinOp),
+        BoolRef(skotch_ast::KtReferenceExpression<'b>),
+    }
+    let cond_shape = match &cond_expr {
+        KtExpr::Binary(b) => {
+            let op = b.operation().map(|o| o.text()).unwrap_or_default();
+            let mir_op = match op.as_str() {
+                "==" => skotch_mir::BinOp::CmpEq,
+                "!=" => skotch_mir::BinOp::CmpNe,
+                "<" => skotch_mir::BinOp::CmpLt,
+                ">" => skotch_mir::BinOp::CmpGt,
+                "<=" => skotch_mir::BinOp::CmpLe,
+                ">=" => skotch_mir::BinOp::CmpGe,
+                _ => return None,
+            };
+            CondShape::Binary(*b, mir_op)
+        }
+        KtExpr::Reference(r) => CondShape::BoolRef(*r),
         _ => return None,
     };
 
@@ -1309,31 +1316,41 @@ fn try_lower_if_expression(
 
     // Build the condition statements.
     let mut b0_stmts: Vec<MStmt> = Vec::new();
-    let lhs = resolve_operand(
-        cmp.lhs()?,
-        &mut next_slot,
-        &mut b0_stmts,
-        &mut extra_locals,
-        strings,
-    )?;
-    let rhs = resolve_operand(
-        cmp.rhs()?,
-        &mut next_slot,
-        &mut b0_stmts,
-        &mut extra_locals,
-        strings,
-    )?;
-    let cond_slot = LocalId(next_slot);
-    next_slot += 1;
-    extra_locals.push(Ty::Bool);
-    b0_stmts.push(MStmt::Assign {
-        dest: cond_slot,
-        value: Rvalue::BinOp {
-            op: cmp_mir_op,
-            lhs,
-            rhs,
-        },
-    });
+    let cond_slot = match cond_shape {
+        CondShape::Binary(cmp, cmp_mir_op) => {
+            let lhs = resolve_operand(
+                cmp.lhs()?,
+                &mut next_slot,
+                &mut b0_stmts,
+                &mut extra_locals,
+                strings,
+            )?;
+            let rhs = resolve_operand(
+                cmp.rhs()?,
+                &mut next_slot,
+                &mut b0_stmts,
+                &mut extra_locals,
+                strings,
+            )?;
+            let slot = LocalId(next_slot);
+            next_slot += 1;
+            extra_locals.push(Ty::Bool);
+            b0_stmts.push(MStmt::Assign {
+                dest: slot,
+                value: Rvalue::BinOp {
+                    op: cmp_mir_op,
+                    lhs,
+                    rhs,
+                },
+            });
+            slot
+        }
+        CondShape::BoolRef(r) => {
+            let n = r.name()?;
+            let idx = outer_param_names.iter().position(|p| p == n)?;
+            LocalId(idx as u32)
+        }
+    };
 
     // Reserve the result_slot before lowering arms; both arms write
     // into the same slot.
@@ -4916,6 +4933,48 @@ mod tests {
                 }
                 _ => panic!("expected CheckCast"),
             },
+        }
+    }
+
+    #[test]
+    fn typed_lower_if_with_bool_param_cond() {
+        // `fun pick(use_a: Boolean, a: Int, b: Int): Int = if (use_a) a else b`
+        // Cond is a bare Boolean Reference — should use the param's
+        // slot directly as cond_slot, no BinOp.
+        let module = lower(
+            "fun pick(use_a: Boolean, a: Int, b: Int): Int = if (use_a) a else b",
+            "TestKt",
+        );
+        let f = module.functions.iter().find(|f| f.name == "pick").unwrap();
+        // 4-block CFG: cond, then, else, return.
+        assert_eq!(f.blocks.len(), 4);
+        // Block 0 should contain NO BinOp Assigns (no comparison) since
+        // the cond is already a Boolean local.
+        let n_binop = f.blocks[0]
+            .stmts
+            .iter()
+            .filter(|s| {
+                matches!(
+                    s,
+                    skotch_mir::Stmt::Assign {
+                        value: skotch_mir::Rvalue::BinOp { .. },
+                        ..
+                    }
+                )
+            })
+            .count();
+        assert_eq!(n_binop, 0, "expected no BinOp for direct bool cond");
+        match &f.blocks[0].terminator {
+            skotch_mir::Terminator::Branch {
+                cond,
+                then_block,
+                else_block,
+            } => {
+                assert_eq!(cond.0, 0, "cond_slot should be the use_a param slot");
+                assert_eq!(*then_block, 1);
+                assert_eq!(*else_block, 2);
+            }
+            other => panic!("expected Branch terminator, got {other:?}"),
         }
     }
 
