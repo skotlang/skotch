@@ -953,3 +953,20 @@ also include:
   (implicit-this virtual call with args)
 - `class P { fun acc(): Int { var sum = 0; sum = sum + 1; return sum } }`
   (method block + var)
+
+### 2026-06-11 (session 6 — push 15: method array access + method template)
+
+**Method body ArrayAccess on implicit-this field:**
+- `class P(val arr: IntArray) { fun first(): Int = arr[0] }` →
+  GetField(this, P, arr) + Const(0) + ArrayLoad. Index resolves as
+  param Reference or literal.
+
+**Method body string-template with implicit-this field interpolation:**
+- `class P(val name: String) { fun greet(): String = "Hello, $name" }`
+  → GetField(this, P, name) + Call(MakeConcatWithConstants{recipe,
+  descriptor}, args). Interpolation lookup order is param first,
+  then implicit-this field. JVM descriptor follows the resolved type.
+
+**Push 15 totals:**
+- mir-lower: **138 unit tests** (up from 136)
+- Workspace clippy: clean
