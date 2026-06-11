@@ -2567,6 +2567,34 @@ fn method_simple_body(
     };
     let body_expr = unwrap_parens(body_expr);
 
+    let param_count = f
+        .value_parameter_list()
+        .map(|pl| pl.parameters().count())
+        .unwrap_or(0);
+    let param_names: Vec<String> = f
+        .value_parameter_list()
+        .map(|pl| {
+            pl.parameters()
+                .map(|p| p.name().unwrap_or("").to_string())
+                .collect()
+        })
+        .unwrap_or_default();
+
+    // Identity-ref body: `fun id(x: Int): Int = x` returns the
+    // parameter slot directly (1-indexed past `this`).
+    if let KtExpr::Reference(r) = &body_expr {
+        if let Some(name) = r.name() {
+            if let Some(idx) = param_names.iter().position(|p| p == name) {
+                let param_slot = skotch_mir::LocalId((1 + idx) as u32);
+                let blocks = vec![BasicBlock {
+                    stmts: Vec::new(),
+                    terminator: Terminator::ReturnValue(param_slot),
+                }];
+                return (blocks, Vec::new());
+            }
+        }
+    }
+
     let Some((c, ty)) = literal_to_const(&body_expr, strings) else {
         return make_placeholder();
     };
@@ -2575,10 +2603,6 @@ fn method_simple_body(
     //   local 0: `this`
     //   locals 1..N+1: user params
     //   local N+2: result
-    let param_count = f
-        .value_parameter_list()
-        .map(|pl| pl.parameters().count())
-        .unwrap_or(0);
     let result_slot = skotch_mir::LocalId((1 + param_count) as u32);
     let blocks = vec![BasicBlock {
         stmts: vec![skotch_mir::Stmt::Assign {
@@ -3934,6 +3958,22 @@ mod tests {
         assert_eq!(c.methods.len(), 1);
         assert_eq!(c.methods[0].name, "greet");
         assert_eq!(c.methods[0].return_ty, Ty::String);
+    }
+
+    #[test]
+    fn typed_lower_class_method_identity_param() {
+        let module = lower(
+            "class P { fun id(x: Int): Int = x }",
+            "TestKt",
+        );
+        let p = module.classes.iter().find(|c| c.name == "P").unwrap();
+        let m = p.methods.iter().find(|m| m.name == "id").unwrap();
+        assert!(m.blocks[0].stmts.is_empty());
+        // Identity: ReturnValue on slot 1 (param x, after this at slot 0).
+        match &m.blocks[0].terminator {
+            Terminator::ReturnValue(slot) => assert_eq!(slot.0, 1),
+            other => panic!("expected ReturnValue(1), got {other:?}"),
+        }
     }
 
     #[test]
