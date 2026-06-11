@@ -1843,6 +1843,56 @@ fn lower_simple_body(
     // Parenthesized passthrough: `(literal)` or `(a + b)`.
     let body_expr = unwrap_parens(body_expr);
 
+    // `is` type check: `fun isInt(x: Any): Boolean = x is Int`.
+    // Emits Rvalue::InstanceOf with the param slot and the type
+    // descriptor (e.g. "java/lang/Integer" for Int).
+    if let KtExpr::Is(is_e) = &body_expr {
+        // First child is the operand (Reference); the IS keyword and
+        // the type follow.
+        let children: Vec<_> = skotch_ast::children(is_e.syntax()).iter().collect();
+        let operand = children.iter().find_map(|c| KtExpr::cast(c)).map(unwrap_parens);
+        let type_name = children.iter().find_map(|c| {
+            if c.kind == skotch_syntax::SyntaxKind::TYPE_REFERENCE {
+                if let Some(tr) = skotch_ast::KtTypeReference::cast(c) {
+                    return tr.user_type().and_then(|u| u.name()).map(String::from);
+                }
+            }
+            None
+        });
+        if let (Some(KtExpr::Reference(r)), Some(tname)) = (operand, type_name) {
+            if let Some(name) = r.name() {
+                let param_names: Vec<String> = f
+                    .value_parameter_list()
+                    .map(|pl| {
+                        pl.parameters()
+                            .map(|p| p.name().unwrap_or("").to_string())
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                if let Some(idx) = param_names.iter().position(|p| p == name) {
+                    // Boxed JVM type descriptor for primitive types
+                    let descriptor =
+                        skotch_types::intrinsics::kotlin_to_jvm_class(&tname)
+                            .map(|s| s.to_string())
+                            .unwrap_or(tname.clone());
+                    let param_count = param_names.len();
+                    let result_slot = skotch_mir::LocalId(param_count as u32);
+                    let blocks = vec![BasicBlock {
+                        stmts: vec![skotch_mir::Stmt::Assign {
+                            dest: result_slot,
+                            value: skotch_mir::Rvalue::InstanceOf {
+                                obj: skotch_mir::LocalId(idx as u32),
+                                type_descriptor: descriptor,
+                            },
+                        }],
+                        terminator: Terminator::ReturnValue(result_slot),
+                    }];
+                    return (blocks, vec![Ty::Bool]);
+                }
+            }
+        }
+    }
+
     // Prefix unary minus on param: `fun neg(x: Int): Int = -x` →
     // BinOp(SubI, 0, x).
     if let KtExpr::Prefix(p) = &body_expr {
@@ -3744,6 +3794,31 @@ mod tests {
             },
         }
         assert!(matches!(block.terminator, Terminator::ReturnValue(_)));
+    }
+
+    #[test]
+    fn typed_lower_is_expression_string_check() {
+        let module = lower(
+            "fun isStr(x: Any): Boolean = x is String",
+            "TestKt",
+        );
+        let f = &module.functions[0];
+        assert_eq!(f.return_ty, Ty::Bool);
+        let block = &f.blocks[0];
+        assert_eq!(block.stmts.len(), 1);
+        match &block.stmts[0] {
+            skotch_mir::Stmt::Assign { value, .. } => match value {
+                skotch_mir::Rvalue::InstanceOf { obj, type_descriptor } => {
+                    assert_eq!(obj.0, 0); // x param
+                    // String maps to java/lang/String.
+                    assert!(
+                        type_descriptor == "java/lang/String"
+                            || type_descriptor == "String"
+                    );
+                }
+                _ => panic!("expected InstanceOf"),
+            },
+        }
     }
 
     #[test]
