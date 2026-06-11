@@ -445,6 +445,7 @@ pub fn lower_file(
             // bodies and non-literal expression bodies still emit an
             // empty Return placeholder.
             let wrapper_class = module.wrapper_class.clone();
+            let mut exception_handlers: Vec<skotch_mir::ExceptionHandler> = Vec::new();
             let (blocks, extra_locals) = lower_simple_body(
                 f,
                 &mut module.strings,
@@ -452,6 +453,7 @@ pub fn lower_file(
                 &val_lookup,
                 &class_lookup,
                 &wrapper_class,
+                &mut exception_handlers,
             );
 
             let mut locals = param_tys;
@@ -469,7 +471,7 @@ pub fn lower_file(
                 param_defaults: Vec::new(),
                 is_abstract: false,
                 vararg_index: None,
-                exception_handlers: Vec::new(),
+                exception_handlers,
                 is_suspend: f.is_suspend(),
                 is_inline: f.is_inline(),
                 has_type_params: f
@@ -1441,6 +1443,165 @@ fn try_lower_if_chain(
     });
 
     Some((blocks, extra_locals))
+}
+
+/// Lower a `try { ... } catch (e: Exception) { ... }` expression body.
+/// Single catch only (no multi-catch chain), no finally. The try and
+/// catch arms must produce a single literal or a Reference.
+///
+/// CFG:
+///   block 0: try-arm — emits result, Goto(2)
+///   block 1: catch-arm — emits result, Goto(2)
+///   block 2: ReturnValue(result)
+///
+/// Returns (blocks, locals, exception_handlers).
+#[allow(clippy::type_complexity)]
+fn try_lower_try_expression(
+    t: &skotch_ast::KtTry<'_>,
+    f: skotch_ast::KtFun<'_>,
+    strings: &mut Vec<String>,
+) -> Option<(Vec<BasicBlock>, Vec<Ty>, Vec<skotch_mir::ExceptionHandler>)> {
+    use skotch_ast::KtExpr;
+
+    let catches: Vec<_> = t.catches().collect();
+    if catches.len() != 1 {
+        return None;
+    }
+    if t.finally().is_some() {
+        return None;
+    }
+    let try_body = t.try_block()?;
+    let catch = catches[0];
+    let catch_body = catch.body()?;
+
+    let outer_param_names: Vec<String> = f
+        .value_parameter_list()
+        .map(|pl| {
+            pl.parameters()
+                .map(|p| p.name().unwrap_or("").to_string())
+                .collect()
+        })
+        .unwrap_or_default();
+    let param_count = outer_param_names.len();
+
+    // Catch exception class name → JVM internal form.
+    let catch_type = catch
+        .parameter()
+        .and_then(|p| p.type_reference())
+        .and_then(|tr| tr.user_type())
+        .and_then(|u| u.name())
+        .map(|n| {
+            skotch_types::intrinsics::kotlin_exception_class(n)
+                .map(|s| s.to_string())
+                .or_else(|| {
+                    skotch_types::intrinsics::kotlin_to_jvm_class(n).map(|s| s.to_string())
+                })
+                .unwrap_or_else(|| n.to_string())
+        });
+
+    // Extract the single return expression from a body block. The body
+    // can be either a single expression (no `return`) or `{ return e }`
+    // / `{ e }`.
+    fn body_result_expr<'a>(block: skotch_ast::KtBlock<'a>) -> Option<skotch_ast::KtExpr<'a>> {
+        use skotch_ast::KtExpr;
+        let stmts: Vec<KtExpr<'a>> = block.statements().collect();
+        if stmts.len() != 1 {
+            return None;
+        }
+        match unwrap_parens(stmts[0]) {
+            KtExpr::Return(r) => skotch_ast::children(r.syntax())
+                .iter()
+                .find_map(KtExpr::cast)
+                .map(unwrap_parens),
+            other => Some(other),
+        }
+    }
+
+    let try_expr = body_result_expr(try_body)?;
+    let catch_expr = body_result_expr(catch_body)?;
+
+    let resolve = |e: KtExpr<'_>,
+                   next_slot: &mut u32,
+                   stmts: &mut Vec<skotch_mir::Stmt>,
+                   extra_locals: &mut Vec<Ty>,
+                   strings: &mut Vec<String>|
+     -> Option<skotch_mir::LocalId> {
+        let e = unwrap_parens(e);
+        if let Some((k, ty)) = literal_to_const(&e, strings) {
+            let slot = skotch_mir::LocalId(*next_slot);
+            *next_slot += 1;
+            extra_locals.push(ty);
+            stmts.push(skotch_mir::Stmt::Assign {
+                dest: slot,
+                value: skotch_mir::Rvalue::Const(k),
+            });
+            return Some(slot);
+        }
+        if let KtExpr::Reference(r) = e {
+            let n = r.name()?;
+            let idx = outer_param_names.iter().position(|p| p == n)?;
+            return Some(skotch_mir::LocalId(idx as u32));
+        }
+        None
+    };
+
+    let mut next_slot = param_count as u32;
+    let mut extra_locals: Vec<Ty> = Vec::new();
+    let result_slot = skotch_mir::LocalId(next_slot);
+    next_slot += 1;
+    extra_locals.push(Ty::Any);
+
+    // Block 0: try arm.
+    let mut try_stmts: Vec<skotch_mir::Stmt> = Vec::new();
+    let try_slot = resolve(
+        try_expr,
+        &mut next_slot,
+        &mut try_stmts,
+        &mut extra_locals,
+        strings,
+    )?;
+    try_stmts.push(skotch_mir::Stmt::Assign {
+        dest: result_slot,
+        value: skotch_mir::Rvalue::Local(try_slot),
+    });
+
+    // Block 1: catch arm.
+    let mut catch_stmts: Vec<skotch_mir::Stmt> = Vec::new();
+    let catch_slot = resolve(
+        catch_expr,
+        &mut next_slot,
+        &mut catch_stmts,
+        &mut extra_locals,
+        strings,
+    )?;
+    catch_stmts.push(skotch_mir::Stmt::Assign {
+        dest: result_slot,
+        value: skotch_mir::Rvalue::Local(catch_slot),
+    });
+
+    let blocks = vec![
+        BasicBlock {
+            stmts: try_stmts,
+            terminator: Terminator::Goto(2),
+        },
+        BasicBlock {
+            stmts: catch_stmts,
+            terminator: Terminator::Goto(2),
+        },
+        BasicBlock {
+            stmts: Vec::new(),
+            terminator: Terminator::ReturnValue(result_slot),
+        },
+    ];
+
+    let handlers = vec![skotch_mir::ExceptionHandler {
+        try_start_block: 0,
+        try_end_block: 1,
+        handler_block: 1,
+        catch_type,
+    }];
+
+    Some((blocks, extra_locals, handlers))
 }
 
 /// Try to lower a simple `if (cond) then-arm else else-arm` expression
@@ -2638,6 +2799,7 @@ fn lower_simple_body(
     val_lookup: &rustc_hash::FxHashMap<String, Ty>,
     class_lookup: &rustc_hash::FxHashMap<String, Vec<Ty>>,
     wrapper_class: &str,
+    exception_handlers: &mut Vec<skotch_mir::ExceptionHandler>,
 ) -> (Vec<BasicBlock>, Vec<Ty>) {
     use skotch_ast::KtExpr;
     use skotch_mir::{LocalId, MirConst};
@@ -3165,6 +3327,15 @@ fn lower_simple_body(
     if let KtExpr::If(if_e) = &body_expr {
         if let Some(blocks_and_locals) = try_lower_if_expression(if_e, f, strings, fn_lookup) {
             return blocks_and_locals;
+        }
+    }
+
+    // try { ... } catch (e: Exception) { ... } body. Emits a 3-block
+    // CFG + populates exception_handlers.
+    if let KtExpr::Try(t) = &body_expr {
+        if let Some((blocks, locals, handlers)) = try_lower_try_expression(t, f, strings) {
+            exception_handlers.extend(handlers);
+            return (blocks, locals);
         }
     }
 
@@ -5802,6 +5973,32 @@ mod tests {
                 _ => panic!("expected CheckCast"),
             },
         }
+    }
+
+    #[test]
+    fn typed_lower_fn_returns_try_catch() {
+        // `fun parse(): Int = try { 1 } catch (e: Exception) { 0 }`
+        // 3-block CFG + 1 exception_handler entry.
+        let module = lower(
+            "fun parse(): Int = try { 1 } catch (e: Exception) { 0 }",
+            "TestKt",
+        );
+        let f = module
+            .functions
+            .iter()
+            .find(|f| f.name == "parse")
+            .unwrap();
+        assert_eq!(f.blocks.len(), 3);
+        assert_eq!(f.exception_handlers.len(), 1);
+        let handler = &f.exception_handlers[0];
+        assert_eq!(handler.try_start_block, 0);
+        assert_eq!(handler.try_end_block, 1);
+        assert_eq!(handler.handler_block, 1);
+        assert_eq!(
+            handler.catch_type.as_deref(),
+            Some("java/lang/Exception"),
+            "Exception → java/lang/Exception JVM internal name"
+        );
     }
 
     #[test]
