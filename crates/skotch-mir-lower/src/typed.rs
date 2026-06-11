@@ -2293,41 +2293,169 @@ fn try_lower_multi_stmt_block_with_offset(
                     }
                 }
             }
-            // Try binary op on refs/literals.
+            // Try binary op on refs/literals/nested-binary. Picks
+            // ConcatStr when either operand reaches a String literal
+            // or String-typed local/val.
             if let KtExpr::Binary(b) = &init {
                 let op_text = b.operation().map(|o| o.text()).unwrap_or_default();
-                let mir_op = match op_text.as_str() {
-                    "+" => Some(skotch_mir::BinOp::AddI),
-                    "-" => Some(skotch_mir::BinOp::SubI),
-                    "*" => Some(skotch_mir::BinOp::MulI),
-                    "/" => Some(skotch_mir::BinOp::DivI),
-                    "%" => Some(skotch_mir::BinOp::ModI),
-                    "==" => Some(skotch_mir::BinOp::CmpEq),
-                    "!=" => Some(skotch_mir::BinOp::CmpNe),
-                    "<" => Some(skotch_mir::BinOp::CmpLt),
-                    ">" => Some(skotch_mir::BinOp::CmpGt),
-                    "<=" => Some(skotch_mir::BinOp::CmpLe),
-                    ">=" => Some(skotch_mir::BinOp::CmpGe),
-                    _ => None,
+                // Compute whether this is a String-concat case by
+                // walking the binary tree looking for a String operand.
+                fn operand_reaches_string<'a>(
+                    e: KtExpr<'a>,
+                    name_to_local: &[(String, LocalId)],
+                    local_tys: &[Ty],
+                    val_lookup: &rustc_hash::FxHashMap<String, Ty>,
+                ) -> bool {
+                    match unwrap_parens(e) {
+                        KtExpr::String(_) => true,
+                        KtExpr::Reference(rr) => {
+                            let Some(n) = rr.name() else { return false };
+                            if let Some((_, slot)) = name_to_local
+                                .iter()
+                                .rev()
+                                .find(|(name, _)| name == n)
+                            {
+                                // best-effort: peek local type at that slot.
+                                if let Some(ty) = local_tys.get(slot.0 as usize) {
+                                    return matches!(ty, Ty::String);
+                                }
+                                return false;
+                            }
+                            matches!(val_lookup.get(n), Some(Ty::String))
+                        }
+                        KtExpr::Binary(b) => {
+                            b.lhs()
+                                .is_some_and(|l| operand_reaches_string(l, name_to_local, local_tys, val_lookup))
+                                || b.rhs()
+                                    .is_some_and(|r| operand_reaches_string(r, name_to_local, local_tys, val_lookup))
+                        }
+                        _ => false,
+                    }
+                }
+                let is_str_concat = op_text == "+"
+                    && (b
+                        .lhs()
+                        .is_some_and(|l| operand_reaches_string(l, &name_to_local, &local_tys, val_lookup))
+                        || b
+                            .rhs()
+                            .is_some_and(|r| operand_reaches_string(r, &name_to_local, &local_tys, val_lookup)));
+                let mir_op = if is_str_concat {
+                    Some(skotch_mir::BinOp::ConcatStr)
+                } else {
+                    match op_text.as_str() {
+                        "+" => Some(skotch_mir::BinOp::AddI),
+                        "-" => Some(skotch_mir::BinOp::SubI),
+                        "*" => Some(skotch_mir::BinOp::MulI),
+                        "/" => Some(skotch_mir::BinOp::DivI),
+                        "%" => Some(skotch_mir::BinOp::ModI),
+                        "==" => Some(skotch_mir::BinOp::CmpEq),
+                        "!=" => Some(skotch_mir::BinOp::CmpNe),
+                        "<" => Some(skotch_mir::BinOp::CmpLt),
+                        ">" => Some(skotch_mir::BinOp::CmpGt),
+                        "<=" => Some(skotch_mir::BinOp::CmpLe),
+                        ">=" => Some(skotch_mir::BinOp::CmpGe),
+                        _ => None,
+                    }
                 };
                 if let Some(op) = mir_op {
-                    // Resolve operand to a slot. Reference → existing
-                    // local; literal → materialize Const into a new slot.
-                    let resolve = |e: KtExpr<'_>,
-                                       name_to_local: &mut Vec<(String, LocalId)>,
-                                       next_slot: &mut u32,
-                                       local_tys: &mut Vec<Ty>,
-                                       stmts: &mut Vec<MStmt>,
-                                       strings: &mut Vec<String>|
-                     -> Option<LocalId> {
+                    // Recursive operand resolver: Reference (local +
+                    // top-level val), Binary (nested), or literal.
+                    fn resolve_init_arg(
+                        e: KtExpr<'_>,
+                        name_to_local: &[(String, LocalId)],
+                        val_lookup: &rustc_hash::FxHashMap<String, Ty>,
+                        wrapper_class: &str,
+                        next_slot: &mut u32,
+                        local_tys: &mut Vec<Ty>,
+                        stmts: &mut Vec<MStmt>,
+                        strings: &mut Vec<String>,
+                    ) -> Option<LocalId> {
                         match unwrap_parens(e) {
                             KtExpr::Reference(rr) => {
                                 let n = rr.name()?;
-                                name_to_local
+                                if let Some(slot) = name_to_local
                                     .iter()
                                     .rev()
                                     .find(|(name, _)| name == n)
                                     .map(|(_, l)| *l)
+                                {
+                                    return Some(slot);
+                                }
+                                if let Some(val_ty) = val_lookup.get(n) {
+                                    let slot = LocalId(*next_slot);
+                                    *next_slot += 1;
+                                    local_tys.push(val_ty.clone());
+                                    stmts.push(MStmt::Assign {
+                                        dest: slot,
+                                        value: skotch_mir::Rvalue::GetStaticField {
+                                            class_name: wrapper_class.to_string(),
+                                            field_name: n.to_string(),
+                                            descriptor: ty_to_descriptor(val_ty),
+                                        },
+                                    });
+                                    return Some(slot);
+                                }
+                                None
+                            }
+                            KtExpr::Binary(inner_b) => {
+                                let inner_op =
+                                    inner_b.operation().map(|o| o.text()).unwrap_or_default();
+                                // Determine inner op type: ConcatStr if any operand is String.
+                                let inner_is_str = inner_op == "+"
+                                    && (inner_b.lhs().is_some_and(|l| {
+                                        matches!(unwrap_parens(l), KtExpr::String(_))
+                                    }) || inner_b.rhs().is_some_and(|r| {
+                                        matches!(unwrap_parens(r), KtExpr::String(_))
+                                    }));
+                                let inner_mir = if inner_is_str {
+                                    Some(skotch_mir::BinOp::ConcatStr)
+                                } else {
+                                    match inner_op.as_str() {
+                                        "+" => Some(skotch_mir::BinOp::AddI),
+                                        "-" => Some(skotch_mir::BinOp::SubI),
+                                        "*" => Some(skotch_mir::BinOp::MulI),
+                                        "/" => Some(skotch_mir::BinOp::DivI),
+                                        "%" => Some(skotch_mir::BinOp::ModI),
+                                        _ => None,
+                                    }
+                                }?;
+                                let lhs = resolve_init_arg(
+                                    inner_b.lhs()?,
+                                    name_to_local,
+                                    val_lookup,
+                                    wrapper_class,
+                                    next_slot,
+                                    local_tys,
+                                    stmts,
+                                    strings,
+                                )?;
+                                let rhs = resolve_init_arg(
+                                    inner_b.rhs()?,
+                                    name_to_local,
+                                    val_lookup,
+                                    wrapper_class,
+                                    next_slot,
+                                    local_tys,
+                                    stmts,
+                                    strings,
+                                )?;
+                                let slot = LocalId(*next_slot);
+                                *next_slot += 1;
+                                local_tys.push(if matches!(inner_mir, skotch_mir::BinOp::ConcatStr)
+                                {
+                                    Ty::String
+                                } else {
+                                    Ty::Int
+                                });
+                                stmts.push(MStmt::Assign {
+                                    dest: slot,
+                                    value: skotch_mir::Rvalue::BinOp {
+                                        op: inner_mir,
+                                        lhs,
+                                        rhs,
+                                    },
+                                });
+                                Some(slot)
                             }
                             other => {
                                 let (k, ty) = literal_to_const(&other, strings)?;
@@ -2341,18 +2469,22 @@ fn try_lower_multi_stmt_block_with_offset(
                                 Some(slot)
                             }
                         }
-                    };
-                    let lhs = resolve(
+                    }
+                    let lhs = resolve_init_arg(
                         b.lhs()?,
-                        &mut name_to_local,
+                        &name_to_local,
+                        val_lookup,
+                        wrapper_class,
                         &mut next_slot,
                         &mut local_tys,
                         &mut stmts,
                         strings,
                     )?;
-                    let rhs = resolve(
+                    let rhs = resolve_init_arg(
                         b.rhs()?,
-                        &mut name_to_local,
+                        &name_to_local,
+                        val_lookup,
+                        wrapper_class,
                         &mut next_slot,
                         &mut local_tys,
                         &mut stmts,
@@ -2369,7 +2501,14 @@ fn try_lower_multi_stmt_block_with_offset(
                             | skotch_mir::BinOp::CmpLe
                             | skotch_mir::BinOp::CmpGe
                     );
-                    local_tys.push(if is_cmp { Ty::Bool } else { Ty::Int });
+                    let result_ty = if is_cmp {
+                        Ty::Bool
+                    } else if matches!(op, skotch_mir::BinOp::ConcatStr) {
+                        Ty::String
+                    } else {
+                        Ty::Int
+                    };
+                    local_tys.push(result_ty);
                     stmts.push(MStmt::Assign {
                         dest: slot,
                         value: skotch_mir::Rvalue::BinOp { op, lhs, rhs },
