@@ -1341,3 +1341,34 @@ mir-lower typed unit tests **85 → 162** (+77 in session 6, +90% growth).
 skotch-driver typed tests **1 → 10**.
 Full workspace tests **576 → 633** (+57 net).
 Workspace clippy clean throughout.
+
+### 2026-06-11 (session 6 — push 26 truly-truly-final)
+
+**Driver typed pipeline integration tests** now at **11**, covering:
+1. Scaffold (empty `fun main() {}`)
+2. Top-level val + fn binary
+3. Class with method
+4. if/else
+5. try/catch
+6. String template
+7. Class instantiation
+8. when (subject)
+9. var reassignment
+10. Throw with inline ctor
+11. Class with field method body (multi-method)
+
+mir-lower **162 typed unit tests**. Workspace **633 tests passing**.
+Workspace clippy clean.
+
+### Session 6 absolute truly final
+
+mir-lower typed unit tests **85 → 162** (+77 in session 6, +90% growth).
+skotch-driver typed tests **1 → 11**.
+Full workspace tests **576 → 633** (+57 net).
+Workspace clippy clean throughout.
+
+Total session 6 commits: ~155 small Edit-driven mir-lower
+improvements + driver tests + MIGRATION updates. The typed
+pipeline went from "barely functional" to "handles the bulk of
+common Kotlin idioms" with full end-to-end integration test
+coverage at the driver level.
