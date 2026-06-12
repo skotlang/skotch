@@ -3793,9 +3793,10 @@ fn try_lower_multi_stmt_block_with_offset(
                                                 .find(|(name, _)| name == n)
                                                 .map(|(_, l)| *l)
                                         };
-                                        lower_inline_expr_to_slot(
+                                        lower_rich_expr_to_slot(
                                             *other,
                                             &lookup,
+                                            fn_lookup_ref,
                                             next_slot,
                                             &mut body_mstmts,
                                             local_tys,
