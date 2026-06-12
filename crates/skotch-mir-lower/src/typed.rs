@@ -10397,6 +10397,10 @@ fn method_simple_body_full(
                            strings: &mut Vec<String>|
              -> Option<skotch_mir::LocalId> {
                 let e = unwrap_parens(e);
+                // `this` reference → slot 0.
+                if let KtExpr::This(_) = &e {
+                    return Some(skotch_mir::LocalId(0));
+                }
                 match e {
                     KtExpr::Reference(rr) => {
                         let n = rr.name()?;
@@ -10436,6 +10440,17 @@ fn method_simple_body_full(
                             return Some(slot);
                         }
                         None
+                    }
+                    KtExpr::Binary(_) => {
+                        // Nested binary: use generic inline lowerer.
+                        let param_names_owned: Vec<String> = param_names.to_vec();
+                        let lookup = |n: &str| -> Option<skotch_mir::LocalId> {
+                            param_names_owned
+                                .iter()
+                                .position(|p| p == n)
+                                .map(|i| skotch_mir::LocalId((1 + i) as u32))
+                        };
+                        lower_inline_expr_to_slot(e, &lookup, next_slot, pre, locals, strings)
                     }
                     other => {
                         let (k, ty) = literal_to_const(&other, strings)?;
