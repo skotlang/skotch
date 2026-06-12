@@ -3608,6 +3608,93 @@ fn try_lower_multi_stmt_block_with_offset(
                             name_to_local.push((pname.to_string(), slot));
                             continue;
                         }
+                        // DotQualified RHS: `val y = i.squared()` (extension
+                        // fn invocation).
+                        if let KtExpr::DotQualified(dq) = &init {
+                            let exprs: Vec<KtExpr<'_>> = skotch_ast::children(dq.syntax())
+                                .iter()
+                                .filter_map(KtExpr::cast)
+                                .collect();
+                            if exprs.len() == 2 {
+                                if let (KtExpr::Reference(recv_ref), KtExpr::Call(call)) =
+                                    (&exprs[0], &exprs[1])
+                                {
+                                    let method_n = match call.callee() {
+                                        Some(KtExpr::Reference(r)) => r.name(),
+                                        _ => None,
+                                    };
+                                    if let (Some(recv_n), Some(method_n)) =
+                                        (recv_ref.name(), method_n)
+                                    {
+                                        if let Some(recv_slot) = name_to_local
+                                            .iter()
+                                            .rev()
+                                            .find(|(n, _)| n == recv_n)
+                                            .map(|(_, l)| *l)
+                                        {
+                                            if let Some((fid, ret_ty)) =
+                                                fn_lookup_ref.get(method_n)
+                                            {
+                                                let mut arg_slots: Vec<LocalId> =
+                                                    vec![recv_slot];
+                                                let mut ok = true;
+                                                if let Some(arg_list) =
+                                                    call.value_argument_list()
+                                                {
+                                                    for arg in arg_list.arguments() {
+                                                        let Some(arg_e) = arg.expression()
+                                                        else {
+                                                            ok = false;
+                                                            break;
+                                                        };
+                                                        let snap = name_to_local.clone();
+                                                        let lookup = |n: &str| -> Option<LocalId> {
+                                                            snap.iter()
+                                                                .rev()
+                                                                .find(|(name, _)| name == n)
+                                                                .map(|(_, l)| *l)
+                                                        };
+                                                        let s = lower_rich_expr_to_slot(
+                                                            arg_e,
+                                                            &lookup,
+                                                            fn_lookup_ref,
+                                                            next_slot,
+                                                            &mut body_mstmts,
+                                                            local_tys,
+                                                            strings,
+                                                        );
+                                                        if let Some(s) = s {
+                                                            arg_slots.push(s);
+                                                        } else {
+                                                            ok = false;
+                                                            break;
+                                                        }
+                                                    }
+                                                }
+                                                if ok {
+                                                    let slot = LocalId(*next_slot);
+                                                    *next_slot += 1;
+                                                    local_tys.push(ret_ty.clone());
+                                                    body_mstmts.push(MStmt::Assign {
+                                                        dest: slot,
+                                                        value: skotch_mir::Rvalue::Call {
+                                                            kind:
+                                                                skotch_mir::CallKind::Static(*fid),
+                                                            args: arg_slots,
+                                                        },
+                                                    });
+                                                    name_to_local.push((
+                                                        pname.to_string(),
+                                                        slot,
+                                                    ));
+                                                    continue;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                         // Binary RHS like `i * 100` (or nested arithmetic).
                         // Routes through lower_inline_expr_to_slot for
                         // recursive Binary handling.
