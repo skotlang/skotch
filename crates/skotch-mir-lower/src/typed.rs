@@ -3629,15 +3629,36 @@ fn try_lower_multi_stmt_block_with_offset(
                                         .map(|(_, l)| *l)?
                                 }
                                 other => {
-                                    let (k, ty) = literal_to_const(other, strings)?;
-                                    let slot = LocalId(*next_slot);
-                                    *next_slot += 1;
-                                    local_tys.push(ty);
-                                    body_mstmts.push(MStmt::Assign {
-                                        dest: slot,
-                                        value: skotch_mir::Rvalue::Const(k),
-                                    });
-                                    slot
+                                    // Try literal first.
+                                    if let Some((k, ty)) =
+                                        literal_to_const(other, strings)
+                                    {
+                                        let slot = LocalId(*next_slot);
+                                        *next_slot += 1;
+                                        local_tys.push(ty);
+                                        body_mstmts.push(MStmt::Assign {
+                                            dest: slot,
+                                            value: skotch_mir::Rvalue::Const(k),
+                                        });
+                                        slot
+                                    } else {
+                                        // Fall back to lower_inline_expr_to_slot.
+                                        let snap = name_to_local.clone();
+                                        let lookup = |n: &str| -> Option<LocalId> {
+                                            snap.iter()
+                                                .rev()
+                                                .find(|(name, _)| name == n)
+                                                .map(|(_, l)| *l)
+                                        };
+                                        lower_inline_expr_to_slot(
+                                            *other,
+                                            &lookup,
+                                            next_slot,
+                                            &mut body_mstmts,
+                                            local_tys,
+                                            strings,
+                                        )?
+                                    }
                                 }
                             };
                             let result_slot = LocalId(*next_slot);
