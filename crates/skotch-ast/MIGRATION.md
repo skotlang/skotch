@@ -1796,3 +1796,37 @@ Four targeted patches:
 Key fixture jumps:
 - 132-nested-loops: 0.000 → 0.875 (graduated from empty)
 - 138-fibonacci-display: 0.000 → progress on main's template interpolation
+
+### 2026-06-12 (session 7 — push 39: architectural — lower_loop_body_blocks for control flow in loop bodies)
+
+The big architectural shift requested by the user — loops bodies can now contain control flow (`break`, `continue`, `if (cmp) break`, `if (cmp) continue`, plain `if`/`if-else`).
+
+**New helper: `lower_loop_body_blocks`**
+- Same signature as `lower_loop_body` plus `block_offset`, `back_edge_target`, `break_target`.
+- Returns `Vec<BasicBlock>` whose IDs start at `block_offset`; all terminators set.
+- Delegates linear-stmt prefixes to `lower_loop_body`; emits its own blocks at control-flow boundaries.
+- Recognizes:
+  - bare `break` / `continue` → `Goto(break_target)` / `Goto(back_edge_target)`
+  - `if (cond) break` / `if (cond) continue` → cond + Branch(jump_target, after_block)
+  - `if (cond) break else continue` → cond + Branch(t_to, e_to)
+  - `if (cond) { stmts }` (no else) → cond + Branch(then, after), then-block + Goto(after)
+  - `if (cond) { stmts } else { stmts }` → cond + Branch(then, else), then/else blocks + Goto(join)
+
+**Caller integration**: for-loop, while-loop, do-while-loop, and nested-for-in-for handlers all gained a `body_has_jumps` (or `inner_has_control` for nested-for) detector that scans the body for any `Break`/`Continue`/`If`. When true, they route through the multi-block path, emitting:
+- a separate step block (so increment / step lives after the body but before the cond, not on every break path)
+- `while (true)` literal now also routed through this path (cond block becomes unconditional `Goto(body_first)`)
+- nested-for inner body uses `step_outer` as `break_target` (Kotlin `break` exits innermost loop)
+
+Sentinel target IDs (`0xfffffffe`, `0xfffffffd`) let the body lowerer emit terminators before the caller knows the final step / exit IDs; the caller remaps them once the body block count is known.
+
+**Push 39 standings:**
+- Fully covered: **212 / 968 (21.9%)**
+- Typed empty: **275 / 968 (28.4%)** (was 283; 8 fewer empty modules)
+- mir-lower typed unit tests: **185 passing**
+
+Key fixture jumps:
+- 139-break: 0.000 → 0.750
+- 140-continue: 0.000 → 0.786
+- 143-while-break-true: 0.000 → 0.462
+- 164-identity-matrix: 0.000 → 0.810
+- 166-collatz-do-while: 0.000 → 0.643
