@@ -10686,19 +10686,40 @@ fn method_simple_body_full(
             .and_then(|e| e.expression())
             .map(unwrap_parens);
         if let (Some(cond), Some(then_e), Some(else_e)) = (cond_expr, then_expr, else_expr) {
-            // Cond shape: Reference (param or field)
+            // Cond shape: Reference (param or field), or Binary cmp, or
+            // Prefix-! — routed through lower_inline_expr_to_slot which
+            // already handles all three.
             let mut pre0_stmts: Vec<skotch_mir::Stmt> = Vec::new();
             let mut extra_locals: Vec<Ty> = Vec::new();
             let mut next_slot = (1 + param_count) as u32;
-            let cond_slot: Option<skotch_mir::LocalId> = match cond {
-                KtExpr::Reference(r) => {
-                    let Some(n) = r.name() else {
-                        return make_placeholder();
+            let cond_slot: Option<skotch_mir::LocalId> = {
+                let param_names_owned: Vec<String> = param_names.to_vec();
+                let class_name_owned = class_name.map(String::from);
+                let field_names_owned: Vec<(String, Ty)> = field_names.to_vec();
+                let lookup = |n: &str| -> Option<skotch_mir::LocalId> {
+                    param_names_owned
+                        .iter()
+                        .position(|p| p == n)
+                        .map(|i| skotch_mir::LocalId((1 + i) as u32))
+                };
+                let inline_slot = lower_inline_expr_to_slot(
+                    cond,
+                    &lookup,
+                    &mut next_slot,
+                    &mut pre0_stmts,
+                    &mut extra_locals,
+                    strings,
+                );
+                if inline_slot.is_some() {
+                    inline_slot
+                } else if let KtExpr::Reference(r) = cond {
+                    // Fallback: implicit-this field bool.
+                    let n = match r.name() {
+                        Some(s) => s,
+                        None => return make_placeholder(),
                     };
-                    if let Some(idx) = param_names.iter().position(|p| p == n) {
-                        Some(skotch_mir::LocalId((1 + idx) as u32))
-                    } else if let (Some(cname), Some((fname, fty))) =
-                        (class_name, field_names.iter().find(|(n2, _)| n2 == n))
+                    if let (Some(cname), Some((fname, fty))) =
+                        (class_name_owned.as_deref(), field_names_owned.iter().find(|(n2, _)| n2 == n))
                     {
                         let slot = skotch_mir::LocalId(next_slot);
                         next_slot += 1;
@@ -10715,8 +10736,9 @@ fn method_simple_body_full(
                     } else {
                         None
                     }
+                } else {
+                    None
                 }
-                _ => None,
             };
             if let Some(cond_slot) = cond_slot {
                 let result_slot = skotch_mir::LocalId(next_slot);
@@ -10729,21 +10751,28 @@ fn method_simple_body_full(
                                    strings: &mut Vec<String>|
                  -> Option<skotch_mir::LocalId> {
                     let e = unwrap_parens(e);
-                    if let Some((k, ty)) = literal_to_const(&e, strings) {
-                        let slot = skotch_mir::LocalId(*next_slot);
-                        *next_slot += 1;
-                        extra_locals.push(ty);
-                        stmts.push(skotch_mir::Stmt::Assign {
-                            dest: slot,
-                            value: skotch_mir::Rvalue::Const(k),
-                        });
+                    let param_names_owned: Vec<String> = param_names.to_vec();
+                    let lookup = |n: &str| -> Option<skotch_mir::LocalId> {
+                        param_names_owned
+                            .iter()
+                            .position(|p| p == n)
+                            .map(|i| skotch_mir::LocalId((1 + i) as u32))
+                    };
+                    // First try generic inline expr lowering (literal /
+                    // Reference / Binary / Prefix / This).
+                    if let Some(slot) = lower_inline_expr_to_slot(
+                        e,
+                        &lookup,
+                        next_slot,
+                        stmts,
+                        extra_locals,
+                        strings,
+                    ) {
                         return Some(slot);
                     }
+                    // Fallback: implicit-this field.
                     if let KtExpr::Reference(r) = e {
                         let n = r.name()?;
-                        if let Some(idx) = param_names.iter().position(|p| p == n) {
-                            return Some(skotch_mir::LocalId((1 + idx) as u32));
-                        }
                         if let (Some(cname), Some((fname, fty))) =
                             (class_name, field_names.iter().find(|(n2, _)| n2 == n))
                         {
