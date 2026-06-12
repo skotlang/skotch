@@ -28,6 +28,10 @@ skotch-resolve      = { workspace = true }
 skotch-backend-jvm  = { workspace = true }
 skotch-compose      = { workspace = true }
 skotch-mir-lower    = { workspace = true }
+skotch-apksig       = { workspace = true }
+skotch-aapt2        = { workspace = true }
 clap                = { workspace = true }
 anyhow              = { workspace = true }
 tokio               = { workspace = true }
+sha1                = { workspace = true }
+sha2                = { workspace = true }

@@ -436,9 +436,11 @@ fn build_android(
     skotch_apk::write_unsigned_apk(&unsigned_path, &contents)
         .with_context(|| format!("writing {}", unsigned_path.display()))?;
 
-    // 6. Sign the APK (debug signing with v2 scheme).
+    // 6. Sign the APK in-process with the debug keystore (v1+v2+v3). No
+    //    external `apksigner` invocation — `skotch-apksig` does the signing.
     let signed_path = build_dir.join("app-debug.apk");
-    skotch_sign::sign_apk_debug(&unsigned_path, &signed_path).with_context(|| "signing APK")?;
+    skotch_apksig::debug::sign_debug_apk_file(&unsigned_path, &signed_path)
+        .with_context(|| "signing APK")?;
 
     eprintln!("BUILD SUCCESS: {}", signed_path.display());
 
@@ -3670,9 +3672,9 @@ fn build_multi_module(
         };
         let apk_path = build_dir.join("app-debug.apk");
         skotch_apk::write_unsigned_apk(&apk_path, &contents)?;
-        // Sign the APK.
+        // Sign the APK in-process with the debug keystore (no external tool).
         let signed_path = build_dir.join("app-debug-signed.apk");
-        skotch_sign::sign_apk_debug(&apk_path, &signed_path)?;
+        skotch_apksig::debug::sign_debug_apk_file(&apk_path, &signed_path)?;
 
         eprintln!("BUILD SUCCESS: {}", signed_path.display());
 

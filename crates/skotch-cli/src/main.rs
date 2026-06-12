@@ -13,6 +13,7 @@
 //! via a symlink), the corresponding subcommand is injected automatically.
 //! See `multicall.rs` for the alias table.
 
+mod apksigner;
 mod kotlinc;
 mod multicall;
 
@@ -179,6 +180,43 @@ enum Command {
         #[arg(value_name = "KOTLINC_ARGS")]
         args: Vec<String>,
     },
+    /// apksigner-cli emulation: sign and verify Android APKs.
+    ///
+    /// Reimplements the Android SDK `apksigner` tool (`sign`, `verify`,
+    /// `rotate`, `lineage`, `version`) on top of `skotch-apksig`. Run
+    /// `skotch apksigner --help` for the full option list.
+    #[command(
+        allow_hyphen_values = true,
+        trailing_var_arg = true,
+        disable_help_flag = true,
+    )]
+    Apksigner {
+        /// apksigner-style arguments — see `skotch apksigner --help`.
+        #[arg(value_name = "APKSIGNER_ARGS")]
+        args: Vec<String>,
+    },
+    /// aapt2-cli emulation: compile, link, dump, diff, optimize, and
+    /// convert Android resources.
+    ///
+    /// Native reimplementation of the Android SDK `aapt2` tool — no SDK
+    /// install required. Examples:
+    ///
+    ///   skotch aapt2 compile --dir res -o compiled.zip
+    ///   skotch aapt2 link -o app.apk --manifest AndroidManifest.xml \
+    ///       -I android.jar compiled.zip --java gen/
+    ///   skotch aapt2 dump badging app.apk
+    #[command(
+        allow_hyphen_values = true,
+        trailing_var_arg = true,
+        disable_help_flag = true,
+    )]
+    Aapt2 {
+        /// aapt2-style arguments: a subcommand (compile, link, dump,
+        /// diff, optimize, convert, version, daemon) followed by its
+        /// flags.
+        #[arg(value_name = "AAPT2_ARGS")]
+        args: Vec<String>,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -235,6 +273,8 @@ fn main() -> Result<()> {
                     | "bsp"
                     | "init"
                     | "kotlinc"
+                    | "apksigner"
+                    | "aapt2"
                     | "sil"
                     | "help"
             )
@@ -393,6 +433,15 @@ fn main() -> Result<()> {
         }
         Command::Kotlinc { args } => {
             kotlinc::run(&args)?;
+        }
+        Command::Apksigner { args } => {
+            apksigner::run(&args)?;
+        }
+        Command::Aapt2 { args } => {
+            let code = skotch_aapt2::cli::run(&args);
+            if code != 0 {
+                std::process::exit(code);
+            }
         }
         Command::Sil { cmd } => {
             run_sil(cmd)?;

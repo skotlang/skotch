@@ -21,11 +21,11 @@
 ///   3. Optionally `ln -s skotch <name>` so users can invoke it directly.
 const KNOWN_ALIASES: &[(&str, &str)] = &[
     ("kotlinc", "kotlinc"),
+    ("aapt2", "aapt2"),
     // Reserved for future delegations — these are real Android SDK
     // tools that skotch will eventually shadow. Listed (but commented)
     // so the dispatch table reads as the intended roadmap rather than
     // having to grep around for "what's coming next".
-    // ("aapt2", "aapt2"),
     // ("d8", "d8"),
     // ("apksigner", "apksigner"),
 ];

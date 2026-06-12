@@ -41,8 +41,10 @@ members = [
     # Layer 6 — packaging + build file parsing
     "crates/skotch-jar",
     "crates/skotch-axml",
+    "crates/skotch-aapt2",
     "crates/skotch-apk",
     "crates/skotch-sign",
+    "crates/skotch-apksig",
     "crates/skotch-classinfo",
     "crates/skotch-buildscript",
     "crates/skotch-tape",
@@ -95,6 +97,26 @@ der          = { version = "0.7", features = ["pem"] }
 p256         = { version = "0.13", features = ["ecdsa"] }
 pkcs12       = "0.1"
 signature_crate = { package = "signature", version = "2" }
+
+# skotch-apksig: full apksigner re-implementation (v1/v2/v3/v3.1/v4 schemes).
+# flate2 uses the C zlib backend so deflate output is byte-identical to
+# java.util.zip.Deflater (required for v1 golden-APK parity).
+sha1         = { version = "0.10", features = ["oid"] }
+md-5         = "0.10"
+dsa          = "0.6"
+p384         = { version = "0.13", features = ["ecdsa"] }
+p521         = { version = "0.13", features = ["ecdsa"] }
+ecdsa        = { version = "0.16", features = ["der", "signing", "verifying"] }
+elliptic-curve = "0.13"
+flate2       = { version = "1", default-features = false, features = ["zlib"] }
+aes          = "0.8"
+cbc          = "0.1"
+des          = "0.8"
+rc2          = "0.8"
+hmac         = "0.12"
+pbkdf2       = { version = "0.12", default-features = false }
+spki         = "0.7"
+pkcs1        = "0.7"
 
 # DEX backend (PR #3): Adler32 checksum + SHA-1 signature for the
 # DEX header. Both crates are tiny and dependency-free.
@@ -174,8 +196,10 @@ skotch-llvm-norm       = { path = "crates/skotch-llvm-norm" }
 skotch-classinfo       = { path = "crates/skotch-classinfo" }
 skotch-jar             = { path = "crates/skotch-jar" }
 skotch-axml            = { path = "crates/skotch-axml" }
+skotch-aapt2           = { path = "crates/skotch-aapt2" }
 skotch-apk             = { path = "crates/skotch-apk" }
 skotch-sign            = { path = "crates/skotch-sign" }
+skotch-apksig          = { path = "crates/skotch-apksig" }
 skotch-buildscript     = { path = "crates/skotch-buildscript" }
 skotch-tape            = { path = "crates/skotch-tape" }
 skotch-db              = { path = "crates/skotch-db" }

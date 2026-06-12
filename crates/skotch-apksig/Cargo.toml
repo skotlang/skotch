@@ -1,0 +1,44 @@
+[package]
+name = "skotch-apksig"
+description = "APK signing and verification (JAR/v2/v3/v3.1/v4 schemes), a Rust port of AOSP apksig"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+version.workspace = true
+repository.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+byteorder.workspace = true
+
+# hashing
+sha1.workspace = true
+sha2.workspace = true
+md-5.workspace = true
+
+# signing / key material
+rsa.workspace = true
+dsa.workspace = true
+p256.workspace = true
+p384.workspace = true
+ecdsa.workspace = true
+elliptic-curve.workspace = true
+signature_crate.workspace = true
+pkcs8.workspace = true
+pkcs1.workspace = true
+spki.workspace = true
+x509-cert.workspace = true
+der.workspace = true
+
+# keystore decryption (PKCS#12 PBES1/PBES2, JKS)
+aes.workspace = true
+cbc.workspace = true
+des.workspace = true
+rc2.workspace = true
+hmac.workspace = true
+pbkdf2.workspace = true
+
+# raw DEFLATE identical to java.util.zip.Deflater (zlib backend)
+flate2.workspace = true
+
+[dev-dependencies]
