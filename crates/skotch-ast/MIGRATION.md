@@ -1759,3 +1759,22 @@ resolver:
 - mir-lower typed unit tests: **184**
 
 Per-crate tests + clippy clean.
+
+### 2026-06-12 (session 7 — push 37: nested binary on fields + &&/|| Binary operands)
+
+Two targeted fixes that unblock substantial class/method coverage:
+
+- **Method-body nested Binary on fields**: `fun perimeter(): Int = 2 * (width + height)` previously bailed because the nested Binary case in the body-expr's Binary handler used `lower_inline_expr_to_slot` with a param-name-only lookup. The Reference operands `width` / `height` (implicit-this fields) returned None. Now pre-binds field refs into a synthesized name_to_local snapshot, emitting GetField for each, before the recursive call. Unblocks Rectangle / Point / Counter-style class methods.
+- **`&&`/`||` body-expr accepts Binary cmp operands**: `fun isTeen(age: Int): Boolean = age >= 13 && age < 18` now resolves each operand through lower_inline_expr_to_slot when it's not a bare param Reference. Pre-stmts go in block 0 before the short-circuit Branch.
+
+**Push 37 standings:**
+- Fully covered: **211 / 968 (21.8%)**
+- Typed empty: **288 / 968 (29.8%)**
+- mir-lower typed unit tests: **185**
+
+Key fixture jumps:
+- 175-bool-function: 0.70 → 1.0 (fully covered)
+- 235-class-rectangle: 0.59 → 0.78
+- 234-class-constructor-params: 0.59 → 0.82
+
+Per-crate tests + clippy clean.
