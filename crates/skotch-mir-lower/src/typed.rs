@@ -4566,6 +4566,58 @@ fn try_lower_multi_stmt_block_with_offset(
                                         continue;
                                     }
                                 }
+                                // Extension fn invocation: `i.method(args)`
+                                // where i is a primitive or non-class local
+                                // and method is a top-level extension fn.
+                                if let Some((fid, ret_ty)) =
+                                    fn_lookup.get(method_name)
+                                {
+                                    let mut arg_slots: Vec<LocalId> = vec![recv_slot];
+                                    let mut ok = true;
+                                    if let Some(arg_list) = call.value_argument_list() {
+                                        for arg in arg_list.arguments() {
+                                            let Some(arg_e) = arg.expression() else {
+                                                ok = false;
+                                                break;
+                                            };
+                                            let snap = name_to_local.clone();
+                                            let lookup = |n: &str| -> Option<LocalId> {
+                                                snap.iter()
+                                                    .rev()
+                                                    .find(|(name, _)| name == n)
+                                                    .map(|(_, l)| *l)
+                                            };
+                                            let s = lower_rich_expr_to_slot(
+                                                arg_e,
+                                                &lookup,
+                                                fn_lookup,
+                                                &mut next_slot,
+                                                &mut stmts,
+                                                &mut local_tys,
+                                                strings,
+                                            );
+                                            if let Some(s) = s {
+                                                arg_slots.push(s);
+                                            } else {
+                                                ok = false;
+                                                break;
+                                            }
+                                        }
+                                    }
+                                    if ok {
+                                        let result_slot = LocalId(next_slot);
+                                        next_slot += 1;
+                                        local_tys.push(ret_ty.clone());
+                                        stmts.push(MStmt::Assign {
+                                            dest: result_slot,
+                                            value: skotch_mir::Rvalue::Call {
+                                                kind: skotch_mir::CallKind::Static(*fid),
+                                                args: arg_slots,
+                                            },
+                                        });
+                                        continue;
+                                    }
+                                }
                             }
                         }
                     }
