@@ -12473,6 +12473,56 @@ mod tests {
     }
 
     #[test]
+    fn typed_lower_lambda_param_invocation() {
+        // `fun M(content: () -> Unit) { content() }`
+        // should emit Call(FunctionInvoke{arity: 0}).
+        let module = lower(
+            "fun M(content: () -> Unit) { content() }",
+            "TestKt",
+        );
+        let f = module
+            .functions
+            .iter()
+            .find(|f| f.name == "M")
+            .expect("expected M");
+        let has_invoke = f.blocks.iter().any(|b| {
+            b.stmts.iter().any(|s| {
+                matches!(
+                    s,
+                    skotch_mir::Stmt::Assign {
+                        value: skotch_mir::Rvalue::Call {
+                            kind: skotch_mir::CallKind::FunctionInvoke { arity: 0 },
+                            ..
+                        },
+                        ..
+                    }
+                )
+            })
+        });
+        assert!(has_invoke, "expected Call(FunctionInvoke) in M body");
+    }
+
+    #[test]
+    fn typed_lower_when_subjectless_returns_string_arms() {
+        // `fun classify(x: Int): String = when { x > 10 -> "big"; else -> "small" }`
+        // emits a multi-block when CFG.
+        let module = lower(
+            "fun classify(x: Int): String = when { x > 10 -> \"big\"; else -> \"small\" }",
+            "TestKt",
+        );
+        let f = module
+            .functions
+            .iter()
+            .find(|f| f.name == "classify")
+            .expect("expected classify");
+        assert!(
+            f.blocks.len() >= 3,
+            "expected multi-block when CFG, got {}",
+            f.blocks.len()
+        );
+    }
+
+    #[test]
     fn typed_lower_extension_fn_with_this_binary_body() {
         // `fun Int.isEven(): Boolean = this % 2 == 0` should produce
         // 4 stmts on a single block: Const(2), BinOp(ModI, 0, 1),
