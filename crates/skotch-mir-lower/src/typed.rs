@@ -5114,6 +5114,42 @@ fn try_lower_multi_stmt_block_with_offset(
                     let rhs = b.rhs().map(unwrap_parens);
                     if let (Some(KtExpr::Reference(lref)), Some(rhs_expr)) = (lhs, rhs) {
                         let lname = lref.name()?;
+                        // Implicit-this field PutField: `count = ...` where
+                        // count is a field on the enclosing class (not a
+                        // local). Emits PutField on this (slot 0).
+                        if !name_to_local.iter().any(|(n, _)| n == lname) {
+                            if let (Some(cname), Some((fname, _fty))) = (
+                                class_name,
+                                field_names.iter().find(|(n, _)| n == lname),
+                            ) {
+                                let snap = name_to_local.clone();
+                                let lookup = |n: &str| -> Option<LocalId> {
+                                    snap.iter()
+                                        .rev()
+                                        .find(|(name, _)| name == n)
+                                        .map(|(_, l)| *l)
+                                };
+                                let value_slot = lower_inline_expr_to_slot(
+                                    rhs_expr,
+                                    &lookup,
+                                    &mut next_slot,
+                                    &mut stmts,
+                                    &mut local_tys,
+                                    strings,
+                                )?;
+                                let this_slot = LocalId(0);
+                                stmts.push(MStmt::Assign {
+                                    dest: this_slot,
+                                    value: skotch_mir::Rvalue::PutField {
+                                        receiver: this_slot,
+                                        class_name: cname.to_string(),
+                                        field_name: fname.clone(),
+                                        value: value_slot,
+                                    },
+                                });
+                                continue;
+                            }
+                        }
                         let lhs_slot = name_to_local
                             .iter()
                             .rev()
