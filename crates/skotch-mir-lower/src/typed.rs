@@ -465,20 +465,36 @@ pub fn lower_file(
     for decl in file.decls() {
         if let KtDecl::Fun(f) = decl {
             let name = f.name().unwrap_or("<anon>").to_string();
+            // Extension-fn receiver type, if any. Lowers as the first
+            // hidden param (slot 0).
+            let receiver_type_name: Option<String> = f
+                .receiver_type()
+                .and_then(|tr| tr.user_type())
+                .and_then(|u| u.name())
+                .map(String::from);
+            let receiver_ty: Option<Ty> = receiver_type_name
+                .as_deref()
+                .and_then(skotch_types::ty_from_name);
+            let is_extension = receiver_type_name.is_some();
             // Pull param/return Ty from the TypedFile pass-1 output if
             // the indices line up.
             let typed_fn = typed.functions.iter().find(|tf| tf.name_index == fn_id);
             let return_ty = typed_fn.map(|tf| tf.return_ty.clone()).unwrap_or(Ty::Unit);
-            let param_count = f
+            let user_param_count = f
                 .value_parameter_list()
                 .map(|pl| pl.parameters().count())
                 .unwrap_or(0);
+            let param_count = user_param_count + if is_extension { 1 } else { 0 };
             let params: Vec<skotch_mir::LocalId> = (0..param_count)
                 .map(|i| skotch_mir::LocalId(i as u32))
                 .collect();
-            let param_tys: Vec<Ty> = typed_fn
+            let mut param_tys: Vec<Ty> = typed_fn
                 .map(|tf| tf.param_tys.clone())
-                .unwrap_or_else(|| (0..param_count).map(|_| Ty::Any).collect());
+                .unwrap_or_else(|| (0..user_param_count).map(|_| Ty::Any).collect());
+            if is_extension {
+                // Prepend receiver Ty.
+                param_tys.insert(0, receiver_ty.clone().unwrap_or(Ty::Any));
+            }
             let param_names: Vec<String> = f
                 .value_parameter_list()
                 .map(|pl| {
@@ -487,22 +503,38 @@ pub fn lower_file(
                         .collect()
                 })
                 .unwrap_or_default();
+            let _ = param_names;
             // Body lowering: expression-bodied fns with a literal
             // expression now emit MStmt::Assign + ReturnValue. Block
             // bodies and non-literal expression bodies still emit an
             // empty Return placeholder.
             let wrapper_class = module.wrapper_class.clone();
             let mut exception_handlers: Vec<skotch_mir::ExceptionHandler> = Vec::new();
-            let (blocks, extra_locals) = lower_simple_body(
-                f,
-                &mut module.strings,
-                &fn_lookup,
-                &val_lookup,
-                &class_lookup,
-                &class_fields,
-                &wrapper_class,
-                &mut exception_handlers,
-            );
+            let (blocks, extra_locals) = if is_extension {
+                // Route extension fns through the method body lowerer
+                // so `this` resolves to slot 0 and user params to 1..N.
+                let receiver_class = receiver_type_name.clone().unwrap_or_default();
+                method_simple_body_full(
+                    f,
+                    &mut module.strings,
+                    Some(&receiver_class),
+                    &[],
+                    &fn_lookup,
+                    &val_lookup,
+                    &wrapper_class,
+                )
+            } else {
+                lower_simple_body(
+                    f,
+                    &mut module.strings,
+                    &fn_lookup,
+                    &val_lookup,
+                    &class_lookup,
+                    &class_fields,
+                    &wrapper_class,
+                    &mut exception_handlers,
+                )
+            };
 
             let mut locals = param_tys;
             locals.extend(extra_locals);
