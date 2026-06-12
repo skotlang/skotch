@@ -14219,6 +14219,46 @@ mod tests {
     }
 
     #[test]
+    fn typed_lower_for_loop_with_break() {
+        // `for (i in 1..10) { if (i == 5) break; println(i) }` —
+        // multi-block body lowering via lower_loop_body_blocks.
+        let module = lower(
+            "fun main() {\n    for (i in 1..10) {\n        if (i == 5) { break }\n        println(i)\n    }\n}",
+            "InputKt",
+        );
+        let f = module.functions.iter().find(|f| f.name == "main").unwrap();
+        // Must have at least pre + cond + body cells + step + exit.
+        assert!(f.blocks.len() >= 4, "expected ≥ 4 blocks, got {}", f.blocks.len());
+        // The exit block's terminator is Return.
+        let last = &f.blocks[f.blocks.len() - 1];
+        assert!(matches!(last.terminator, skotch_mir::Terminator::Return));
+    }
+
+    #[test]
+    fn typed_lower_while_true_with_break() {
+        let module = lower(
+            "fun main() {\n    var n = 1\n    while (true) {\n        if (n > 5) { break }\n        println(n)\n        n = n + 1\n    }\n}",
+            "InputKt",
+        );
+        let f = module.functions.iter().find(|f| f.name == "main").unwrap();
+        assert!(f.blocks.len() >= 4);
+    }
+
+    #[test]
+    fn typed_lower_for_loop_with_if_else_assign() {
+        // `for (i in 1..10) { if (i % 2 == 0) sum += i else sum -= i }` —
+        // if-else with non-jump arms inside loop body uses the
+        // IfNonJump path.
+        let module = lower(
+            "fun main() {\n    var sum = 0\n    for (i in 1..10) {\n        if (i % 2 == 0) { sum = sum + i } else { sum = sum - i }\n    }\n    println(sum)\n}",
+            "InputKt",
+        );
+        let f = module.functions.iter().find(|f| f.name == "main").unwrap();
+        // CFG: pre, cond, body-cond+Branch, then, else, join, step, exit
+        assert!(f.blocks.len() >= 6);
+    }
+
+    #[test]
     fn typed_lower_while_cond_with_binary_lhs() {
         // `while (a + b < 100)` — pre-fix the while-cond resolver only
         // accepted Reference/literal, not Binary on the LHS, so this
