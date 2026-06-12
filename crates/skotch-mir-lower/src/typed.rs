@@ -2494,6 +2494,25 @@ fn try_lower_multi_stmt_block_with_offset(
                 .collect()
         })
         .unwrap_or_default();
+    // Names of function-typed params (used for lambda invocation
+    // detection inside loop bodies — fn_lookup doesn't know them).
+    let function_param_names: Vec<String> = f
+        .value_parameter_list()
+        .map(|pl| {
+            pl.parameters()
+                .filter_map(|p| {
+                    if p.type_reference()
+                        .map(|tr| tr.function_type().is_some())
+                        .unwrap_or(false)
+                    {
+                        Some(p.name().unwrap_or("").to_string())
+                    } else {
+                        None
+                    }
+                })
+                .collect()
+        })
+        .unwrap_or_default();
     let mut name_to_local: Vec<(String, LocalId)> = param_names
         .iter()
         .enumerate()
@@ -3422,6 +3441,7 @@ fn try_lower_multi_stmt_block_with_offset(
                 local_tys: &mut Vec<Ty>,
                 strings: &mut Vec<String>,
                 fn_lookup_ref: &rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)>,
+                function_param_names: &[String],
             ) -> Option<Vec<MStmt>> {
                 let mut body_mstmts: Vec<MStmt> = Vec::new();
                 for bn in body_children {
@@ -3827,6 +3847,89 @@ fn try_lower_multi_stmt_block_with_offset(
                                             },
                                         });
                                         continue;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    // Lambda/function-typed param invocation:
+                    // `content()` inside a loop body.
+                    if let KtExpr::Call(call) = be {
+                        if let Some(KtExpr::Reference(rc)) = call.callee() {
+                            if let Some(callee_n) = rc.name() {
+                                if function_param_names.iter().any(|n| n == callee_n) {
+                                    if let Some(slot) = name_to_local
+                                        .iter()
+                                        .rev()
+                                        .find(|(n, _)| n == callee_n)
+                                        .map(|(_, l)| *l)
+                                    {
+                                        let arity = call
+                                            .value_argument_list()
+                                            .map(|al| al.arguments().count())
+                                            .unwrap_or(0)
+                                            as u8;
+                                        let mut invoke_args: Vec<LocalId> = vec![slot];
+                                        let mut ok = true;
+                                        if let Some(arg_list) = call.value_argument_list() {
+                                            for arg in arg_list.arguments() {
+                                                let Some(arg_e) = arg.expression() else {
+                                                    ok = false;
+                                                    break;
+                                                };
+                                                match unwrap_parens(arg_e) {
+                                                    KtExpr::Reference(rr) => {
+                                                        let Some(an) = rr.name() else {
+                                                            ok = false;
+                                                            break;
+                                                        };
+                                                        if let Some(s) = name_to_local
+                                                            .iter()
+                                                            .rev()
+                                                            .find(|(n, _)| n == an)
+                                                            .map(|(_, l)| *l)
+                                                        {
+                                                            invoke_args.push(s);
+                                                        } else {
+                                                            ok = false;
+                                                            break;
+                                                        }
+                                                    }
+                                                    other => {
+                                                        let Some((k, ty)) =
+                                                            literal_to_const(&other, strings)
+                                                        else {
+                                                            ok = false;
+                                                            break;
+                                                        };
+                                                        let s = LocalId(*next_slot);
+                                                        *next_slot += 1;
+                                                        local_tys.push(ty);
+                                                        body_mstmts.push(MStmt::Assign {
+                                                            dest: s,
+                                                            value: skotch_mir::Rvalue::Const(k),
+                                                        });
+                                                        invoke_args.push(s);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        if ok {
+                                            let result_slot = LocalId(*next_slot);
+                                            *next_slot += 1;
+                                            local_tys.push(Ty::Any);
+                                            body_mstmts.push(MStmt::Assign {
+                                                dest: result_slot,
+                                                value: skotch_mir::Rvalue::Call {
+                                                    kind:
+                                                        skotch_mir::CallKind::FunctionInvoke {
+                                                            arity,
+                                                        },
+                                                    args: invoke_args,
+                                                },
+                                            });
+                                            continue;
+                                        }
                                     }
                                 }
                             }
@@ -4401,6 +4504,7 @@ fn try_lower_multi_stmt_block_with_offset(
                     &mut local_tys,
                     strings,
                     fn_lookup,
+                    &function_param_names,
                 )?;
                 // Trailing-return splitting (same shape as for-in).
                 let before_ret: Vec<&skotch_sil::SilNode> = {
@@ -4429,6 +4533,7 @@ fn try_lower_multi_stmt_block_with_offset(
                         &mut local_tys,
                         strings,
                         fn_lookup,
+                        &function_param_names,
                     )?
                 };
                 let mut trailing_return_slot: Option<LocalId> = None;
@@ -4592,6 +4697,7 @@ fn try_lower_multi_stmt_block_with_offset(
                     &mut local_tys,
                     strings,
                     fn_lookup,
+                    &function_param_names,
                 )?;
                 // Trailing-return splitting (same shape as for-in).
                 let before_ret: Vec<&skotch_sil::SilNode> = {
@@ -4620,6 +4726,7 @@ fn try_lower_multi_stmt_block_with_offset(
                         &mut local_tys,
                         strings,
                         fn_lookup,
+                        &function_param_names,
                     )?
                 };
                 let mut trailing_return_slot: Option<LocalId> = None;
@@ -4770,6 +4877,7 @@ fn try_lower_multi_stmt_block_with_offset(
                     &mut local_tys,
                     strings,
                     fn_lookup,
+                    &function_param_names,
                 )?;
                 // i = i + 1 at end of body.
                 let one_slot = LocalId(next_slot);
@@ -4853,6 +4961,7 @@ fn try_lower_multi_stmt_block_with_offset(
                         &mut local_tys,
                         strings,
                         fn_lookup,
+                        &function_param_names,
                     )?
                 };
                 // Detect again whether there was a trailing return, and
@@ -5073,6 +5182,7 @@ fn try_lower_multi_stmt_block_with_offset(
                             &mut local_tys,
                             strings,
                             fn_lookup,
+                            &function_param_names,
                         )?
                     };
                     let arm_return_slot: Option<LocalId> = if let Some(re) = ret_expr_inner {
@@ -5106,6 +5216,7 @@ fn try_lower_multi_stmt_block_with_offset(
                         &mut local_tys,
                         strings,
                         fn_lookup,
+                        &function_param_names,
                     )?),
                     None => None,
                 };
@@ -5151,6 +5262,7 @@ fn try_lower_multi_stmt_block_with_offset(
                             &mut local_tys,
                             strings,
                             fn_lookup,
+                            &function_param_names,
                         )?
                     };
                     let mut trailing_return_slot: Option<LocalId> = None;
@@ -5303,6 +5415,7 @@ fn try_lower_multi_stmt_block_with_offset(
                         &mut local_tys,
                         strings,
                         fn_lookup,
+                        &function_param_names,
                     )?
                 };
                 let mut trailing_return_slot: Option<LocalId> = None;
