@@ -1883,6 +1883,52 @@ Updated `body_has_jumps` detection in for/while/do-while handlers to also trigge
 Key fixture jump:
 - 210-prime-factors: 0.000 → 0.500 (nested `while (n % d == 0)` inside outer `while (n > 1)`)
 
+### 2026-06-12 (session 7 — pushes 46-55: builder + extensions)
+
+This burst delivered the architectural refactor previously deferred plus a
+large batch of shape extensions guided by parallel-agent fixture analysis.
+
+**Architectural changes:**
+- Push 46: lifted `lower_loop_body` and `lower_loop_body_blocks` from nested
+  fns inside `try_lower_multi_stmt_block_with_offset` to module scope (2100+
+  LOC relocation, no behavior change).
+- Push 47: added module-scope `try_lower_function_body_via_blocks` builder
+  that lowers the entire function body via `lower_loop_body_blocks` with
+  final-return wrapping; hooked into `try_lower_multi_stmt_block_inner` as a
+  fallback when the legacy walker returns None. **Single biggest graduation
+  trigger of the session: +8 fully covered in one push.**
+
+**Shape extensions:**
+- Push 48: `Special::PropertyWithWhenInit` — `val x = when (subj) { lit -> e; … }`,
+  both with-subject and subject-less forms; subject is lowered via rich expr.
+- Push 49: zero-arg `println()` / `print()` in loop bodies (previously bailed).
+- Push 50: `Special::WhenStmt` — when-as-stmt (result discarded), arms run
+  body + Goto join.
+- Push 51: `Receiver.toString()` lowers to `Integer.toString(I)String` etc.
+  Defaults to Int for Reference receivers (most common case); explicit
+  Float→Double / Bool→Boolean for typed literals.
+- Push 52: Java static call dispatcher for Math/Integer/Long/Double/System
+  builtins — `Math.{abs,max,min,sqrt,pow,floor,ceil,round,exp,log,sin,cos,random}`,
+  `Integer.parseInt`, `Long.parseLong`, `Integer/Long/Double.toString(prim)`,
+  `System.{currentTimeMillis,nanoTime,getProperty,lineSeparator}`.
+- Push 53: String instance methods via VirtualJava — `uppercase`, `lowercase`,
+  `isEmpty`, `isNotEmpty`, `isBlank`, `trim` (all no-arg).
+- Push 54: String `.length` property access via VirtualJava.
+- Push 55: ctor call heuristic — capitalized callee not in fn_lookup emits
+  `NewInstance` + `Constructor`. Filters out builtin namespaces.
+
+**Pushes 46-55 standings:**
+- Fully covered: **230 / 968 (23.8%)** (was 212 at start of burst — **+18**)
+- Typed empty: **248 / 968 (25.6%)** (was 274 at start — **−26 empty modules**)
+- mir-lower typed unit tests: **188 passing**
+
+**Fixtures graduated to 1.000 byte-parity in this burst:**
+142-extension-int, 149-extension-chain, 153-multiline-if-result, 198-negative-when,
+209-ext-conversion, 212-deep-nesting, 223-euclidean-dist, 228-math-interop,
+231-import-statement, 232-system-getproperty, 241-jdk-class-lookup,
+25-extension-function, 275-string-length, 276-int-tostring, 283-double-to-string,
+73-extension-function-basic, 1214-java-getter-property, 1292-char-stringbuilder-append.
+
 ### 2026-06-12 (session 7 — push 43: top-level if-handler exit supports control-flow trailing)
 
 The single-arm if-handler in `try_lower_multi_stmt_block_with_offset` builds a 3- or 4-block CFG with a single join block for trailing children. When the trailing has `while`/`for`/`return`, the `lower_loop_body` call inside join used to fail and the entire function became a placeholder.
