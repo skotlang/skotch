@@ -1648,3 +1648,35 @@ en masse.
 
 Workspace tests + clippy clean (1 minor explicit-counter-loop
 warning remains in the if-chain CFG construction).
+
+### 2026-06-12 (session 7 — push 33: rich-arg lowering across the walker)
+
+Multiple call sites that previously only accepted Reference + literal
+args now flow through `lower_rich_expr_to_slot` (Reference / literal /
+Binary / Prefix / Call / `this`). Affects:
+
+- stmt-level top-level fn call args
+- val-init static-call args
+- var-reassign Call RHS args
+- lower_loop_body's println / fn-call args
+- body-expr static-call args
+
+Also extended:
+
+- **when expression body arms** accept Binary / Prefix / nested
+  arithmetic via lower_inline_expr_to_slot fallback. Unblocks
+  `when (op) { 1 -> a + b; ...; else -> 0 }`-shape fixtures.
+- **218-calculator fully covered (38/38)** via when-arm-Binary.
+
+**Push 33 standings:**
+- Fully covered: **210 / 968 (21.7%)**
+- Typed empty: **289 / 968 (29.9%)**
+- mir-lower typed unit tests: **181**
+
+Realistically: extension fn method-call on primitive receivers
+(`i.squared()` where i is Int + squared is an extension fn) is the
+next pattern blocking ~10-20 fixtures including 187-sum-of-squares.
+Currently the walker's DotQualified handler requires Ty::Class
+receivers, so calls on primitives fall through.
+
+Workspace tests + clippy clean.
