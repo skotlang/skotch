@@ -5022,6 +5022,7 @@ fn try_lower_multi_stmt_block_with_offset(
                 let mut cmp_block_stmts: Vec<Vec<MStmt>> = Vec::with_capacity(n_arms);
                 let mut cmp_slots: Vec<LocalId> = Vec::with_capacity(n_arms);
                 let mut arm_mstmts: Vec<Vec<MStmt>> = Vec::with_capacity(n_arms);
+                let mut arm_returns: Vec<Option<LocalId>> = Vec::with_capacity(n_arms);
                 for (cond_expr, then_children) in &arms {
                     let mut c_stmts: Vec<MStmt> = Vec::new();
                     let cmp_slot = if let KtExpr::Binary(cmp_b) = cond_expr {
@@ -5077,15 +5078,62 @@ fn try_lower_multi_stmt_block_with_offset(
                     };
                     cmp_block_stmts.push(c_stmts);
                     cmp_slots.push(cmp_slot);
-                    let then_mstmts = lower_loop_body(
-                        then_children,
-                        &mut name_to_local,
-                        &mut next_slot,
-                        &mut local_tys,
-                        strings,
-                        fn_lookup,
-                    )?;
+                    // Split off a trailing `return X` from the arm body
+                    // so we can emit Terminator::ReturnValue(slot) for
+                    // that arm instead of Goto(join).
+                    let arm_then_kids: &[&skotch_sil::SilNode] = then_children;
+                    let mut ret_idx: Option<usize> = None;
+                    let mut ret_expr_inner: Option<KtExpr<'_>> = None;
+                    for (i, c) in arm_then_kids.iter().enumerate().rev() {
+                        if let Some(KtExpr::Return(r)) = KtExpr::cast(c) {
+                            ret_idx = Some(i);
+                            ret_expr_inner = skotch_ast::children(r.syntax())
+                                .iter()
+                                .find_map(KtExpr::cast)
+                                .map(unwrap_parens);
+                            break;
+                        }
+                        if KtExpr::cast(c).is_some() {
+                            break;
+                        }
+                    }
+                    let before_ret: Vec<&skotch_sil::SilNode> = match ret_idx {
+                        Some(idx) => arm_then_kids[..idx].iter().copied().collect(),
+                        None => arm_then_kids.iter().copied().collect(),
+                    };
+                    let mut then_mstmts = if before_ret.is_empty() {
+                        Vec::new()
+                    } else {
+                        lower_loop_body(
+                            &before_ret,
+                            &mut name_to_local,
+                            &mut next_slot,
+                            &mut local_tys,
+                            strings,
+                            fn_lookup,
+                        )?
+                    };
+                    let arm_return_slot: Option<LocalId> = if let Some(re) =
+                        ret_expr_inner
+                    {
+                        let snap = name_to_local.clone();
+                        let lookup = |n: &str| -> Option<LocalId> {
+                            snap.iter().rev().find(|(name, _)| name == n).map(|(_, l)| *l)
+                        };
+                        let slot = lower_inline_expr_to_slot(
+                            re,
+                            &lookup,
+                            &mut next_slot,
+                            &mut then_mstmts,
+                            &mut local_tys,
+                            strings,
+                        )?;
+                        Some(slot)
+                    } else {
+                        None
+                    };
                     arm_mstmts.push(then_mstmts);
+                    arm_returns.push(arm_return_slot);
                 }
                 let final_else_mstmts = match &final_else {
                     Some(children) => Some(lower_loop_body(
@@ -5204,10 +5252,16 @@ fn try_lower_multi_stmt_block_with_offset(
                         stmts: block0_stmts,
                         terminator: block0_terminator,
                     });
-                    // Build arm 0 + Goto(join).
+                    // Build arm 0. Terminator depends on whether the
+                    // arm body had a trailing return.
+                    let arm0_return = arm_returns.remove(0);
+                    let arm0_terminator = match arm0_return {
+                        Some(slot) => Terminator::ReturnValue(slot),
+                        None => Terminator::Goto(join_idx),
+                    };
                     all_blocks.push(BasicBlock {
                         stmts: arm_mstmts.remove(0),
-                        terminator: Terminator::Goto(join_idx),
+                        terminator: arm0_terminator,
                     });
                     // Build cmp_1..cmp_{n-1} + their arms.
                     for i in 1..n {
@@ -5225,9 +5279,14 @@ fn try_lower_multi_stmt_block_with_offset(
                                 else_block: next_else,
                             },
                         });
+                        let armi_return = arm_returns.remove(0);
+                        let armi_terminator = match armi_return {
+                            Some(slot) => Terminator::ReturnValue(slot),
+                            None => Terminator::Goto(join_idx),
+                        };
                         all_blocks.push(BasicBlock {
                             stmts: arm_mstmts.remove(0),
-                            terminator: Terminator::Goto(join_idx),
+                            terminator: armi_terminator,
                         });
                     }
                     // Else block.
@@ -5254,6 +5313,7 @@ fn try_lower_multi_stmt_block_with_offset(
                 stmts.extend(cmp_block_stmts.remove(0));
                 let cmp_slot = cmp_slots[0];
                 let then_mstmts = arm_mstmts.remove(0);
+                let then_return_slot = arm_returns.remove(0);
                 let else_mstmts = final_else_mstmts;
                 // Trailing-return splitting for the join block.
                 let before_ret: Vec<&skotch_sil::SilNode> = {
@@ -5320,6 +5380,10 @@ fn try_lower_multi_stmt_block_with_offset(
                     None => Terminator::Return,
                 };
                 let pre_block_stmts = std::mem::take(&mut stmts);
+                let then_terminator = match then_return_slot {
+                    Some(slot) => Terminator::ReturnValue(slot),
+                    None => Terminator::Goto(if else_mstmts.is_some() { 3 } else { 2 }),
+                };
                 let (blocks, _) = if let Some(else_mstmts) = else_mstmts {
                     // 4-block CFG: pre / then / else / join
                     let pre_block = BasicBlock {
@@ -5332,7 +5396,7 @@ fn try_lower_multi_stmt_block_with_offset(
                     };
                     let then_block = BasicBlock {
                         stmts: then_mstmts,
-                        terminator: Terminator::Goto(3),
+                        terminator: then_terminator,
                     };
                     let else_block = BasicBlock {
                         stmts: else_mstmts,
@@ -5355,7 +5419,7 @@ fn try_lower_multi_stmt_block_with_offset(
                     };
                     let then_block = BasicBlock {
                         stmts: then_mstmts,
-                        terminator: Terminator::Goto(2),
+                        terminator: then_terminator,
                     };
                     let join_block = BasicBlock {
                         stmts: exit_stmts,
