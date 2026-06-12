@@ -3911,37 +3911,25 @@ fn try_lower_multi_stmt_block_with_offset(
                                 continue;
                             }
                         }
-                        if let KtExpr::Binary(rb) = &rhs {
-                            let rop = rb.operation().map(|o| o.text()).unwrap_or_default();
-                            let mir_op = match rop.as_str() {
-                                "+" => Some(skotch_mir::BinOp::AddI),
-                                "-" => Some(skotch_mir::BinOp::SubI),
-                                "*" => Some(skotch_mir::BinOp::MulI),
-                                "/" => Some(skotch_mir::BinOp::DivI),
-                                "%" => Some(skotch_mir::BinOp::ModI),
-                                _ => None,
-                            }?;
-                            let lhs_op = resolve(
-                                rb.lhs()?,
+                        if let KtExpr::Binary(_) = &rhs {
+                            let snap = name_to_local.clone();
+                            let lookup = |n: &str| -> Option<LocalId> {
+                                snap.iter()
+                                    .rev()
+                                    .find(|(name, _)| name == n)
+                                    .map(|(_, l)| *l)
+                            };
+                            let rhs_slot = lower_inline_expr_to_slot(
+                                rhs,
+                                &lookup,
                                 next_slot,
-                                local_tys,
                                 &mut body_mstmts,
-                                strings,
-                            )?;
-                            let rhs_op = resolve(
-                                rb.rhs()?,
-                                next_slot,
                                 local_tys,
-                                &mut body_mstmts,
                                 strings,
                             )?;
                             body_mstmts.push(MStmt::Assign {
                                 dest: lhs_slot,
-                                value: skotch_mir::Rvalue::BinOp {
-                                    op: mir_op,
-                                    lhs: lhs_op,
-                                    rhs: rhs_op,
-                                },
+                                value: skotch_mir::Rvalue::Local(rhs_slot),
                             });
                             continue;
                         }
