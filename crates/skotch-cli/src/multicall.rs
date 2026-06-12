@@ -22,12 +22,8 @@
 const KNOWN_ALIASES: &[(&str, &str)] = &[
     ("kotlinc", "kotlinc"),
     ("aapt2", "aapt2"),
-    // Reserved for future delegations — these are real Android SDK
-    // tools that skotch will eventually shadow. Listed (but commented)
-    // so the dispatch table reads as the intended roadmap rather than
-    // having to grep around for "what's coming next".
-    // ("d8", "d8"),
-    // ("apksigner", "apksigner"),
+    ("apksigner", "apksigner"),
+    ("d8", "d8"),
 ];
 
 /// If the running binary was invoked through one of the known aliases,

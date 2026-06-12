@@ -2609,6 +2609,7 @@ version = "0.41.0"
 dependencies = [
  "anyhow",
  "byteorder",
+ "flate2",
 ]
 
 [[package]]
@@ -2724,6 +2725,8 @@ version = "0.41.0"
 dependencies = [
  "anyhow",
  "byteorder",
+ "skotch-classfile",
+ "skotch-dex",
 ]
 
 [[package]]

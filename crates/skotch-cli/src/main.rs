@@ -14,6 +14,7 @@
 //! See `multicall.rs` for the alias table.
 
 mod apksigner;
+mod d8;
 mod kotlinc;
 mod multicall;
 

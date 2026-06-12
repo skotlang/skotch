@@ -10,3 +10,4 @@ repository.workspace = true
 [dependencies]
 anyhow.workspace = true
 byteorder.workspace = true
+flate2.workspace = true

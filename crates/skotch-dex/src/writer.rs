@@ -41,7 +41,7 @@ impl Pools {
         let mut fields: std::collections::BTreeSet<FieldRef> = Default::default();
         let mut methods: std::collections::BTreeSet<MethodRef> = Default::default();
 
-        let mut add_type = |types: &mut std::collections::BTreeSet<String>,
+        let add_type = |types: &mut std::collections::BTreeSet<String>,
                             strings: &mut std::collections::BTreeSet<String>,
                             t: &str| {
             types.insert(t.to_string());
@@ -236,6 +236,11 @@ impl Pools {
             }
         }
 
+        // 8. annotation_set (align 4): d8 always materializes one empty
+        //    annotation_set_item (DexAnnotationSet.empty singleton) per DEX.
+        let annotation_set_off = data.align(4);
+        data.put_u32(0); // empty annotation_set_item (size 0)
+
         // map_list (align 4)
         let map_off = data.align(4);
         let map = self.build_map(
@@ -251,6 +256,7 @@ impl Pools {
             &type_list_off,
             string_data_off[0],
             &class_data_off,
+            annotation_set_off,
             map_off,
         );
         data.put_bytes(&map);
@@ -525,6 +531,7 @@ impl Pools {
         type_list_off: &BTreeMap<Vec<String>, u32>,
         first_string_data_off: u32,
         class_data_off: &[u32],
+        annotation_set_off: u32,
         map_off: u32,
     ) -> Vec<u8> {
         let mut entries: Vec<(u16, u32, u32)> = Vec::new();
@@ -558,6 +565,7 @@ impl Pools {
             let first = *class_data_off.iter().filter(|&&o| o != 0).min().unwrap();
             entries.push((0x2000, class_data_count as u32, first));
         }
+        entries.push((0x1003, 1, annotation_set_off)); // empty annotation set
         entries.push((0x1000, 1, map_off));
 
         // Map must be sorted by offset.
