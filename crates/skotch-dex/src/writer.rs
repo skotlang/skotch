@@ -200,11 +200,22 @@ impl Pools {
         }
 
         // 2. debug_info (align 1) — written after codes; patch code's debug_info_off.
+        //    d8 canonicalizes debug_info_item objects: methods with byte-identical
+        //    debug info (e.g. two default `<init>`s) share one item. We dedup by
+        //    encoded bytes; distinct items keep first-occurrence (code-layout) order.
         let mut debug_offsets: BTreeMap<MethodRef, u32> = BTreeMap::new();
+        let mut debug_dedup: BTreeMap<Vec<u8>, u32> = BTreeMap::new();
         for (mref, di) in &debug_for_code {
-            let doff = data.pos();
+            let bytes = self.encode_debug_info(di);
+            let doff = if let Some(&existing) = debug_dedup.get(&bytes) {
+                existing
+            } else {
+                let off = data.pos();
+                data.put_bytes(&bytes);
+                debug_dedup.insert(bytes, off);
+                off
+            };
             debug_offsets.insert(mref.clone(), doff);
-            self.write_debug_info(&mut data, di);
         }
         for (mref, coff) in &method_code_off {
             if let Some(doff) = debug_offsets.get(mref) {
@@ -416,7 +427,10 @@ impl Pools {
         }
     }
 
-    fn write_debug_info(&self, data: &mut DataSection, di: &DebugInfo) {
+    /// Encodes a `debug_info_item` to its byte form (pool indices resolved).
+    /// Returned bytes are the canonicalization key: d8 shares one item between
+    /// methods whose encoded debug info is identical (e.g. two `<init>`s).
+    fn encode_debug_info(&self, di: &DebugInfo) -> Vec<u8> {
         let mut buf = Vec::new();
         write_uleb128(&mut buf, di.line_start);
         write_uleb128(&mut buf, di.parameter_names.len() as u32);
@@ -430,7 +444,7 @@ impl Pools {
             self.write_debug_event(&mut buf, ev);
         }
         buf.push(0x00); // DBG_END_SEQUENCE
-        data.put_bytes(&buf);
+        buf
     }
 
     fn write_debug_event(&self, buf: &mut Vec<u8>, ev: &DebugEvent) {
@@ -562,7 +576,10 @@ impl Pools {
         }
         if !debug_offsets.is_empty() {
             let first = *debug_offsets.values().min().unwrap();
-            entries.push((0x2003, debug_offsets.len() as u32, first));
+            // Count DISTINCT debug_info_item offsets — d8 shares one item across
+            // methods with identical debug info, so method count != item count.
+            let distinct: std::collections::BTreeSet<u32> = debug_offsets.values().copied().collect();
+            entries.push((0x2003, distinct.len() as u32, first));
         }
         if !type_list_off.is_empty() {
             let first = *type_list_off.values().min().unwrap();

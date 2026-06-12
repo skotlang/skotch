@@ -10686,6 +10686,58 @@ fn lower_rich_expr_to_slot(
                     Some(KtExpr::Reference(r)) => r.name(),
                     _ => None,
                 };
+                // Receiver.toString() / Receiver.toInt() / Receiver.toLong()
+                // built-in conversion methods. Lowered as Java static
+                // calls on the corresponding wrapper class.
+                if let (Some(method_n), KtExpr::Reference(_)) = (method_n, &dq_exprs[0]) {
+                    let recv_slot = lower_rich_expr_to_slot(
+                        dq_exprs[0],
+                        lookup_name,
+                        fn_lookup,
+                        next_slot,
+                        pre_stmts,
+                        extra_locals,
+                        strings,
+                    );
+                    if let Some(recv_slot) = recv_slot {
+                        if method_n == "toString" {
+                            // Look up the receiver's type to determine the
+                            // Java static class name + descriptor.
+                            let recv_ty = extra_locals
+                                .get(recv_slot.0 as usize)
+                                .cloned()
+                                .unwrap_or(Ty::Any);
+                            let (cls, desc) = match recv_ty {
+                                Ty::Int => Some(("java/lang/Integer", "(I)Ljava/lang/String;")),
+                                Ty::Long => Some(("java/lang/Long", "(J)Ljava/lang/String;")),
+                                Ty::Float => Some(("java/lang/Float", "(F)Ljava/lang/String;")),
+                                Ty::Double => {
+                                    Some(("java/lang/Double", "(D)Ljava/lang/String;"))
+                                }
+                                Ty::Bool => {
+                                    Some(("java/lang/Boolean", "(Z)Ljava/lang/String;"))
+                                }
+                                _ => None,
+                            }
+                            .map(|(c, d)| (c.to_string(), d.to_string()))?;
+                            let result_slot = LocalId(*next_slot);
+                            *next_slot += 1;
+                            extra_locals.push(Ty::String);
+                            pre_stmts.push(MStmt::Assign {
+                                dest: result_slot,
+                                value: skotch_mir::Rvalue::Call {
+                                    kind: skotch_mir::CallKind::StaticJava {
+                                        class_name: cls,
+                                        method_name: "toString".to_string(),
+                                        descriptor: desc,
+                                    },
+                                    args: vec![recv_slot],
+                                },
+                            });
+                            return Some(result_slot);
+                        }
+                    }
+                }
                 if let Some(method_n) = method_n {
                     if let Some((fid, ret_ty)) = fn_lookup.get(method_n) {
                         let recv_slot = lower_rich_expr_to_slot(
