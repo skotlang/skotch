@@ -6983,6 +6983,11 @@ fn lower_inline_expr_to_slot(
         return Some(slot);
     }
     match e {
+        // `this` reference → slot 0. The closure has no notion of
+        // method context; callers that don't want this should
+        // pre-check before recursion (or simply not recurse via this
+        // helper inside non-method contexts).
+        KtExpr::This(_) => Some(skotch_mir::LocalId(0)),
         KtExpr::Reference(r) => {
             let n = r.name()?;
             lookup_name(n)
@@ -11699,6 +11704,26 @@ mod tests {
         assert_eq!(f.return_ty, Ty::Unit);
         assert_eq!(f.blocks.len(), 1);
         assert!(matches!(f.blocks[0].terminator, Terminator::Return));
+    }
+
+    #[test]
+    fn typed_lower_extension_fn_with_this_binary_body() {
+        // `fun Int.isEven(): Boolean = this % 2 == 0` should produce
+        // 4 stmts on a single block: Const(2), BinOp(ModI, 0, 1),
+        // Const(0), BinOp(CmpEq, 2, 3); terminator ReturnValue(LocalId(4)).
+        let module = lower("fun Int.isEven(): Boolean = this % 2 == 0", "TestKt");
+        let f = module
+            .functions
+            .iter()
+            .find(|f| f.name == "isEven")
+            .expect("expected isEven fn");
+        assert_eq!(f.params.len(), 1);
+        let total_stmts: usize = f.blocks.iter().map(|b| b.stmts.len()).sum();
+        assert_eq!(total_stmts, 4);
+        assert!(matches!(
+            f.blocks[0].terminator,
+            skotch_mir::Terminator::ReturnValue(_)
+        ));
     }
 
     #[test]
