@@ -5757,7 +5757,10 @@ fn try_lower_multi_stmt_block_with_offset(
                                 }
                             }
                         }
-                        // Try binary RHS: `sum = sum + 1`.
+                        // Try binary RHS: `sum = sum + 1` (or nested
+                        // arithmetic like `r = r * 10 + x % 10`). Falls
+                        // back to lower_inline_expr_to_slot for any
+                        // shape unknown to the simple resolver.
                         if let KtExpr::Binary(rb) = &rhs_expr {
                             let rop_text = rb.operation().map(|o| o.text()).unwrap_or_default();
                             let mir_op = match rop_text.as_str() {
@@ -5769,6 +5772,13 @@ fn try_lower_multi_stmt_block_with_offset(
                                 _ => None,
                             };
                             if let Some(op) = mir_op {
+                                let snap = name_to_local.clone();
+                                let lookup = |n: &str| -> Option<LocalId> {
+                                    snap.iter()
+                                        .rev()
+                                        .find(|(name, _)| name == n)
+                                        .map(|(_, l)| *l)
+                                };
                                 let resolve = |e: KtExpr<'_>,
                                                name_to_local: &Vec<(String, LocalId)>,
                                                next_slot: &mut u32,
@@ -5785,6 +5795,14 @@ fn try_lower_multi_stmt_block_with_offset(
                                                 .find(|(name, _)| name == n)
                                                 .map(|(_, l)| *l)
                                         }
+                                        KtExpr::Binary(_) => lower_inline_expr_to_slot(
+                                            e,
+                                            &lookup,
+                                            next_slot,
+                                            stmts,
+                                            local_tys,
+                                            strings,
+                                        ),
                                         other => {
                                             let (k, ty) = literal_to_const(&other, strings)?;
                                             let slot = LocalId(*next_slot);
