@@ -10814,6 +10814,9 @@ fn lower_rich_expr_to_slot(
                             ("System", "getProperty") => (Some("java/lang/System"), |n| {
                                 if n == 1 { Some(("System.getProperty", "(Ljava/lang/String;)Ljava/lang/String;")) } else { None }
                             }),
+                            ("System", "lineSeparator") => (Some("java/lang/System"), |n| {
+                                if n == 0 { Some(("System.lineSeparator", "()Ljava/lang/String;")) } else { None }
+                            }),
                             ("Integer", "toString") => (Some("java/lang/Integer"), |n| {
                                 if n == 1 { Some(("Integer.toString", "(I)Ljava/lang/String;")) } else { None }
                             }),
