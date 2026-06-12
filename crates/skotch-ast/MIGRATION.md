@@ -1740,3 +1740,22 @@ Key fixture jumps:
 - 195-tower-of-hanoi: 0.91 (held)
 
 Per-crate tests + clippy clean.
+
+### 2026-06-12 (session 7 — push 36: rich-expr in more arg/init sites)
+
+Pushed `lower_rich_expr_to_slot` (and prebind_top_level_vals) into the
+last remaining arg/init sites that were still on the literal-or-Reference
+resolver:
+
+- **walker println-arg fallback** for non-literal args: routes through
+  lower_rich_expr_to_slot, picking up `println("hello".exclaim())`-style
+  DotQualified-extension-fn invocations and Binary/Call args.
+- **val-init final fallback** uses lower_rich_expr_to_slot + prebind so
+  `val r = 4.isEven()` and `val r = MAX + helper(x)` shapes work.
+
+**Push 36 standings:**
+- Fully covered: **210 / 968 (21.7%)**
+- Typed empty: **288 / 968 (29.8%)**
+- mir-lower typed unit tests: **184**
+
+Per-crate tests + clippy clean.
