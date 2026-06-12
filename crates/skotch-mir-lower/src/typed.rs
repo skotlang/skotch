@@ -9256,8 +9256,10 @@ fn lower_simple_body(
                                     });
                                     arg_slots.push(inner_slot);
                                 }
-                                other => match literal_to_const(&other, strings) {
-                                    Some((k, ty)) => {
+                                other => {
+                                    if let Some((k, ty)) =
+                                        literal_to_const(&other, strings)
+                                    {
                                         let slot = skotch_mir::LocalId(next_slot);
                                         next_slot += 1;
                                         extra_locals.push(ty);
@@ -9266,12 +9268,37 @@ fn lower_simple_body(
                                             value: skotch_mir::Rvalue::Const(k),
                                         });
                                         arg_slots.push(slot);
+                                    } else {
+                                        // Fall back to lower_rich_expr_to_slot
+                                        // for nested Binary / Call args.
+                                        let outer_param_names_owned: Vec<String> =
+                                            outer_param_names.clone();
+                                        let lookup =
+                                            |n: &str| -> Option<skotch_mir::LocalId> {
+                                                outer_param_names_owned
+                                                    .iter()
+                                                    .position(|p| p == n)
+                                                    .map(|i| {
+                                                        skotch_mir::LocalId(i as u32)
+                                                    })
+                                            };
+                                        let s = lower_rich_expr_to_slot(
+                                            other,
+                                            &lookup,
+                                            fn_lookup,
+                                            &mut next_slot,
+                                            &mut pre_stmts,
+                                            &mut extra_locals,
+                                            strings,
+                                        );
+                                        if let Some(s) = s {
+                                            arg_slots.push(s);
+                                        } else {
+                                            ok = false;
+                                            break;
+                                        }
                                     }
-                                    None => {
-                                        ok = false;
-                                        break;
-                                    }
-                                },
+                                }
                             }
                         }
                     }
