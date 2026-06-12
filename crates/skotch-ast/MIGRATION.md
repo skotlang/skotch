@@ -1680,3 +1680,39 @@ Currently the walker's DotQualified handler requires Ty::Class
 receivers, so calls on primitives fall through.
 
 Workspace tests + clippy clean.
+
+### 2026-06-12 (session 7 — push 34: extension fn method-call dispatch + Calculator)
+
+Push focus: extension fn invocation across walker / method-body /
+inline-expr lowering paths, plus full Calculator fixture parity.
+
+- **218-calculator fully covered (38/38)** — when-expression body
+  arms now accept Binary / Prefix shapes via lower_inline_expr_to_slot
+  fallback in try_lower_when_expression.
+- **Extension fn method-call** dispatches in many positions:
+  - stmt-level walker DotQualified → checks fn_lookup if recv is
+    non-Ty::Class
+  - lower_loop_body compound-assignment RHS (e.g. `total += i.squared()`)
+  - lower_loop_body val-init `val s = i.method()`
+  - body-expr DotQualified → static call with receiver as first arg
+  - val-init DotQualified in the main walker
+  - **lower_rich_expr_to_slot DotQualified branch** — picks up the
+    pattern in any inline-expr context (println args, trailing
+    returns, val-init RHS, etc.)
+- **lower_rich_expr_to_slot** used in many more call sites:
+  println args inside lower_loop_body, val-init static-call args,
+  var-reassign Call RHS args, body-expr Static-call args.
+
+**Push 34 standings:**
+- Fully covered: **210 / 968 (21.7%)**
+- Typed empty: **289 / 968 (29.9%)**
+- mir-lower typed unit tests: **181**
+
+Key fixture jumps in this push:
+- 187-sum-of-squares: 0.42 → 0.75 (10 → 18 stmts)
+- 142-extension-int: 0 → 0.48 (0 → 11 stmts)
+- 167-extension-multi: 0 → 0.22 (0 → 4 stmts)
+- 195-tower-of-hanoi: 0.78 → 0.91 (18 → 21 stmts)
+- 218-calculator: 0.95 → 1.0 (fully covered)
+
+Per-crate tests + clippy clean.
