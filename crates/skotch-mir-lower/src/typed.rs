@@ -5055,6 +5055,15 @@ fn try_lower_multi_stmt_block_with_offset(
                         }
                     }
                     if let Some(re) = ret_expr_inner {
+                        prebind_top_level_vals(
+                            re,
+                            &mut name_to_local,
+                            &mut next_slot,
+                            &mut exit_stmts,
+                            &mut local_tys,
+                            val_lookup,
+                            wrapper_class,
+                        );
                         let snap = name_to_local.clone();
                         let lookup = |n: &str| -> Option<LocalId> {
                             snap.iter()
@@ -5249,6 +5258,15 @@ fn try_lower_multi_stmt_block_with_offset(
                         }
                     }
                     if let Some(re) = ret_expr_inner {
+                        prebind_top_level_vals(
+                            re,
+                            &mut name_to_local,
+                            &mut next_slot,
+                            &mut exit_stmts,
+                            &mut local_tys,
+                            val_lookup,
+                            wrapper_class,
+                        );
                         let snap = name_to_local.clone();
                         let lookup = |n: &str| -> Option<LocalId> {
                             snap.iter()
