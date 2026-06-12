@@ -10646,8 +10646,7 @@ fn lower_rich_expr_to_slot(
                     && !matches!(
                         name,
                         "Math" | "Integer" | "Long" | "Float" | "Double" | "Boolean"
-                            | "String" | "System" | "Pair" | "Triple" | "List" | "Map"
-                            | "Set"
+                            | "String" | "System" | "List" | "Map" | "Set"
                     )
                 {
                     let mut arg_slots: Vec<LocalId> = Vec::new();
