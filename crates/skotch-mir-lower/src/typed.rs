@@ -5402,19 +5402,33 @@ fn try_lower_multi_stmt_block_with_offset(
                     .condition()
                     .and_then(|c| c.expression())
                     .map(unwrap_parens)?;
-                let KtExpr::Binary(cmp_b) = cond_expr else {
-                    return None;
+                // `while (true)` — infinite loop; cond block becomes
+                // an unconditional Goto(body_first). Caller handles
+                // this via a flag.
+                let is_while_true = match &cond_expr {
+                    KtExpr::Boolean(b) => skotch_ast::children(b.syntax())
+                        .iter()
+                        .any(|c| c.kind == skotch_syntax::SyntaxKind::KW_TRUE),
+                    _ => false,
                 };
-                let cmp_text = cmp_b.operation().map(|o| o.text()).unwrap_or_default();
-                let cmp_mir = match cmp_text.as_str() {
-                    "==" => Some(skotch_mir::BinOp::CmpEq),
-                    "!=" => Some(skotch_mir::BinOp::CmpNe),
-                    "<" => Some(skotch_mir::BinOp::CmpLt),
-                    ">" => Some(skotch_mir::BinOp::CmpGt),
-                    "<=" => Some(skotch_mir::BinOp::CmpLe),
-                    ">=" => Some(skotch_mir::BinOp::CmpGe),
-                    _ => None,
-                }?;
+                let (cmp_b_opt, cmp_mir_opt) = if is_while_true {
+                    (None, None)
+                } else {
+                    let KtExpr::Binary(cmp_b) = cond_expr else {
+                        return None;
+                    };
+                    let cmp_text = cmp_b.operation().map(|o| o.text()).unwrap_or_default();
+                    let cmp_mir = match cmp_text.as_str() {
+                        "==" => Some(skotch_mir::BinOp::CmpEq),
+                        "!=" => Some(skotch_mir::BinOp::CmpNe),
+                        "<" => Some(skotch_mir::BinOp::CmpLt),
+                        ">" => Some(skotch_mir::BinOp::CmpGt),
+                        "<=" => Some(skotch_mir::BinOp::CmpLe),
+                        ">=" => Some(skotch_mir::BinOp::CmpGe),
+                        _ => None,
+                    }?;
+                    (Some(cmp_b), Some(cmp_mir))
+                };
                 let resolve_w = |e: KtExpr<'_>,
                                  name_to_local: &Vec<(String, LocalId)>,
                                  next_slot: &mut u32,
@@ -5445,65 +5459,71 @@ fn try_lower_multi_stmt_block_with_offset(
                 };
                 let _ = resolve_w; // superseded by lower_inline_expr_to_slot
                 let mut cond_stmts: Vec<MStmt> = Vec::new();
-                // Pre-bind top-level vals referenced in cond bounds.
-                if let Some(l) = cmp_b.lhs() {
-                    prebind_top_level_vals(
-                        l,
-                        &mut name_to_local,
-                        &mut next_slot,
-                        &mut cond_stmts,
-                        &mut local_tys,
-                        val_lookup,
-                        wrapper_class,
-                    );
-                }
-                if let Some(r) = cmp_b.rhs() {
-                    prebind_top_level_vals(
-                        r,
-                        &mut name_to_local,
-                        &mut next_slot,
-                        &mut cond_stmts,
-                        &mut local_tys,
-                        val_lookup,
-                        wrapper_class,
-                    );
-                }
-                let cond_lookup = {
-                    let snap = name_to_local.clone();
-                    move |n: &str| -> Option<LocalId> {
-                        snap.iter()
-                            .rev()
-                            .find(|(name, _)| name == n)
-                            .map(|(_, l)| *l)
+                let cmp_slot_opt: Option<LocalId> = if let (Some(cmp_b), Some(cmp_mir)) =
+                    (cmp_b_opt, cmp_mir_opt)
+                {
+                    if let Some(l) = cmp_b.lhs() {
+                        prebind_top_level_vals(
+                            l,
+                            &mut name_to_local,
+                            &mut next_slot,
+                            &mut cond_stmts,
+                            &mut local_tys,
+                            val_lookup,
+                            wrapper_class,
+                        );
                     }
+                    if let Some(r) = cmp_b.rhs() {
+                        prebind_top_level_vals(
+                            r,
+                            &mut name_to_local,
+                            &mut next_slot,
+                            &mut cond_stmts,
+                            &mut local_tys,
+                            val_lookup,
+                            wrapper_class,
+                        );
+                    }
+                    let cond_lookup = {
+                        let snap = name_to_local.clone();
+                        move |n: &str| -> Option<LocalId> {
+                            snap.iter()
+                                .rev()
+                                .find(|(name, _)| name == n)
+                                .map(|(_, l)| *l)
+                        }
+                    };
+                    let lhs_slot = lower_inline_expr_to_slot(
+                        cmp_b.lhs()?,
+                        &cond_lookup,
+                        &mut next_slot,
+                        &mut cond_stmts,
+                        &mut local_tys,
+                        strings,
+                    )?;
+                    let rhs_slot = lower_inline_expr_to_slot(
+                        cmp_b.rhs()?,
+                        &cond_lookup,
+                        &mut next_slot,
+                        &mut cond_stmts,
+                        &mut local_tys,
+                        strings,
+                    )?;
+                    let cmp_slot = LocalId(next_slot);
+                    next_slot += 1;
+                    local_tys.push(Ty::Bool);
+                    cond_stmts.push(MStmt::Assign {
+                        dest: cmp_slot,
+                        value: skotch_mir::Rvalue::BinOp {
+                            op: cmp_mir,
+                            lhs: lhs_slot,
+                            rhs: rhs_slot,
+                        },
+                    });
+                    Some(cmp_slot)
+                } else {
+                    None
                 };
-                let lhs_slot = lower_inline_expr_to_slot(
-                    cmp_b.lhs()?,
-                    &cond_lookup,
-                    &mut next_slot,
-                    &mut cond_stmts,
-                    &mut local_tys,
-                    strings,
-                )?;
-                let rhs_slot = lower_inline_expr_to_slot(
-                    cmp_b.rhs()?,
-                    &cond_lookup,
-                    &mut next_slot,
-                    &mut cond_stmts,
-                    &mut local_tys,
-                    strings,
-                )?;
-                let cmp_slot = LocalId(next_slot);
-                next_slot += 1;
-                local_tys.push(Ty::Bool);
-                cond_stmts.push(MStmt::Assign {
-                    dest: cmp_slot,
-                    value: skotch_mir::Rvalue::BinOp {
-                        op: cmp_mir,
-                        lhs: lhs_slot,
-                        rhs: rhs_slot,
-                    },
-                });
                 // Resolve body stmts via shared helper.
                 let body_block_opt = w.body().and_then(|b| b.expression());
                 let body_children: Vec<&skotch_sil::SilNode> = match body_block_opt {
@@ -5587,12 +5607,18 @@ fn try_lower_multi_stmt_block_with_offset(
                         stmts: std::mem::take(&mut stmts),
                         terminator: Terminator::Goto(1),
                     };
-                    let cond_block = BasicBlock {
-                        stmts: cond_stmts,
-                        terminator: Terminator::Branch {
-                            cond: cmp_slot,
-                            then_block: 2,
-                            else_block: exit_id,
+                    let cond_block = match cmp_slot_opt {
+                        Some(cmp_slot) => BasicBlock {
+                            stmts: cond_stmts,
+                            terminator: Terminator::Branch {
+                                cond: cmp_slot,
+                                then_block: 2,
+                                else_block: exit_id,
+                            },
+                        },
+                        None => BasicBlock {
+                            stmts: cond_stmts,
+                            terminator: Terminator::Goto(2),
                         },
                     };
                     let exit_block = BasicBlock {
@@ -5604,6 +5630,9 @@ fn try_lower_multi_stmt_block_with_offset(
                     all.push(exit_block);
                     return Some((all, local_tys));
                 }
+                // Plain (non-jump) body: requires a real cond (we
+                // can't lower `while(true) { body }` without break).
+                let cmp_slot = cmp_slot_opt?;
                 let body_mstmts = lower_loop_body(
                     &body_children,
                     &mut name_to_local,
