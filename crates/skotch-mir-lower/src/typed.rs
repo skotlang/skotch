@@ -3172,6 +3172,88 @@ fn try_lower_multi_stmt_block_with_offset(
                     }
                 }
             }
+            // Lambda/function-typed param invocation in val-init:
+            // `val r = content()` where content is a () -> X param.
+            if let KtExpr::Call(call) = &init {
+                if let Some(KtExpr::Reference(rc)) = call.callee() {
+                    if let Some(callee_n) = rc.name() {
+                        if function_param_names.iter().any(|n| n == callee_n) {
+                            if let Some(slot) = name_to_local
+                                .iter()
+                                .rev()
+                                .find(|(n, _)| n == callee_n)
+                                .map(|(_, l)| *l)
+                            {
+                                let arity = call
+                                    .value_argument_list()
+                                    .map(|al| al.arguments().count())
+                                    .unwrap_or(0) as u8;
+                                let mut invoke_args: Vec<LocalId> = vec![slot];
+                                let mut ok = true;
+                                if let Some(arg_list) = call.value_argument_list() {
+                                    for arg in arg_list.arguments() {
+                                        let Some(arg_e) = arg.expression() else {
+                                            ok = false;
+                                            break;
+                                        };
+                                        match unwrap_parens(arg_e) {
+                                            KtExpr::Reference(rr) => {
+                                                let Some(an) = rr.name() else {
+                                                    ok = false;
+                                                    break;
+                                                };
+                                                if let Some(s) = name_to_local
+                                                    .iter()
+                                                    .rev()
+                                                    .find(|(n, _)| n == an)
+                                                    .map(|(_, l)| *l)
+                                                {
+                                                    invoke_args.push(s);
+                                                } else {
+                                                    ok = false;
+                                                    break;
+                                                }
+                                            }
+                                            other => {
+                                                let Some((k, ty)) =
+                                                    literal_to_const(&other, strings)
+                                                else {
+                                                    ok = false;
+                                                    break;
+                                                };
+                                                let s = LocalId(next_slot);
+                                                next_slot += 1;
+                                                local_tys.push(ty);
+                                                stmts.push(MStmt::Assign {
+                                                    dest: s,
+                                                    value: skotch_mir::Rvalue::Const(k),
+                                                });
+                                                invoke_args.push(s);
+                                            }
+                                        }
+                                    }
+                                }
+                                if ok {
+                                    let result_slot = LocalId(next_slot);
+                                    next_slot += 1;
+                                    local_tys.push(Ty::Any);
+                                    stmts.push(MStmt::Assign {
+                                        dest: result_slot,
+                                        value: skotch_mir::Rvalue::Call {
+                                            kind: skotch_mir::CallKind::FunctionInvoke {
+                                                arity,
+                                            },
+                                            args: invoke_args,
+                                        },
+                                    });
+                                    name_to_local.push((name.to_string(), result_slot));
+                                    continue;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             // Try binary op on refs/literals/nested-binary. Picks
             // ConcatStr when either operand reaches a String literal
             // or String-typed local/val.
