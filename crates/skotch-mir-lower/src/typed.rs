@@ -5332,10 +5332,156 @@ fn try_lower_multi_stmt_block_with_offset(
                             i = j + 1;
                             continue;
                         }
-                        Some((_j, Special::NestedForIn)) => {
-                            // Nested for not yet supported via this
-                            // path; fall through.
-                            return None;
+                        Some((j, Special::NestedForIn)) => {
+                            // Nested `for (i in lo..hi) { body }` inside
+                            // outer loop body. Emits pre+cond+body+step
+                            // sub-CFG; back_edge=step, break=after.
+                            let for_node = body_children[j];
+                            let KtExpr::For(for_e) = KtExpr::cast(for_node)? else {
+                                return None;
+                            };
+                            let loop_var = for_e.loop_parameter()?;
+                            let loop_var_name = loop_var.name()?;
+                            let range_expr = for_e
+                                .loop_range()
+                                .and_then(|r| r.expression())
+                                .map(unwrap_parens)?;
+                            let KtExpr::Binary(rb) = range_expr else {
+                                return None;
+                            };
+                            if rb.operation().map(|o| o.text()).as_deref() != Some("..") {
+                                return None;
+                            }
+                            let snap = name_to_local.clone();
+                            let lookup = |n: &str| -> Option<LocalId> {
+                                snap.iter()
+                                    .rev()
+                                    .find(|(name, _)| name == n)
+                                    .map(|(_, l)| *l)
+                            };
+                            let lo_slot = lower_inline_expr_to_slot(
+                                rb.lhs()?,
+                                &lookup,
+                                next_slot,
+                                &mut cur_stmts,
+                                local_tys,
+                                strings,
+                            )?;
+                            let hi_slot = lower_inline_expr_to_slot(
+                                rb.rhs()?,
+                                &lookup,
+                                next_slot,
+                                &mut cur_stmts,
+                                local_tys,
+                                strings,
+                            )?;
+                            let i_slot = LocalId(*next_slot);
+                            *next_slot += 1;
+                            local_tys.push(Ty::Int);
+                            cur_stmts.push(MStmt::Assign {
+                                dest: i_slot,
+                                value: skotch_mir::Rvalue::Local(lo_slot),
+                            });
+                            name_to_local.push((loop_var_name.to_string(), i_slot));
+                            let inner_cond_id = block_offset + blocks.len() as u32 + 1;
+                            blocks.push(BasicBlock {
+                                stmts: std::mem::take(&mut cur_stmts),
+                                terminator: Terminator::Goto(inner_cond_id),
+                            });
+                            let cmp_slot = LocalId(*next_slot);
+                            *next_slot += 1;
+                            local_tys.push(Ty::Bool);
+                            let cond_stmt = MStmt::Assign {
+                                dest: cmp_slot,
+                                value: skotch_mir::Rvalue::BinOp {
+                                    op: skotch_mir::BinOp::CmpLe,
+                                    lhs: i_slot,
+                                    rhs: hi_slot,
+                                },
+                            };
+                            let body_block_opt = for_e.body().and_then(|b| b.expression());
+                            let inner_body_children: Vec<&skotch_sil::SilNode> =
+                                match body_block_opt {
+                                    Some(KtExpr::Block(bl)) => {
+                                        skotch_ast::children(bl.syntax()).iter().collect()
+                                    }
+                                    Some(other) => vec![other.syntax()],
+                                    None => vec![],
+                                };
+                            const SENT_BACK: u32 = 0xfffffffe;
+                            const SENT_BREAK: u32 = 0xfffffffd;
+                            let mut inner_body_blocks = lower_loop_body_blocks(
+                                &inner_body_children,
+                                name_to_local,
+                                next_slot,
+                                local_tys,
+                                strings,
+                                fn_lookup_ref,
+                                function_param_names,
+                                inner_cond_id + 1,
+                                SENT_BACK,
+                                SENT_BREAK,
+                            )?;
+                            let n = inner_body_blocks.len() as u32;
+                            let step_id = inner_cond_id + 1 + n;
+                            let after_id = step_id + 1;
+                            for blk in &mut inner_body_blocks {
+                                let remap = |t: u32| -> u32 {
+                                    if t == SENT_BACK {
+                                        step_id
+                                    } else if t == SENT_BREAK {
+                                        after_id
+                                    } else {
+                                        t
+                                    }
+                                };
+                                match &mut blk.terminator {
+                                    Terminator::Goto(t) => *t = remap(*t),
+                                    Terminator::Branch {
+                                        then_block,
+                                        else_block,
+                                        ..
+                                    } => {
+                                        *then_block = remap(*then_block);
+                                        *else_block = remap(*else_block);
+                                    }
+                                    _ => {}
+                                }
+                            }
+                            blocks.push(BasicBlock {
+                                stmts: vec![cond_stmt],
+                                terminator: Terminator::Branch {
+                                    cond: cmp_slot,
+                                    then_block: inner_cond_id + 1,
+                                    else_block: after_id,
+                                },
+                            });
+                            blocks.extend(inner_body_blocks);
+                            let one_slot = LocalId(*next_slot);
+                            *next_slot += 1;
+                            local_tys.push(Ty::Int);
+                            blocks.push(BasicBlock {
+                                stmts: vec![
+                                    MStmt::Assign {
+                                        dest: one_slot,
+                                        value: skotch_mir::Rvalue::Const(
+                                            skotch_mir::MirConst::Int(1),
+                                        ),
+                                    },
+                                    MStmt::Assign {
+                                        dest: i_slot,
+                                        value: skotch_mir::Rvalue::BinOp {
+                                            op: skotch_mir::BinOp::AddI,
+                                            lhs: i_slot,
+                                            rhs: one_slot,
+                                        },
+                                    },
+                                ],
+                                terminator: Terminator::Goto(inner_cond_id),
+                            });
+                            name_to_local.pop();
+                            i = j + 1;
+                            continue;
                         }
                         Some((j, Special::PropertyWithIfInit)) => {
                             // `val/var name = if (cond) e1 else e2`.
