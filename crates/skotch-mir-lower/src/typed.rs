@@ -2809,6 +2809,17 @@ fn lower_loop_body(
                 let args = call.value_argument_list()?;
                 let arg_exprs: Vec<KtExpr<'_>> =
                     args.arguments().filter_map(|a| a.expression()).collect();
+                if arg_exprs.is_empty() {
+                    // `println()` — zero-arg version (prints just a newline).
+                    let result_slot = LocalId(*next_slot);
+                    *next_slot += 1;
+                    local_tys.push(Ty::Unit);
+                    body_mstmts.push(MStmt::Assign {
+                        dest: result_slot,
+                        value: skotch_mir::Rvalue::Call { kind, args: vec![] },
+                    });
+                    continue;
+                }
                 if arg_exprs.len() != 1 {
                     return None;
                 }
