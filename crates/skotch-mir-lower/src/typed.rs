@@ -4724,95 +4724,276 @@ fn try_lower_multi_stmt_block_with_offset(
             // The cond must be a binary comparison whose operands lower
             // via lower_inline_expr_to_slot.
             if let KtExpr::If(if_e) = &expr {
-                let cond_expr = if_e
-                    .condition()
-                    .and_then(|c| c.expression())
-                    .map(unwrap_parens)?;
-                let KtExpr::Binary(cmp_b) = cond_expr else {
-                    return None;
-                };
-                let cmp_text = cmp_b.operation().map(|o| o.text()).unwrap_or_default();
-                let cmp_mir = match cmp_text.as_str() {
-                    "==" => Some(skotch_mir::BinOp::CmpEq),
-                    "!=" => Some(skotch_mir::BinOp::CmpNe),
-                    "<" => Some(skotch_mir::BinOp::CmpLt),
-                    ">" => Some(skotch_mir::BinOp::CmpGt),
-                    "<=" => Some(skotch_mir::BinOp::CmpLe),
-                    ">=" => Some(skotch_mir::BinOp::CmpGe),
-                    _ => None,
-                }?;
+                // Collect chained if/else-if/else by walking the
+                // else branch as long as it's another If.
+                let mut arms: Vec<(KtExpr<'_>, Vec<&skotch_sil::SilNode>)> = Vec::new();
+                let mut final_else: Option<Vec<&skotch_sil::SilNode>> = None;
+                let mut cur_if = *if_e;
+                loop {
+                    let cond_expr = cur_if
+                        .condition()
+                        .and_then(|c| c.expression())
+                        .map(unwrap_parens)?;
+                    let then_expr = cur_if.then_branch().and_then(|t| t.expression());
+                    let then_children: Vec<&skotch_sil::SilNode> = match then_expr {
+                        Some(KtExpr::Block(bl)) => {
+                            skotch_ast::children(bl.syntax()).iter().collect()
+                        }
+                        Some(other) => vec![other.syntax()],
+                        None => vec![],
+                    };
+                    arms.push((cond_expr, then_children));
+                    let else_expr = cur_if.else_branch().and_then(|t| t.expression());
+                    match else_expr {
+                        Some(KtExpr::If(inner_if)) => {
+                            cur_if = inner_if;
+                            continue;
+                        }
+                        Some(KtExpr::Block(bl)) => {
+                            final_else =
+                                Some(skotch_ast::children(bl.syntax()).iter().collect());
+                            break;
+                        }
+                        Some(other) => {
+                            final_else = Some(vec![other.syntax()]);
+                            break;
+                        }
+                        None => break,
+                    }
+                }
+                // Lower each cond + arm body.
+                let n_arms = arms.len();
                 let if_cond_lookup = {
                     let snap = name_to_local.clone();
                     move |n: &str| -> Option<LocalId> {
                         snap.iter().rev().find(|(name, _)| name == n).map(|(_, l)| *l)
                     }
                 };
-                let lhs_slot = lower_inline_expr_to_slot(
-                    cmp_b.lhs()?,
-                    &if_cond_lookup,
-                    &mut next_slot,
-                    &mut stmts,
-                    &mut local_tys,
-                    strings,
-                )?;
-                let rhs_slot = lower_inline_expr_to_slot(
-                    cmp_b.rhs()?,
-                    &if_cond_lookup,
-                    &mut next_slot,
-                    &mut stmts,
-                    &mut local_tys,
-                    strings,
-                )?;
-                let cmp_slot = LocalId(next_slot);
-                next_slot += 1;
-                local_tys.push(Ty::Bool);
-                stmts.push(MStmt::Assign {
-                    dest: cmp_slot,
-                    value: skotch_mir::Rvalue::BinOp {
-                        op: cmp_mir,
-                        lhs: lhs_slot,
-                        rhs: rhs_slot,
-                    },
-                });
-                // Lower then-branch children.
-                let then_expr = if_e.then_branch().and_then(|t| t.expression());
-                let then_children: Vec<&skotch_sil::SilNode> = match then_expr {
-                    Some(KtExpr::Block(bl)) => {
-                        skotch_ast::children(bl.syntax()).iter().collect()
-                    }
-                    Some(other) => vec![other.syntax()],
-                    None => vec![],
-                };
-                let then_mstmts = lower_loop_body(
-                    &then_children,
-                    &mut name_to_local,
-                    &mut next_slot,
-                    &mut local_tys,
-                    strings,
-                    fn_lookup,
-                )?;
-                // Lower else-branch children (may be missing).
-                let else_expr = if_e.else_branch().and_then(|t| t.expression());
-                let has_else = else_expr.is_some();
-                let else_children: Vec<&skotch_sil::SilNode> = match else_expr {
-                    Some(KtExpr::Block(bl)) => {
-                        skotch_ast::children(bl.syntax()).iter().collect()
-                    }
-                    Some(other) => vec![other.syntax()],
-                    None => vec![],
-                };
-                let else_mstmts = if has_else {
-                    Some(lower_loop_body(
-                        &else_children,
+                let mut cmp_block_stmts: Vec<Vec<MStmt>> = Vec::with_capacity(n_arms);
+                let mut cmp_slots: Vec<LocalId> = Vec::with_capacity(n_arms);
+                let mut arm_mstmts: Vec<Vec<MStmt>> = Vec::with_capacity(n_arms);
+                for (cond_expr, then_children) in &arms {
+                    let mut c_stmts: Vec<MStmt> = Vec::new();
+                    let KtExpr::Binary(cmp_b) = cond_expr else {
+                        return None;
+                    };
+                    let cmp_text = cmp_b.operation().map(|o| o.text()).unwrap_or_default();
+                    let cmp_mir = match cmp_text.as_str() {
+                        "==" => Some(skotch_mir::BinOp::CmpEq),
+                        "!=" => Some(skotch_mir::BinOp::CmpNe),
+                        "<" => Some(skotch_mir::BinOp::CmpLt),
+                        ">" => Some(skotch_mir::BinOp::CmpGt),
+                        "<=" => Some(skotch_mir::BinOp::CmpLe),
+                        ">=" => Some(skotch_mir::BinOp::CmpGe),
+                        _ => None,
+                    }?;
+                    let lhs_slot = lower_inline_expr_to_slot(
+                        cmp_b.lhs()?,
+                        &if_cond_lookup,
+                        &mut next_slot,
+                        &mut c_stmts,
+                        &mut local_tys,
+                        strings,
+                    )?;
+                    let rhs_slot = lower_inline_expr_to_slot(
+                        cmp_b.rhs()?,
+                        &if_cond_lookup,
+                        &mut next_slot,
+                        &mut c_stmts,
+                        &mut local_tys,
+                        strings,
+                    )?;
+                    let cmp_slot = LocalId(next_slot);
+                    next_slot += 1;
+                    local_tys.push(Ty::Bool);
+                    c_stmts.push(MStmt::Assign {
+                        dest: cmp_slot,
+                        value: skotch_mir::Rvalue::BinOp {
+                            op: cmp_mir,
+                            lhs: lhs_slot,
+                            rhs: rhs_slot,
+                        },
+                    });
+                    cmp_block_stmts.push(c_stmts);
+                    cmp_slots.push(cmp_slot);
+                    let then_mstmts = lower_loop_body(
+                        then_children,
                         &mut name_to_local,
                         &mut next_slot,
                         &mut local_tys,
                         strings,
                         fn_lookup,
-                    )?)
-                } else {
-                    None
+                    )?;
+                    arm_mstmts.push(then_mstmts);
+                }
+                let final_else_mstmts = match &final_else {
+                    Some(children) => Some(lower_loop_body(
+                        children,
+                        &mut name_to_local,
+                        &mut next_slot,
+                        &mut local_tys,
+                        strings,
+                        fn_lookup,
+                    )?),
+                    None => None,
                 };
+                let has_more_arms = n_arms > 1;
+                if has_more_arms {
+                    // First cmp block stmts get prepended into the
+                    // outer stmts buffer.
+                    let first_cmp_extra = cmp_block_stmts.remove(0);
+                    // Multi-arm CFG construction.
+                    // Block 0 (pre): pre-stmts + first cmp; Branch
+                    //   then_block_0 vs cmp_block_1
+                    // Block 1 (then_0): arm[0]; Goto(join)
+                    // Block 2 (cmp_1): cmp1; Branch then_block_1 vs cmp_block_2 (or else/join)
+                    // ...
+                    // Final else block (optional)
+                    // Join block: trailing stmts + Return
+                    let mut all_blocks: Vec<BasicBlock> = Vec::new();
+                    let pre_block_stmts = std::mem::take(&mut stmts);
+                    // Prepare trailing exit_stmts.
+                    let before_ret: Vec<&skotch_sil::SilNode> = {
+                        let mut ret_idx: Option<usize> = None;
+                        for (i, c) in trailing_children.iter().enumerate().rev() {
+                            if let Some(KtExpr::Return(_)) = KtExpr::cast(c) {
+                                ret_idx = Some(i);
+                                break;
+                            }
+                            if KtExpr::cast(c).is_some() {
+                                break;
+                            }
+                        }
+                        match ret_idx {
+                            Some(idx) => {
+                                trailing_children[..idx].iter().copied().collect()
+                            }
+                            None => trailing_children.iter().copied().collect(),
+                        }
+                    };
+                    let mut exit_stmts = if before_ret.is_empty() {
+                        Vec::new()
+                    } else {
+                        lower_loop_body(
+                            &before_ret,
+                            &mut name_to_local,
+                            &mut next_slot,
+                            &mut local_tys,
+                            strings,
+                            fn_lookup,
+                        )?
+                    };
+                    let mut trailing_return_slot: Option<LocalId> = None;
+                    {
+                        let mut ret_expr_inner: Option<KtExpr<'_>> = None;
+                        for c in trailing_children.iter().rev() {
+                            if let Some(KtExpr::Return(r)) = KtExpr::cast(c) {
+                                ret_expr_inner = skotch_ast::children(r.syntax())
+                                    .iter()
+                                    .find_map(KtExpr::cast)
+                                    .map(unwrap_parens);
+                                break;
+                            }
+                            if KtExpr::cast(c).is_some() {
+                                break;
+                            }
+                        }
+                        if let Some(re) = ret_expr_inner {
+                            let snap = name_to_local.clone();
+                            let lookup = |n: &str| -> Option<LocalId> {
+                                snap.iter()
+                                    .rev()
+                                    .find(|(name, _)| name == n)
+                                    .map(|(_, l)| *l)
+                            };
+                            let slot = lower_inline_expr_to_slot(
+                                re,
+                                &lookup,
+                                &mut next_slot,
+                                &mut exit_stmts,
+                                &mut local_tys,
+                                strings,
+                            )?;
+                            trailing_return_slot = Some(slot);
+                        }
+                    }
+                    // Now allocate block indices.
+                    // n_arms cmp blocks at indices: pre (0), cmp_1 = 2,
+                    //   cmp_2 = 4, ..., then_i alternates between them.
+                    // Layout:
+                    //   block 0: pre + cmp_0 + Branch
+                    //   block 1: arm_0 + Goto(join)
+                    //   block 2: cmp_1 + Branch
+                    //   block 3: arm_1 + Goto(join)
+                    //   ...
+                    //   block 2N: final else + Goto(join) OR Goto(join) if no else
+                    //   block 2N+1: join (trailing + Return)
+                    let n = n_arms;
+                    let join_idx = (2 * n + 1) as u32;
+                    let else_idx = (2 * n) as u32;
+                    // Build the first cmp block.
+                    let mut block0_stmts = pre_block_stmts.clone();
+                    block0_stmts.extend(first_cmp_extra);
+                    let block0_terminator = Terminator::Branch {
+                        cond: cmp_slots[0],
+                        then_block: 1,
+                        else_block: if n > 1 { 2 } else { else_idx },
+                    };
+                    all_blocks.push(BasicBlock {
+                        stmts: block0_stmts,
+                        terminator: block0_terminator,
+                    });
+                    // Build arm 0 + Goto(join).
+                    all_blocks.push(BasicBlock {
+                        stmts: arm_mstmts.remove(0),
+                        terminator: Terminator::Goto(join_idx),
+                    });
+                    // Build cmp_1..cmp_{n-1} + their arms.
+                    for i in 1..n {
+                        let cmp_stmts = cmp_block_stmts.remove(0);
+                        let next_else = if i + 1 < n {
+                            (2 * (i + 1)) as u32
+                        } else {
+                            else_idx
+                        };
+                        all_blocks.push(BasicBlock {
+                            stmts: cmp_stmts,
+                            terminator: Terminator::Branch {
+                                cond: cmp_slots[i],
+                                then_block: (2 * i + 1) as u32,
+                                else_block: next_else,
+                            },
+                        });
+                        all_blocks.push(BasicBlock {
+                            stmts: arm_mstmts.remove(0),
+                            terminator: Terminator::Goto(join_idx),
+                        });
+                    }
+                    // Else block.
+                    let else_block_stmts = final_else_mstmts.unwrap_or_default();
+                    all_blocks.push(BasicBlock {
+                        stmts: else_block_stmts,
+                        terminator: Terminator::Goto(join_idx),
+                    });
+                    // Join block.
+                    let join_terminator = match trailing_return_slot {
+                        Some(slot) => Terminator::ReturnValue(slot),
+                        None => Terminator::Return,
+                    };
+                    all_blocks.push(BasicBlock {
+                        stmts: exit_stmts,
+                        terminator: join_terminator,
+                    });
+                    let _ = pre_block_stmts;
+                    return Some((all_blocks, local_tys));
+                }
+                // Single-arm path falls through to original 3-/4-block CFG.
+                // Re-add first_cmp_extra into the outer stmts buffer
+                // so the existing assembly sees it as pre-stmts.
+                stmts.extend(cmp_block_stmts.remove(0));
+                let cmp_slot = cmp_slots[0];
+                let then_mstmts = arm_mstmts.remove(0);
+                let else_mstmts = final_else_mstmts;
                 // Trailing-return splitting for the join block.
                 let before_ret: Vec<&skotch_sil::SilNode> = {
                     let mut ret_idx: Option<usize> = None;
