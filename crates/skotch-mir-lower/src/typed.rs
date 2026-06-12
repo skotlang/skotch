@@ -8752,6 +8752,105 @@ fn lower_simple_body(
     }
     // end DotQualified virtual-call body
 
+    // Lambda/function-typed param invocation body:
+    // `fun apply(f: (Int) -> Int, x: Int): Int = f(x)`. The callee is
+    // a function-typed parameter; emit Call(FunctionInvoke).
+    if let KtExpr::Call(call) = &body_expr {
+        if let Some(KtExpr::Reference(r)) = call.callee() {
+            if let Some(name) = r.name() {
+                let outer_params_iter: Vec<(usize, skotch_ast::KtValueParameter<'_>)> = f
+                    .value_parameter_list()
+                    .map(|pl| pl.parameters().enumerate().collect())
+                    .unwrap_or_default();
+                let function_param_idx = outer_params_iter.iter().find_map(|(i, p)| {
+                    if p.name() == Some(name)
+                        && p.type_reference()
+                            .map(|tr| tr.function_type().is_some())
+                            .unwrap_or(false)
+                    {
+                        Some(*i)
+                    } else {
+                        None
+                    }
+                });
+                if let Some(idx) = function_param_idx {
+                    let param_count = outer_params_iter.len();
+                    let param_slot = skotch_mir::LocalId(idx as u32);
+                    let arity = call
+                        .value_argument_list()
+                        .map(|al| al.arguments().count())
+                        .unwrap_or(0) as u8;
+                    let outer_param_names: Vec<String> = outer_params_iter
+                        .iter()
+                        .map(|(_, p)| p.name().unwrap_or("").to_string())
+                        .collect();
+                    let mut next_slot = param_count as u32;
+                    let mut pre_stmts: Vec<skotch_mir::Stmt> = Vec::new();
+                    let mut extra_locals: Vec<Ty> = Vec::new();
+                    let mut invoke_args: Vec<skotch_mir::LocalId> = vec![param_slot];
+                    let mut ok = true;
+                    if let Some(arg_list) = call.value_argument_list() {
+                        for arg in arg_list.arguments() {
+                            let Some(arg_expr) = arg.expression() else {
+                                ok = false;
+                                break;
+                            };
+                            match unwrap_parens(arg_expr) {
+                                KtExpr::Reference(rr) => {
+                                    let Some(an) = rr.name() else {
+                                        ok = false;
+                                        break;
+                                    };
+                                    if let Some(p_idx) =
+                                        outer_param_names.iter().position(|p| p == an)
+                                    {
+                                        invoke_args
+                                            .push(skotch_mir::LocalId(p_idx as u32));
+                                    } else {
+                                        ok = false;
+                                        break;
+                                    }
+                                }
+                                other => match literal_to_const(&other, strings) {
+                                    Some((k, ty)) => {
+                                        let slot = skotch_mir::LocalId(next_slot);
+                                        next_slot += 1;
+                                        extra_locals.push(ty);
+                                        pre_stmts.push(skotch_mir::Stmt::Assign {
+                                            dest: slot,
+                                            value: skotch_mir::Rvalue::Const(k),
+                                        });
+                                        invoke_args.push(slot);
+                                    }
+                                    None => {
+                                        ok = false;
+                                        break;
+                                    }
+                                },
+                            }
+                        }
+                    }
+                    if ok {
+                        let result_slot = skotch_mir::LocalId(next_slot);
+                        extra_locals.push(Ty::Any);
+                        pre_stmts.push(skotch_mir::Stmt::Assign {
+                            dest: result_slot,
+                            value: skotch_mir::Rvalue::Call {
+                                kind: skotch_mir::CallKind::FunctionInvoke { arity },
+                                args: invoke_args,
+                            },
+                        });
+                        let blocks = vec![BasicBlock {
+                            stmts: pre_stmts,
+                            terminator: Terminator::ReturnValue(result_slot),
+                        }];
+                        return (blocks, extra_locals);
+                    }
+                }
+            }
+        }
+    }
+
     // Static-call body: `fun outer() = inner(arg1, arg2)` where
     // inner is a top-level fn in the same file. Args may be either
     // literal constants or References to the outer's parameters.
