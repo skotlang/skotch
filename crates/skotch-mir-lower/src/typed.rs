@@ -11526,13 +11526,71 @@ fn method_simple_body_full(
                         None
                     }
                     KtExpr::Binary(_) => {
-                        // Nested binary: use generic inline lowerer.
-                        let param_names_owned: Vec<String> = param_names.to_vec();
+                        // Nested binary: pre-bind any implicit-this
+                        // fields referenced and use lower_inline_expr_to_slot.
+                        let mut snap_locals: Vec<(String, skotch_mir::LocalId)> = param_names
+                            .iter()
+                            .enumerate()
+                            .map(|(i, n)| (n.clone(), skotch_mir::LocalId((1 + i) as u32)))
+                            .collect();
+                        if let (Some(cname), Some(_)) =
+                            (class_name, field_names.first())
+                        {
+                            // Walk expression for Reference to field, emit
+                            // GetField, push to snap_locals.
+                            fn collect_field_refs<'a>(
+                                e: skotch_ast::KtExpr<'a>,
+                                out: &mut Vec<&'a str>,
+                            ) {
+                                use skotch_ast::KtExpr;
+                                let e = unwrap_parens(e);
+                                match e {
+                                    KtExpr::Reference(r) => {
+                                        if let Some(n) = r.name() {
+                                            out.push(n);
+                                        }
+                                    }
+                                    KtExpr::Binary(b) => {
+                                        if let Some(l) = b.lhs() {
+                                            collect_field_refs(l, out);
+                                        }
+                                        if let Some(r) = b.rhs() {
+                                            collect_field_refs(r, out);
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                            }
+                            let mut refs: Vec<&str> = Vec::new();
+                            collect_field_refs(e, &mut refs);
+                            for n in refs {
+                                if snap_locals.iter().any(|(nm, _)| nm == n) {
+                                    continue;
+                                }
+                                if let Some((fname, fty)) =
+                                    field_names.iter().find(|(nm, _)| nm == n)
+                                {
+                                    let slot = skotch_mir::LocalId(*next_slot);
+                                    *next_slot += 1;
+                                    locals.push(fty.clone());
+                                    pre.push(skotch_mir::Stmt::Assign {
+                                        dest: slot,
+                                        value: skotch_mir::Rvalue::GetField {
+                                            receiver: skotch_mir::LocalId(0),
+                                            class_name: cname.to_string(),
+                                            field_name: fname.clone(),
+                                        },
+                                    });
+                                    snap_locals.push((n.to_string(), slot));
+                                }
+                            }
+                        }
+                        let snap = snap_locals.clone();
                         let lookup = |n: &str| -> Option<skotch_mir::LocalId> {
-                            param_names_owned
-                                .iter()
-                                .position(|p| p == n)
-                                .map(|i| skotch_mir::LocalId((1 + i) as u32))
+                            snap.iter()
+                                .rev()
+                                .find(|(nm, _)| nm == n)
+                                .map(|(_, l)| *l)
                         };
                         lower_inline_expr_to_slot(e, &lookup, next_slot, pre, locals, strings)
                     }
@@ -12812,6 +12870,38 @@ mod tests {
         assert_eq!(f.return_ty, Ty::Unit);
         assert_eq!(f.blocks.len(), 1);
         assert!(matches!(f.blocks[0].terminator, Terminator::Return));
+    }
+
+    #[test]
+    fn typed_lower_method_body_nested_binary_with_fields() {
+        // `class Rectangle(val width: Int, val height: Int) {
+        //    fun perimeter(): Int = 2 * (width + height)
+        //  }`
+        // The nested Binary `width + height` references two implicit-
+        // this fields. The recursive lower_inline_expr_to_slot call
+        // would only see param-name lookups, so both Reference lookups
+        // returned None and the perimeter body fell back to placeholder.
+        // Pre-binding field refs into a synthesized name_to_local
+        // snapshot fixes this — perimeter now lowers to 5 stmts.
+        let module = lower(
+            "class Rectangle(val width: Int, val height: Int) { fun perimeter(): Int = 2 * (width + height) }",
+            "TestKt",
+        );
+        let cls = module
+            .classes
+            .iter()
+            .find(|c| c.name == "Rectangle")
+            .expect("expected Rectangle class");
+        let perim = cls
+            .methods
+            .iter()
+            .find(|m| m.name == "perimeter")
+            .expect("expected perimeter method");
+        let stmts: usize = perim.blocks.iter().map(|b| b.stmts.len()).sum();
+        assert!(
+            stmts >= 5,
+            "expected ≥5 stmts in perimeter body, got {stmts}"
+        );
     }
 
     #[test]
