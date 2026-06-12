@@ -1778,3 +1778,21 @@ Key fixture jumps:
 - 234-class-constructor-params: 0.59 → 0.82
 
 Per-crate tests + clippy clean.
+
+### 2026-06-12 (session 7 — push 38: nested-for CFG + rich template interpolation)
+
+Four targeted patches:
+
+- **`lower_loop_body` val/var Binary init via rich lowerer**: `val s = i.squared() + 1` style inits now resolve through `lower_rich_expr_to_slot` instead of `lower_inline_expr_to_slot`, picking up nested Call operands.
+- **Plain var-reassign with Binary RHS via rich**: `x = compute(y) + 1` inside loop bodies now resolves Call operands.
+- **Nested `for (i in ..) { for (j in ..) { body } }` 7-block CFG**: outer for whose single inner body is another for-loop now emits a synthesized 7-block CFG (pre / cond_i / pre_j / cond_j / inner_body / exit / step_i) instead of the entire walker bailing because `lower_loop_body` has no `KtExpr::For` arm.
+- **`${call(x)}` inside println string template**: added `try_lower_println_template_with_rich_lookup` threading an optional fn_lookup through `LONG_STRING_TEMPLATE_ENTRY`, so `println("fib($i) = ${fib(i)}")` resolves the embedded Call.
+
+**Push 38 standings:**
+- Fully covered: **212 / 968 (21.9%)**
+- Typed empty: **283 / 968 (29.2%)** (down from 288)
+- mir-lower typed unit tests: **185 passing**
+
+Key fixture jumps:
+- 132-nested-loops: 0.000 → 0.875 (graduated from empty)
+- 138-fibonacci-display: 0.000 → progress on main's template interpolation

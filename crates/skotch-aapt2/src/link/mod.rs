@@ -175,6 +175,7 @@ pub struct LinkContext {
     pub min_sdk_version: i32,
     pub symbols: SymbolTable,
     pub app_info: AppInfo,
+    pub feature_flag_values: FeatureFlagValues,
 }
 
 /// The `aapt2 link` entry point.
@@ -240,6 +241,20 @@ pub fn link(
     let app_info = manifest_fixer::extract_app_info(&manifest)?;
     let min_sdk_version = app_info.min_sdk_version.unwrap_or(0);
 
+    // Feature-flag filtering of the manifest. For minSdk > U the
+    // runtime evaluates flags itself, so disabled elements stay.
+    let mut flags_filter_options = transforms::FeatureFlagsFilterOptions::default();
+    if min_sdk_version > crate::res::config::SDK_U as i32 {
+        flags_filter_options.remove_disabled_elements = false;
+        flags_filter_options.flags_must_have_value = false;
+    }
+    transforms::filter_feature_flags(
+        &mut manifest,
+        &options.feature_flag_values,
+        &flags_filter_options,
+        diag,
+    )?;
+
     let mut context = LinkContext {
         compilation_package: compilation_package.clone(),
         package_id,
@@ -247,6 +262,7 @@ pub fn link(
         min_sdk_version,
         symbols,
         app_info,
+        feature_flag_values: options.feature_flag_values.clone(),
     };
 
     if options.verbose {
@@ -359,6 +375,10 @@ pub fn link(
     if !options.no_resource_deduping {
         transforms::dedupe_resources(&mut table)?;
     }
+
+    // Resources that exist only behind disabled flags are erased just
+    // before writing, mirroring WriteApk's FlagDisabledResourceRemover.
+    transforms::remove_flag_disabled(&mut table)?;
 
     // ── 7. Write the APK ───────────────────────────────────────────
     let writer_options = apk_writer::ApkWriterOptions {

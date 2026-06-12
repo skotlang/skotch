@@ -411,14 +411,125 @@ pub fn dedupe_resources(table: &mut ResourceTable) -> Result<()> {
     Ok(())
 }
 
-/// Removes values that sit behind disabled feature flags, and blanks
-/// flag-disabled strings. Mirrors `FlagDisabledResourceRemover` and the
-/// `FlagDisabledStringVisitor` in Link.cpp.
+/// Options for [`filter_feature_flags`]. Mirrors
+/// `FeatureFlagsFilterOptions`.
+#[derive(Debug, Clone, Copy)]
+pub struct FeatureFlagsFilterOptions {
+    /// Remove elements whose `android:featureFlag` evaluates disabled.
+    pub remove_disabled_elements: bool,
+    pub fail_on_unrecognized_flags: bool,
+    pub flags_must_have_value: bool,
+    pub flags_must_be_readonly: bool,
+}
+
+impl Default for FeatureFlagsFilterOptions {
+    fn default() -> Self {
+        FeatureFlagsFilterOptions {
+            remove_disabled_elements: true,
+            fail_on_unrecognized_flags: true,
+            flags_must_have_value: true,
+            flags_must_be_readonly: false,
+        }
+    }
+}
+
+/// Walks an XML document removing elements behind disabled
+/// `android:featureFlag` attributes and validating flag usage.
+/// Port of `link/FeatureFlagsFilter.cpp`.
+pub fn filter_feature_flags(
+    root: &mut crate::xml::Element,
+    feature_flags: &crate::compile::FeatureFlagValues,
+    options: &FeatureFlagsFilterOptions,
+    diag: &Diagnostics,
+) -> Result<()> {
+    let mut has_error = false;
+    filter_element(root, feature_flags, options, diag, &mut has_error);
+    if has_error {
+        bail!("feature flag validation failed");
+    }
+    Ok(())
+}
+
+fn filter_element(
+    element: &mut crate::xml::Element,
+    feature_flags: &crate::compile::FeatureFlagValues,
+    options: &FeatureFlagsFilterOptions,
+    diag: &Diagnostics,
+    has_error: &mut bool,
+) {
+    element.children.retain(|child| {
+        let crate::xml::Node::Element(el) = child else { return true };
+        let Some(attr) = el.find_attribute(crate::xml::SCHEMA_ANDROID, "featureFlag") else {
+            return true;
+        };
+        let mut flag_name = crate::util::trim_whitespace(&attr.value);
+        let mut negated = false;
+        if let Some(rest) = flag_name.strip_prefix('!') {
+            negated = true;
+            flag_name = rest;
+        }
+        match feature_flags.get(flag_name) {
+            Some(properties) => {
+                if let Some(enabled) = properties.enabled {
+                    if options.flags_must_be_readonly && !properties.read_only {
+                        diag.error(format!(
+                            "attribute 'android:featureFlag' has flag '{flag_name}' which must \
+                             be readonly but is not"
+                        ));
+                        *has_error = true;
+                        return true;
+                    }
+                    if options.remove_disabled_elements {
+                        // Remove when flag==true && attr=="!flag" OR
+                        // flag==false && attr=="flag".
+                        return enabled != negated;
+                    }
+                } else if options.flags_must_have_value {
+                    diag.error(format!(
+                        "attribute 'android:featureFlag' has flag '{flag_name}' without a \
+                         true/false value from --feature_flags parameter"
+                    ));
+                    *has_error = true;
+                }
+            }
+            None => {
+                if options.fail_on_unrecognized_flags {
+                    diag.error(format!(
+                        "attribute 'android:featureFlag' has flag '{flag_name}' not found in \
+                         flags from --feature_flags parameter"
+                    ));
+                    *has_error = true;
+                }
+            }
+        }
+        true
+    });
+    for child in element.child_elements_mut() {
+        filter_element(child, feature_flags, options, diag, has_error);
+    }
+}
+
+/// Removes resources that exist only behind disabled feature flags, and
+/// blanks any flag-disabled strings that remain. Mirrors
+/// `FlagDisabledResourceRemover` plus the `FlagDisabledStringVisitor`
+/// in `Link.cpp::WriteApk`.
+///
+/// In this model disabled values are segregated into
+/// `flag_disabled_values` rather than mixed into `values` with a status
+/// (as in C++), so the C++ rule "remove the entry when every value is
+/// disabled" becomes "remove the entry when `values` is empty and
+/// `flag_disabled_values` is not".
 pub fn remove_flag_disabled(table: &mut ResourceTable) -> Result<()> {
     use crate::res::FlagStatus;
     for package in &mut table.packages {
         for ty in &mut package.types {
+            ty.entries
+                .retain(|entry| !entry.values.is_empty() || entry.flag_disabled_values.is_empty());
             for entry in &mut ty.entries {
+                // The final table carries no disabled payloads.
+                entry.flag_disabled_values.clear();
+                // Defensive: blank disabled strings that sit in `values`
+                // (can occur for values merged from foreign tables).
                 for config_value in &mut entry.values {
                     if let Some(value) = &mut config_value.value {
                         if value.meta.flag_status == FlagStatus::Disabled {

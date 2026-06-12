@@ -251,6 +251,19 @@ pub fn write_apk(
             FileType::ProtoXml => {
                 let mut root = crate::xml::decode_pb_xml(&entry.contents)
                     .with_context(|| format!("failed to parse compiled XML for {}", entry.dest))?;
+                // Element-level feature flags are evaluated here, before
+                // reference linking (resource files require read-only
+                // flags, mirroring ResourceFileFlattener).
+                let flags_filter_options = super::transforms::FeatureFlagsFilterOptions {
+                    flags_must_be_readonly: true,
+                    ..Default::default()
+                };
+                super::transforms::filter_feature_flags(
+                    &mut root,
+                    &context.feature_flag_values,
+                    &flags_filter_options,
+                    diag,
+                )?;
                 if !options.merge_only {
                     reference_linker::link_xml_references(
                         &mut root,
