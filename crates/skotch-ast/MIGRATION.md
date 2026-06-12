@@ -1830,3 +1830,22 @@ Key fixture jumps:
 - 143-while-break-true: 0.000 → 0.462
 - 164-identity-matrix: 0.000 → 0.810
 - 166-collatz-do-while: 0.000 → 0.643
+
+### 2026-06-12 (session 7 — push 40: return + if-with-return + rich-cond in loop bodies)
+
+Three further extensions to `lower_loop_body_blocks`:
+
+- **`Special::ReturnStmt`**: bare `return` or `return expr` inside a loop body terminates that block with `Return`/`ReturnValue(slot)` rather than `Goto(back_edge)`. The return-expr is lowered via `lower_rich_expr_to_slot`.
+- **`Special::IfWithReturn`**: `if (cond) return X` / `if (cond) { return X }` and the symmetric else form. Allocates a separate return-block whose terminator is `ReturnValue(slot)`. When both arms return, the if collapses into the Branch terminator alone.
+- **If-cond uses rich lowerer**: the three `lower_inline_expr_to_slot(cond_expr, …)` sites in `lower_loop_body_blocks` are upgraded to `lower_rich_expr_to_slot(cond_expr, …, fn_lookup_ref)` so `if (isPrime(n)) { … }` resolves the Call.
+
+Also extends `body_has_jumps` detection in for/while/do-while to trigger on `KtExpr::Return` so the multi-block path picks these up.
+
+**Push 40 standings:**
+- Fully covered: **212 / 968 (21.9%)**
+- Typed empty: **275 / 968 (28.4%)** (unchanged — graduations from this round are partials)
+- mir-lower typed unit tests: **188 passing**
+
+Key fixture jumps:
+- 141-break-continue-practical: 0.000 → 0.550 (findFirst's `return i` inside for-loop)
+- 137-practical-loop: 0.029 → 0.257 (isPrime's `if (isPrime(n))` call-cond inside main's for)
