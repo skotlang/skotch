@@ -4958,6 +4958,29 @@ fn try_lower_multi_stmt_block_with_offset(
                 };
                 let _ = resolve_w; // superseded by lower_inline_expr_to_slot
                 let mut cond_stmts: Vec<MStmt> = Vec::new();
+                // Pre-bind top-level vals referenced in cond bounds.
+                if let Some(l) = cmp_b.lhs() {
+                    prebind_top_level_vals(
+                        l,
+                        &mut name_to_local,
+                        &mut next_slot,
+                        &mut cond_stmts,
+                        &mut local_tys,
+                        val_lookup,
+                        wrapper_class,
+                    );
+                }
+                if let Some(r) = cmp_b.rhs() {
+                    prebind_top_level_vals(
+                        r,
+                        &mut name_to_local,
+                        &mut next_slot,
+                        &mut cond_stmts,
+                        &mut local_tys,
+                        val_lookup,
+                        wrapper_class,
+                    );
+                }
                 let cond_lookup = {
                     let snap = name_to_local.clone();
                     move |n: &str| -> Option<LocalId> {
@@ -5160,6 +5183,29 @@ fn try_lower_multi_stmt_block_with_offset(
                 };
                 let _ = resolve_w; // superseded by lower_inline_expr_to_slot
                 let mut cond_stmts: Vec<MStmt> = Vec::new();
+                // Pre-bind top-level vals referenced in cond bounds.
+                if let Some(l) = cmp_b.lhs() {
+                    prebind_top_level_vals(
+                        l,
+                        &mut name_to_local,
+                        &mut next_slot,
+                        &mut cond_stmts,
+                        &mut local_tys,
+                        val_lookup,
+                        wrapper_class,
+                    );
+                }
+                if let Some(r) = cmp_b.rhs() {
+                    prebind_top_level_vals(
+                        r,
+                        &mut name_to_local,
+                        &mut next_slot,
+                        &mut cond_stmts,
+                        &mut local_tys,
+                        val_lookup,
+                        wrapper_class,
+                    );
+                }
                 let cond_lookup = {
                     let snap = name_to_local.clone();
                     move |n: &str| -> Option<LocalId> {
