@@ -251,7 +251,6 @@
 0.080	406-suspend-fun-params	25	2	15	2	1
 0.082	1322-class-delegation-by	49	4	21	9	6
 0.085	1242-repeat-with-counter	47	4	17	4	1
-0.093	216-roman-numerals	162	15	9	2	1
 0.094	1221-remember-lambda-return-type	32	3	17	3	1
 0.095	424-compound-field-assign	21	2	11	2	1
 0.100	1280-secondary-ctor-cross-file-stub	30	3	13	4	3
@@ -532,6 +531,7 @@
 0.645	201-fibonacci-iterative	31	20	9	2	0
 0.645	253-fibonacci	31	20	9	2	0
 0.647	365-upper-bound-generic	17	11	9	2	0
+0.660	216-roman-numerals	162	107	9	2	0
 0.667	1001-suspend-tail-call-bool	3	2	9	2	0
 0.667	1002-suspend-tail-call-long	3	2	9	2	0
 0.667	1003-suspend-tail-call-double	3	2	9	2	0
