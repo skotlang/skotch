@@ -5673,21 +5673,34 @@ fn try_lower_multi_stmt_block_with_offset(
                     &trailing_children[consumed_trailing..];
                 // Lower each cond + arm body.
                 let n_arms = arms.len();
-                let if_cond_lookup = {
-                    let snap = name_to_local.clone();
-                    move |n: &str| -> Option<LocalId> {
-                        snap.iter()
-                            .rev()
-                            .find(|(name, _)| name == n)
-                            .map(|(_, l)| *l)
-                    }
-                };
                 let mut cmp_block_stmts: Vec<Vec<MStmt>> = Vec::with_capacity(n_arms);
                 let mut cmp_slots: Vec<LocalId> = Vec::with_capacity(n_arms);
                 let mut arm_mstmts: Vec<Vec<MStmt>> = Vec::with_capacity(n_arms);
                 let mut arm_returns: Vec<Option<LocalId>> = Vec::with_capacity(n_arms);
                 for (cond_expr, then_children) in &arms {
                     let mut c_stmts: Vec<MStmt> = Vec::new();
+                    // Pre-bind top-level vals referenced in the cond
+                    // (e.g. `n > MAX` where MAX is a top-level val).
+                    prebind_top_level_vals(
+                        *cond_expr,
+                        &mut name_to_local,
+                        &mut next_slot,
+                        &mut c_stmts,
+                        &mut local_tys,
+                        val_lookup,
+                        wrapper_class,
+                    );
+                    // Refresh lookup after potential pre-bind to pick up
+                    // newly synthesized top-level val slots.
+                    let if_cond_lookup = {
+                        let snap = name_to_local.clone();
+                        move |n: &str| -> Option<LocalId> {
+                            snap.iter()
+                                .rev()
+                                .find(|(name, _)| name == n)
+                                .map(|(_, l)| *l)
+                        }
+                    };
                     let cmp_slot = if let KtExpr::Binary(cmp_b) = cond_expr {
                         let cmp_text = cmp_b.operation().map(|o| o.text()).unwrap_or_default();
                         let cmp_mir = match cmp_text.as_str() {
