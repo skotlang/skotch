@@ -1346,53 +1346,61 @@ fn try_lower_when_expression(
             },
         });
 
-        // then_block: result_slot = (literal | param ref); Goto join.
-        let then_stmts = if let Some((bk, bty)) = literal_to_const(body, strings) {
-            let body_slot = LocalId(next_slot);
+        // then_block: result_slot = (literal | param ref | Binary | Call);
+        // Goto join.
+        let mut then_stmts: Vec<MStmt> = Vec::new();
+        let body_slot: LocalId = if let Some((bk, bty)) = literal_to_const(body, strings) {
+            let s = LocalId(next_slot);
             next_slot += 1;
             extra_locals.push(bty);
-            vec![
-                MStmt::Assign {
-                    dest: body_slot,
-                    value: Rvalue::Const(bk),
-                },
-                MStmt::Assign {
-                    dest: result_slot,
-                    value: Rvalue::Local(body_slot),
-                },
-            ]
+            then_stmts.push(MStmt::Assign {
+                dest: s,
+                value: Rvalue::Const(bk),
+            });
+            s
         } else if let KtExpr::Reference(rr) = body {
             let n = rr.name()?;
             if let Some(idx) = outer_param_names.iter().position(|p| p == n) {
-                let param_slot = LocalId(idx as u32);
-                vec![MStmt::Assign {
-                    dest: result_slot,
-                    value: Rvalue::Local(param_slot),
-                }]
+                LocalId(idx as u32)
             } else if let Some(val_ty) = val_lookup.get(n) {
-                let slot = LocalId(next_slot);
+                let s = LocalId(next_slot);
                 next_slot += 1;
                 extra_locals.push(val_ty.clone());
-                vec![
-                    MStmt::Assign {
-                        dest: slot,
-                        value: Rvalue::GetStaticField {
-                            class_name: wrapper_class.to_string(),
-                            field_name: n.to_string(),
-                            descriptor: ty_to_descriptor(val_ty),
-                        },
+                then_stmts.push(MStmt::Assign {
+                    dest: s,
+                    value: Rvalue::GetStaticField {
+                        class_name: wrapper_class.to_string(),
+                        field_name: n.to_string(),
+                        descriptor: ty_to_descriptor(val_ty),
                     },
-                    MStmt::Assign {
-                        dest: result_slot,
-                        value: Rvalue::Local(slot),
-                    },
-                ]
+                });
+                s
             } else {
                 return None;
             }
         } else {
-            return None;
+            // Fall back to lower_inline_expr_to_slot — covers Binary,
+            // Prefix, nested arithmetic on outer params.
+            let outer_param_names_owned: Vec<String> = outer_param_names.clone();
+            let lookup = |n: &str| -> Option<LocalId> {
+                outer_param_names_owned
+                    .iter()
+                    .position(|p| p == n)
+                    .map(|i| LocalId(i as u32))
+            };
+            lower_inline_expr_to_slot(
+                *body,
+                &lookup,
+                &mut next_slot,
+                &mut then_stmts,
+                &mut extra_locals,
+                strings,
+            )?
         };
+        then_stmts.push(MStmt::Assign {
+            dest: result_slot,
+            value: Rvalue::Local(body_slot),
+        });
         blocks.push(BasicBlock {
             stmts: then_stmts,
             terminator: Terminator::Goto(join_block_idx),
