@@ -3910,13 +3910,14 @@ fn try_lower_multi_stmt_block_with_offset(
                                 let mut probe_stmts: Vec<MStmt> = Vec::new();
                                 let mut probe_extra: Vec<Ty> = Vec::new();
                                 if let Some((concat_kind, parts)) =
-                                    try_lower_println_template_with_lookup(
+                                    try_lower_println_template_with_rich_lookup(
                                         &call,
                                         strings,
                                         &mut probe_slot,
                                         &mut probe_stmts,
                                         &mut probe_extra,
                                         &lookup,
+                                        Some(fn_lookup_ref),
                                     )
                                 {
                                     *next_slot = probe_slot;
@@ -7275,14 +7276,17 @@ fn try_lower_multi_stmt_block_with_offset(
                                 .find(|(name, _)| name == n)
                                 .map(|(_, l)| *l)
                         };
-                        if let Some((concat_kind, parts)) = try_lower_println_template_with_lookup(
-                            &call,
-                            strings,
-                            &mut probe_next,
-                            &mut probe_stmts,
-                            &mut probe_extra,
-                            &lookup,
-                        ) {
+                        if let Some((concat_kind, parts)) =
+                            try_lower_println_template_with_rich_lookup(
+                                &call,
+                                strings,
+                                &mut probe_next,
+                                &mut probe_stmts,
+                                &mut probe_extra,
+                                &lookup,
+                                Some(fn_lookup),
+                            )
+                        {
                             next_slot = probe_next;
                             local_tys.extend(probe_extra);
                             stmts.extend(probe_stmts);
@@ -7782,6 +7786,30 @@ fn try_lower_println_template_with_lookup(
     extra_locals: &mut Vec<Ty>,
     lookup_name: &dyn Fn(&str) -> Option<skotch_mir::LocalId>,
 ) -> Option<(skotch_mir::CallKind, Vec<skotch_mir::LocalId>)> {
+    try_lower_println_template_with_rich_lookup(
+        call,
+        strings,
+        next_slot,
+        pre_stmts,
+        extra_locals,
+        lookup_name,
+        None,
+    )
+}
+
+/// Like `try_lower_println_template_with_lookup`, but accepts an
+/// optional fn_lookup so `${foo(x)}` style interpolations of
+/// top-level fn calls resolve to a Call rvalue instead of None.
+#[allow(clippy::too_many_arguments)]
+fn try_lower_println_template_with_rich_lookup(
+    call: &skotch_ast::KtCallExpression<'_>,
+    strings: &mut Vec<String>,
+    next_slot: &mut u32,
+    pre_stmts: &mut Vec<skotch_mir::Stmt>,
+    extra_locals: &mut Vec<Ty>,
+    lookup_name: &dyn Fn(&str) -> Option<skotch_mir::LocalId>,
+    fn_lookup: Option<&rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)>>,
+) -> Option<(skotch_mir::CallKind, Vec<skotch_mir::LocalId>)> {
     use skotch_ast::KtExpr;
     use skotch_mir::{LocalId, Stmt as MStmt};
     use skotch_syntax::SyntaxKind as S;
@@ -7857,19 +7885,32 @@ fn try_lower_println_template_with_lookup(
             S::LONG_STRING_TEMPLATE_ENTRY => {
                 // `${expr}` — eval expr to a slot. Supports
                 // literal / Reference / Binary on Reference+literal.
+                // When fn_lookup is supplied, also lowers Call
+                // expressions (`${fib(i)}`) via the rich lowerer.
                 had_interp = true;
                 let inner = skotch_ast::children(child)
                     .iter()
                     .find_map(KtExpr::cast)
                     .map(unwrap_parens)?;
-                let slot = lower_inline_expr_to_slot(
-                    inner,
-                    lookup_name,
-                    next_slot,
-                    pre_stmts,
-                    extra_locals,
-                    strings,
-                )?;
+                let slot = match fn_lookup {
+                    Some(fl) => lower_rich_expr_to_slot(
+                        inner,
+                        lookup_name,
+                        fl,
+                        next_slot,
+                        pre_stmts,
+                        extra_locals,
+                        strings,
+                    )?,
+                    None => lower_inline_expr_to_slot(
+                        inner,
+                        lookup_name,
+                        next_slot,
+                        pre_stmts,
+                        extra_locals,
+                        strings,
+                    )?,
+                };
                 part_slots.push(slot);
             }
             S::BLOCK_STRING_TEMPLATE_ENTRY => return None,

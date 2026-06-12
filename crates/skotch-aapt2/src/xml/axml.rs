@@ -29,6 +29,11 @@ fn read_u32(data: &[u8], offset: usize) -> Option<u32> {
 
 struct PendingNamespace {
     decl: NamespaceDecl,
+    /// Whether the declaration has already been attached to the element
+    /// that follows it. Namespace declarations attach only to the next
+    /// START_ELEMENT (mirroring `XmlDom`'s pending element), not to
+    /// every element in their scope.
+    attached: bool,
 }
 
 /// Parses complete binary XML bytes into an element tree.
@@ -82,6 +87,7 @@ pub fn parse_binary_xml(data: &[u8]) -> Result<Element> {
                         line_number: line,
                         column_number: 0,
                     },
+                    attached: false,
                 });
             }
             RES_XML_END_NAMESPACE_TYPE => {
@@ -101,9 +107,14 @@ pub fn parse_binary_xml(data: &[u8]) -> Result<Element> {
                 element.line_number = line;
                 // Namespaces declared since the previous element become
                 // this element's declarations (mirrors XmlDom's pending
-                // element behavior closely enough for round-tripping).
-                element.namespace_decls =
-                    pending_namespaces.iter().map(|p| p.decl.clone()).collect();
+                // element). Already-attached declarations stay with the
+                // element that introduced them.
+                for pending in pending_namespaces.iter_mut() {
+                    if !pending.attached {
+                        element.namespace_decls.push(pending.decl.clone());
+                        pending.attached = true;
+                    }
+                }
 
                 for i in 0..attribute_count {
                     let attr_offset = ext + attribute_start + i * attribute_size;

@@ -68,7 +68,16 @@ impl ApkVerifier {
         let mut result = VerificationResult::default();
         let sections = zip::find_zip_sections(apk)?;
 
-        let block_info = zip::find_apk_signing_block(apk, &sections)?;
+        // A malformed signing block must not abort verification — it makes the
+        // block schemes fail and verification falls back to v1 (apksig
+        // behavior). Record it as an error rather than propagating.
+        let block_info = match zip::find_apk_signing_block(apk, &sections) {
+            Ok(bi) => bi,
+            Err(e) => {
+                result.errors.push(format!("Malformed APK Signing Block: {e}"));
+                None
+            }
+        };
         if let Some(info) = &block_info {
             let block = &apk[info.start_offset..info.start_offset + info.size];
 
@@ -118,10 +127,28 @@ impl ApkVerifier {
 
         // v1 detection + verification.
         match crate::v1verify::verify_v1(apk, &sections) {
-            Ok(Some(certs)) => {
+            Ok(Some(v1)) => {
                 result.verified_v1 = true;
                 if result.signer_certs.is_empty() {
-                    result.signer_certs = certs;
+                    result.signer_certs = v1.certs;
+                }
+                // Signature-stripping protection: the .SF's `X-Android-APK-Signed`
+                // attribute lists the APK signature schemes this APK must also
+                // carry. If a referenced scheme is missing or didn't verify, the
+                // APK was tampered with (a v2/v3 block was stripped) and must be
+                // rejected.
+                for scheme_id in v1.referenced_schemes {
+                    let present = match scheme_id {
+                        2 => result.verified_v2,
+                        3 => result.verified_v3 || result.verified_v31,
+                        _ => true, // unknown scheme id — ignore, as apksig does
+                    };
+                    if !present {
+                        result.errors.push(format!(
+                            "V1 signature indicates the APK is signed using APK Signature \
+                             Scheme v{scheme_id}, but this scheme is missing or did not verify"
+                        ));
+                    }
                 }
             }
             Ok(None) => {}
@@ -300,10 +327,12 @@ fn verify_signer_signed_data(
 ) -> Result<Vec<u8>> {
     // 1. Verify each signature over the signed-data.
     let mut verified_any = false;
+    let mut signature_alg_ids: Vec<u32> = Vec::new();
     while signatures.has_remaining() {
         let mut sig = signatures.get_length_prefixed_slice()?;
         let alg_id = sig.get_u32()?;
         let signature = sig.get_length_prefixed_bytes()?;
+        signature_alg_ids.push(alg_id);
         let alg = match SignatureAlgorithm::from_id(alg_id) {
             Some(a) => a,
             None => continue,
@@ -337,11 +366,13 @@ fn verify_signer_signed_data(
     // 3. Recompute and compare content digests.
     let mut needed: Vec<ContentDigestAlgorithm> = Vec::new();
     let mut declared: BTreeMap<ContentDigestAlgorithm, Vec<u8>> = BTreeMap::new();
+    let mut digest_alg_ids: Vec<u32> = Vec::new();
     let mut dcursor = digests;
     while dcursor.has_remaining() {
         let mut d = dcursor.get_length_prefixed_slice()?;
         let alg_id = d.get_u32()?;
         let value = d.get_length_prefixed_bytes()?.to_vec();
+        digest_alg_ids.push(alg_id);
         if let Some(alg) = SignatureAlgorithm::from_id(alg_id) {
             let cda = alg.content_digest_algorithm();
             if !needed.contains(&cda) {
@@ -351,6 +382,14 @@ fn verify_signer_signed_data(
         }
     }
     let _ = &mut digests;
+
+    // The set of signature algorithms in the signatures block must match the
+    // set in the digests block (prevents algorithm-substitution attacks).
+    let sig_set: std::collections::BTreeSet<u32> = signature_alg_ids.into_iter().collect();
+    let digest_set: std::collections::BTreeSet<u32> = digest_alg_ids.into_iter().collect();
+    if sig_set != digest_set {
+        bail!("signature algorithms in signatures and digests records do not match");
+    }
     let computed = compute_content_digests(&needed, before_cd, central_dir, eocd)?;
     for (cda, value) in &declared {
         match computed.get(cda) {

@@ -13,9 +13,17 @@ use crate::zip::{self, CdRecord, ZipSections};
 use anyhow::{bail, Context, Result};
 use std::collections::BTreeMap;
 
-/// Verifies the v1 signature, returning the signer certs, or `None` if the
-/// APK has no v1 signature.
-pub fn verify_v1(apk: &[u8], sections: &ZipSections) -> Result<Option<Vec<SignerCert>>> {
+/// Result of v1 verification.
+pub struct V1Result {
+    pub certs: Vec<SignerCert>,
+    /// APK signature scheme ids referenced by the `.SF`'s `X-Android-APK-Signed`
+    /// attribute (the stripping-protection list).
+    pub referenced_schemes: Vec<u32>,
+}
+
+/// Verifies the v1 signature, returning the signer certs + referenced schemes,
+/// or `None` if the APK has no v1 signature.
+pub fn verify_v1(apk: &[u8], sections: &ZipSections) -> Result<Option<V1Result>> {
     let records = zip::parse_central_directory(apk, sections)?;
     let lfh_section = &apk[..sections.cd_offset];
 
@@ -32,6 +40,7 @@ pub fn verify_v1(apk: &[u8], sections: &ZipSections) -> Result<Option<Vec<Signer
 
     // Locate signers: every META-INF/<name>.SF with a sibling signature block.
     let mut signer_certs = Vec::new();
+    let mut referenced_schemes: Vec<u32> = Vec::new();
     let mut found_signer = false;
     for r in &records {
         let name = &r.name;
@@ -58,6 +67,11 @@ pub fn verify_v1(apk: &[u8], sections: &ZipSections) -> Result<Option<Vec<Signer
         verify_sf_against_manifest(&sf, &manifest)?;
         verify_manifest_entries(&manifest, &by_name, lfh_section)?;
 
+        for id in referenced_schemes_from_sf(&sf) {
+            if !referenced_schemes.contains(&id) {
+                referenced_schemes.push(id);
+            }
+        }
         signer_certs.push(SignerCert {
             cert_der: cert,
             min_sdk_version: None,
@@ -68,7 +82,23 @@ pub fn verify_v1(apk: &[u8], sections: &ZipSections) -> Result<Option<Vec<Signer
     if !found_signer {
         return Ok(None);
     }
-    Ok(Some(signer_certs))
+    Ok(Some(V1Result {
+        certs: signer_certs,
+        referenced_schemes,
+    }))
+}
+
+/// Parses the `X-Android-APK-Signed` main attribute of a `.SF` into scheme ids.
+fn referenced_schemes_from_sf(sf: &[u8]) -> Vec<u32> {
+    crate::v1::parse_manifest_main_attributes(sf)
+        .into_iter()
+        .find(|(k, _)| k == "X-Android-APK-Signed")
+        .map(|(_, v)| {
+            v.split(',')
+                .filter_map(|s| s.trim().parse::<u32>().ok())
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 fn entry_data(lfh_section: &[u8], cd: &CdRecord) -> Result<Vec<u8>> {

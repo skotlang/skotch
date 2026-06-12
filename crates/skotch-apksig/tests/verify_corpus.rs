@@ -137,3 +137,57 @@ fn neg_sig_does_not_verify() {
 fn neg_digest_mismatch() {
     assert_fails("v2-only-with-rsa-pkcs1-sha512-4096-digest-mismatch.apk");
 }
+#[test]
+fn neg_ecdsa_digest_mismatch() {
+    assert_fails("v2-only-with-ecdsa-sha256-p256-digest-mismatch.apk");
+}
+#[test]
+fn neg_v3_dsa_sig_does_not_verify() {
+    assert_fails("v3-only-with-dsa-sha256-2048-sig-does-not-verify.apk");
+}
+
+// ── Security-critical: stripping protection + malformed blocks ──────────────
+
+#[test]
+fn neg_v2_stripped() {
+    // v1 present, declares v2 required (X-Android-APK-Signed: 2), v2 block
+    // stripped — must be rejected (stripping protection).
+    assert_fails("v2-stripped.apk");
+}
+#[test]
+fn neg_v3_stripped() {
+    assert_fails("v3-stripped.apk");
+}
+#[test]
+fn neg_cert_pubkey_mismatch_v2() {
+    assert_fails("v2-only-cert-and-public-key-mismatch.apk");
+}
+#[test]
+fn neg_cert_pubkey_mismatch_v3() {
+    assert_fails("v3-only-cert-and-public-key-mismatch.apk");
+}
+#[test]
+fn neg_sig_alg_mismatch() {
+    assert_fails("v2-only-signatures-and-digests-block-mismatch.apk");
+}
+#[test]
+fn neg_no_certs_in_sig() {
+    assert_fails("v2-only-no-certs-in-sig.apk");
+}
+#[test]
+fn neg_11_signers() {
+    // Exceeds MAX_APK_SIGNERS (10) — must be rejected.
+    assert_fails("v2-only-11-signers.apk");
+}
+#[test]
+fn neg_second_signer_no_sig() {
+    assert_fails("v2-only-two-signers-second-signer-no-sig.apk");
+}
+#[test]
+fn neg_wrong_block_magic() {
+    assert_fails("v2-only-wrong-apk-sig-block-magic.apk");
+}
+#[test]
+fn neg_block_size_mismatch() {
+    assert_fails("v2-only-apk-sig-block-size-mismatch.apk");
+}
