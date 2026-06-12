@@ -5586,6 +5586,73 @@ fn try_lower_multi_stmt_block_with_offset(
                         None => break,
                     }
                 }
+                // Implicit-else chain detection: if no else, and the
+                // last arm body ends with a `return`, peek the trailing
+                // children. If they continue with more `if (cond) { return X }`
+                // statements (each guard-clause-shaped), absorb those as
+                // additional arms. Finally, if trailing ends with
+                // `return X`, treat that as the implicit else.
+                fn arm_ends_with_return(kids: &[&skotch_sil::SilNode]) -> bool {
+                    use skotch_ast::KtExpr;
+                    for c in kids.iter().rev() {
+                        if let Some(KtExpr::Return(_)) = KtExpr::cast(c) {
+                            return true;
+                        }
+                        if KtExpr::cast(c).is_some() {
+                            return false;
+                        }
+                    }
+                    false
+                }
+                let mut consumed_trailing: usize = 0;
+                if final_else.is_none()
+                    && arms
+                        .last()
+                        .map(|(_, kids)| arm_ends_with_return(kids))
+                        .unwrap_or(false)
+                {
+                    // Walk trailing_children consuming `if (cond) return X`
+                    // patterns.
+                    let mut i = 0;
+                    while i < trailing_children.len() {
+                        let c = trailing_children[i];
+                        let Some(child_expr) = KtExpr::cast(c) else {
+                            i += 1;
+                            continue;
+                        };
+                        if let KtExpr::If(next_if) = child_expr {
+                            let next_cond = next_if
+                                .condition()
+                                .and_then(|c| c.expression())
+                                .map(unwrap_parens);
+                            let next_then = next_if.then_branch().and_then(|t| t.expression());
+                            let next_then_kids: Vec<&skotch_sil::SilNode> = match next_then {
+                                Some(KtExpr::Block(bl)) => {
+                                    skotch_ast::children(bl.syntax()).iter().collect()
+                                }
+                                Some(other) => vec![other.syntax()],
+                                None => vec![],
+                            };
+                            let next_has_else =
+                                next_if.else_branch().and_then(|e| e.expression()).is_some();
+                            if next_cond.is_some()
+                                && !next_has_else
+                                && arm_ends_with_return(&next_then_kids)
+                            {
+                                arms.push((next_cond.unwrap(), next_then_kids));
+                                i += 1;
+                                consumed_trailing = i;
+                                continue;
+                            }
+                            break;
+                        }
+                        // Anything else stops the chain.
+                        break;
+                    }
+                }
+                // Reslice trailing_children to skip what we just consumed.
+                let trailing_children: &[&skotch_sil::SilNode] =
+                    &trailing_children[consumed_trailing..];
                 // Lower each cond + arm body.
                 let n_arms = arms.len();
                 let if_cond_lookup = {
