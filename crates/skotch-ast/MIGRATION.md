@@ -1716,3 +1716,27 @@ Key fixture jumps in this push:
 - 218-calculator: 0.95 → 1.0 (fully covered)
 
 Per-crate tests + clippy clean.
+
+### 2026-06-12 (session 7 — push 35: guard-clause chains + top-level val pre-binding)
+
+Two cross-cutting additions:
+
+- **Implicit-else if-chain detection**: `if (cond1) return X1; if (cond2) return X2; return final` is now recognized as a chained if/else and folded into the multi-arm CFG. The walker continues consuming trailing children as long as they are guard-clause-shaped if-stmts (then ends in return, no else). Unblocks clamp-/fizzbuzz-/leap-year-style guard sequences.
+- **prebind_top_level_vals helper**: walks an expression and emits GetStaticField for every top-level val Reference it encounters, pushing the synthesized slot into name_to_local so subsequent lookup closures resolve it. Applied to:
+  - all trailing-return paths (for-in / while / do-while / if single-arm and chain)
+  - if-chain cond cmp ops (per-iteration with refreshed lookup snapshot)
+  - while/do-while cond cmp ops
+  - for-in range bounds
+  - if-arm return value (also routed through lower_rich_expr_to_slot)
+
+**Push 35 standings:**
+- Fully covered: **210 / 968 (21.7%)**
+- Typed empty: **289 / 968 (29.9%)**
+- mir-lower typed unit tests: **183**
+
+Key fixture jumps:
+- 124-guard-clause: 0.71 → 0.81
+- 192-top-level-constants: 0.52 → 0.76
+- 195-tower-of-hanoi: 0.91 (held)
+
+Per-crate tests + clippy clean.
