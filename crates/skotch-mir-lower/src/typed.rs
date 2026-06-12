@@ -10216,23 +10216,60 @@ fn lower_simple_body(
                         .collect()
                 })
                 .unwrap_or_default();
-            let resolve_bool = |e: KtExpr<'_>| -> Option<(skotch_mir::LocalId, bool)> {
+            // Resolve each Boolean operand: either a param Reference or
+            // a Binary cmp lowered via lower_inline_expr_to_slot.
+            let mut pre_stmts: Vec<skotch_mir::Stmt> = Vec::new();
+            let mut extra_locals: Vec<Ty> = Vec::new();
+            let mut local_next_slot = param_count as u32;
+            let param_names_owned = param_names.clone();
+            let lookup = |n: &str| -> Option<skotch_mir::LocalId> {
+                param_names_owned
+                    .iter()
+                    .position(|p| p == n)
+                    .map(|i| skotch_mir::LocalId(i as u32))
+            };
+            let lhs_slot_opt = b.lhs().and_then(|e| {
                 let e = unwrap_parens(e);
                 match e {
                     KtExpr::Reference(r) => {
                         let n = r.name()?;
                         let idx = param_names.iter().position(|p| p == n)?;
-                        // (slot, is_param)
-                        Some((skotch_mir::LocalId(idx as u32), true))
+                        Some(skotch_mir::LocalId(idx as u32))
                     }
-                    _ => None,
+                    _ => lower_inline_expr_to_slot(
+                        e,
+                        &lookup,
+                        &mut local_next_slot,
+                        &mut pre_stmts,
+                        &mut extra_locals,
+                        strings,
+                    ),
                 }
-            };
-            let lhs = b.lhs().and_then(resolve_bool);
-            let rhs = b.rhs().and_then(resolve_bool);
-            if let (Some((lhs_slot, _)), Some((rhs_slot, _))) = (lhs, rhs) {
-                let result_slot = skotch_mir::LocalId(param_count as u32);
-                let const_slot = skotch_mir::LocalId((param_count + 1) as u32);
+            });
+            let rhs_slot_opt = b.rhs().and_then(|e| {
+                let e = unwrap_parens(e);
+                match e {
+                    KtExpr::Reference(r) => {
+                        let n = r.name()?;
+                        let idx = param_names.iter().position(|p| p == n)?;
+                        Some(skotch_mir::LocalId(idx as u32))
+                    }
+                    _ => lower_inline_expr_to_slot(
+                        e,
+                        &lookup,
+                        &mut local_next_slot,
+                        &mut pre_stmts,
+                        &mut extra_locals,
+                        strings,
+                    ),
+                }
+            });
+            if let (Some(lhs_slot), Some(rhs_slot)) = (lhs_slot_opt, rhs_slot_opt) {
+                let result_slot = skotch_mir::LocalId(local_next_slot);
+                let const_slot = skotch_mir::LocalId(local_next_slot + 1);
+                // Append local-next slots to extra_locals so the caller's
+                // locals[] grows correctly.
+                let _ = const_slot;
                 let (const_val, then_uses_rhs) = if op_text == "&&" {
                     // a && b: then = b, else = false
                     (skotch_mir::MirConst::Bool(false), true)
@@ -10241,9 +10278,10 @@ fn lower_simple_body(
                     (skotch_mir::MirConst::Bool(true), false)
                 };
                 let block_then_uses_rhs = then_uses_rhs;
-                // Block 0: Branch on lhs.
+                // Block 0: pre-stmts (resolving Binary operands) +
+                // Branch on lhs.
                 let b0 = BasicBlock {
-                    stmts: Vec::new(),
+                    stmts: pre_stmts,
                     terminator: Terminator::Branch {
                         cond: lhs_slot,
                         then_block: 1,
@@ -10286,7 +10324,9 @@ fn lower_simple_body(
                     terminator: Terminator::ReturnValue(result_slot),
                 };
                 let _ = const_slot;
-                return (vec![b0, b1, b2, b3], vec![Ty::Bool]);
+                let mut all_locals = extra_locals;
+                all_locals.push(Ty::Bool);
+                return (vec![b0, b1, b2, b3], all_locals);
             }
         }
     }
