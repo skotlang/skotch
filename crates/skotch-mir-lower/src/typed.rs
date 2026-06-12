@@ -2131,15 +2131,35 @@ fn try_lower_if_expression(
                 Some(res_slot)
             }
             other => {
-                let (k, ty) = literal_to_const(&other, strings)?;
-                let slot = LocalId(*next_slot);
-                *next_slot += 1;
-                extra_locals.push(ty);
-                pre_stmts.push(MStmt::Assign {
-                    dest: slot,
-                    value: Rvalue::Const(k),
-                });
-                Some(slot)
+                // Try literal first.
+                if let Some((k, ty)) = literal_to_const(&other, strings) {
+                    let slot = LocalId(*next_slot);
+                    *next_slot += 1;
+                    extra_locals.push(ty);
+                    pre_stmts.push(MStmt::Assign {
+                        dest: slot,
+                        value: Rvalue::Const(k),
+                    });
+                    return Some(slot);
+                }
+                // Fall back to lower_inline_expr_to_slot for Binary /
+                // nested arithmetic / etc — needs a name-only lookup
+                // that resolves outer params + top-level vals.
+                let snap_param_names = outer_param_names.clone();
+                let lookup = |n: &str| -> Option<LocalId> {
+                    snap_param_names
+                        .iter()
+                        .position(|p| p == n)
+                        .map(|i| LocalId(i as u32))
+                };
+                lower_inline_expr_to_slot(
+                    other,
+                    &lookup,
+                    next_slot,
+                    pre_stmts,
+                    extra_locals,
+                    strings,
+                )
             }
         }
     };
