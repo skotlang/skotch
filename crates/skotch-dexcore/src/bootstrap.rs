@@ -137,8 +137,11 @@ fn translate_code(
     let instance = m.access_flags & 0x0008 == 0;
     let ins_size = arg_register_count(params, instance) as u16;
 
-    let local_uses = count_local_loads(&code.bytecode, code.max_locals as usize)?;
-    let mut e = Emitter::new(cf, ins_size, &code.line_numbers, local_uses, min_api);
+    let lu = count_local_loads(&code.bytecode, code.max_locals as usize)?;
+    let mut e = Emitter::new(cf, ins_size, &code.line_numbers, lu.loads.clone(), min_api);
+    // Single-assignment locals: JVM slot → the register-backed Val a store bound.
+    // Arg slots are absent here and load as `Val::Local` (their own register).
+    let mut stored: std::collections::HashMap<u16, Val> = std::collections::HashMap::new();
     let mut stack: Vec<Val> = Vec::new();
     let bc = &code.bytecode;
     let mut pc = 0;
@@ -146,13 +149,20 @@ fn translate_code(
         e.set_pc(pc as u32);
         let op = bc[pc];
         match op {
-            0x1a..=0x1d => { stack.push(Val::Local((op - 0x1a) as u16, false)); pc += 1; } // iload_n
-            0x1e..=0x21 => { stack.push(Val::Local((op - 0x1e) as u16, true)); pc += 1; } // lload_n
-            0x22..=0x25 => { stack.push(Val::Local((op - 0x22) as u16, false)); pc += 1; } // fload_n
-            0x26..=0x29 => { stack.push(Val::Local((op - 0x26) as u16, true)); pc += 1; } // dload_n
-            0x2a..=0x2d => { stack.push(Val::Local((op - 0x2a) as u16, false)); pc += 1; } // aload_n
-            0x15 | 0x17 | 0x19 => { stack.push(Val::Local(bc[pc + 1] as u16, false)); pc += 2; } // iload/fload/aload
-            0x16 | 0x18 => { stack.push(Val::Local(bc[pc + 1] as u16, true)); pc += 2; } // lload/dload
+            0x1a..=0x1d => { stack.push(load_local(&mut stored, (op - 0x1a) as u16, false)); pc += 1; } // iload_n
+            0x1e..=0x21 => { stack.push(load_local(&mut stored, (op - 0x1e) as u16, true)); pc += 1; } // lload_n
+            0x22..=0x25 => { stack.push(load_local(&mut stored, (op - 0x22) as u16, false)); pc += 1; } // fload_n
+            0x26..=0x29 => { stack.push(load_local(&mut stored, (op - 0x26) as u16, true)); pc += 1; } // dload_n
+            0x2a..=0x2d => { stack.push(load_local(&mut stored, (op - 0x2a) as u16, false)); pc += 1; } // aload_n
+            0x15 | 0x17 | 0x19 => { stack.push(load_local(&mut stored, bc[pc + 1] as u16, false)); pc += 2; } // iload/fload/aload
+            0x16 | 0x18 => { stack.push(load_local(&mut stored, bc[pc + 1] as u16, true)); pc += 2; } // lload/dload
+            // local stores (single-assignment subset; bails otherwise)
+            0x36..=0x4e => {
+                let (slot, len) = store_slot(bc, pc).unwrap();
+                let v = stack.pop().unwrap();
+                bind_store(&mut stored, &lu, ins_size, slot as u16, v, &m.name, &m.descriptor)?;
+                pc += len;
+            }
             // constants
             0x02..=0x08 => { stack.push(Val::ConstInt(op as i32 - 0x03)); pc += 1; } // iconst_m1..5
             0x09 | 0x0a => { stack.push(Val::ConstLong((op - 0x09) as i64)); pc += 1; } // lconst_0/1
@@ -521,7 +531,8 @@ impl<'a> Emitter<'a> {
 
     fn putstatic(&mut self, cf: &ClassFile, idx: u16, v: Val) -> Result<()> {
         let (field, desc) = self.field_op(cf, idx)?;
-        let wide = desc == "J" || desc == "D";
+        // sput_op picks the wide variant from `desc`; the value register carries
+        // its own width — no separate `wide` needed here.
         let r = self.materialize(&v)?;
         self.release(&v);
         let op = sput_op(&desc);
@@ -679,14 +690,87 @@ fn a_from(reg: u16) -> Val {
     Val::Reg(reg, false)
 }
 
-/// Counts how many times each local variable is loaded (used to free an
-/// argument's register on its last use). Returns an error if a local *store*
-/// is present (the bootstrap doesn't allocate locals — that needs Phase 1).
-fn count_local_loads(bc: &[u8], max_locals: usize) -> Result<Vec<u32>> {
-    let mut uses = vec![0u32; max_locals + 1];
+/// Per-slot load and store counts. Loads free an argument's register on its last
+/// use; stores let the bootstrap support single-assignment locals (it bails in
+/// the translator unless a stored slot is written once and read once).
+struct LocalUses {
+    loads: Vec<u32>,
+    stores: Vec<u32>,
+}
+
+/// Decodes a JVM local store opcode to its slot index and instruction length,
+/// or `None` if `op` is not a store.
+fn store_slot(bc: &[u8], pc: usize) -> Option<(usize, usize)> {
+    let op = bc[pc];
+    match op {
+        0x36..=0x3a => Some((bc[pc + 1] as usize, 2)), // i/l/f/d/astore <idx>
+        0x3b..=0x3e => Some(((op - 0x3b) as usize, 1)), // istore_0..3
+        0x3f..=0x42 => Some(((op - 0x3f) as usize, 1)), // lstore_0..3
+        0x43..=0x46 => Some(((op - 0x43) as usize, 1)), // fstore_0..3
+        0x47..=0x4a => Some(((op - 0x47) as usize, 1)), // dstore_0..3
+        0x4b..=0x4e => Some(((op - 0x4b) as usize, 1)), // astore_0..3
+        _ => None,
+    }
+}
+
+/// Loads a local: a stored single-assignment slot yields its bound register
+/// value (consumed — the subset guarantees a single read); an argument slot
+/// yields `Val::Local`, which materializes to its own register.
+fn load_local(stored: &mut std::collections::HashMap<u16, Val>, slot: u16, wide: bool) -> Val {
+    stored.remove(&slot).unwrap_or(Val::Local(slot, wide))
+}
+
+/// Binds a store to a local slot, restricted to the subset the bootstrap can
+/// emit byte-identically without a real register allocator: a fresh (non-arg)
+/// slot, written once and read once, holding a computed register value. Anything
+/// else bails loudly rather than risk a register-allocation divergence from d8.
+fn bind_store(
+    stored: &mut std::collections::HashMap<u16, Val>,
+    lu: &LocalUses,
+    ins_size: u16,
+    slot: u16,
+    v: Val,
+    mname: &str,
+    mdesc: &str,
+) -> Result<()> {
+    let s = slot as usize;
+    let stores = lu.stores.get(s).copied().unwrap_or(0);
+    let loads = lu.loads.get(s).copied().unwrap_or(0);
+    if slot < ins_size {
+        bail!("dexer: store to argument slot {slot} in {mname}{mdesc} (needs Phase 1 register allocation)");
+    }
+    if stores != 1 || loads != 1 {
+        bail!(
+            "dexer: local slot {slot} in {mname}{mdesc} has {stores} store(s)/{loads} load(s); \
+             only single-assignment single-use locals are supported (needs Phase 1)"
+        );
+    }
+    match v {
+        Val::Reg(..) => {
+            stored.insert(slot, v);
+            Ok(())
+        }
+        _ => bail!(
+            "dexer: store of a non-computed value into slot {slot} in {mname}{mdesc} (needs Phase 1)"
+        ),
+    }
+}
+
+/// Counts loads and stores per local slot. Stores no longer bail here — the
+/// translator decides per-slot whether the single-assignment subset is met.
+fn count_local_loads(bc: &[u8], max_locals: usize) -> Result<LocalUses> {
+    let mut loads = vec![0u32; max_locals + 1];
+    let mut stores = vec![0u32; max_locals + 1];
     let mut pc = 0;
     while pc < bc.len() {
         let op = bc[pc];
+        if let Some((slot, len)) = store_slot(bc, pc) {
+            if slot < stores.len() {
+                stores[slot] += 1;
+            }
+            pc += len;
+            continue;
+        }
         let (idx, len): (Option<usize>, usize) = match op {
             0x1a..=0x1d => (Some((op - 0x1a) as usize), 1),
             0x1e..=0x21 => (Some((op - 0x1e) as usize), 1),
@@ -694,22 +778,16 @@ fn count_local_loads(bc: &[u8], max_locals: usize) -> Result<Vec<u32>> {
             0x26..=0x29 => (Some((op - 0x26) as usize), 1),
             0x2a..=0x2d => (Some((op - 0x2a) as usize), 1),
             0x15 | 0x16 | 0x17 | 0x18 | 0x19 => (Some(bc[pc + 1] as usize), 2),
-            // local stores — not supported by the bootstrap allocator.
-            0x36..=0x3a | 0x3b..=0x4e => {
-                return Err(anyhow::anyhow!(
-                    "dexer: local stores need register allocation (Phase 1)"
-                ))
-            }
             _ => (None, instr_len(bc, pc)),
         };
         if let Some(i) = idx {
-            if i < uses.len() {
-                uses[i] += 1;
+            if i < loads.len() {
+                loads[i] += 1;
             }
         }
         pc += len;
     }
-    Ok(uses)
+    Ok(LocalUses { loads, stores })
 }
 
 /// JVM instruction length for skipping during the use-count scan. Only needs to
@@ -849,35 +927,6 @@ mod tests {
             }
         }
     }
-}
-
-/// Builds debug info matching d8's release-mode line-only output for a method
-/// whose locals are all arguments (no local-variable tracking).
-fn build_debug_info(code: &Code, params: &[String], _instance: bool, _ret: &str) -> Option<DebugInfo> {
-    if code.line_numbers.is_empty() {
-        return None;
-    }
-    // debug_info parameters_size counts the method's declared parameters only —
-    // the implicit `this` of an instance method is not a debug parameter.
-    let param_count = params.len();
-    let mut lines = code.line_numbers.clone();
-    lines.sort_by_key(|(pc, _)| *pc);
-    let line_start = lines[0].1 as u32;
-    let mut events = Vec::new();
-    let mut cur_addr: i64 = 0;
-    let mut cur_line: i64 = line_start as i64;
-    for (pc, line) in &lines {
-        let addr_diff = *pc as i64 - cur_addr;
-        let line_diff = *line as i64 - cur_line;
-        emit_position(&mut events, addr_diff, line_diff);
-        cur_addr = *pc as i64;
-        cur_line = *line as i64;
-    }
-    Some(DebugInfo {
-        line_start,
-        parameter_names: vec![None; param_count],
-        events,
-    })
 }
 
 const DBG_FIRST_SPECIAL: i64 = 0x0a;

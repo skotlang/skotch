@@ -10681,11 +10681,102 @@ fn lower_rich_expr_to_slot(
             .filter_map(KtExpr::cast)
             .collect();
         if dq_exprs.len() == 2 {
+            // String.length — property access on String.
+            if let KtExpr::Reference(prop_ref) = &dq_exprs[1] {
+                if let Some(prop_name) = prop_ref.name() {
+                    if prop_name == "length" {
+                        // Receiver must be a String. Lower it and emit
+                        // invokevirtual java/lang/String.length()I.
+                        let recv_slot = lower_rich_expr_to_slot(
+                            dq_exprs[0],
+                            lookup_name,
+                            fn_lookup,
+                            next_slot,
+                            pre_stmts,
+                            extra_locals,
+                            strings,
+                        )?;
+                        let recv_ty = extra_locals
+                            .get(recv_slot.0 as usize)
+                            .cloned()
+                            .unwrap_or(Ty::Any);
+                        if matches!(recv_ty, Ty::String | Ty::Any) {
+                            let result_slot = LocalId(*next_slot);
+                            *next_slot += 1;
+                            extra_locals.push(Ty::Int);
+                            pre_stmts.push(MStmt::Assign {
+                                dest: result_slot,
+                                value: skotch_mir::Rvalue::Call {
+                                    kind: skotch_mir::CallKind::VirtualJava {
+                                        class_name: "java/lang/String".to_string(),
+                                        method_name: "length".to_string(),
+                                        descriptor: "()I".to_string(),
+                                    },
+                                    args: vec![recv_slot],
+                                },
+                            });
+                            return Some(result_slot);
+                        }
+                    }
+                }
+            }
             if let KtExpr::Call(call) = &dq_exprs[1] {
                 let method_n = match call.callee() {
                     Some(KtExpr::Reference(r)) => r.name(),
                     _ => None,
                 };
+                // String instance methods → VirtualJava on java/lang/String.
+                if let Some(method_n) = method_n {
+                    let recv_ty_candidate = match &dq_exprs[0] {
+                        KtExpr::Reference(rr) => rr
+                            .name()
+                            .and_then(|n| lookup_name(n))
+                            .and_then(|s| extra_locals.get(s.0 as usize).cloned()),
+                        KtExpr::String(_) => Some(Ty::String),
+                        _ => None,
+                    };
+                    if matches!(recv_ty_candidate, Some(Ty::String)) {
+                        let arg_count = call
+                            .value_argument_list()
+                            .map(|al| al.arguments().count())
+                            .unwrap_or(0);
+                        let str_method: Option<(&str, Ty)> = match (method_n, arg_count) {
+                            ("uppercase", 0) => Some(("()Ljava/lang/String;", Ty::String)),
+                            ("lowercase", 0) => Some(("()Ljava/lang/String;", Ty::String)),
+                            ("isEmpty", 0) => Some(("()Z", Ty::Bool)),
+                            ("isNotEmpty", 0) => Some(("()Z", Ty::Bool)),
+                            ("isBlank", 0) => Some(("()Z", Ty::Bool)),
+                            ("trim", 0) => Some(("()Ljava/lang/String;", Ty::String)),
+                            _ => None,
+                        };
+                        if let Some((descriptor, ret_ty)) = str_method {
+                            let recv_slot = lower_rich_expr_to_slot(
+                                dq_exprs[0],
+                                lookup_name,
+                                fn_lookup,
+                                next_slot,
+                                pre_stmts,
+                                extra_locals,
+                                strings,
+                            )?;
+                            let result_slot = LocalId(*next_slot);
+                            *next_slot += 1;
+                            extra_locals.push(ret_ty);
+                            pre_stmts.push(MStmt::Assign {
+                                dest: result_slot,
+                                value: skotch_mir::Rvalue::Call {
+                                    kind: skotch_mir::CallKind::VirtualJava {
+                                        class_name: "java/lang/String".to_string(),
+                                        method_name: method_n.to_string(),
+                                        descriptor: descriptor.to_string(),
+                                    },
+                                    args: vec![recv_slot],
+                                },
+                            });
+                            return Some(result_slot);
+                        }
+                    }
+                }
                 // Math.abs/max/min etc. — Java static method on
                 // java/lang/Math. Detected by Reference receiver
                 // named "Math".

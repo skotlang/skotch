@@ -32,6 +32,30 @@ fn straightline_battery_byte_identical() {
     );
 }
 
+/// Like the B battery, but with `two(int a) { int x = a*2; return x+1; }` — a
+/// single-assignment local (`istore_1`). d8 coalesces the local into v0
+/// (`mul-int/lit8 v0,v0,#2; add-int/lit8 v0,v0,#1; return v0`); the bootstrap
+/// dexer must match via its guarded single-assignment local support.
+#[test]
+fn local_var_battery_byte_identical() {
+    let cf = skotch_classfile::parse_class_file(&fixtures().join("S.class")).unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let produced = dex_classes(&[cf], &opts).unwrap();
+    let golden = std::fs::read(fixtures().join("S.d8.dex")).unwrap();
+    if produced != golden {
+        std::fs::write("/tmp/skotch-S-produced.dex", &produced).unwrap();
+    }
+    skotch_dex::validator::validate(&produced).expect("self-validation");
+    assert_eq!(
+        produced,
+        golden,
+        "S local-var battery: produced {} vs golden {}; first diff {:?}",
+        produced.len(),
+        golden.len(),
+        (0..produced.len().min(golden.len())).find(|&i| produced[i] != golden[i])
+    );
+}
+
 /// Two classes dexed into one `classes.dex`. d8's code-layout sort is global
 /// across all classes (`holder.toSourceString() + signature`), so every `B`
 /// method precedes every `Calc` method (`'B' < 'C'`). This exercises the
