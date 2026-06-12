@@ -5859,6 +5859,17 @@ fn try_lower_multi_stmt_block_with_offset(
                         )?
                     };
                     let arm_return_slot: Option<LocalId> = if let Some(re) = ret_expr_inner {
+                        // Pre-bind top-level vals in the arm-return
+                        // expression (e.g. `return MAX`).
+                        prebind_top_level_vals(
+                            re,
+                            &mut name_to_local,
+                            &mut next_slot,
+                            &mut then_mstmts,
+                            &mut local_tys,
+                            val_lookup,
+                            wrapper_class,
+                        );
                         let snap = name_to_local.clone();
                         let lookup = |n: &str| -> Option<LocalId> {
                             snap.iter()
@@ -5866,9 +5877,10 @@ fn try_lower_multi_stmt_block_with_offset(
                                 .find(|(name, _)| name == n)
                                 .map(|(_, l)| *l)
                         };
-                        let slot = lower_inline_expr_to_slot(
+                        let slot = lower_rich_expr_to_slot(
                             re,
                             &lookup,
+                            fn_lookup,
                             &mut next_slot,
                             &mut then_mstmts,
                             &mut local_tys,
