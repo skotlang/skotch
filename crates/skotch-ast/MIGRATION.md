@@ -1621,3 +1621,30 @@ Key fixture jumps:
 - 313-counter-class: 0.46 → 0.74
 
 Workspace tests + clippy clean.
+
+### 2026-06-11 (session 7 — push 32: lambda invocation + extension fns + Call-aware lowering)
+
+Major push focused on shape categories that had been blocking
+many composable / extension / recursive fn fixtures:
+
+- **Lambda / function-typed param invocation**: `fun M(content: () -> Unit) { content() }`. Detects KtTypeReference::function_type() on params and emits Call(FunctionInvoke { arity }) on the param's slot. Threaded through:
+  - the outer walker's stmt-level Call handler
+  - lower_loop_body's stmt-level handler (via threaded function_param_names list)
+  - val-init in the walker (`val r = content()`)
+  - body-expr Call (top-level fn = function-typed-param invocation)
+- **Extension fns route through method_simple_body_full**: `fun Int.isEven(): Boolean = this % 2 == 0`. Lifts the receiver into a synthetic slot-0 param and lets the existing method-body shape handlers (which already understand `this`) do the rest.
+- **lower_inline_expr_to_slot accepts `this`**: KtExpr::This now returns LocalId(0) inside the recursive expression lowerer, so nested binary like `(this % 2) == 0` works.
+- **method-body if-expression handler**: cond + arms now route through lower_inline_expr_to_slot, picking up Binary cmp / Prefix-! / `this` / fields uniformly.
+- **lower_rich_expr_to_slot**: new helper wrapping lower_inline_expr_to_slot with top-level-fn Call support. Used in trailing-return slots so `return helper(n - 1) + helper(n - 2)` recursive shapes lower correctly; also in val-init static-call args for nested Binary / Call args.
+
+**Push 32 standings:**
+- Fully covered: **209 / 968 (21.6%)** — up from 174
+- Typed empty: **292 / 968 (30.2%)** — down from 343
+- mir-lower typed unit tests: **181** (was 180)
+
+The +35 fully-covered jump came mostly from the lambda invocation
+work — the composable / inline-content fixture cluster lit up
+en masse.
+
+Workspace tests + clippy clean (1 minor explicit-counter-loop
+warning remains in the if-chain CFG construction).
