@@ -165,7 +165,9 @@ fn run_emit_typed_vs_legacy_worklist() {
     rows.sort_by(|a, b| {
         let a_ratio = a.completeness_ratio();
         let b_ratio = b.completeness_ratio();
-        a_ratio.partial_cmp(&b_ratio).unwrap_or(std::cmp::Ordering::Equal)
+        a_ratio
+            .partial_cmp(&b_ratio)
+            .unwrap_or(std::cmp::Ordering::Equal)
     });
 
     let total = rows.len();
@@ -180,9 +182,17 @@ fn run_emit_typed_vs_legacy_worklist() {
         "Total fixtures: {}\nFully covered: {} ({}%)\nTyped empty: {} ({}%)",
         total,
         fully_covered,
-        if total > 0 { 100 * fully_covered / total } else { 0 },
+        if total > 0 {
+            100 * fully_covered / total
+        } else {
+            0
+        },
         empty_typed,
-        if total > 0 { 100 * empty_typed / total } else { 0 }
+        if total > 0 {
+            100 * empty_typed / total
+        } else {
+            0
+        }
     );
     eprintln!("(coverage = typed_stmts / legacy_stmts; lower = worse)");
 

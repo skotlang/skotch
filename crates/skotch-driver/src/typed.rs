@@ -201,7 +201,11 @@ mod tests {
             &mut diags,
             None,
         );
-        let f = module.functions.iter().find(|f| f.name == "lookup").unwrap();
+        let f = module
+            .functions
+            .iter()
+            .find(|f| f.name == "lookup")
+            .unwrap();
         // 2 arms × 2 blocks + 1 else + 1 join = 6 blocks.
         assert_eq!(f.blocks.len(), 6);
     }

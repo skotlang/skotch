@@ -397,8 +397,7 @@ pub fn lower_file(
     // Top-level class lookup: name → constructor param types. Used by
     // body lowerers to detect `P(args)` calls and emit NewInstance +
     // Constructor.
-    let mut class_lookup: rustc_hash::FxHashMap<String, Vec<Ty>> =
-        rustc_hash::FxHashMap::default();
+    let mut class_lookup: rustc_hash::FxHashMap<String, Vec<Ty>> = rustc_hash::FxHashMap::default();
     // Top-level class fields: name → Vec<(field_name, declared type
     // name)>. Used by body lowerers to resolve `obj.field` chains.
     let mut class_fields: rustc_hash::FxHashMap<String, Vec<(String, String)>> =
@@ -1630,26 +1629,18 @@ fn try_lower_if_chain(
                     ">=" => skotch_mir::BinOp::CmpGe,
                     _ => return None,
                 };
-                let lhs = resolve_operand(
-                    b.lhs()?,
-                    next_slot,
-                    pre_stmts,
-                    extra_locals,
-                    strings,
-                )?;
-                let rhs = resolve_operand(
-                    b.rhs()?,
-                    next_slot,
-                    pre_stmts,
-                    extra_locals,
-                    strings,
-                )?;
+                let lhs = resolve_operand(b.lhs()?, next_slot, pre_stmts, extra_locals, strings)?;
+                let rhs = resolve_operand(b.rhs()?, next_slot, pre_stmts, extra_locals, strings)?;
                 let slot = LocalId(*next_slot);
                 *next_slot += 1;
                 extra_locals.push(Ty::Bool);
                 pre_stmts.push(MStmt::Assign {
                     dest: slot,
-                    value: Rvalue::BinOp { op: mir_op, lhs, rhs },
+                    value: Rvalue::BinOp {
+                        op: mir_op,
+                        lhs,
+                        rhs,
+                    },
                 });
                 Some((slot, false))
             }
@@ -1678,7 +1669,11 @@ fn try_lower_if_chain(
         let then_block = (arm_block_base + i) as u32;
         // If not last cond: fall through to next cond block (i+1).
         // If last cond: fall through to else_block.
-        let next_else = if i + 1 < n { (i + 1) as u32 } else { else_block as u32 };
+        let next_else = if i + 1 < n {
+            (i + 1) as u32
+        } else {
+            else_block as u32
+        };
         cond_blocks.push(BasicBlock {
             stmts: b_cond,
             terminator: Terminator::Branch {
@@ -1923,14 +1918,7 @@ fn try_lower_if_expression(
     // through to the existing 4-block code below.
     if let Some((arms, else_expr)) = flatten_if_chain(if_e) {
         if arms.len() >= 2 {
-            return try_lower_if_chain(
-                &arms,
-                &else_expr,
-                f,
-                strings,
-                val_lookup,
-                wrapper_class,
-            );
+            return try_lower_if_chain(&arms, &else_expr, f, strings, val_lookup, wrapper_class);
         }
     }
 
@@ -2178,7 +2166,9 @@ fn try_lower_if_expression(
                                     if cc.kind == S::REFERENCE_EXPRESSION {
                                         for ccc in skotch_ast::children(cc) {
                                             if ccc.kind == S::IDENTIFIER {
-                                                if let skotch_sil::SilData::Token { text } = &ccc.data {
+                                                if let skotch_sil::SilData::Token { text } =
+                                                    &ccc.data
+                                                {
                                                     return Some(text.as_str().to_string());
                                                 }
                                             }
@@ -2269,8 +2259,7 @@ fn try_lower_if_expression(
                         }
                     }
                     if ok && had_interp {
-                        let descriptor =
-                            format!("({})Ljava/lang/String;", arg_descs.join(""));
+                        let descriptor = format!("({})Ljava/lang/String;", arg_descs.join(""));
                         let result_slot = LocalId(*next_slot);
                         *next_slot += 1;
                         extra_locals.push(Ty::String);
@@ -2539,9 +2528,18 @@ fn try_lower_multi_stmt_block_with_offset(
             // Chains through nested ifs as long as the cond is a
             // boolean literal.
             while let KtExpr::If(if_e) = init {
-                let cond_expr = if_e.condition().and_then(|c| c.expression()).map(unwrap_parens);
-                let then_expr = if_e.then_branch().and_then(|t| t.expression()).map(unwrap_parens);
-                let else_expr = if_e.else_branch().and_then(|e| e.expression()).map(unwrap_parens);
+                let cond_expr = if_e
+                    .condition()
+                    .and_then(|c| c.expression())
+                    .map(unwrap_parens);
+                let then_expr = if_e
+                    .then_branch()
+                    .and_then(|t| t.expression())
+                    .map(unwrap_parens);
+                let else_expr = if_e
+                    .else_branch()
+                    .and_then(|e| e.expression())
+                    .map(unwrap_parens);
                 let cond_bool = match cond_expr {
                     Some(KtExpr::Boolean(b)) => Some(
                         skotch_ast::children(b.syntax())
@@ -2578,21 +2576,18 @@ fn try_lower_multi_stmt_block_with_offset(
                         }
                         S::SHORT_STRING_TEMPLATE_ENTRY => {
                             had_interp = true;
-                            let id_name =
-                                skotch_ast::children(child).iter().find_map(|c| {
-                                    if c.kind == S::REFERENCE_EXPRESSION {
-                                        for cc in skotch_ast::children(c) {
-                                            if cc.kind == S::IDENTIFIER {
-                                                if let skotch_sil::SilData::Token { text } =
-                                                    &cc.data
-                                                {
-                                                    return Some(text.as_str().to_string());
-                                                }
+                            let id_name = skotch_ast::children(child).iter().find_map(|c| {
+                                if c.kind == S::REFERENCE_EXPRESSION {
+                                    for cc in skotch_ast::children(c) {
+                                        if cc.kind == S::IDENTIFIER {
+                                            if let skotch_sil::SilData::Token { text } = &cc.data {
+                                                return Some(text.as_str().to_string());
                                             }
                                         }
                                     }
-                                    None
-                                });
+                                }
+                                None
+                            });
                             let Some(id_name) = id_name else {
                                 ok = false;
                                 break;
@@ -2606,10 +2601,7 @@ fn try_lower_multi_stmt_block_with_offset(
                             {
                                 arg_slots.push(slot);
                                 // Best-effort: peek the local's type.
-                                let ty = local_tys
-                                    .get(slot.0 as usize)
-                                    .cloned()
-                                    .unwrap_or(Ty::Any);
+                                let ty = local_tys.get(slot.0 as usize).cloned().unwrap_or(Ty::Any);
                                 arg_descs.push(ty_to_descriptor(&ty));
                             } else if let Some(val_ty) = val_lookup.get(&id_name) {
                                 let slot = LocalId(next_slot);
@@ -2659,9 +2651,7 @@ fn try_lower_multi_stmt_block_with_offset(
                                 wrapper_class: &str,
                             ) -> Option<(LocalId, Ty)> {
                                 let e = unwrap_parens(e);
-                                if let Some((k, ty)) =
-                                    literal_to_const(&e, strings)
-                                {
+                                if let Some((k, ty)) = literal_to_const(&e, strings) {
                                     let slot = LocalId(*next_slot);
                                     *next_slot += 1;
                                     local_tys.push(ty.clone());
@@ -2703,7 +2693,8 @@ fn try_lower_multi_stmt_block_with_offset(
                                         None
                                     }
                                     KtExpr::Binary(b) => {
-                                        let op_text = b.operation().map(|o| o.text()).unwrap_or_default();
+                                        let op_text =
+                                            b.operation().map(|o| o.text()).unwrap_or_default();
                                         let mir_op = match op_text.as_str() {
                                             "+" => Some(skotch_mir::BinOp::AddI),
                                             "-" => Some(skotch_mir::BinOp::SubI),
@@ -2816,8 +2807,7 @@ fn try_lower_multi_stmt_block_with_offset(
                     }
                 }
                 if ok && had_interp {
-                    let descriptor =
-                        format!("({})Ljava/lang/String;", arg_descs.join(""));
+                    let descriptor = format!("({})Ljava/lang/String;", arg_descs.join(""));
                     let result_slot = LocalId(next_slot);
                     next_slot += 1;
                     local_tys.push(Ty::String);
@@ -2856,12 +2846,8 @@ fn try_lower_multi_stmt_block_with_offset(
                     .collect();
                 if exprs.len() == 2 {
                     match (&exprs[0], &exprs[1]) {
-                        (
-                            KtExpr::Reference(recv_ref),
-                            KtExpr::Reference(prop_ref),
-                        ) => {
-                            if let (Some(recv_n), Some(prop_n)) =
-                                (recv_ref.name(), prop_ref.name())
+                        (KtExpr::Reference(recv_ref), KtExpr::Reference(prop_ref)) => {
+                            if let (Some(recv_n), Some(prop_n)) = (recv_ref.name(), prop_ref.name())
                             {
                                 if let Some(recv_slot) = name_to_local
                                     .iter()
@@ -2905,9 +2891,7 @@ fn try_lower_multi_stmt_block_with_offset(
                                         {
                                             let mut arg_slots: Vec<LocalId> = vec![recv_slot];
                                             let mut ok = true;
-                                            if let Some(arg_list) =
-                                                call.value_argument_list()
-                                            {
+                                            if let Some(arg_list) = call.value_argument_list() {
                                                 for arg in arg_list.arguments() {
                                                     let Some(arg_e) = arg.expression() else {
                                                         ok = false;
@@ -2933,9 +2917,7 @@ fn try_lower_multi_stmt_block_with_offset(
                                                         }
                                                         other => {
                                                             let Some((k, ty)) =
-                                                                literal_to_const(
-                                                                    &other, strings,
-                                                                )
+                                                                literal_to_const(&other, strings)
                                                             else {
                                                                 ok = false;
                                                                 break;
@@ -3066,8 +3048,7 @@ fn try_lower_multi_stmt_block_with_offset(
                                             }
                                         }
                                         other => {
-                                            let Some((k, ty)) =
-                                                literal_to_const(&other, strings)
+                                            let Some((k, ty)) = literal_to_const(&other, strings)
                                             else {
                                                 ok = false;
                                                 break;
@@ -3189,10 +3170,8 @@ fn try_lower_multi_stmt_block_with_offset(
                         KtExpr::String(_) => true,
                         KtExpr::Reference(rr) => {
                             let Some(n) = rr.name() else { return false };
-                            if let Some((_, slot)) = name_to_local
-                                .iter()
-                                .rev()
-                                .find(|(name, _)| name == n)
+                            if let Some((_, slot)) =
+                                name_to_local.iter().rev().find(|(name, _)| name == n)
                             {
                                 // best-effort: peek local type at that slot.
                                 if let Some(ty) = local_tys.get(slot.0 as usize) {
@@ -3203,21 +3182,21 @@ fn try_lower_multi_stmt_block_with_offset(
                             matches!(val_lookup.get(n), Some(Ty::String))
                         }
                         KtExpr::Binary(b) => {
-                            b.lhs()
-                                .is_some_and(|l| operand_reaches_string(l, name_to_local, local_tys, val_lookup))
-                                || b.rhs()
-                                    .is_some_and(|r| operand_reaches_string(r, name_to_local, local_tys, val_lookup))
+                            b.lhs().is_some_and(|l| {
+                                operand_reaches_string(l, name_to_local, local_tys, val_lookup)
+                            }) || b.rhs().is_some_and(|r| {
+                                operand_reaches_string(r, name_to_local, local_tys, val_lookup)
+                            })
                         }
                         _ => false,
                     }
                 }
                 let is_str_concat = op_text == "+"
-                    && (b
-                        .lhs()
-                        .is_some_and(|l| operand_reaches_string(l, &name_to_local, &local_tys, val_lookup))
-                        || b
-                            .rhs()
-                            .is_some_and(|r| operand_reaches_string(r, &name_to_local, &local_tys, val_lookup)));
+                    && (b.lhs().is_some_and(|l| {
+                        operand_reaches_string(l, &name_to_local, &local_tys, val_lookup)
+                    }) || b.rhs().is_some_and(|r| {
+                        operand_reaches_string(r, &name_to_local, &local_tys, val_lookup)
+                    }));
                 let mir_op = if is_str_concat {
                     Some(skotch_mir::BinOp::ConcatStr)
                 } else {
@@ -3320,12 +3299,13 @@ fn try_lower_multi_stmt_block_with_offset(
                                 )?;
                                 let slot = LocalId(*next_slot);
                                 *next_slot += 1;
-                                local_tys.push(if matches!(inner_mir, skotch_mir::BinOp::ConcatStr)
-                                {
-                                    Ty::String
-                                } else {
-                                    Ty::Int
-                                });
+                                local_tys.push(
+                                    if matches!(inner_mir, skotch_mir::BinOp::ConcatStr) {
+                                        Ty::String
+                                    } else {
+                                        Ty::Int
+                                    },
+                                );
                                 stmts.push(MStmt::Assign {
                                     dest: slot,
                                     value: skotch_mir::Rvalue::BinOp {
@@ -3406,7 +3386,10 @@ fn try_lower_multi_stmt_block_with_offset(
                 let init_now = init;
                 let snap = name_to_local.clone();
                 let lookup = |n: &str| -> Option<LocalId> {
-                    snap.iter().rev().find(|(name, _)| name == n).map(|(_, l)| *l)
+                    snap.iter()
+                        .rev()
+                        .find(|(name, _)| name == n)
+                        .map(|(_, l)| *l)
                 };
                 let mut probe_stmts: Vec<MStmt> = Vec::new();
                 let mut probe_locals: Vec<Ty> = Vec::new();
@@ -3543,11 +3526,7 @@ fn try_lower_multi_stmt_block_with_offset(
                                 local_tys.push(Ty::Int);
                                 body_mstmts.push(MStmt::Assign {
                                     dest: slot,
-                                    value: skotch_mir::Rvalue::BinOp {
-                                        op,
-                                        lhs,
-                                        rhs,
-                                    },
+                                    value: skotch_mir::Rvalue::BinOp { op, lhs, rhs },
                                 });
                                 name_to_local.push((pname.to_string(), slot));
                                 continue;
@@ -3630,9 +3609,7 @@ fn try_lower_multi_stmt_block_with_offset(
                                 }
                                 other => {
                                     // Try literal first.
-                                    if let Some((k, ty)) =
-                                        literal_to_const(other, strings)
-                                    {
+                                    if let Some((k, ty)) = literal_to_const(other, strings) {
                                         let slot = LocalId(*next_slot);
                                         *next_slot += 1;
                                         local_tys.push(ty);
@@ -3730,9 +3707,7 @@ fn try_lower_multi_stmt_block_with_offset(
                     // PutField stmt in loop body: `obj.field = value`.
                     if let KtExpr::Binary(b) = be {
                         if b.operation().map(|o| o.text()).as_deref() == Some("=") {
-                            if let Some(KtExpr::DotQualified(dq)) =
-                                b.lhs().map(unwrap_parens)
-                            {
+                            if let Some(KtExpr::DotQualified(dq)) = b.lhs().map(unwrap_parens) {
                                 let exprs: Vec<KtExpr<'_>> = skotch_ast::children(dq.syntax())
                                     .iter()
                                     .filter_map(KtExpr::cast)
@@ -3755,16 +3730,14 @@ fn try_lower_multi_stmt_block_with_offset(
                                                 if let Some(Ty::Class(cname)) =
                                                     local_tys.get(rcv_slot.0 as usize).cloned()
                                                 {
-                                                    let rhs_expr =
-                                                        b.rhs().map(unwrap_parens)?;
+                                                    let rhs_expr = b.rhs().map(unwrap_parens)?;
                                                     let snap = name_to_local.clone();
-                                                    let lookup =
-                                                        |n: &str| -> Option<LocalId> {
-                                                            snap.iter()
-                                                                .rev()
-                                                                .find(|(name, _)| name == n)
-                                                                .map(|(_, l)| *l)
-                                                        };
+                                                    let lookup = |n: &str| -> Option<LocalId> {
+                                                        snap.iter()
+                                                            .rev()
+                                                            .find(|(name, _)| name == n)
+                                                            .map(|(_, l)| *l)
+                                                    };
                                                     let value_slot = lower_inline_expr_to_slot(
                                                         rhs_expr,
                                                         &lookup,
@@ -3914,13 +3887,8 @@ fn try_lower_multi_stmt_block_with_offset(
                         };
                         if let Some(op) = compound_op {
                             // x += y: x = x + y
-                            let rhs_slot = resolve(
-                                rhs,
-                                next_slot,
-                                local_tys,
-                                &mut body_mstmts,
-                                strings,
-                            )?;
+                            let rhs_slot =
+                                resolve(rhs, next_slot, local_tys, &mut body_mstmts, strings)?;
                             body_mstmts.push(MStmt::Assign {
                                 dest: lhs_slot,
                                 value: skotch_mir::Rvalue::BinOp {
@@ -4178,9 +4146,7 @@ fn try_lower_multi_stmt_block_with_offset(
                             local_tys.push(Ty::Int);
                             stmts.push(MStmt::Assign {
                                 dest: one_slot,
-                                value: skotch_mir::Rvalue::Const(
-                                    skotch_mir::MirConst::Int(1),
-                                ),
+                                value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(1)),
                             });
                             stmts.push(MStmt::Assign {
                                 dest: slot,
@@ -4193,10 +4159,9 @@ fn try_lower_multi_stmt_block_with_offset(
                             continue;
                         }
                         // Implicit-this field.
-                        if let (Some(cname), Some((fname, fty))) = (
-                            class_name,
-                            field_names.iter().find(|(n, _)| n == nm),
-                        ) {
+                        if let (Some(cname), Some((fname, fty))) =
+                            (class_name, field_names.iter().find(|(n, _)| n == nm))
+                        {
                             let cur_slot = LocalId(next_slot);
                             next_slot += 1;
                             local_tys.push(fty.clone());
@@ -4213,9 +4178,7 @@ fn try_lower_multi_stmt_block_with_offset(
                             local_tys.push(Ty::Int);
                             stmts.push(MStmt::Assign {
                                 dest: one_slot,
-                                value: skotch_mir::Rvalue::Const(
-                                    skotch_mir::MirConst::Int(1),
-                                ),
+                                value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(1)),
                             });
                             let new_slot = LocalId(next_slot);
                             next_slot += 1;
@@ -4258,8 +4221,7 @@ fn try_lower_multi_stmt_block_with_offset(
                             Some(KtExpr::Reference(r)) => r.name(),
                             _ => None,
                         };
-                        if let (Some(recv_name), Some(method_name)) =
-                            (recv_ref.name(), method_name)
+                        if let (Some(recv_name), Some(method_name)) = (recv_ref.name(), method_name)
                         {
                             if let Some(recv_slot) = name_to_local
                                 .iter()
@@ -4267,9 +4229,7 @@ fn try_lower_multi_stmt_block_with_offset(
                                 .find(|(n, _)| n == recv_name)
                                 .map(|(_, l)| *l)
                             {
-                                let recv_ty = local_tys
-                                    .get(recv_slot.0 as usize)
-                                    .cloned();
+                                let recv_ty = local_tys.get(recv_slot.0 as usize).cloned();
                                 if let Some(Ty::Class(cname)) = recv_ty {
                                     let mut arg_slots: Vec<LocalId> = vec![recv_slot];
                                     let mut ok = true;
@@ -4362,41 +4322,43 @@ fn try_lower_multi_stmt_block_with_offset(
                     ">=" => Some(skotch_mir::BinOp::CmpGe),
                     _ => None,
                 }?;
-                let resolve_w =
-                    |e: KtExpr<'_>,
-                     name_to_local: &Vec<(String, LocalId)>,
-                     next_slot: &mut u32,
-                     local_tys: &mut Vec<Ty>,
-                     stmts: &mut Vec<MStmt>,
-                     strings: &mut Vec<String>|
-                     -> Option<LocalId> {
-                        let e = unwrap_parens(e);
-                        if let Some((k, ty)) = literal_to_const(&e, strings) {
-                            let slot = LocalId(*next_slot);
-                            *next_slot += 1;
-                            local_tys.push(ty);
-                            stmts.push(MStmt::Assign {
-                                dest: slot,
-                                value: skotch_mir::Rvalue::Const(k),
-                            });
-                            return Some(slot);
-                        }
-                        if let KtExpr::Reference(rr) = e {
-                            let n = rr.name()?;
-                            return name_to_local
-                                .iter()
-                                .rev()
-                                .find(|(name, _)| name == n)
-                                .map(|(_, l)| *l);
-                        }
-                        None
-                    };
+                let resolve_w = |e: KtExpr<'_>,
+                                 name_to_local: &Vec<(String, LocalId)>,
+                                 next_slot: &mut u32,
+                                 local_tys: &mut Vec<Ty>,
+                                 stmts: &mut Vec<MStmt>,
+                                 strings: &mut Vec<String>|
+                 -> Option<LocalId> {
+                    let e = unwrap_parens(e);
+                    if let Some((k, ty)) = literal_to_const(&e, strings) {
+                        let slot = LocalId(*next_slot);
+                        *next_slot += 1;
+                        local_tys.push(ty);
+                        stmts.push(MStmt::Assign {
+                            dest: slot,
+                            value: skotch_mir::Rvalue::Const(k),
+                        });
+                        return Some(slot);
+                    }
+                    if let KtExpr::Reference(rr) = e {
+                        let n = rr.name()?;
+                        return name_to_local
+                            .iter()
+                            .rev()
+                            .find(|(name, _)| name == n)
+                            .map(|(_, l)| *l);
+                    }
+                    None
+                };
                 let _ = resolve_w; // superseded by lower_inline_expr_to_slot
                 let mut cond_stmts: Vec<MStmt> = Vec::new();
                 let cond_lookup = {
                     let snap = name_to_local.clone();
                     move |n: &str| -> Option<LocalId> {
-                        snap.iter().rev().find(|(name, _)| name == n).map(|(_, l)| *l)
+                        snap.iter()
+                            .rev()
+                            .find(|(name, _)| name == n)
+                            .map(|(_, l)| *l)
                     }
                 };
                 let lhs_slot = lower_inline_expr_to_slot(
@@ -4428,9 +4390,7 @@ fn try_lower_multi_stmt_block_with_offset(
                 });
                 let body_block_opt = dw.body().and_then(|b| b.expression());
                 let body_children: Vec<&skotch_sil::SilNode> = match body_block_opt {
-                    Some(KtExpr::Block(bl)) => {
-                        skotch_ast::children(bl.syntax()).iter().collect()
-                    }
+                    Some(KtExpr::Block(bl)) => skotch_ast::children(bl.syntax()).iter().collect(),
                     Some(other) => vec![other.syntax()],
                     None => vec![],
                 };
@@ -4455,8 +4415,8 @@ fn try_lower_multi_stmt_block_with_offset(
                         }
                     }
                     match ret_idx {
-                        Some(idx) => trailing_children[..idx].iter().copied().collect(),
-                        None => trailing_children.iter().copied().collect(),
+                        Some(idx) => trailing_children[..idx].to_vec(),
+                        None => trailing_children.to_vec(),
                     }
                 };
                 let mut exit_stmts = if before_ret.is_empty() {
@@ -4489,7 +4449,10 @@ fn try_lower_multi_stmt_block_with_offset(
                     if let Some(re) = ret_expr_inner {
                         let snap = name_to_local.clone();
                         let lookup = |n: &str| -> Option<LocalId> {
-                            snap.iter().rev().find(|(name, _)| name == n).map(|(_, l)| *l)
+                            snap.iter()
+                                .rev()
+                                .find(|(name, _)| name == n)
+                                .map(|(_, l)| *l)
                         };
                         let slot = lower_inline_expr_to_slot(
                             re,
@@ -4526,10 +4489,7 @@ fn try_lower_multi_stmt_block_with_offset(
                     stmts: exit_stmts,
                     terminator: exit_terminator,
                 };
-                return Some((
-                    vec![pre_block, body_blk, cond_block, exit_block],
-                    local_tys,
-                ));
+                return Some((vec![pre_block, body_blk, cond_block, exit_block], local_tys));
             }
             // `while (cond) { body }` as the last meaningful
             // statement in the block. Same 4-block CFG shape as for-in
@@ -4552,41 +4512,43 @@ fn try_lower_multi_stmt_block_with_offset(
                     ">=" => Some(skotch_mir::BinOp::CmpGe),
                     _ => None,
                 }?;
-                let resolve_w =
-                    |e: KtExpr<'_>,
-                     name_to_local: &Vec<(String, LocalId)>,
-                     next_slot: &mut u32,
-                     local_tys: &mut Vec<Ty>,
-                     stmts: &mut Vec<MStmt>,
-                     strings: &mut Vec<String>|
-                     -> Option<LocalId> {
-                        let e = unwrap_parens(e);
-                        if let Some((k, ty)) = literal_to_const(&e, strings) {
-                            let slot = LocalId(*next_slot);
-                            *next_slot += 1;
-                            local_tys.push(ty);
-                            stmts.push(MStmt::Assign {
-                                dest: slot,
-                                value: skotch_mir::Rvalue::Const(k),
-                            });
-                            return Some(slot);
-                        }
-                        if let KtExpr::Reference(rr) = e {
-                            let n = rr.name()?;
-                            return name_to_local
-                                .iter()
-                                .rev()
-                                .find(|(name, _)| name == n)
-                                .map(|(_, l)| *l);
-                        }
-                        None
-                    };
+                let resolve_w = |e: KtExpr<'_>,
+                                 name_to_local: &Vec<(String, LocalId)>,
+                                 next_slot: &mut u32,
+                                 local_tys: &mut Vec<Ty>,
+                                 stmts: &mut Vec<MStmt>,
+                                 strings: &mut Vec<String>|
+                 -> Option<LocalId> {
+                    let e = unwrap_parens(e);
+                    if let Some((k, ty)) = literal_to_const(&e, strings) {
+                        let slot = LocalId(*next_slot);
+                        *next_slot += 1;
+                        local_tys.push(ty);
+                        stmts.push(MStmt::Assign {
+                            dest: slot,
+                            value: skotch_mir::Rvalue::Const(k),
+                        });
+                        return Some(slot);
+                    }
+                    if let KtExpr::Reference(rr) = e {
+                        let n = rr.name()?;
+                        return name_to_local
+                            .iter()
+                            .rev()
+                            .find(|(name, _)| name == n)
+                            .map(|(_, l)| *l);
+                    }
+                    None
+                };
                 let _ = resolve_w; // superseded by lower_inline_expr_to_slot
                 let mut cond_stmts: Vec<MStmt> = Vec::new();
                 let cond_lookup = {
                     let snap = name_to_local.clone();
                     move |n: &str| -> Option<LocalId> {
-                        snap.iter().rev().find(|(name, _)| name == n).map(|(_, l)| *l)
+                        snap.iter()
+                            .rev()
+                            .find(|(name, _)| name == n)
+                            .map(|(_, l)| *l)
                     }
                 };
                 let lhs_slot = lower_inline_expr_to_slot(
@@ -4619,9 +4581,7 @@ fn try_lower_multi_stmt_block_with_offset(
                 // Resolve body stmts via shared helper.
                 let body_block_opt = w.body().and_then(|b| b.expression());
                 let body_children: Vec<&skotch_sil::SilNode> = match body_block_opt {
-                    Some(KtExpr::Block(bl)) => {
-                        skotch_ast::children(bl.syntax()).iter().collect()
-                    }
+                    Some(KtExpr::Block(bl)) => skotch_ast::children(bl.syntax()).iter().collect(),
                     Some(other) => vec![other.syntax()],
                     None => vec![],
                 };
@@ -4646,8 +4606,8 @@ fn try_lower_multi_stmt_block_with_offset(
                         }
                     }
                     match ret_idx {
-                        Some(idx) => trailing_children[..idx].iter().copied().collect(),
-                        None => trailing_children.iter().copied().collect(),
+                        Some(idx) => trailing_children[..idx].to_vec(),
+                        None => trailing_children.to_vec(),
                     }
                 };
                 let mut exit_stmts = if before_ret.is_empty() {
@@ -4680,7 +4640,10 @@ fn try_lower_multi_stmt_block_with_offset(
                     if let Some(re) = ret_expr_inner {
                         let snap = name_to_local.clone();
                         let lookup = |n: &str| -> Option<LocalId> {
-                            snap.iter().rev().find(|(name, _)| name == n).map(|(_, l)| *l)
+                            snap.iter()
+                                .rev()
+                                .find(|(name, _)| name == n)
+                                .map(|(_, l)| *l)
                         };
                         let slot = lower_inline_expr_to_slot(
                             re,
@@ -4717,10 +4680,7 @@ fn try_lower_multi_stmt_block_with_offset(
                     stmts: exit_stmts,
                     terminator: exit_terminator,
                 };
-                return Some((
-                    vec![pre_block, cond_block, body_blk, exit_block],
-                    local_tys,
-                ));
+                return Some((vec![pre_block, cond_block, body_blk, exit_block], local_tys));
             }
             // `for (i in lo..hi) { body }` as the last meaningful
             // statement in the block. Emits a 4-block CFG:
@@ -4798,9 +4758,7 @@ fn try_lower_multi_stmt_block_with_offset(
                 // Resolve the body.
                 let body_block = for_e.body().and_then(|b| b.expression());
                 let body_children: Vec<&skotch_sil::SilNode> = match body_block {
-                    Some(KtExpr::Block(bl)) => {
-                        skotch_ast::children(bl.syntax()).iter().collect()
-                    }
+                    Some(KtExpr::Block(bl)) => skotch_ast::children(bl.syntax()).iter().collect(),
                     Some(other) => vec![other.syntax()],
                     None => vec![],
                 };
@@ -4864,13 +4822,16 @@ fn try_lower_multi_stmt_block_with_offset(
                         }
                     }
                     let before: Vec<&skotch_sil::SilNode> = match ret_idx {
-                        Some(idx) => trailing_children[..idx].iter().copied().collect(),
-                        None => trailing_children.iter().copied().collect(),
+                        Some(idx) => trailing_children[..idx].to_vec(),
+                        None => trailing_children.to_vec(),
                     };
                     let slot = if let Some(re) = ret_expr_inner {
                         let snap = name_to_local.clone();
                         let lookup = |n: &str| -> Option<LocalId> {
-                            snap.iter().rev().find(|(name, _)| name == n).map(|(_, l)| *l)
+                            snap.iter()
+                                .rev()
+                                .find(|(name, _)| name == n)
+                                .map(|(_, l)| *l)
                         };
                         // First lower the pre-return stmts so locals are set.
                         // We'll defer materializing the return value until
@@ -4919,7 +4880,10 @@ fn try_lower_multi_stmt_block_with_offset(
                     if let Some(re) = ret_expr_inner {
                         let snap = name_to_local.clone();
                         let lookup = |n: &str| -> Option<LocalId> {
-                            snap.iter().rev().find(|(name, _)| name == n).map(|(_, l)| *l)
+                            snap.iter()
+                                .rev()
+                                .find(|(name, _)| name == n)
+                                .map(|(_, l)| *l)
                         };
                         let slot = lower_inline_expr_to_slot(
                             re,
@@ -4960,10 +4924,7 @@ fn try_lower_multi_stmt_block_with_offset(
                     stmts: exit_stmts,
                     terminator: exit_terminator,
                 };
-                return Some((
-                    vec![pre_block, cond_block, body_blk, exit_block],
-                    local_tys,
-                ));
+                return Some((vec![pre_block, cond_block, body_blk, exit_block], local_tys));
             }
             // `if (cond) { then } else { else_ }` (or just then) as a
             // statement (result discarded). 4- or 3-block CFG:
@@ -5000,8 +4961,7 @@ fn try_lower_multi_stmt_block_with_offset(
                             continue;
                         }
                         Some(KtExpr::Block(bl)) => {
-                            final_else =
-                                Some(skotch_ast::children(bl.syntax()).iter().collect());
+                            final_else = Some(skotch_ast::children(bl.syntax()).iter().collect());
                             break;
                         }
                         Some(other) => {
@@ -5016,7 +4976,10 @@ fn try_lower_multi_stmt_block_with_offset(
                 let if_cond_lookup = {
                     let snap = name_to_local.clone();
                     move |n: &str| -> Option<LocalId> {
-                        snap.iter().rev().find(|(name, _)| name == n).map(|(_, l)| *l)
+                        snap.iter()
+                            .rev()
+                            .find(|(name, _)| name == n)
+                            .map(|(_, l)| *l)
                     }
                 };
                 let mut cmp_block_stmts: Vec<Vec<MStmt>> = Vec::with_capacity(n_arms);
@@ -5026,8 +4989,7 @@ fn try_lower_multi_stmt_block_with_offset(
                 for (cond_expr, then_children) in &arms {
                     let mut c_stmts: Vec<MStmt> = Vec::new();
                     let cmp_slot = if let KtExpr::Binary(cmp_b) = cond_expr {
-                        let cmp_text =
-                            cmp_b.operation().map(|o| o.text()).unwrap_or_default();
+                        let cmp_text = cmp_b.operation().map(|o| o.text()).unwrap_or_default();
                         let cmp_mir = match cmp_text.as_str() {
                             "==" => Some(skotch_mir::BinOp::CmpEq),
                             "!=" => Some(skotch_mir::BinOp::CmpNe),
@@ -5098,8 +5060,8 @@ fn try_lower_multi_stmt_block_with_offset(
                         }
                     }
                     let before_ret: Vec<&skotch_sil::SilNode> = match ret_idx {
-                        Some(idx) => arm_then_kids[..idx].iter().copied().collect(),
-                        None => arm_then_kids.iter().copied().collect(),
+                        Some(idx) => arm_then_kids[..idx].to_vec(),
+                        None => arm_then_kids.to_vec(),
                     };
                     let mut then_mstmts = if before_ret.is_empty() {
                         Vec::new()
@@ -5113,12 +5075,13 @@ fn try_lower_multi_stmt_block_with_offset(
                             fn_lookup,
                         )?
                     };
-                    let arm_return_slot: Option<LocalId> = if let Some(re) =
-                        ret_expr_inner
-                    {
+                    let arm_return_slot: Option<LocalId> = if let Some(re) = ret_expr_inner {
                         let snap = name_to_local.clone();
                         let lookup = |n: &str| -> Option<LocalId> {
-                            snap.iter().rev().find(|(name, _)| name == n).map(|(_, l)| *l)
+                            snap.iter()
+                                .rev()
+                                .find(|(name, _)| name == n)
+                                .map(|(_, l)| *l)
                         };
                         let slot = lower_inline_expr_to_slot(
                             re,
@@ -5174,10 +5137,8 @@ fn try_lower_multi_stmt_block_with_offset(
                             }
                         }
                         match ret_idx {
-                            Some(idx) => {
-                                trailing_children[..idx].iter().copied().collect()
-                            }
-                            None => trailing_children.iter().copied().collect(),
+                            Some(idx) => trailing_children[..idx].to_vec(),
+                            None => trailing_children.to_vec(),
                         }
                     };
                     let mut exit_stmts = if before_ret.is_empty() {
@@ -5328,8 +5289,8 @@ fn try_lower_multi_stmt_block_with_offset(
                         }
                     }
                     match ret_idx {
-                        Some(idx) => trailing_children[..idx].iter().copied().collect(),
-                        None => trailing_children.iter().copied().collect(),
+                        Some(idx) => trailing_children[..idx].to_vec(),
+                        None => trailing_children.to_vec(),
                     }
                 };
                 let mut exit_stmts = if before_ret.is_empty() {
@@ -5362,7 +5323,10 @@ fn try_lower_multi_stmt_block_with_offset(
                     if let Some(re) = ret_expr_inner {
                         let snap = name_to_local.clone();
                         let lookup = |n: &str| -> Option<LocalId> {
-                            snap.iter().rev().find(|(name, _)| name == n).map(|(_, l)| *l)
+                            snap.iter()
+                                .rev()
+                                .find(|(name, _)| name == n)
+                                .map(|(_, l)| *l)
                         };
                         let slot = lower_inline_expr_to_slot(
                             re,
@@ -5484,8 +5448,7 @@ fn try_lower_multi_stmt_block_with_offset(
                                         arg_slots.push(slot);
                                     }
                                     other => {
-                                        let (k, ty) =
-                                            literal_to_const(&other, strings)?;
+                                        let (k, ty) = literal_to_const(&other, strings)?;
                                         let slot = LocalId(next_slot);
                                         next_slot += 1;
                                         local_tys.push(ty);
@@ -5614,9 +5577,7 @@ fn try_lower_multi_stmt_block_with_offset(
                             .find(|(n, _)| n == lname)
                             .map(|(_, l)| *l)?;
                         // Resolve RHS: literal, Reference, or short Binary.
-                        let rhs_slot = if let Some((k, ty)) =
-                            literal_to_const(&rhs_expr, strings)
-                        {
+                        let rhs_slot = if let Some((k, ty)) = literal_to_const(&rhs_expr, strings) {
                             let slot = LocalId(next_slot);
                             next_slot += 1;
                             local_tys.push(ty);
@@ -5724,10 +5685,9 @@ fn try_lower_multi_stmt_block_with_offset(
                         // count is a field on the enclosing class (not a
                         // local). Emits PutField on this (slot 0).
                         if !name_to_local.iter().any(|(n, _)| n == lname) {
-                            if let (Some(cname), Some((fname, _fty))) = (
-                                class_name,
-                                field_names.iter().find(|(n, _)| n == lname),
-                            ) {
+                            if let (Some(cname), Some((fname, _fty))) =
+                                (class_name, field_names.iter().find(|(n, _)| n == lname))
+                            {
                                 let snap = name_to_local.clone();
                                 let lookup = |n: &str| -> Option<LocalId> {
                                     snap.iter()
@@ -5794,9 +5754,7 @@ fn try_lower_multi_stmt_block_with_offset(
                                     if let Some((fid, _)) = fn_lookup.get(callee_name) {
                                         let mut arg_slots: Vec<LocalId> = Vec::new();
                                         let mut ok = true;
-                                        if let Some(arg_list) =
-                                            call.value_argument_list()
-                                        {
+                                        if let Some(arg_list) = call.value_argument_list() {
                                             for arg in arg_list.arguments() {
                                                 let Some(arg_e) = arg.expression() else {
                                                     ok = false;
@@ -5892,12 +5850,7 @@ fn try_lower_multi_stmt_block_with_offset(
                                                 .map(|(_, l)| *l)
                                         }
                                         KtExpr::Binary(_) => lower_inline_expr_to_slot(
-                                            e,
-                                            &lookup,
-                                            next_slot,
-                                            stmts,
-                                            local_tys,
-                                            strings,
+                                            e, &lookup, next_slot, stmts, local_tys, strings,
                                         ),
                                         other => {
                                             let (k, ty) = literal_to_const(&other, strings)?;
@@ -6133,20 +6086,16 @@ fn try_lower_multi_stmt_block_with_offset(
                     // on Reference, or a binary op on refs/literals.
                     let arg_slot = match &arg_exprs[0] {
                         KtExpr::DotQualified(dq) => {
-                            let exprs: Vec<KtExpr<'_>> =
-                                skotch_ast::children(dq.syntax())
-                                    .iter()
-                                    .filter_map(KtExpr::cast)
-                                    .collect();
+                            let exprs: Vec<KtExpr<'_>> = skotch_ast::children(dq.syntax())
+                                .iter()
+                                .filter_map(KtExpr::cast)
+                                .collect();
                             if exprs.len() != 2 {
                                 return None;
                             }
                             // Field access OR method call on local.
                             match (&exprs[0], &exprs[1]) {
-                                (
-                                    KtExpr::Reference(recv_ref),
-                                    KtExpr::Reference(prop_ref),
-                                ) => {
+                                (KtExpr::Reference(recv_ref), KtExpr::Reference(prop_ref)) => {
                                     let recv_n = recv_ref.name()?;
                                     let prop_n = prop_ref.name()?;
                                     let recv_slot = name_to_local
@@ -6172,10 +6121,7 @@ fn try_lower_multi_stmt_block_with_offset(
                                     });
                                     slot
                                 }
-                                (
-                                    KtExpr::Reference(recv_ref),
-                                    KtExpr::Call(call),
-                                ) => {
+                                (KtExpr::Reference(recv_ref), KtExpr::Call(call)) => {
                                     let recv_n = recv_ref.name()?;
                                     let method_n = match call.callee() {
                                         Some(KtExpr::Reference(r)) => r.name()?,
@@ -6239,26 +6185,19 @@ fn try_lower_multi_stmt_block_with_offset(
                             }
                         }
                         KtExpr::Prefix(p)
-                            if skotch_ast::children(p.syntax())
-                                .iter()
-                                .any(|c| {
-                                    c.kind == skotch_syntax::SyntaxKind::OPERATION_REFERENCE
-                                        && skotch_ast::children(c)
-                                            .iter()
-                                            .any(|cc| {
-                                                cc.kind == skotch_syntax::SyntaxKind::MINUS
-                                            })
-                                }) =>
+                            if skotch_ast::children(p.syntax()).iter().any(|c| {
+                                c.kind == skotch_syntax::SyntaxKind::OPERATION_REFERENCE
+                                    && skotch_ast::children(c)
+                                        .iter()
+                                        .any(|cc| cc.kind == skotch_syntax::SyntaxKind::MINUS)
+                            }) =>
                         {
                             let inner = skotch_ast::children(p.syntax())
                                 .iter()
                                 .find_map(KtExpr::cast)
                                 .map(unwrap_parens)?;
                             // Try literal fold first (handles -Int/-Long/etc).
-                            if let Some((k, ty)) = literal_to_const(
-                                &KtExpr::Prefix(*p),
-                                strings,
-                            ) {
+                            if let Some((k, ty)) = literal_to_const(&KtExpr::Prefix(*p), strings) {
                                 let slot = LocalId(next_slot);
                                 next_slot += 1;
                                 local_tys.push(ty);
@@ -6279,22 +6218,16 @@ fn try_lower_multi_stmt_block_with_offset(
                                     .cloned()
                                     .unwrap_or(Ty::Int);
                                 let (zero, op) = match inner_ty {
-                                    Ty::Long => (
-                                        skotch_mir::MirConst::Long(0),
-                                        skotch_mir::BinOp::SubL,
-                                    ),
-                                    Ty::Float => (
-                                        skotch_mir::MirConst::Float(0.0),
-                                        skotch_mir::BinOp::SubF,
-                                    ),
-                                    Ty::Double => (
-                                        skotch_mir::MirConst::Double(0.0),
-                                        skotch_mir::BinOp::SubD,
-                                    ),
-                                    _ => (
-                                        skotch_mir::MirConst::Int(0),
-                                        skotch_mir::BinOp::SubI,
-                                    ),
+                                    Ty::Long => {
+                                        (skotch_mir::MirConst::Long(0), skotch_mir::BinOp::SubL)
+                                    }
+                                    Ty::Float => {
+                                        (skotch_mir::MirConst::Float(0.0), skotch_mir::BinOp::SubF)
+                                    }
+                                    Ty::Double => {
+                                        (skotch_mir::MirConst::Double(0.0), skotch_mir::BinOp::SubD)
+                                    }
+                                    _ => (skotch_mir::MirConst::Int(0), skotch_mir::BinOp::SubI),
                                 };
                                 let zero_slot = LocalId(next_slot);
                                 next_slot += 1;
@@ -6379,7 +6312,10 @@ fn try_lower_multi_stmt_block_with_offset(
                                             .map(|(_, l)| *l)
                                     }
                                     KtExpr::Binary(inner_b) => {
-                                        let inner_op = inner_b.operation().map(|o| o.text()).unwrap_or_default();
+                                        let inner_op = inner_b
+                                            .operation()
+                                            .map(|o| o.text())
+                                            .unwrap_or_default();
                                         let inner_mir = match inner_op.as_str() {
                                             "+" => Some(skotch_mir::BinOp::AddI),
                                             "-" => Some(skotch_mir::BinOp::SubI),
@@ -6784,7 +6720,11 @@ fn lower_inline_expr_to_slot(
             extra_locals.push(if is_cmp { Ty::Bool } else { Ty::Int });
             pre_stmts.push(MStmt::Assign {
                 dest: slot,
-                value: skotch_mir::Rvalue::BinOp { op: mir_op, lhs, rhs },
+                value: skotch_mir::Rvalue::BinOp {
+                    op: mir_op,
+                    lhs,
+                    rhs,
+                },
             });
             Some(slot)
         }
@@ -6820,9 +6760,7 @@ fn lower_inline_expr_to_slot(
                     extra_locals.push(Ty::Int);
                     pre_stmts.push(MStmt::Assign {
                         dest: zero_slot,
-                        value: skotch_mir::Rvalue::Const(
-                            skotch_mir::MirConst::Int(0),
-                        ),
+                        value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(0)),
                     });
                     let result = LocalId(*next_slot);
                     *next_slot += 1;
@@ -6844,9 +6782,7 @@ fn lower_inline_expr_to_slot(
                     extra_locals.push(Ty::Bool);
                     pre_stmts.push(MStmt::Assign {
                         dest: false_slot,
-                        value: skotch_mir::Rvalue::Const(
-                            skotch_mir::MirConst::Bool(false),
-                        ),
+                        value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Bool(false)),
                     });
                     let result = LocalId(*next_slot);
                     *next_slot += 1;
@@ -6929,23 +6865,24 @@ fn literal_to_const(
     match e {
         KtExpr::Integer(_) => {
             // Either INTEGER_LITERAL → Int or LONG_LITERAL → Long.
-            let (text, is_long) = skotch_ast::children(e.syntax()).iter().find_map(|c| {
-                match c.kind {
-                    S::INTEGER_LITERAL => {
-                        if let skotch_sil::SilData::Token { text } = &c.data {
-                            return Some((text.as_str().to_string(), false));
+            let (text, is_long) =
+                skotch_ast::children(e.syntax())
+                    .iter()
+                    .find_map(|c| match c.kind {
+                        S::INTEGER_LITERAL => {
+                            if let skotch_sil::SilData::Token { text } = &c.data {
+                                return Some((text.as_str().to_string(), false));
+                            }
+                            None
                         }
-                        None
-                    }
-                    S::LONG_LITERAL => {
-                        if let skotch_sil::SilData::Token { text } = &c.data {
-                            return Some((text.as_str().to_string(), true));
+                        S::LONG_LITERAL => {
+                            if let skotch_sil::SilData::Token { text } = &c.data {
+                                return Some((text.as_str().to_string(), true));
+                            }
+                            None
                         }
-                        None
-                    }
-                    _ => None,
-                }
-            })?;
+                        _ => None,
+                    })?;
             // Parse text supporting hex (0x), binary (0b), underscores,
             // and the trailing 'L' suffix.
             let parse_int = |s: &str| -> Option<i64> {
@@ -7000,8 +6937,9 @@ fn literal_to_const(
             }
         }
         KtExpr::Float(_) => {
-            let (text, is_float) = skotch_ast::children(e.syntax()).iter().find_map(|c| {
-                match c.kind {
+            let (text, is_float) = skotch_ast::children(e.syntax())
+                .iter()
+                .find_map(|c| match c.kind {
                     S::FLOAT_LITERAL => {
                         if let skotch_sil::SilData::Token { text } = &c.data {
                             return Some((text.as_str().to_string(), true));
@@ -7015,8 +6953,7 @@ fn literal_to_const(
                         None
                     }
                     _ => None,
-                }
-            })?;
+                })?;
             if is_float {
                 let trimmed = text.trim_end_matches(['f', 'F']);
                 let v: f32 = trimmed.parse().ok()?;
@@ -7036,16 +6973,14 @@ fn literal_to_const(
             // `'A'` → MirConst::Int with the char code. Strips the
             // surrounding single quotes and parses one char (or an
             // escape like \n, \t, \\, \').
-            let text = skotch_ast::children(e.syntax())
-                .iter()
-                .find_map(|c| {
-                    if c.kind == S::CHARACTER_LITERAL {
-                        if let skotch_sil::SilData::Token { text } = &c.data {
-                            return Some(text.as_str().to_string());
-                        }
+            let text = skotch_ast::children(e.syntax()).iter().find_map(|c| {
+                if c.kind == S::CHARACTER_LITERAL {
+                    if let skotch_sil::SilData::Token { text } = &c.data {
+                        return Some(text.as_str().to_string());
                     }
-                    None
-                })?;
+                }
+                None
+            })?;
             let inner = text.strip_prefix('\'')?.strip_suffix('\'')?;
             let ch = match inner {
                 "\\n" => '\n',
@@ -7188,17 +7123,15 @@ fn lower_simple_body(
             // Walk PROPERTY children + KtExpr stmts together via
             // try_lower_multi_stmt_block — this handles
             // `val x = 10; println(x)` and similar simple shapes.
-            if let Some((blocks, locals)) =
-                try_lower_multi_stmt_block_inner(
-                    block,
-                    f,
-                    strings,
-                    fn_lookup,
-                    val_lookup,
-                    class_lookup,
-                    wrapper_class,
-                )
-            {
+            if let Some((blocks, locals)) = try_lower_multi_stmt_block_inner(
+                block,
+                f,
+                strings,
+                fn_lookup,
+                val_lookup,
+                class_lookup,
+                wrapper_class,
+            ) {
                 return (blocks, locals);
             }
             if stmts.len() == 1 {
@@ -7299,7 +7232,9 @@ fn lower_simple_body(
                         break None;
                     }
                     if let KtExpr::Reference(prop_ref) = &exprs[1] {
-                        let Some(pname) = prop_ref.name() else { break None };
+                        let Some(pname) = prop_ref.name() else {
+                            break None;
+                        };
                         chain.push(pname.to_string());
                         cursor = exprs[0];
                     } else {
@@ -7320,8 +7255,10 @@ fn lower_simple_body(
                     .value_parameter_list()
                     .map(|pl| pl.parameters().collect())
                     .unwrap_or_default();
-                if let Some((idx, param)) =
-                    params.iter().enumerate().find(|(_, p)| p.name() == Some(base_name))
+                if let Some((idx, param)) = params
+                    .iter()
+                    .enumerate()
+                    .find(|(_, p)| p.name() == Some(base_name))
                 {
                     let mut current_cls = param
                         .type_reference()
@@ -7341,8 +7278,7 @@ fn lower_simple_body(
                                     ok = false;
                                     break;
                                 };
-                                let slot =
-                                    skotch_mir::LocalId(base_slot_count + step_i as u32);
+                                let slot = skotch_mir::LocalId(base_slot_count + step_i as u32);
                                 extra_locals.push(Ty::Any);
                                 stmts.push(skotch_mir::Stmt::Assign {
                                     dest: slot,
@@ -7357,9 +7293,8 @@ fn lower_simple_body(
                                 // subsequent step.
                                 let is_last = step_i + 1 == chain.len();
                                 if !is_last {
-                                    let next_cls_name = class_fields
-                                        .get(&cls_name)
-                                        .and_then(|fields| {
+                                    let next_cls_name =
+                                        class_fields.get(&cls_name).and_then(|fields| {
                                             fields
                                                 .iter()
                                                 .find(|(n, _)| n == prop_name)
@@ -7898,10 +7833,7 @@ fn lower_simple_body(
                 stmts: vec![skotch_mir::Stmt::Assign {
                     dest: result_slot,
                     value: skotch_mir::Rvalue::Call {
-                        kind: skotch_mir::CallKind::MakeConcatWithConstants {
-                            recipe,
-                            descriptor,
-                        },
+                        kind: skotch_mir::CallKind::MakeConcatWithConstants { recipe, descriptor },
                         args: arg_slots,
                     },
                 }],
@@ -8038,17 +7970,13 @@ fn lower_simple_body(
                 }
             }
             if ok && had_interp && had_long {
-                let descriptor =
-                    format!("({})Ljava/lang/String;", arg_descs.join(""));
+                let descriptor = format!("({})Ljava/lang/String;", arg_descs.join(""));
                 let result_slot = skotch_mir::LocalId(next_slot);
                 extra_locals.push(Ty::String);
                 pre_stmts.push(skotch_mir::Stmt::Assign {
                     dest: result_slot,
                     value: skotch_mir::Rvalue::Call {
-                        kind: skotch_mir::CallKind::MakeConcatWithConstants {
-                            recipe,
-                            descriptor,
-                        },
+                        kind: skotch_mir::CallKind::MakeConcatWithConstants { recipe, descriptor },
                         args: arg_slots,
                     },
                 });
@@ -8106,7 +8034,8 @@ fn lower_simple_body(
                     let jvm_cls = skotch_types::intrinsics::kotlin_exception_class(cls)
                         .map(|s| s.to_string())
                         .or_else(|| {
-                            skotch_types::intrinsics::kotlin_to_jvm_class(cls).map(|s| s.to_string())
+                            skotch_types::intrinsics::kotlin_to_jvm_class(cls)
+                                .map(|s| s.to_string())
                         })
                         .unwrap_or_else(|| cls.to_string());
                     let mut next_slot = param_count as u32;
@@ -8133,9 +8062,7 @@ fn lower_simple_body(
                                         ok = false;
                                         break;
                                     };
-                                    if let Some(idx) =
-                                        param_names.iter().position(|p| p == an)
-                                    {
+                                    if let Some(idx) = param_names.iter().position(|p| p == an) {
                                         arg_slots.push(skotch_mir::LocalId(idx as u32));
                                     } else {
                                         ok = false;
@@ -8186,13 +8113,7 @@ fn lower_simple_body(
     // when (subject) { v1 -> result1; v2 -> result2; else -> default }
     // expression body. Lowers to a chain of comparison blocks.
     if let KtExpr::When(w) = &body_expr {
-        if let Some(lowered) = try_lower_when_expression(
-            w,
-            f,
-            strings,
-            val_lookup,
-            wrapper_class,
-        ) {
+        if let Some(lowered) = try_lower_when_expression(w, f, strings, val_lookup, wrapper_class) {
             return lowered;
         }
     }
@@ -8205,14 +8126,9 @@ fn lower_simple_body(
     //   block 2: result_local = else-arm; Goto(3)
     //   block 3: ReturnValue(result_local)
     if let KtExpr::If(if_e) = &body_expr {
-        if let Some(blocks_and_locals) = try_lower_if_expression(
-            if_e,
-            f,
-            strings,
-            fn_lookup,
-            val_lookup,
-            wrapper_class,
-        ) {
+        if let Some(blocks_and_locals) =
+            try_lower_if_expression(if_e, f, strings, fn_lookup, val_lookup, wrapper_class)
+        {
             return blocks_and_locals;
         }
     }
@@ -8448,123 +8364,103 @@ fn lower_simple_body(
                     _ => None,
                 };
                 if let (Some(recv_name), Some(meth_name)) = (recv_ref.name(), meth_name) {
-                        let params: Vec<skotch_ast::KtValueParameter<'_>> = f
-                            .value_parameter_list()
-                            .map(|pl| pl.parameters().collect())
-                            .unwrap_or_default();
-                        let outer_param_names: Vec<String> = params
-                            .iter()
-                            .map(|p| p.name().unwrap_or("").to_string())
-                            .collect();
-                        if let Some((idx, param)) =
-                            params.iter().enumerate().find(|(_, p)| p.name() == Some(recv_name))
-                        {
-                            let recv_class = param
-                                .type_reference()
-                                .and_then(|tr| tr.user_type())
-                                .and_then(|u| u.name());
-                            if let Some(cname) = recv_class {
-                                if class_lookup.contains_key(cname) {
-                                    let recv_slot = skotch_mir::LocalId(idx as u32);
-                                    let mut next_slot = params.len() as u32;
-                                    let mut pre_stmts: Vec<skotch_mir::Stmt> = Vec::new();
-                                    let mut extra_locals: Vec<Ty> = Vec::new();
-                                    let mut arg_slots: Vec<skotch_mir::LocalId> = vec![recv_slot];
-                                    let mut ok = true;
-                                    if let Some(arg_list) = call.value_argument_list() {
-                                        for arg in arg_list.arguments() {
-                                            let Some(arg_expr) = arg.expression() else {
-                                                ok = false;
-                                                break;
-                                            };
-                                            match arg_expr {
-                                                KtExpr::Reference(rr) => {
-                                                    let Some(an) = rr.name() else {
-                                                        ok = false;
-                                                        break;
-                                                    };
-                                                    if let Some(pidx) = outer_param_names
-                                                        .iter()
-                                                        .position(|p| p == an)
-                                                    {
-                                                        arg_slots.push(skotch_mir::LocalId(
-                                                            pidx as u32,
-                                                        ));
-                                                    } else if let Some(val_ty) =
-                                                        val_lookup.get(an)
-                                                    {
-                                                        let slot =
-                                                            skotch_mir::LocalId(next_slot);
-                                                        next_slot += 1;
-                                                        extra_locals.push(val_ty.clone());
-                                                        pre_stmts.push(
-                                                            skotch_mir::Stmt::Assign {
-                                                                dest: slot,
-                                                                value:
-                                                                    skotch_mir::Rvalue::GetStaticField {
-                                                                        class_name: wrapper_class
-                                                                            .to_string(),
-                                                                        field_name: an
-                                                                            .to_string(),
-                                                                        descriptor:
-                                                                            ty_to_descriptor(
-                                                                                val_ty,
-                                                                            ),
-                                                                    },
-                                                            },
-                                                        );
-                                                        arg_slots.push(slot);
-                                                    } else {
-                                                        ok = false;
-                                                        break;
-                                                    }
-                                                }
-                                                other => {
-                                                    match literal_to_const(&other, strings) {
-                                                        Some((k, ty)) => {
-                                                            let slot =
-                                                                skotch_mir::LocalId(next_slot);
-                                                            next_slot += 1;
-                                                            extra_locals.push(ty);
-                                                            pre_stmts.push(
-                                                                skotch_mir::Stmt::Assign {
-                                                                    dest: slot,
-                                                                    value:
-                                                                        skotch_mir::Rvalue::Const(
-                                                                            k,
-                                                                        ),
-                                                                },
-                                                            );
-                                                            arg_slots.push(slot);
-                                                        }
-                                                        None => {
-                                                            ok = false;
-                                                            break;
-                                                        }
-                                                    }
+                    let params: Vec<skotch_ast::KtValueParameter<'_>> = f
+                        .value_parameter_list()
+                        .map(|pl| pl.parameters().collect())
+                        .unwrap_or_default();
+                    let outer_param_names: Vec<String> = params
+                        .iter()
+                        .map(|p| p.name().unwrap_or("").to_string())
+                        .collect();
+                    if let Some((idx, param)) = params
+                        .iter()
+                        .enumerate()
+                        .find(|(_, p)| p.name() == Some(recv_name))
+                    {
+                        let recv_class = param
+                            .type_reference()
+                            .and_then(|tr| tr.user_type())
+                            .and_then(|u| u.name());
+                        if let Some(cname) = recv_class {
+                            if class_lookup.contains_key(cname) {
+                                let recv_slot = skotch_mir::LocalId(idx as u32);
+                                let mut next_slot = params.len() as u32;
+                                let mut pre_stmts: Vec<skotch_mir::Stmt> = Vec::new();
+                                let mut extra_locals: Vec<Ty> = Vec::new();
+                                let mut arg_slots: Vec<skotch_mir::LocalId> = vec![recv_slot];
+                                let mut ok = true;
+                                if let Some(arg_list) = call.value_argument_list() {
+                                    for arg in arg_list.arguments() {
+                                        let Some(arg_expr) = arg.expression() else {
+                                            ok = false;
+                                            break;
+                                        };
+                                        match arg_expr {
+                                            KtExpr::Reference(rr) => {
+                                                let Some(an) = rr.name() else {
+                                                    ok = false;
+                                                    break;
+                                                };
+                                                if let Some(pidx) =
+                                                    outer_param_names.iter().position(|p| p == an)
+                                                {
+                                                    arg_slots
+                                                        .push(skotch_mir::LocalId(pidx as u32));
+                                                } else if let Some(val_ty) = val_lookup.get(an) {
+                                                    let slot = skotch_mir::LocalId(next_slot);
+                                                    next_slot += 1;
+                                                    extra_locals.push(val_ty.clone());
+                                                    pre_stmts.push(skotch_mir::Stmt::Assign {
+                                                        dest: slot,
+                                                        value: skotch_mir::Rvalue::GetStaticField {
+                                                            class_name: wrapper_class.to_string(),
+                                                            field_name: an.to_string(),
+                                                            descriptor: ty_to_descriptor(val_ty),
+                                                        },
+                                                    });
+                                                    arg_slots.push(slot);
+                                                } else {
+                                                    ok = false;
+                                                    break;
                                                 }
                                             }
+                                            other => match literal_to_const(&other, strings) {
+                                                Some((k, ty)) => {
+                                                    let slot = skotch_mir::LocalId(next_slot);
+                                                    next_slot += 1;
+                                                    extra_locals.push(ty);
+                                                    pre_stmts.push(skotch_mir::Stmt::Assign {
+                                                        dest: slot,
+                                                        value: skotch_mir::Rvalue::Const(k),
+                                                    });
+                                                    arg_slots.push(slot);
+                                                }
+                                                None => {
+                                                    ok = false;
+                                                    break;
+                                                }
+                                            },
                                         }
                                     }
-                                    if ok {
-                                        let result_slot = skotch_mir::LocalId(next_slot);
-                                        extra_locals.push(Ty::Any);
-                                        pre_stmts.push(skotch_mir::Stmt::Assign {
-                                            dest: result_slot,
-                                            value: skotch_mir::Rvalue::Call {
-                                                kind: skotch_mir::CallKind::Virtual {
-                                                    class_name: cname.to_string(),
-                                                    method_name: meth_name.to_string(),
-                                                },
-                                                args: arg_slots,
+                                }
+                                if ok {
+                                    let result_slot = skotch_mir::LocalId(next_slot);
+                                    extra_locals.push(Ty::Any);
+                                    pre_stmts.push(skotch_mir::Stmt::Assign {
+                                        dest: result_slot,
+                                        value: skotch_mir::Rvalue::Call {
+                                            kind: skotch_mir::CallKind::Virtual {
+                                                class_name: cname.to_string(),
+                                                method_name: meth_name.to_string(),
                                             },
-                                        });
-                                        let blocks = vec![BasicBlock {
-                                            stmts: pre_stmts,
-                                            terminator: Terminator::ReturnValue(result_slot),
-                                        }];
-                                        return (blocks, extra_locals);
-                                    }
+                                            args: arg_slots,
+                                        },
+                                    });
+                                    let blocks = vec![BasicBlock {
+                                        stmts: pre_stmts,
+                                        terminator: Terminator::ReturnValue(result_slot),
+                                    }];
+                                    return (blocks, extra_locals);
                                 }
                             }
                         }
@@ -8572,6 +8468,7 @@ fn lower_simple_body(
                 }
             }
         }
+    }
     // end DotQualified virtual-call body
 
     // Static-call body: `fun outer() = inner(arg1, arg2)` where
@@ -8640,14 +8537,12 @@ fn lower_simple_body(
                                         Some(KtExpr::Reference(rr)) => rr.name(),
                                         _ => None,
                                     };
-                                    let lookup =
-                                        inner_name.and_then(|n| fn_lookup.get(n).cloned());
+                                    let lookup = inner_name.and_then(|n| fn_lookup.get(n).cloned());
                                     let Some((inner_fid, inner_ret)) = lookup else {
                                         ok = false;
                                         break;
                                     };
-                                    let mut inner_arg_slots: Vec<skotch_mir::LocalId> =
-                                        Vec::new();
+                                    let mut inner_arg_slots: Vec<skotch_mir::LocalId> = Vec::new();
                                     let mut inner_ok = true;
                                     if let Some(inner_args) = nested_call.value_argument_list() {
                                         for inner_arg in inner_args.arguments() {
@@ -9160,7 +9055,9 @@ fn lower_simple_body(
                         )?;
                         let (zero, op) = match inner_ty {
                             Ty::Long => (skotch_mir::MirConst::Long(0), skotch_mir::BinOp::SubL),
-                            Ty::Float => (skotch_mir::MirConst::Float(0.0), skotch_mir::BinOp::SubF),
+                            Ty::Float => {
+                                (skotch_mir::MirConst::Float(0.0), skotch_mir::BinOp::SubF)
+                            }
                             Ty::Double => {
                                 (skotch_mir::MirConst::Double(0.0), skotch_mir::BinOp::SubD)
                             }
@@ -9344,8 +9241,9 @@ fn constructor_from_primary_impl(
     locals.push(Ty::Class(class_name.to_string()));
     locals.extend(user_param_tys);
     let this_slot = skotch_mir::LocalId(0);
-    let params: Vec<skotch_mir::LocalId> =
-        (0..=user_param_count).map(|i| skotch_mir::LocalId(i as u32)).collect();
+    let params: Vec<skotch_mir::LocalId> = (0..=user_param_count)
+        .map(|i| skotch_mir::LocalId(i as u32))
+        .collect();
 
     let mut stmts: Vec<skotch_mir::Stmt> = Vec::new();
     // 1. Super call.
@@ -9400,8 +9298,12 @@ fn constructor_from_primary_impl(
     if let Some(body) = c.body() {
         for d in body.declarations() {
             let KtDecl::Property(prop) = d else { continue };
-            let Some(field_name) = prop.name() else { continue };
-            let Some(init) = prop.initializer() else { continue };
+            let Some(field_name) = prop.name() else {
+                continue;
+            };
+            let Some(init) = prop.initializer() else {
+                continue;
+            };
             let init = unwrap_parens(init);
             // 3a. Literal init.
             if let Some((const_val, ty)) = literal_to_const(&init, &mut strings) {
@@ -9691,20 +9593,18 @@ fn method_simple_body_full(
             // First try a proper multi-stmt block walk. This handles
             // `val x = ...; return x` and `var x = 0; x = x + 1; return x`
             // shapes that the single-return path below can't.
-            if let Some((blocks, locals)) =
-                try_lower_multi_stmt_block_with_offset(
-                    block,
-                    f,
-                    strings,
-                    fn_lookup,
-                    val_lookup,
-                    &rustc_hash::FxHashMap::default(),
-                    wrapper_class,
-                    1,
-                    class_name,
-                    field_names,
-                )
-            {
+            if let Some((blocks, locals)) = try_lower_multi_stmt_block_with_offset(
+                block,
+                f,
+                strings,
+                fn_lookup,
+                val_lookup,
+                &rustc_hash::FxHashMap::default(),
+                wrapper_class,
+                1,
+                class_name,
+                field_names,
+            ) {
                 return (blocks, locals);
             }
             let mut returned: Option<KtExpr<'_>> = None;
@@ -9836,10 +9736,7 @@ fn method_simple_body_full(
             pre_stmts.push(skotch_mir::Stmt::Assign {
                 dest: result_slot,
                 value: skotch_mir::Rvalue::Call {
-                    kind: skotch_mir::CallKind::MakeConcatWithConstants {
-                        recipe,
-                        descriptor,
-                    },
+                    kind: skotch_mir::CallKind::MakeConcatWithConstants { recipe, descriptor },
                     args: arg_slots,
                 },
             });
@@ -9861,9 +9758,7 @@ fn method_simple_body_full(
         if exprs.len() == 2 {
             if let (KtExpr::This(_), KtExpr::Reference(prop_ref)) = (&exprs[0], &exprs[1]) {
                 if let (Some(cname), Some(prop_name)) = (class_name, prop_ref.name()) {
-                    if let Some((fname, fty)) =
-                        field_names.iter().find(|(n, _)| n == prop_name)
-                    {
+                    if let Some((fname, fty)) = field_names.iter().find(|(n, _)| n == prop_name) {
                         let this_slot = skotch_mir::LocalId(0);
                         let result_slot = skotch_mir::LocalId((1 + param_count) as u32);
                         let blocks = vec![BasicBlock {
@@ -10523,7 +10418,8 @@ fn method_simple_body_full(
                     let jvm_cls = skotch_types::intrinsics::kotlin_exception_class(cls)
                         .map(|s| s.to_string())
                         .or_else(|| {
-                            skotch_types::intrinsics::kotlin_to_jvm_class(cls).map(|s| s.to_string())
+                            skotch_types::intrinsics::kotlin_to_jvm_class(cls)
+                                .map(|s| s.to_string())
                         })
                         .unwrap_or_else(|| cls.to_string());
                     let mut next_slot = (1 + param_count) as u32;
@@ -10550,9 +10446,7 @@ fn method_simple_body_full(
                                         ok = false;
                                         break;
                                     };
-                                    if let Some(idx) =
-                                        param_names.iter().position(|p| p == an)
-                                    {
+                                    if let Some(idx) = param_names.iter().position(|p| p == an) {
                                         arg_slots.push(skotch_mir::LocalId((1 + idx) as u32));
                                     } else if let (Some(cname), Some((fname, fty))) =
                                         (class_name, field_names.iter().find(|(n, _)| n == an))
@@ -10661,9 +10555,7 @@ fn method_simple_body_full(
                                         ok = false;
                                         break;
                                     };
-                                    if let Some(idx) =
-                                        param_names.iter().position(|p| p == an)
-                                    {
+                                    if let Some(idx) = param_names.iter().position(|p| p == an) {
                                         arg_slots.push(skotch_mir::LocalId((1 + idx) as u32));
                                     } else {
                                         ok = false;
@@ -10735,10 +10627,7 @@ fn method_simple_body_full(
     if let KtExpr::Call(call) = &body_expr {
         if let Some(KtExpr::Reference(r)) = call.callee() {
             if let Some(name) = r.name() {
-                if name != "println"
-                    && name != "print"
-                    && !fn_lookup.contains_key(name)
-                {
+                if name != "println" && name != "print" && !fn_lookup.contains_key(name) {
                     if let Some(cname) = class_name {
                         let this_slot = skotch_mir::LocalId(0);
                         let mut next_slot = (1 + param_count) as u32;
@@ -10758,8 +10647,7 @@ fn method_simple_body_full(
                                             ok = false;
                                             break;
                                         };
-                                        if let Some(idx) =
-                                            param_names.iter().position(|p| p == an)
+                                        if let Some(idx) = param_names.iter().position(|p| p == an)
                                         {
                                             arg_slots.push(skotch_mir::LocalId((1 + idx) as u32));
                                         } else if let (Some(cname), Some((fname, fty))) =
@@ -10878,8 +10766,7 @@ fn method_simple_body_full(
                                             ok = false;
                                             break;
                                         };
-                                        if let Some(idx) =
-                                            param_names.iter().position(|p| p == an)
+                                        if let Some(idx) = param_names.iter().position(|p| p == an)
                                         {
                                             // User param: slot 1 + idx (this at 0).
                                             arg_slots.push(skotch_mir::LocalId((1 + idx) as u32));
@@ -11461,7 +11348,10 @@ mod tests {
         );
         let f = module.functions.iter().find(|f| f.name == "main").unwrap();
         let stmts: usize = f.blocks.iter().map(|b| b.stmts.len()).sum();
-        assert_eq!(stmts, 4, "expected 4 stmts (n=42, lit=1, n+1, PrintlnConcat)");
+        assert_eq!(
+            stmts, 4,
+            "expected 4 stmts (n=42, lit=1, n+1, PrintlnConcat)"
+        );
         let has_println_concat = f.blocks[0].stmts.iter().any(|s| {
             matches!(
                 s,
@@ -12123,7 +12013,10 @@ mod tests {
                 _ => false,
             },
         });
-        assert!(has_getstatic, "expected GetStaticField for MAX in then arm: {then:?}");
+        assert!(
+            has_getstatic,
+            "expected GetStaticField for MAX in then arm: {then:?}"
+        );
     }
 
     #[test]
@@ -12250,10 +12143,7 @@ mod tests {
     #[test]
     fn typed_lower_constructor_call_with_binary_arg() {
         // `class P(val x: Int) ; fun mk(): P = P(1 + 2)`
-        let module = lower(
-            "class P(val x: Int)\nfun mk(): P = P(1 + 2)",
-            "TestKt",
-        );
+        let module = lower("class P(val x: Int)\nfun mk(): P = P(1 + 2)", "TestKt");
         let f = module.functions.iter().find(|f| f.name == "mk").unwrap();
         let block = &f.blocks[0];
         let has_add = block.stmts.iter().any(|s| {
@@ -12324,7 +12214,10 @@ mod tests {
                 }
             )
         });
-        assert!(has_getstatic, "expected GetStaticField for DEFAULT: {block:?}");
+        assert!(
+            has_getstatic,
+            "expected GetStaticField for DEFAULT: {block:?}"
+        );
         assert!(has_virtual, "expected Virtual call: {block:?}");
     }
 
@@ -12358,7 +12251,10 @@ mod tests {
                 }
             )
         });
-        assert!(has_getstatic, "expected GetStaticField for DEFAULT: {block:?}");
+        assert!(
+            has_getstatic,
+            "expected GetStaticField for DEFAULT: {block:?}"
+        );
         assert!(has_static_call, "expected Static call: {block:?}");
     }
 
@@ -12372,11 +12268,7 @@ mod tests {
             "TestKt",
         );
         let cls = module.classes.iter().find(|c| c.name == "P").unwrap();
-        let f = cls
-            .methods
-            .iter()
-            .find(|m| m.name == "isOverMax")
-            .unwrap();
+        let f = cls.methods.iter().find(|m| m.name == "isOverMax").unwrap();
         let block = &f.blocks[0];
         let has_getfield = block.stmts.iter().any(|s| match s {
             skotch_mir::Stmt::Assign { value, .. } => match value {
@@ -12426,10 +12318,7 @@ mod tests {
                 _ => false,
             },
         });
-        assert!(
-            has_getstatic,
-            "expected GetStaticField for MAX: {block:?}"
-        );
+        assert!(has_getstatic, "expected GetStaticField for MAX: {block:?}");
     }
 
     #[test]
@@ -12471,10 +12360,7 @@ mod tests {
     #[test]
     fn typed_lower_array_access_with_binary_index() {
         // `fun get(arr: IntArray, i: Int): Int = arr[i + 1]`
-        let module = lower(
-            "fun get(arr: IntArray, i: Int): Int = arr[i + 1]",
-            "TestKt",
-        );
+        let module = lower("fun get(arr: IntArray, i: Int): Int = arr[i + 1]", "TestKt");
         let f = module.functions.iter().find(|f| f.name == "get").unwrap();
         let block = &f.blocks[0];
         let has_add = block.stmts.iter().any(|s| {
@@ -12756,10 +12642,7 @@ mod tests {
     fn typed_lower_fn_returns_string_concat_two_literals() {
         // `fun hello(): String = "hi" + " there"`
         // Should detect both operands as String and pick ConcatStr.
-        let module = lower(
-            r#"fun hello(): String = "hi" + " there""#,
-            "TestKt",
-        );
+        let module = lower(r#"fun hello(): String = "hi" + " there""#, "TestKt");
         let f = module.functions.iter().find(|f| f.name == "hello").unwrap();
         let block = &f.blocks[0];
         let has_concat = block.stmts.iter().any(|s| {
@@ -12910,11 +12793,7 @@ mod tests {
             "fun parse(): Int = try { 1 } catch (e: NumberFormatException) { 2 } catch (e: Exception) { 3 }",
             "TestKt",
         );
-        let f = module
-            .functions
-            .iter()
-            .find(|f| f.name == "parse")
-            .unwrap();
+        let f = module.functions.iter().find(|f| f.name == "parse").unwrap();
         assert_eq!(f.blocks.len(), 4);
         assert_eq!(f.exception_handlers.len(), 2);
         assert_eq!(
@@ -13043,11 +12922,7 @@ mod tests {
         match block.stmts.iter().find_map(|s| match s {
             skotch_mir::Stmt::Assign { value, .. } => match value {
                 skotch_mir::Rvalue::Call {
-                    kind:
-                        skotch_mir::CallKind::MakeConcatWithConstants {
-                            recipe,
-                            descriptor,
-                        },
+                    kind: skotch_mir::CallKind::MakeConcatWithConstants { recipe, descriptor },
                     args,
                 } => Some((recipe.clone(), descriptor.clone(), args.clone())),
                 _ => None,
@@ -13067,10 +12942,7 @@ mod tests {
     #[test]
     fn typed_lower_block_println_binary_arg() {
         // `fun show(x: Int) { println(x); println(x + 1) }`
-        let module = lower(
-            "fun show(x: Int) { println(x); println(x + 1) }",
-            "TestKt",
-        );
+        let module = lower("fun show(x: Int) { println(x); println(x + 1) }", "TestKt");
         let f = module.functions.iter().find(|f| f.name == "show").unwrap();
         let block = &f.blocks[0];
         let n_println = block
@@ -13124,11 +12996,7 @@ mod tests {
         match block.stmts.iter().find_map(|s| match s {
             skotch_mir::Stmt::Assign { value, .. } => match value {
                 skotch_mir::Rvalue::Call {
-                    kind:
-                        skotch_mir::CallKind::MakeConcatWithConstants {
-                            recipe,
-                            descriptor,
-                        },
+                    kind: skotch_mir::CallKind::MakeConcatWithConstants { recipe, descriptor },
                     args,
                 } => Some((recipe.clone(), descriptor.clone(), args.clone())),
                 _ => None,
@@ -13236,11 +13104,7 @@ mod tests {
             "fun parse(): Int = try { 1 } catch (e: Exception) { 0 }",
             "TestKt",
         );
-        let f = module
-            .functions
-            .iter()
-            .find(|f| f.name == "parse")
-            .unwrap();
+        let f = module.functions.iter().find(|f| f.name == "parse").unwrap();
         assert_eq!(f.blocks.len(), 3);
         assert_eq!(f.exception_handlers.len(), 1);
         let handler = &f.exception_handlers[0];
@@ -13343,10 +13207,7 @@ mod tests {
     fn typed_lower_fn_returns_short_circuit_or() {
         // `fun or(a: Boolean, b: Boolean): Boolean = a || b`
         // → if (a) true else b. 4-block CFG.
-        let module = lower(
-            "fun or(a: Boolean, b: Boolean): Boolean = a || b",
-            "TestKt",
-        );
+        let module = lower("fun or(a: Boolean, b: Boolean): Boolean = a || b", "TestKt");
         let f = module.functions.iter().find(|f| f.name == "or").unwrap();
         assert_eq!(f.blocks.len(), 4);
         // Block 1 (then): assign true.
@@ -13678,7 +13539,10 @@ mod tests {
             })
             .count();
         assert_eq!(n_add, 1, "expected one AddI for a+b");
-        assert!(matches!(block.terminator, skotch_mir::Terminator::ReturnValue(_)));
+        assert!(matches!(
+            block.terminator,
+            skotch_mir::Terminator::ReturnValue(_)
+        ));
     }
 
     #[test]
@@ -13697,7 +13561,10 @@ mod tests {
             )
         });
         assert!(const_42);
-        assert!(matches!(block.terminator, skotch_mir::Terminator::ReturnValue(_)));
+        assert!(matches!(
+            block.terminator,
+            skotch_mir::Terminator::ReturnValue(_)
+        ));
     }
 
     #[test]
@@ -13840,10 +13707,7 @@ mod tests {
         // `fun n(x: Int): Int { val y = x + 1; return y }`
         // val init binary now resolves literal operands (1) via
         // a fresh Const slot.
-        let module = lower(
-            "fun n(x: Int): Int { val y = x + 1; return y }",
-            "TestKt",
-        );
+        let module = lower("fun n(x: Int): Int { val y = x + 1; return y }", "TestKt");
         let f = module.functions.iter().find(|f| f.name == "n").unwrap();
         let block = &f.blocks[0];
         let has_const_1 = block.stmts.iter().any(|s| {
@@ -13970,11 +13834,7 @@ mod tests {
             "class Box(val x: Int) { fun get(): Int = x }\nfun useIt(b: Box): Int = b.get()",
             "TestKt",
         );
-        let f = module
-            .functions
-            .iter()
-            .find(|f| f.name == "useIt")
-            .unwrap();
+        let f = module.functions.iter().find(|f| f.name == "useIt").unwrap();
         let block = &f.blocks[0];
         assert_eq!(block.stmts.len(), 1);
         match &block.stmts[0] {
@@ -14289,10 +14149,7 @@ mod tests {
         // Then-arm `-x` is a Prefix-minus on a param ref. Else-arm is the
         // bare param. The CFG must have the then-block emit `0 - x_slot`
         // and write the result into the shared result slot.
-        let module = lower(
-            "fun absVal(x: Int): Int = if (x < 0) -x else x",
-            "TestKt",
-        );
+        let module = lower("fun absVal(x: Int): Int = if (x < 0) -x else x", "TestKt");
         let f = module
             .functions
             .iter()
@@ -15363,10 +15220,7 @@ mod tests {
 
     #[test]
     fn typed_lower_class_method_block_return_literal() {
-        let module = lower(
-            "class P { fun answer(): Int { return 42 } }",
-            "TestKt",
-        );
+        let module = lower("class P { fun answer(): Int { return 42 } }", "TestKt");
         let p = module.classes.iter().find(|c| c.name == "P").unwrap();
         let m = p.methods.iter().find(|m| m.name == "answer").unwrap();
         match &m.blocks[0].stmts[0] {
