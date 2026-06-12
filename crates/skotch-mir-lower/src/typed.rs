@@ -10686,6 +10686,98 @@ fn lower_rich_expr_to_slot(
                     Some(KtExpr::Reference(r)) => r.name(),
                     _ => None,
                 };
+                // Math.abs/max/min etc. — Java static method on
+                // java/lang/Math. Detected by Reference receiver
+                // named "Math".
+                if let (Some(method_n), KtExpr::Reference(rref)) = (method_n, &dq_exprs[0])
+                {
+                    if let Some(rn) = rref.name() {
+                        let (cls_opt, desc_fn): (Option<&str>, fn(usize) -> Option<(&'static str, &'static str)>) = match (rn, method_n) {
+                            ("Math", "abs") => (Some("java/lang/Math"), |n| {
+                                if n == 1 { Some(("Math.abs", "(I)I")) } else { None }
+                            }),
+                            ("Math", "max") => (Some("java/lang/Math"), |n| {
+                                if n == 2 { Some(("Math.max", "(II)I")) } else { None }
+                            }),
+                            ("Math", "min") => (Some("java/lang/Math"), |n| {
+                                if n == 2 { Some(("Math.min", "(II)I")) } else { None }
+                            }),
+                            ("Math", "sqrt") => (Some("java/lang/Math"), |n| {
+                                if n == 1 { Some(("Math.sqrt", "(D)D")) } else { None }
+                            }),
+                            ("Math", "pow") => (Some("java/lang/Math"), |n| {
+                                if n == 2 { Some(("Math.pow", "(DD)D")) } else { None }
+                            }),
+                            ("Integer", "parseInt") => (Some("java/lang/Integer"), |n| {
+                                if n == 1 { Some(("Integer.parseInt", "(Ljava/lang/String;)I")) } else { None }
+                            }),
+                            ("Long", "parseLong") => (Some("java/lang/Long"), |n| {
+                                if n == 1 { Some(("Long.parseLong", "(Ljava/lang/String;)J")) } else { None }
+                            }),
+                            ("System", "currentTimeMillis") => (Some("java/lang/System"), |n| {
+                                if n == 0 { Some(("System.currentTimeMillis", "()J")) } else { None }
+                            }),
+                            ("System", "nanoTime") => (Some("java/lang/System"), |n| {
+                                if n == 0 { Some(("System.nanoTime", "()J")) } else { None }
+                            }),
+                            _ => (None, |_| None),
+                        };
+                        if let Some(cls_str) = cls_opt {
+                            let arg_count = call
+                                .value_argument_list()
+                                .map(|al| al.arguments().count())
+                                .unwrap_or(0);
+                            if let Some((_, descriptor)) = desc_fn(arg_count) {
+                                let mut arg_slots: Vec<LocalId> = Vec::new();
+                                if let Some(arg_list) = call.value_argument_list() {
+                                    for arg in arg_list.arguments() {
+                                        let arg_e = arg.expression()?;
+                                        let slot = lower_rich_expr_to_slot(
+                                            arg_e,
+                                            lookup_name,
+                                            fn_lookup,
+                                            next_slot,
+                                            pre_stmts,
+                                            extra_locals,
+                                            strings,
+                                        )?;
+                                        arg_slots.push(slot);
+                                    }
+                                }
+                                // Determine return ty from descriptor.
+                                let ret_ty = match descriptor
+                                    .chars()
+                                    .rev()
+                                    .next()
+                                    .unwrap_or('V')
+                                {
+                                    'I' => Ty::Int,
+                                    'J' => Ty::Long,
+                                    'F' => Ty::Float,
+                                    'D' => Ty::Double,
+                                    'Z' => Ty::Bool,
+                                    ';' => Ty::String, // crude
+                                    _ => Ty::Any,
+                                };
+                                let result_slot = LocalId(*next_slot);
+                                *next_slot += 1;
+                                extra_locals.push(ret_ty);
+                                pre_stmts.push(MStmt::Assign {
+                                    dest: result_slot,
+                                    value: skotch_mir::Rvalue::Call {
+                                        kind: skotch_mir::CallKind::StaticJava {
+                                            class_name: cls_str.to_string(),
+                                            method_name: method_n.to_string(),
+                                            descriptor: descriptor.to_string(),
+                                        },
+                                        args: arg_slots,
+                                    },
+                                });
+                                return Some(result_slot);
+                            }
+                        }
+                    }
+                }
                 // Receiver.toString() / Receiver.toInt() / Receiver.toLong()
                 // built-in conversion methods. Lowered as Java static
                 // calls on the corresponding wrapper class.
