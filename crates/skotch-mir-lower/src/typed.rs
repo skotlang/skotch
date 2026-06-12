@@ -9294,6 +9294,97 @@ fn lower_simple_body(
     }
     // end DotQualified virtual-call body
 
+    // Extension-fn body: `fun foo(x: Int): Int = x.squared()` where
+    // `squared` is a top-level extension fn (Int.squared()). Lowered
+    // as a regular static call with the receiver as the first arg.
+    if let KtExpr::DotQualified(dq) = &body_expr {
+        let dq_exprs: Vec<KtExpr<'_>> = skotch_ast::children(dq.syntax())
+            .iter()
+            .filter_map(KtExpr::cast)
+            .collect();
+        if dq_exprs.len() == 2 {
+            if let (KtExpr::Reference(recv_ref), KtExpr::Call(call)) =
+                (&dq_exprs[0], &dq_exprs[1])
+            {
+                let meth_name = match call.callee() {
+                    Some(KtExpr::Reference(r)) => r.name(),
+                    _ => None,
+                };
+                if let (Some(recv_name), Some(meth_name)) = (recv_ref.name(), meth_name) {
+                    let outer_param_names: Vec<String> = f
+                        .value_parameter_list()
+                        .map(|pl| {
+                            pl.parameters()
+                                .map(|p| p.name().unwrap_or("").to_string())
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    if let Some(idx) =
+                        outer_param_names.iter().position(|p| p == recv_name)
+                    {
+                        if let Some((fid, ret_ty)) = fn_lookup.get(meth_name) {
+                            let recv_slot = skotch_mir::LocalId(idx as u32);
+                            let param_count = outer_param_names.len();
+                            let mut next_slot = param_count as u32;
+                            let mut pre_stmts: Vec<skotch_mir::Stmt> = Vec::new();
+                            let mut extra_locals: Vec<Ty> = Vec::new();
+                            let mut arg_slots: Vec<skotch_mir::LocalId> = vec![recv_slot];
+                            let mut ok = true;
+                            if let Some(arg_list) = call.value_argument_list() {
+                                for arg in arg_list.arguments() {
+                                    let Some(arg_expr) = arg.expression() else {
+                                        ok = false;
+                                        break;
+                                    };
+                                    let outer_param_names_owned: Vec<String> =
+                                        outer_param_names.clone();
+                                    let lookup =
+                                        |n: &str| -> Option<skotch_mir::LocalId> {
+                                            outer_param_names_owned
+                                                .iter()
+                                                .position(|p| p == n)
+                                                .map(|i| skotch_mir::LocalId(i as u32))
+                                        };
+                                    let s = lower_rich_expr_to_slot(
+                                        arg_expr,
+                                        &lookup,
+                                        fn_lookup,
+                                        &mut next_slot,
+                                        &mut pre_stmts,
+                                        &mut extra_locals,
+                                        strings,
+                                    );
+                                    if let Some(s) = s {
+                                        arg_slots.push(s);
+                                    } else {
+                                        ok = false;
+                                        break;
+                                    }
+                                }
+                            }
+                            if ok {
+                                let result_slot = skotch_mir::LocalId(next_slot);
+                                extra_locals.push(ret_ty.clone());
+                                pre_stmts.push(skotch_mir::Stmt::Assign {
+                                    dest: result_slot,
+                                    value: skotch_mir::Rvalue::Call {
+                                        kind: skotch_mir::CallKind::Static(*fid),
+                                        args: arg_slots,
+                                    },
+                                });
+                                let blocks = vec![BasicBlock {
+                                    stmts: pre_stmts,
+                                    terminator: Terminator::ReturnValue(result_slot),
+                                }];
+                                return (blocks, extra_locals);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // Lambda/function-typed param invocation body:
     // `fun apply(f: (Int) -> Int, x: Int): Int = f(x)`. The callee is
     // a function-typed parameter; emit Call(FunctionInvoke).
