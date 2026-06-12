@@ -32,6 +32,31 @@ fn straightline_battery_byte_identical() {
     );
 }
 
+/// Two classes dexed into one `classes.dex`. d8's code-layout sort is global
+/// across all classes (`holder.toSourceString() + signature`), so every `B`
+/// method precedes every `Calc` method (`'B' < 'C'`). This exercises the
+/// cross-class ordering that the single-class battery cannot.
+#[test]
+fn multi_class_battery_byte_identical() {
+    let b = skotch_classfile::parse_class_file(&fixtures().join("B.class")).unwrap();
+    let calc = skotch_classfile::parse_class_file(&fixtures().join("Calc.class")).unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let produced = dex_classes(&[b, calc], &opts).unwrap();
+    let golden = std::fs::read(fixtures().join("BC.d8.dex")).unwrap();
+    if produced != golden {
+        std::fs::write("/tmp/skotch-BC-produced.dex", &produced).unwrap();
+    }
+    skotch_dex::validator::validate(&produced).expect("self-validation");
+    assert_eq!(
+        produced,
+        golden,
+        "B+Calc multi-class: produced {} vs golden {}; first diff {:?}",
+        produced.len(),
+        golden.len(),
+        (0..produced.len().min(golden.len())).find(|&i| produced[i] != golden[i])
+    );
+}
+
 #[test]
 fn empty_class_end_to_end_byte_identical() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("Empty.class")).unwrap();
