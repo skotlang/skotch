@@ -2488,7 +2488,9 @@ fn try_lower_multi_stmt_block_inner(
     class_lookup: &rustc_hash::FxHashMap<String, Vec<Ty>>,
     wrapper_class: &str,
 ) -> Option<(Vec<BasicBlock>, Vec<Ty>)> {
-    try_lower_multi_stmt_block_with_offset(
+    // Try the legacy per-stmt walker first. It handles many shapes the
+    // builder doesn't (when, try-catch, ctor, complex returns, …).
+    if let Some(result) = try_lower_multi_stmt_block_with_offset(
         block,
         f,
         strings,
@@ -2499,13 +2501,16 @@ fn try_lower_multi_stmt_block_inner(
         0,
         None,
         &[],
-    )
+    ) {
+        return Some(result);
+    }
+    // Fall back to the builder path: lowers the entire body via
+    // lower_loop_body_blocks (supports break/continue/return/if/nested-loop
+    // inside the top-level sequence). Only handles shapes that
+    // lower_loop_body covers as the linear-stmt prefix.
+    try_lower_function_body_via_blocks(block, f, strings, fn_lookup, 0)
 }
 
-/// Like try_lower_multi_stmt_block_inner but parameters can start at a
-/// non-zero slot. Class methods set `slot_offset = 1` so `this` occupies
-/// LocalId(0) and the user params shift to slots 1..=N.
-#[allow(clippy::too_many_arguments)]
 /// Lower the body of a for-in / while loop into a flat
 /// Vec<MStmt>. Supports linear stmts (val/var, var-reassign,
 /// println, method/Call/extension-fn, postfix++) but NOT
@@ -4621,6 +4626,115 @@ fn lower_loop_body_blocks(
     }
     Some(blocks)
 }
+
+/// Lower a function body's KtBlock entirely via `lower_loop_body_blocks`,
+/// wrapping the result with a final return block. Returns None when the
+/// builder pipeline can't represent some part of the body — the caller
+/// should then fall back to the legacy per-stmt walker. This is the
+/// builder-pattern alternative to `try_lower_multi_stmt_block_with_offset`
+/// that handles arbitrary control flow inside the body sequence.
+#[allow(clippy::too_many_arguments)]
+fn try_lower_function_body_via_blocks(
+    block: skotch_ast::KtBlock<'_>,
+    f: skotch_ast::KtFun<'_>,
+    strings: &mut Vec<String>,
+    fn_lookup: &rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)>,
+    slot_offset: u32,
+) -> Option<(Vec<BasicBlock>, Vec<Ty>)> {
+    use skotch_mir::LocalId;
+    let param_count = f
+        .value_parameter_list()
+        .map(|pl| pl.parameters().count())
+        .unwrap_or(0);
+    let param_names: Vec<String> = f
+        .value_parameter_list()
+        .map(|pl| {
+            pl.parameters()
+                .map(|p| p.name().unwrap_or("").to_string())
+                .collect()
+        })
+        .unwrap_or_default();
+    let function_param_names: Vec<String> = f
+        .value_parameter_list()
+        .map(|pl| {
+            pl.parameters()
+                .filter_map(|p| {
+                    if p.type_reference()
+                        .map(|tr| tr.function_type().is_some())
+                        .unwrap_or(false)
+                    {
+                        Some(p.name().unwrap_or("").to_string())
+                    } else {
+                        None
+                    }
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let mut name_to_local: Vec<(String, LocalId)> = param_names
+        .iter()
+        .enumerate()
+        .map(|(i, n)| (n.clone(), LocalId(i as u32 + slot_offset)))
+        .collect();
+    let mut local_tys: Vec<Ty> = Vec::new();
+    let mut next_slot: u32 = param_count as u32 + slot_offset;
+    let block_children: Vec<&skotch_sil::SilNode> =
+        skotch_ast::children(block.syntax()).iter().collect();
+
+    const SENT: u32 = 0xfffffffe;
+    let saved_strings_len = strings.len();
+    let mut blocks = match lower_loop_body_blocks(
+        &block_children,
+        &mut name_to_local,
+        &mut next_slot,
+        &mut local_tys,
+        strings,
+        fn_lookup,
+        &function_param_names,
+        0,
+        SENT,
+        SENT,
+    ) {
+        Some(b) => b,
+        None => {
+            strings.truncate(saved_strings_len);
+            return None;
+        }
+    };
+    // Require non-trivial output before accepting.
+    let total_stmts: usize = blocks.iter().map(|b| b.stmts.len()).sum();
+    if total_stmts == 0 {
+        strings.truncate(saved_strings_len);
+        return None;
+    }
+    let n = blocks.len() as u32;
+    let final_id = n;
+    for blk in &mut blocks {
+        let remap = |t: u32| if t == SENT { final_id } else { t };
+        match &mut blk.terminator {
+            Terminator::Goto(t) => *t = remap(*t),
+            Terminator::Branch {
+                then_block,
+                else_block,
+                ..
+            } => {
+                *then_block = remap(*then_block);
+                *else_block = remap(*else_block);
+            }
+            _ => {}
+        }
+    }
+    blocks.push(BasicBlock {
+        stmts: Vec::new(),
+        terminator: Terminator::Return,
+    });
+    Some((blocks, local_tys))
+}
+
+/// Like try_lower_multi_stmt_block_inner but parameters can start at a
+/// non-zero slot. Class methods set `slot_offset = 1` so `this` occupies
+/// LocalId(0) and the user params shift to slots 1..=N.
+#[allow(clippy::too_many_arguments)]
 fn try_lower_multi_stmt_block_with_offset(
     block: skotch_ast::KtBlock<'_>,
     f: skotch_ast::KtFun<'_>,

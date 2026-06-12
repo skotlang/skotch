@@ -30,6 +30,7 @@ skotch-compose      = { workspace = true }
 skotch-mir-lower    = { workspace = true }
 skotch-apksig       = { workspace = true }
 skotch-aapt2        = { workspace = true }
+skotch-d8           = { workspace = true }
 clap                = { workspace = true }
 anyhow              = { workspace = true }
 tokio               = { workspace = true }

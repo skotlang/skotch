@@ -218,6 +218,20 @@ enum Command {
         #[arg(value_name = "AAPT2_ARGS")]
         args: Vec<String>,
     },
+    /// d8-cli emulation: compile `.class`/`.jar` inputs to a `.dex`.
+    ///
+    /// Native reimplementation of the Android SDK `d8` dexer on top of
+    /// `skotch-d8`. Run `skotch d8 --help` for the option list.
+    #[command(
+        allow_hyphen_values = true,
+        trailing_var_arg = true,
+        disable_help_flag = true,
+    )]
+    D8 {
+        /// d8-style arguments — see `skotch d8 --help`.
+        #[arg(value_name = "D8_ARGS")]
+        args: Vec<String>,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -276,6 +290,7 @@ fn main() -> Result<()> {
                     | "kotlinc"
                     | "apksigner"
                     | "aapt2"
+                    | "d8"
                     | "sil"
                     | "help"
             )
@@ -443,6 +458,9 @@ fn main() -> Result<()> {
             if code != 0 {
                 std::process::exit(code);
             }
+        }
+        Command::D8 { args } => {
+            d8::run(&args)?;
         }
         Command::Sil { cmd } => {
             run_sil(cmd)?;

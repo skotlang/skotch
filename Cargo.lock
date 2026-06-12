@@ -2644,6 +2644,7 @@ dependencies = [
  "skotch-bsp",
  "skotch-build",
  "skotch-compose",
+ "skotch-d8",
  "skotch-diagnostics",
  "skotch-driver",
  "skotch-intern",
