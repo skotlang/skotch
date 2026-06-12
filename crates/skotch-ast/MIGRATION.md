@@ -1587,3 +1587,37 @@ These pushes accept many additional stmts within loop bodies without
 flipping the fully-covered metric (legacy still emits more overhead
 per fixture). The internal coverage gain shows up as stmt-counts
 shifting from 0 to 4-9 across dozens of fixtures.
+
+### 2026-06-11 (session 7 — push 31: stmt-level if-chain + early return + when arms)
+
+Continued the worklist-driven additions with focus on the walker's
+control-flow handling:
+
+- **Subjectless when expression body**: `fun foo(x: Int): String = when { x > 10 -> "big"; else -> "small" }`. New `try_lower_when_subjectless` emits a chain of cmp/branch/arm blocks per arm, each cond materialized via `lower_inline_expr_to_slot`.
+- **Stmt-level if-chain (else-if recursion)**: `if (a) {A} else if (b) {B} else {C}; trailing` walks the else branch as long as it's another KtExpr::If, collects all (cond, body) pairs, and emits a 2N+2 block CFG.
+- **Postfix `name++` / `name--` on local + implicit-this field**: as stmt-level walker handler + inside lower_loop_body for local-only case.
+- **var-reassign to implicit-this field**: `count = count + 1` inside a class method body falls through to PutField on this when the LHS name isn't a local but is in field_names.
+- **When-arm multi-cond**: `when (x) { "a", "b" -> ...; else -> ... }` unfolds into single-cond arms with body duplicated, so the existing CFG construction handles it without bailing on `conds.len() != 1`.
+- **Boolean if-cond as Reference**: `if (b) ...` where b is a Boolean param/local Reference (not a Binary cmp) now lowers via `lower_inline_expr_to_slot`.
+- **String template arms** in if-expression body via re-walk path through resolve_operand's fallback.
+- **Nested Binary RHS in var-reassign**: `result = result * 10 + x % 10` now routes through `lower_inline_expr_to_slot` instead of the flat resolver that only accepted Reference/literal operands. Same change in lower_loop_body's var-decl Binary RHS.
+- **Loop body val-init Binary RHS** via `lower_inline_expr_to_slot`.
+- **Loop body println accepts Binary/Prefix/cmp args** via inline lowerer fallback.
+- **Stmt-level if-arm with trailing `return X`**: when an arm body's last child is `return X`, the arm block's terminator becomes `Terminator::ReturnValue(slot)` instead of `Goto(join)`. Applies to single-arm and multi-arm if-chain. Unblocks `isPrime`-style `if (n < 2) return false; rest` shapes.
+
+**Push 31 standings:**
+- Fully covered: **174 / 968 (18.0%)** — up from 171
+- Typed empty: **343 / 968 (35.4%)** — down from 363
+- mir-lower typed unit tests: **180**
+
+Key fixture jumps:
+- 158-power: 0.48 → 0.76 (12 → 19 stmts)
+- 165-fibonacci-while: 0.0 → 0.53
+- 169-scope-shadowing: 0.0 → 0.92
+- 178-int-to-string: 0.0 → 1.0
+- 156-else-if-chain: 0.45 → 0.80
+- 185-else-if-chain: 0.0 → 0.76
+- 186-reverse-number: 0.32 → 0.75
+- 313-counter-class: 0.46 → 0.74
+
+Workspace tests + clippy clean.
