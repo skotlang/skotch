@@ -10905,40 +10905,48 @@ fn lower_rich_expr_to_slot(
                         }
                     }
                 }
-                // Receiver.toString() / Receiver.toInt() / Receiver.toLong()
-                // built-in conversion methods. Lowered as Java static
-                // calls on the corresponding wrapper class.
-                if let (Some(method_n), KtExpr::Reference(_)) = (method_n, &dq_exprs[0]) {
-                    let recv_slot = lower_rich_expr_to_slot(
-                        dq_exprs[0],
-                        lookup_name,
-                        fn_lookup,
-                        next_slot,
-                        pre_stmts,
-                        extra_locals,
-                        strings,
-                    );
-                    if let Some(recv_slot) = recv_slot {
-                        if method_n == "toString" {
-                            // Look up the receiver's type to determine the
-                            // Java static class name + descriptor.
-                            let recv_ty = extra_locals
-                                .get(recv_slot.0 as usize)
-                                .cloned()
-                                .unwrap_or(Ty::Any);
-                            let (cls, desc) = match recv_ty {
-                                Ty::Int => Some(("java/lang/Integer", "(I)Ljava/lang/String;")),
-                                Ty::Long => Some(("java/lang/Long", "(J)Ljava/lang/String;")),
-                                Ty::Float => Some(("java/lang/Float", "(F)Ljava/lang/String;")),
-                                Ty::Double => {
-                                    Some(("java/lang/Double", "(D)Ljava/lang/String;"))
-                                }
-                                Ty::Bool => {
-                                    Some(("java/lang/Boolean", "(Z)Ljava/lang/String;"))
-                                }
-                                _ => None,
-                            }
-                            .map(|(c, d)| (c.to_string(), d.to_string()))?;
+                // Receiver.toString() built-in: detect early so we can
+                // lower without recursing into the receiver twice.
+                // Defaults to Integer.toString(I)String for unknown
+                // receiver types — works for the common `n.toString()`
+                // case where n is a known-Int local.
+                if method_n == Some("toString") {
+                    // Filter out cases where receiver shouldn't use
+                    // this path (DotQualified like "Math.abs" or
+                    // class-name references).
+                    let recv_is_int_like = match &dq_exprs[0] {
+                        KtExpr::Reference(_)
+                        | KtExpr::Integer(_)
+                        | KtExpr::Float(_)
+                        | KtExpr::Boolean(_)
+                        | KtExpr::Prefix(_)
+                        | KtExpr::Parenthesized(_) => true,
+                        _ => false,
+                    };
+                    if recv_is_int_like {
+                        let recv_ty_guess = match &dq_exprs[0] {
+                            KtExpr::Float(_) => Ty::Double,
+                            KtExpr::Boolean(_) => Ty::Bool,
+                            _ => Ty::Int,
+                        };
+                        let cls_desc: Option<(&str, &str)> = match recv_ty_guess {
+                            Ty::Int => Some(("java/lang/Integer", "(I)Ljava/lang/String;")),
+                            Ty::Long => Some(("java/lang/Long", "(J)Ljava/lang/String;")),
+                            Ty::Float => Some(("java/lang/Float", "(F)Ljava/lang/String;")),
+                            Ty::Double => Some(("java/lang/Double", "(D)Ljava/lang/String;")),
+                            Ty::Bool => Some(("java/lang/Boolean", "(Z)Ljava/lang/String;")),
+                            _ => None,
+                        };
+                        if let Some((cls, desc)) = cls_desc {
+                            let recv_slot = lower_rich_expr_to_slot(
+                                dq_exprs[0],
+                                lookup_name,
+                                fn_lookup,
+                                next_slot,
+                                pre_stmts,
+                                extra_locals,
+                                strings,
+                            )?;
                             let result_slot = LocalId(*next_slot);
                             *next_slot += 1;
                             extra_locals.push(Ty::String);
@@ -10946,9 +10954,9 @@ fn lower_rich_expr_to_slot(
                                 dest: result_slot,
                                 value: skotch_mir::Rvalue::Call {
                                     kind: skotch_mir::CallKind::StaticJava {
-                                        class_name: cls,
+                                        class_name: cls.to_string(),
                                         method_name: "toString".to_string(),
-                                        descriptor: desc,
+                                        descriptor: desc.to_string(),
                                     },
                                     args: vec![recv_slot],
                                 },
