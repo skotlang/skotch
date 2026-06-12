@@ -4673,9 +4673,10 @@ fn try_lower_multi_stmt_block_with_offset(
                                 .find(|(name, _)| name == n)
                                 .map(|(_, l)| *l)
                         };
-                        let slot = lower_inline_expr_to_slot(
+                        let slot = lower_rich_expr_to_slot(
                             re,
                             &lookup,
+                            fn_lookup,
                             &mut next_slot,
                             &mut exit_stmts,
                             &mut local_tys,
@@ -4866,9 +4867,10 @@ fn try_lower_multi_stmt_block_with_offset(
                                 .find(|(name, _)| name == n)
                                 .map(|(_, l)| *l)
                         };
-                        let slot = lower_inline_expr_to_slot(
+                        let slot = lower_rich_expr_to_slot(
                             re,
                             &lookup,
+                            fn_lookup,
                             &mut next_slot,
                             &mut exit_stmts,
                             &mut local_tys,
@@ -5108,9 +5110,10 @@ fn try_lower_multi_stmt_block_with_offset(
                                 .find(|(name, _)| name == n)
                                 .map(|(_, l)| *l)
                         };
-                        let slot = lower_inline_expr_to_slot(
+                        let slot = lower_rich_expr_to_slot(
                             re,
                             &lookup,
+                            fn_lookup,
                             &mut next_slot,
                             &mut exit_stmts,
                             &mut local_tys,
@@ -5555,9 +5558,10 @@ fn try_lower_multi_stmt_block_with_offset(
                                 .find(|(name, _)| name == n)
                                 .map(|(_, l)| *l)
                         };
-                        let slot = lower_inline_expr_to_slot(
+                        let slot = lower_rich_expr_to_slot(
                             re,
                             &lookup,
+                            fn_lookup,
                             &mut next_slot,
                             &mut exit_stmts,
                             &mut local_tys,
@@ -7120,6 +7124,131 @@ fn lower_inline_expr_to_slot(
         }
         _ => None,
     }
+}
+
+/// Like `lower_inline_expr_to_slot` but also handles Call to a
+/// top-level fn (looked up via fn_lookup). Use this in contexts
+/// where return / val-init / etc. need to materialize a function
+/// call's result. Args resolve via the same lookup_name + literal
+/// fallback as the inline lowerer.
+#[allow(clippy::too_many_arguments)]
+fn lower_rich_expr_to_slot(
+    e: skotch_ast::KtExpr<'_>,
+    lookup_name: &dyn Fn(&str) -> Option<skotch_mir::LocalId>,
+    fn_lookup: &rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)>,
+    next_slot: &mut u32,
+    pre_stmts: &mut Vec<skotch_mir::Stmt>,
+    extra_locals: &mut Vec<Ty>,
+    strings: &mut Vec<String>,
+) -> Option<skotch_mir::LocalId> {
+    use skotch_ast::KtExpr;
+    use skotch_mir::{LocalId, Stmt as MStmt};
+    let e = unwrap_parens(e);
+    // Try inline first.
+    if let Some(slot) = lower_inline_expr_to_slot(
+        e,
+        lookup_name,
+        next_slot,
+        pre_stmts,
+        extra_locals,
+        strings,
+    ) {
+        return Some(slot);
+    }
+    // Call to top-level fn.
+    if let KtExpr::Call(call) = e {
+        if let Some(KtExpr::Reference(rc)) = call.callee() {
+            if let Some(name) = rc.name() {
+                if let Some((fid, ret_ty)) = fn_lookup.get(name) {
+                    let mut arg_slots: Vec<LocalId> = Vec::new();
+                    if let Some(arg_list) = call.value_argument_list() {
+                        for arg in arg_list.arguments() {
+                            let arg_e = arg.expression()?;
+                            let slot = lower_rich_expr_to_slot(
+                                arg_e,
+                                lookup_name,
+                                fn_lookup,
+                                next_slot,
+                                pre_stmts,
+                                extra_locals,
+                                strings,
+                            )?;
+                            arg_slots.push(slot);
+                        }
+                    }
+                    let result_slot = LocalId(*next_slot);
+                    *next_slot += 1;
+                    extra_locals.push(ret_ty.clone());
+                    pre_stmts.push(MStmt::Assign {
+                        dest: result_slot,
+                        value: skotch_mir::Rvalue::Call {
+                            kind: skotch_mir::CallKind::Static(*fid),
+                            args: arg_slots,
+                        },
+                    });
+                    return Some(result_slot);
+                }
+            }
+        }
+    }
+    // Binary may have come back as None because operands were Calls.
+    if let KtExpr::Binary(b) = e {
+        let op_text = b.operation().map(|o| o.text()).unwrap_or_default();
+        let mir_op = match op_text.as_str() {
+            "+" => Some(skotch_mir::BinOp::AddI),
+            "-" => Some(skotch_mir::BinOp::SubI),
+            "*" => Some(skotch_mir::BinOp::MulI),
+            "/" => Some(skotch_mir::BinOp::DivI),
+            "%" => Some(skotch_mir::BinOp::ModI),
+            "==" => Some(skotch_mir::BinOp::CmpEq),
+            "!=" => Some(skotch_mir::BinOp::CmpNe),
+            "<" => Some(skotch_mir::BinOp::CmpLt),
+            ">" => Some(skotch_mir::BinOp::CmpGt),
+            "<=" => Some(skotch_mir::BinOp::CmpLe),
+            ">=" => Some(skotch_mir::BinOp::CmpGe),
+            _ => None,
+        }?;
+        let lhs_slot = lower_rich_expr_to_slot(
+            b.lhs()?,
+            lookup_name,
+            fn_lookup,
+            next_slot,
+            pre_stmts,
+            extra_locals,
+            strings,
+        )?;
+        let rhs_slot = lower_rich_expr_to_slot(
+            b.rhs()?,
+            lookup_name,
+            fn_lookup,
+            next_slot,
+            pre_stmts,
+            extra_locals,
+            strings,
+        )?;
+        let is_cmp = matches!(
+            mir_op,
+            skotch_mir::BinOp::CmpEq
+                | skotch_mir::BinOp::CmpNe
+                | skotch_mir::BinOp::CmpLt
+                | skotch_mir::BinOp::CmpGt
+                | skotch_mir::BinOp::CmpLe
+                | skotch_mir::BinOp::CmpGe
+        );
+        let slot = LocalId(*next_slot);
+        *next_slot += 1;
+        extra_locals.push(if is_cmp { Ty::Bool } else { Ty::Int });
+        pre_stmts.push(MStmt::Assign {
+            dest: slot,
+            value: skotch_mir::Rvalue::BinOp {
+                op: mir_op,
+                lhs: lhs_slot,
+                rhs: rhs_slot,
+            },
+        });
+        return Some(slot);
+    }
+    None
 }
 
 /// Try to lower `println(literal)` / `print(literal)` to the
