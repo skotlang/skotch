@@ -4774,46 +4774,57 @@ fn try_lower_multi_stmt_block_with_offset(
                 let mut arm_mstmts: Vec<Vec<MStmt>> = Vec::with_capacity(n_arms);
                 for (cond_expr, then_children) in &arms {
                     let mut c_stmts: Vec<MStmt> = Vec::new();
-                    let KtExpr::Binary(cmp_b) = cond_expr else {
-                        return None;
+                    let cmp_slot = if let KtExpr::Binary(cmp_b) = cond_expr {
+                        let cmp_text =
+                            cmp_b.operation().map(|o| o.text()).unwrap_or_default();
+                        let cmp_mir = match cmp_text.as_str() {
+                            "==" => Some(skotch_mir::BinOp::CmpEq),
+                            "!=" => Some(skotch_mir::BinOp::CmpNe),
+                            "<" => Some(skotch_mir::BinOp::CmpLt),
+                            ">" => Some(skotch_mir::BinOp::CmpGt),
+                            "<=" => Some(skotch_mir::BinOp::CmpLe),
+                            ">=" => Some(skotch_mir::BinOp::CmpGe),
+                            _ => None,
+                        }?;
+                        let lhs_slot = lower_inline_expr_to_slot(
+                            cmp_b.lhs()?,
+                            &if_cond_lookup,
+                            &mut next_slot,
+                            &mut c_stmts,
+                            &mut local_tys,
+                            strings,
+                        )?;
+                        let rhs_slot = lower_inline_expr_to_slot(
+                            cmp_b.rhs()?,
+                            &if_cond_lookup,
+                            &mut next_slot,
+                            &mut c_stmts,
+                            &mut local_tys,
+                            strings,
+                        )?;
+                        let cmp_slot = LocalId(next_slot);
+                        next_slot += 1;
+                        local_tys.push(Ty::Bool);
+                        c_stmts.push(MStmt::Assign {
+                            dest: cmp_slot,
+                            value: skotch_mir::Rvalue::BinOp {
+                                op: cmp_mir,
+                                lhs: lhs_slot,
+                                rhs: rhs_slot,
+                            },
+                        });
+                        cmp_slot
+                    } else {
+                        // Boolean Reference or similar — use directly.
+                        lower_inline_expr_to_slot(
+                            *cond_expr,
+                            &if_cond_lookup,
+                            &mut next_slot,
+                            &mut c_stmts,
+                            &mut local_tys,
+                            strings,
+                        )?
                     };
-                    let cmp_text = cmp_b.operation().map(|o| o.text()).unwrap_or_default();
-                    let cmp_mir = match cmp_text.as_str() {
-                        "==" => Some(skotch_mir::BinOp::CmpEq),
-                        "!=" => Some(skotch_mir::BinOp::CmpNe),
-                        "<" => Some(skotch_mir::BinOp::CmpLt),
-                        ">" => Some(skotch_mir::BinOp::CmpGt),
-                        "<=" => Some(skotch_mir::BinOp::CmpLe),
-                        ">=" => Some(skotch_mir::BinOp::CmpGe),
-                        _ => None,
-                    }?;
-                    let lhs_slot = lower_inline_expr_to_slot(
-                        cmp_b.lhs()?,
-                        &if_cond_lookup,
-                        &mut next_slot,
-                        &mut c_stmts,
-                        &mut local_tys,
-                        strings,
-                    )?;
-                    let rhs_slot = lower_inline_expr_to_slot(
-                        cmp_b.rhs()?,
-                        &if_cond_lookup,
-                        &mut next_slot,
-                        &mut c_stmts,
-                        &mut local_tys,
-                        strings,
-                    )?;
-                    let cmp_slot = LocalId(next_slot);
-                    next_slot += 1;
-                    local_tys.push(Ty::Bool);
-                    c_stmts.push(MStmt::Assign {
-                        dest: cmp_slot,
-                        value: skotch_mir::Rvalue::BinOp {
-                            op: cmp_mir,
-                            lhs: lhs_slot,
-                            rhs: rhs_slot,
-                        },
-                    });
                     cmp_block_stmts.push(c_stmts);
                     cmp_slots.push(cmp_slot);
                     let then_mstmts = lower_loop_body(
