@@ -4699,6 +4699,233 @@ fn try_lower_multi_stmt_block_with_offset(
                 Some(body_mstmts)
             }
 
+            /// Like `lower_loop_body` but emits a sequence of basic
+            /// blocks so the body can contain control flow
+            /// (`break`, `continue`, `if (cmp) break`, `if (cmp)
+            /// continue`).
+            ///
+            /// Returns blocks whose IDs are
+            /// `[block_offset, block_offset + N - 1]`. All terminators
+            /// are set; the caller can append the returned blocks to
+            /// the CFG verbatim. The "fallthrough" terminator at the
+            /// end of the body is `Goto(back_edge_target)`; a `break`
+            /// becomes `Goto(break_target)`; a `continue` becomes
+            /// `Goto(back_edge_target)`.
+            ///
+            /// Sibling block IDs (the after-block for an if-then-only
+            /// jump) use `block_offset + blocks.len()`; the caller
+            /// must lay these blocks out contiguously starting at
+            /// `block_offset` so the IDs match.
+            ///
+            /// Falls back to `lower_loop_body` for the linear-stmt
+            /// prefix before any control flow.
+            #[allow(clippy::too_many_arguments)]
+            fn lower_loop_body_blocks(
+                body_children: &[&skotch_sil::SilNode],
+                name_to_local: &mut Vec<(String, LocalId)>,
+                next_slot: &mut u32,
+                local_tys: &mut Vec<Ty>,
+                strings: &mut Vec<String>,
+                fn_lookup_ref: &rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)>,
+                function_param_names: &[String],
+                block_offset: u32,
+                back_edge_target: u32,
+                break_target: u32,
+            ) -> Option<Vec<BasicBlock>> {
+                use skotch_ast::KtExpr;
+                use skotch_mir::Stmt as MStmt;
+                let mut blocks: Vec<BasicBlock> = Vec::new();
+                let mut cur_stmts: Vec<MStmt> = Vec::new();
+
+                // Classify the jump that a body expression represents.
+                // Returns None if expr isn't a jump; Some(target) is the
+                // block ID to Goto when this expr fires.
+                fn classify_jump(
+                    expr: &KtExpr<'_>,
+                    back_edge: u32,
+                    break_to: u32,
+                ) -> Option<u32> {
+                    match expr {
+                        KtExpr::Break(_) => Some(break_to),
+                        KtExpr::Continue(_) => Some(back_edge),
+                        _ => None,
+                    }
+                }
+                // Extract a single jump expr from an if-arm:
+                //   `{ break }`, `{ continue }`, `break`, `continue`.
+                fn extract_arm_jump(
+                    arm: Option<KtExpr<'_>>,
+                    back_edge: u32,
+                    break_to: u32,
+                ) -> Option<u32> {
+                    let arm = arm.map(unwrap_parens)?;
+                    if let Some(t) = classify_jump(&arm, back_edge, break_to) {
+                        return Some(t);
+                    }
+                    if let KtExpr::Block(bl) = arm {
+                        let stmts: Vec<KtExpr<'_>> = bl.statements().collect();
+                        if stmts.len() == 1 {
+                            return classify_jump(&stmts[0], back_edge, break_to);
+                        }
+                    }
+                    None
+                }
+
+                #[derive(Clone, Copy)]
+                enum Special {
+                    DirectJump(u32),
+                    IfWithJump {
+                        then_target: Option<u32>,
+                        else_target: Option<u32>,
+                        has_else: bool,
+                    },
+                }
+                let mut i: usize = 0;
+                while i < body_children.len() {
+                    // Scan ahead for the next jump-or-if-with-jump child.
+                    let mut special_at: Option<(usize, Special)> = None;
+                    for j in i..body_children.len() {
+                        let c = body_children[j];
+                        let Some(expr) = KtExpr::cast(c) else {
+                            continue;
+                        };
+                        if let Some(t) = classify_jump(&expr, back_edge_target, break_target)
+                        {
+                            special_at = Some((j, Special::DirectJump(t)));
+                            break;
+                        }
+                        if let KtExpr::If(if_e) = expr {
+                            let then_arm = if_e.then_branch().and_then(|t| t.expression());
+                            let else_arm = if_e.else_branch().and_then(|e| e.expression());
+                            let then_target =
+                                extract_arm_jump(then_arm, back_edge_target, break_target);
+                            let else_target =
+                                extract_arm_jump(else_arm, back_edge_target, break_target);
+                            if then_target.is_some() || else_target.is_some() {
+                                special_at = Some((
+                                    j,
+                                    Special::IfWithJump {
+                                        then_target,
+                                        else_target,
+                                        has_else: else_arm.is_some(),
+                                    },
+                                ));
+                                break;
+                            }
+                        }
+                    }
+
+                    let prefix_end = special_at.map(|(j, _)| j).unwrap_or(body_children.len());
+
+                    if prefix_end > i {
+                        let slice = &body_children[i..prefix_end];
+                        let stmts = lower_loop_body(
+                            slice,
+                            name_to_local,
+                            next_slot,
+                            local_tys,
+                            strings,
+                            fn_lookup_ref,
+                            function_param_names,
+                        )?;
+                        cur_stmts.extend(stmts);
+                    }
+
+                    match special_at {
+                        None => {
+                            blocks.push(BasicBlock {
+                                stmts: std::mem::take(&mut cur_stmts),
+                                terminator: Terminator::Goto(back_edge_target),
+                            });
+                            return Some(blocks);
+                        }
+                        Some((j, Special::DirectJump(target))) => {
+                            blocks.push(BasicBlock {
+                                stmts: std::mem::take(&mut cur_stmts),
+                                terminator: Terminator::Goto(target),
+                            });
+                            let _ = j;
+                            return Some(blocks);
+                        }
+                        Some((
+                            j,
+                            Special::IfWithJump {
+                                then_target,
+                                else_target,
+                                has_else,
+                            },
+                        )) => {
+                            // Re-extract cond_expr from the source SilNode.
+                            let if_node = body_children[j];
+                            let KtExpr::If(if_e) = KtExpr::cast(if_node)? else {
+                                return None;
+                            };
+                            let cond_expr = if_e
+                                .condition()
+                                .and_then(|c| c.expression())
+                                .map(unwrap_parens)?;
+                            let snap = name_to_local.clone();
+                            let lookup = |n: &str| -> Option<LocalId> {
+                                snap.iter()
+                                    .rev()
+                                    .find(|(name, _)| name == n)
+                                    .map(|(_, l)| *l)
+                            };
+                            let cmp_slot = lower_inline_expr_to_slot(
+                                cond_expr,
+                                &lookup,
+                                next_slot,
+                                &mut cur_stmts,
+                                local_tys,
+                                strings,
+                            )?;
+                            match (then_target, else_target, has_else) {
+                                (Some(t_to), Some(e_to), true) => {
+                                    blocks.push(BasicBlock {
+                                        stmts: std::mem::take(&mut cur_stmts),
+                                        terminator: Terminator::Branch {
+                                            cond: cmp_slot,
+                                            then_block: t_to,
+                                            else_block: e_to,
+                                        },
+                                    });
+                                    return Some(blocks);
+                                }
+                                (Some(t_to), None, false) => {
+                                    let after_block_id =
+                                        block_offset + blocks.len() as u32 + 1;
+                                    blocks.push(BasicBlock {
+                                        stmts: std::mem::take(&mut cur_stmts),
+                                        terminator: Terminator::Branch {
+                                            cond: cmp_slot,
+                                            then_block: t_to,
+                                            else_block: after_block_id,
+                                        },
+                                    });
+                                    i = j + 1;
+                                    continue;
+                                }
+                                _ => return None,
+                            }
+                        }
+                    }
+                }
+
+                if !cur_stmts.is_empty() {
+                    blocks.push(BasicBlock {
+                        stmts: cur_stmts,
+                        terminator: Terminator::Goto(back_edge_target),
+                    });
+                }
+                if blocks.is_empty() {
+                    blocks.push(BasicBlock {
+                        stmts: Vec::new(),
+                        terminator: Terminator::Goto(back_edge_target),
+                    });
+                }
+                Some(blocks)
+            }
+
             // Postfix `name++` / `name--` as stmt — handles both
             // local-var increment and implicit-this field increment.
             if let KtExpr::Postfix(p) = &expr {
@@ -5284,6 +5511,99 @@ fn try_lower_multi_stmt_block_with_offset(
                     Some(other) => vec![other.syntax()],
                     None => vec![],
                 };
+                let body_has_jumps = body_children.iter().any(|c| {
+                    let Some(expr) = KtExpr::cast(c) else {
+                        return false;
+                    };
+                    if matches!(expr, KtExpr::Break(_) | KtExpr::Continue(_)) {
+                        return true;
+                    }
+                    if let KtExpr::If(if_e) = expr {
+                        let is_jump_arm = |arm: Option<KtExpr<'_>>| -> bool {
+                            let Some(arm) = arm.map(unwrap_parens) else {
+                                return false;
+                            };
+                            if matches!(arm, KtExpr::Break(_) | KtExpr::Continue(_)) {
+                                return true;
+                            }
+                            if let KtExpr::Block(bl) = arm {
+                                let s: Vec<KtExpr<'_>> = bl.statements().collect();
+                                if s.len() == 1 {
+                                    return matches!(
+                                        s[0],
+                                        KtExpr::Break(_) | KtExpr::Continue(_)
+                                    );
+                                }
+                            }
+                            false
+                        };
+                        let then_e = if_e.then_branch().and_then(|t| t.expression());
+                        let else_e = if_e.else_branch().and_then(|e| e.expression());
+                        return is_jump_arm(then_e) || is_jump_arm(else_e);
+                    }
+                    false
+                });
+                if body_has_jumps {
+                    const SENT_BACK: u32 = 0xfffffffe;
+                    const SENT_BREAK: u32 = 0xfffffffd;
+                    let mut body_blocks = lower_loop_body_blocks(
+                        &body_children,
+                        &mut name_to_local,
+                        &mut next_slot,
+                        &mut local_tys,
+                        strings,
+                        fn_lookup,
+                        &function_param_names,
+                        2,
+                        SENT_BACK,
+                        SENT_BREAK,
+                    )?;
+                    let n = body_blocks.len() as u32;
+                    let exit_id = 2 + n;
+                    for blk in &mut body_blocks {
+                        let remap = |t: u32| -> u32 {
+                            if t == SENT_BACK {
+                                1
+                            } else if t == SENT_BREAK {
+                                exit_id
+                            } else {
+                                t
+                            }
+                        };
+                        match &mut blk.terminator {
+                            Terminator::Goto(t) => *t = remap(*t),
+                            Terminator::Branch {
+                                then_block,
+                                else_block,
+                                ..
+                            } => {
+                                *then_block = remap(*then_block);
+                                *else_block = remap(*else_block);
+                            }
+                            _ => {}
+                        }
+                    }
+                    let pre_block = BasicBlock {
+                        stmts: std::mem::take(&mut stmts),
+                        terminator: Terminator::Goto(1),
+                    };
+                    let cond_block = BasicBlock {
+                        stmts: cond_stmts,
+                        terminator: Terminator::Branch {
+                            cond: cmp_slot,
+                            then_block: 2,
+                            else_block: exit_id,
+                        },
+                    };
+                    let exit_block = BasicBlock {
+                        stmts: Vec::new(),
+                        terminator: Terminator::Return,
+                    };
+                    let mut all = vec![pre_block, cond_block];
+                    all.extend(body_blocks);
+                    all.push(exit_block);
+                    return Some((all, local_tys));
+                }
                 let body_mstmts = lower_loop_body(
                     &body_children,
                     &mut name_to_local,
@@ -5746,6 +6066,140 @@ fn try_lower_multi_stmt_block_with_offset(
                     Some(other) => vec![other.syntax()],
                     None => vec![],
                 };
+                // Check whether the body has break/continue/if-with-
+                // jump that requires the multi-block lowering path.
+                let body_has_jumps = body_children.iter().any(|c| {
+                    let Some(expr) = KtExpr::cast(c) else {
+                        return false;
+                    };
+                    if matches!(expr, KtExpr::Break(_) | KtExpr::Continue(_)) {
+                        return true;
+                    }
+                    if let KtExpr::If(if_e) = expr {
+                        let is_jump_arm = |arm: Option<KtExpr<'_>>| -> bool {
+                            let Some(arm) = arm.map(unwrap_parens) else {
+                                return false;
+                            };
+                            if matches!(arm, KtExpr::Break(_) | KtExpr::Continue(_)) {
+                                return true;
+                            }
+                            if let KtExpr::Block(bl) = arm {
+                                let s: Vec<KtExpr<'_>> = bl.statements().collect();
+                                if s.len() == 1 {
+                                    return matches!(
+                                        s[0],
+                                        KtExpr::Break(_) | KtExpr::Continue(_)
+                                    );
+                                }
+                            }
+                            false
+                        };
+                        let then_e = if_e.then_branch().and_then(|t| t.expression());
+                        let else_e = if_e.else_branch().and_then(|e| e.expression());
+                        return is_jump_arm(then_e) || is_jump_arm(else_e);
+                    }
+                    false
+                });
+                if body_has_jumps {
+                    // Multi-block path: emit body blocks via
+                    // lower_loop_body_blocks with sentinel targets,
+                    // then remap to step / exit IDs.
+                    const SENT_BACK: u32 = 0xfffffffe;
+                    const SENT_BREAK: u32 = 0xfffffffd;
+                    let mut body_blocks = lower_loop_body_blocks(
+                        &body_children,
+                        &mut name_to_local,
+                        &mut next_slot,
+                        &mut local_tys,
+                        strings,
+                        fn_lookup,
+                        &function_param_names,
+                        2,
+                        SENT_BACK,
+                        SENT_BREAK,
+                    )?;
+                    let n = body_blocks.len() as u32;
+                    let step_id = 2 + n;
+                    let exit_id = step_id + 1;
+                    for blk in &mut body_blocks {
+                        let remap = |t: u32| -> u32 {
+                            if t == SENT_BACK {
+                                step_id
+                            } else if t == SENT_BREAK {
+                                exit_id
+                            } else {
+                                t
+                            }
+                        };
+                        match &mut blk.terminator {
+                            Terminator::Goto(t) => *t = remap(*t),
+                            Terminator::Branch {
+                                then_block,
+                                else_block,
+                                ..
+                            } => {
+                                *then_block = remap(*then_block);
+                                *else_block = remap(*else_block);
+                            }
+                            _ => {}
+                        }
+                    }
+                    // i = i + 1 stmts for the step block.
+                    let one_slot = LocalId(next_slot);
+                    next_slot += 1;
+                    local_tys.push(Ty::Int);
+                    let step_stmts = vec![
+                        MStmt::Assign {
+                            dest: one_slot,
+                            value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(1)),
+                        },
+                        MStmt::Assign {
+                            dest: i_slot,
+                            value: skotch_mir::Rvalue::BinOp {
+                                op: skotch_mir::BinOp::AddI,
+                                lhs: i_slot,
+                                rhs: one_slot,
+                            },
+                        },
+                    ];
+                    let cmp_slot = LocalId(next_slot);
+                    next_slot += 1;
+                    local_tys.push(Ty::Bool);
+                    let cond_stmt = MStmt::Assign {
+                        dest: cmp_slot,
+                        value: skotch_mir::Rvalue::BinOp {
+                            op: skotch_mir::BinOp::CmpLe,
+                            lhs: i_slot,
+                            rhs: end_slot,
+                        },
+                    };
+                    name_to_local.pop(); // pop loop var
+                    let pre_block = BasicBlock {
+                        stmts: std::mem::take(&mut stmts),
+                        terminator: Terminator::Goto(1),
+                    };
+                    let cond_block = BasicBlock {
+                        stmts: vec![cond_stmt],
+                        terminator: Terminator::Branch {
+                            cond: cmp_slot,
+                            then_block: 2,
+                            else_block: exit_id,
+                        },
+                    };
+                    let step_block = BasicBlock {
+                        stmts: step_stmts,
+                        terminator: Terminator::Goto(1),
+                    };
+                    let exit_block = BasicBlock {
+                        stmts: Vec::new(),
+                        terminator: Terminator::Return,
+                    };
+                    let mut all = vec![pre_block, cond_block];
+                    all.extend(body_blocks);
+                    all.push(step_block);
+                    all.push(exit_block);
+                    return Some((all, local_tys));
+                }
                 // Lower body via shared helper.
                 let mut body_mstmts = lower_loop_body(
                     &body_children,
