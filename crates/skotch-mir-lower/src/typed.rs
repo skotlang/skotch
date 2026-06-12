@@ -7624,6 +7624,63 @@ fn lower_rich_expr_to_slot(
             }
         }
     }
+    // DotQualified — extension fn invocation:
+    //   `i.squared()` → Call(Static(squared_fid), [i_slot])
+    //   `4.isEven()`  → materialize 4 into slot, then Call.
+    if let KtExpr::DotQualified(dq) = e {
+        let dq_exprs: Vec<KtExpr<'_>> = skotch_ast::children(dq.syntax())
+            .iter()
+            .filter_map(KtExpr::cast)
+            .collect();
+        if dq_exprs.len() == 2 {
+            if let KtExpr::Call(call) = &dq_exprs[1] {
+                let method_n = match call.callee() {
+                    Some(KtExpr::Reference(r)) => r.name(),
+                    _ => None,
+                };
+                if let Some(method_n) = method_n {
+                    if let Some((fid, ret_ty)) = fn_lookup.get(method_n) {
+                        let recv_slot = lower_rich_expr_to_slot(
+                            dq_exprs[0],
+                            lookup_name,
+                            fn_lookup,
+                            next_slot,
+                            pre_stmts,
+                            extra_locals,
+                            strings,
+                        )?;
+                        let mut arg_slots: Vec<LocalId> = vec![recv_slot];
+                        if let Some(arg_list) = call.value_argument_list() {
+                            for arg in arg_list.arguments() {
+                                let arg_e = arg.expression()?;
+                                let slot = lower_rich_expr_to_slot(
+                                    arg_e,
+                                    lookup_name,
+                                    fn_lookup,
+                                    next_slot,
+                                    pre_stmts,
+                                    extra_locals,
+                                    strings,
+                                )?;
+                                arg_slots.push(slot);
+                            }
+                        }
+                        let result_slot = LocalId(*next_slot);
+                        *next_slot += 1;
+                        extra_locals.push(ret_ty.clone());
+                        pre_stmts.push(MStmt::Assign {
+                            dest: result_slot,
+                            value: skotch_mir::Rvalue::Call {
+                                kind: skotch_mir::CallKind::Static(*fid),
+                                args: arg_slots,
+                            },
+                        });
+                        return Some(result_slot);
+                    }
+                }
+            }
+        }
+    }
     // Binary may have come back as None because operands were Calls.
     if let KtExpr::Binary(b) = e {
         let op_text = b.operation().map(|o| o.text()).unwrap_or_default();
