@@ -3459,7 +3459,30 @@ fn try_lower_multi_stmt_block_with_offset(
                             name_to_local.push((pname.to_string(), slot));
                             continue;
                         }
-                        // Binary RHS like `i * 100`.
+                        // Binary RHS like `i * 100` (or nested arithmetic).
+                        // Routes through lower_inline_expr_to_slot for
+                        // recursive Binary handling.
+                        if let KtExpr::Binary(_) = &init {
+                            let snap = name_to_local.clone();
+                            let lookup = |n: &str| -> Option<LocalId> {
+                                snap.iter()
+                                    .rev()
+                                    .find(|(name, _)| name == n)
+                                    .map(|(_, l)| *l)
+                            };
+                            if let Some(rhs_slot) = lower_inline_expr_to_slot(
+                                init,
+                                &lookup,
+                                next_slot,
+                                &mut body_mstmts,
+                                local_tys,
+                                strings,
+                            ) {
+                                name_to_local.push((pname.to_string(), rhs_slot));
+                                continue;
+                            }
+                        }
+                        // Legacy Binary RHS path (kept for compile compat — superseded above).
                         if let KtExpr::Binary(b) = &init {
                             let op = b.operation().map(|o| o.text()).unwrap_or_default();
                             let mir_op = match op.as_str() {
