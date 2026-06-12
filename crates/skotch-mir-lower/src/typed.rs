@@ -3677,6 +3677,7 @@ fn lower_loop_body_blocks(
             has_else: bool,
         },
         PropertyWithIfInit,
+        PropertyWithWhenInit,
         NestedWhile,
         NestedForIn,
     }
@@ -3686,12 +3687,19 @@ fn lower_loop_body_blocks(
         let mut special_at: Option<(usize, Special)> = None;
         for j in i..body_children.len() {
             let c = body_children[j];
-            // KtProperty (val/var) with if-expr initializer.
+            // KtProperty (val/var) with if-expr or when-expr initializer.
             if let Some(prop) = skotch_ast::KtProperty::cast(c) {
                 if let Some(init) = prop.initializer() {
-                    if let KtExpr::If(_) = unwrap_parens(init) {
-                        special_at = Some((j, Special::PropertyWithIfInit));
-                        break;
+                    match unwrap_parens(init) {
+                        KtExpr::If(_) => {
+                            special_at = Some((j, Special::PropertyWithIfInit));
+                            break;
+                        }
+                        KtExpr::When(_) => {
+                            special_at = Some((j, Special::PropertyWithWhenInit));
+                            break;
+                        }
+                        _ => {}
                     }
                 }
                 continue;
@@ -4498,6 +4506,187 @@ fn lower_loop_body_blocks(
                     stmts: else_stmts,
                     terminator: Terminator::Goto(join_block_id),
                 });
+                name_to_local.push((pname.to_string(), prop_slot));
+                i = j + 1;
+                continue;
+            }
+            Some((j, Special::PropertyWithWhenInit)) => {
+                // `val/var name = when (subj) { lit -> e; ...; else -> e_else }`.
+                // Each arm contributes a cmp block + a then block;
+                // an else block; finally a join block. The property
+                // slot is written in each arm and join.
+                let prop_node = body_children[j];
+                let prop = skotch_ast::KtProperty::cast(prop_node)?;
+                let pname = prop.name()?;
+                let init = prop.initializer().map(unwrap_parens)?;
+                let KtExpr::When(when_e) = init else {
+                    return None;
+                };
+                // Subject must be a Reference into name_to_local.
+                let subject = when_e.subject().map(unwrap_parens)?;
+                let KtExpr::Reference(rsub) = subject else {
+                    return None;
+                };
+                let subj_name = rsub.name()?;
+                let subject_slot = name_to_local
+                    .iter()
+                    .rev()
+                    .find(|(n, _)| n == subj_name)
+                    .map(|(_, l)| *l)?;
+                let mut arms: Vec<(KtExpr<'_>, KtExpr<'_>)> = Vec::new();
+                let mut else_arm: Option<KtExpr<'_>> = None;
+                for entry in when_e.entries() {
+                    if entry.is_else() {
+                        else_arm = entry.body().map(unwrap_parens);
+                        continue;
+                    }
+                    let conds = entry.conditions();
+                    if conds.is_empty() {
+                        return None;
+                    }
+                    let body = entry.body().map(unwrap_parens)?;
+                    for c in conds {
+                        if c.kind
+                            != skotch_syntax::SyntaxKind::WHEN_CONDITION_WITH_EXPRESSION
+                        {
+                            return None;
+                        }
+                        let ce = skotch_ast::children(c)
+                            .iter()
+                            .find_map(KtExpr::cast)
+                            .map(unwrap_parens)?;
+                        arms.push((ce, body));
+                    }
+                }
+                let else_body = else_arm?;
+                let prop_slot = LocalId(*next_slot);
+                *next_slot += 1;
+                local_tys.push(Ty::Any);
+                let n_arms = arms.len();
+                // Block IDs:
+                //   start = cond_block_id_for_arm_0
+                //   arms[i].cmp = start + 2*i
+                //   arms[i].then = start + 2*i + 1
+                //   else = start + 2*n_arms
+                //   join = start + 2*n_arms + 1
+                // We need to flush cur_stmts as the "pre" block before
+                // the first cmp; that becomes the block we just push.
+                let start_id = block_offset + blocks.len() as u32;
+                let else_id = start_id + 2 * n_arms as u32;
+                let join_id = else_id + 1;
+                // We'll emit blocks in order: cur (with Goto into start),
+                // then per-arm cmp+then, then else, then join opens.
+                // Actually, the simplest is to make cur_block (with its
+                // existing stmts) emit cmp_0 stmts at the end so it
+                // does the first compare itself.
+                // Approach: keep cur_stmts; build cmp_i stmts buffer
+                // and Branch terminators.
+                let mut arm_blocks: Vec<BasicBlock> = Vec::new();
+                for (i_arm, (cond_expr, body)) in arms.iter().enumerate() {
+                    let mut c_stmts: Vec<MStmt> = Vec::new();
+                    let target_buf = if i_arm == 0 {
+                        // First cmp goes in cur_stmts.
+                        &mut cur_stmts
+                    } else {
+                        &mut c_stmts
+                    };
+                    let (k, ty) = literal_to_const(cond_expr, strings)?;
+                    let lit_slot = LocalId(*next_slot);
+                    *next_slot += 1;
+                    local_tys.push(ty);
+                    target_buf.push(MStmt::Assign {
+                        dest: lit_slot,
+                        value: skotch_mir::Rvalue::Const(k),
+                    });
+                    let cmp_slot = LocalId(*next_slot);
+                    *next_slot += 1;
+                    local_tys.push(Ty::Bool);
+                    target_buf.push(MStmt::Assign {
+                        dest: cmp_slot,
+                        value: skotch_mir::Rvalue::BinOp {
+                            op: skotch_mir::BinOp::CmpEq,
+                            lhs: subject_slot,
+                            rhs: lit_slot,
+                        },
+                    });
+                    let then_block_id = start_id + 2 * i_arm as u32 + 1;
+                    let next_block_id = if i_arm + 1 < n_arms {
+                        start_id + 2 * (i_arm as u32 + 1)
+                    } else {
+                        else_id
+                    };
+                    let cmp_term = Terminator::Branch {
+                        cond: cmp_slot,
+                        then_block: then_block_id,
+                        else_block: next_block_id,
+                    };
+                    // Lower the body expression and assign to prop_slot.
+                    let mut then_stmts: Vec<MStmt> = Vec::new();
+                    let snap = name_to_local.clone();
+                    let lookup = |n: &str| -> Option<LocalId> {
+                        snap.iter()
+                            .rev()
+                            .find(|(name, _)| name == n)
+                            .map(|(_, l)| *l)
+                    };
+                    let val_slot = lower_rich_expr_to_slot(
+                        *body,
+                        &lookup,
+                        fn_lookup_ref,
+                        next_slot,
+                        &mut then_stmts,
+                        local_tys,
+                        strings,
+                    )?;
+                    then_stmts.push(MStmt::Assign {
+                        dest: prop_slot,
+                        value: skotch_mir::Rvalue::Local(val_slot),
+                    });
+                    let then_term = Terminator::Goto(join_id);
+                    if i_arm == 0 {
+                        arm_blocks.push(BasicBlock {
+                            stmts: std::mem::take(&mut cur_stmts),
+                            terminator: cmp_term,
+                        });
+                    } else {
+                        arm_blocks.push(BasicBlock {
+                            stmts: c_stmts,
+                            terminator: cmp_term,
+                        });
+                    }
+                    arm_blocks.push(BasicBlock {
+                        stmts: then_stmts,
+                        terminator: then_term,
+                    });
+                }
+                // Else block.
+                let mut else_stmts: Vec<MStmt> = Vec::new();
+                let snap = name_to_local.clone();
+                let lookup = |n: &str| -> Option<LocalId> {
+                    snap.iter()
+                        .rev()
+                        .find(|(name, _)| name == n)
+                        .map(|(_, l)| *l)
+                };
+                let else_val = lower_rich_expr_to_slot(
+                    else_body,
+                    &lookup,
+                    fn_lookup_ref,
+                    next_slot,
+                    &mut else_stmts,
+                    local_tys,
+                    strings,
+                )?;
+                else_stmts.push(MStmt::Assign {
+                    dest: prop_slot,
+                    value: skotch_mir::Rvalue::Local(else_val),
+                });
+                arm_blocks.push(BasicBlock {
+                    stmts: else_stmts,
+                    terminator: Terminator::Goto(join_id),
+                });
+                // Push all blocks.
+                blocks.extend(arm_blocks);
                 name_to_local.push((pname.to_string(), prop_slot));
                 i = j + 1;
                 continue;
