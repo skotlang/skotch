@@ -3892,6 +3892,106 @@ fn try_lower_multi_stmt_block_with_offset(
                 Some(body_mstmts)
             }
 
+            // Postfix `name++` / `name--` as stmt — handles both
+            // local-var increment and implicit-this field increment.
+            if let KtExpr::Postfix(p) = &expr {
+                let op_text = skotch_ast::children(p.syntax())
+                    .iter()
+                    .find_map(|c| {
+                        if c.kind == skotch_syntax::SyntaxKind::OPERATION_REFERENCE {
+                            skotch_ast::KtOperationReference::cast(c).map(|o| o.text())
+                        } else {
+                            None
+                        }
+                    })
+                    .unwrap_or_default();
+                let inner = skotch_ast::children(p.syntax())
+                    .iter()
+                    .find_map(KtExpr::cast)
+                    .map(unwrap_parens);
+                let mir_op = match op_text.as_str() {
+                    "++" => Some(skotch_mir::BinOp::AddI),
+                    "--" => Some(skotch_mir::BinOp::SubI),
+                    _ => None,
+                };
+                if let (Some(mir_op), Some(KtExpr::Reference(rr))) = (mir_op, inner) {
+                    if let Some(nm) = rr.name() {
+                        // Try local slot first.
+                        if let Some(slot) = name_to_local
+                            .iter()
+                            .rev()
+                            .find(|(n, _)| n == nm)
+                            .map(|(_, l)| *l)
+                        {
+                            let one_slot = LocalId(next_slot);
+                            next_slot += 1;
+                            local_tys.push(Ty::Int);
+                            stmts.push(MStmt::Assign {
+                                dest: one_slot,
+                                value: skotch_mir::Rvalue::Const(
+                                    skotch_mir::MirConst::Int(1),
+                                ),
+                            });
+                            stmts.push(MStmt::Assign {
+                                dest: slot,
+                                value: skotch_mir::Rvalue::BinOp {
+                                    op: mir_op,
+                                    lhs: slot,
+                                    rhs: one_slot,
+                                },
+                            });
+                            continue;
+                        }
+                        // Implicit-this field.
+                        if let (Some(cname), Some((fname, fty))) = (
+                            class_name,
+                            field_names.iter().find(|(n, _)| n == nm),
+                        ) {
+                            let cur_slot = LocalId(next_slot);
+                            next_slot += 1;
+                            local_tys.push(fty.clone());
+                            stmts.push(MStmt::Assign {
+                                dest: cur_slot,
+                                value: skotch_mir::Rvalue::GetField {
+                                    receiver: LocalId(0),
+                                    class_name: cname.to_string(),
+                                    field_name: fname.clone(),
+                                },
+                            });
+                            let one_slot = LocalId(next_slot);
+                            next_slot += 1;
+                            local_tys.push(Ty::Int);
+                            stmts.push(MStmt::Assign {
+                                dest: one_slot,
+                                value: skotch_mir::Rvalue::Const(
+                                    skotch_mir::MirConst::Int(1),
+                                ),
+                            });
+                            let new_slot = LocalId(next_slot);
+                            next_slot += 1;
+                            local_tys.push(fty.clone());
+                            stmts.push(MStmt::Assign {
+                                dest: new_slot,
+                                value: skotch_mir::Rvalue::BinOp {
+                                    op: mir_op,
+                                    lhs: cur_slot,
+                                    rhs: one_slot,
+                                },
+                            });
+                            stmts.push(MStmt::Assign {
+                                dest: LocalId(0),
+                                value: skotch_mir::Rvalue::PutField {
+                                    receiver: LocalId(0),
+                                    class_name: cname.to_string(),
+                                    field_name: fname.clone(),
+                                    value: new_slot,
+                                },
+                            });
+                            continue;
+                        }
+                    }
+                }
+            }
             // Method call on a local: `localVar.method(args)` as a
             // statement (result discarded). Receiver's type comes
             // from local_tys; must be Ty::Class(name).
