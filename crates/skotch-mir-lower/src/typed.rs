@@ -4771,12 +4771,36 @@ fn try_lower_multi_stmt_block_with_offset(
                     None
                 }
 
+                // Recognize a `return` arm in an if/else and produce
+                // an index pointing into the if-arm's source location
+                // so we can re-extract its expr later.
+                fn extract_arm_return(arm: Option<KtExpr<'_>>) -> bool {
+                    let Some(arm) = arm.map(unwrap_parens) else {
+                        return false;
+                    };
+                    if matches!(arm, KtExpr::Return(_)) {
+                        return true;
+                    }
+                    if let KtExpr::Block(bl) = arm {
+                        let s: Vec<KtExpr<'_>> = bl.statements().collect();
+                        if s.len() == 1 {
+                            return matches!(s[0], KtExpr::Return(_));
+                        }
+                    }
+                    false
+                }
                 #[derive(Clone, Copy)]
                 enum Special {
                     DirectJump(u32),
+                    ReturnStmt,
                     IfWithJump {
                         then_target: Option<u32>,
                         else_target: Option<u32>,
+                        has_else: bool,
+                    },
+                    IfWithReturn {
+                        then_is_return: bool,
+                        else_is_return: bool,
                         has_else: bool,
                     },
                     IfNonJump {
@@ -4797,6 +4821,10 @@ fn try_lower_multi_stmt_block_with_offset(
                             special_at = Some((j, Special::DirectJump(t)));
                             break;
                         }
+                        if matches!(expr, KtExpr::Return(_)) {
+                            special_at = Some((j, Special::ReturnStmt));
+                            break;
+                        }
                         if let KtExpr::If(if_e) = expr {
                             let then_arm = if_e.then_branch().and_then(|t| t.expression());
                             let else_arm = if_e.else_branch().and_then(|e| e.expression());
@@ -4810,6 +4838,19 @@ fn try_lower_multi_stmt_block_with_offset(
                                     Special::IfWithJump {
                                         then_target,
                                         else_target,
+                                        has_else: else_arm.is_some(),
+                                    },
+                                ));
+                                break;
+                            }
+                            let then_is_return = extract_arm_return(then_arm);
+                            let else_is_return = extract_arm_return(else_arm);
+                            if then_is_return || else_is_return {
+                                special_at = Some((
+                                    j,
+                                    Special::IfWithReturn {
+                                        then_is_return,
+                                        else_is_return,
                                         has_else: else_arm.is_some(),
                                     },
                                 ));
@@ -4858,6 +4899,222 @@ fn try_lower_multi_stmt_block_with_offset(
                             });
                             let _ = j;
                             return Some(blocks);
+                        }
+                        Some((j, Special::ReturnStmt)) => {
+                            // Bare `return` or `return expr`.
+                            let ret_node = body_children[j];
+                            let KtExpr::Return(r) = KtExpr::cast(ret_node)? else {
+                                return None;
+                            };
+                            let ret_expr_inner = skotch_ast::children(r.syntax())
+                                .iter()
+                                .find_map(KtExpr::cast)
+                                .map(unwrap_parens);
+                            let terminator = match ret_expr_inner {
+                                None => Terminator::Return,
+                                Some(re) => {
+                                    let snap = name_to_local.clone();
+                                    let lookup = |n: &str| -> Option<LocalId> {
+                                        snap.iter()
+                                            .rev()
+                                            .find(|(name, _)| name == n)
+                                            .map(|(_, l)| *l)
+                                    };
+                                    let slot = lower_rich_expr_to_slot(
+                                        re,
+                                        &lookup,
+                                        fn_lookup_ref,
+                                        next_slot,
+                                        &mut cur_stmts,
+                                        local_tys,
+                                        strings,
+                                    )?;
+                                    Terminator::ReturnValue(slot)
+                                }
+                            };
+                            blocks.push(BasicBlock {
+                                stmts: std::mem::take(&mut cur_stmts),
+                                terminator,
+                            });
+                            return Some(blocks);
+                        }
+                        Some((
+                            j,
+                            Special::IfWithReturn {
+                                then_is_return,
+                                else_is_return,
+                                has_else,
+                            },
+                        )) => {
+                            let if_node = body_children[j];
+                            let KtExpr::If(if_e) = KtExpr::cast(if_node)? else {
+                                return None;
+                            };
+                            let cond_expr = if_e
+                                .condition()
+                                .and_then(|c| c.expression())
+                                .map(unwrap_parens)?;
+                            let then_arm = if_e
+                                .then_branch()
+                                .and_then(|t| t.expression())
+                                .map(unwrap_parens)?;
+                            let else_arm = if_e
+                                .else_branch()
+                                .and_then(|e| e.expression())
+                                .map(unwrap_parens);
+                            let snap = name_to_local.clone();
+                            let lookup = |n: &str| -> Option<LocalId> {
+                                snap.iter()
+                                    .rev()
+                                    .find(|(name, _)| name == n)
+                                    .map(|(_, l)| *l)
+                            };
+                            let cmp_slot = lower_inline_expr_to_slot(
+                                cond_expr,
+                                &lookup,
+                                next_slot,
+                                &mut cur_stmts,
+                                local_tys,
+                                strings,
+                            )?;
+                            // Build a "return block" for each
+                            // return-arm; the other arm is either a
+                            // jump-back (Goto join) or a non-return.
+                            fn extract_inner_return(arm: KtExpr<'_>) -> Option<KtExpr<'_>> {
+                                let arm = unwrap_parens(arm);
+                                let r = match arm {
+                                    KtExpr::Return(r) => r,
+                                    KtExpr::Block(bl) => {
+                                        let s: Vec<KtExpr<'_>> = bl.statements().collect();
+                                        if s.len() != 1 {
+                                            return None;
+                                        }
+                                        if let KtExpr::Return(r) = s[0] {
+                                            r
+                                        } else {
+                                            return None;
+                                        }
+                                    }
+                                    _ => return None,
+                                };
+                                skotch_ast::children(r.syntax())
+                                    .iter()
+                                    .find_map(KtExpr::cast)
+                                    .map(unwrap_parens)
+                            }
+                            let make_return_block = |re: Option<KtExpr<'_>>,
+                                                     next_slot: &mut u32,
+                                                     local_tys: &mut Vec<Ty>,
+                                                     strings: &mut Vec<String>|
+                             -> Option<BasicBlock> {
+                                let mut stmts: Vec<MStmt> = Vec::new();
+                                let term = match re {
+                                    None => Terminator::Return,
+                                    Some(re) => {
+                                        let slot = lower_rich_expr_to_slot(
+                                            re,
+                                            &lookup,
+                                            fn_lookup_ref,
+                                            next_slot,
+                                            &mut stmts,
+                                            local_tys,
+                                            strings,
+                                        )?;
+                                        Terminator::ReturnValue(slot)
+                                    }
+                                };
+                                Some(BasicBlock {
+                                    stmts,
+                                    terminator: term,
+                                })
+                            };
+                            let cond_block_id = block_offset + blocks.len() as u32;
+                            let then_block_id = cond_block_id + 1;
+                            let (else_block_id, after_block_id) = if has_else {
+                                let e_id = then_block_id + 1;
+                                let a_id = e_id + 1;
+                                (Some(e_id), a_id)
+                            } else {
+                                (None, then_block_id + 1)
+                            };
+                            blocks.push(BasicBlock {
+                                stmts: std::mem::take(&mut cur_stmts),
+                                terminator: Terminator::Branch {
+                                    cond: cmp_slot,
+                                    then_block: then_block_id,
+                                    else_block: else_block_id.unwrap_or(after_block_id),
+                                },
+                            });
+                            // Then-block:
+                            if then_is_return {
+                                let then_re = extract_inner_return(then_arm);
+                                blocks.push(make_return_block(
+                                    then_re,
+                                    next_slot,
+                                    local_tys,
+                                    strings,
+                                )?);
+                            } else {
+                                let then_children: Vec<&skotch_sil::SilNode> =
+                                    match then_arm {
+                                        KtExpr::Block(bl) => skotch_ast::children(bl.syntax())
+                                            .iter()
+                                            .collect(),
+                                        other => vec![other.syntax()],
+                                    };
+                                let then_stmts = lower_loop_body(
+                                    &then_children,
+                                    name_to_local,
+                                    next_slot,
+                                    local_tys,
+                                    strings,
+                                    fn_lookup_ref,
+                                    function_param_names,
+                                )?;
+                                blocks.push(BasicBlock {
+                                    stmts: then_stmts,
+                                    terminator: Terminator::Goto(after_block_id),
+                                });
+                            }
+                            // Else-block (only if has_else):
+                            if has_else {
+                                let else_arm_v = else_arm?;
+                                if else_is_return {
+                                    let else_re = extract_inner_return(else_arm_v);
+                                    blocks.push(make_return_block(
+                                        else_re,
+                                        next_slot,
+                                        local_tys,
+                                        strings,
+                                    )?);
+                                } else {
+                                    let else_children: Vec<&skotch_sil::SilNode> =
+                                        match else_arm_v {
+                                            KtExpr::Block(bl) => {
+                                                skotch_ast::children(bl.syntax())
+                                                    .iter()
+                                                    .collect()
+                                            }
+                                            other => vec![other.syntax()],
+                                        };
+                                    let else_stmts = lower_loop_body(
+                                        &else_children,
+                                        name_to_local,
+                                        next_slot,
+                                        local_tys,
+                                        strings,
+                                        fn_lookup_ref,
+                                        function_param_names,
+                                    )?;
+                                    blocks.push(BasicBlock {
+                                        stmts: else_stmts,
+                                        terminator: Terminator::Goto(after_block_id),
+                                    });
+                                }
+                            }
+                            // Continue into the after-block.
+                            i = j + 1;
+                            continue;
                         }
                         Some((
                             j,
@@ -5407,7 +5664,7 @@ fn try_lower_multi_stmt_block_with_offset(
                     let Some(expr) = KtExpr::cast(c) else {
                         return false;
                     };
-                    if matches!(expr, KtExpr::Break(_) | KtExpr::Continue(_)) {
+                    if matches!(expr, KtExpr::Break(_) | KtExpr::Continue(_) | KtExpr::Return(_)) {
                         return true;
                     }
                     if let KtExpr::If(if_e) = expr {
@@ -5753,7 +6010,7 @@ fn try_lower_multi_stmt_block_with_offset(
                     let Some(expr) = KtExpr::cast(c) else {
                         return false;
                     };
-                    if matches!(expr, KtExpr::Break(_) | KtExpr::Continue(_)) {
+                    if matches!(expr, KtExpr::Break(_) | KtExpr::Continue(_) | KtExpr::Return(_)) {
                         return true;
                     }
                     if let KtExpr::If(if_e) = expr {
@@ -6466,7 +6723,7 @@ fn try_lower_multi_stmt_block_with_offset(
                     let Some(expr) = KtExpr::cast(c) else {
                         return false;
                     };
-                    if matches!(expr, KtExpr::Break(_) | KtExpr::Continue(_)) {
+                    if matches!(expr, KtExpr::Break(_) | KtExpr::Continue(_) | KtExpr::Return(_)) {
                         return true;
                     }
                     if let KtExpr::If(if_e) = expr {

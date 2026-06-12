@@ -374,7 +374,6 @@
 0.364	144-nested-when	55	20	9	2	1
 0.365	170-insertion-sort	63	23	8	1	0
 0.365	193-bubble-sort-5	63	23	8	1	0
-0.375	141-break-continue-practical	40	15	9	2	0
 0.378	1332-private-constructor-companion-factory	45	17	18	8	6
 0.382	1247-for-loop-virtual-dispatch	34	13	16	7	2
 0.385	190-ext-chain-complex	26	10	11	4	2
@@ -386,7 +385,6 @@
 0.406	1329-linked-list-generic-node	69	28	18	6	3
 0.414	184-nested-when	29	12	9	2	1
 0.419	578-intersection-smart-cast	31	13	9	2	0
-0.425	155-binary-search	40	17	9	2	0
 0.438	104-property-getter-setter	16	7	12	2	0
 0.444	177-while-break-condition	18	8	8	1	0
 0.448	1264-cross-file-sealed-typeck	29	13	16	7	2
@@ -510,6 +508,7 @@
 0.545	152-nested-local-fun	11	6	10	2	1
 0.545	265-class-with-nullable	11	6	9	2	1
 0.545	86-nullable-elvis	11	6	9	2	1
+0.550	141-break-continue-practical	40	22	9	2	0
 0.556	1119-suspend-multi-trivial	9	5	12	5	0
 0.556	1226-empty-try-catch	9	5	11	4	3
 0.556	1333-raw-string-interpolation	18	10	9	2	1
@@ -663,6 +662,7 @@
 0.762	192-top-level-constants	21	16	9	2	0
 0.765	185-else-if-chain	17	13	8	1	0
 0.771	257-collatz-sequence	35	27	9	2	0
+0.775	155-binary-search	40	31	9	2	0
 0.778	1298-explicit-unit-return-not-inferred	18	14	12	3	0
 0.778	235-class-rectangle	27	21	13	4	0
 0.778	60-class-properties	18	14	12	3	0
