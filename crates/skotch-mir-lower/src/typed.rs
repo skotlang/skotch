@@ -2146,6 +2146,147 @@ fn try_lower_if_expression(
                     });
                     return Some(slot);
                 }
+                // String template arm: `"prefix $x"` or `"prefix ${expr}"`.
+                if let KtExpr::String(_) = &other {
+                    use skotch_syntax::SyntaxKind as S;
+                    let mut recipe = String::new();
+                    let mut arg_slots: Vec<LocalId> = Vec::new();
+                    let mut arg_descs: Vec<String> = Vec::new();
+                    let mut had_interp = false;
+                    let mut ok = true;
+                    let snap_param_names = outer_param_names.clone();
+                    let template_lookup = |n: &str| -> Option<LocalId> {
+                        snap_param_names
+                            .iter()
+                            .position(|p| p == n)
+                            .map(|i| LocalId(i as u32))
+                    };
+                    for child in skotch_ast::children(other.syntax()) {
+                        match child.kind {
+                            S::LITERAL_STRING_TEMPLATE_ENTRY => {
+                                for cc in skotch_ast::children(child) {
+                                    if cc.kind == S::STRING_CHUNK {
+                                        if let skotch_sil::SilData::Token { text } = &cc.data {
+                                            recipe.push_str(text);
+                                        }
+                                    }
+                                }
+                            }
+                            S::SHORT_STRING_TEMPLATE_ENTRY => {
+                                had_interp = true;
+                                let name_opt = skotch_ast::children(child).iter().find_map(|cc| {
+                                    if cc.kind == S::REFERENCE_EXPRESSION {
+                                        for ccc in skotch_ast::children(cc) {
+                                            if ccc.kind == S::IDENTIFIER {
+                                                if let skotch_sil::SilData::Token { text } = &ccc.data {
+                                                    return Some(text.as_str().to_string());
+                                                }
+                                            }
+                                        }
+                                    }
+                                    None
+                                });
+                                let Some(name) = name_opt else {
+                                    ok = false;
+                                    break;
+                                };
+                                let Some(idx) = snap_param_names.iter().position(|p| p == &name)
+                                else {
+                                    ok = false;
+                                    break;
+                                };
+                                let param_ty = f
+                                    .value_parameter_list()
+                                    .and_then(|pl| {
+                                        pl.parameters().nth(idx).and_then(|p| {
+                                            p.type_reference()
+                                                .and_then(|tr| tr.user_type())
+                                                .and_then(|u| u.name())
+                                                .and_then(skotch_types::ty_from_name)
+                                        })
+                                    })
+                                    .unwrap_or(Ty::Any);
+                                arg_descs.push(ty_to_descriptor(&param_ty));
+                                arg_slots.push(LocalId(idx as u32));
+                                recipe.push('\x01');
+                            }
+                            S::LONG_STRING_TEMPLATE_ENTRY => {
+                                had_interp = true;
+                                let inner = skotch_ast::children(child)
+                                    .iter()
+                                    .find_map(KtExpr::cast)
+                                    .map(unwrap_parens);
+                                let Some(inner) = inner else {
+                                    ok = false;
+                                    break;
+                                };
+                                let slot = lower_inline_expr_to_slot(
+                                    inner,
+                                    &template_lookup,
+                                    next_slot,
+                                    pre_stmts,
+                                    extra_locals,
+                                    strings,
+                                );
+                                let Some(slot) = slot else {
+                                    ok = false;
+                                    break;
+                                };
+                                // Best-effort descriptor: derive from
+                                // extra_locals or default to Int.
+                                let ty_idx = slot.0 as usize;
+                                let param_count = outer_param_names.len();
+                                let ty = if ty_idx < param_count {
+                                    f.value_parameter_list()
+                                        .and_then(|pl| {
+                                            pl.parameters().nth(ty_idx).and_then(|p| {
+                                                p.type_reference()
+                                                    .and_then(|tr| tr.user_type())
+                                                    .and_then(|u| u.name())
+                                                    .and_then(skotch_types::ty_from_name)
+                                            })
+                                        })
+                                        .unwrap_or(Ty::Any)
+                                } else {
+                                    extra_locals
+                                        .get(ty_idx - param_count)
+                                        .cloned()
+                                        .unwrap_or(Ty::Int)
+                                };
+                                arg_descs.push(ty_to_descriptor(&ty));
+                                arg_slots.push(slot);
+                                recipe.push('\x01');
+                            }
+                            S::STRING_START | S::STRING_END | S::WHITE_SPACE => {}
+                            S::BLOCK_STRING_TEMPLATE_ENTRY => {
+                                ok = false;
+                                break;
+                            }
+                            _ => {
+                                ok = false;
+                                break;
+                            }
+                        }
+                    }
+                    if ok && had_interp {
+                        let descriptor =
+                            format!("({})Ljava/lang/String;", arg_descs.join(""));
+                        let result_slot = LocalId(*next_slot);
+                        *next_slot += 1;
+                        extra_locals.push(Ty::String);
+                        pre_stmts.push(MStmt::Assign {
+                            dest: result_slot,
+                            value: Rvalue::Call {
+                                kind: skotch_mir::CallKind::MakeConcatWithConstants {
+                                    recipe,
+                                    descriptor,
+                                },
+                                args: arg_slots,
+                            },
+                        });
+                        return Some(result_slot);
+                    }
+                }
                 // Fall back to lower_inline_expr_to_slot for Binary /
                 // nested arithmetic / etc — needs a name-only lookup
                 // that resolves outer params + top-level vals.
