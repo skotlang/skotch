@@ -3598,27 +3598,37 @@ fn try_lower_multi_stmt_block_with_offset(
                     continue;
                 }
             }
-            // Final fallback: try to lower the init via the generic
-            // inline-expression slot lowerer. Handles shapes that the
-            // specialized branches above don't cover (Prefix-minus, !b,
-            // val-of-Reference where name resolves to a top-level val,
-            // etc.). Uses a name-only lookup so only known locals are
-            // resolved here — top-level vals fall through.
+            // Final fallback: try to lower the init via the rich
+            // expression slot lowerer. Handles shapes the specialized
+            // branches above don't cover: Prefix-minus, !b, top-level
+            // val (via prebind), Binary/Call, DotQualified extension
+            // fn invocation on literal receivers, etc.
             {
                 let init_now = init;
-                let snap = name_to_local.clone();
+                let mut probe_stmts: Vec<MStmt> = Vec::new();
+                let mut probe_locals: Vec<Ty> = Vec::new();
+                let mut probe_slot = next_slot;
+                let mut snap_locals = name_to_local.clone();
+                prebind_top_level_vals(
+                    init_now,
+                    &mut snap_locals,
+                    &mut probe_slot,
+                    &mut probe_stmts,
+                    &mut probe_locals,
+                    val_lookup,
+                    wrapper_class,
+                );
+                let snap = snap_locals.clone();
                 let lookup = |n: &str| -> Option<LocalId> {
                     snap.iter()
                         .rev()
                         .find(|(name, _)| name == n)
                         .map(|(_, l)| *l)
                 };
-                let mut probe_stmts: Vec<MStmt> = Vec::new();
-                let mut probe_locals: Vec<Ty> = Vec::new();
-                let mut probe_slot = next_slot;
-                if let Some(slot) = lower_inline_expr_to_slot(
+                if let Some(slot) = lower_rich_expr_to_slot(
                     init_now,
                     &lookup,
+                    fn_lookup,
                     &mut probe_slot,
                     &mut probe_stmts,
                     &mut probe_locals,
@@ -3627,6 +3637,7 @@ fn try_lower_multi_stmt_block_with_offset(
                     next_slot = probe_slot;
                     local_tys.extend(probe_locals);
                     stmts.extend(probe_stmts);
+                    name_to_local = snap_locals;
                     name_to_local.push((name.to_string(), slot));
                     continue;
                 }
