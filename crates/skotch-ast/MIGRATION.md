@@ -1865,3 +1865,20 @@ No fixture currently exercises this exact shape inside a loop body, but it's a b
 - Fully covered: **212 / 968 (21.9%)**
 - Typed empty: **275 / 968 (28.4%)**
 - mir-lower typed unit tests: **188 passing**
+
+### 2026-06-12 (session 7 — push 42: nested while + nested for in loop bodies)
+
+Two new variants on `lower_loop_body_blocks`:
+
+- **`Special::NestedWhile`**: detects `while (cmp) { body }` inside the outer loop body. Emits a pre-block (flushes cur_stmts), an inner cond block, the inner body via recursive `lower_loop_body_blocks` (back_edge=inner_cond, break=after-inner), and an after-inner continuation block.
+- **`Special::NestedForIn`**: detects `for (i in lo..hi) { body }` inside the outer loop body. Allocates the inner loop var slot in the pre-block, emits inner cond / body / step blocks; the inner body recurses with back_edge=step, break=after.
+
+Updated `body_has_jumps` detection in for/while/do-while handlers to also trigger on `KtExpr::While` and `KtExpr::For`, so these patterns route through the multi-block path.
+
+**Push 42 standings:**
+- Fully covered: **212 / 968 (21.9%)**
+- Typed empty: **274 / 968 (28.3%)** (down from 275)
+- mir-lower typed unit tests: **188 passing**
+
+Key fixture jump:
+- 210-prime-factors: 0.000 → 0.500 (nested `while (n % d == 0)` inside outer `while (n > 1)`)
