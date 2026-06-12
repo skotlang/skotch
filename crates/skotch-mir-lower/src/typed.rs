@@ -6007,6 +6007,19 @@ fn try_lower_multi_stmt_block_with_offset(
                         }
                     }
                     if let Some(re) = ret_expr_inner {
+                        // Pre-bind top-level vals referenced in `re` so
+                        // the lookup_name closure can find them. Walks
+                        // the expression and emits GetStaticField for
+                        // each top-level val Reference encountered.
+                        prebind_top_level_vals(
+                            re,
+                            &mut name_to_local,
+                            &mut next_slot,
+                            &mut exit_stmts,
+                            &mut local_tys,
+                            val_lookup,
+                            wrapper_class,
+                        );
                         let snap = name_to_local.clone();
                         let lookup = |n: &str| -> Option<LocalId> {
                             snap.iter()
@@ -7632,6 +7645,106 @@ fn lower_inline_expr_to_slot(
 /// call's result. Args resolve via the same lookup_name + literal
 /// fallback as the inline lowerer.
 #[allow(clippy::too_many_arguments)]
+/// Walk an expression and pre-emit GetStaticField for every Reference
+/// whose name is a top-level val (key present in `val_lookup`).
+/// The resulting slot is pushed into `name_to_local` so subsequent
+/// lookup_name closures find it. Idempotent for already-bound names.
+#[allow(clippy::too_many_arguments)]
+fn prebind_top_level_vals(
+    e: skotch_ast::KtExpr<'_>,
+    name_to_local: &mut Vec<(String, skotch_mir::LocalId)>,
+    next_slot: &mut u32,
+    pre_stmts: &mut Vec<skotch_mir::Stmt>,
+    extra_locals: &mut Vec<Ty>,
+    val_lookup: &rustc_hash::FxHashMap<String, Ty>,
+    wrapper_class: &str,
+) {
+    use skotch_ast::KtExpr;
+    use skotch_mir::{LocalId, Stmt as MStmt};
+    let e = unwrap_parens(e);
+    match e {
+        KtExpr::Reference(r) => {
+            if let Some(n) = r.name() {
+                if name_to_local.iter().any(|(nm, _)| nm == n) {
+                    return;
+                }
+                if let Some(val_ty) = val_lookup.get(n) {
+                    let slot = LocalId(*next_slot);
+                    *next_slot += 1;
+                    extra_locals.push(val_ty.clone());
+                    pre_stmts.push(MStmt::Assign {
+                        dest: slot,
+                        value: skotch_mir::Rvalue::GetStaticField {
+                            class_name: wrapper_class.to_string(),
+                            field_name: n.to_string(),
+                            descriptor: ty_to_descriptor(val_ty),
+                        },
+                    });
+                    name_to_local.push((n.to_string(), slot));
+                }
+            }
+        }
+        KtExpr::Binary(b) => {
+            if let Some(l) = b.lhs() {
+                prebind_top_level_vals(
+                    l,
+                    name_to_local,
+                    next_slot,
+                    pre_stmts,
+                    extra_locals,
+                    val_lookup,
+                    wrapper_class,
+                );
+            }
+            if let Some(r) = b.rhs() {
+                prebind_top_level_vals(
+                    r,
+                    name_to_local,
+                    next_slot,
+                    pre_stmts,
+                    extra_locals,
+                    val_lookup,
+                    wrapper_class,
+                );
+            }
+        }
+        KtExpr::Call(call) => {
+            if let Some(arg_list) = call.value_argument_list() {
+                for arg in arg_list.arguments() {
+                    if let Some(arg_e) = arg.expression() {
+                        prebind_top_level_vals(
+                            arg_e,
+                            name_to_local,
+                            next_slot,
+                            pre_stmts,
+                            extra_locals,
+                            val_lookup,
+                            wrapper_class,
+                        );
+                    }
+                }
+            }
+        }
+        KtExpr::Prefix(p) => {
+            if let Some(inner) = skotch_ast::children(p.syntax())
+                .iter()
+                .find_map(KtExpr::cast)
+            {
+                prebind_top_level_vals(
+                    inner,
+                    name_to_local,
+                    next_slot,
+                    pre_stmts,
+                    extra_locals,
+                    val_lookup,
+                    wrapper_class,
+                );
+            }
+        }
+        _ => {}
+    }
+}
+
 fn lower_rich_expr_to_slot(
     e: skotch_ast::KtExpr<'_>,
     lookup_name: &dyn Fn(&str) -> Option<skotch_mir::LocalId>,
