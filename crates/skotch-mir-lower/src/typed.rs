@@ -7936,10 +7936,25 @@ fn try_lower_multi_stmt_block_with_offset(
                         None => trailing_children.to_vec(),
                     }
                 };
-                let mut exit_stmts = if before_ret.is_empty() {
-                    Vec::new()
-                } else {
-                    lower_loop_body(
+                // If before_ret contains control flow (while/for/
+                // return), use lower_loop_body_blocks to emit a
+                // multi-block join. Otherwise fast-path via
+                // lower_loop_body.
+                let before_ret_has_control = before_ret.iter().any(|c| {
+                    if let Some(e) = KtExpr::cast(c) {
+                        matches!(e, KtExpr::While(_) | KtExpr::For(_) | KtExpr::Return(_))
+                    } else {
+                        false
+                    }
+                });
+                let pre_block_stmts_pre = std::mem::take(&mut stmts);
+                let mut exit_stmts: Vec<MStmt> = Vec::new();
+                let mut multi_block_exit: Option<Vec<BasicBlock>> = None;
+                if before_ret_has_control {
+                    const SENT_BACK: u32 = 0xfffffffe;
+                    const SENT_BREAK: u32 = 0xfffffffd;
+                    let block_offset_exit = if else_mstmts.is_some() { 3 } else { 2 };
+                    let blocks_v = lower_loop_body_blocks(
                         &before_ret,
                         &mut name_to_local,
                         &mut next_slot,
@@ -7947,9 +7962,27 @@ fn try_lower_multi_stmt_block_with_offset(
                         strings,
                         fn_lookup,
                         &function_param_names,
-                    )?
-                };
+                        block_offset_exit,
+                        SENT_BACK,
+                        SENT_BREAK,
+                    )?;
+                    multi_block_exit = Some(blocks_v);
+                } else if !before_ret.is_empty() {
+                    exit_stmts = lower_loop_body(
+                        &before_ret,
+                        &mut name_to_local,
+                        &mut next_slot,
+                        &mut local_tys,
+                        strings,
+                        fn_lookup,
+                        &function_param_names,
+                    )?;
+                }
                 let mut trailing_return_slot: Option<LocalId> = None;
+                // Build a buffer of stmts for the FINAL "return"
+                // block. Used both when single-block exit and when
+                // multi-block exit feeds into a separate return block.
+                let mut final_return_stmts: Vec<MStmt> = Vec::new();
                 {
                     let mut ret_expr_inner: Option<KtExpr<'_>> = None;
                     for c in trailing_children.iter().rev() {
@@ -7965,15 +7998,16 @@ fn try_lower_multi_stmt_block_with_offset(
                         }
                     }
                     if let Some(re) = ret_expr_inner {
-                        // Pre-bind top-level vals referenced in `re` so
-                        // the lookup_name closure can find them. Walks
-                        // the expression and emits GetStaticField for
-                        // each top-level val Reference encountered.
+                        let target = if multi_block_exit.is_some() {
+                            &mut final_return_stmts
+                        } else {
+                            &mut exit_stmts
+                        };
                         prebind_top_level_vals(
                             re,
                             &mut name_to_local,
                             &mut next_slot,
-                            &mut exit_stmts,
+                            target,
                             &mut local_tys,
                             val_lookup,
                             wrapper_class,
@@ -7990,7 +8024,7 @@ fn try_lower_multi_stmt_block_with_offset(
                             &lookup,
                             fn_lookup,
                             &mut next_slot,
-                            &mut exit_stmts,
+                            target,
                             &mut local_tys,
                             strings,
                         )?;
@@ -8001,7 +8035,66 @@ fn try_lower_multi_stmt_block_with_offset(
                     Some(slot) => Terminator::ReturnValue(slot),
                     None => Terminator::Return,
                 };
-                let pre_block_stmts = std::mem::take(&mut stmts);
+                let pre_block_stmts = pre_block_stmts_pre;
+                // Handle the multi-block exit path first.
+                if let Some(mut exit_blocks) = multi_block_exit {
+                    const SENT_BACK: u32 = 0xfffffffe;
+                    const SENT_BREAK: u32 = 0xfffffffd;
+                    let block_offset_exit = if else_mstmts.is_some() { 3 } else { 2 };
+                    let n = exit_blocks.len() as u32;
+                    let final_return_id = block_offset_exit + n;
+                    for blk in &mut exit_blocks {
+                        let remap = |t: u32| -> u32 {
+                            if t == SENT_BACK || t == SENT_BREAK {
+                                final_return_id
+                            } else {
+                                t
+                            }
+                        };
+                        match &mut blk.terminator {
+                            Terminator::Goto(t) => *t = remap(*t),
+                            Terminator::Branch {
+                                then_block,
+                                else_block,
+                                ..
+                            } => {
+                                *then_block = remap(*then_block);
+                                *else_block = remap(*else_block);
+                            }
+                            _ => {}
+                        }
+                    }
+                    let then_terminator = match then_return_slot {
+                        Some(slot) => Terminator::ReturnValue(slot),
+                        None => Terminator::Goto(block_offset_exit),
+                    };
+                    let pre_block = BasicBlock {
+                        stmts: pre_block_stmts,
+                        terminator: Terminator::Branch {
+                            cond: cmp_slot,
+                            then_block: 1,
+                            else_block: block_offset_exit,
+                        },
+                    };
+                    let then_block = BasicBlock {
+                        stmts: then_mstmts,
+                        terminator: then_terminator,
+                    };
+                    let final_block = BasicBlock {
+                        stmts: final_return_stmts,
+                        terminator: join_terminator,
+                    };
+                    let mut all = vec![pre_block, then_block];
+                    if let Some(else_m) = else_mstmts {
+                        all.push(BasicBlock {
+                            stmts: else_m,
+                            terminator: Terminator::Goto(block_offset_exit),
+                        });
+                    }
+                    all.extend(exit_blocks);
+                    all.push(final_block);
+                    return Some((all, local_tys));
+                }
                 let then_terminator = match then_return_slot {
                     Some(slot) => Terminator::ReturnValue(slot),
                     None => Terminator::Goto(if else_mstmts.is_some() { 3 } else { 2 }),
