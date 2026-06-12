@@ -45,6 +45,10 @@ members = [
     "crates/skotch-apk",
     "crates/skotch-sign",
     "crates/skotch-apksig",
+    "crates/skotch-dex",
+    "crates/skotch-classfile",
+    "crates/skotch-dexcore",
+    "crates/skotch-d8",
     "crates/skotch-classinfo",
     "crates/skotch-buildscript",
     "crates/skotch-tape",
@@ -200,6 +204,10 @@ skotch-aapt2           = { path = "crates/skotch-aapt2" }
 skotch-apk             = { path = "crates/skotch-apk" }
 skotch-sign            = { path = "crates/skotch-sign" }
 skotch-apksig          = { path = "crates/skotch-apksig" }
+skotch-dex             = { path = "crates/skotch-dex" }
+skotch-classfile       = { path = "crates/skotch-classfile" }
+skotch-dexcore         = { path = "crates/skotch-dexcore" }
+skotch-d8              = { path = "crates/skotch-d8" }
 skotch-buildscript     = { path = "crates/skotch-buildscript" }
 skotch-tape            = { path = "crates/skotch-tape" }
 skotch-db              = { path = "crates/skotch-db" }

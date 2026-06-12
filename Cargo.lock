@@ -2604,6 +2604,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "skotch-classfile"
+version = "0.41.0"
+dependencies = [
+ "anyhow",
+ "byteorder",
+]
+
+[[package]]
 name = "skotch-classfile-norm"
 version = "0.41.0"
 dependencies = [
@@ -2664,6 +2672,16 @@ name = "skotch-config"
 version = "0.41.0"
 
 [[package]]
+name = "skotch-d8"
+version = "0.41.0"
+dependencies = [
+ "anyhow",
+ "skotch-classfile",
+ "skotch-dex",
+ "skotch-dexcore",
+]
+
+[[package]]
 name = "skotch-db"
 version = "0.41.0"
 dependencies = [
@@ -2684,9 +2702,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "skotch-dex"
+version = "0.41.0"
+dependencies = [
+ "adler",
+ "anyhow",
+ "byteorder",
+ "sha1",
+]
+
+[[package]]
 name = "skotch-dex-norm"
 version = "0.41.0"
 dependencies = [
+ "byteorder",
+]
+
+[[package]]
+name = "skotch-dexcore"
+version = "0.41.0"
+dependencies = [
+ "anyhow",
  "byteorder",
 ]
 

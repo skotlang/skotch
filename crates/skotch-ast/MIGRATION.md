@@ -1898,3 +1898,16 @@ Specifically unblocks the canonical `if (n<2) return false; var i = 2; while (co
 
 Key fixture jump:
 - 137-practical-loop: 0.257 → 0.600 (isPrime's `if (n<2) return false; var i = 2; while (i*i <= n) {…}; return true`)
+
+### 2026-06-12 (session 7 — pushes 44/45: same exit-multi-block extension for for/while/do-while top-level handlers)
+
+The pattern from push 43 (single-arm if-handler's exit/join) is now also applied to the **for-in**, **while**, and **do-while** top-level handlers. Each one's trailing children may now contain `while`/`for`/`return` and the handler emits a multi-block exit sequence + separate final return block (via `lower_loop_body_blocks`) instead of failing.
+
+This standardizes the exit semantics across all four loop/branch handlers: anything that lower_loop_body_blocks can express in the trailing now works after these constructs.
+
+**Push 45 standings:**
+- Fully covered: **212 / 968 (21.9%)**
+- Typed empty: **274 / 968 (28.3%)**
+- mir-lower typed unit tests: **188 passing**
+
+No new fixture graduations because patterns with for/while followed by nested for/while/return are uncommon, but the framework is now in place for any future fixture with that shape.

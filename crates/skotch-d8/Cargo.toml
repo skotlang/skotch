@@ -1,0 +1,14 @@
+[package]
+name = "skotch-d8"
+description = "native d8 dexer driver"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+version.workspace = true
+repository.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+skotch-dex = { workspace = true }
+skotch-classfile = { workspace = true }
+skotch-dexcore = { workspace = true }
