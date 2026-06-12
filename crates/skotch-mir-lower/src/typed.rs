@@ -1227,7 +1227,10 @@ fn try_lower_when_expression(
         _ => return None,
     };
 
-    // Collect arms (and optional else).
+    // Collect arms (and optional else). Each arm may have 1+ conditions
+    // (comma-separated literals share a body); we unfold multi-cond
+    // arms into 1-cond arms with the body duplicated so the existing
+    // CFG construction below sees uniform single-cond arms.
     let mut arms: Vec<(KtExpr<'_>, KtExpr<'_>)> = Vec::new();
     let mut else_arm: Option<KtExpr<'_>> = None;
     for entry in w.entries() {
@@ -1236,19 +1239,20 @@ fn try_lower_when_expression(
             continue;
         }
         let conds = entry.conditions();
-        if conds.len() != 1 {
+        if conds.is_empty() {
             return None;
         }
-        // Condition must be WHEN_CONDITION_WITH_EXPRESSION carrying a literal.
-        if conds[0].kind != skotch_syntax::SyntaxKind::WHEN_CONDITION_WITH_EXPRESSION {
-            return None;
-        }
-        let cond_expr = skotch_ast::children(conds[0])
-            .iter()
-            .find_map(KtExpr::cast)
-            .map(unwrap_parens)?;
         let body = entry.body().map(unwrap_parens)?;
-        arms.push((cond_expr, body));
+        for c in conds {
+            if c.kind != skotch_syntax::SyntaxKind::WHEN_CONDITION_WITH_EXPRESSION {
+                return None;
+            }
+            let ce = skotch_ast::children(c)
+                .iter()
+                .find_map(KtExpr::cast)
+                .map(unwrap_parens)?;
+            arms.push((ce, body));
+        }
     }
     let else_body = else_arm.map(unwrap_parens)?; // require else
 
