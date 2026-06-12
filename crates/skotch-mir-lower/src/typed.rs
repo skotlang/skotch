@@ -5404,6 +5404,29 @@ fn try_lower_multi_stmt_block_with_offset(
                     }
                     None
                 };
+                // Pre-bind top-level vals referenced in range bounds.
+                if let Some(l) = rb.lhs() {
+                    prebind_top_level_vals(
+                        l,
+                        &mut name_to_local,
+                        &mut next_slot,
+                        &mut stmts,
+                        &mut local_tys,
+                        val_lookup,
+                        wrapper_class,
+                    );
+                }
+                if let Some(r) = rb.rhs() {
+                    prebind_top_level_vals(
+                        r,
+                        &mut name_to_local,
+                        &mut next_slot,
+                        &mut stmts,
+                        &mut local_tys,
+                        val_lookup,
+                        wrapper_class,
+                    );
+                }
                 let start_slot = resolve_bound(
                     rb.lhs()?,
                     &name_to_local,
