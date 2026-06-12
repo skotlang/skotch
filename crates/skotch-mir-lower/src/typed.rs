@@ -10636,6 +10636,60 @@ fn lower_rich_expr_to_slot(
     ) {
         return Some(slot);
     }
+    // Constructor call heuristic: capitalized name not in fn_lookup
+    // treated as ctor invocation.
+    if let KtExpr::Call(call) = e {
+        if let Some(KtExpr::Reference(rc)) = call.callee() {
+            if let Some(name) = rc.name() {
+                if !fn_lookup.contains_key(name)
+                    && name.starts_with(char::is_uppercase)
+                    && !matches!(
+                        name,
+                        "Math" | "Integer" | "Long" | "Float" | "Double" | "Boolean"
+                            | "String" | "System" | "Pair" | "Triple" | "List" | "Map"
+                            | "Set"
+                    )
+                {
+                    let mut arg_slots: Vec<LocalId> = Vec::new();
+                    if let Some(arg_list) = call.value_argument_list() {
+                        for arg in arg_list.arguments() {
+                            let arg_e = arg.expression()?;
+                            let slot = lower_rich_expr_to_slot(
+                                arg_e,
+                                lookup_name,
+                                fn_lookup,
+                                next_slot,
+                                pre_stmts,
+                                extra_locals,
+                                strings,
+                            )?;
+                            arg_slots.push(slot);
+                        }
+                    }
+                    let new_slot = LocalId(*next_slot);
+                    *next_slot += 1;
+                    extra_locals.push(Ty::Class(name.to_string()));
+                    pre_stmts.push(MStmt::Assign {
+                        dest: new_slot,
+                        value: skotch_mir::Rvalue::NewInstance(name.to_string()),
+                    });
+                    let mut ctor_args: Vec<LocalId> = vec![new_slot];
+                    ctor_args.extend(arg_slots);
+                    let init_slot = LocalId(*next_slot);
+                    *next_slot += 1;
+                    extra_locals.push(Ty::Unit);
+                    pre_stmts.push(MStmt::Assign {
+                        dest: init_slot,
+                        value: skotch_mir::Rvalue::Call {
+                            kind: skotch_mir::CallKind::Constructor(name.to_string()),
+                            args: ctor_args,
+                        },
+                    });
+                    return Some(new_slot);
+                }
+            }
+        }
+    }
     // Call to top-level fn.
     if let KtExpr::Call(call) = e {
         if let Some(KtExpr::Reference(rc)) = call.callee() {
