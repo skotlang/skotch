@@ -14,7 +14,7 @@ use skotch_dex::model::*;
 const ACC_CONSTRUCTOR: u32 = 0x1_0000;
 
 /// Translates a class file into a DEX [`ClassDef`].
-pub fn dex_class(cf: &ClassFile) -> Result<ClassDef> {
+pub fn dex_class(cf: &ClassFile, min_api: u32) -> Result<ClassDef> {
     let class_type = cf.descriptor();
     let superclass = cf
         .super_class
@@ -29,7 +29,7 @@ pub fn dex_class(cf: &ClassFile) -> Result<ClassDef> {
     let mut direct = Vec::new();
     let mut virtual_ = Vec::new();
     for m in &cf.methods {
-        let em = dex_method(cf, m)?;
+        let em = dex_method(cf, m, min_api)?;
         if is_direct(m) {
             direct.push(em);
         } else {
@@ -84,7 +84,7 @@ fn is_direct(m: &Member) -> bool {
     m.is_static() || m.access_flags & 0x0002 != 0 || m.name == "<init>" || m.name == "<clinit>"
 }
 
-fn dex_method(cf: &ClassFile, m: &Member) -> Result<EncodedMethod> {
+fn dex_method(cf: &ClassFile, m: &Member, min_api: u32) -> Result<EncodedMethod> {
     let (params, ret) = parse_descriptor(&m.descriptor)?;
     let mut access = m.access_flags as u32;
     if m.name == "<init>" || m.name == "<clinit>" {
@@ -98,7 +98,7 @@ fn dex_method(cf: &ClassFile, m: &Member) -> Result<EncodedMethod> {
     let code = if m.is_abstract() || m.is_native() {
         None
     } else if let Some(c) = &m.code {
-        Some(translate_code(cf, m, c, &params, &ret)?)
+        Some(translate_code(cf, m, c, &params, &ret, min_api)?)
     } else {
         None
     };
@@ -132,12 +132,13 @@ fn translate_code(
     code: &Code,
     params: &[String],
     _ret: &str,
+    min_api: u32,
 ) -> Result<CodeItem> {
     let instance = m.access_flags & 0x0008 == 0;
     let ins_size = arg_register_count(params, instance) as u16;
 
     let local_uses = count_local_loads(&code.bytecode, code.max_locals as usize)?;
-    let mut e = Emitter::new(cf, ins_size, &code.line_numbers, local_uses);
+    let mut e = Emitter::new(cf, ins_size, &code.line_numbers, local_uses, min_api);
     let mut stack: Vec<Val> = Vec::new();
     let bc = &code.bytecode;
     let mut pc = 0;
@@ -230,6 +231,9 @@ struct Emitter<'a> {
     /// Remaining loads of each local; an argument's register is freed when its
     /// count reaches zero, so a result can coalesce into it (→ 2addr/lit).
     local_uses: Vec<u32>,
+    /// Target API level. Below 23 (M), d8 avoids `mul-int/2addr` (ART bug
+    /// `canHaveMul2AddrBug`) and emits the 3-address `mul-int` instead.
+    min_api: u32,
 }
 
 impl<'a> Emitter<'a> {
@@ -238,6 +242,7 @@ impl<'a> Emitter<'a> {
         ins_size: u16,
         line_numbers: &[(u16, u16)],
         local_uses: Vec<u32>,
+        min_api: u32,
     ) -> Emitter<'a> {
         let mut used = vec![false; ins_size as usize + 8];
         for r in 0..ins_size as usize {
@@ -255,6 +260,7 @@ impl<'a> Emitter<'a> {
             line_numbers: line_numbers.to_vec(),
             positions: Vec::new(),
             local_uses,
+            min_api,
         }
     }
 
@@ -460,8 +466,12 @@ impl<'a> Emitter<'a> {
         self.release(&a);
         self.release(&b);
         let dest = self.alloc_result(ra)?;
+        // d8 normally coalesces `dest = a op b` (dest == a) into the 2-address
+        // form, EXCEPT for `mul` below API 23: `mul-int/2addr` triggers an ART
+        // Marshmallow bug (`canHaveMul2AddrBug`), so d8 keeps the 3-address form.
+        let mul2addr_bug = self.min_api < 23 && is_mul_op(jvm_op);
         if let Some(op2) = binop_2addr_op(jvm_op) {
-            if dest == ra {
+            if dest == ra && !mul2addr_bug {
                 self.insns.push(op2 | ((dest as u16) << 8) | ((rb as u16) << 12));
                 return Ok(Val::Reg(dest, false));
             }
@@ -647,10 +657,19 @@ impl<'a> Emitter<'a> {
         let mut events = Vec::new();
         let mut cur_addr: i64 = 0;
         let mut cur_line: i64 = line_start as i64;
+        // d8 emits a debug position only when the line changes from the last
+        // emitted one — two throwing instructions on the same source line (e.g.
+        // `System.out.println(x)`: getstatic + invoke) get a single entry. The
+        // address state advances only on emitted entries, never on skips.
+        let mut first = true;
         for (addr, line) in &positions {
+            if !first && *line as i64 == cur_line {
+                continue;
+            }
             emit_position(&mut events, *addr as i64 - cur_addr, *line as i64 - cur_line);
             cur_addr = *addr as i64;
             cur_line = *line as i64;
+            first = false;
         }
         Some(DebugInfo { line_start, parameter_names: vec![None; params.len()], events })
     }
@@ -726,6 +745,12 @@ fn lit_ops(jvm_op: u8) -> Option<(u16, u16)> {
         0x82 => Some((0xdf, 0xd7)), // xor
         _ => None,
     }
+}
+
+/// JVM `imul`/`lmul`/`fmul`/`dmul` — d8's `isMul()` for the Marshmallow
+/// `mul-int/2addr` workaround.
+fn is_mul_op(jvm_op: u8) -> bool {
+    matches!(jvm_op, 0x68..=0x6b)
 }
 
 fn binop_2addr_op(jvm_op: u8) -> Option<u16> {
@@ -817,7 +842,7 @@ mod tests {
         let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../skotch-dex/tests/fixtures/B.class");
         let cf = skotch_classfile::parse_class_file(&path).unwrap();
         for m in &cf.methods {
-            let r = dex_method(&cf, m);
+            let r = dex_method(&cf, m, 1);
             match r {
                 Ok(_) => eprintln!("OK   {}{}", m.name, m.descriptor),
                 Err(e) => eprintln!("FAIL {}{} :: {:#}", m.name, m.descriptor, e),

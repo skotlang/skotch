@@ -74,7 +74,8 @@ pub fn dex_classes(classes: &[ClassFile], opts: &D8Options) -> Result<Vec<u8>> {
     sorted.sort_by(|a, b| a.descriptor().cmp(&b.descriptor()));
     for cf in sorted {
         model.classes.push(
-            skotch_dexcore::dex_class(cf).with_context(|| format!("dexing {}", cf.this_class))?,
+            skotch_dexcore::dex_class(cf, opts.min_api)
+                .with_context(|| format!("dexing {}", cf.this_class))?,
         );
     }
     Ok(skotch_dex::write(&model))

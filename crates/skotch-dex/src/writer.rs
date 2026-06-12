@@ -167,41 +167,47 @@ impl Pools {
         // ── Build the data section (d8 canonical order). ──
         let mut data = DataSection::new(data_off);
 
-        // 1. code (align 4)
-        let mut code_offsets: Vec<u32> = Vec::new(); // index = (class,method) flat order
-        let mut method_code_off: BTreeMap<(usize, usize, usize), u32> = BTreeMap::new();
-        let mut debug_for_code: Vec<(usize, usize, usize, DebugInfo)> = Vec::new();
-        for (ci, c) in file.classes.iter().enumerate() {
-            for (kind, methods) in [(0usize, &c.direct_methods), (1usize, &c.virtual_methods)] {
-                for (mi, m) in methods.iter().enumerate() {
-                    if let Some(code) = &m.code {
-                        let coff = data.align(4);
-                        method_code_off.insert((ci, kind, mi), coff);
-                        // Placeholder: debug_info_off patched after debug section.
-                        let dbg_index = if code.debug_info.is_some() {
-                            debug_for_code.push((ci, kind, mi, code.debug_info.clone().unwrap()));
-                            Some(())
-                        } else {
-                            None
-                        };
-                        self.write_code_item(&mut data, code, dbg_index.is_some());
-                        code_offsets.push(coff);
-                    }
+        // 1. code (align 4). d8 lays code out in method-index order across all
+        //    classes; keying offsets by MethodRef lets us reorder freely.
+        let mut code_offsets: Vec<u32> = Vec::new();
+        let mut method_code_off: BTreeMap<MethodRef, u32> = BTreeMap::new();
+        let mut debug_for_code: Vec<(MethodRef, DebugInfo)> = Vec::new();
+        let mut coded_methods: Vec<(&EncodedMethod,)> = Vec::new();
+        for c in &file.classes {
+            for m in c.direct_methods.iter().chain(&c.virtual_methods) {
+                if m.code.is_some() {
+                    coded_methods.push((m,));
                 }
             }
         }
+        // d8 lays codes out via DefaultMixedSectionLayoutStrategy:
+        // `Comparator.comparing(getKeyForDexCodeSorting)`, where the key is
+        // `holder.toSourceString() + MethodSignature.toString()` and the
+        // signature stringifies RETURN-TYPE-FIRST (`type name(params)`). At
+        // min-API < S, `canUseCanonicalizedCodeObjects()` is false, so the
+        // dedup-count primary key is absent and this string key is the whole
+        // comparator. (The API≥S count primary key is deferred to Phase 2.)
+        coded_methods.sort_by(|(a,), (b,)| code_sort_key(&a.method).cmp(&code_sort_key(&b.method)));
+        for (m,) in &coded_methods {
+            let code = m.code.as_ref().unwrap();
+            let coff = data.align(4);
+            method_code_off.insert(m.method.clone(), coff);
+            if let Some(di) = &code.debug_info {
+                debug_for_code.push((m.method.clone(), di.clone()));
+            }
+            self.write_code_item(&mut data, code, code.debug_info.is_some());
+            code_offsets.push(coff);
+        }
 
         // 2. debug_info (align 1) — written after codes; patch code's debug_info_off.
-        let mut debug_offsets: BTreeMap<(usize, usize, usize), u32> = BTreeMap::new();
-        for (ci, kind, mi, di) in &debug_for_code {
+        let mut debug_offsets: BTreeMap<MethodRef, u32> = BTreeMap::new();
+        for (mref, di) in &debug_for_code {
             let doff = data.pos();
-            debug_offsets.insert((*ci, *kind, *mi), doff);
+            debug_offsets.insert(mref.clone(), doff);
             self.write_debug_info(&mut data, di);
         }
-        // patch each code item's debug_info_off field
-        for ((ci, kind, mi), coff) in &method_code_off {
-            if let Some(doff) = debug_offsets.get(&(*ci, *kind, *mi)) {
-                // debug_info_off is at code_item offset + 8 (u32).
+        for (mref, coff) in &method_code_off {
+            if let Some(doff) = debug_offsets.get(mref) {
                 data.patch_u32((*coff as usize) + 8, *doff);
             }
         }
@@ -232,7 +238,7 @@ impl Pools {
         for (ci, c) in file.classes.iter().enumerate() {
             if class_has_data(c) {
                 class_data_off[ci] = data.pos();
-                self.write_class_data(&mut data, c, &method_code_off, ci);
+                self.write_class_data(&mut data, c, &method_code_off);
             }
         }
 
@@ -472,8 +478,7 @@ impl Pools {
         &self,
         data: &mut DataSection,
         c: &ClassDef,
-        method_code_off: &BTreeMap<(usize, usize, usize), u32>,
-        ci: usize,
+        method_code_off: &BTreeMap<MethodRef, u32>,
     ) {
         let mut buf = Vec::new();
         write_uleb128(&mut buf, c.static_fields.len() as u32);
@@ -482,14 +487,17 @@ impl Pools {
         write_uleb128(&mut buf, c.virtual_methods.len() as u32);
         self.write_encoded_fields(&mut buf, &c.static_fields);
         self.write_encoded_fields(&mut buf, &c.instance_fields);
-        self.write_encoded_methods(&mut buf, &c.direct_methods, method_code_off, ci, 0);
-        self.write_encoded_methods(&mut buf, &c.virtual_methods, method_code_off, ci, 1);
+        self.write_encoded_methods(&mut buf, &c.direct_methods, method_code_off);
+        self.write_encoded_methods(&mut buf, &c.virtual_methods, method_code_off);
         data.put_bytes(&buf);
     }
 
     fn write_encoded_fields(&self, buf: &mut Vec<u8>, fields: &[EncodedField]) {
+        // DEX requires encoded fields in ascending field-index order.
+        let mut sorted: Vec<&EncodedField> = fields.iter().collect();
+        sorted.sort_by_key(|ef| self.field_idx[&ef.field]);
         let mut prev = 0u32;
-        for ef in fields {
+        for ef in sorted {
             let idx = self.field_idx[&ef.field];
             write_uleb128(buf, idx - prev);
             write_uleb128(buf, ef.access_flags);
@@ -501,16 +509,17 @@ impl Pools {
         &self,
         buf: &mut Vec<u8>,
         methods: &[EncodedMethod],
-        method_code_off: &BTreeMap<(usize, usize, usize), u32>,
-        ci: usize,
-        kind: usize,
+        method_code_off: &BTreeMap<MethodRef, u32>,
     ) {
+        // DEX requires encoded methods in ascending method-index order.
+        let mut sorted: Vec<&EncodedMethod> = methods.iter().collect();
+        sorted.sort_by_key(|em| self.method_idx[&em.method]);
         let mut prev = 0u32;
-        for (mi, em) in methods.iter().enumerate() {
+        for em in sorted {
             let idx = self.method_idx[&em.method];
             write_uleb128(buf, idx - prev);
             write_uleb128(buf, em.access_flags);
-            let coff = method_code_off.get(&(ci, kind, mi)).copied().unwrap_or(0);
+            let coff = method_code_off.get(&em.method).copied().unwrap_or(0);
             write_uleb128(buf, coff);
             prev = idx;
         }
@@ -527,7 +536,7 @@ impl Pools {
         method_ids_off: usize,
         class_defs_off: usize,
         code_offsets: &[u32],
-        debug_offsets: &BTreeMap<(usize, usize, usize), u32>,
+        debug_offsets: &BTreeMap<MethodRef, u32>,
         type_list_off: &BTreeMap<Vec<String>, u32>,
         first_string_data_off: u32,
         class_data_off: &[u32],
@@ -684,6 +693,47 @@ fn cmp_method(
         .cmp(&type_idx[&b.class])
         .then_with(|| string_idx[&a.name].cmp(&string_idx[&b.name]))
         .then_with(|| proto_idx[&a.proto].cmp(&proto_idx[&b.proto]))
+}
+
+/// d8's code-layout sort key: `holder.toSourceString() + MethodSignature`,
+/// where the signature is `returnSource + ' ' + name + '(' + paramSources + ')'`
+/// (see `DefaultMixedSectionLayoutStrategy.getKeyForDexCodeSorting` and
+/// `MemberNaming.MethodSignature.toString`). Sorting by this string orders codes
+/// by (holder, return type, name, params) — return type first.
+fn code_sort_key(m: &MethodRef) -> String {
+    let class = descriptor_to_source(&m.class);
+    let ret = descriptor_to_source(&m.proto.return_type);
+    let params: Vec<String> = m.proto.params.iter().map(|p| descriptor_to_source(p)).collect();
+    format!("{class}{ret} {}({})", m.name, params.join(","))
+}
+
+/// JVM type descriptor → r8 `toSourceString()` form: `I`→"int", `V`→"void",
+/// `[I`→"int[]", `Ljava/lang/String;`→"java.lang.String".
+fn descriptor_to_source(desc: &str) -> String {
+    let bytes = desc.as_bytes();
+    let mut i = 0;
+    let mut dims = 0;
+    while i < bytes.len() && bytes[i] == b'[' {
+        dims += 1;
+        i += 1;
+    }
+    let mut s = match bytes.get(i) {
+        Some(b'V') => "void".to_string(),
+        Some(b'Z') => "boolean".to_string(),
+        Some(b'B') => "byte".to_string(),
+        Some(b'S') => "short".to_string(),
+        Some(b'C') => "char".to_string(),
+        Some(b'I') => "int".to_string(),
+        Some(b'J') => "long".to_string(),
+        Some(b'F') => "float".to_string(),
+        Some(b'D') => "double".to_string(),
+        Some(b'L') => desc[i + 1..desc.len() - 1].replace('/', "."),
+        _ => desc[i..].to_string(),
+    };
+    for _ in 0..dims {
+        s.push_str("[]");
+    }
+    s
 }
 
 fn collect_field(

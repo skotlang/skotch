@@ -4533,8 +4533,8 @@ fn lower_loop_body_blocks(
                 let KtExpr::When(when_e) = init else {
                     return None;
                 };
-                // Subject (if present) must be a Reference into
-                // name_to_local; without subject, arm conds are
+                // Subject (if present) is lowered to a slot via the
+                // rich-expr lowerer. Without subject, arm conds are
                 // arbitrary boolean expressions.
                 let subject_opt = when_e.subject().map(unwrap_parens);
                 let subject_slot: Option<LocalId> = match subject_opt {
@@ -4548,8 +4548,25 @@ fn lower_loop_body_blocks(
                                 .map(|(_, l)| *l)?,
                         )
                     }
+                    Some(subj) => {
+                        let snap = name_to_local.clone();
+                        let lookup = |n: &str| -> Option<LocalId> {
+                            snap.iter()
+                                .rev()
+                                .find(|(name, _)| name == n)
+                                .map(|(_, l)| *l)
+                        };
+                        Some(lower_rich_expr_to_slot(
+                            subj,
+                            &lookup,
+                            fn_lookup_ref,
+                            next_slot,
+                            &mut cur_stmts,
+                            local_tys,
+                            strings,
+                        )?)
+                    }
                     None => None,
-                    _ => return None,
                 };
                 let mut arms: Vec<(KtExpr<'_>, KtExpr<'_>)> = Vec::new();
                 let mut else_arm: Option<KtExpr<'_>> = None;
