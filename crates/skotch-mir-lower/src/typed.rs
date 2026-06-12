@@ -7396,15 +7396,33 @@ fn try_lower_multi_stmt_block_with_offset(
                             slot
                         }
                         other => {
-                            let (k, ty) = literal_to_const(other, strings)?;
-                            let slot = LocalId(next_slot);
-                            next_slot += 1;
-                            local_tys.push(ty);
-                            stmts.push(MStmt::Assign {
-                                dest: slot,
-                                value: skotch_mir::Rvalue::Const(k),
-                            });
-                            slot
+                            if let Some((k, ty)) = literal_to_const(other, strings) {
+                                let slot = LocalId(next_slot);
+                                next_slot += 1;
+                                local_tys.push(ty);
+                                stmts.push(MStmt::Assign {
+                                    dest: slot,
+                                    value: skotch_mir::Rvalue::Const(k),
+                                });
+                                slot
+                            } else {
+                                let snap = name_to_local.clone();
+                                let lookup = |n: &str| -> Option<LocalId> {
+                                    snap.iter()
+                                        .rev()
+                                        .find(|(name, _)| name == n)
+                                        .map(|(_, l)| *l)
+                                };
+                                lower_rich_expr_to_slot(
+                                    *other,
+                                    &lookup,
+                                    fn_lookup,
+                                    &mut next_slot,
+                                    &mut stmts,
+                                    &mut local_tys,
+                                    strings,
+                                )?
+                            }
                         }
                     };
                     let result_slot = LocalId(next_slot);
@@ -12762,6 +12780,22 @@ mod tests {
         assert_eq!(f.return_ty, Ty::Unit);
         assert_eq!(f.blocks.len(), 1);
         assert!(matches!(f.blocks[0].terminator, Terminator::Return));
+    }
+
+    #[test]
+    fn debug_73_extension() {
+        let src = "fun String.exclaim(): String = this + \"!\"";
+        let module = lower(src, "TestKt");
+        for f in &module.functions {
+            let stmts: usize = f.blocks.iter().map(|b| b.stmts.len()).sum();
+            eprintln!("[{}] params={} stmts={}", f.name, f.params.len(), stmts);
+            for (i, b) in f.blocks.iter().enumerate() {
+                eprintln!("  Block {} term={:?}", i, b.terminator);
+                for s in &b.stmts {
+                    eprintln!("    {:?}", s);
+                }
+            }
+        }
     }
 
     #[test]
