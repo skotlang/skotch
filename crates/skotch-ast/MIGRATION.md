@@ -1849,3 +1849,19 @@ Also extends `body_has_jumps` detection in for/while/do-while to trigger on `KtE
 Key fixture jumps:
 - 141-break-continue-practical: 0.000 → 0.550 (findFirst's `return i` inside for-loop)
 - 137-practical-loop: 0.029 → 0.257 (isPrime's `if (isPrime(n))` call-cond inside main's for)
+
+### 2026-06-12 (session 7 — push 41: val/var with if-init in loop bodies)
+
+Adds `Special::PropertyWithIfInit` to `lower_loop_body_blocks`:
+- Detects `KtProperty` (val/var) whose initializer is `KtExpr::If`.
+- Allocates a slot for the property.
+- Lowers cond, emits Branch(then, else).
+- Each arm assigns its value to the property slot before Goto(join).
+- Supports block-bodied arms (multi-stmt prefix + final-expression as value).
+
+No fixture currently exercises this exact shape inside a loop body, but it's a building block for `val r = if (cond) compute(a) else compute(b)` patterns common in functional code.
+
+**Push 41 standings (unchanged from 40):**
+- Fully covered: **212 / 968 (21.9%)**
+- Typed empty: **275 / 968 (28.4%)**
+- mir-lower typed unit tests: **188 passing**
