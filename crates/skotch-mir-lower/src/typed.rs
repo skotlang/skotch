@@ -6030,6 +6030,92 @@ fn try_lower_multi_stmt_block_with_offset(
                             continue;
                         }
                     }
+                    // Lambda/function-typed param invocation:
+                    // `content()` where content is a () -> X param.
+                    // Emits Call(FunctionInvoke) on the param's slot.
+                    if let Some(slot) = name_to_local
+                        .iter()
+                        .rev()
+                        .find(|(n, _)| n == name)
+                        .map(|(_, l)| *l)
+                    {
+                        if let Some(param_idx) = param_names.iter().position(|p| p == name) {
+                            let is_function_typed = f
+                                .value_parameter_list()
+                                .and_then(|pl| {
+                                    pl.parameters().nth(param_idx).and_then(|p| {
+                                        p.type_reference().map(|tr| {
+                                            tr.function_type().is_some()
+                                        })
+                                    })
+                                })
+                                .unwrap_or(false);
+                            if is_function_typed {
+                                let arity = call
+                                    .value_argument_list()
+                                    .map(|al| al.arguments().count())
+                                    .unwrap_or(0) as u8;
+                                let mut invoke_args: Vec<LocalId> = vec![slot];
+                                let mut ok = true;
+                                if let Some(arg_list) = call.value_argument_list() {
+                                    for arg in arg_list.arguments() {
+                                        let Some(arg_e) = arg.expression() else {
+                                            ok = false;
+                                            break;
+                                        };
+                                        match unwrap_parens(arg_e) {
+                                            KtExpr::Reference(rr) => {
+                                                let Some(an) = rr.name() else {
+                                                    ok = false;
+                                                    break;
+                                                };
+                                                if let Some(s) = name_to_local
+                                                    .iter()
+                                                    .rev()
+                                                    .find(|(n, _)| n == an)
+                                                    .map(|(_, l)| *l)
+                                                {
+                                                    invoke_args.push(s);
+                                                } else {
+                                                    ok = false;
+                                                    break;
+                                                }
+                                            }
+                                            other => {
+                                                let Some((k, ty)) =
+                                                    literal_to_const(&other, strings)
+                                                else {
+                                                    ok = false;
+                                                    break;
+                                                };
+                                                let s = LocalId(next_slot);
+                                                next_slot += 1;
+                                                local_tys.push(ty);
+                                                stmts.push(MStmt::Assign {
+                                                    dest: s,
+                                                    value: skotch_mir::Rvalue::Const(k),
+                                                });
+                                                invoke_args.push(s);
+                                            }
+                                        }
+                                    }
+                                }
+                                if ok {
+                                    let result_slot = LocalId(next_slot);
+                                    next_slot += 1;
+                                    local_tys.push(Ty::Any);
+                                    stmts.push(MStmt::Assign {
+                                        dest: result_slot,
+                                        value: skotch_mir::Rvalue::Call {
+                                            kind: skotch_mir::CallKind::FunctionInvoke { arity },
+                                            args: invoke_args,
+                                        },
+                                    });
+                                    continue;
+                                }
+                            }
+                        }
+                    }
                     let kind = match name {
                         "println" => skotch_mir::CallKind::Println,
                         "print" => skotch_mir::CallKind::Print,
