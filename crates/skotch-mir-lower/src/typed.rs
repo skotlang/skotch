@@ -6118,6 +6118,153 @@ fn try_lower_multi_stmt_block_with_offset(
                                             rhs: in_hi,
                                         },
                                     };
+                                    let inner_has_control = inner_body_children
+                                        .iter()
+                                        .any(|c| {
+                                            let Some(expr) = KtExpr::cast(c) else {
+                                                return false;
+                                            };
+                                            matches!(
+                                                expr,
+                                                KtExpr::Break(_)
+                                                    | KtExpr::Continue(_)
+                                                    | KtExpr::If(_)
+                                            )
+                                        });
+                                    if inner_has_control {
+                                        // Multi-block inner body. CFG:
+                                        //   0 pre_outer
+                                        //   1 cond_outer (cmp_i, Branch(2, exit))
+                                        //   2 pre_inner (j = lo, end_j = hi)
+                                        //   3 cond_inner (cmp_j, Branch(4, step_outer))
+                                        //   4..N+3 inner body blocks
+                                        //   N+4 step_inner (j++; Goto 3)
+                                        //   N+5 step_outer (i++; Goto 1)
+                                        //   N+6 exit
+                                        const SENT_BACK: u32 = 0xfffffffe;
+                                        const SENT_BREAK: u32 = 0xfffffffd;
+                                        let mut inner_blocks = lower_loop_body_blocks(
+                                            &inner_body_children,
+                                            &mut name_to_local,
+                                            &mut next_slot,
+                                            &mut local_tys,
+                                            strings,
+                                            fn_lookup,
+                                            &function_param_names,
+                                            4,
+                                            SENT_BACK,
+                                            SENT_BREAK,
+                                        )?;
+                                        let n = inner_blocks.len() as u32;
+                                        let step_inner_id = 4 + n;
+                                        let step_outer_id = step_inner_id + 1;
+                                        let exit_id = step_outer_id + 1;
+                                        for blk in &mut inner_blocks {
+                                            let remap = |t: u32| -> u32 {
+                                                if t == SENT_BACK {
+                                                    step_inner_id
+                                                } else if t == SENT_BREAK {
+                                                    step_outer_id
+                                                } else {
+                                                    t
+                                                }
+                                            };
+                                            match &mut blk.terminator {
+                                                Terminator::Goto(t) => *t = remap(*t),
+                                                Terminator::Branch {
+                                                    then_block,
+                                                    else_block,
+                                                    ..
+                                                } => {
+                                                    *then_block = remap(*then_block);
+                                                    *else_block = remap(*else_block);
+                                                }
+                                                _ => {}
+                                            }
+                                        }
+                                        let one_j = LocalId(next_slot);
+                                        next_slot += 1;
+                                        local_tys.push(Ty::Int);
+                                        let step_inner_stmts = vec![
+                                            MStmt::Assign {
+                                                dest: one_j,
+                                                value: skotch_mir::Rvalue::Const(
+                                                    skotch_mir::MirConst::Int(1),
+                                                ),
+                                            },
+                                            MStmt::Assign {
+                                                dest: j_slot,
+                                                value: skotch_mir::Rvalue::BinOp {
+                                                    op: skotch_mir::BinOp::AddI,
+                                                    lhs: j_slot,
+                                                    rhs: one_j,
+                                                },
+                                            },
+                                        ];
+                                        name_to_local.pop(); // inner
+                                        name_to_local.pop(); // outer
+                                        let one_i = LocalId(next_slot);
+                                        next_slot += 1;
+                                        local_tys.push(Ty::Int);
+                                        let step_outer_stmts = vec![
+                                            MStmt::Assign {
+                                                dest: one_i,
+                                                value: skotch_mir::Rvalue::Const(
+                                                    skotch_mir::MirConst::Int(1),
+                                                ),
+                                            },
+                                            MStmt::Assign {
+                                                dest: i_slot,
+                                                value: skotch_mir::Rvalue::BinOp {
+                                                    op: skotch_mir::BinOp::AddI,
+                                                    lhs: i_slot,
+                                                    rhs: one_i,
+                                                },
+                                            },
+                                        ];
+                                        let blk0 = BasicBlock {
+                                            stmts: std::mem::take(&mut stmts),
+                                            terminator: Terminator::Goto(1),
+                                        };
+                                        let blk1 = BasicBlock {
+                                            stmts: vec![cond1_stmt],
+                                            terminator: Terminator::Branch {
+                                                cond: cmp1,
+                                                then_block: 2,
+                                                else_block: exit_id,
+                                            },
+                                        };
+                                        let blk2 = BasicBlock {
+                                            stmts: pre2_stmts,
+                                            terminator: Terminator::Goto(3),
+                                        };
+                                        let blk3 = BasicBlock {
+                                            stmts: vec![cond2_stmt],
+                                            terminator: Terminator::Branch {
+                                                cond: cmp2,
+                                                then_block: 4,
+                                                else_block: step_outer_id,
+                                            },
+                                        };
+                                        let step_inner_block = BasicBlock {
+                                            stmts: step_inner_stmts,
+                                            terminator: Terminator::Goto(3),
+                                        };
+                                        let step_outer_block = BasicBlock {
+                                            stmts: step_outer_stmts,
+                                            terminator: Terminator::Goto(1),
+                                        };
+                                        let exit_block = BasicBlock {
+                                            stmts: Vec::new(),
+                                            terminator: Terminator::Return,
+                                        };
+                                        let mut all = vec![blk0, blk1, blk2, blk3];
+                                        all.extend(inner_blocks);
+                                        all.push(step_inner_block);
+                                        all.push(step_outer_block);
+                                        all.push(exit_block);
+                                        return Some((all, local_tys));
+                                    }
                                     let mut inner_body_mstmts = lower_loop_body(
                                         &inner_body_children,
                                         &mut name_to_local,
