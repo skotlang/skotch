@@ -12783,19 +12783,31 @@ mod tests {
     }
 
     #[test]
-    fn debug_73_extension() {
-        let src = "fun String.exclaim(): String = this + \"!\"";
-        let module = lower(src, "TestKt");
-        for f in &module.functions {
-            let stmts: usize = f.blocks.iter().map(|b| b.stmts.len()).sum();
-            eprintln!("[{}] params={} stmts={}", f.name, f.params.len(), stmts);
-            for (i, b) in f.blocks.iter().enumerate() {
-                eprintln!("  Block {} term={:?}", i, b.terminator);
-                for s in &b.stmts {
-                    eprintln!("    {:?}", s);
+    fn typed_lower_extension_fn_string_concat_body() {
+        // `fun String.exclaim(): String = this + "!"` should produce
+        // 2 stmts: Const("!") + ConcatStr(this, "!").
+        let module = lower("fun String.exclaim(): String = this + \"!\"", "TestKt");
+        let f = module
+            .functions
+            .iter()
+            .find(|f| f.name == "exclaim")
+            .expect("expected exclaim");
+        assert_eq!(f.params.len(), 1);
+        let total_stmts: usize = f.blocks.iter().map(|b| b.stmts.len()).sum();
+        assert_eq!(total_stmts, 2);
+        let has_concat = f.blocks[0].stmts.iter().any(|s| {
+            matches!(
+                s,
+                skotch_mir::Stmt::Assign {
+                    value: skotch_mir::Rvalue::BinOp {
+                        op: skotch_mir::BinOp::ConcatStr,
+                        ..
+                    },
+                    ..
                 }
-            }
-        }
+            )
+        });
+        assert!(has_concat);
     }
 
     #[test]
