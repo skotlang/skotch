@@ -10811,6 +10811,42 @@ fn lower_rich_expr_to_slot(
                             ("System", "nanoTime") => (Some("java/lang/System"), |n| {
                                 if n == 0 { Some(("System.nanoTime", "()J")) } else { None }
                             }),
+                            ("System", "getProperty") => (Some("java/lang/System"), |n| {
+                                if n == 1 { Some(("System.getProperty", "(Ljava/lang/String;)Ljava/lang/String;")) } else { None }
+                            }),
+                            ("Integer", "toString") => (Some("java/lang/Integer"), |n| {
+                                if n == 1 { Some(("Integer.toString", "(I)Ljava/lang/String;")) } else { None }
+                            }),
+                            ("Long", "toString") => (Some("java/lang/Long"), |n| {
+                                if n == 1 { Some(("Long.toString", "(J)Ljava/lang/String;")) } else { None }
+                            }),
+                            ("Double", "toString") => (Some("java/lang/Double"), |n| {
+                                if n == 1 { Some(("Double.toString", "(D)Ljava/lang/String;")) } else { None }
+                            }),
+                            ("Math", "floor") => (Some("java/lang/Math"), |n| {
+                                if n == 1 { Some(("Math.floor", "(D)D")) } else { None }
+                            }),
+                            ("Math", "ceil") => (Some("java/lang/Math"), |n| {
+                                if n == 1 { Some(("Math.ceil", "(D)D")) } else { None }
+                            }),
+                            ("Math", "round") => (Some("java/lang/Math"), |n| {
+                                if n == 1 { Some(("Math.round", "(D)J")) } else { None }
+                            }),
+                            ("Math", "exp") => (Some("java/lang/Math"), |n| {
+                                if n == 1 { Some(("Math.exp", "(D)D")) } else { None }
+                            }),
+                            ("Math", "log") => (Some("java/lang/Math"), |n| {
+                                if n == 1 { Some(("Math.log", "(D)D")) } else { None }
+                            }),
+                            ("Math", "sin") => (Some("java/lang/Math"), |n| {
+                                if n == 1 { Some(("Math.sin", "(D)D")) } else { None }
+                            }),
+                            ("Math", "cos") => (Some("java/lang/Math"), |n| {
+                                if n == 1 { Some(("Math.cos", "(D)D")) } else { None }
+                            }),
+                            ("Math", "random") => (Some("java/lang/Math"), |n| {
+                                if n == 0 { Some(("Math.random", "()D")) } else { None }
+                            }),
                             _ => (None, |_| None),
                         };
                         if let Some(cls_str) = cls_opt {
