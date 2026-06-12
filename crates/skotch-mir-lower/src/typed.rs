@@ -4159,9 +4159,146 @@ fn try_lower_multi_stmt_block_with_offset(
                             None
                         };
                         if let Some(op) = compound_op {
-                            // x += y: x = x + y
-                            let rhs_slot =
-                                resolve(rhs, next_slot, local_tys, &mut body_mstmts, strings)?;
+                            // x += y: x = x + y. Try simple resolve first
+                            // (literal / Reference); fall back to
+                            // lower_rich_expr_to_slot (Binary / Call / etc).
+                            let rhs_slot = match resolve(
+                                rhs,
+                                next_slot,
+                                local_tys,
+                                &mut body_mstmts,
+                                strings,
+                            ) {
+                                Some(s) => s,
+                                None => {
+                                    let snap = name_to_local.clone();
+                                    let lookup = |n: &str| -> Option<LocalId> {
+                                        snap.iter()
+                                            .rev()
+                                            .find(|(name, _)| name == n)
+                                            .map(|(_, l)| *l)
+                                    };
+                                    // Try extension-fn invocation
+                                    // (`i.squared()` becomes
+                                    // Call(Static(squared_fid), [i_slot])).
+                                    let ext_slot = if let KtExpr::DotQualified(dq) = &rhs
+                                    {
+                                        let exprs: Vec<KtExpr<'_>> =
+                                            skotch_ast::children(dq.syntax())
+                                                .iter()
+                                                .filter_map(KtExpr::cast)
+                                                .collect();
+                                        if exprs.len() == 2 {
+                                            if let (
+                                                KtExpr::Reference(recv_ref),
+                                                KtExpr::Call(call),
+                                            ) = (&exprs[0], &exprs[1])
+                                            {
+                                                let method_name = match call.callee() {
+                                                    Some(KtExpr::Reference(r)) => r.name(),
+                                                    _ => None,
+                                                };
+                                                if let (Some(rn), Some(mn)) =
+                                                    (recv_ref.name(), method_name)
+                                                {
+                                                    if let Some(rs) = name_to_local
+                                                        .iter()
+                                                        .rev()
+                                                        .find(|(n, _)| n == rn)
+                                                        .map(|(_, l)| *l)
+                                                    {
+                                                        if let Some((fid, ret_ty)) =
+                                                            fn_lookup_ref.get(mn)
+                                                        {
+                                                            let mut arg_slots: Vec<
+                                                                LocalId,
+                                                            > = vec![rs];
+                                                            let mut ok = true;
+                                                            if let Some(arg_list) =
+                                                                call.value_argument_list(
+                                                                )
+                                                            {
+                                                                for arg in
+                                                                    arg_list.arguments()
+                                                                {
+                                                                    let Some(arg_e) =
+                                                                        arg.expression()
+                                                                    else {
+                                                                        ok = false;
+                                                                        break;
+                                                                    };
+                                                                    let s =
+                                                                        lower_rich_expr_to_slot(
+                                                                            arg_e,
+                                                                            &lookup,
+                                                                            fn_lookup_ref,
+                                                                            next_slot,
+                                                                            &mut body_mstmts,
+                                                                            local_tys,
+                                                                            strings,
+                                                                        );
+                                                                    if let Some(s) = s {
+                                                                        arg_slots.push(s);
+                                                                    } else {
+                                                                        ok = false;
+                                                                        break;
+                                                                    }
+                                                                }
+                                                            }
+                                                            if ok {
+                                                                let result_slot =
+                                                                    LocalId(*next_slot);
+                                                                *next_slot += 1;
+                                                                local_tys
+                                                                    .push(ret_ty.clone());
+                                                                body_mstmts.push(
+                                                                    MStmt::Assign {
+                                                                        dest: result_slot,
+                                                                        value:
+                                                                            skotch_mir::Rvalue::Call {
+                                                                                kind:
+                                                                                    skotch_mir::CallKind::Static(*fid),
+                                                                                args: arg_slots,
+                                                                            },
+                                                                    },
+                                                                );
+                                                                Some(result_slot)
+                                                            } else {
+                                                                None
+                                                            }
+                                                        } else {
+                                                            None
+                                                        }
+                                                    } else {
+                                                        None
+                                                    }
+                                                } else {
+                                                    None
+                                                }
+                                            } else {
+                                                None
+                                            }
+                                        } else {
+                                            None
+                                        }
+                                    } else {
+                                        None
+                                    };
+                                    if let Some(s) = ext_slot {
+                                        s
+                                    } else {
+                                        lower_rich_expr_to_slot(
+                                            rhs,
+                                            &lookup,
+                                            fn_lookup_ref,
+                                            next_slot,
+                                            &mut body_mstmts,
+                                            local_tys,
+                                            strings,
+                                        )?
+                                    }
+                                }
+                            };
                             body_mstmts.push(MStmt::Assign {
                                 dest: lhs_slot,
                                 value: skotch_mir::Rvalue::BinOp {
