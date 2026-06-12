@@ -216,19 +216,15 @@
 0.010	1303-priority-queue-heap	508	5	25	13	11
 0.012	1297-graph-bfs	172	2	16	7	6
 0.016	1288-lru-cache-two-type-params	128	2	17	7	6
-0.017	179-practical-algorithms	58	1	10	3	2
 0.018	565-complex-string-template	56	1	9	2	1
 0.020	1306-game-of-life	253	5	19	9	7
 0.020	1295-map-get-checkcast-generic	50	1	12	4	3
 0.023	410-comprehensive-coroutine	88	2	21	2	1
-0.024	215-sieve-eratosthenes	41	1	9	2	1
 0.025	1294-mini-json-parser	714	18	41	25	17
-0.029	137-practical-loop	35	1	9	2	1
-0.029	254-prime-sieve	35	1	9	2	1
-0.030	1305-sudoku-solver	701	21	17	10	5
 0.034	1328-in-operator-user-class	58	2	12	4	2
 0.036	1313-game-2048	363	13	19	12	10
 0.037	1223-chained-map-filter-element-flow	81	3	19	2	1
+0.040	1305-sudoku-solver	701	28	17	10	5
 0.040	1216-listof-filter-lambda-element-type	75	3	18	2	1
 0.041	1217-listof-map-element-type	74	3	18	2	1
 0.041	1218-listof-foreach-data-class	74	3	18	2	1
@@ -238,7 +234,6 @@
 0.045	1299-stack-vm-sealed-when	358	16	34	18	12
 0.045	995-enum-cmp-lambda	44	2	18	3	2
 0.051	1331-multi-arg-index-operator	59	3	14	4	3
-0.051	150-comprehensive-demo	78	4	12	5	4
 0.054	305-data-class-rgb	74	4	19	2	1
 0.056	304-data-class-person	54	3	17	2	1
 0.057	303-data-class-point	53	3	17	2	1
@@ -280,8 +275,10 @@
 0.143	1222-smart-cast-is-narrowing	21	3	12	4	2
 0.148	425-sealed-interface	27	4	14	5	3
 0.154	1337-crossinline-noinline-modifiers	13	2	12	3	1
+0.154	150-comprehensive-demo	78	12	12	5	3
 0.154	367-star-projection	13	2	11	3	2
 0.155	1219-let-implicit-it-element-type	58	9	19	3	1
+0.155	179-practical-algorithms	58	9	10	3	1
 0.166	1304-calculator-parser	332	55	50	35	22
 0.167	1225-factory-vs-ctor	12	2	12	3	2
 0.167	21-data-class	48	8	17	2	0
@@ -330,6 +327,8 @@
 0.250	709-composable-inline-conditional	4	1	8	1	0
 0.250	767-composable-inline-conditional-2	4	1	8	1	0
 0.250	909-composable-inline-bool-content	4	1	8	1	0
+0.257	137-practical-loop	35	9	9	2	0
+0.257	254-prime-sieve	35	9	9	2	0
 0.258	201-fibonacci-iterative	31	8	9	2	1
 0.258	253-fibonacci	31	8	9	2	1
 0.258	577-value-class	31	8	15	2	0
@@ -340,6 +339,7 @@
 0.267	1334-infix-member-functions	45	12	14	5	3
 0.267	289-fizzbuzz	30	8	9	2	1
 0.267	99-operator-invoke	15	4	11	3	1
+0.268	215-sieve-eratosthenes	41	11	9	2	0
 0.273	1231-companion-bare-ident	11	3	13	6	3
 0.273	1307-double-param-stackmap	55	15	9	2	1
 0.286	1309-regex-matcher	378	108	39	24	11

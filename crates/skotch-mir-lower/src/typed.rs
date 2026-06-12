@@ -4969,9 +4969,10 @@ fn try_lower_multi_stmt_block_with_offset(
                                     .find(|(name, _)| name == n)
                                     .map(|(_, l)| *l)
                             };
-                            let cmp_slot = lower_inline_expr_to_slot(
+                            let cmp_slot = lower_rich_expr_to_slot(
                                 cond_expr,
                                 &lookup,
+                                fn_lookup_ref,
                                 next_slot,
                                 &mut cur_stmts,
                                 local_tys,
@@ -5140,9 +5141,10 @@ fn try_lower_multi_stmt_block_with_offset(
                                     .find(|(name, _)| name == n)
                                     .map(|(_, l)| *l)
                             };
-                            let cmp_slot = lower_inline_expr_to_slot(
+                            let cmp_slot = lower_rich_expr_to_slot(
                                 cond_expr,
                                 &lookup,
+                                fn_lookup_ref,
                                 next_slot,
                                 &mut cur_stmts,
                                 local_tys,
@@ -5201,9 +5203,10 @@ fn try_lower_multi_stmt_block_with_offset(
                                     .find(|(name, _)| name == n)
                                     .map(|(_, l)| *l)
                             };
-                            let cmp_slot = lower_inline_expr_to_slot(
+                            let cmp_slot = lower_rich_expr_to_slot(
                                 cond_expr,
                                 &lookup,
+                                fn_lookup_ref,
                                 next_slot,
                                 &mut cur_stmts,
                                 local_tys,
