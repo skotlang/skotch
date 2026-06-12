@@ -4807,6 +4807,8 @@ fn try_lower_multi_stmt_block_with_offset(
                         has_else: bool,
                     },
                     PropertyWithIfInit,
+                    NestedWhile,
+                    NestedForIn,
                 }
                 let mut i: usize = 0;
                 while i < body_children.len() {
@@ -4834,6 +4836,14 @@ fn try_lower_multi_stmt_block_with_offset(
                         }
                         if matches!(expr, KtExpr::Return(_)) {
                             special_at = Some((j, Special::ReturnStmt));
+                            break;
+                        }
+                        if matches!(expr, KtExpr::While(_)) {
+                            special_at = Some((j, Special::NestedWhile));
+                            break;
+                        }
+                        if matches!(expr, KtExpr::For(_)) {
+                            special_at = Some((j, Special::NestedForIn));
                             break;
                         }
                         if let KtExpr::If(if_e) = expr {
@@ -5189,6 +5199,143 @@ fn try_lower_multi_stmt_block_with_offset(
                                 }
                                 _ => return None,
                             }
+                        }
+                        Some((j, Special::NestedWhile)) => {
+                            // Nested `while (cmp) { body }` inside the
+                            // outer loop body. Allocates inner cond /
+                            // body / exit blocks.
+                            let while_node = body_children[j];
+                            let KtExpr::While(w) = KtExpr::cast(while_node)? else {
+                                return None;
+                            };
+                            let cond_expr = w
+                                .condition()
+                                .and_then(|c| c.expression())
+                                .map(unwrap_parens)?;
+                            let KtExpr::Binary(cmp_b) = cond_expr else {
+                                return None;
+                            };
+                            let cmp_text = cmp_b.operation().map(|o| o.text()).unwrap_or_default();
+                            let cmp_mir = match cmp_text.as_str() {
+                                "==" => Some(skotch_mir::BinOp::CmpEq),
+                                "!=" => Some(skotch_mir::BinOp::CmpNe),
+                                "<" => Some(skotch_mir::BinOp::CmpLt),
+                                ">" => Some(skotch_mir::BinOp::CmpGt),
+                                "<=" => Some(skotch_mir::BinOp::CmpLe),
+                                ">=" => Some(skotch_mir::BinOp::CmpGe),
+                                _ => None,
+                            }?;
+                            let snap = name_to_local.clone();
+                            let lookup = |n: &str| -> Option<LocalId> {
+                                snap.iter()
+                                    .rev()
+                                    .find(|(name, _)| name == n)
+                                    .map(|(_, l)| *l)
+                            };
+                            // First flush the cur_stmts as the
+                            // "pre-while" block which goes to the
+                            // inner cond.
+                            let cond_block_id = block_offset + blocks.len() as u32 + 1;
+                            blocks.push(BasicBlock {
+                                stmts: std::mem::take(&mut cur_stmts),
+                                terminator: Terminator::Goto(cond_block_id),
+                            });
+                            // Build the inner cond block.
+                            let mut inner_cond_stmts: Vec<MStmt> = Vec::new();
+                            let lhs_slot = lower_inline_expr_to_slot(
+                                cmp_b.lhs()?,
+                                &lookup,
+                                next_slot,
+                                &mut inner_cond_stmts,
+                                local_tys,
+                                strings,
+                            )?;
+                            let rhs_slot = lower_inline_expr_to_slot(
+                                cmp_b.rhs()?,
+                                &lookup,
+                                next_slot,
+                                &mut inner_cond_stmts,
+                                local_tys,
+                                strings,
+                            )?;
+                            let cmp_slot = LocalId(*next_slot);
+                            *next_slot += 1;
+                            local_tys.push(Ty::Bool);
+                            inner_cond_stmts.push(MStmt::Assign {
+                                dest: cmp_slot,
+                                value: skotch_mir::Rvalue::BinOp {
+                                    op: cmp_mir,
+                                    lhs: lhs_slot,
+                                    rhs: rhs_slot,
+                                },
+                            });
+                            let body_block_opt = w.body().and_then(|b| b.expression());
+                            let inner_body_children: Vec<&skotch_sil::SilNode> =
+                                match body_block_opt {
+                                    Some(KtExpr::Block(bl)) => {
+                                        skotch_ast::children(bl.syntax()).iter().collect()
+                                    }
+                                    Some(other) => vec![other.syntax()],
+                                    None => vec![],
+                                };
+                            const SENT_BACK: u32 = 0xfffffffe;
+                            const SENT_BREAK: u32 = 0xfffffffd;
+                            let mut inner_body_blocks = lower_loop_body_blocks(
+                                &inner_body_children,
+                                name_to_local,
+                                next_slot,
+                                local_tys,
+                                strings,
+                                fn_lookup_ref,
+                                function_param_names,
+                                cond_block_id + 1,
+                                SENT_BACK,
+                                SENT_BREAK,
+                            )?;
+                            let n = inner_body_blocks.len() as u32;
+                            let after_inner_id = cond_block_id + 1 + n;
+                            for blk in &mut inner_body_blocks {
+                                let remap = |t: u32| -> u32 {
+                                    if t == SENT_BACK {
+                                        cond_block_id
+                                    } else if t == SENT_BREAK {
+                                        after_inner_id
+                                    } else {
+                                        t
+                                    }
+                                };
+                                match &mut blk.terminator {
+                                    Terminator::Goto(t) => *t = remap(*t),
+                                    Terminator::Branch {
+                                        then_block,
+                                        else_block,
+                                        ..
+                                    } => {
+                                        *then_block = remap(*then_block);
+                                        *else_block = remap(*else_block);
+                                    }
+                                    _ => {}
+                                }
+                            }
+                            blocks.push(BasicBlock {
+                                stmts: inner_cond_stmts,
+                                terminator: Terminator::Branch {
+                                    cond: cmp_slot,
+                                    then_block: cond_block_id + 1,
+                                    else_block: after_inner_id,
+                                },
+                            });
+                            blocks.extend(inner_body_blocks);
+                            // Continue accumulating into the after-
+                            // inner block (next push has id ==
+                            // after_inner_id).
+                            i = j + 1;
+                            continue;
+                        }
+                        Some((_j, Special::NestedForIn)) => {
+                            // Nested for not yet supported via this
+                            // path; fall through.
+                            return None;
                         }
                         Some((j, Special::PropertyWithIfInit)) => {
                             // `val/var name = if (cond) e1 else e2`.
@@ -5827,7 +5974,7 @@ fn try_lower_multi_stmt_block_with_offset(
                     let Some(expr) = KtExpr::cast(c) else {
                         return false;
                     };
-                    if matches!(expr, KtExpr::Break(_) | KtExpr::Continue(_) | KtExpr::Return(_)) {
+                    if matches!(expr, KtExpr::Break(_) | KtExpr::Continue(_) | KtExpr::Return(_) | KtExpr::While(_) | KtExpr::For(_)) {
                         return true;
                     }
                     if let KtExpr::If(if_e) = expr {
@@ -6173,7 +6320,7 @@ fn try_lower_multi_stmt_block_with_offset(
                     let Some(expr) = KtExpr::cast(c) else {
                         return false;
                     };
-                    if matches!(expr, KtExpr::Break(_) | KtExpr::Continue(_) | KtExpr::Return(_)) {
+                    if matches!(expr, KtExpr::Break(_) | KtExpr::Continue(_) | KtExpr::Return(_) | KtExpr::While(_) | KtExpr::For(_)) {
                         return true;
                     }
                     if let KtExpr::If(if_e) = expr {
@@ -6886,7 +7033,7 @@ fn try_lower_multi_stmt_block_with_offset(
                     let Some(expr) = KtExpr::cast(c) else {
                         return false;
                     };
-                    if matches!(expr, KtExpr::Break(_) | KtExpr::Continue(_) | KtExpr::Return(_)) {
+                    if matches!(expr, KtExpr::Break(_) | KtExpr::Continue(_) | KtExpr::Return(_) | KtExpr::While(_) | KtExpr::For(_)) {
                         return true;
                     }
                     if let KtExpr::If(if_e) = expr {
