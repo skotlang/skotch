@@ -4779,6 +4779,9 @@ fn try_lower_multi_stmt_block_with_offset(
                         else_target: Option<u32>,
                         has_else: bool,
                     },
+                    IfNonJump {
+                        has_else: bool,
+                    },
                 }
                 let mut i: usize = 0;
                 while i < body_children.len() {
@@ -4812,6 +4815,15 @@ fn try_lower_multi_stmt_block_with_offset(
                                 ));
                                 break;
                             }
+                            // Non-jump if/else — treat as control
+                            // flow needing its own block layout.
+                            special_at = Some((
+                                j,
+                                Special::IfNonJump {
+                                    has_else: else_arm.is_some(),
+                                },
+                            ));
+                            break;
                         }
                     }
 
@@ -4907,6 +4919,112 @@ fn try_lower_multi_stmt_block_with_offset(
                                 }
                                 _ => return None,
                             }
+                        }
+                        Some((j, Special::IfNonJump { has_else })) => {
+                            let if_node = body_children[j];
+                            let KtExpr::If(if_e) = KtExpr::cast(if_node)? else {
+                                return None;
+                            };
+                            let cond_expr = if_e
+                                .condition()
+                                .and_then(|c| c.expression())
+                                .map(unwrap_parens)?;
+                            let then_expr = if_e
+                                .then_branch()
+                                .and_then(|t| t.expression())
+                                .map(unwrap_parens)?;
+                            let else_expr = if_e
+                                .else_branch()
+                                .and_then(|e| e.expression())
+                                .map(unwrap_parens);
+                            let snap = name_to_local.clone();
+                            let lookup = |n: &str| -> Option<LocalId> {
+                                snap.iter()
+                                    .rev()
+                                    .find(|(name, _)| name == n)
+                                    .map(|(_, l)| *l)
+                            };
+                            let cmp_slot = lower_inline_expr_to_slot(
+                                cond_expr,
+                                &lookup,
+                                next_slot,
+                                &mut cur_stmts,
+                                local_tys,
+                                strings,
+                            )?;
+                            let then_children: Vec<&skotch_sil::SilNode> =
+                                match then_expr {
+                                    KtExpr::Block(bl) => {
+                                        skotch_ast::children(bl.syntax()).iter().collect()
+                                    }
+                                    other => vec![other.syntax()],
+                                };
+                            let then_stmts = lower_loop_body(
+                                &then_children,
+                                name_to_local,
+                                next_slot,
+                                local_tys,
+                                strings,
+                                fn_lookup_ref,
+                                function_param_names,
+                            )?;
+                            let cond_block_id = block_offset + blocks.len() as u32;
+                            let then_block_id = cond_block_id + 1;
+                            let (else_stmts_opt, else_block_id_opt): (
+                                Option<Vec<MStmt>>,
+                                Option<u32>,
+                            ) = if has_else {
+                                let else_expr_v = else_expr?;
+                                let else_children: Vec<&skotch_sil::SilNode> =
+                                    match else_expr_v {
+                                        KtExpr::Block(bl) => skotch_ast::children(bl.syntax())
+                                            .iter()
+                                            .collect(),
+                                        other => vec![other.syntax()],
+                                    };
+                                let else_stmts = lower_loop_body(
+                                    &else_children,
+                                    name_to_local,
+                                    next_slot,
+                                    local_tys,
+                                    strings,
+                                    fn_lookup_ref,
+                                    function_param_names,
+                                )?;
+                                (Some(else_stmts), Some(then_block_id + 1))
+                            } else {
+                                (None, None)
+                            };
+                            let join_block_id = match else_block_id_opt {
+                                Some(eid) => eid + 1,
+                                None => then_block_id + 1,
+                            };
+                            blocks.push(BasicBlock {
+                                stmts: std::mem::take(&mut cur_stmts),
+                                terminator: Terminator::Branch {
+                                    cond: cmp_slot,
+                                    then_block: then_block_id,
+                                    else_block: else_block_id_opt
+                                        .unwrap_or(join_block_id),
+                                },
+                            });
+                            blocks.push(BasicBlock {
+                                stmts: then_stmts,
+                                terminator: Terminator::Goto(join_block_id),
+                            });
+                            if let Some(else_stmts) = else_stmts_opt {
+                                blocks.push(BasicBlock {
+                                    stmts: else_stmts,
+                                    terminator: Terminator::Goto(join_block_id),
+                                });
+                            }
+                            // join block becomes the new cur_block —
+                            // we accumulate subsequent stmts into
+                            // cur_stmts which will become the join.
+                            // Sanity: the next pushed block must have
+                            // ID == join_block_id.
+                            i = j + 1;
+                            continue;
                         }
                     }
                 }
@@ -5285,6 +5403,106 @@ fn try_lower_multi_stmt_block_with_offset(
                     Some(other) => vec![other.syntax()],
                     None => vec![],
                 };
+                let body_has_jumps = body_children.iter().any(|c| {
+                    let Some(expr) = KtExpr::cast(c) else {
+                        return false;
+                    };
+                    if matches!(expr, KtExpr::Break(_) | KtExpr::Continue(_)) {
+                        return true;
+                    }
+                    if let KtExpr::If(if_e) = expr {
+                        let is_jump_arm = |arm: Option<KtExpr<'_>>| -> bool {
+                            let Some(arm) = arm.map(unwrap_parens) else {
+                                return false;
+                            };
+                            if matches!(arm, KtExpr::Break(_) | KtExpr::Continue(_)) {
+                                return true;
+                            }
+                            if let KtExpr::Block(bl) = arm {
+                                let s: Vec<KtExpr<'_>> = bl.statements().collect();
+                                if s.len() == 1 {
+                                    return matches!(
+                                        s[0],
+                                        KtExpr::Break(_) | KtExpr::Continue(_)
+                                    );
+                                }
+                            }
+                            false
+                        };
+                        let then_e = if_e.then_branch().and_then(|t| t.expression());
+                        let else_e = if_e.else_branch().and_then(|e| e.expression());
+                        return true; // any if triggers multi-block path
+                    }
+                    false
+                });
+                if body_has_jumps {
+                    // do-while CFG layout with jumps:
+                    //   0 (pre): pre_stmts, Goto(1)
+                    //   1..N (body blocks): back_edge=cond_id, break=exit_id
+                    //   N+1 (cond): cond_stmts, Branch(1, exit_id)
+                    //   N+2 (exit): exit_stmts, Return/ReturnValue
+                    const SENT_BACK: u32 = 0xfffffffe;
+                    const SENT_BREAK: u32 = 0xfffffffd;
+                    let mut body_blocks = lower_loop_body_blocks(
+                        &body_children,
+                        &mut name_to_local,
+                        &mut next_slot,
+                        &mut local_tys,
+                        strings,
+                        fn_lookup,
+                        &function_param_names,
+                        1,
+                        SENT_BACK,
+                        SENT_BREAK,
+                    )?;
+                    let n = body_blocks.len() as u32;
+                    let cond_id = 1 + n;
+                    let exit_id = cond_id + 1;
+                    for blk in &mut body_blocks {
+                        let remap = |t: u32| -> u32 {
+                            if t == SENT_BACK {
+                                cond_id
+                            } else if t == SENT_BREAK {
+                                exit_id
+                            } else {
+                                t
+                            }
+                        };
+                        match &mut blk.terminator {
+                            Terminator::Goto(t) => *t = remap(*t),
+                            Terminator::Branch {
+                                then_block,
+                                else_block,
+                                ..
+                            } => {
+                                *then_block = remap(*then_block);
+                                *else_block = remap(*else_block);
+                            }
+                            _ => {}
+                        }
+                    }
+                    let pre_block = BasicBlock {
+                        stmts: std::mem::take(&mut stmts),
+                        terminator: Terminator::Goto(1),
+                    };
+                    let cond_block = BasicBlock {
+                        stmts: cond_stmts,
+                        terminator: Terminator::Branch {
+                            cond: cmp_slot,
+                            then_block: 1,
+                            else_block: exit_id,
+                        },
+                    };
+                    let exit_block = BasicBlock {
+                        stmts: Vec::new(),
+                        terminator: Terminator::Return,
+                    };
+                    let mut all = vec![pre_block];
+                    all.extend(body_blocks);
+                    all.push(cond_block);
+                    all.push(exit_block);
+                    return Some((all, local_tys));
+                }
                 let body_mstmts = lower_loop_body(
                     &body_children,
                     &mut name_to_local,
@@ -5559,7 +5777,7 @@ fn try_lower_multi_stmt_block_with_offset(
                         };
                         let then_e = if_e.then_branch().and_then(|t| t.expression());
                         let else_e = if_e.else_branch().and_then(|e| e.expression());
-                        return is_jump_arm(then_e) || is_jump_arm(else_e);
+                        return true; // any if triggers multi-block path
                     }
                     false
                 });
@@ -6125,7 +6343,7 @@ fn try_lower_multi_stmt_block_with_offset(
                         };
                         let then_e = if_e.then_branch().and_then(|t| t.expression());
                         let else_e = if_e.else_branch().and_then(|e| e.expression());
-                        return is_jump_arm(then_e) || is_jump_arm(else_e);
+                        return true; // any if triggers multi-block path
                     }
                     false
                 });
