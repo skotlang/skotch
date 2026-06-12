@@ -1882,3 +1882,19 @@ Updated `body_has_jumps` detection in for/while/do-while handlers to also trigge
 
 Key fixture jump:
 - 210-prime-factors: 0.000 → 0.500 (nested `while (n % d == 0)` inside outer `while (n > 1)`)
+
+### 2026-06-12 (session 7 — push 43: top-level if-handler exit supports control-flow trailing)
+
+The single-arm if-handler in `try_lower_multi_stmt_block_with_offset` builds a 3- or 4-block CFG with a single join block for trailing children. When the trailing has `while`/`for`/`return`, the `lower_loop_body` call inside join used to fail and the entire function became a placeholder.
+
+New logic: if `before_ret` (trailing minus final return) contains `While`/`For`/`Return`, the handler calls `lower_loop_body_blocks` instead, emitting a multi-block sequence between the if-CFG and a separate final return block. Sentinel back-edge/break targets remap to the final return block; the trailing return value lives in `final_return_stmts`. Layout shifts to: `pre + then + [else?] + join_blocks[..] + final_return`.
+
+Specifically unblocks the canonical `if (n<2) return false; var i = 2; while (cond) { … }; return true` shape (isPrime / parser-cursor / state-machine).
+
+**Push 43 standings:**
+- Fully covered: **212 / 968 (21.9%)**
+- Typed empty: **274 / 968 (28.3%)** (unchanged — partial-coverage graduations)
+- mir-lower typed unit tests: **188 passing**
+
+Key fixture jump:
+- 137-practical-loop: 0.257 → 0.600 (isPrime's `if (n<2) return false; var i = 2; while (i*i <= n) {…}; return true`)
