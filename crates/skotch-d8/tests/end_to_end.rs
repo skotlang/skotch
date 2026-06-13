@@ -127,18 +127,26 @@ fn wide_arith_battery_byte_identical() {
 }
 
 /// `cmp100(int a){ if(a>100) return 1; return 0; }` needs a scratch register for
-/// the constant while `a` is live, so d8 relocates `a` to a high register
-/// (registers=2, ins=1: `a`→v1, const→v0). The bootstrap doesn't model args-high
-/// allocation yet, so it must BAIL — never emit byte-divergent register numbers.
+/// the constant while `a` is live, so d8 relocates `a` to the high register
+/// (registers=2, ins=1: `a`→v1, const→v0, return values→v1). The allocated→real
+/// register remap (d8's args-high placement) reproduces this byte-for-byte.
 #[test]
-fn args_high_pressure_bails_not_miscompiles() {
+fn args_high_pressure_byte_identical() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("ArgsHigh.class")).unwrap();
     let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
-    let err = dex_classes(&[cf], &opts).expect_err("args-high method must bail, not miscompile");
-    let msg = format!("{err:#}");
-    assert!(
-        msg.contains("args-high") || msg.contains("argument range"),
-        "expected an args-high bail, got: {msg}"
+    let produced = dex_classes(&[cf], &opts).unwrap();
+    let golden = std::fs::read(fixtures().join("ArgsHigh.d8.dex")).unwrap();
+    if produced != golden {
+        std::fs::write("/tmp/skotch-ArgsHigh-produced.dex", &produced).unwrap();
+    }
+    skotch_dex::validator::validate(&produced).expect("self-validation");
+    assert_eq!(
+        produced,
+        golden,
+        "args-high: produced {} vs golden {}; first diff {:?}",
+        produced.len(),
+        golden.len(),
+        (0..produced.len().min(golden.len())).find(|&i| produced[i] != golden[i])
     );
 }
 

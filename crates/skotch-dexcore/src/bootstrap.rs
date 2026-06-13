@@ -98,7 +98,12 @@ fn dex_method(cf: &ClassFile, m: &Member, min_api: u32) -> Result<EncodedMethod>
     let code = if m.is_abstract() || m.is_native() {
         None
     } else if let Some(c) = &m.code {
-        Some(translate_code(cf, m, c, &params, &ret, min_api)?)
+        let mut item = translate_code(cf, m, c, &params, &ret, min_api)?;
+        // Remap allocated → real DEX registers (d8's args-high placement). This
+        // is the identity unless the method has register pressure beyond its
+        // arguments, so it leaves no-pressure methods byte-identical.
+        crate::regalloc::remap_insns(&mut item.insns, item.ins_size, item.registers_size);
+        Some(item)
     } else {
         None
     };
@@ -696,21 +701,11 @@ fn translate_code_cfg(
         )?
     };
 
-    // Args-high relocation: when registers_size > ins_size, d8 places incoming
-    // args in the HIGH registers `[registers_size - ins, registers_size)`, not
-    // `[0, ins)`. This CFG path assumes args sit at `[0, ins)`, which is only
-    // valid without pressure. If a register above the argument range was needed
-    // while arguments are present, bail rather than emit divergent register
-    // numbers (needs the full Phase-1 allocator).
-    if ins_size > 0 && emit.max_reg >= ins_size as i32 {
-        bail!(
-            "dexer (cfg): register pressure above the argument range needs args-high \
-             allocation (Phase 1) in {}{}",
-            m.name,
-            m.descriptor
-        );
-    }
-
+    // Register pressure above the argument range is now handled by the
+    // allocated→real remap in `dex_method` (d8's args-high placement): the CFG
+    // path allocates in d8's "allocated space" (args at `[0, ins)`, temporaries
+    // reusing dead-argument registers via liveness), and the remap moves the
+    // arguments to the high registers afterward.
     let registers_size = ((emit.max_reg + 1).max(ins_size as i32)) as u16;
     let debug_info = emit.e.build_debug_info(params);
     Ok(CodeItem {

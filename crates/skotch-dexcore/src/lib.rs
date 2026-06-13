@@ -13,5 +13,6 @@
 //! (Phase 1) replaces it.
 
 pub mod bootstrap;
+pub mod regalloc;
 
 pub use bootstrap::dex_class;

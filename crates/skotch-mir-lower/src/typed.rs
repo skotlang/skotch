@@ -11126,10 +11126,27 @@ fn lower_rich_expr_to_slot(
                 }
                 // Math.abs/max/min etc. — Java static method on
                 // java/lang/Math. Detected by Reference receiver
-                // named "Math".
-                if let (Some(method_n), KtExpr::Reference(rref)) = (method_n, &dq_exprs[0])
+                // named "Math" (also accepts qualified `java.lang.Math`).
+                let receiver_class_name: Option<String> = match &dq_exprs[0] {
+                    KtExpr::Reference(rref) => rref.name().map(|s| s.to_string()),
+                    KtExpr::DotQualified(inner_dq) => {
+                        // For qualified `java.lang.X`, return X.
+                        let inner_exprs: Vec<KtExpr<'_>> =
+                            skotch_ast::children(inner_dq.syntax())
+                                .iter()
+                                .filter_map(KtExpr::cast)
+                                .collect();
+                        if let Some(KtExpr::Reference(last)) = inner_exprs.last() {
+                            last.name().map(|s| s.to_string())
+                        } else {
+                            None
+                        }
+                    }
+                    _ => None,
+                };
+                if let (Some(method_n), Some(rn)) = (method_n, receiver_class_name.as_deref())
                 {
-                    if let Some(rn) = rref.name() {
+                    {
                         let (cls_opt, desc_fn): (Option<&str>, fn(usize) -> Option<(&'static str, &'static str)>) = match (rn, method_n) {
                             ("Math", "abs") => (Some("java/lang/Math"), |n| {
                                 if n == 1 { Some(("Math.abs", "(I)I")) } else { None }
