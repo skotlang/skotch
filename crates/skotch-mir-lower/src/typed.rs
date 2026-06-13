@@ -667,7 +667,66 @@ pub fn lower_file(
         }
     }
 
+    // Post-process pass: many lowering sites hard-code `BinOp::AddI`
+    // / `SubI` / `MulI` / `DivI` / `ModI` without type-checking the
+    // operands. For functions that operate on Double / Long / Float
+    // locals (e.g. Newton-style sqrt) this produces semantically
+    // invalid MIR that the JVM backend's max-stack analysis can
+    // diverge on. Walk each function and rewrite Int-coded arithmetic
+    // BinOps to the right variant based on the lhs operand's
+    // declared local type.
+    for f in &mut module.functions {
+        fixup_binop_variants(f);
+    }
+    for c in &mut module.classes {
+        for m in &mut c.methods {
+            fixup_binop_variants(m);
+        }
+        fixup_binop_variants(&mut c.constructor);
+    }
+
     module
+}
+
+/// Rewrite `BinOp::AddI` / `SubI` / `MulI` / `DivI` / `ModI` in a
+/// function body to the type-specific variant when the lhs operand's
+/// `Ty` says Long / Float / Double. Operates in place; cheap walk.
+fn fixup_binop_variants(f: &mut MirFunction) {
+    use skotch_mir::{BinOp, Rvalue, Stmt};
+    // `locals` is indexed by LocalId.0 directly (params share the same
+    // LocalId space as locals).
+    let locals = f.locals.clone();
+    let resolve_ty = |slot: skotch_mir::LocalId| -> Option<Ty> {
+        locals.get(slot.0 as usize).cloned()
+    };
+    for blk in &mut f.blocks {
+        for stmt in &mut blk.stmts {
+            let Stmt::Assign { value, .. } = stmt;
+            if let Rvalue::BinOp { op, lhs, .. } = value {
+                let ty = resolve_ty(*lhs).unwrap_or(Ty::Any);
+                let new_op = match (*op, &ty) {
+                    (BinOp::AddI, Ty::Double) => Some(BinOp::AddD),
+                    (BinOp::SubI, Ty::Double) => Some(BinOp::SubD),
+                    (BinOp::MulI, Ty::Double) => Some(BinOp::MulD),
+                    (BinOp::DivI, Ty::Double) => Some(BinOp::DivD),
+                    (BinOp::ModI, Ty::Double) => Some(BinOp::ModD),
+                    (BinOp::AddI, Ty::Float) => Some(BinOp::AddF),
+                    (BinOp::SubI, Ty::Float) => Some(BinOp::SubF),
+                    (BinOp::MulI, Ty::Float) => Some(BinOp::MulF),
+                    (BinOp::DivI, Ty::Float) => Some(BinOp::DivF),
+                    (BinOp::AddI, Ty::Long) => Some(BinOp::AddL),
+                    (BinOp::SubI, Ty::Long) => Some(BinOp::SubL),
+                    (BinOp::MulI, Ty::Long) => Some(BinOp::MulL),
+                    (BinOp::DivI, Ty::Long) => Some(BinOp::DivL),
+                    (BinOp::ModI, Ty::Long) => Some(BinOp::ModL),
+                    _ => None,
+                };
+                if let Some(n) = new_op {
+                    *op = n;
+                }
+            }
+        }
+    }
 }
 
 /// Recursively unwrap KtExpr::Parenthesized layers.
