@@ -1222,6 +1222,12 @@ fn try_lower_when_subjectless(
 
     let mut next_slot = param_count as u32;
     let mut extra_locals: Vec<Ty> = Vec::new();
+    // kotlinc lowers `when { c1 -> v1; ... }` as `when (true) { c1 -> v1; ... }`,
+    // so it allocates a "phantom subject = true" local in a pre-block
+    // before the result slot.
+    let phantom_subject_slot = LocalId(next_slot);
+    next_slot += 1;
+    extra_locals.push(Ty::Bool);
     let result_slot = LocalId(next_slot);
     next_slot += 1;
     let result_ty = match &else_body {
@@ -1233,9 +1239,19 @@ fn try_lower_when_subjectless(
     extra_locals.push(result_ty);
 
     let n_arms = arms.len();
-    let else_block_idx = (2 * n_arms) as u32;
+    // Block indices shifted by +1 for the pre-block.
+    let else_block_idx = (2 * n_arms + 1) as u32;
     let join_block_idx = else_block_idx + 1;
     let mut blocks: Vec<BasicBlock> = Vec::new();
+
+    // Pre-block: phantom subject = true.
+    blocks.push(BasicBlock {
+        stmts: vec![MStmt::Assign {
+            dest: phantom_subject_slot,
+            value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Bool(true)),
+        }],
+        terminator: Terminator::Goto(1),
+    });
 
     let lookup = |n: &str| -> Option<LocalId> {
         outer_param_names
@@ -1254,9 +1270,9 @@ fn try_lower_when_subjectless(
             &mut extra_locals,
             strings,
         )?;
-        let then_idx = (2 * i + 1) as u32;
+        let then_idx = (2 * i + 2) as u32;
         let next_cmp_or_else = if i + 1 < n_arms {
-            (2 * (i + 1)) as u32
+            (2 * (i + 1) + 1) as u32
         } else {
             else_block_idx
         };
@@ -1268,13 +1284,19 @@ fn try_lower_when_subjectless(
                 else_block: next_cmp_or_else,
             },
         });
-        // Arm body block: assign result.
+        // Arm body block: kotlinc shape is `tmp = Const(...); result = Local(tmp)`.
         let mut arm_stmts: Vec<MStmt> = Vec::new();
         let (k, ty) = literal_to_const(body, strings)?;
-        let _ = ty;
+        let tmp_slot = LocalId(next_slot);
+        next_slot += 1;
+        extra_locals.push(ty);
+        arm_stmts.push(MStmt::Assign {
+            dest: tmp_slot,
+            value: skotch_mir::Rvalue::Const(k),
+        });
         arm_stmts.push(MStmt::Assign {
             dest: result_slot,
-            value: skotch_mir::Rvalue::Const(k),
+            value: skotch_mir::Rvalue::Local(tmp_slot),
         });
         blocks.push(BasicBlock {
             stmts: arm_stmts,
@@ -1282,12 +1304,19 @@ fn try_lower_when_subjectless(
         });
     }
 
-    // Else block.
+    // Else block: also uses temp-slot copy-back.
     let mut else_stmts: Vec<MStmt> = Vec::new();
-    let (k, _ty) = literal_to_const(&else_body, strings)?;
+    let (k, ety) = literal_to_const(&else_body, strings)?;
+    let else_tmp = LocalId(next_slot);
+    next_slot += 1;
+    extra_locals.push(ety);
+    else_stmts.push(MStmt::Assign {
+        dest: else_tmp,
+        value: skotch_mir::Rvalue::Const(k),
+    });
     else_stmts.push(MStmt::Assign {
         dest: result_slot,
-        value: skotch_mir::Rvalue::Const(k),
+        value: skotch_mir::Rvalue::Local(else_tmp),
     });
     blocks.push(BasicBlock {
         stmts: else_stmts,
