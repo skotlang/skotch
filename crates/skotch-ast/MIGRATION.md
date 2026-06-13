@@ -1970,6 +1970,27 @@ receiver type guess; class-name receiver filter for toString (exclude Math/Integ
 296-string-get-char, 297-string-equals, 298-string-compareto, 311-method-chain-types,
 318-string-repeat. Plus partial graduations (0.000 → 0.5+) for many more.
 
+### 2026-06-13 (session 7 — final state)
+
+**End-of-session standings:**
+- Fully covered: **244 / 968 (25.2%)** — up from 211 at session start (+33 graduations)
+- Typed empty: **227 / 968 (23.4%)** — down from 288 (−61 empty modules)
+- mir-lower typed unit tests: **188 passing**
+- Total commits this session: **57+**
+- All pipeline crate tests green (mir-lower, driver, resolve, typeck, ast)
+
+**Distance to ast.rs deletion:** 25% byte parity is far from the ~95% needed for safe cutover. The next major shape clusters (each requires architectural work, not one-shape-per-PR extensions):
+1. **Coroutine builders** (~18 fixtures): runBlocking/launch/async — needs kotlinx runtime resolution
+2. **Lambda expressions** (~12 fixtures): invokedynamic + LambdaMetafactory emission
+3. **Enum class lowering** (~12 fixtures): EnumDecl + values()/valueOf() synthesis
+4. **Collections + stdlib** (~30 fixtures combined): listOf/mapOf + member dispatch on List/Map types via fn_lookup with generics
+5. **Suspend trampolines** (~50 fixtures with the 1-3 stmt gap): typed-pipeline suspend lowering doesn't exist yet
+6. **Try-catch / try-as-expression** (~5 fixtures): ExceptionHandler MIR emission
+7. **Logical &&/|| in inline context** (~3 fixtures): short-circuit MIR via BinOp::And/Or addition or per-call inline branch CFG
+8. **Range iteration** (Reference range vars, until-step combos): full Range.iterator lowering
+
+At ~30-40 graduations per major shape extension, reaching 90%+ coverage realistically needs 10-15 more focused sessions of similar throughput.
+
 ### 2026-06-12 (session 7 — push 43: top-level if-handler exit supports control-flow trailing)
 
 The single-arm if-handler in `try_lower_multi_stmt_block_with_offset` builds a 3- or 4-block CFG with a single join block for trailing children. When the trailing has `while`/`for`/`return`, the `lower_loop_body` call inside join used to fail and the entire function became a placeholder.
