@@ -5801,8 +5801,29 @@ fn try_lower_multi_stmt_block_with_offset(
                     continue;
                 }
             }
-            // Try literal first.
+            // Try literal first. kotlinc shape for `var x = LITERAL`
+            // is `tmp = Const(LITERAL); x = Local(tmp)` (2 stmts) — the
+            // temp slot reflects the JVM stack semantics. `val x =
+            // LITERAL` keeps the single-stmt direct shape.
             if let Some((k, ty)) = literal_to_const(&init, strings) {
+                if prop.is_var() {
+                    let tmp = LocalId(next_slot);
+                    next_slot += 1;
+                    local_tys.push(ty.clone());
+                    stmts.push(MStmt::Assign {
+                        dest: tmp,
+                        value: skotch_mir::Rvalue::Const(k),
+                    });
+                    let slot = LocalId(next_slot);
+                    next_slot += 1;
+                    local_tys.push(ty);
+                    stmts.push(MStmt::Assign {
+                        dest: slot,
+                        value: skotch_mir::Rvalue::Local(tmp),
+                    });
+                    name_to_local.push((name.to_string(), slot));
+                    continue;
+                }
                 let slot = LocalId(next_slot);
                 next_slot += 1;
                 local_tys.push(ty);
@@ -19918,7 +19939,9 @@ mod tests {
             } => Some(*dest),
             _ => None,
         });
-        assert_eq!(add_dest.unwrap().0, 0, "AddI should write back to sum slot");
+        // var-literal init now goes via temp: slot 0 = Const(0), slot 1
+        // = Local(slot 0) ← sum. AddI writes back to sum slot (1).
+        assert_eq!(add_dest.unwrap().0, 1, "AddI should write back to sum slot");
     }
 
     #[test]
