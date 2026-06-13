@@ -11329,6 +11329,15 @@ fn lower_rich_expr_to_slot(
                         let recv_ty_guess = match &dq_exprs[0] {
                             KtExpr::Float(_) => Ty::Double,
                             KtExpr::Boolean(_) => Ty::Bool,
+                            KtExpr::Integer(int_e) => {
+                                // Check for LONG_LITERAL child token.
+                                let is_long = skotch_ast::children(int_e.syntax())
+                                    .iter()
+                                    .any(|c| {
+                                        c.kind == skotch_syntax::SyntaxKind::LONG_LITERAL
+                                    });
+                                if is_long { Ty::Long } else { Ty::Int }
+                            }
                             _ => Ty::Int,
                         };
                         let cls_desc: Option<(&str, &str)> = match recv_ty_guess {
