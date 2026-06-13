@@ -11119,6 +11119,21 @@ fn lower_rich_expr_to_slot(
                                 Ty::Double,
                                 "@parseDouble",
                             )),
+                            ("toByte", 0) => Some((
+                                "(Ljava/lang/String;)B",
+                                Ty::Int,
+                                "@parseByte",
+                            )),
+                            ("toShort", 0) => Some((
+                                "(Ljava/lang/String;)S",
+                                Ty::Int,
+                                "@parseShort",
+                            )),
+                            ("toFloat", 0) => Some((
+                                "(Ljava/lang/String;)F",
+                                Ty::Float,
+                                "@parseFloat",
+                            )),
                             _ => None,
                         };
                         if let Some((descriptor, ret_ty, jvm_name)) = str_method {
@@ -11166,12 +11181,18 @@ fn lower_rich_expr_to_slot(
                                     "Int" => "java/lang/Integer",
                                     "Long" => "java/lang/Long",
                                     "Double" => "java/lang/Double",
+                                    "Byte" => "java/lang/Byte",
+                                    "Short" => "java/lang/Short",
+                                    "Float" => "java/lang/Float",
                                     _ => "java/lang/Object",
                                 };
                                 let method = match static_name {
                                     "Int" => "parseInt",
                                     "Long" => "parseLong",
                                     "Double" => "parseDouble",
+                                    "Byte" => "parseByte",
+                                    "Short" => "parseShort",
+                                    "Float" => "parseFloat",
                                     _ => "parse",
                                 };
                                 skotch_mir::CallKind::StaticJava {
