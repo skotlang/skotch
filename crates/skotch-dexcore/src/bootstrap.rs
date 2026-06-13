@@ -924,7 +924,7 @@ impl<'a> Emitter<'a> {
             if let Some((op8, op16)) = lit_ops(jvm_op) {
                 let src = self.materialize(&a)?;
                 self.release(&a);
-                let dest = self.alloc_result(src)?;
+                let dest = self.alloc_result(src, false)?;
                 if (-128..=127).contains(&c) {
                     self.insns.push(op8 | (dest << 8));
                     self.insns.push((src & 0xff) | (((c as u16) & 0xff) << 8));
@@ -941,36 +941,43 @@ impl<'a> Emitter<'a> {
     }
 
     fn binop_reg(&mut self, jvm_op: u8, a: Val, b: Val) -> Result<Val> {
+        // The result width follows the first operand (long/double → wide; for
+        // shifts the shift-amount `b` is narrow but `a`/result are wide).
+        let wide = a.is_wide();
         let ra = self.materialize(&a)?;
         let rb = self.materialize(&b)?;
         self.release(&a);
         self.release(&b);
-        let dest = self.alloc_result(ra)?;
+        let dest = self.alloc_result(ra, wide)?;
         // d8 normally coalesces `dest = a op b` (dest == a) into the 2-address
-        // form, EXCEPT for `mul` below API 23: `mul-int/2addr` triggers an ART
+        // form, EXCEPT for `mul` below API 23: `mul-*/2addr` triggers an ART
         // Marshmallow bug (`canHaveMul2AddrBug`), so d8 keeps the 3-address form.
         let mul2addr_bug = self.min_api < 23 && is_mul_op(jvm_op);
         if let Some(op2) = binop_2addr_op(jvm_op) {
             if dest == ra && !mul2addr_bug {
                 self.insns.push(op2 | ((dest as u16) << 8) | ((rb as u16) << 12));
-                return Ok(Val::Reg(dest, false));
+                return Ok(Val::Reg(dest, wide));
             }
         }
         let op3 = binop_3addr_op(jvm_op)?;
         self.insns.push(op3 | (dest << 8));
         self.insns.push((ra & 0xff) | ((rb & 0xff) << 8));
-        Ok(Val::Reg(dest, false))
+        Ok(Val::Reg(dest, wide))
     }
 
-    /// Picks the result register for a binop: reuse the first operand's
-    /// register if it is now free (→ 2addr), else allocate a fresh one.
-    fn alloc_result(&mut self, first_operand: u16) -> Result<u16> {
-        if !self.used[first_operand as usize] {
-            self.used[first_operand as usize] = true;
-            self.max_reg = self.max_reg.max(first_operand as i32);
+    /// Picks the result register (a pair if `wide`) for a binop: reuse the first
+    /// operand's register(s) if now free (→ 2addr), else allocate fresh.
+    fn alloc_result(&mut self, first_operand: u16, wide: bool) -> Result<u16> {
+        let need = if wide { 2 } else { 1 };
+        let base = first_operand as usize;
+        if (0..need).all(|k| !self.used[base + k]) {
+            for k in 0..need {
+                self.used[base + k] = true;
+            }
+            self.max_reg = self.max_reg.max((first_operand as i32) + need as i32 - 1);
             Ok(first_operand)
         } else {
-            self.alloc(false)
+            self.alloc(wide)
         }
     }
 

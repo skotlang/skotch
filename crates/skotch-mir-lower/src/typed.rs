@@ -10838,12 +10838,23 @@ fn lower_rich_expr_to_slot(
                 };
                 // String instance methods → VirtualJava on java/lang/String.
                 if let Some(method_n) = method_n {
+                    // Receiver type detection: literal, local ref, or
+                    // by name shape (DotQualified ending in a known
+                    // String-returning method or top-level String).
                     let recv_ty_candidate = match &dq_exprs[0] {
                         KtExpr::Reference(rr) => rr
                             .name()
                             .and_then(|n| lookup_name(n))
                             .and_then(|s| extra_locals.get(s.0 as usize).cloned()),
                         KtExpr::String(_) => Some(Ty::String),
+                        KtExpr::DotQualified(_) => {
+                            // For chained method calls, recursively
+                            // peek at what the inner DotQualified
+                            // returns. Common case is String.
+                            // Default to String to allow chains like
+                            // `s.trim().uppercase()`.
+                            Some(Ty::String)
+                        }
                         _ => None,
                     };
                     if matches!(recv_ty_candidate, Some(Ty::String)) {
