@@ -8243,7 +8243,7 @@ fn try_lower_multi_stmt_block_with_offset(
                     return Some((all, local_tys));
                 }
                 // Lower body via shared helper.
-                let mut body_mstmts = lower_loop_body(
+                let body_mstmts = lower_loop_body(
                     &body_children,
                     &mut name_to_local,
                     &mut next_slot,
@@ -8252,34 +8252,51 @@ fn try_lower_multi_stmt_block_with_offset(
                     fn_lookup,
                     &function_param_names,
                 )?;
-                // i = i ± step at end of body.
+                // i = i ± 1 in a separate step block (kotlinc's
+                // overflow-safe loop layout): body → check → step → body.
                 let one_slot = LocalId(next_slot);
                 next_slot += 1;
                 local_tys.push(Ty::Int);
-                body_mstmts.push(MStmt::Assign {
-                    dest: one_slot,
-                    value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(1)),
-                });
                 let step_op = if range_step > 0 {
                     skotch_mir::BinOp::AddI
                 } else {
                     skotch_mir::BinOp::SubI
                 };
-                body_mstmts.push(MStmt::Assign {
-                    dest: i_slot,
-                    value: skotch_mir::Rvalue::BinOp {
-                        op: step_op,
-                        lhs: i_slot,
-                        rhs: one_slot,
+                let step_stmts: Vec<MStmt> = vec![
+                    MStmt::Assign {
+                        dest: one_slot,
+                        value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(1)),
                     },
-                });
-                // Cond block stmts: cmp = i ≤/</≥ end.
+                    MStmt::Assign {
+                        dest: i_slot,
+                        value: skotch_mir::Rvalue::BinOp {
+                            op: step_op,
+                            lhs: i_slot,
+                            rhs: one_slot,
+                        },
+                    },
+                ];
+                // Initial cond block stmts: cmp = i ≤/</≥ end.
                 let cmp_slot = LocalId(next_slot);
+                next_slot += 1;
                 local_tys.push(Ty::Bool);
                 let cond_stmt = MStmt::Assign {
                     dest: cmp_slot,
                     value: skotch_mir::Rvalue::BinOp {
                         op: range_cmp_op,
+                        lhs: i_slot,
+                        rhs: end_slot,
+                    },
+                };
+                // Check block stmts: cmp_ne = i != end (to skip the
+                // overflow boundary).
+                let check_slot = LocalId(next_slot);
+                next_slot += 1;
+                local_tys.push(Ty::Bool);
+                let check_stmt = MStmt::Assign {
+                    dest: check_slot,
+                    value: skotch_mir::Rvalue::BinOp {
+                        op: skotch_mir::BinOp::CmpNe,
                         lhs: i_slot,
                         rhs: end_slot,
                     },
@@ -8419,23 +8436,45 @@ fn try_lower_multi_stmt_block_with_offset(
                     stmts: std::mem::take(&mut stmts),
                     terminator: Terminator::Goto(1),
                 };
+                // kotlinc's IntRange iteration layout:
+                //   0 pre  : pre stmts, Goto(1)
+                //   1 cond : cmp_le, Branch(body=2, exit=5)
+                //   2 body : body stmts, Goto(check=3)
+                //   3 check: cmp_ne, Branch(step=4, exit=5)
+                //   4 step : i++ , Goto(body=2)
+                //   5 exit : trailing + Return
                 let cond_block = BasicBlock {
                     stmts: vec![cond_stmt],
                     terminator: Terminator::Branch {
                         cond: cmp_slot,
                         then_block: 2,
-                        else_block: 3,
+                        else_block: 5,
                     },
                 };
                 let body_blk = BasicBlock {
                     stmts: body_mstmts,
-                    terminator: Terminator::Goto(1),
+                    terminator: Terminator::Goto(3),
+                };
+                let check_blk = BasicBlock {
+                    stmts: vec![check_stmt],
+                    terminator: Terminator::Branch {
+                        cond: check_slot,
+                        then_block: 4,
+                        else_block: 5,
+                    },
+                };
+                let step_blk = BasicBlock {
+                    stmts: step_stmts,
+                    terminator: Terminator::Goto(2),
                 };
                 let exit_terminator = match trailing_return_slot {
                     Some(slot) => Terminator::ReturnValue(slot),
                     None => Terminator::Return,
                 };
                 if let Some(mut exit_blocks) = multi_block_exit {
+                    // Multi-block exit path keeps the older simpler
+                    // layout (3-block body + exit-blocks) since exit
+                    // restructuring is more involved.
                     const SENT_BACK: u32 = 0xfffffffe;
                     const SENT_BREAK: u32 = 0xfffffffd;
                     let n = exit_blocks.len() as u32;
@@ -8461,7 +8500,30 @@ fn try_lower_multi_stmt_block_with_offset(
                             _ => {}
                         }
                     }
-                    let mut all = vec![pre_block, cond_block, body_blk];
+                    // Restore the simpler layout for this path: body
+                    // goes back to cond (no separate step/check).
+                    let mut body_with_step = body_blk.stmts.clone();
+                    body_with_step.extend(step_blk.stmts.clone());
+                    let body_blk_simple = BasicBlock {
+                        stmts: body_with_step,
+                        terminator: Terminator::Goto(1),
+                    };
+                    let cond_simple = BasicBlock {
+                        stmts: vec![MStmt::Assign {
+                            dest: cmp_slot,
+                            value: skotch_mir::Rvalue::BinOp {
+                                op: range_cmp_op,
+                                lhs: i_slot,
+                                rhs: end_slot,
+                            },
+                        }],
+                        terminator: Terminator::Branch {
+                            cond: cmp_slot,
+                            then_block: 2,
+                            else_block: 3,
+                        },
+                    };
+                    let mut all = vec![pre_block, cond_simple, body_blk_simple];
                     all.extend(exit_blocks);
                     all.push(BasicBlock {
                         stmts: final_return_stmts,
@@ -8473,7 +8535,10 @@ fn try_lower_multi_stmt_block_with_offset(
                     stmts: exit_stmts,
                     terminator: exit_terminator,
                 };
-                return Some((vec![pre_block, cond_block, body_blk, exit_block], local_tys));
+                return Some((
+                    vec![pre_block, cond_block, body_blk, check_blk, step_blk, exit_block],
+                    local_tys,
+                ));
             }
             // `if (cond) { then } else { else_ }` (or just then) as a
             // statement (result discarded). 4- or 3-block CFG:
@@ -17070,11 +17135,11 @@ mod tests {
             "InputKt",
         );
         let f = module.functions.iter().find(|f| f.name == "main").unwrap();
-        assert_eq!(f.blocks.len(), 4, "expected 4-block for-in CFG");
+        assert_eq!(f.blocks.len(), 6, "expected 6-block for-in CFG (pre/cond/body/check/step/exit)");
         let body_stmt_count = f.blocks[2].stmts.len();
         assert!(
-            body_stmt_count >= 4,
-            "expected ≥4 body stmts (val y init, println, i++), got {body_stmt_count}"
+            body_stmt_count >= 2,
+            "expected ≥2 body stmts (val y init, println), got {body_stmt_count}"
         );
     }
 
@@ -17088,9 +17153,9 @@ mod tests {
             "InputKt",
         );
         let f = module.functions.iter().find(|f| f.name == "main").unwrap();
-        assert_eq!(f.blocks.len(), 4);
-        // The exit block (index 3) should contain the println("done").
-        assert!(!f.blocks[3].stmts.is_empty());
+        assert_eq!(f.blocks.len(), 6);
+        // The exit block (index 5) should contain the println("done").
+        assert!(!f.blocks[5].stmts.is_empty());
     }
 
     #[test]
