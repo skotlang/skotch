@@ -107,7 +107,7 @@ fn dex_method(cf: &ClassFile, m: &Member, min_api: u32) -> Result<EncodedMethod>
         // (e.g. a nested loop's undefined φ-entry) we propagate its bail loudly
         // rather than risk a miscompile via the acyclic fallback.
         let item = if crate::ssa::method_has_loop(&c.bytecode) {
-            crate::ssa::dex_method_ssa(&c.bytecode, &params, instance)?
+            crate::ssa::dex_method_ssa(cf, &c.bytecode, &params, instance, &c.line_numbers)?
         } else {
             // Remap allocated → real DEX registers (d8's args-high placement).
             // This is the identity unless the method has register pressure beyond

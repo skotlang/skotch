@@ -732,6 +732,10 @@ pub(crate) fn live_intervals(f: &SsaFn, num: &Numbering) -> Vec<Interval> {
             note(v, bstart, bstart, &mut start, &mut end);
         }
         for &v in &f.blocks[b].body {
+            // A value with no result (a void call) reserves no register.
+            if !produces_value(&f.values[v as usize].op) {
+                continue;
+            }
             let d = num.def[v as usize];
             note(v, d, d, &mut start, &mut end);
             if live_out[b].contains(&v) {
@@ -770,6 +774,12 @@ fn operands(op: &SsaOp) -> Vec<ValId> {
         SsaOp::Unop { a, .. } => vec![*a],
         SsaOp::Invoke { args, .. } => args.clone(),
     }
+}
+
+/// Whether an op defines a result that needs a register. A void call defines no
+/// value (it's a pure side-effect statement).
+fn produces_value(op: &SsaOp) -> bool {
+    !matches!(op, SsaOp::Invoke { ret: None, .. })
 }
 
 fn term_operands(t: &Terminator) -> Vec<ValId> {
@@ -951,8 +961,14 @@ use skotch_dex::model::CodeItem;
 
 /// Full IR pipeline for a method body: SSA construction → numbering → live
 /// intervals → linear-scan allocation → DexBuilder.
-pub(crate) fn dex_method_ssa(bc: &[u8], params: &[String], instance: bool) -> Result<CodeItem> {
-    let mut f = build_ssa(bc, params, instance)?;
+pub(crate) fn dex_method_ssa(
+    cf: &ClassFile,
+    bc: &[u8],
+    params: &[String],
+    instance: bool,
+    line_numbers: &[(u16, u16)],
+) -> Result<CodeItem> {
+    let mut f = build_ssa(cf, bc, params, instance)?;
     // d8 builds its IR with lazily-created φ-nodes: a loop variable's φ is created
     // the first time its slot is *read*, so the φ for the variable used earliest in
     // the loop (the counter, read in the condition) gets the lower SSA number — and
@@ -965,7 +981,7 @@ pub(crate) fn dex_method_ssa(bc: &[u8], params: &[String], instance: bool) -> Re
     let num = number(&f);
     let ivs = live_intervals(&f, &num);
     let alloc = allocate(&f, &num, &ivs);
-    build_dex(&f, &num, &alloc)
+    build_dex(&f, &num, &alloc, line_numbers, params)
 }
 
 /// For each φ value, the earliest numbered position at which it is used (its
@@ -1163,15 +1179,71 @@ pub(crate) fn build_dex(
 
     let registers_size = alloc.registers_used.max(f.num_arg_registers);
     crate::regalloc::remap_insns(&mut insns, f.num_arg_registers, registers_size);
+    let debug_info = crate::bootstrap::build_debug_info(&positions, params);
     Ok(CodeItem {
         registers_size,
         ins_size: f.num_arg_registers,
-        outs_size: 0,
+        outs_size: outs,
         insns,
-        fixups: Vec::new(),
+        fixups: pool_fixups,
         tries: Vec::new(),
-        debug_info: None,
+        debug_info,
     })
+}
+
+/// Emits a method call: `invoke-* {args}` (35c) + a `move-result*` when the call
+/// returns a value (the result lands in `reg(v)`). Records the throwing-position
+/// for debug info, the method-ref fixup, and the outgoing-register count.
+#[allow(clippy::too_many_arguments)]
+fn emit_invoke(
+    f: &SsaFn,
+    insns: &mut Vec<u16>,
+    alloc: &Allocation,
+    v: ValId,
+    pool_fixups: &mut Vec<Fixup>,
+    outs: &mut u16,
+    positions: &mut Vec<(u32, u32)>,
+    line_numbers: &[(u16, u16)],
+) -> Result<()> {
+    let reg = |x: ValId| alloc.reg[x as usize];
+    let (dex_op, method, args, ret, jvm_pc) = match &f.values[v as usize].op {
+        SsaOp::Invoke { dex_op, method, args, ret, jvm_pc } => (*dex_op, method, args, ret, *jvm_pc),
+        _ => unreachable!(),
+    };
+    // Expand args into registers; a wide (long/double) arg occupies a pair.
+    let mut regs: Vec<u16> = Vec::new();
+    for &a in args {
+        let r = reg(a);
+        regs.push(r);
+        if f.values[a as usize].wide {
+            regs.push(r + 1);
+        }
+    }
+    if regs.len() > 5 || regs.iter().any(|&r| r > 15) {
+        bail!("ssa dexbuilder: invoke needs range form / >16 registers (not yet supported)");
+    }
+    // A throwing instruction records a debug position at its dex address.
+    if let Some(line) = crate::bootstrap::line_for(line_numbers, jvm_pc) {
+        positions.push((insns.len() as u32, line));
+    }
+    let argn = regs.len() as u16;
+    let g = if regs.len() == 5 { regs[4] } else { 0 };
+    insns.push(dex_op | (((argn << 4) | g) << 8));
+    let method_unit = insns.len();
+    insns.push(0); // method-ref placeholder, patched via the fixup
+    let mut nib: u16 = 0;
+    for (k, &r) in regs.iter().take(4).enumerate() {
+        nib |= r << (4 * k);
+    }
+    insns.push(nib);
+    pool_fixups.push(Fixup { unit: method_unit, item: ItemRef::Method(method.clone()), wide: false });
+    *outs = (*outs).max(argn);
+    if let Some(rk) = ret {
+        let dest = reg(v);
+        let mv: u16 = if rk.wide { 0x0b } else if rk.is_ref { 0x0c } else { 0x0a };
+        insns.push(mv | (dest << 8));
+    }
+    Ok(())
 }
 
 /// Emits the instruction defining `v` (the result lands in `reg(v)`).
@@ -1194,7 +1266,9 @@ fn emit_value(f: &SsaFn, insns: &mut Vec<u16>, alloc: &Allocation, v: ValId) -> 
             insns.push((reg(*a) & 0xff) | ((reg(*b) & 0xff) << 8));
         }
         SsaOp::Binop { jvm_op, a, b } => emit_binop(f, insns, alloc, dest, *jvm_op, *a, *b)?,
-        SsaOp::Phi { .. } | SsaOp::Argument { .. } | SsaOp::ConstString(_) => {
+        // Invokes are emitted by `emit_invoke` (they carry extra state); the
+        // rest define no emittable instruction on their own.
+        SsaOp::Phi { .. } | SsaOp::Argument { .. } | SsaOp::ConstString(_) | SsaOp::Invoke { .. } => {
             bail!("ssa dexbuilder: value {v} has no emittable instruction")
         }
     }
@@ -1318,7 +1392,19 @@ mod tests {
         let m = cf.methods.iter().find(|m| m.name == method).unwrap();
         let bc = &m.code.as_ref().unwrap().bytecode;
         let ps: Vec<String> = params.iter().map(|s| s.to_string()).collect();
-        build_ssa(bc, &ps, false).unwrap()
+        build_ssa(&cf, bc, &ps, false).unwrap()
+    }
+
+    /// Runs the full SSA dexer on a method of a fixture class, returning the code.
+    fn ssa_code(fixture: &str, method: &str, params: &[&str]) -> CodeItem {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../skotch-dex/tests/fixtures")
+            .join(fixture);
+        let cf = skotch_classfile::parse_class_file(&path).unwrap();
+        let m = cf.methods.iter().find(|m| m.name == method).unwrap();
+        let code = m.code.as_ref().unwrap();
+        let ps: Vec<String> = params.iter().map(|s| s.to_string()).collect();
+        dex_method_ssa(&cf, &code.bytecode, &ps, false, &code.line_numbers).unwrap()
     }
 
     #[test]
@@ -1383,17 +1469,9 @@ mod tests {
         assert_eq!(crate::regalloc::remap_register(alloc.reg[n as usize], 1, 2), 1);
     }
 
-    fn method_bc(name: &str) -> Vec<u8> {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../skotch-dex/tests/fixtures/Loop.class");
-        let cf = skotch_classfile::parse_class_file(&path).unwrap();
-        let m = cf.methods.iter().find(|m| m.name == name).unwrap();
-        m.code.as_ref().unwrap().bytecode.clone()
-    }
-
     #[test]
     fn count_dex_byte_identical() {
-        let code = dex_method_ssa(&method_bc("count"), &["I".to_string()], false).unwrap();
+        let code = ssa_code("Loop.class", "count", &["I"]);
         // d8: const/4 v0,#0; if-ge v0,v1,+5; add-int/lit8 v0,v0,#1; goto -4; return v0
         // (little-endian code units).
         let expected: Vec<u16> = vec![0x0012, 0x1035, 0x0005, 0x00d8, 0x0100, 0xfc28, 0x000f];
@@ -1407,7 +1485,7 @@ mod tests {
 
     #[test]
     fn sumto_dex_byte_identical() {
-        let code = dex_method_ssa(&method_bc("sumTo"), &["I".to_string()], false).unwrap();
+        let code = ssa_code("Loop.class", "sumTo", &["I"]);
         // d8: const/4 v0,#0; const/4 v1,#0; if-ge v0,v2,+6; add-int/2addr v1,v0;
         //     add-int/lit8 v0,v0,#1; goto -5; return v1
         // (i is the counter → v0/low register; s is the accumulator → v1; n → v2).

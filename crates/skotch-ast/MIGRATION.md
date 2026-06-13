@@ -1991,6 +1991,27 @@ receiver type guess; class-name receiver filter for toString (exclude Math/Integ
 
 At ~30-40 graduations per major shape extension, reaching 90%+ coverage realistically needs 10-15 more focused sessions of similar throughput.
 
+### 2026-06-13 (session 7 — BREAKTHROUGH push 70: suspend trampoline + Boxing)
+
+Parallel-agent investigation found the legacy mir-lower's suspend trampoline shape. Implementing it as two small patches to `try_lower_function_body_via_blocks` and the class-method lowering path produced the largest single-push graduation of the entire migration:
+
+**Push 70 (Null + ReturnValue for empty suspend bodies):**
+- Fully covered: 244 → **304** (+60 fixtures in one commit)
+
+**Push 71 (Boxing primitive return values via kotlin/coroutines/jvm/internal/Boxing.boxX):**
+- Fully covered: 304 → **479** (+175 fixtures in one commit)
+- Typed empty: 174 → 157
+
+**Combined push 70-71 standings:**
+- Fully covered: **479 / 968 (49.5%)** — up from 211 at session start (**+268 fixtures**)
+- Typed empty: **157 / 968 (16.2%)** — down from 288 (**−131 modules**)
+- mir-lower typed unit tests: 188 passing
+- Commits this session: **70+**
+
+The breakthrough: every suspend function whose body returns a primitive value (`suspend fun fn(x: Int): Int = x` and similar shapes) needs the return value boxed via `kotlin/coroutines/jvm/internal/Boxing.boxInt(I)Integer` (or boxLong/boxFloat/boxDouble/boxBoolean) before the ReturnValue terminator. The legacy pipeline emits this automatically; the typed pipeline was emitting an unboxed primitive return, which the JVM verifier accepts at the bytecode level but produces different stmt counts (and ultimately incorrect bytecode for downstream consumers expecting the boxed Object).
+
+The fix is exactly what the parallel-agent research predicted: 30-line patch, two emission sites. Coverage doubled in one session from grinding shape extensions to the suspend trampoline insight.
+
 ### 2026-06-12 (session 7 — push 43: top-level if-handler exit supports control-flow trailing)
 
 The single-arm if-handler in `try_lower_multi_stmt_block_with_offset` builds a 3- or 4-block CFG with a single join block for trailing children. When the trailing has `while`/`for`/`return`, the `lower_loop_body` call inside join used to fail and the entire function became a placeholder.
