@@ -18,6 +18,8 @@
 
 use crate::bootstrap::{split_blocks, Block};
 use anyhow::{bail, Result};
+use skotch_classfile::model::ClassFile;
+use skotch_dex::model::{Fixup, ItemRef, MethodRef, ProtoRef};
 use std::collections::{BTreeMap, BTreeSet};
 
 // ───────────────────────────── SSA IR ─────────────────────────────
@@ -37,6 +39,24 @@ pub(crate) enum SsaOp {
     Binop { jvm_op: u8, a: ValId, b: ValId },
     Unop { jvm_op: u8, a: ValId },
     Cmp { jvm_op: u8, a: ValId, b: ValId },
+    /// A method call: emits `invoke-* {args}` (+ `move-result` if non-void). The
+    /// value's register is the move-result destination; void calls allocate no
+    /// register. `ret` is the result kind, `None` for void. `jvm_pc` locates the
+    /// source line for the throwing-instruction debug position.
+    Invoke {
+        dex_op: u16,
+        method: MethodRef,
+        args: Vec<ValId>,
+        ret: Option<RetKind>,
+        jvm_pc: u32,
+    },
+}
+
+/// The result kind of a non-void call (selects the `move-result` variant).
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct RetKind {
+    pub(crate) wide: bool,
+    pub(crate) is_ref: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -275,7 +295,12 @@ pub(crate) fn method_has_loop(bc: &[u8]) -> bool {
 /// Builds the SSA form of a method body (loop-capable). Handles the integer
 /// loop/branch subset (loads, int constants, iinc, int binops, comparisons,
 /// conditional branches, gotos, returns); bails on anything else for now.
-pub(crate) fn build_ssa(bc: &[u8], params: &[String], instance: bool) -> Result<SsaFn> {
+pub(crate) fn build_ssa(
+    cf: &ClassFile,
+    bc: &[u8],
+    params: &[String],
+    instance: bool,
+) -> Result<SsaFn> {
     let cfg = Cfg::build(bc)?;
     let n = cfg.len();
     let idom = dominators(&cfg);
@@ -357,7 +382,7 @@ pub(crate) fn build_ssa(bc: &[u8], params: &[String], instance: bool) -> Result<
         versions.entry(slot).or_default().push(v);
     }
 
-    rename(&cfg, bc, &children, &block_phi_slots, &mut blocks, &mut b, &mut versions, 0)?;
+    rename(cf, &cfg, bc, &children, &block_phi_slots, &mut blocks, &mut b, &mut versions, 0)?;
 
     Ok(SsaFn { values, blocks, num_arg_registers })
 }
@@ -375,6 +400,7 @@ impl<'a> Builder<'a> {
 
 #[allow(clippy::too_many_arguments)]
 fn rename(
+    cf: &ClassFile,
     cfg: &Cfg,
     bc: &[u8],
     children: &[Vec<usize>],
@@ -481,6 +507,47 @@ fn rename(
             }
             0xb1 => { term = Some(Terminator::Return(None)); pc += 1; }
             0xac | 0xad | 0xae | 0xaf | 0xb0 => { term = Some(Terminator::Return(Some(stack.pop().unwrap()))); pc += 1; }
+            // method calls: invokevirtual/special/static/interface
+            0xb6 | 0xb7 | 0xb8 | 0xb9 => {
+                let idx = u16::from_be_bytes([bc[pc + 1], bc[pc + 2]]);
+                let (class, name, desc) = cf.constant_pool.member_ref(idx)?;
+                let (mparams, ret) = crate::bootstrap::parse_descriptor(&desc)?;
+                let is_static = op == 0xb8;
+                let argc = mparams.len() + if is_static { 0 } else { 1 };
+                let mut args: Vec<ValId> = Vec::with_capacity(argc);
+                for _ in 0..argc {
+                    args.push(stack.pop().unwrap());
+                }
+                args.reverse();
+                let dex_op: u16 = match op {
+                    0xb6 => 0x6e,                                          // invoke-virtual
+                    0xb7 => if name == "<init>" { 0x70 } else { 0x6f },    // invoke-direct/super
+                    0xb8 => 0x71,                                          // invoke-static
+                    0xb9 => 0x72,                                          // invoke-interface
+                    _ => unreachable!(),
+                };
+                let method = MethodRef {
+                    class: skotch_classfile::constant_pool::internal_to_descriptor(&class),
+                    proto: ProtoRef { return_type: ret.clone(), params: mparams },
+                    name,
+                };
+                let ret_kind = if ret == "V" {
+                    None
+                } else {
+                    Some(RetKind { wide: ret == "J" || ret == "D", is_ref: crate::bootstrap::is_ref(&ret) })
+                };
+                let wide = ret_kind.map(|r| r.wide).unwrap_or(false);
+                let v = b.new(
+                    SsaOp::Invoke { dex_op, method, args, ret: ret_kind, jvm_pc: pc as u32 },
+                    wide,
+                    blk,
+                );
+                blocks[blk].body.push(v);
+                if ret_kind.is_some() {
+                    stack.push(v);
+                }
+                pc += if op == 0xb9 { 5 } else { 3 };
+            }
             other => bail!("ssa: unsupported opcode {other:#04x} (loop subset only)"),
         }
     }
@@ -511,7 +578,7 @@ fn rename(
 
     // Recurse into dominator-tree children.
     for &c in &children[blk] {
-        rename(cfg, bc, children, block_phi_slots, blocks, b, versions, c)?;
+        rename(cf, cfg, bc, children, block_phi_slots, blocks, b, versions, c)?;
     }
 
     // Pop versions defined in this block.
@@ -701,6 +768,7 @@ fn operands(op: &SsaOp) -> Vec<ValId> {
         SsaOp::Phi { .. } | SsaOp::Argument { .. } | SsaOp::ConstInt(_) | SsaOp::ConstLong(_) | SsaOp::ConstString(_) => Vec::new(),
         SsaOp::Binop { a, b, .. } | SsaOp::Cmp { a, b, .. } => vec![*a, *b],
         SsaOp::Unop { a, .. } => vec![*a],
+        SsaOp::Invoke { args, .. } => args.clone(),
     }
 }
 
@@ -999,11 +1067,22 @@ fn reorder_entry_inits(f: &mut SsaFn, ranks: &BTreeMap<ValId, u32>) {
 /// Emits a DEX code item from the SSA form + allocation. φ-nodes are no-ops when
 /// coalesced (their value already lives in the shared register). Registers are
 /// emitted in allocated space and then remapped args-high by `crate::regalloc`.
-pub(crate) fn build_dex(f: &SsaFn, num: &Numbering, alloc: &Allocation) -> Result<CodeItem> {
+pub(crate) fn build_dex(
+    f: &SsaFn,
+    num: &Numbering,
+    alloc: &Allocation,
+    line_numbers: &[(u16, u16)],
+    params: &[String],
+) -> Result<CodeItem> {
     let mut insns: Vec<u16> = Vec::new();
     let mut block_unit = vec![0usize; f.blocks.len()];
     // (offset_word_index, target_block, is_goto)
     let mut fixups: Vec<(usize, usize, bool)> = Vec::new();
+    // Constant-pool references (method/field) patched by the writer.
+    let mut pool_fixups: Vec<Fixup> = Vec::new();
+    // (dex_addr, line) at throwing instructions, for the debug_info.
+    let mut positions: Vec<(u32, u32)> = Vec::new();
+    let mut outs: u16 = 0;
     let reg = |v: ValId| alloc.reg[v as usize];
 
     for (pos, &b) in num.layout.iter().enumerate() {
@@ -1021,7 +1100,11 @@ pub(crate) fn build_dex(f: &SsaFn, num: &Numbering, alloc: &Allocation) -> Resul
             if is_rematerialized(f, v) {
                 continue;
             }
-            emit_value(f, &mut insns, alloc, v)?;
+            if let SsaOp::Invoke { .. } = &f.values[v as usize].op {
+                emit_invoke(f, &mut insns, alloc, v, &mut pool_fixups, &mut outs, &mut positions, line_numbers)?;
+            } else {
+                emit_value(f, &mut insns, alloc, v)?;
+            }
         }
         match &f.blocks[b].term {
             Terminator::Return(None) => insns.push(0x0e),

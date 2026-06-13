@@ -861,14 +861,7 @@ impl<'a> Emitter<'a> {
     }
 
     fn cur_line(&self) -> Option<u32> {
-        // The line of the last LineNumberTable entry with start_pc <= cur_pc.
-        let mut line = None;
-        for (start, l) in &self.line_numbers {
-            if *start as u32 <= self.cur_pc {
-                line = Some(*l as u32);
-            }
-        }
-        line
+        line_for(&self.line_numbers, self.cur_pc)
     }
 
     fn dex_addr(&self) -> u32 {
@@ -1460,30 +1453,7 @@ impl<'a> Emitter<'a> {
     }
 
     fn build_debug_info(&self, params: &[String]) -> Option<DebugInfo> {
-        if self.positions.is_empty() {
-            return None;
-        }
-        let mut positions = self.positions.clone();
-        positions.sort_by_key(|(addr, _)| *addr);
-        let line_start = positions[0].1;
-        let mut events = Vec::new();
-        let mut cur_addr: i64 = 0;
-        let mut cur_line: i64 = line_start as i64;
-        // d8 emits a debug position only when the line changes from the last
-        // emitted one — two throwing instructions on the same source line (e.g.
-        // `System.out.println(x)`: getstatic + invoke) get a single entry. The
-        // address state advances only on emitted entries, never on skips.
-        let mut first = true;
-        for (addr, line) in &positions {
-            if !first && *line as i64 == cur_line {
-                continue;
-            }
-            emit_position(&mut events, *addr as i64 - cur_addr, *line as i64 - cur_line);
-            cur_addr = *addr as i64;
-            cur_line = *line as i64;
-            first = false;
-        }
-        Some(DebugInfo { line_start, parameter_names: vec![None; params.len()], events })
+        build_debug_info(&self.positions, params)
     }
 }
 
@@ -1606,8 +1576,49 @@ fn instr_len(bc: &[u8], pc: usize) -> usize {
     }
 }
 
-fn is_ref(desc: &str) -> bool {
+pub(crate) fn is_ref(desc: &str) -> bool {
     desc.starts_with('L') || desc.starts_with('[')
+}
+
+/// The source line of the last `LineNumberTable` entry with `start_pc <= pc`.
+pub(crate) fn line_for(line_numbers: &[(u16, u16)], pc: u32) -> Option<u32> {
+    let mut line = None;
+    for (start, l) in line_numbers {
+        if *start as u32 <= pc {
+            line = Some(*l as u32);
+        }
+    }
+    line
+}
+
+/// Builds a method's `debug_info` from positions recorded at throwing
+/// instructions (d8's release shape): a position is emitted only when the line
+/// changes from the last emitted one; the address state advances only on emitted
+/// entries. Returns `None` when there are no positions (no debug_info_item).
+pub(crate) fn build_debug_info(
+    positions: &[(u32, u32)],
+    params: &[String],
+) -> Option<DebugInfo> {
+    if positions.is_empty() {
+        return None;
+    }
+    let mut positions = positions.to_vec();
+    positions.sort_by_key(|(addr, _)| *addr);
+    let line_start = positions[0].1;
+    let mut events = Vec::new();
+    let mut cur_addr: i64 = 0;
+    let mut cur_line: i64 = line_start as i64;
+    let mut first = true;
+    for (addr, line) in &positions {
+        if !first && *line as i64 == cur_line {
+            continue;
+        }
+        emit_position(&mut events, *addr as i64 - cur_addr, *line as i64 - cur_line);
+        cur_addr = *addr as i64;
+        cur_line = *line as i64;
+        first = false;
+    }
+    Some(DebugInfo { line_start, parameter_names: vec![None; params.len()], events })
 }
 /// JVM comparison opcode → (DEX `cmp*` op, operands-are-wide). The narrow
 /// result is -1/0/1; `cmpl`/`cmpg` differ only in NaN handling.

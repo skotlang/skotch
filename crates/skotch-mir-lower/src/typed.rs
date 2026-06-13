@@ -16562,14 +16562,55 @@ fn method_from_fun_with_class(
     };
     if is_suspend && !is_abstract {
         if let Some(last_block) = blocks.last_mut() {
-            if matches!(last_block.terminator, Terminator::Return) {
-                let null_slot = skotch_mir::LocalId(locals.len() as u32);
-                locals.push(Ty::Nullable(Box::new(Ty::Any)));
-                last_block.stmts.push(skotch_mir::Stmt::Assign {
-                    dest: null_slot,
-                    value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Null),
-                });
-                last_block.terminator = Terminator::ReturnValue(null_slot);
+            match &last_block.terminator {
+                Terminator::Return => {
+                    let null_slot = skotch_mir::LocalId(locals.len() as u32);
+                    locals.push(Ty::Nullable(Box::new(Ty::Any)));
+                    last_block.stmts.push(skotch_mir::Stmt::Assign {
+                        dest: null_slot,
+                        value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Null),
+                    });
+                    last_block.terminator = Terminator::ReturnValue(null_slot);
+                }
+                Terminator::ReturnValue(slot) => {
+                    let slot = *slot;
+                    let slot_ty = locals
+                        .get(slot.0 as usize)
+                        .cloned()
+                        .unwrap_or(Ty::Any);
+                    let (box_method, box_desc): (Option<&str>, &str) =
+                        match slot_ty {
+                            Ty::Int => (Some("boxInt"), "(I)Ljava/lang/Integer;"),
+                            Ty::Long => (Some("boxLong"), "(J)Ljava/lang/Long;"),
+                            Ty::Float => (Some("boxFloat"), "(F)Ljava/lang/Float;"),
+                            Ty::Double => {
+                                (Some("boxDouble"), "(D)Ljava/lang/Double;")
+                            }
+                            Ty::Bool => {
+                                (Some("boxBoolean"), "(Z)Ljava/lang/Boolean;")
+                            }
+                            _ => (None, ""),
+                        };
+                    if let Some(method) = box_method {
+                        let boxed_slot = skotch_mir::LocalId(locals.len() as u32);
+                        locals.push(Ty::Any);
+                        last_block.stmts.push(skotch_mir::Stmt::Assign {
+                            dest: boxed_slot,
+                            value: skotch_mir::Rvalue::Call {
+                                kind: skotch_mir::CallKind::StaticJava {
+                                    class_name:
+                                        "kotlin/coroutines/jvm/internal/Boxing"
+                                            .to_string(),
+                                    method_name: method.to_string(),
+                                    descriptor: box_desc.to_string(),
+                                },
+                                args: vec![slot],
+                            },
+                        });
+                        last_block.terminator = Terminator::ReturnValue(boxed_slot);
+                    }
+                }
+                _ => {}
             }
         }
     }
