@@ -38,6 +38,29 @@ pub fn compile_source(
     )
 }
 
+/// Compile a pre-parsed typed [`KtFile`] to a [`MirModule`]. Used by
+/// the multi-file build pipeline (skotch-cli/kotlinc) where files are
+/// parsed in Phase 1 (gather) and compiled in Phase 2.
+pub fn compile_ast(
+    file: skotch_ast::KtFile<'_>,
+    wrapper_class: &str,
+    interner: &mut Interner,
+    diags: &mut Diagnostics,
+    package_symbols: Option<&PackageSymbolTable>,
+) -> MirModule {
+    let resolved = resolve_file(file, interner, package_symbols);
+    let typed = skotch_typeck::typed::type_check(file, &resolved, interner, diags, package_symbols);
+    skotch_mir_lower::typed::lower_file(
+        file,
+        &resolved,
+        &typed,
+        interner,
+        diags,
+        wrapper_class,
+        package_symbols,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -206,8 +229,9 @@ mod tests {
             .iter()
             .find(|f| f.name == "lookup")
             .unwrap();
-        // 2 arms × 2 blocks + 1 else + 1 join = 6 blocks.
-        assert_eq!(f.blocks.len(), 6);
+        // pre (subject-capture or empty for primitive subject) + 2 arms × 2 blocks
+        // + 1 else + 1 join = 7 blocks.
+        assert_eq!(f.blocks.len(), 7);
     }
 
     #[test]

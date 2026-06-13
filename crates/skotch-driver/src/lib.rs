@@ -10,12 +10,7 @@ use std::path::{Path, PathBuf};
 
 use skotch_diagnostics::{render, Diagnostics};
 use skotch_intern::Interner;
-use skotch_lexer::lex;
-use skotch_mir_lower::lower_file;
-use skotch_parser::parse_file;
-use skotch_resolve::resolve_file;
 use skotch_span::SourceMap;
-use skotch_typeck::type_check;
 
 pub mod typed;
 
@@ -74,75 +69,19 @@ pub fn compile_source(
     diags: &mut Diagnostics,
     package_symbols: Option<&skotch_resolve::PackageSymbolTable>,
 ) -> skotch_mir::MirModule {
-    let lexed = lex(file_id, source, diags);
-    let ast = parse_file(&lexed, interner, diags);
-    let resolved = resolve_file(&ast, interner, diags, package_symbols);
-    let typed = type_check(&ast, &resolved, interner, diags, package_symbols);
-    let mir = lower_file(
-        &ast,
-        &resolved,
-        &typed,
+    // Cutover: the typed pipeline is now the only path. `file_id` is
+    // unused but retained for backward-compatible callers; the typed
+    // path identifies the file by an arbitrary name.
+    let _ = file_id;
+    let mir = typed::compile_source(
+        source,
+        "input.kt",
+        wrapper_class,
         interner,
         diags,
-        wrapper_class,
         package_symbols,
     );
     validate_mir(&mir, diags);
-    mir
-}
-
-/// Compile a pre-parsed AST to a [`MirModule`]. Used by the build pipeline
-/// which parses all files in Phase 1 (gather) and compiles in Phase 2.
-pub fn compile_ast(
-    ast: &skotch_syntax::KtFile,
-    wrapper_class: &str,
-    interner: &mut Interner,
-    diags: &mut Diagnostics,
-    package_symbols: Option<&skotch_resolve::PackageSymbolTable>,
-) -> skotch_mir::MirModule {
-    let timing = std::env::var("SKOTCH_TIMING").is_ok();
-    let t0 = if timing {
-        Some(std::time::Instant::now())
-    } else {
-        None
-    };
-    let resolved = resolve_file(ast, interner, diags, package_symbols);
-    let t_resolve = t0.map(|t| t.elapsed().as_millis()).unwrap_or(0);
-    let t1 = if timing {
-        Some(std::time::Instant::now())
-    } else {
-        None
-    };
-    let typed = type_check(ast, &resolved, interner, diags, package_symbols);
-    let t_typeck = t1.map(|t| t.elapsed().as_millis()).unwrap_or(0);
-    let t2 = if timing {
-        Some(std::time::Instant::now())
-    } else {
-        None
-    };
-    let mir = lower_file(
-        ast,
-        &resolved,
-        &typed,
-        interner,
-        diags,
-        wrapper_class,
-        package_symbols,
-    );
-    let t_lower = t2.map(|t| t.elapsed().as_millis()).unwrap_or(0);
-    let t3 = if timing {
-        Some(std::time::Instant::now())
-    } else {
-        None
-    };
-    validate_mir(&mir, diags);
-    let t_validate = t3.map(|t| t.elapsed().as_millis()).unwrap_or(0);
-    if timing {
-        eprintln!(
-            "skotch-timing/compile_ast: resolve={t_resolve}ms typeck={t_typeck}ms \
-             lower={t_lower}ms validate={t_validate}ms"
-        );
-    }
     mir
 }
 
@@ -187,25 +126,25 @@ fn emit_inner(opts: &EmitOptions, print_diags: bool) -> Result<()> {
         .with_context(|| format!("reading {}", opts.input.display()))?;
 
     let mut sm = SourceMap::new();
-    let file_id = sm.add(opts.input.clone(), source.clone());
+    let _file_id = sm.add(opts.input.clone(), source.clone());
 
     let mut interner = Interner::new();
     let mut diags = Diagnostics::new();
-    let lexed = lex(file_id, &source, &mut diags);
-    let ast = parse_file(&lexed, &mut interner, &mut diags);
-    let resolved = resolve_file(&ast, &mut interner, &mut diags, None);
-    let typed = type_check(&ast, &resolved, &mut interner, &mut diags, None);
-
     let wrapper = wrapper_class_for(&opts.input);
-    let mut mir = lower_file(
-        &ast,
-        &resolved,
-        &typed,
+    let file_name = opts
+        .input
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("input.kt");
+    let mut mir = typed::compile_source(
+        &source,
+        file_name,
+        &wrapper,
         &mut interner,
         &mut diags,
-        &wrapper,
         None,
     );
+    validate_mir(&mir, &mut diags);
 
     if skotch_compose::has_composables(&mir) {
         skotch_compose::compose_transform(&mut mir);

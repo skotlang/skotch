@@ -186,36 +186,42 @@ pub fn run_tests(opts: &TestOptions) -> Result<TestResult> {
     let mut test_sm = skotch_span::SourceMap::new();
 
     // Parse main sources to gather their declarations.
-    let mut main_parsed: Vec<(skotch_span::FileId, skotch_syntax::KtFile, String)> = Vec::new();
+    let mut main_parsed: Vec<(skotch_ast::ParsedFile, String)> = Vec::new();
     for path in &main_files {
         let text = std::fs::read_to_string(path).unwrap_or_default();
-        let fid = test_sm.add(path.clone(), text.clone());
-        let lexed = skotch_lexer::lex(fid, &text, &mut test_diags);
-        let ast = skotch_parser::parse_file(&lexed, &mut test_interner, &mut test_diags);
+        let _fid = test_sm.add(path.clone(), text.clone());
+        let file_name = path
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or("input.kt");
+        let parsed_file = skotch_ast::parse(file_name, &text);
         let wrapper = crate::pipeline_wrapper_class_for(path);
-        main_parsed.push((fid, ast, wrapper));
+        main_parsed.push((parsed_file, wrapper));
     }
-    let main_refs: Vec<(skotch_span::FileId, &skotch_syntax::KtFile, &str)> = main_parsed
+    let main_refs: Vec<(skotch_ast::KtFile<'_>, &str)> = main_parsed
         .iter()
-        .map(|(fid, ast, wc)| (*fid, ast, wc.as_str()))
+        .map(|(pf, wc)| (pf.file(), wc.as_str()))
         .collect();
-    let main_symbols = skotch_resolve::gather_declarations(&main_refs, &test_interner);
+    let main_symbols = skotch_resolve::typed::gather_declarations(&main_refs, &test_interner);
 
     // Now parse test files and gather combined symbol table.
-    let mut test_parsed: Vec<(skotch_span::FileId, skotch_syntax::KtFile, String)> = Vec::new();
+    let mut test_parsed: Vec<(skotch_ast::ParsedFile, String)> = Vec::new();
     for path in &test_files {
         let text = std::fs::read_to_string(path)?;
-        let fid = test_sm.add(path.clone(), text.clone());
-        let lexed = skotch_lexer::lex(fid, &text, &mut test_diags);
-        let ast = skotch_parser::parse_file(&lexed, &mut test_interner, &mut test_diags);
+        let _fid = test_sm.add(path.clone(), text.clone());
+        let file_name = path
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or("input.kt");
+        let parsed_file = skotch_ast::parse(file_name, &text);
         let wrapper = crate::pipeline_wrapper_class_for(path);
-        test_parsed.push((fid, ast, wrapper));
+        test_parsed.push((parsed_file, wrapper));
     }
-    let test_refs: Vec<(skotch_span::FileId, &skotch_syntax::KtFile, &str)> = test_parsed
+    let test_refs: Vec<(skotch_ast::KtFile<'_>, &str)> = test_parsed
         .iter()
-        .map(|(fid, ast, wc)| (*fid, ast, wc.as_str()))
+        .map(|(pf, wc)| (pf.file(), wc.as_str()))
         .collect();
-    let test_symbols = skotch_resolve::gather_declarations(&test_refs, &test_interner);
+    let test_symbols = skotch_resolve::typed::gather_declarations(&test_refs, &test_interner);
 
     // Merge main + test symbols into combined table.
     let mut combined_symbols = main_symbols;
@@ -230,9 +236,9 @@ pub fn run_tests(opts: &TestOptions) -> Result<TestResult> {
     }
 
     // Compile test files with the combined symbol table.
-    for (_fid, ast, wrapper) in &test_parsed {
-        let mir = skotch_driver::compile_ast(
-            ast,
+    for (pf, wrapper) in &test_parsed {
+        let mir = skotch_driver::typed::compile_ast(
+            pf.file(),
             wrapper,
             &mut test_interner,
             &mut test_diags,

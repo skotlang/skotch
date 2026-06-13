@@ -13,11 +13,9 @@ use anyhow::{anyhow, Context, Result};
 use std::path::{Path, PathBuf};
 
 use skotch_diagnostics::{render, Diagnostics};
-use skotch_driver::{compile_ast, wrapper_class_for};
+use skotch_driver::{typed::compile_ast, wrapper_class_for};
 use skotch_intern::Interner;
-use skotch_lexer::lex;
-use skotch_parser::parse_file;
-use skotch_resolve::{gather_declarations, PackageSymbolTable};
+use skotch_resolve::{typed::gather_declarations, PackageSymbolTable};
 use skotch_span::SourceMap;
 
 /// Parsed kotlinc invocation.
@@ -142,34 +140,39 @@ pub fn run(raw_args: &[String]) -> Result<()> {
     let mut t_compose_ms: u128 = 0;
     let mut t_backend_ms: u128 = 0;
 
-    let mut parsed: Vec<(skotch_span::FileId, skotch_syntax::KtFile, String)> = Vec::new();
+    // Phase 1: parse all sources via the typed-AST front-end.
+    let mut parsed: Vec<(skotch_ast::ParsedFile, String)> = Vec::new();
     for path in &source_files {
         let t0 = std::time::Instant::now();
         let text =
             std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
-        let file_id = sm.add(path.clone(), text.clone());
-        let lexed = lex(file_id, &text, &mut diags);
-        let ast = parse_file(&lexed, &mut interner, &mut diags);
+        let _file_id = sm.add(path.clone(), text.clone());
+        let file_name = path
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or("input.kt")
+            .to_string();
+        let parsed_file = skotch_ast::parse(&file_name, &text);
         let wrapper = wrapper_class_for(path);
-        parsed.push((file_id, ast, wrapper));
+        parsed.push((parsed_file, wrapper));
         t_lex_parse_ms += t0.elapsed().as_millis();
     }
 
     // Gather declarations into a shared symbol table so cross-file refs
     // resolve during per-file compilation (kotlinc semantics).
-    let refs: Vec<(skotch_span::FileId, &skotch_syntax::KtFile, &str)> = parsed
+    let refs: Vec<(skotch_ast::KtFile<'_>, &str)> = parsed
         .iter()
-        .map(|(fid, ast, wc)| (*fid, ast, wc.as_str()))
+        .map(|(pf, wc)| (pf.file(), wc.as_str()))
         .collect();
     let t_gather = std::time::Instant::now();
     let combined_symbols: PackageSymbolTable = gather_declarations(&refs, &interner);
     t_gather_ms += t_gather.elapsed().as_millis();
 
     let mut all_classes: Vec<(String, Vec<u8>)> = Vec::new();
-    for (_fid, ast, wrapper) in &parsed {
+    for (pf, wrapper) in &parsed {
         let t_ast = std::time::Instant::now();
         let mut mir = compile_ast(
-            ast,
+            pf.file(),
             wrapper,
             &mut interner,
             &mut diags,
