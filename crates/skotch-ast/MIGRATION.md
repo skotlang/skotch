@@ -1929,6 +1929,47 @@ large batch of shape extensions guided by parallel-agent fixture analysis.
 25-extension-function, 275-string-length, 276-int-tostring, 283-double-to-string,
 73-extension-function-basic, 1214-java-getter-property, 1292-char-stringbuilder-append.
 
+### 2026-06-13 (session 7 — pushes 56-65: long tail of shape extensions)
+
+After the initial burst, continued adding targeted shape support per parallel-agent
+recommendations. Each push was small (1-5 fixtures graduated) but cumulative impact
+brought coverage from 230 → 244.
+
+**Push 56-58**: String VirtualJava expansion (substring/contains/indexOf/equals/
+compareTo/get/replace), String.repeat → StringsKt.
+
+**Push 59-60**: Java static dispatcher growth — Math.addExact/subtractExact/
+multiplyExact, Math.absExact, full FQN qualifier walk (`java.lang.System.X` resolves
+identically to `System.X`).
+
+**Push 61**: `KtOperationReference.text()` recurses into nested REFERENCE_EXPRESSION,
+unblocking SIL's infix-function operator AST shape — for-handler now accepts
+`until` / `downTo` range operators with proper cmp+step direction.
+
+**Push 62**: `a..b` IntRange construction outside for-context (`val r = 1..5`).
+
+**Push 63**: `1 to "one"` infix to → kotlin/TuplesKt.to → Pair; Pair.first/second
+property accessors.
+
+**Push 64**: `Long.MAX_VALUE` / `Integer.MAX_VALUE` etc. static constants emit Const.
+
+**Push 65**: Class instance fallbacks in rich expr — Virtual call for `obj.method(args)`,
+GetField for `obj.field` (when method/field not otherwise recognized).
+
+**Push 66**: Char.code property (no-op identity); Long literal detection in toString
+receiver type guess; class-name receiver filter for toString (exclude Math/Integer/etc).
+
+**Push 56-66 standings:**
+- Fully covered: **244 / 968 (25.2%)** (was 230 at start of push 56)
+- Typed empty: **227 / 968 (23.4%)** (was 248 at start)
+- mir-lower typed unit tests: **188 passing**
+- Total commits this session: **55+**
+
+**Additional fixtures graduated to 1.000:**
+229-fqn-java-call, 242-math-addexact, 275-string-length, 287-long-println,
+296-string-get-char, 297-string-equals, 298-string-compareto, 311-method-chain-types,
+318-string-repeat. Plus partial graduations (0.000 → 0.5+) for many more.
+
 ### 2026-06-12 (session 7 — push 43: top-level if-handler exit supports control-flow trailing)
 
 The single-arm if-handler in `try_lower_multi_stmt_block_with_offset` builds a 3- or 4-block CFG with a single join block for trailing children. When the trailing has `while`/`for`/`return`, the `lower_loop_body` call inside join used to fail and the entire function became a placeholder.
