@@ -11029,6 +11029,11 @@ fn lower_rich_expr_to_slot(
                                 Ty::Int,
                                 "charAt",
                             )),
+                            ("repeat", 1) => Some((
+                                "(Ljava/lang/CharSequence;I)Ljava/lang/String;",
+                                Ty::String,
+                                "@StringsKt.repeat",
+                            )),
                             ("toInt", 0) => Some((
                                 "(Ljava/lang/String;)I",
                                 Ty::Int,
@@ -11077,7 +11082,14 @@ fn lower_rich_expr_to_slot(
                             extra_locals.push(ret_ty);
                             // toInt/toLong/toDouble route to Integer/Long/Double.parseX
                             // (static call with String arg).
-                            let kind = if let Some(static_name) =
+                            let kind = if jvm_name.starts_with("@StringsKt.") {
+                                let m = &jvm_name["@StringsKt.".len()..];
+                                skotch_mir::CallKind::StaticJava {
+                                    class_name: "kotlin/text/StringsKt".to_string(),
+                                    method_name: m.to_string(),
+                                    descriptor: descriptor.to_string(),
+                                }
+                            } else if let Some(static_name) =
                                 jvm_name.strip_prefix("@parse")
                             {
                                 let cls = match static_name {
