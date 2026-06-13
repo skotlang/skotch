@@ -173,6 +173,12 @@ fn translate_code(
             // constants
             0x02..=0x08 => { stack.push(Val::ConstInt(op as i32 - 0x03)); pc += 1; } // iconst_m1..5
             0x09 | 0x0a => { stack.push(Val::ConstLong((op - 0x09) as i64)); pc += 1; } // lconst_0/1
+            // fconst_0/1/2 and dconst_0/1 push float/double bit patterns.
+            0x0b => { stack.push(Val::ConstInt(0)); pc += 1; }                           // fconst_0 = 0.0f
+            0x0c => { stack.push(Val::ConstInt(0x3f80_0000u32 as i32)); pc += 1; }        // fconst_1 = 1.0f
+            0x0d => { stack.push(Val::ConstInt(0x4000_0000u32 as i32)); pc += 1; }        // fconst_2 = 2.0f
+            0x0e => { stack.push(Val::ConstLong(0)); pc += 1; }                           // dconst_0 = 0.0
+            0x0f => { stack.push(Val::ConstLong(0x3ff0_0000_0000_0000u64 as i64)); pc += 1; } // dconst_1 = 1.0
             0x10 => { stack.push(Val::ConstInt(bc[pc + 1] as i8 as i32)); pc += 2; } // bipush
             0x11 => { stack.push(Val::ConstInt(i16::from_be_bytes([bc[pc + 1], bc[pc + 2]]) as i32)); pc += 3; } // sipush
             0x12 => { stack.push(e.ldc(cf, bc[pc + 1] as u16)?); pc += 2; } // ldc

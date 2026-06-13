@@ -10970,6 +10970,21 @@ fn lower_rich_expr_to_slot(
                                 Ty::String,
                                 "replace",
                             )),
+                            ("equals", 1) => Some((
+                                "(Ljava/lang/Object;)Z",
+                                Ty::Bool,
+                                "equals",
+                            )),
+                            ("compareTo", 1) => Some((
+                                "(Ljava/lang/String;)I",
+                                Ty::Int,
+                                "compareTo",
+                            )),
+                            ("get", 1) => Some((
+                                "(I)C",
+                                Ty::Int,
+                                "charAt",
+                            )),
                             ("toInt", 0) => Some((
                                 "(Ljava/lang/String;)I",
                                 Ty::Int,
