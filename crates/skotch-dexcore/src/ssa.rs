@@ -238,10 +238,11 @@ pub(crate) fn def_sites(cfg: &Cfg, bc: &[u8]) -> BTreeMap<u16, BTreeSet<usize>> 
         let mut pc = blk.start;
         while pc < blk.end {
             if let Some((slot, len)) = crate::bootstrap::store_slot(bc, pc) {
+                // A wide (long/double) value is ONE SSA variable named by its low
+                // slot; the high half (slot+1) is never read independently in valid
+                // bytecode, so adding it as a def-site would place a φ whose operands
+                // are undefined (a spurious bail). Track only the low slot.
                 sites.entry(slot as u16).or_default().insert(bi);
-                if crate::bootstrap::store_is_wide(bc[pc]) {
-                    sites.entry(slot as u16 + 1).or_default().insert(bi);
-                }
                 pc += len;
             } else if bc[pc] == 0x84 {
                 // iinc index, const — increments a local in place (a def + use).
@@ -459,6 +460,14 @@ fn rename(
             0x02..=0x08 => { let v = b.new(SsaOp::ConstInt(op as i32 - 0x03), false, blk); blocks[blk].body.push(v); stack.push(v); pc += 1; }
             0x10 => { let v = b.new(SsaOp::ConstInt(bc[pc + 1] as i8 as i32), false, blk); blocks[blk].body.push(v); stack.push(v); pc += 2; }
             0x11 => { let v = b.new(SsaOp::ConstInt(i16::from_be_bytes([bc[pc + 1], bc[pc + 2]]) as i32), false, blk); blocks[blk].body.push(v); stack.push(v); pc += 3; }
+            // long/double constants (lconst_0/1, dconst_0/1) — wide.
+            0x09 | 0x0a => { let v = b.new(SsaOp::ConstLong((op - 0x09) as i64), true, blk); blocks[blk].body.push(v); stack.push(v); pc += 1; }
+            0x0e => { let v = b.new(SsaOp::ConstLong(0), true, blk); blocks[blk].body.push(v); stack.push(v); pc += 1; }
+            0x0f => { let v = b.new(SsaOp::ConstLong(0x3ff0_0000_0000_0000u64 as i64), true, blk); blocks[blk].body.push(v); stack.push(v); pc += 1; }
+            // float constants (fconst_0/1/2) — narrow, the IEEE-754 bit pattern.
+            0x0b => { let v = b.new(SsaOp::ConstInt(0), false, blk); blocks[blk].body.push(v); stack.push(v); pc += 1; }
+            0x0c => { let v = b.new(SsaOp::ConstInt(0x3f80_0000u32 as i32), false, blk); blocks[blk].body.push(v); stack.push(v); pc += 1; }
+            0x0d => { let v = b.new(SsaOp::ConstInt(0x4000_0000u32 as i32), false, blk); blocks[blk].body.push(v); stack.push(v); pc += 1; }
             // stores: rename the slot to the popped value (no instruction)
             0x36..=0x3a => { let v = stack.pop().unwrap(); versions.entry(bc[pc + 1] as u16).or_default().push(v); pushed.push(bc[pc + 1] as u16); pc += 2; }
             0x3b..=0x3e => { let v = stack.pop().unwrap(); let s = (op - 0x3b) as u16; versions.entry(s).or_default().push(v); pushed.push(s); pc += 1; }
@@ -479,11 +488,30 @@ fn rename(
                 pushed.push(slot);
                 pc += 3;
             }
-            // int binops
-            0x60 | 0x64 | 0x68 | 0x6c | 0x70 | 0x7e | 0x80 | 0x82 | 0x78 | 0x7a | 0x7c => {
+            // arithmetic/bitwise/shift binops (int/long/float/double). Integer and
+            // long div/rem (0x6c/0x6d/0x70/0x71) are throwing — they need a debug
+            // position the binop path doesn't yet carry, so they bail below.
+            0x60..=0x73 | 0x78..=0x83 if !matches!(op, 0x6c | 0x6d | 0x70 | 0x71) => {
                 let rb = stack.pop().unwrap();
                 let ra = stack.pop().unwrap();
-                let v = b.new(SsaOp::Binop { jvm_op: op, a: ra, b: rb }, false, blk);
+                let v = b.new(SsaOp::Binop { jvm_op: op, a: ra, b: rb }, binop_result_wide(op), blk);
+                blocks[blk].body.push(v);
+                stack.push(v);
+                pc += 1;
+            }
+            // unary negation (ineg/lneg/fneg/dneg) — result width = operand width.
+            0x74..=0x77 => {
+                let a = stack.pop().unwrap();
+                let wide = op == 0x75 || op == 0x77;
+                let v = b.new(SsaOp::Unop { jvm_op: op, a }, wide, blk);
+                blocks[blk].body.push(v);
+                stack.push(v);
+                pc += 1;
+            }
+            // numeric conversions (i2l..i2s). Result width per the target type.
+            0x85..=0x93 => {
+                let a = stack.pop().unwrap();
+                let v = b.new(SsaOp::Unop { jvm_op: op, a }, conv_result_wide(op), blk);
                 blocks[blk].body.push(v);
                 stack.push(v);
                 pc += 1;
@@ -860,6 +888,25 @@ fn operands(op: &SsaOp) -> Vec<ValId> {
         SsaOp::ArrayPut { array, index, value, .. } => vec![*array, *index, *value],
         SsaOp::ArrayLength { array, .. } => vec![*array],
     }
+}
+
+/// Whether an arithmetic/bitwise/shift binop produces a wide (long/double) result.
+fn binop_result_wide(jvm_op: u8) -> bool {
+    matches!(
+        jvm_op,
+        // long: ladd/lsub/lmul/ldiv/lrem, land/lor/lxor, lshl/lshr/lushr
+        0x61 | 0x65 | 0x69 | 0x6d | 0x71 | 0x7f | 0x81 | 0x83 | 0x79 | 0x7b | 0x7d
+        // double: dadd/dsub/dmul/ddiv/drem
+        | 0x63 | 0x67 | 0x6b | 0x6f | 0x73
+    )
+}
+
+/// Whether a numeric conversion (i2l..i2s) produces a wide (long/double) result.
+fn conv_result_wide(jvm_op: u8) -> bool {
+    matches!(
+        jvm_op,
+        0x85 /*i2l*/ | 0x87 /*i2d*/ | 0x8a /*l2d*/ | 0x8c /*f2l*/ | 0x8d /*f2d*/ | 0x8f /*d2l*/
+    )
 }
 
 /// Whether an op defines a result that needs a register. A void call, a field
@@ -1431,7 +1478,12 @@ fn emit_value(f: &SsaFn, insns: &mut Vec<u16>, alloc: &Allocation, v: ValId) -> 
         SsaOp::ConstLong(c) => emit_const_long(insns, dest, *c),
         SsaOp::Unop { jvm_op, a } => {
             let dop = match jvm_op {
+                // negation: neg-int/long/float/double
                 0x74 => 0x7b, 0x75 => 0x7d, 0x76 => 0x7f, 0x77 => 0x80,
+                // conversions (i2l..i2s) → DEX 0x81..0x8f (12x, A=dest, B=src)
+                0x85 => 0x81, 0x86 => 0x82, 0x87 => 0x83, 0x88 => 0x84, 0x89 => 0x85,
+                0x8a => 0x86, 0x8b => 0x87, 0x8c => 0x88, 0x8d => 0x89, 0x8e => 0x8a,
+                0x8f => 0x8b, 0x90 => 0x8c, 0x91 => 0x8d, 0x92 => 0x8e, 0x93 => 0x8f,
                 other => bail!("ssa dexbuilder: unop {other:#x} unsupported"),
             };
             insns.push(dop | ((dest & 0xf) << 8) | ((reg(*a) & 0xf) << 12));

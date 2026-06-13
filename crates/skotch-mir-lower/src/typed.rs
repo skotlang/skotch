@@ -553,7 +553,10 @@ pub fn lower_file(
             if is_suspend {
                 // Apply suspend trampoline to EVERY Return/ReturnValue
                 // terminator in the function (multi-block bodies have
-                // multiple termination points).
+                // multiple termination points). The box-type uses the
+                // declared return_ty since intermediate slots may be
+                // typed Ty::Any.
+                let declared_ret = return_ty.clone();
                 for block in blocks.iter_mut() {
                     match &block.terminator {
                         Terminator::Return => {
@@ -570,10 +573,17 @@ pub fn lower_file(
                         }
                         Terminator::ReturnValue(slot) => {
                             let slot = *slot;
-                            let slot_ty = locals
-                                .get(slot.0 as usize)
-                                .cloned()
-                                .unwrap_or(Ty::Any);
+                            // Prefer declared return ty over local ty
+                            // (intermediate slots may be Ty::Any).
+                            let slot_ty = match &declared_ret {
+                                Ty::Int | Ty::Long | Ty::Float | Ty::Double | Ty::Bool => {
+                                    declared_ret.clone()
+                                }
+                                _ => locals
+                                    .get(slot.0 as usize)
+                                    .cloned()
+                                    .unwrap_or(Ty::Any),
+                            };
                             let (box_method, box_desc): (Option<&str>, &str) =
                                 match slot_ty {
                                     Ty::Int => (
@@ -16558,6 +16568,7 @@ fn method_from_fun_with_class(
         None
     };
     if is_suspend && !is_abstract {
+        let declared_ret = return_ty.clone();
         for block in blocks.iter_mut() {
             match &block.terminator {
                 Terminator::Return => {
@@ -16571,10 +16582,12 @@ fn method_from_fun_with_class(
                 }
                 Terminator::ReturnValue(slot) => {
                     let slot = *slot;
-                    let slot_ty = locals
-                        .get(slot.0 as usize)
-                        .cloned()
-                        .unwrap_or(Ty::Any);
+                    let slot_ty = match &declared_ret {
+                        Ty::Int | Ty::Long | Ty::Float | Ty::Double | Ty::Bool => {
+                            declared_ret.clone()
+                        }
+                        _ => locals.get(slot.0 as usize).cloned().unwrap_or(Ty::Any),
+                    };
                     let (box_method, box_desc): (Option<&str>, &str) =
                         match slot_ty {
                             Ty::Int => (Some("boxInt"), "(I)Ljava/lang/Integer;"),
