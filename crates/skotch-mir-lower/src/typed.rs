@@ -11413,12 +11413,12 @@ fn lower_rich_expr_to_slot(
                 // case where n is a known-Int local.
                 if method_n == Some("toString") {
                     // Filter out cases where receiver shouldn't use
-                    // this path (class-name references).
+                    // this path (class-name references; class
+                    // instances handled by the Virtual fallback).
                     let recv_is_int_like = match &dq_exprs[0] {
                         KtExpr::Reference(rr) => {
-                            // Skip class-name receivers (Math, etc.)
                             let n = rr.name();
-                            !matches!(
+                            let is_class_namespace = matches!(
                                 n,
                                 Some("Math")
                                     | Some("Integer")
@@ -11428,7 +11428,13 @@ fn lower_rich_expr_to_slot(
                                     | Some("Boolean")
                                     | Some("String")
                                     | Some("System")
-                            )
+                            );
+                            let is_class_instance = n
+                                .and_then(|name| lookup_name(name))
+                                .and_then(|s| extra_locals.get(s.0 as usize).cloned())
+                                .map(|ty| matches!(ty, Ty::Class(_) | Ty::String))
+                                .unwrap_or(false);
+                            !is_class_namespace && !is_class_instance
                         }
                         KtExpr::Integer(_)
                         | KtExpr::Float(_)
