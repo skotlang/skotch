@@ -285,8 +285,8 @@
 0.273	1231-companion-bare-ident	11	3	13	6	3
 0.273	1307-double-param-stackmap	55	15	9	2	1
 0.281	200-digit-sum	32	9	9	2	1
+0.286	1309-regex-matcher	378	108	39	24	11
 0.294	1260-list-indexed-checkcast	17	5	14	6	4
-0.296	1309-regex-matcher	378	112	39	24	11
 0.300	329-companion-factory	10	3	12	5	2
 0.300	338-super-call	10	3	12	5	2
 0.308	1316-n-queens-backtracking	78	24	11	4	2

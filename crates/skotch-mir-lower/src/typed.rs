@@ -10832,36 +10832,55 @@ fn lower_rich_expr_to_slot(
             .filter_map(KtExpr::cast)
             .collect();
         if dq_exprs.len() == 2 {
-            // String.length — property access on String.
+            // Java-style property access on builtin classes:
+            //   s.length, pair.first/second, etc.
             if let KtExpr::Reference(prop_ref) = &dq_exprs[1] {
                 if let Some(prop_name) = prop_ref.name() {
-                    if prop_name == "length" {
-                        // Receiver must be a String. Lower it and emit
-                        // invokevirtual java/lang/String.length()I.
-                        let recv_slot = lower_rich_expr_to_slot(
-                            dq_exprs[0],
-                            lookup_name,
-                            fn_lookup,
-                            next_slot,
-                            pre_stmts,
-                            extra_locals,
-                            strings,
-                        )?;
+                    let recv_slot_opt = lower_rich_expr_to_slot(
+                        dq_exprs[0],
+                        lookup_name,
+                        fn_lookup,
+                        next_slot,
+                        pre_stmts,
+                        extra_locals,
+                        strings,
+                    );
+                    if let Some(recv_slot) = recv_slot_opt {
                         let recv_ty = extra_locals
                             .get(recv_slot.0 as usize)
                             .cloned()
                             .unwrap_or(Ty::Any);
-                        if matches!(recv_ty, Ty::String | Ty::Any) {
+                        // (class, method, descriptor, ret_ty)
+                        let prop_dispatch: Option<(&str, &str, &str, Ty)> =
+                            match (&recv_ty, prop_name) {
+                                (Ty::String, "length") => {
+                                    Some(("java/lang/String", "length", "()I", Ty::Int))
+                                }
+                                (Ty::Class(c), "first") if c == "kotlin/Pair" => Some((
+                                    "kotlin/Pair",
+                                    "getFirst",
+                                    "()Ljava/lang/Object;",
+                                    Ty::Any,
+                                )),
+                                (Ty::Class(c), "second") if c == "kotlin/Pair" => Some((
+                                    "kotlin/Pair",
+                                    "getSecond",
+                                    "()Ljava/lang/Object;",
+                                    Ty::Any,
+                                )),
+                                _ => None,
+                            };
+                        if let Some((cls, method, desc, ret_ty)) = prop_dispatch {
                             let result_slot = LocalId(*next_slot);
                             *next_slot += 1;
-                            extra_locals.push(Ty::Int);
+                            extra_locals.push(ret_ty);
                             pre_stmts.push(MStmt::Assign {
                                 dest: result_slot,
                                 value: skotch_mir::Rvalue::Call {
                                     kind: skotch_mir::CallKind::VirtualJava {
-                                        class_name: "java/lang/String".to_string(),
-                                        method_name: "length".to_string(),
-                                        descriptor: "()I".to_string(),
+                                        class_name: cls.to_string(),
+                                        method_name: method.to_string(),
+                                        descriptor: desc.to_string(),
                                     },
                                     args: vec![recv_slot],
                                 },
