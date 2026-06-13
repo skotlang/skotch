@@ -137,6 +137,13 @@ fn translate_code(
     let instance = m.access_flags & 0x0008 == 0;
     let ins_size = arg_register_count(params, instance) as u16;
 
+    // Methods with control flow go through the CFG path (basic blocks + local
+    // liveness + branch fixups). The straight-line path below stays for the
+    // common case and never sees a branch.
+    if method_has_branches(&code.bytecode) {
+        return translate_code_cfg(cf, m, code, params, ins_size, min_api);
+    }
+
     let lu = count_local_loads(&code.bytecode, code.max_locals as usize)?;
     let mut e = Emitter::new(cf, ins_size, &code.line_numbers, lu.loads.clone(), min_api);
     // Single-assignment locals: JVM slot → the register-backed Val a store bound.
@@ -638,6 +645,28 @@ impl<'a> Emitter<'a> {
             self.insns.push(mv | (r << 8));
             Ok(Some(Val::Reg(r, wide)))
         }
+    }
+
+    /// neg-int / not-int style 12x unary: `op vA, vB`.
+    fn emit_unary(&mut self, op: u16, dest: u16, src: u16) {
+        self.insns.push(op | ((dest & 0xf) << 8) | ((src & 0xf) << 12));
+    }
+
+    /// if-testz vAA, +0000 (21t) — pushes a placeholder offset; returns the
+    /// unit index of the offset word so the caller can patch the branch target.
+    fn emit_if_z(&mut self, op: u16, reg: u16) -> usize {
+        self.insns.push(op | (reg << 8));
+        let unit = self.insns.len();
+        self.insns.push(0);
+        unit
+    }
+
+    /// if-test vA, vB, +0000 (22t) — placeholder offset; returns its unit index.
+    fn emit_if(&mut self, op: u16, a: u16, b: u16) -> usize {
+        self.insns.push(op | ((a & 0xf) << 8) | ((b & 0xf) << 12));
+        let unit = self.insns.len();
+        self.insns.push(0);
+        unit
     }
 
     fn return_void(&mut self) {

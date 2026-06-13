@@ -10793,16 +10793,73 @@ fn lower_rich_expr_to_slot(
                             .value_argument_list()
                             .map(|al| al.arguments().count())
                             .unwrap_or(0);
-                        let str_method: Option<(&str, Ty)> = match (method_n, arg_count) {
-                            ("uppercase", 0) => Some(("()Ljava/lang/String;", Ty::String)),
-                            ("lowercase", 0) => Some(("()Ljava/lang/String;", Ty::String)),
-                            ("isEmpty", 0) => Some(("()Z", Ty::Bool)),
-                            ("isNotEmpty", 0) => Some(("()Z", Ty::Bool)),
-                            ("isBlank", 0) => Some(("()Z", Ty::Bool)),
-                            ("trim", 0) => Some(("()Ljava/lang/String;", Ty::String)),
+                        // (descriptor, ret_ty, method_jvm_name) — None means
+                        // re-route to a Kotlin → JVM-named method.
+                        let str_method: Option<(&str, Ty, &str)> = match (method_n, arg_count) {
+                            ("uppercase", 0) => Some(("()Ljava/lang/String;", Ty::String, "uppercase")),
+                            ("lowercase", 0) => Some(("()Ljava/lang/String;", Ty::String, "lowercase")),
+                            ("isEmpty", 0) => Some(("()Z", Ty::Bool, "isEmpty")),
+                            ("isNotEmpty", 0) => Some(("()Z", Ty::Bool, "isNotEmpty")),
+                            ("isBlank", 0) => Some(("()Z", Ty::Bool, "isBlank")),
+                            ("trim", 0) => Some(("()Ljava/lang/String;", Ty::String, "trim")),
+                            ("substring", 1) => Some((
+                                "(I)Ljava/lang/String;",
+                                Ty::String,
+                                "substring",
+                            )),
+                            ("substring", 2) => Some((
+                                "(II)Ljava/lang/String;",
+                                Ty::String,
+                                "substring",
+                            )),
+                            ("contains", 1) => Some((
+                                "(Ljava/lang/CharSequence;)Z",
+                                Ty::Bool,
+                                "contains",
+                            )),
+                            ("startsWith", 1) => Some((
+                                "(Ljava/lang/String;)Z",
+                                Ty::Bool,
+                                "startsWith",
+                            )),
+                            ("endsWith", 1) => Some((
+                                "(Ljava/lang/String;)Z",
+                                Ty::Bool,
+                                "endsWith",
+                            )),
+                            ("indexOf", 1) => Some((
+                                "(Ljava/lang/String;)I",
+                                Ty::Int,
+                                "indexOf",
+                            )),
+                            ("lastIndexOf", 1) => Some((
+                                "(Ljava/lang/String;)I",
+                                Ty::Int,
+                                "lastIndexOf",
+                            )),
+                            ("replace", 2) => Some((
+                                "(Ljava/lang/CharSequence;Ljava/lang/CharSequence;)Ljava/lang/String;",
+                                Ty::String,
+                                "replace",
+                            )),
+                            ("toInt", 0) => Some((
+                                "(Ljava/lang/String;)I",
+                                Ty::Int,
+                                "@parseInt",
+                            )),
+                            ("toLong", 0) => Some((
+                                "(Ljava/lang/String;)J",
+                                Ty::Long,
+                                "@parseLong",
+                            )),
+                            ("toDouble", 0) => Some((
+                                "(Ljava/lang/String;)D",
+                                Ty::Double,
+                                "@parseDouble",
+                            )),
                             _ => None,
                         };
-                        if let Some((descriptor, ret_ty)) = str_method {
+                        if let Some((descriptor, ret_ty, jvm_name)) = str_method {
                             let recv_slot = lower_rich_expr_to_slot(
                                 dq_exprs[0],
                                 lookup_name,
@@ -10812,19 +10869,57 @@ fn lower_rich_expr_to_slot(
                                 extra_locals,
                                 strings,
                             )?;
+                            let mut arg_slots = vec![recv_slot];
+                            if let Some(arg_list) = call.value_argument_list() {
+                                for arg in arg_list.arguments() {
+                                    let arg_e = arg.expression()?;
+                                    let slot = lower_rich_expr_to_slot(
+                                        arg_e,
+                                        lookup_name,
+                                        fn_lookup,
+                                        next_slot,
+                                        pre_stmts,
+                                        extra_locals,
+                                        strings,
+                                    )?;
+                                    arg_slots.push(slot);
+                                }
+                            }
                             let result_slot = LocalId(*next_slot);
                             *next_slot += 1;
                             extra_locals.push(ret_ty);
+                            // toInt/toLong/toDouble route to Integer/Long/Double.parseX
+                            // (static call with String arg).
+                            let kind = if let Some(static_name) =
+                                jvm_name.strip_prefix("@parse")
+                            {
+                                let cls = match static_name {
+                                    "Int" => "java/lang/Integer",
+                                    "Long" => "java/lang/Long",
+                                    "Double" => "java/lang/Double",
+                                    _ => "java/lang/Object",
+                                };
+                                let method = match static_name {
+                                    "Int" => "parseInt",
+                                    "Long" => "parseLong",
+                                    "Double" => "parseDouble",
+                                    _ => "parse",
+                                };
+                                skotch_mir::CallKind::StaticJava {
+                                    class_name: cls.to_string(),
+                                    method_name: method.to_string(),
+                                    descriptor: descriptor.to_string(),
+                                }
+                            } else {
+                                skotch_mir::CallKind::VirtualJava {
+                                    class_name: "java/lang/String".to_string(),
+                                    method_name: jvm_name.to_string(),
+                                    descriptor: descriptor.to_string(),
+                                }
+                            };
                             pre_stmts.push(MStmt::Assign {
                                 dest: result_slot,
-                                value: skotch_mir::Rvalue::Call {
-                                    kind: skotch_mir::CallKind::VirtualJava {
-                                        class_name: "java/lang/String".to_string(),
-                                        method_name: method_n.to_string(),
-                                        descriptor: descriptor.to_string(),
-                                    },
-                                    args: vec![recv_slot],
-                                },
+                                value: skotch_mir::Rvalue::Call { kind, args: arg_slots },
                             });
                             return Some(result_slot);
                         }
