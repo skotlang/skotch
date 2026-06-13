@@ -79,11 +79,11 @@ fn set_field(insns: &mut [u16], base: usize, f: Field, v: u16) {
 fn dex_insn_len(op: u8) -> usize {
     match op {
         // 1-word: move-result(0x0a-0x0c), return-void(0x0e), return(0x0f-0x11),
-        //         const/4(0x12), move(0x01), array-length(0x21), unops(0x7b-0x8f),
-        //         2addr(0xb0-0xcf)
-        0x0a..=0x0c | 0x0e..=0x12 | 0x01 | 0x21 | 0x7b..=0x8f | 0xb0..=0xcf => 1,
-        // 3-word: const(0x14), const-wide/32(0x17), invoke 35c(0x6e-0x72)
-        0x14 | 0x17 | 0x6e..=0x72 => 3,
+        //         const/4(0x12), move(0x01), goto(0x28), array-length(0x21),
+        //         unops(0x7b-0x8f), 2addr(0xb0-0xcf)
+        0x0a..=0x0c | 0x0e..=0x12 | 0x01 | 0x21 | 0x28 | 0x7b..=0x8f | 0xb0..=0xcf => 1,
+        // 3-word: const(0x14), const-wide/32(0x17), goto/32(0x2a), invoke 35c(0x6e-0x72)
+        0x14 | 0x17 | 0x2a | 0x6e..=0x72 => 3,
         // 5-word: const-wide(0x18)
         0x18 => 5,
         // everything else our dexer emits is 2 words
@@ -115,8 +115,8 @@ fn reg_fields(op: u8) -> &'static [Field] {
         }
         // 22b (lit8) — AA in word0 + BB in word1 low byte
         0xd8..=0xdf => &[Field::ByteAA { w: 0 }, Field::ByteLo { w: 1 }],
-        // 23x (3addr binops, aget*/aput*) — AA word0, BB word1 low, CC word1 high
-        0x90..=0x9a | 0x44..=0x51 => {
+        // 23x (3addr binops, aget*/aput*, cmp*) — AA word0, BB word1 lo, CC hi
+        0x90..=0x9a | 0x44..=0x51 | 0x2d..=0x31 => {
             &[Field::ByteAA { w: 0 }, Field::ByteLo { w: 1 }, Field::ByteHi { w: 1 }]
         }
         _ => &[],

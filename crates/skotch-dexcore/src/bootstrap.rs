@@ -315,15 +315,15 @@ fn translate_code(
 
 /// A basic block: a half-open JVM bytecode range plus its successor block
 /// indices.
-struct Block {
-    start: usize,
-    end: usize,
-    succ: Vec<usize>,
+pub(crate) struct Block {
+    pub(crate) start: usize,
+    pub(crate) end: usize,
+    pub(crate) succ: Vec<usize>,
 }
 
 /// Maps a JVM conditional-branch opcode to its DEX op and whether it compares
 /// two registers (`if-test`, 22t) vs one against zero (`if-testz`, 21t).
-fn cond_branch_dex_op(jvm: u8) -> Option<(u16, bool)> {
+pub(crate) fn cond_branch_dex_op(jvm: u8) -> Option<(u16, bool)> {
     Some(match jvm {
         0x99 => (0x38, false), // ifeq        → if-eqz
         0x9a => (0x39, false), // ifne        → if-nez
@@ -343,7 +343,7 @@ fn cond_branch_dex_op(jvm: u8) -> Option<(u16, bool)> {
 
 /// JVM instruction length, complete for the opcodes the dexer accepts plus all
 /// branch/return forms (so block-boundary walks stay aligned).
-fn jvm_step_len(bc: &[u8], pc: usize) -> usize {
+pub(crate) fn jvm_step_len(bc: &[u8], pc: usize) -> usize {
     match bc[pc] {
         0x10 | 0x12 | 0x15..=0x19 | 0x36..=0x3a | 0xa9 | 0xbc => 2,
         0x11 | 0x13 | 0x14 | 0x84 | 0x99..=0xa7 | 0xb2..=0xb8 | 0xbb | 0xbd | 0xc0
@@ -352,6 +352,11 @@ fn jvm_step_len(bc: &[u8], pc: usize) -> usize {
         0xb9 | 0xba | 0xc8 | 0xc9 => 5,
         _ => 1,
     }
+}
+
+/// Whether a load opcode reads a wide (long/double) local.
+fn load_is_wide(op: u8) -> bool {
+    matches!(op, 0x16 | 0x18 | 0x1e..=0x21 | 0x26..=0x29)
 }
 
 /// The local slot a load opcode reads, or `None` if `op` is not a load.
@@ -405,7 +410,7 @@ fn is_bare_load_return(bc: &[u8], start: usize, end: usize) -> bool {
 }
 
 /// Splits bytecode into basic blocks with successor edges.
-fn split_blocks(bc: &[u8]) -> Result<Vec<Block>> {
+pub(crate) fn split_blocks(bc: &[u8]) -> Result<Vec<Block>> {
     use std::collections::BTreeSet;
     let mut leaders: BTreeSet<usize> = BTreeSet::new();
     leaders.insert(0);
@@ -473,6 +478,11 @@ fn block_liveness(blocks: &[Block], bc: &[u8], _max_locals: usize) -> Vec<std::c
             if let Some(slot) = load_slot_of(bc, pc) {
                 if !defined.contains(&slot) {
                     used[bi].insert(slot);
+                    // A wide local occupies two registers; its high half is live
+                    // too (it is never loaded on its own, so account for it here).
+                    if load_is_wide(bc[pc]) {
+                        used[bi].insert(slot + 1);
+                    }
                 }
             }
             if let Some((slot, _)) = store_slot(bc, pc) {
@@ -625,6 +635,27 @@ fn emit_cfg<'a>(
                     let r = cfg_materialize(&mut e, &mut used, &mut max_reg, &v)?;
                     e.emit_unary(0x7b, r, r);
                     stack.push(Val::Reg(r, false));
+                    pc += 1;
+                }
+                // long/float/double comparison → narrow -1/0/1 result (23x).
+                0x94..=0x98 => {
+                    let (dex_op, wide_ops) = cmp_op(op);
+                    let b = stack.pop().unwrap();
+                    let a = stack.pop().unwrap();
+                    let ra = cfg_materialize(&mut e, &mut used, &mut max_reg, &a)?;
+                    let rb = cfg_materialize(&mut e, &mut used, &mut max_reg, &b)?;
+                    // Float (narrow) cmp reuses the first operand's register; long/
+                    // double (wide) cmp takes a fresh register (matching d8).
+                    let dest = if wide_ops {
+                        alloc_lowest(&mut used, &mut max_reg, false)
+                    } else {
+                        used[ra as usize] = false;
+                        used[rb as usize] = false;
+                        alloc_lowest(&mut used, &mut max_reg, false)
+                    };
+                    e.insns.push(dex_op | (dest << 8));
+                    e.insns.push((ra & 0xff) | ((rb & 0xff) << 8));
+                    stack.push(Val::Reg(dest, false));
                     pc += 1;
                 }
                 0x99..=0xa4 => {
@@ -1455,7 +1486,12 @@ struct LocalUses {
 
 /// Decodes a JVM local store opcode to its slot index and instruction length,
 /// or `None` if `op` is not a store.
-fn store_slot(bc: &[u8], pc: usize) -> Option<(usize, usize)> {
+/// Whether a store opcode writes a wide (long/double) local.
+pub(crate) fn store_is_wide(op: u8) -> bool {
+    matches!(op, 0x37 | 0x39 | 0x3f..=0x42 | 0x47..=0x4a)
+}
+
+pub(crate) fn store_slot(bc: &[u8], pc: usize) -> Option<(usize, usize)> {
     let op = bc[pc];
     match op {
         0x36..=0x3a => Some((bc[pc + 1] as usize, 2)), // i/l/f/d/astore <idx>
@@ -1561,6 +1597,18 @@ fn instr_len(bc: &[u8], pc: usize) -> usize {
 fn is_ref(desc: &str) -> bool {
     desc.starts_with('L') || desc.starts_with('[')
 }
+/// JVM comparison opcode → (DEX `cmp*` op, operands-are-wide). The narrow
+/// result is -1/0/1; `cmpl`/`cmpg` differ only in NaN handling.
+pub(crate) fn cmp_op(jvm_op: u8) -> (u16, bool) {
+    match jvm_op {
+        0x94 => (0x31, true),  // lcmp  → cmp-long
+        0x95 => (0x2d, false), // fcmpl → cmpl-float
+        0x96 => (0x2e, false), // fcmpg → cmpg-float
+        0x97 => (0x2f, true),  // dcmpl → cmpl-double
+        _ => (0x30, true),     // dcmpg → cmpg-double
+    }
+}
+
 /// JVM array-load opcode → (DEX `aget*` op, result-is-wide).
 fn aget_op(jvm_op: u8) -> (u16, bool) {
     match jvm_op {
@@ -1604,7 +1652,7 @@ fn newarray_desc(atype: u8) -> &'static str {
     }
 }
 
-fn lit_ops(jvm_op: u8) -> Option<(u16, u16)> {
+pub(crate) fn lit_ops(jvm_op: u8) -> Option<(u16, u16)> {
     // (lit8 op, lit16 op) for `x <op> const` int binops. The literal is the
     // RIGHT operand, so non-commutative div/rem fold too (`a / 7`).
     match jvm_op {
@@ -1621,14 +1669,14 @@ fn lit_ops(jvm_op: u8) -> Option<(u16, u16)> {
 
 /// JVM `imul`/`lmul`/`fmul`/`dmul` — d8's `isMul()` for the Marshmallow
 /// `mul-int/2addr` workaround.
-fn is_mul_op(jvm_op: u8) -> bool {
+pub(crate) fn is_mul_op(jvm_op: u8) -> bool {
     matches!(jvm_op, 0x68..=0x6b)
 }
 
 /// Commutative arithmetic binops (add/mul/and/or/xor, all widths) — d8's
 /// `Binop.isCommutative()`. Used to let the result coalesce into the second
 /// operand's register when only that one is dead. (sub/div/rem/shifts are not.)
-fn is_commutative(jvm_op: u8) -> bool {
+pub(crate) fn is_commutative(jvm_op: u8) -> bool {
     matches!(jvm_op, 0x60..=0x63 | 0x68..=0x6b | 0x7e..=0x83)
 }
 
@@ -1661,7 +1709,7 @@ fn conv_op(jvm: u8) -> Option<(u16, bool)> {
     })
 }
 
-fn binop_2addr_op(jvm_op: u8) -> Option<u16> {
+pub(crate) fn binop_2addr_op(jvm_op: u8) -> Option<u16> {
     Some(match jvm_op {
         // int
         0x60 => 0xb0, 0x64 => 0xb1, 0x68 => 0xb2, 0x6c => 0xb3, 0x70 => 0xb4,
@@ -1677,7 +1725,7 @@ fn binop_2addr_op(jvm_op: u8) -> Option<u16> {
     })
 }
 
-fn binop_3addr_op(jvm_op: u8) -> Result<u16> {
+pub(crate) fn binop_3addr_op(jvm_op: u8) -> Result<u16> {
     Ok(match jvm_op {
         // int
         0x60 => 0x90, 0x64 => 0x91, 0x68 => 0x92, 0x6c => 0x93, 0x70 => 0x94,

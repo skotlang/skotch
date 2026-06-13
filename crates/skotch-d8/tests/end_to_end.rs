@@ -32,6 +32,30 @@ fn straightline_battery_byte_identical() {
     );
 }
 
+/// Long/float/double comparisons in branches: `if(longA >= longB)` →
+/// `cmp-long v0, v1, v3; if-ltz v0` (args high, cmp result fresh in v0), and
+/// `if(floatA < floatB)` → `cmpg-float v0, v0, v1; if-gez v0` (narrow cmp reuses
+/// the operand register).
+#[test]
+fn wide_compare_branch_battery_byte_identical() {
+    let cf = skotch_classfile::parse_class_file(&fixtures().join("Wcmp.class")).unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let produced = dex_classes(&[cf], &opts).unwrap();
+    let golden = std::fs::read(fixtures().join("Wcmp.d8.dex")).unwrap();
+    if produced != golden {
+        std::fs::write("/tmp/skotch-Wcmp-produced.dex", &produced).unwrap();
+    }
+    skotch_dex::validator::validate(&produced).expect("self-validation");
+    assert_eq!(
+        produced,
+        golden,
+        "Wide-compare branch battery: produced {} vs golden {}; first diff {:?}",
+        produced.len(),
+        golden.len(),
+        (0..produced.len().min(golden.len())).find(|&i| produced[i] != golden[i])
+    );
+}
+
 /// Negation (`neg-int`/`neg-long`, incl. `-(a+b)`) and a 3-argument static call
 /// (`invoke-static {v0,v1,v2}` — the 35c form with three register operands).
 #[test]

@@ -14,5 +14,6 @@
 
 pub mod bootstrap;
 pub mod regalloc;
+pub mod ssa;
 
 pub use bootstrap::dex_class;

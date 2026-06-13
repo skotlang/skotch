@@ -10638,21 +10638,52 @@ fn lower_inline_expr_to_slot(
             )?;
             match op_text.as_str() {
                 "-" => {
-                    // 0 - x
+                    // 0 - x; pick Int vs Long vs Double based on
+                    // inner's type when available.
+                    let inner_ty = extra_locals
+                        .get(inner_slot.0 as usize)
+                        .cloned()
+                        .unwrap_or(Ty::Int);
+                    let (zero_const, zero_ty, sub_op, ret_ty) = match inner_ty {
+                        Ty::Long => (
+                            skotch_mir::MirConst::Long(0),
+                            Ty::Long,
+                            skotch_mir::BinOp::SubL,
+                            Ty::Long,
+                        ),
+                        Ty::Double => (
+                            skotch_mir::MirConst::Double(0.0),
+                            Ty::Double,
+                            skotch_mir::BinOp::SubD,
+                            Ty::Double,
+                        ),
+                        Ty::Float => (
+                            skotch_mir::MirConst::Float(0.0),
+                            Ty::Float,
+                            skotch_mir::BinOp::SubF,
+                            Ty::Float,
+                        ),
+                        _ => (
+                            skotch_mir::MirConst::Int(0),
+                            Ty::Int,
+                            skotch_mir::BinOp::SubI,
+                            Ty::Int,
+                        ),
+                    };
                     let zero_slot = LocalId(*next_slot);
                     *next_slot += 1;
-                    extra_locals.push(Ty::Int);
+                    extra_locals.push(zero_ty);
                     pre_stmts.push(MStmt::Assign {
                         dest: zero_slot,
-                        value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(0)),
+                        value: skotch_mir::Rvalue::Const(zero_const),
                     });
                     let result = LocalId(*next_slot);
                     *next_slot += 1;
-                    extra_locals.push(Ty::Int);
+                    extra_locals.push(ret_ty);
                     pre_stmts.push(MStmt::Assign {
                         dest: result,
                         value: skotch_mir::Rvalue::BinOp {
-                            op: skotch_mir::BinOp::SubI,
+                            op: sub_op,
                             lhs: zero_slot,
                             rhs: inner_slot,
                         },
