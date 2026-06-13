@@ -10657,6 +10657,53 @@ fn lower_rich_expr_to_slot(
     ) {
         return Some(slot);
     }
+    // `a..b` IntRange creation → new IntRange(a, b).
+    if let KtExpr::Binary(b) = e {
+        let op_text = b.operation().map(|o| o.text()).unwrap_or_default();
+        if op_text == ".." {
+            let lhs_slot = lower_rich_expr_to_slot(
+                b.lhs()?,
+                lookup_name,
+                fn_lookup,
+                next_slot,
+                pre_stmts,
+                extra_locals,
+                strings,
+            )?;
+            let rhs_slot = lower_rich_expr_to_slot(
+                b.rhs()?,
+                lookup_name,
+                fn_lookup,
+                next_slot,
+                pre_stmts,
+                extra_locals,
+                strings,
+            )?;
+            let new_slot = LocalId(*next_slot);
+            *next_slot += 1;
+            extra_locals.push(Ty::Class("kotlin/ranges/IntRange".to_string()));
+            pre_stmts.push(MStmt::Assign {
+                dest: new_slot,
+                value: skotch_mir::Rvalue::NewInstance(
+                    "kotlin/ranges/IntRange".to_string(),
+                ),
+            });
+            let init_slot = LocalId(*next_slot);
+            *next_slot += 1;
+            extra_locals.push(Ty::Unit);
+            pre_stmts.push(MStmt::Assign {
+                dest: init_slot,
+                value: skotch_mir::Rvalue::Call {
+                    kind: skotch_mir::CallKind::ConstructorJava {
+                        class_name: "kotlin/ranges/IntRange".to_string(),
+                        descriptor: "(II)V".to_string(),
+                    },
+                    args: vec![new_slot, lhs_slot, rhs_slot],
+                },
+            });
+            return Some(new_slot);
+        }
+    }
     // Infix `a to b` → kotlin.TuplesKt.to(Object, Object) → Pair.
     if let KtExpr::Binary(b) = e {
         let op_text = b.operation().map(|o| o.text()).unwrap_or_default();
