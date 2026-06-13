@@ -19,7 +19,7 @@
 use crate::bootstrap::{split_blocks, Block};
 use anyhow::{bail, Result};
 use skotch_classfile::model::ClassFile;
-use skotch_dex::model::{Fixup, ItemRef, MethodRef, ProtoRef};
+use skotch_dex::model::{FieldRef, Fixup, ItemRef, MethodRef, ProtoRef};
 use std::collections::{BTreeMap, BTreeSet};
 
 // ───────────────────────────── SSA IR ─────────────────────────────
@@ -50,6 +50,20 @@ pub(crate) enum SsaOp {
         ret: Option<RetKind>,
         jvm_pc: u32,
     },
+    /// Instance field read (`iget* dest, obj, field@`). Throwing (NPE).
+    GetField { dex_op: u16, field: FieldRef, obj: ValId, jvm_pc: u32 },
+    /// Static field read (`sget* dest, field@`). Throwing (class init).
+    GetStatic { dex_op: u16, field: FieldRef, jvm_pc: u32 },
+    /// Instance field write (`iput* value, obj, field@`). A statement (no result).
+    PutField { dex_op: u16, field: FieldRef, obj: ValId, value: ValId, jvm_pc: u32 },
+    /// Static field write (`sput* value, field@`). A statement (no result).
+    PutStatic { dex_op: u16, field: FieldRef, value: ValId, jvm_pc: u32 },
+    /// Array element read (`aget* dest, array, index`, 23x). Throwing (NPE/AIOOBE).
+    ArrayGet { dex_op: u16, array: ValId, index: ValId, jvm_pc: u32 },
+    /// Array element write (`aput* value, array, index`, 23x). A statement.
+    ArrayPut { dex_op: u16, array: ValId, index: ValId, value: ValId, jvm_pc: u32 },
+    /// Array length (`array-length dest, array`, 12x). Throwing (NPE).
+    ArrayLength { array: ValId, jvm_pc: u32 },
 }
 
 /// The result kind of a non-void call (selects the `move-result` variant).
@@ -548,6 +562,71 @@ fn rename(
                 }
                 pc += if op == 0xb9 { 5 } else { 3 };
             }
+            // field access: getstatic/putstatic/getfield/putfield
+            0xb2 | 0xb3 | 0xb4 | 0xb5 => {
+                let idx = u16::from_be_bytes([bc[pc + 1], bc[pc + 2]]);
+                let (class, name, desc) = cf.constant_pool.member_ref(idx)?;
+                let field = FieldRef {
+                    class: skotch_classfile::constant_pool::internal_to_descriptor(&class),
+                    type_: desc.clone(),
+                    name,
+                };
+                let wide = desc == "J" || desc == "D";
+                match op {
+                    0xb2 => {
+                        let v = b.new(SsaOp::GetStatic { dex_op: crate::bootstrap::sget_op(&desc), field, jvm_pc: pc as u32 }, wide, blk);
+                        blocks[blk].body.push(v);
+                        stack.push(v);
+                    }
+                    0xb4 => {
+                        let obj = stack.pop().unwrap();
+                        let v = b.new(SsaOp::GetField { dex_op: crate::bootstrap::iget_op(&desc), field, obj, jvm_pc: pc as u32 }, wide, blk);
+                        blocks[blk].body.push(v);
+                        stack.push(v);
+                    }
+                    0xb3 => {
+                        let value = stack.pop().unwrap();
+                        let v = b.new(SsaOp::PutStatic { dex_op: crate::bootstrap::sput_op(&desc), field, value, jvm_pc: pc as u32 }, false, blk);
+                        blocks[blk].body.push(v);
+                    }
+                    0xb5 => {
+                        let value = stack.pop().unwrap();
+                        let obj = stack.pop().unwrap();
+                        let v = b.new(SsaOp::PutField { dex_op: crate::bootstrap::iput_op(&desc), field, obj, value, jvm_pc: pc as u32 }, false, blk);
+                        blocks[blk].body.push(v);
+                    }
+                    _ => unreachable!(),
+                }
+                pc += 3;
+            }
+            // array element load: iaload/laload/faload/daload/aaload/baload/caload/saload
+            0x2e..=0x35 => {
+                let (dex_op, wide) = crate::bootstrap::aget_op(op);
+                let index = stack.pop().unwrap();
+                let array = stack.pop().unwrap();
+                let v = b.new(SsaOp::ArrayGet { dex_op, array, index, jvm_pc: pc as u32 }, wide, blk);
+                blocks[blk].body.push(v);
+                stack.push(v);
+                pc += 1;
+            }
+            // array element store: i/l/f/d/a/b/c/sastore
+            0x4f..=0x56 => {
+                let dex_op = crate::bootstrap::aput_op(op);
+                let value = stack.pop().unwrap();
+                let index = stack.pop().unwrap();
+                let array = stack.pop().unwrap();
+                let v = b.new(SsaOp::ArrayPut { dex_op, array, index, value, jvm_pc: pc as u32 }, false, blk);
+                blocks[blk].body.push(v);
+                pc += 1;
+            }
+            // arraylength
+            0xbe => {
+                let array = stack.pop().unwrap();
+                let v = b.new(SsaOp::ArrayLength { array, jvm_pc: pc as u32 }, false, blk);
+                blocks[blk].body.push(v);
+                stack.push(v);
+                pc += 1;
+            }
             other => bail!("ssa: unsupported opcode {other:#04x} (loop subset only)"),
         }
     }
@@ -773,13 +852,26 @@ fn operands(op: &SsaOp) -> Vec<ValId> {
         SsaOp::Binop { a, b, .. } | SsaOp::Cmp { a, b, .. } => vec![*a, *b],
         SsaOp::Unop { a, .. } => vec![*a],
         SsaOp::Invoke { args, .. } => args.clone(),
+        SsaOp::GetStatic { .. } => Vec::new(),
+        SsaOp::GetField { obj, .. } => vec![*obj],
+        SsaOp::PutStatic { value, .. } => vec![*value],
+        SsaOp::PutField { obj, value, .. } => vec![*obj, *value],
+        SsaOp::ArrayGet { array, index, .. } => vec![*array, *index],
+        SsaOp::ArrayPut { array, index, value, .. } => vec![*array, *index, *value],
+        SsaOp::ArrayLength { array, .. } => vec![*array],
     }
 }
 
-/// Whether an op defines a result that needs a register. A void call defines no
-/// value (it's a pure side-effect statement).
+/// Whether an op defines a result that needs a register. A void call, a field
+/// store, or an array store defines no value (it's a pure side-effect statement).
 fn produces_value(op: &SsaOp) -> bool {
-    !matches!(op, SsaOp::Invoke { ret: None, .. })
+    !matches!(
+        op,
+        SsaOp::Invoke { ret: None, .. }
+            | SsaOp::PutField { .. }
+            | SsaOp::PutStatic { .. }
+            | SsaOp::ArrayPut { .. }
+    )
 }
 
 fn term_operands(t: &Terminator) -> Vec<ValId> {
@@ -990,7 +1082,7 @@ pub(crate) fn dex_method_ssa(
 fn phi_first_use(f: &SsaFn, num: &Numbering) -> BTreeMap<ValId, u32> {
     let is_phi = |v: ValId| matches!(f.values[v as usize].op, SsaOp::Phi { .. });
     let mut first: BTreeMap<ValId, u32> = BTreeMap::new();
-    let mut note = |phi: ValId, pos: u32, m: &mut BTreeMap<ValId, u32>| {
+    let note = |phi: ValId, pos: u32, m: &mut BTreeMap<ValId, u32>| {
         m.entry(phi).and_modify(|x| *x = (*x).min(pos)).or_insert(pos);
     };
     for b in 0..f.blocks.len() {
@@ -1116,10 +1208,17 @@ pub(crate) fn build_dex(
             if is_rematerialized(f, v) {
                 continue;
             }
-            if let SsaOp::Invoke { .. } = &f.values[v as usize].op {
-                emit_invoke(f, &mut insns, alloc, v, &mut pool_fixups, &mut outs, &mut positions, line_numbers)?;
-            } else {
-                emit_value(f, &mut insns, alloc, v)?;
+            match &f.values[v as usize].op {
+                SsaOp::Invoke { .. } => {
+                    emit_invoke(f, &mut insns, alloc, v, &mut pool_fixups, &mut outs, &mut positions, line_numbers)?;
+                }
+                SsaOp::GetField { .. } | SsaOp::GetStatic { .. } | SsaOp::PutField { .. } | SsaOp::PutStatic { .. } => {
+                    emit_field(f, &mut insns, alloc, v, &mut pool_fixups, &mut positions, line_numbers)?;
+                }
+                SsaOp::ArrayGet { .. } | SsaOp::ArrayPut { .. } | SsaOp::ArrayLength { .. } => {
+                    emit_array(f, &mut insns, alloc, v, &mut positions, line_numbers);
+                }
+                _ => emit_value(f, &mut insns, alloc, v)?,
             }
         }
         match &f.blocks[b].term {
@@ -1246,6 +1345,83 @@ fn emit_invoke(
     Ok(())
 }
 
+/// Emits a field access: `iget/sget` (21c/22c, result in `reg(v)`) or
+/// `iput/sput` (the value is the source). All field accesses are throwing, so a
+/// debug position is recorded; the field-ref word is a fixup placeholder.
+fn emit_field(
+    f: &SsaFn,
+    insns: &mut Vec<u16>,
+    alloc: &Allocation,
+    v: ValId,
+    pool_fixups: &mut Vec<Fixup>,
+    positions: &mut Vec<(u32, u32)>,
+    line_numbers: &[(u16, u16)],
+) -> Result<()> {
+    let reg = |x: ValId| alloc.reg[x as usize];
+    let (dex_op, field, jvm_pc) = match &f.values[v as usize].op {
+        SsaOp::GetField { dex_op, field, jvm_pc, .. }
+        | SsaOp::GetStatic { dex_op, field, jvm_pc, .. }
+        | SsaOp::PutField { dex_op, field, jvm_pc, .. }
+        | SsaOp::PutStatic { dex_op, field, jvm_pc, .. } => (*dex_op, field.clone(), *jvm_pc),
+        _ => unreachable!(),
+    };
+    if let Some(line) = crate::bootstrap::line_for(line_numbers, jvm_pc) {
+        positions.push((insns.len() as u32, line));
+    }
+    match &f.values[v as usize].op {
+        // 21c: sget/sput AA = dest/value.
+        SsaOp::GetStatic { .. } => insns.push(dex_op | (reg(v) << 8)),
+        SsaOp::PutStatic { value, .. } => insns.push(dex_op | (reg(*value) << 8)),
+        // 22c: iget/iput A = dest/value (low nibble), B = object (high nibble).
+        SsaOp::GetField { obj, .. } => {
+            insns.push(dex_op | ((reg(v) & 0xf) << 8) | ((reg(*obj) & 0xf) << 12));
+        }
+        SsaOp::PutField { obj, value, .. } => {
+            insns.push(dex_op | ((reg(*value) & 0xf) << 8) | ((reg(*obj) & 0xf) << 12));
+        }
+        _ => unreachable!(),
+    }
+    let unit = insns.len();
+    insns.push(0); // field-ref placeholder, patched via the fixup
+    pool_fixups.push(Fixup { unit, item: ItemRef::Field(field), wide: false });
+    Ok(())
+}
+
+/// Emits an array access: `aget*/aput*` (23x: AA=dest/value, BB=array, CC=index)
+/// or `array-length` (12x). All are throwing → a debug position is recorded.
+fn emit_array(
+    f: &SsaFn,
+    insns: &mut Vec<u16>,
+    alloc: &Allocation,
+    v: ValId,
+    positions: &mut Vec<(u32, u32)>,
+    line_numbers: &[(u16, u16)],
+) {
+    let reg = |x: ValId| alloc.reg[x as usize];
+    let jvm_pc = match &f.values[v as usize].op {
+        SsaOp::ArrayGet { jvm_pc, .. } | SsaOp::ArrayPut { jvm_pc, .. } | SsaOp::ArrayLength { jvm_pc, .. } => *jvm_pc,
+        _ => unreachable!(),
+    };
+    if let Some(line) = crate::bootstrap::line_for(line_numbers, jvm_pc) {
+        positions.push((insns.len() as u32, line));
+    }
+    match &f.values[v as usize].op {
+        SsaOp::ArrayGet { dex_op, array, index, .. } => {
+            insns.push(dex_op | (reg(v) << 8));
+            insns.push((reg(*array) & 0xff) | ((reg(*index) & 0xff) << 8));
+        }
+        SsaOp::ArrayPut { dex_op, array, index, value, .. } => {
+            insns.push(dex_op | (reg(*value) << 8));
+            insns.push((reg(*array) & 0xff) | ((reg(*index) & 0xff) << 8));
+        }
+        // array-length (0x21, 12x): A = dest (low nibble), B = array (high nibble).
+        SsaOp::ArrayLength { array, .. } => {
+            insns.push(0x21 | ((reg(v) & 0xf) << 8) | ((reg(*array) & 0xf) << 12));
+        }
+        _ => unreachable!(),
+    }
+}
+
 /// Emits the instruction defining `v` (the result lands in `reg(v)`).
 fn emit_value(f: &SsaFn, insns: &mut Vec<u16>, alloc: &Allocation, v: ValId) -> Result<()> {
     let reg = |x: ValId| alloc.reg[x as usize];
@@ -1266,9 +1442,19 @@ fn emit_value(f: &SsaFn, insns: &mut Vec<u16>, alloc: &Allocation, v: ValId) -> 
             insns.push((reg(*a) & 0xff) | ((reg(*b) & 0xff) << 8));
         }
         SsaOp::Binop { jvm_op, a, b } => emit_binop(f, insns, alloc, dest, *jvm_op, *a, *b)?,
-        // Invokes are emitted by `emit_invoke` (they carry extra state); the
-        // rest define no emittable instruction on their own.
-        SsaOp::Phi { .. } | SsaOp::Argument { .. } | SsaOp::ConstString(_) | SsaOp::Invoke { .. } => {
+        // Invokes/field-accesses are emitted by `emit_invoke`/`emit_field` (they
+        // carry extra state); the rest define no emittable instruction on their own.
+        SsaOp::Phi { .. }
+        | SsaOp::Argument { .. }
+        | SsaOp::ConstString(_)
+        | SsaOp::Invoke { .. }
+        | SsaOp::GetField { .. }
+        | SsaOp::GetStatic { .. }
+        | SsaOp::PutField { .. }
+        | SsaOp::PutStatic { .. }
+        | SsaOp::ArrayGet { .. }
+        | SsaOp::ArrayPut { .. }
+        | SsaOp::ArrayLength { .. } => {
             bail!("ssa dexbuilder: value {v} has no emittable instruction")
         }
     }
@@ -1484,6 +1670,31 @@ mod tests {
     }
 
     #[test]
+    fn sumtwice_static_call_in_loop() {
+        // `for(i=0;i<n;i++) s += twice(i)` — a static call inside a loop:
+        // invoke-static {v0} + move-result v2 + add-int/2addr; the call is a
+        // throwing instruction → one debug position. The method-ref word is a
+        // fixup placeholder (0) here, patched to its pool index by the writer.
+        let code = ssa_code("Calls.class", "sumTwice", &["I"]);
+        let expected: Vec<u16> = vec![
+            0x0012, 0x0112, 0x3035, 0x000a, // const i,s; if-ge i,n,+10
+            0x1071, 0x0000, 0x0000, // invoke-static {v0}, <placeholder>
+            0x020a, // move-result v2
+            0x21b0, // add-int/2addr v1, v2
+            0x00d8, 0x0100, // add-int/lit8 v0, v0, #1
+            0xf728, // goto -9
+            0x010f, // return v1
+        ];
+        eprintln!("sumTwice produced: {:04x?} (regs={} outs={})", code.insns, code.registers_size, code.outs_size);
+        assert_eq!(code.insns, expected, "static call in loop must match d8 (modulo pool idx)");
+        assert_eq!(code.registers_size, 4);
+        assert_eq!(code.outs_size, 1);
+        assert_eq!(code.fixups.len(), 1, "one method-ref fixup");
+        let dbg = code.debug_info.expect("invoke is throwing → a debug position");
+        assert_eq!(dbg.line_start, 3, "position line for the call site");
+    }
+
+    #[test]
     fn sumto_dex_byte_identical() {
         let code = ssa_code("Loop.class", "sumTo", &["I"]);
         // d8: const/4 v0,#0; const/4 v1,#0; if-ge v0,v2,+6; add-int/2addr v1,v0;
@@ -1496,16 +1707,13 @@ mod tests {
         assert_eq!(code.insns, expected, "two-loop-variable loop must be byte-identical to d8");
     }
 
-    fn loops2_bc(name: &str) -> Vec<u8> {
+    fn diag(name: &str, expected: &[u16], regs: u16) -> bool {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../skotch-dex/tests/fixtures/Loops2.class");
         let cf = skotch_classfile::parse_class_file(&path).unwrap();
         let m = cf.methods.iter().find(|m| m.name == name).unwrap();
-        m.code.as_ref().unwrap().bytecode.clone()
-    }
-
-    fn diag(name: &str, expected: &[u16], regs: u16) -> bool {
-        let code = match dex_method_ssa(&loops2_bc(name), &["I".to_string()], false) {
+        let c = m.code.as_ref().unwrap();
+        let code = match dex_method_ssa(&cf, &c.bytecode, &["I".to_string()], false, &c.line_numbers) {
             Ok(c) => c,
             Err(e) => {
                 eprintln!("{name} BAILS: {e}");

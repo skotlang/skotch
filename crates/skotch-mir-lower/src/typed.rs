@@ -551,27 +551,24 @@ pub fn lower_file(
                 None
             };
             if is_suspend {
-                if let Some(last_block) = blocks.last_mut() {
-                    match &last_block.terminator {
+                // Apply suspend trampoline to EVERY Return/ReturnValue
+                // terminator in the function (multi-block bodies have
+                // multiple termination points).
+                for block in blocks.iter_mut() {
+                    match &block.terminator {
                         Terminator::Return => {
-                            // Empty/Unit suspend body — emit Null +
-                            // ReturnValue.
                             let null_slot =
                                 skotch_mir::LocalId(locals.len() as u32);
                             locals.push(Ty::Nullable(Box::new(Ty::Any)));
-                            last_block.stmts.push(skotch_mir::Stmt::Assign {
+                            block.stmts.push(skotch_mir::Stmt::Assign {
                                 dest: null_slot,
                                 value: skotch_mir::Rvalue::Const(
                                     skotch_mir::MirConst::Null,
                                 ),
                             });
-                            last_block.terminator =
-                                Terminator::ReturnValue(null_slot);
+                            block.terminator = Terminator::ReturnValue(null_slot);
                         }
                         Terminator::ReturnValue(slot) => {
-                            // Primitive-return suspend body — box the
-                            // return value via kotlin/coroutines/jvm/
-                            // internal/Boxing.
                             let slot = *slot;
                             let slot_ty = locals
                                 .get(slot.0 as usize)
@@ -605,7 +602,7 @@ pub fn lower_file(
                                 let boxed_slot =
                                     skotch_mir::LocalId(locals.len() as u32);
                                 locals.push(Ty::Any);
-                                last_block.stmts.push(skotch_mir::Stmt::Assign {
+                                block.stmts.push(skotch_mir::Stmt::Assign {
                                     dest: boxed_slot,
                                     value: skotch_mir::Rvalue::Call {
                                         kind: skotch_mir::CallKind::StaticJava {
@@ -618,7 +615,7 @@ pub fn lower_file(
                                         args: vec![slot],
                                     },
                                 });
-                                last_block.terminator =
+                                block.terminator =
                                     Terminator::ReturnValue(boxed_slot);
                             }
                         }
@@ -16561,16 +16558,16 @@ fn method_from_fun_with_class(
         None
     };
     if is_suspend && !is_abstract {
-        if let Some(last_block) = blocks.last_mut() {
-            match &last_block.terminator {
+        for block in blocks.iter_mut() {
+            match &block.terminator {
                 Terminator::Return => {
                     let null_slot = skotch_mir::LocalId(locals.len() as u32);
                     locals.push(Ty::Nullable(Box::new(Ty::Any)));
-                    last_block.stmts.push(skotch_mir::Stmt::Assign {
+                    block.stmts.push(skotch_mir::Stmt::Assign {
                         dest: null_slot,
                         value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Null),
                     });
-                    last_block.terminator = Terminator::ReturnValue(null_slot);
+                    block.terminator = Terminator::ReturnValue(null_slot);
                 }
                 Terminator::ReturnValue(slot) => {
                     let slot = *slot;
@@ -16594,7 +16591,7 @@ fn method_from_fun_with_class(
                     if let Some(method) = box_method {
                         let boxed_slot = skotch_mir::LocalId(locals.len() as u32);
                         locals.push(Ty::Any);
-                        last_block.stmts.push(skotch_mir::Stmt::Assign {
+                        block.stmts.push(skotch_mir::Stmt::Assign {
                             dest: boxed_slot,
                             value: skotch_mir::Rvalue::Call {
                                 kind: skotch_mir::CallKind::StaticJava {
@@ -16607,7 +16604,7 @@ fn method_from_fun_with_class(
                                 args: vec![slot],
                             },
                         });
-                        last_block.terminator = Terminator::ReturnValue(boxed_slot);
+                        block.terminator = Terminator::ReturnValue(boxed_slot);
                     }
                 }
                 _ => {}

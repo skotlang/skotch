@@ -1633,7 +1633,7 @@ pub(crate) fn cmp_op(jvm_op: u8) -> (u16, bool) {
 }
 
 /// JVM array-load opcode → (DEX `aget*` op, result-is-wide).
-fn aget_op(jvm_op: u8) -> (u16, bool) {
+pub(crate) fn aget_op(jvm_op: u8) -> (u16, bool) {
     match jvm_op {
         0x2e | 0x30 => (0x44, false), // iaload / faload → aget
         0x2f | 0x31 => (0x45, true),  // laload / daload → aget-wide
@@ -1645,7 +1645,7 @@ fn aget_op(jvm_op: u8) -> (u16, bool) {
 }
 
 /// JVM array-store opcode → DEX `aput*` op.
-fn aput_op(jvm_op: u8) -> u16 {
+pub(crate) fn aput_op(jvm_op: u8) -> u16 {
     match jvm_op {
         0x4f | 0x51 => 0x4b, // iastore / fastore → aput
         0x50 | 0x52 => 0x4c, // lastore / dastore → aput-wide
@@ -1764,7 +1764,7 @@ pub(crate) fn binop_3addr_op(jvm_op: u8) -> Result<u16> {
     })
 }
 
-fn sget_op(desc: &str) -> u16 {
+pub(crate) fn sget_op(desc: &str) -> u16 {
     match desc.as_bytes()[0] {
         b'J' | b'D' => 0x61,
         b'L' | b'[' => 0x62,
@@ -1775,7 +1775,7 @@ fn sget_op(desc: &str) -> u16 {
         _ => 0x60, // int/float
     }
 }
-fn sput_op(desc: &str) -> u16 {
+pub(crate) fn sput_op(desc: &str) -> u16 {
     match desc.as_bytes()[0] {
         b'J' | b'D' => 0x68,
         b'L' | b'[' => 0x69,
@@ -1786,7 +1786,7 @@ fn sput_op(desc: &str) -> u16 {
         _ => 0x67,
     }
 }
-fn iget_op(desc: &str) -> u16 {
+pub(crate) fn iget_op(desc: &str) -> u16 {
     match desc.as_bytes()[0] {
         b'J' | b'D' => 0x53,
         b'L' | b'[' => 0x54,
@@ -1797,7 +1797,7 @@ fn iget_op(desc: &str) -> u16 {
         _ => 0x52,
     }
 }
-fn iput_op(desc: &str) -> u16 {
+pub(crate) fn iput_op(desc: &str) -> u16 {
     match desc.as_bytes()[0] {
         b'J' | b'D' => 0x5a,
         b'L' | b'[' => 0x5b,

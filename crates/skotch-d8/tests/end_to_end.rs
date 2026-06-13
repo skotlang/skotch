@@ -533,6 +533,106 @@ fn loop_battery_byte_identical() {
     );
 }
 
+/// A loop containing a static method call: `sumTwice(n){ for(i) s += twice(i) }`.
+/// Exercises the SSA path's invoke emission (invoke-static {v0} + move-result),
+/// `outs_size`, the method-ref Fixup (patched to a pool index by the writer), and
+/// debug-position emission (the call is a throwing instruction → `0x0004 line=3`).
+/// `twice` (acyclic) goes through the bootstrap path. Full `.dex` byte-identical.
+#[test]
+fn call_in_loop_byte_identical() {
+    let cf = skotch_classfile::parse_class_file(&fixtures().join("Calls.class")).unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let produced = dex_classes(&[cf], &opts).unwrap();
+    let golden = std::fs::read(fixtures().join("Calls.d8.dex")).unwrap();
+    if produced != golden {
+        std::fs::write("/tmp/skotch-Calls-produced.dex", &produced).unwrap();
+    }
+    skotch_dex::validator::validate(&produced).expect("self-validation");
+    assert_eq!(
+        produced,
+        golden,
+        "Call-in-loop battery: produced {} vs golden {}; first diff {:?}",
+        produced.len(),
+        golden.len(),
+        (0..produced.len().min(golden.len())).find(|&i| produced[i] != golden[i])
+    );
+}
+
+/// More call shapes in loops: `twoCalls` mixes a value-returning static call
+/// (`triple(i)` → move-result) with a VOID static call (`noop(s)` → no
+/// move-result), both on one source line so their two throwing positions dedup to
+/// one debug entry. `viaInstance` does an instance call (`invoke-virtual {v3,v0},
+/// c.scale` — receiver + arg, outs=2). Exercises void/instance invokes + position
+/// dedup through the SSA path. Full `.dex` byte-identical.
+#[test]
+fn void_and_instance_calls_in_loop_byte_identical() {
+    let cf = skotch_classfile::parse_class_file(&fixtures().join("Calls2.class")).unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let produced = dex_classes(&[cf], &opts).unwrap();
+    let golden = std::fs::read(fixtures().join("Calls2.d8.dex")).unwrap();
+    if produced != golden {
+        std::fs::write("/tmp/skotch-Calls2-produced.dex", &produced).unwrap();
+    }
+    skotch_dex::validator::validate(&produced).expect("self-validation");
+    assert_eq!(
+        produced,
+        golden,
+        "Void/instance call battery: produced {} vs golden {}; first diff {:?}",
+        produced.len(),
+        golden.len(),
+        (0..produced.len().min(golden.len())).find(|&i| produced[i] != golden[i])
+    );
+}
+
+/// Field access in loops through the SSA path: `sumField` (`iget` instance read),
+/// `store` (`iput` instance write), `bumpStatic` (`counter += 1` → `sget` +
+/// add-int/lit8 + `sput`, with the loaded value and stored value sharing a
+/// register via interval reuse). All field accesses are throwing → debug
+/// positions; the field-ref words are fixups. Full `.dex` byte-identical.
+#[test]
+fn fields_in_loop_byte_identical() {
+    let cf = skotch_classfile::parse_class_file(&fixtures().join("Fields.class")).unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let produced = dex_classes(&[cf], &opts).unwrap();
+    let golden = std::fs::read(fixtures().join("Fields.d8.dex")).unwrap();
+    if produced != golden {
+        std::fs::write("/tmp/skotch-Fields-produced.dex", &produced).unwrap();
+    }
+    skotch_dex::validator::validate(&produced).expect("self-validation");
+    assert_eq!(
+        produced,
+        golden,
+        "Fields-in-loop battery: produced {} vs golden {}; first diff {:?}",
+        produced.len(),
+        golden.len(),
+        (0..produced.len().min(golden.len())).find(|&i| produced[i] != golden[i])
+    );
+}
+
+/// Array access in loops through the SSA path: `sumArr` (`aget` element read),
+/// `fillSquares` (`mul-int` + `aput` write), `total` (`array-length` recomputed in
+/// the loop header — its result and the later `aget` result share a register via
+/// interval reuse). All array ops are throwing → debug positions. Byte-identical.
+#[test]
+fn arrays_in_loop_byte_identical() {
+    let cf = skotch_classfile::parse_class_file(&fixtures().join("ArrLoop.class")).unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let produced = dex_classes(&[cf], &opts).unwrap();
+    let golden = std::fs::read(fixtures().join("ArrLoop.d8.dex")).unwrap();
+    if produced != golden {
+        std::fs::write("/tmp/skotch-ArrLoop-produced.dex", &produced).unwrap();
+    }
+    skotch_dex::validator::validate(&produced).expect("self-validation");
+    assert_eq!(
+        produced,
+        golden,
+        "Arrays-in-loop battery: produced {} vs golden {}; first diff {:?}",
+        produced.len(),
+        golden.len(),
+        (0..produced.len().min(golden.len())).find(|&i| produced[i] != golden[i])
+    );
+}
+
 #[test]
 fn empty_class_end_to_end_byte_identical() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("Empty.class")).unwrap();
