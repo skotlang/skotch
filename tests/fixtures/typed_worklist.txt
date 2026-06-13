@@ -217,10 +217,8 @@
 0.167	21-data-class	48	8	17	2	0
 0.167	323-multiple-classes	96	16	26	3	0
 0.168	1311-brainfuck-vm	185	31	19	12	8
-0.172	1210-value-class-arithmetic	29	5	14	6	3
 0.173	1314-complex-mandelbrot	185	32	19	10	6
 0.173	1269-when-is-smartcast-scope-leak	75	13	20	10	4
-0.176	233-class-field-access	17	3	11	2	1
 0.183	1319-kmp-search	164	30	12	5	4
 0.185	1308-mandelbrot-ascii	108	20	11	4	2
 0.188	95-delegation-by	16	3	15	6	4
@@ -462,6 +460,7 @@
 0.609	348-inherited-field-method	23	14	14	5	1
 0.611	312-field-mutation	18	11	12	3	1
 0.615	101-lateinit-var	13	8	12	3	0
+0.621	1210-value-class-arithmetic	29	18	14	6	2
 0.625	171-selection-min	24	15	9	2	0
 0.625	724-suspend-class-secondary-prop	8	5	12	3	0
 0.629	254-prime-sieve	35	22	9	2	0
@@ -697,6 +696,7 @@
 0.875	317-until-range	8	7	8	1	0
 0.875	321-downto-range	8	7	8	1	0
 0.875	53-for-range	8	7	8	1	0
+0.882	233-class-field-access	17	15	11	2	0
 0.885	190-ext-chain-complex	26	23	11	4	1
 0.889	1109-suspend-arith-deep	9	8	8	1	0
 0.889	125-recursive-function	18	16	9	2	0

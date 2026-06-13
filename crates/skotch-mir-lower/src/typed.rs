@@ -10936,6 +10936,7 @@ fn lower_rich_expr_to_slot(
             }
             // Java-style property access on builtin classes:
             //   s.length, pair.first/second, etc.
+            //   Plus fallback to GetField for class instances.
             if let KtExpr::Reference(prop_ref) = &dq_exprs[1] {
                 if let Some(prop_name) = prop_ref.name() {
                     let recv_slot_opt = lower_rich_expr_to_slot(
@@ -10948,6 +10949,36 @@ fn lower_rich_expr_to_slot(
                         strings,
                     );
                     if let Some(recv_slot) = recv_slot_opt {
+                        // Class instance field fallback: emit GetField.
+                        let recv_ty_pre = extra_locals
+                            .get(recv_slot.0 as usize)
+                            .cloned()
+                            .unwrap_or(Ty::Any);
+                        if let Ty::Class(cname) = &recv_ty_pre {
+                            // Allow known builtin Pair / String special
+                            // handling below to fire FIRST; only emit
+                            // GetField as a fallback for user classes.
+                            if !matches!(
+                                cname.as_str(),
+                                "java/lang/String"
+                                    | "kotlin/Pair"
+                                    | "kotlin/Triple"
+                                    | "kotlin/ranges/IntRange"
+                            ) {
+                                let result_slot = LocalId(*next_slot);
+                                *next_slot += 1;
+                                extra_locals.push(Ty::Any);
+                                pre_stmts.push(MStmt::Assign {
+                                    dest: result_slot,
+                                    value: skotch_mir::Rvalue::GetField {
+                                        receiver: recv_slot,
+                                        class_name: cname.clone(),
+                                        field_name: prop_name.to_string(),
+                                    },
+                                });
+                                return Some(result_slot);
+                            }
+                        }
                         let recv_ty = extra_locals
                             .get(recv_slot.0 as usize)
                             .cloned()
