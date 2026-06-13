@@ -10752,6 +10752,12 @@ fn lower_rich_expr_to_slot(
                 let mapped: Option<(&str, &str, &str, Ty)> = match name {
                     "maxOf" => Some(("java/lang/Math", "max", "(II)I", Ty::Int)),
                     "minOf" => Some(("java/lang/Math", "min", "(II)I", Ty::Int)),
+                    "emptyList" => Some((
+                        "kotlin/collections/CollectionsKt",
+                        "emptyList",
+                        "()Ljava/util/List;",
+                        Ty::Class("java/util/List".to_string()),
+                    )),
                     _ => None,
                 };
                 if let Some((cls, method, desc, ret_ty)) = mapped {
@@ -10771,7 +10777,12 @@ fn lower_rich_expr_to_slot(
                             arg_slots.push(slot);
                         }
                     }
-                    if arg_slots.len() == 2 {
+                    let expected_args = match name {
+                        "maxOf" | "minOf" => 2,
+                        "emptyList" => 0,
+                        _ => 0,
+                    };
+                    if arg_slots.len() == expected_args {
                         let result_slot = LocalId(*next_slot);
                         *next_slot += 1;
                         extra_locals.push(ret_ty);
