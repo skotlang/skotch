@@ -1148,16 +1148,11 @@ fn emit_binop(f: &SsaFn, insns: &mut Vec<u16>, alloc: &Allocation, dest: u16, jv
             return Ok(());
         }
     }
+    // 3-address form keeps the operands in source order (d8 does NOT canonicalize
+    // commutative sources: `p*i` with p=v1,i=v0 stays `mul-int v1, v1, v0`).
     let op3 = crate::bootstrap::binop_3addr_op(jvm_op)?;
-    // d8 canonicalizes a commutative 3-address binop's sources into ascending
-    // register order (e.g. `p*i` with p=v1,i=v0 emits `mul-int v1, v0, v1`).
-    let (s1, s2) = if crate::bootstrap::is_commutative(jvm_op) && ra > rb {
-        (rb, ra)
-    } else {
-        (ra, rb)
-    };
     insns.push(op3 | (dest << 8));
-    insns.push((s1 & 0xff) | ((s2 & 0xff) << 8));
+    insns.push((ra & 0xff) | ((rb & 0xff) << 8));
     Ok(())
 }
 
@@ -1349,7 +1344,13 @@ mod tests {
     }
 
     fn diag(name: &str, expected: &[u16], regs: u16) -> bool {
-        let code = dex_method_ssa(&loops2_bc(name), &["I".to_string()], false).unwrap();
+        let code = match dex_method_ssa(&loops2_bc(name), &["I".to_string()], false) {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("{name} BAILS: {e}");
+                return false;
+            }
+        };
         eprintln!("{name} produced: {:04x?} (regs={})", code.insns, code.registers_size);
         eprintln!("{name} expected: {expected:04x?} (regs={regs})");
         let ok = code.insns == expected && code.registers_size == regs;
@@ -1367,8 +1368,8 @@ mod tests {
 
     #[test]
     fn fact_dex_byte_identical() {
-        // `for(i=1;i<=n;i++) p*=i` — if-gt condition, mul-int 3-addr with
-        // commutative source canonicalization (`mul-int v1, v0, v1`).
+        // `for(i=1;i<=n;i++) p*=i` — if-gt condition; the mul-int bug forces the
+        // 3-address form, whose sources keep source order (`mul-int v1, v1, v0`).
         let expected =
             [0x1012, 0x1112, 0x2036, 0x0007, 0x0192, 0x0001, 0x00d8, 0x0100, 0xfa28, 0x010f];
         assert!(diag("fact", &expected, 3), "fact must match d8");
@@ -1377,7 +1378,10 @@ mod tests {
     #[test]
     fn grid_dex_diff() {
         // Nested loop, three live loop vars (i, j, accumulator t) + a temp. 6
-        // registers. Diagnostic only — exercises multi-loop φ ordering/allocation.
+        // registers. Diagnostic only — the SSA path currently BAILS (the nested
+        // loop needs d8's φ-move insertion + partial coalescing, which leaves a
+        // dead `const/4 v0`; we fully coalesce instead). Falls back to the CFG
+        // path in the real dexer. Marks the nested-loop frontier.
         let expected = [
             0x0012, 0x0112, 0x0212, 0x5135, 0x000e, 0x0312, 0x5335, 0x0008, 0x0492, 0x0301,
             0x42b0, 0x03d8, 0x0103, 0xf928, 0x01d8, 0x0101, 0xf328, 0x020f,
