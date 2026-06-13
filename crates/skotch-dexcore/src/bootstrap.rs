@@ -185,6 +185,32 @@ fn translate_code(
                 stack.push(e.int_binop(op, a, b)?);
                 pc += 1;
             }
+            // long / float / double binops (non-throwing: add/sub/mul, bitwise,
+            // shifts). No lit-folding for these — straight to reg form. div/rem
+            // are throwing (need debug positions) and intentionally still bail.
+            0x61 | 0x65 | 0x69 | 0x7f | 0x81 | 0x83 | 0x79 | 0x7b | 0x7d // long
+            | 0x62 | 0x66 | 0x6a // float
+            | 0x63 | 0x67 | 0x6b => { // double
+                let b = stack.pop().unwrap();
+                let a = stack.pop().unwrap();
+                stack.push(e.binop_reg(op, a, b)?);
+                pc += 1;
+            }
+            // numeric conversions that d8 emits as `conv vDest, vSrc` reusing the
+            // source's low register (i2f/i2b/i2c/i2s, l2f, f2i, d2i/d2l/d2f). The
+            // widening forms (i2l/i2d/f2l/f2d) need args-high, and l2i picks the
+            // source's HIGH register — both diverge, so they fall through to the
+            // bail below rather than be matched here.
+            0x86 | 0x91 | 0x92 | 0x93 | 0x89 | 0x8b | 0x8e | 0x8f | 0x90 => {
+                let (dexop, wide_res) = conv_op(op).unwrap();
+                let v = stack.pop().unwrap();
+                let src = e.materialize(&v)?;
+                e.release(&v);
+                let dest = e.alloc_result(src, wide_res)?;
+                e.emit_unary(dexop, dest, src);
+                stack.push(Val::Reg(dest, wide_res));
+                pc += 1;
+            }
             // static field access
             0xb2 => { stack.push(e.getstatic(cf, u16::from_be_bytes([bc[pc + 1], bc[pc + 2]]))?); pc += 3; }
             0xb3 => { let v = stack.pop().unwrap(); e.putstatic(cf, u16::from_be_bytes([bc[pc + 1], bc[pc + 2]]), v)?; pc += 3; }
@@ -1338,36 +1364,53 @@ fn is_mul_op(jvm_op: u8) -> bool {
     matches!(jvm_op, 0x68..=0x6b)
 }
 
+/// JVM numeric-conversion opcode → (DEX `conv` op, result-is-wide), for the
+/// conversions d8 emits as a simple `conv vDest, vSrc` reusing the source's low
+/// register. Only the byte-identical-matching subset is listed (see the match
+/// arm); the rest bail.
+fn conv_op(jvm: u8) -> Option<(u16, bool)> {
+    Some(match jvm {
+        0x86 => (0x82, false), // i2f → int-to-float
+        0x91 => (0x8d, false), // i2b → int-to-byte
+        0x92 => (0x8e, false), // i2c → int-to-char
+        0x93 => (0x8f, false), // i2s → int-to-short
+        0x89 => (0x85, false), // l2f → long-to-float
+        0x8b => (0x87, false), // f2i → float-to-int
+        0x8e => (0x8a, false), // d2i → double-to-int
+        0x8f => (0x8b, true),  // d2l → double-to-long (wide result)
+        0x90 => (0x8c, false), // d2f → double-to-float
+        _ => return None,
+    })
+}
+
 fn binop_2addr_op(jvm_op: u8) -> Option<u16> {
-    match jvm_op {
-        0x60 => Some(0xb0),
-        0x64 => Some(0xb1),
-        0x68 => Some(0xb2),
-        0x6c => Some(0xb3),
-        0x70 => Some(0xb4),
-        0x7e => Some(0xb5),
-        0x80 => Some(0xb6),
-        0x82 => Some(0xb7),
-        0x78 => Some(0xb8),
-        0x7a => Some(0xb9),
-        0x7c => Some(0xba),
-        _ => None,
-    }
+    Some(match jvm_op {
+        // int
+        0x60 => 0xb0, 0x64 => 0xb1, 0x68 => 0xb2, 0x6c => 0xb3, 0x70 => 0xb4,
+        0x7e => 0xb5, 0x80 => 0xb6, 0x82 => 0xb7, 0x78 => 0xb8, 0x7a => 0xb9, 0x7c => 0xba,
+        // long
+        0x61 => 0xbb, 0x65 => 0xbc, 0x69 => 0xbd, 0x6d => 0xbe, 0x71 => 0xbf,
+        0x7f => 0xc0, 0x81 => 0xc1, 0x83 => 0xc2, 0x79 => 0xc3, 0x7b => 0xc4, 0x7d => 0xc5,
+        // float
+        0x62 => 0xc6, 0x66 => 0xc7, 0x6a => 0xc8, 0x6e => 0xc9, 0x72 => 0xca,
+        // double
+        0x63 => 0xcb, 0x67 => 0xcc, 0x6b => 0xcd, 0x6f => 0xce, 0x73 => 0xcf,
+        _ => return None,
+    })
 }
 
 fn binop_3addr_op(jvm_op: u8) -> Result<u16> {
     Ok(match jvm_op {
-        0x60 => 0x90,
-        0x64 => 0x91,
-        0x68 => 0x92,
-        0x6c => 0x93,
-        0x70 => 0x94,
-        0x7e => 0x95,
-        0x80 => 0x96,
-        0x82 => 0x97,
-        0x78 => 0x98,
-        0x7a => 0x99,
-        0x7c => 0x9a,
+        // int
+        0x60 => 0x90, 0x64 => 0x91, 0x68 => 0x92, 0x6c => 0x93, 0x70 => 0x94,
+        0x7e => 0x95, 0x80 => 0x96, 0x82 => 0x97, 0x78 => 0x98, 0x7a => 0x99, 0x7c => 0x9a,
+        // long
+        0x61 => 0x9b, 0x65 => 0x9c, 0x69 => 0x9d, 0x6d => 0x9e, 0x71 => 0x9f,
+        0x7f => 0xa0, 0x81 => 0xa1, 0x83 => 0xa2, 0x79 => 0xa3, 0x7b => 0xa4, 0x7d => 0xa5,
+        // float
+        0x62 => 0xa6, 0x66 => 0xa7, 0x6a => 0xa8, 0x6e => 0xa9, 0x72 => 0xaa,
+        // double
+        0x63 => 0xab, 0x67 => 0xac, 0x6b => 0xad, 0x6f => 0xae, 0x73 => 0xaf,
         _ => bail!("unsupported binop {jvm_op:#x}"),
     })
 }

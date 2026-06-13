@@ -10646,6 +10646,46 @@ fn lower_rich_expr_to_slot(
     ) {
         return Some(slot);
     }
+    // Infix `a to b` → kotlin.TuplesKt.to(Object, Object) → Pair.
+    if let KtExpr::Binary(b) = e {
+        let op_text = b.operation().map(|o| o.text()).unwrap_or_default();
+        if op_text == "to" {
+            let lhs_slot = lower_rich_expr_to_slot(
+                b.lhs()?,
+                lookup_name,
+                fn_lookup,
+                next_slot,
+                pre_stmts,
+                extra_locals,
+                strings,
+            )?;
+            let rhs_slot = lower_rich_expr_to_slot(
+                b.rhs()?,
+                lookup_name,
+                fn_lookup,
+                next_slot,
+                pre_stmts,
+                extra_locals,
+                strings,
+            )?;
+            let result_slot = LocalId(*next_slot);
+            *next_slot += 1;
+            extra_locals.push(Ty::Class("kotlin/Pair".to_string()));
+            pre_stmts.push(MStmt::Assign {
+                dest: result_slot,
+                value: skotch_mir::Rvalue::Call {
+                    kind: skotch_mir::CallKind::StaticJava {
+                        class_name: "kotlin/TuplesKt".to_string(),
+                        method_name: "to".to_string(),
+                        descriptor: "(Ljava/lang/Object;Ljava/lang/Object;)Lkotlin/Pair;"
+                            .to_string(),
+                    },
+                    args: vec![lhs_slot, rhs_slot],
+                },
+            });
+            return Some(result_slot);
+        }
+    }
     // Kotlin stdlib top-level functions that route to Java statics:
     // maxOf/minOf (Int) → Math.max/min.
     if let KtExpr::Call(call) = e {

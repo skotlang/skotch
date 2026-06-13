@@ -105,21 +105,23 @@ impl Pools {
         methods.sort_by(|a, b| cmp_method(a, b, &type_idx, &string_idx, &proto_idx));
         let method_idx = index_map(&methods);
 
-        // Distinct type lists: proto params + class interfaces.
-        let mut tl_set: std::collections::BTreeSet<Vec<String>> = Default::default();
+        // Distinct type lists in d8's layout order. `getTypeLists()` returns
+        // INSERTION order, so d8 emits each list at its first occurrence while
+        // walking the (already-sorted) protos and then class interfaces — NOT
+        // sorted by content. (ConvAll's `(I)F`/`(J)F`/`(D)F` protos expose this:
+        // type_lists come out D,I,J,F by first use, not D,F,I,J by content.)
+        let mut type_lists: Vec<Vec<String>> = Vec::new();
+        let mut tl_seen: std::collections::HashSet<Vec<String>> = Default::default();
         for p in &protos {
-            if !p.params.is_empty() {
-                tl_set.insert(p.params.clone());
+            if !p.params.is_empty() && tl_seen.insert(p.params.clone()) {
+                type_lists.push(p.params.clone());
             }
         }
         for c in &file.classes {
-            if !c.interfaces.is_empty() {
-                tl_set.insert(c.interfaces.clone());
+            if !c.interfaces.is_empty() && tl_seen.insert(c.interfaces.clone()) {
+                type_lists.push(c.interfaces.clone());
             }
         }
-        let mut type_lists: Vec<Vec<String>> = tl_set.into_iter().collect();
-        // d8 sorts type_lists by their element type indices.
-        type_lists.sort_by(|a, b| cmp_type_list(a, b, &type_idx));
 
         Pools {
             strings,
