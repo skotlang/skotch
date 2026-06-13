@@ -2705,6 +2705,28 @@ fn lower_loop_body(
             let init = prop.initializer()?;
             let init = unwrap_parens(init);
             if let Some((k, ty)) = literal_to_const(&init, strings) {
+                // kotlinc shape for `var x = LITERAL` is:
+                //   tmp = Const(LITERAL); x_slot = Local(tmp)
+                // For `val x = LITERAL` the slot directly holds the
+                // const (no temp). Distinguish by KW_VAR.
+                if prop.is_var() {
+                    let tmp = LocalId(*next_slot);
+                    *next_slot += 1;
+                    local_tys.push(ty.clone());
+                    body_mstmts.push(MStmt::Assign {
+                        dest: tmp,
+                        value: skotch_mir::Rvalue::Const(k),
+                    });
+                    let slot = LocalId(*next_slot);
+                    *next_slot += 1;
+                    local_tys.push(ty);
+                    body_mstmts.push(MStmt::Assign {
+                        dest: slot,
+                        value: skotch_mir::Rvalue::Local(tmp),
+                    });
+                    name_to_local.push((pname.to_string(), slot));
+                    continue;
+                }
                 let slot = LocalId(*next_slot);
                 *next_slot += 1;
                 local_tys.push(ty);
