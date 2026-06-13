@@ -10832,6 +10832,50 @@ fn lower_rich_expr_to_slot(
             .filter_map(KtExpr::cast)
             .collect();
         if dq_exprs.len() == 2 {
+            // Java static constants: Long.MAX_VALUE, Integer.MAX_VALUE etc.
+            if let (KtExpr::Reference(cls_ref), KtExpr::Reference(prop_ref)) =
+                (&dq_exprs[0], &dq_exprs[1])
+            {
+                if let (Some(cls), Some(prop)) = (cls_ref.name(), prop_ref.name()) {
+                    let static_const: Option<(skotch_mir::MirConst, Ty)> = match (cls, prop) {
+                        ("Long", "MAX_VALUE") => Some((
+                            skotch_mir::MirConst::Long(i64::MAX),
+                            Ty::Long,
+                        )),
+                        ("Long", "MIN_VALUE") => Some((
+                            skotch_mir::MirConst::Long(i64::MIN),
+                            Ty::Long,
+                        )),
+                        ("Integer", "MAX_VALUE") => Some((
+                            skotch_mir::MirConst::Int(i32::MAX),
+                            Ty::Int,
+                        )),
+                        ("Integer", "MIN_VALUE") => Some((
+                            skotch_mir::MirConst::Int(i32::MIN),
+                            Ty::Int,
+                        )),
+                        ("Double", "MAX_VALUE") => Some((
+                            skotch_mir::MirConst::Double(f64::MAX),
+                            Ty::Double,
+                        )),
+                        ("Double", "MIN_VALUE") => Some((
+                            skotch_mir::MirConst::Double(f64::MIN_POSITIVE),
+                            Ty::Double,
+                        )),
+                        _ => None,
+                    };
+                    if let Some((k, ty)) = static_const {
+                        let slot = LocalId(*next_slot);
+                        *next_slot += 1;
+                        extra_locals.push(ty);
+                        pre_stmts.push(MStmt::Assign {
+                            dest: slot,
+                            value: skotch_mir::Rvalue::Const(k),
+                        });
+                        return Some(slot);
+                    }
+                }
+            }
             // Java-style property access on builtin classes:
             //   s.length, pair.first/second, etc.
             if let KtExpr::Reference(prop_ref) = &dq_exprs[1] {

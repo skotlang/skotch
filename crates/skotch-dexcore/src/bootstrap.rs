@@ -1104,11 +1104,19 @@ impl<'a> Emitter<'a> {
         popped.reverse();
         // Materialize each argument into a register; wide args occupy a pair.
         let mut regs: Vec<u16> = Vec::new();
+        // Registers freshly allocated to materialize constant arguments: the call
+        // consumes them, so they must be freed afterward (like d8) — otherwise a
+        // returned value can't reuse the dead argument register (`viaH`:
+        // `const v0,#5; invoke {v0}; move-result v0`).
+        let mut const_arg_regs: Vec<(u16, bool)> = Vec::new();
         for v in &popped {
             let r = self.materialize(v)?;
             regs.push(r);
             if v.is_wide() {
                 regs.push(r + 1);
+            }
+            if matches!(v, Val::ConstInt(_) | Val::ConstLong(_) | Val::ConstString(_)) {
+                const_arg_regs.push((r, v.is_wide()));
             }
         }
         for v in &popped {
@@ -1145,6 +1153,11 @@ impl<'a> Emitter<'a> {
             wide: false,
         });
         self.max_outs = self.max_outs.max(a);
+        // The call consumed its constant arguments; free their registers so a
+        // returned value coalesces into the lowest one, as d8 does.
+        for (r, w) in const_arg_regs {
+            self.free(r, w);
+        }
         if ret == "V" {
             Ok(None)
         } else {

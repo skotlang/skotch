@@ -32,6 +32,29 @@ fn straightline_battery_byte_identical() {
     );
 }
 
+/// Static method invocations: `invoke-static {}`/`{v0}` + `move-result`, with the
+/// returned value coalescing into a dead constant-argument register (`viaH`:
+/// `const v0,#5; invoke {v0}; move-result v0`), and a two-call chain.
+#[test]
+fn static_invoke_battery_byte_identical() {
+    let cf = skotch_classfile::parse_class_file(&fixtures().join("Call.class")).unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let produced = dex_classes(&[cf], &opts).unwrap();
+    let golden = std::fs::read(fixtures().join("Call.d8.dex")).unwrap();
+    if produced != golden {
+        std::fs::write("/tmp/skotch-Call-produced.dex", &produced).unwrap();
+    }
+    skotch_dex::validator::validate(&produced).expect("self-validation");
+    assert_eq!(
+        produced,
+        golden,
+        "Static invoke battery: produced {} vs golden {}; first diff {:?}",
+        produced.len(),
+        golden.len(),
+        (0..produced.len().min(golden.len())).find(|&i| produced[i] != golden[i])
+    );
+}
+
 /// Float/double/long literal constants exercise every const form: `const`/`const/4`
 /// for floats (float bits via the narrow path), `const-wide`, `const-wide/16`, and
 /// `const-wide/high16` for longs/doubles.
