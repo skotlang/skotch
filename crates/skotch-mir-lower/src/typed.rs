@@ -11655,20 +11655,10 @@ fn lower_rich_expr_to_slot(
     // Binary may have come back as None because operands were Calls.
     if let KtExpr::Binary(b) = e {
         let op_text = b.operation().map(|o| o.text()).unwrap_or_default();
-        let mir_op = match op_text.as_str() {
-            "+" => Some(skotch_mir::BinOp::AddI),
-            "-" => Some(skotch_mir::BinOp::SubI),
-            "*" => Some(skotch_mir::BinOp::MulI),
-            "/" => Some(skotch_mir::BinOp::DivI),
-            "%" => Some(skotch_mir::BinOp::ModI),
-            "==" => Some(skotch_mir::BinOp::CmpEq),
-            "!=" => Some(skotch_mir::BinOp::CmpNe),
-            "<" => Some(skotch_mir::BinOp::CmpLt),
-            ">" => Some(skotch_mir::BinOp::CmpGt),
-            "<=" => Some(skotch_mir::BinOp::CmpLe),
-            ">=" => Some(skotch_mir::BinOp::CmpGe),
-            _ => None,
-        }?;
+        let is_cmp_op = matches!(
+            op_text.as_str(),
+            "==" | "!=" | "<" | ">" | "<=" | ">="
+        );
         let lhs_slot = lower_rich_expr_to_slot(
             b.lhs()?,
             lookup_name,
@@ -11687,18 +11677,65 @@ fn lower_rich_expr_to_slot(
             extra_locals,
             strings,
         )?;
-        let is_cmp = matches!(
-            mir_op,
-            skotch_mir::BinOp::CmpEq
-                | skotch_mir::BinOp::CmpNe
-                | skotch_mir::BinOp::CmpLt
-                | skotch_mir::BinOp::CmpGt
-                | skotch_mir::BinOp::CmpLe
-                | skotch_mir::BinOp::CmpGe
-        );
+        let lhs_ty = extra_locals
+            .get(lhs_slot.0 as usize)
+            .cloned()
+            .unwrap_or(Ty::Int);
+        let rhs_ty = extra_locals
+            .get(rhs_slot.0 as usize)
+            .cloned()
+            .unwrap_or(Ty::Int);
+        let is_long = matches!(lhs_ty, Ty::Long) || matches!(rhs_ty, Ty::Long);
+        let is_double = matches!(lhs_ty, Ty::Double) || matches!(rhs_ty, Ty::Double);
+        let mir_op = if is_cmp_op {
+            match op_text.as_str() {
+                "==" => Some(skotch_mir::BinOp::CmpEq),
+                "!=" => Some(skotch_mir::BinOp::CmpNe),
+                "<" => Some(skotch_mir::BinOp::CmpLt),
+                ">" => Some(skotch_mir::BinOp::CmpGt),
+                "<=" => Some(skotch_mir::BinOp::CmpLe),
+                ">=" => Some(skotch_mir::BinOp::CmpGe),
+                _ => None,
+            }
+        } else if is_long {
+            match op_text.as_str() {
+                "+" => Some(skotch_mir::BinOp::AddL),
+                "-" => Some(skotch_mir::BinOp::SubL),
+                "*" => Some(skotch_mir::BinOp::MulL),
+                "/" => Some(skotch_mir::BinOp::DivL),
+                "%" => Some(skotch_mir::BinOp::ModL),
+                _ => None,
+            }
+        } else if is_double {
+            match op_text.as_str() {
+                "+" => Some(skotch_mir::BinOp::AddD),
+                "-" => Some(skotch_mir::BinOp::SubD),
+                "*" => Some(skotch_mir::BinOp::MulD),
+                "/" => Some(skotch_mir::BinOp::DivD),
+                "%" => Some(skotch_mir::BinOp::ModD),
+                _ => None,
+            }
+        } else {
+            match op_text.as_str() {
+                "+" => Some(skotch_mir::BinOp::AddI),
+                "-" => Some(skotch_mir::BinOp::SubI),
+                "*" => Some(skotch_mir::BinOp::MulI),
+                "/" => Some(skotch_mir::BinOp::DivI),
+                "%" => Some(skotch_mir::BinOp::ModI),
+                _ => None,
+            }
+        }?;
         let slot = LocalId(*next_slot);
         *next_slot += 1;
-        extra_locals.push(if is_cmp { Ty::Bool } else { Ty::Int });
+        extra_locals.push(if is_cmp_op {
+            Ty::Bool
+        } else if is_long {
+            Ty::Long
+        } else if is_double {
+            Ty::Double
+        } else {
+            Ty::Int
+        });
         pre_stmts.push(MStmt::Assign {
             dest: slot,
             value: skotch_mir::Rvalue::BinOp {
