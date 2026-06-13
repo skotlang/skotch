@@ -4115,10 +4115,22 @@ fn lower_loop_body_blocks(
                 };
                 let cond_block_id = block_offset + blocks.len() as u32;
                 let then_block_id = cond_block_id + 1;
+                // kotlinc materializes an `if (..) return ..` as a
+                // value-producing expression: the false branch falls
+                // through into a synthetic Unit-assignment block before
+                // continuing. We insert one when then_is_return is the
+                // only return arm, has no else, and there's a stmt
+                // after the if in the body (i.e. a continuation).
+                let needs_synthetic_unit_join = !has_else
+                    && then_is_return
+                    && (j + 1) < body_children.len();
                 let (else_block_id, after_block_id) = if has_else {
                     let e_id = then_block_id + 1;
                     let a_id = e_id + 1;
                     (Some(e_id), a_id)
+                } else if needs_synthetic_unit_join {
+                    let synth = then_block_id + 1;
+                    (Some(synth), synth + 1)
                 } else {
                     (None, then_block_id + 1)
                 };
@@ -4196,6 +4208,30 @@ fn lower_loop_body_blocks(
                             terminator: Terminator::Goto(after_block_id),
                         });
                     }
+                } else if needs_synthetic_unit_join {
+                    // kotlinc shape: `Const(Null) → tmp; phantom_slot = Local(tmp)`.
+                    // This materializes the if-expression's Unit value
+                    // on the false branch before falling through to the
+                    // continuation.
+                    let tmp_slot = LocalId(*next_slot);
+                    *next_slot += 1;
+                    local_tys.push(Ty::Any);
+                    let phantom_slot = LocalId(*next_slot);
+                    *next_slot += 1;
+                    local_tys.push(Ty::Any);
+                    blocks.push(BasicBlock {
+                        stmts: vec![
+                            MStmt::Assign {
+                                dest: tmp_slot,
+                                value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Null),
+                            },
+                            MStmt::Assign {
+                                dest: phantom_slot,
+                                value: skotch_mir::Rvalue::Local(tmp_slot),
+                            },
+                        ],
+                        terminator: Terminator::Goto(after_block_id),
+                    });
                 }
                 // Continue into the after-block.
                 i = j + 1;
@@ -9235,11 +9271,11 @@ fn try_lower_multi_stmt_block_with_offset(
                     all.push(final_block);
                     return Some((all, local_tys));
                 }
-                let then_terminator = match then_return_slot {
-                    Some(slot) => Terminator::ReturnValue(slot),
-                    None => Terminator::Goto(if else_mstmts.is_some() { 3 } else { 2 }),
-                };
                 let (blocks, _) = if let Some(else_mstmts) = else_mstmts {
+                    let then_terminator = match then_return_slot {
+                        Some(slot) => Terminator::ReturnValue(slot),
+                        None => Terminator::Goto(3),
+                    };
                     // 4-block CFG: pre / then / else / join
                     let pre_block = BasicBlock {
                         stmts: pre_block_stmts,
@@ -9263,24 +9299,84 @@ fn try_lower_multi_stmt_block_with_offset(
                     };
                     (vec![pre_block, then_block, else_block, join_block], ())
                 } else {
-                    // 3-block CFG: pre / then / join
-                    let pre_block = BasicBlock {
-                        stmts: pre_block_stmts,
-                        terminator: Terminator::Branch {
-                            cond: cmp_slot,
-                            then_block: 1,
-                            else_block: 2,
-                        },
-                    };
-                    let then_block = BasicBlock {
-                        stmts: then_mstmts,
-                        terminator: then_terminator,
-                    };
-                    let join_block = BasicBlock {
-                        stmts: exit_stmts,
-                        terminator: join_terminator,
-                    };
-                    (vec![pre_block, then_block, join_block], ())
+                    // No else. kotlinc inserts a synthetic Unit-join
+                    // block on the false-branch when the then-arm
+                    // returns AND there's a continuation — because
+                    // the if is treated as a Unit-valued expression
+                    // and the Unit must be materialized somewhere.
+                    let has_continuation =
+                        !exit_stmts.is_empty() || trailing_return_slot.is_some();
+                    let want_synthetic =
+                        then_return_slot.is_some() && has_continuation;
+                    if want_synthetic {
+                        let then_terminator = Terminator::ReturnValue(
+                            then_return_slot.expect("checked"),
+                        );
+                        let tmp_slot = LocalId(next_slot);
+                        next_slot += 1;
+                        local_tys.push(Ty::Any);
+                        let phantom_slot = LocalId(next_slot);
+                        next_slot += 1;
+                        local_tys.push(Ty::Any);
+                        let pre_block = BasicBlock {
+                            stmts: pre_block_stmts,
+                            terminator: Terminator::Branch {
+                                cond: cmp_slot,
+                                then_block: 1,
+                                else_block: 2,
+                            },
+                        };
+                        let then_block = BasicBlock {
+                            stmts: then_mstmts,
+                            terminator: then_terminator,
+                        };
+                        let synthetic = BasicBlock {
+                            stmts: vec![
+                                MStmt::Assign {
+                                    dest: tmp_slot,
+                                    value: skotch_mir::Rvalue::Const(
+                                        skotch_mir::MirConst::Null,
+                                    ),
+                                },
+                                MStmt::Assign {
+                                    dest: phantom_slot,
+                                    value: skotch_mir::Rvalue::Local(tmp_slot),
+                                },
+                            ],
+                            terminator: Terminator::Goto(3),
+                        };
+                        let join_block = BasicBlock {
+                            stmts: exit_stmts,
+                            terminator: join_terminator,
+                        };
+                        (
+                            vec![pre_block, then_block, synthetic, join_block],
+                            (),
+                        )
+                    } else {
+                        let then_terminator = match then_return_slot {
+                            Some(slot) => Terminator::ReturnValue(slot),
+                            None => Terminator::Goto(2),
+                        };
+                        // 3-block CFG: pre / then / join
+                        let pre_block = BasicBlock {
+                            stmts: pre_block_stmts,
+                            terminator: Terminator::Branch {
+                                cond: cmp_slot,
+                                then_block: 1,
+                                else_block: 2,
+                            },
+                        };
+                        let then_block = BasicBlock {
+                            stmts: then_mstmts,
+                            terminator: then_terminator,
+                        };
+                        let join_block = BasicBlock {
+                            stmts: exit_stmts,
+                            terminator: join_terminator,
+                        };
+                        (vec![pre_block, then_block, join_block], ())
+                    }
                 };
                 return Some((blocks, local_tys));
             }
