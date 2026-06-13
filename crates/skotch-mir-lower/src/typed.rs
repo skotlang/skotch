@@ -1345,7 +1345,7 @@ fn try_lower_when_expression(
     };
 
     // Subject must be a Reference to a parameter.
-    let subject_slot = match &subject {
+    let subject_param_slot = match &subject {
         KtExpr::Reference(r) => r
             .name()
             .and_then(|n| outer_param_names.iter().position(|p| p == n))
@@ -1382,8 +1382,35 @@ fn try_lower_when_expression(
     }
     let else_body = else_arm.map(unwrap_parens)?; // require else
 
+    // kotlinc only captures the subject into its own local when the
+    // subject type is a REFERENCE type (String, class). For primitive
+    // subjects (Int, Long, Float, Double, Boolean) kotlinc compares
+    // directly against the param slot and the pre-block is empty.
+    // Determine the subject param's declared type via its user-type name.
+    let subject_is_ref = {
+        let param_type_name: Option<&str> = f
+            .value_parameter_list()
+            .and_then(|pl| pl.parameters().nth(subject_param_slot.0 as usize))
+            .and_then(|p| p.type_reference())
+            .and_then(|tr| tr.user_type())
+            .and_then(|u| u.name());
+        !matches!(
+            param_type_name,
+            Some("Int") | Some("Long") | Some("Short") | Some("Byte")
+                | Some("Float") | Some("Double") | Some("Boolean") | Some("Char")
+        )
+    };
+
     let mut next_slot = param_count as u32;
     let mut extra_locals: Vec<Ty> = Vec::new();
+    let subject_capture_slot = if subject_is_ref {
+        let s = LocalId(next_slot);
+        next_slot += 1;
+        extra_locals.push(Ty::Any);
+        Some(s)
+    } else {
+        None
+    };
     let result_slot = LocalId(next_slot);
     next_slot += 1;
     // Result type from else_body shape (best-effort).
@@ -1397,11 +1424,28 @@ fn try_lower_when_expression(
 
     let mut blocks: Vec<BasicBlock> = Vec::new();
 
+    // Pre-block: subject capture for reference subjects, empty for
+    // primitive subjects. kotlinc emits the empty pre-block too.
+    blocks.push(BasicBlock {
+        stmts: match subject_capture_slot {
+            Some(c) => vec![MStmt::Assign {
+                dest: c,
+                value: Rvalue::Local(subject_param_slot),
+            }],
+            None => Vec::new(),
+        },
+        terminator: Terminator::Goto(1),
+    });
+
+    // For ref subjects, use the captured local. For primitives, use
+    // the param slot directly.
+    let subject_slot = subject_capture_slot.unwrap_or(subject_param_slot);
+
     // Each arm contributes: cmp_block (with stmts) + then_block.
     // After all arms, an else_block, then join_block.
+    // All indices are shifted by +1 because of the pre-block.
     let n_arms = arms.len();
-    // Reserve indices: 0..(2N) for cmp/then alternation, 2N for else, 2N+1 for join.
-    let else_block_idx = (2 * n_arms) as u32;
+    let else_block_idx = (2 * n_arms + 1) as u32;
     let join_block_idx = else_block_idx + 1;
 
     for (i, (cond_expr, body)) in arms.iter().enumerate() {
@@ -1426,9 +1470,10 @@ fn try_lower_when_expression(
                 rhs: lit_slot,
             },
         });
-        let then_block_idx = (2 * i + 1) as u32;
+        // Shifted by +1 to account for the pre subject-capture block.
+        let then_block_idx = (2 * i + 2) as u32;
         let next_cmp_block_idx = if i + 1 < n_arms {
-            (2 * (i + 1)) as u32
+            (2 * (i + 1) + 1) as u32
         } else {
             else_block_idx
         };
@@ -17644,24 +17689,26 @@ mod tests {
             "TestKt",
         );
         let f = &module.functions[0];
-        // 6 blocks: cmp_1, then_1, cmp_2, then_2, else, join
-        assert_eq!(f.blocks.len(), 6);
-        // join block is index 5: ReturnValue.
-        assert!(matches!(f.blocks[5].terminator, Terminator::ReturnValue(_)));
-        // First cmp block branches into then_1 (index 1) or cmp_2 (index 2).
+        // 7 blocks: subj_capture, cmp_1, then_1, cmp_2, then_2, else, join
+        assert_eq!(f.blocks.len(), 7);
+        // pre block is index 0: capture; Goto(1).
+        assert!(matches!(f.blocks[0].terminator, Terminator::Goto(1)));
+        // join block is index 6: ReturnValue.
+        assert!(matches!(f.blocks[6].terminator, Terminator::ReturnValue(_)));
+        // First cmp block branches into then_1 (index 2) or cmp_2 (index 3).
         assert!(matches!(
-            f.blocks[0].terminator,
+            f.blocks[1].terminator,
             Terminator::Branch {
-                then_block: 1,
-                else_block: 2,
+                then_block: 2,
+                else_block: 3,
                 ..
             }
         ));
-        // then blocks Goto(5) the join.
-        assert!(matches!(f.blocks[1].terminator, Terminator::Goto(5)));
-        assert!(matches!(f.blocks[3].terminator, Terminator::Goto(5)));
-        // else block (index 4) also Goto(5).
-        assert!(matches!(f.blocks[4].terminator, Terminator::Goto(5)));
+        // then blocks Goto(6) the join.
+        assert!(matches!(f.blocks[2].terminator, Terminator::Goto(6)));
+        assert!(matches!(f.blocks[4].terminator, Terminator::Goto(6)));
+        // else block (index 5) also Goto(6).
+        assert!(matches!(f.blocks[5].terminator, Terminator::Goto(6)));
     }
 
     #[test]
@@ -18780,17 +18827,17 @@ mod tests {
             "TestKt",
         );
         let f = module.functions.iter().find(|f| f.name == "pick").unwrap();
-        // 2 arms * 2 blocks (cmp + body) + 1 else + 1 join = 6 blocks.
-        assert_eq!(f.blocks.len(), 6);
-        // Then arm 1 (block 1) should assign Local(a) (slot 1).
-        match &f.blocks[1].stmts[0] {
+        // pre + 2 arms * 2 blocks (cmp + body) + 1 else + 1 join = 7 blocks.
+        assert_eq!(f.blocks.len(), 7);
+        // Then arm 1 (block 2) should assign Local(a) (slot 1).
+        match &f.blocks[2].stmts[0] {
             skotch_mir::Stmt::Assign { value, .. } => match value {
                 skotch_mir::Rvalue::Local(s) => assert_eq!(s.0, 1),
                 _ => panic!("expected Local(a), got {value:?}"),
             },
         }
-        // Then arm 2 (block 3) should assign Local(b) (slot 2).
-        match &f.blocks[3].stmts[0] {
+        // Then arm 2 (block 4) should assign Local(b) (slot 2).
+        match &f.blocks[4].stmts[0] {
             skotch_mir::Stmt::Assign { value, .. } => match value {
                 skotch_mir::Rvalue::Local(s) => assert_eq!(s.0, 2),
                 _ => panic!("expected Local(b), got {value:?}"),
@@ -19301,11 +19348,11 @@ mod tests {
             .iter()
             .find(|f| f.name == "lookup")
             .unwrap();
-        // 2 arms + else + join = 2*2 + 1 + 1 = 6 blocks.
-        assert_eq!(f.blocks.len(), 6);
+        // pre + 2 arms + else + join = 1 + 2*2 + 1 + 1 = 7 blocks.
+        assert_eq!(f.blocks.len(), 7);
         // The last block should be ReturnValue.
         assert!(matches!(
-            f.blocks[5].terminator,
+            f.blocks[6].terminator,
             skotch_mir::Terminator::ReturnValue(_)
         ));
     }
