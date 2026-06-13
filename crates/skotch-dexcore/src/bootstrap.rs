@@ -485,28 +485,32 @@ fn cfg_materialize(
     }
 }
 
-fn translate_code_cfg(
-    cf: &ClassFile,
-    m: &Member,
+/// One CFG emission pass's outputs (an `Emitter` plus per-block return facts).
+struct CfgEmit<'a> {
+    e: Emitter<'a>,
+    max_reg: i32,
+    ret_reg: Vec<Option<u16>>,
+    bare_ret: Vec<bool>,
+}
+
+/// Emits all blocks once. Blocks in `drop_return` omit their final `return`
+/// instruction (they fall through to a shared exit instead). Branch offsets are
+/// patched before returning.
+fn emit_cfg<'a>(
+    cf: &'a ClassFile,
     code: &Code,
-    params: &[String],
     ins_size: u16,
     min_api: u32,
-) -> Result<CodeItem> {
-    let bc = &code.bytecode;
-    let lu = count_local_loads(bc, code.max_locals as usize)?;
-    if lu.stores.iter().any(|&s| s > 0) {
-        bail!(
-            "dexer (cfg): stores + control flow need full register allocation (Phase 1) in {}{}",
-            m.name,
-            m.descriptor
-        );
-    }
-    let blocks = split_blocks(bc)?;
-    let live_in = block_liveness(&blocks, bc, code.max_locals as usize);
+    blocks: &[Block],
+    live_in: &[std::collections::BTreeSet<u16>],
+    bc: &[u8],
+    loads: Vec<u32>,
+    drop_return: &std::collections::HashSet<usize>,
+    mname: &str,
+    mdesc: &str,
+) -> Result<CfgEmit<'a>> {
     let block_at = |pc: usize| blocks.iter().position(|b| b.start == pc);
-
-    let mut e = Emitter::new(cf, ins_size, &code.line_numbers, lu.loads, min_api);
+    let mut e = Emitter::new(cf, ins_size, &code.line_numbers, loads, min_api);
     let mut block_unit = vec![0usize; blocks.len()];
     let mut fixups: Vec<(usize, usize)> = Vec::new();
     let mut ret_reg: Vec<Option<u16>> = vec![None; blocks.len()];
@@ -572,35 +576,21 @@ fn translate_code_cfg(
                     let r = cfg_materialize(&mut e, &mut used, &mut max_reg, &v)?;
                     ret_reg[bi] = Some(r);
                     bare_ret[bi] = is_bare_load_return(bc, blk.start, blk.end);
-                    e.return_value(Val::Reg(r, v.is_wide()))?;
+                    // A merged contributor drops its return and falls through to
+                    // the shared exit (the value already sits in the exit reg).
+                    if !drop_return.contains(&bi) {
+                        e.return_value(Val::Reg(r, v.is_wide()))?;
+                    }
                     pc += 1;
                 }
                 0xb1 => { e.return_void(); pc += 1; }
                 other => bail!(
-                    "dexer (cfg): unsupported opcode {other:#04x} in {}{} (needs Phase 1)",
-                    m.name,
-                    m.descriptor
+                    "dexer (cfg): unsupported opcode {other:#04x} in {mname}{mdesc} (needs Phase 1)"
                 ),
             }
         }
         if !stack.is_empty() {
-            bail!("dexer (cfg): non-empty stack at block boundary in {}{}", m.name, m.descriptor);
-        }
-    }
-
-    // d8 collapses a bare `return vR` shared by multiple paths into one exit
-    // block (e.g. `absv`/`clamp0`). We don't model that yet, so bail rather than
-    // emit the un-merged (divergent) form.
-    for bi in 0..blocks.len() {
-        if bare_ret[bi] {
-            let r = ret_reg[bi];
-            if (0..blocks.len()).any(|bj| bj != bi && ret_reg[bj] == r) {
-                bail!(
-                    "dexer (cfg): shared-exit return merging not yet supported in {}{} (needs Phase 1)",
-                    m.name,
-                    m.descriptor
-                );
-            }
+            bail!("dexer (cfg): non-empty stack at block boundary in {mname}{mdesc}");
         }
     }
 
@@ -611,14 +601,77 @@ fn translate_code_cfg(
         e.insns[off_unit] = off as i16 as u16;
     }
 
-    let registers_size = ((max_reg + 1).max(ins_size as i32)) as u16;
-    let debug_info = e.build_debug_info(params);
+    Ok(CfgEmit { e, max_reg, ret_reg, bare_ret })
+}
+
+fn translate_code_cfg(
+    cf: &ClassFile,
+    m: &Member,
+    code: &Code,
+    params: &[String],
+    ins_size: u16,
+    min_api: u32,
+) -> Result<CodeItem> {
+    let bc = &code.bytecode;
+    let lu = count_local_loads(bc, code.max_locals as usize)?;
+    if lu.stores.iter().any(|&s| s > 0) {
+        bail!(
+            "dexer (cfg): stores + control flow need full register allocation (Phase 1) in {}{}",
+            m.name,
+            m.descriptor
+        );
+    }
+    let blocks = split_blocks(bc)?;
+    let live_in = block_liveness(&blocks, bc, code.max_locals as usize);
+    let no_drop = std::collections::HashSet::new();
+
+    // Pass 1: emit without merging, to learn each block's return register.
+    let pass1 = emit_cfg(
+        cf, code, ins_size, min_api, &blocks, &live_in, bc, lu.loads.clone(), &no_drop, &m.name, &m.descriptor,
+    )?;
+
+    // d8 collapses a bare `return vR` shared by multiple paths into a single
+    // exit block; a contributing block laid out immediately before the exit
+    // drops its `return` and falls through. We support exactly that shape (one
+    // contributor per exit, immediately preceding it); anything else bails.
+    let mut drops: std::collections::HashSet<usize> = std::collections::HashSet::new();
+    for bi in 0..blocks.len() {
+        if !pass1.bare_ret[bi] {
+            continue;
+        }
+        let r = pass1.ret_reg[bi];
+        let contributors: Vec<usize> =
+            (0..blocks.len()).filter(|&bj| bj != bi && pass1.ret_reg[bj] == r).collect();
+        if contributors.is_empty() {
+            continue;
+        }
+        if contributors.len() == 1 && contributors[0] + 1 == bi && !pass1.bare_ret[contributors[0]] {
+            drops.insert(contributors[0]);
+        } else {
+            bail!(
+                "dexer (cfg): shared-exit merge shape not yet supported in {}{} (needs Phase 1)",
+                m.name,
+                m.descriptor
+            );
+        }
+    }
+
+    let emit = if drops.is_empty() {
+        pass1
+    } else {
+        emit_cfg(
+            cf, code, ins_size, min_api, &blocks, &live_in, bc, lu.loads, &drops, &m.name, &m.descriptor,
+        )?
+    };
+
+    let registers_size = ((emit.max_reg + 1).max(ins_size as i32)) as u16;
+    let debug_info = emit.e.build_debug_info(params);
     Ok(CodeItem {
         registers_size,
         ins_size,
-        outs_size: e.max_outs,
-        insns: e.insns,
-        fixups: e.fixups,
+        outs_size: emit.e.max_outs,
+        insns: emit.e.insns,
+        fixups: emit.e.fixups,
         tries: vec![],
         debug_info,
     })

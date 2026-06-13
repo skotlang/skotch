@@ -7782,9 +7782,14 @@ fn try_lower_multi_stmt_block_with_offset(
                 let KtExpr::Binary(rb) = range_expr else {
                     return None;
                 };
-                if rb.operation().map(|o| o.text()).as_deref() != Some("..") {
-                    return None;
-                }
+                let range_op_text = rb.operation().map(|o| o.text()).unwrap_or_default();
+                let (range_cmp_op, range_step): (skotch_mir::BinOp, i32) =
+                    match range_op_text.as_str() {
+                        ".." => (skotch_mir::BinOp::CmpLe, 1),
+                        "until" => (skotch_mir::BinOp::CmpLt, 1),
+                        "downTo" => (skotch_mir::BinOp::CmpGe, -1),
+                        _ => return None,
+                    };
                 // Resolve range bounds: literal | Reference (local).
                 let resolve_bound = |e: KtExpr<'_>,
                                      name_to_local: &Vec<(String, LocalId)>,
@@ -8015,7 +8020,7 @@ fn try_lower_multi_stmt_block_with_offset(
                     fn_lookup,
                     &function_param_names,
                 )?;
-                // i = i + 1 at end of body.
+                // i = i ± step at end of body.
                 let one_slot = LocalId(next_slot);
                 next_slot += 1;
                 local_tys.push(Ty::Int);
@@ -8023,21 +8028,26 @@ fn try_lower_multi_stmt_block_with_offset(
                     dest: one_slot,
                     value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(1)),
                 });
+                let step_op = if range_step > 0 {
+                    skotch_mir::BinOp::AddI
+                } else {
+                    skotch_mir::BinOp::SubI
+                };
                 body_mstmts.push(MStmt::Assign {
                     dest: i_slot,
                     value: skotch_mir::Rvalue::BinOp {
-                        op: skotch_mir::BinOp::AddI,
+                        op: step_op,
                         lhs: i_slot,
                         rhs: one_slot,
                     },
                 });
-                // Cond block stmts: cmp = i <= end.
+                // Cond block stmts: cmp = i ≤/</≥ end.
                 let cmp_slot = LocalId(next_slot);
                 local_tys.push(Ty::Bool);
                 let cond_stmt = MStmt::Assign {
                     dest: cmp_slot,
                     value: skotch_mir::Rvalue::BinOp {
-                        op: skotch_mir::BinOp::CmpLe,
+                        op: range_cmp_op,
                         lhs: i_slot,
                         rhs: end_slot,
                     },

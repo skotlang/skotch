@@ -32,6 +32,30 @@ fn straightline_battery_byte_identical() {
     );
 }
 
+/// Branch methods that exercise d8's shared-exit return-merging: `absv`
+/// (`if(x<0) return -x; return x`) and `clamp0` collapse two same-register
+/// returns into one bare `return v0` that the preceding block falls through to.
+/// Also includes `sign`/`max2` (no merge) to confirm mixed methods coexist.
+#[test]
+fn branch_merge_battery_byte_identical() {
+    let cf = skotch_classfile::parse_class_file(&fixtures().join("Br.class")).unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let produced = dex_classes(&[cf], &opts).unwrap();
+    let golden = std::fs::read(fixtures().join("Br.d8.dex")).unwrap();
+    if produced != golden {
+        std::fs::write("/tmp/skotch-Br-produced.dex", &produced).unwrap();
+    }
+    skotch_dex::validator::validate(&produced).expect("self-validation");
+    assert_eq!(
+        produced,
+        golden,
+        "Br merge battery: produced {} vs golden {}; first diff {:?}",
+        produced.len(),
+        golden.len(),
+        (0..produced.len().min(golden.len())).find(|&i| produced[i] != golden[i])
+    );
+}
+
 /// Conditional-branch methods (`sign`, `max2`, `min2`) — exercises the CFG
 /// path: basic-block splitting, local-slot liveness (so `const v0` reuses the
 /// argument's register only where it's dead), `if-testz`/`if-test` emission, and
