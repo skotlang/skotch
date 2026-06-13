@@ -664,6 +664,21 @@ fn translate_code_cfg(
         )?
     };
 
+    // Args-high relocation: when registers_size > ins_size, d8 places incoming
+    // args in the HIGH registers `[registers_size - ins, registers_size)`, not
+    // `[0, ins)`. This CFG path assumes args sit at `[0, ins)`, which is only
+    // valid without pressure. If a register above the argument range was needed
+    // while arguments are present, bail rather than emit divergent register
+    // numbers (needs the full Phase-1 allocator).
+    if ins_size > 0 && emit.max_reg >= ins_size as i32 {
+        bail!(
+            "dexer (cfg): register pressure above the argument range needs args-high \
+             allocation (Phase 1) in {}{}",
+            m.name,
+            m.descriptor
+        );
+    }
+
     let registers_size = ((emit.max_reg + 1).max(ins_size as i32)) as u16;
     let debug_info = emit.e.build_debug_info(params);
     Ok(CodeItem {
@@ -1000,6 +1015,14 @@ impl<'a> Emitter<'a> {
     }
 
     fn getfield(&mut self, cf: &ClassFile, idx: u16, obj: Val) -> Result<Val> {
+        // d8 places the receiver argument in a HIGH register and the loaded
+        // value in a LOW one (e.g. `get(){return x}` → `iget v0, v1`,
+        // registers=2, ins=1) instead of coalescing the result into the now-dead
+        // receiver register. Matching that needs args-high allocation, so bail
+        // rather than emit the coalesced (byte-divergent) `iget v0, v0`.
+        if self.ins_size > 0 {
+            bail!("dexer: instance getfield needs args-high allocation (Phase 1)");
+        }
         let (field, desc) = self.field_op(cf, idx)?;
         let wide = desc == "J" || desc == "D";
         let ro = self.materialize(&obj)?;

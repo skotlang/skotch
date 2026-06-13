@@ -32,6 +32,22 @@ fn straightline_battery_byte_identical() {
     );
 }
 
+/// `cmp100(int a){ if(a>100) return 1; return 0; }` needs a scratch register for
+/// the constant while `a` is live, so d8 relocates `a` to a high register
+/// (registers=2, ins=1: `a`→v1, const→v0). The bootstrap doesn't model args-high
+/// allocation yet, so it must BAIL — never emit byte-divergent register numbers.
+#[test]
+fn args_high_pressure_bails_not_miscompiles() {
+    let cf = skotch_classfile::parse_class_file(&fixtures().join("ArgsHigh.class")).unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let err = dex_classes(&[cf], &opts).expect_err("args-high method must bail, not miscompile");
+    let msg = format!("{err:#}");
+    assert!(
+        msg.contains("args-high") || msg.contains("argument range"),
+        "expected an args-high bail, got: {msg}"
+    );
+}
+
 /// Branch methods that exercise d8's shared-exit return-merging: `absv`
 /// (`if(x<0) return -x; return x`) and `clamp0` collapse two same-register
 /// returns into one bare `return v0` that the preceding block falls through to.
