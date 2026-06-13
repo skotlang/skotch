@@ -350,39 +350,38 @@ pub fn lower_file(
     }
 
     // Top-level vals — emit as top_level_consts (if `const val`) or
-    // top_level_props (otherwise). The actual <clinit> synthesis and
-    // get<Name>() accessor emission is deferred to a follow-up port.
+    // top_level_props (otherwise). The JVM backend synthesizes the
+    // `<clinit>` and `getXxx()` accessor from these tables.
     for decl in file.decls() {
         if let KtDecl::Property(p) = decl {
             let Some(name) = p.name() else { continue };
-            let ty = p
+            // Type: explicit annotation first; else infer from initializer.
+            let declared_ty = p
                 .type_reference()
-                .and_then(|tr| {
-                    // Walk the typed TypeRef to a Ty. We don't yet have
-                    // shared TypeRef->Ty here; use the typeck output
-                    // when available, or fall back to Ty::Any.
-                    let _ = tr;
-                    None
-                })
-                .or_else(|| {
-                    // Pull from TypedFile.top_vals if pass-1 typeck
-                    // collected the val.
-                    typed.top_vals.iter().find_map(|tv| {
-                        // We don't track the val name in TypedTopVal;
-                        // best-effort: assume source-order matches.
-                        // (TypedTopVal.name_index is the index, not a
-                        // symbol.) Pull by position below instead.
-                        let _ = tv;
-                        None
-                    })
-                })
-                .unwrap_or(skotch_types::Ty::Any);
-            let init_const = p.initializer().and_then(lower_const_init_typed);
+                .and_then(|tr| tr.user_type())
+                .and_then(|u| u.name())
+                .and_then(skotch_types::ty_from_name);
+            let init_const = p
+                .initializer()
+                .and_then(|i| lower_const_or_string_init(i, &mut module.strings));
+            let inferred_ty = match &init_const {
+                Some(skotch_mir::MirConst::String(_)) => Some(skotch_types::Ty::String),
+                Some(skotch_mir::MirConst::Int(_)) => Some(skotch_types::Ty::Int),
+                Some(skotch_mir::MirConst::Long(_)) => Some(skotch_types::Ty::Long),
+                Some(skotch_mir::MirConst::Float(_)) => Some(skotch_types::Ty::Float),
+                Some(skotch_mir::MirConst::Double(_)) => Some(skotch_types::Ty::Double),
+                Some(skotch_mir::MirConst::Bool(_)) => Some(skotch_types::Ty::Bool),
+                _ => None,
+            };
+            let ty = declared_ty.or(inferred_ty).unwrap_or(skotch_types::Ty::Any);
             let entry = (
                 name.to_string(),
-                ty,
+                ty.clone(),
                 init_const.unwrap_or(skotch_mir::MirConst::Null),
             );
+            // Mirror the inferred Ty back into val_lookup so body
+            // lowerers issuing GetStaticField pick the right descriptor.
+            val_lookup.insert(name.to_string(), ty);
             if p.is_const() {
                 module.top_level_consts.push(entry);
             } else {
@@ -17383,14 +17382,12 @@ fn lower_const_init_typed(e: skotch_ast::KtExpr<'_>) -> Option<skotch_mir::MirCo
     use skotch_mir::MirConst;
     match e {
         KtExpr::Boolean(_) => {
-            // The boolean composite child is a KW_TRUE / KW_FALSE token.
             let is_true = skotch_ast::children(e.syntax())
                 .iter()
                 .any(|c| c.kind == skotch_syntax::SyntaxKind::KW_TRUE);
             Some(MirConst::Bool(is_true))
         }
         KtExpr::Integer(_) => {
-            // Pull the integer literal text from the child INTEGER_LITERAL.
             let text = skotch_ast::children(e.syntax()).iter().find_map(|c| {
                 if c.kind == skotch_syntax::SyntaxKind::INTEGER_LITERAL {
                     if let skotch_sil::SilData::Token { text } = &c.data {
@@ -17400,7 +17397,6 @@ fn lower_const_init_typed(e: skotch_ast::KtExpr<'_>) -> Option<skotch_mir::MirCo
                 None
             })?;
             let v: i64 = text.parse().ok()?;
-            // Mirror legacy: Int by default (cast).
             Some(MirConst::Int(v as i32))
         }
         KtExpr::Float(_) => {
@@ -17417,7 +17413,6 @@ fn lower_const_init_typed(e: skotch_ast::KtExpr<'_>) -> Option<skotch_mir::MirCo
                 None
             })?;
             let v: f64 = text.trim_end_matches(['f', 'F']).parse().ok()?;
-            // Disambiguate Float vs Double from suffix.
             if text.ends_with('f') || text.ends_with('F') {
                 Some(MirConst::Float(v as f32))
             } else {
@@ -17428,10 +17423,51 @@ fn lower_const_init_typed(e: skotch_ast::KtExpr<'_>) -> Option<skotch_mir::MirCo
         KtExpr::Parenthesized(p) => skotch_ast::children(p.syntax())
             .iter()
             .find_map(|c| KtExpr::cast(c).and_then(lower_const_init_typed)),
-        // String templates require MirModule access to intern strings,
-        // so defer until call sites can pass module in.
         _ => None,
     }
+}
+
+/// Like [`lower_const_init_typed`] but also handles plain string
+/// literals (`KtExpr::String` with a single token child). Interns the
+/// string text into `strings` and returns `MirConst::String(StringId)`.
+fn lower_const_or_string_init(
+    e: skotch_ast::KtExpr<'_>,
+    strings: &mut Vec<String>,
+) -> Option<skotch_mir::MirConst> {
+    use skotch_ast::KtExpr;
+    use skotch_mir::MirConst;
+    if let Some(c) = lower_const_init_typed(e) {
+        return Some(c);
+    }
+    if let KtExpr::String(_) = e {
+        // Walk LITERAL_STRING_TEMPLATE_ENTRY children. A simple string
+        // has one entry with one STRING_CHUNK token; interpolated
+        // templates have multiple entries (any non-literal entry → bail).
+        use skotch_syntax::SyntaxKind as S;
+        let mut text = String::new();
+        for child in skotch_ast::children(e.syntax()) {
+            match child.kind {
+                S::LITERAL_STRING_TEMPLATE_ENTRY => {
+                    for cc in skotch_ast::children(child) {
+                        if cc.kind == S::STRING_CHUNK {
+                            if let skotch_sil::SilData::Token { text: t } = &cc.data {
+                                text.push_str(t);
+                            }
+                        }
+                    }
+                }
+                S::SHORT_STRING_TEMPLATE_ENTRY | S::LONG_STRING_TEMPLATE_ENTRY => return None,
+                S::OPEN_QUOTE | S::CLOSING_QUOTE => {}
+                _ => {}
+            }
+        }
+        let id = strings.iter().position(|s| s == &text).unwrap_or_else(|| {
+            strings.push(text);
+            strings.len() - 1
+        });
+        return Some(MirConst::String(skotch_mir::StringId(id as u32)));
+    }
+    None
 }
 
 #[cfg(test)]
