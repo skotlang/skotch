@@ -32,6 +32,30 @@ fn straightline_battery_byte_identical() {
     );
 }
 
+/// Conditional-branch methods (`sign`, `max2`, `min2`) — exercises the CFG
+/// path: basic-block splitting, local-slot liveness (so `const v0` reuses the
+/// argument's register only where it's dead), `if-testz`/`if-test` emission, and
+/// branch-offset fixups. All three avoid d8's shared-exit return-merging.
+#[test]
+fn branch_battery_byte_identical() {
+    let cf = skotch_classfile::parse_class_file(&fixtures().join("Cmp.class")).unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let produced = dex_classes(&[cf], &opts).unwrap();
+    let golden = std::fs::read(fixtures().join("Cmp.d8.dex")).unwrap();
+    if produced != golden {
+        std::fs::write("/tmp/skotch-Cmp-produced.dex", &produced).unwrap();
+    }
+    skotch_dex::validator::validate(&produced).expect("self-validation");
+    assert_eq!(
+        produced,
+        golden,
+        "Cmp branch battery: produced {} vs golden {}; first diff {:?}",
+        produced.len(),
+        golden.len(),
+        (0..produced.len().min(golden.len())).find(|&i| produced[i] != golden[i])
+    );
+}
+
 /// Like the B battery, but with `two(int a) { int x = a*2; return x+1; }` — a
 /// single-assignment local (`istore_1`). d8 coalesces the local into v0
 /// (`mul-int/lit8 v0,v0,#2; add-int/lit8 v0,v0,#1; return v0`); the bootstrap

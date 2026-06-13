@@ -229,6 +229,401 @@ fn translate_code(
     })
 }
 
+// ───────────────────────── control-flow (CFG) path ─────────────────────────
+//
+// Methods with branches need basic blocks + local liveness so register reuse
+// matches d8 (a temp may reuse an argument's register only where that argument
+// is dead). This path handles conditional branches over the arithmetic/const
+// subset and bails loudly on anything that would diverge from d8: stores mixed
+// with branches, goto/switch, register pressure, and d8's shared-exit
+// return-merging (where two blocks returning the same register collapse to one).
+
+/// A basic block: a half-open JVM bytecode range plus its successor block
+/// indices.
+struct Block {
+    start: usize,
+    end: usize,
+    succ: Vec<usize>,
+}
+
+/// Maps a JVM conditional-branch opcode to its DEX op and whether it compares
+/// two registers (`if-test`, 22t) vs one against zero (`if-testz`, 21t).
+fn cond_branch_dex_op(jvm: u8) -> Option<(u16, bool)> {
+    Some(match jvm {
+        0x99 => (0x38, false), // ifeq        → if-eqz
+        0x9a => (0x39, false), // ifne        → if-nez
+        0x9b => (0x3a, false), // iflt        → if-ltz
+        0x9c => (0x3b, false), // ifge        → if-gez
+        0x9d => (0x3c, false), // ifgt        → if-gtz
+        0x9e => (0x3d, false), // ifle        → if-lez
+        0x9f => (0x32, true),  // if_icmpeq   → if-eq
+        0xa0 => (0x33, true),  // if_icmpne   → if-ne
+        0xa1 => (0x34, true),  // if_icmplt   → if-lt
+        0xa2 => (0x35, true),  // if_icmpge   → if-ge
+        0xa3 => (0x36, true),  // if_icmpgt   → if-gt
+        0xa4 => (0x37, true),  // if_icmple   → if-le
+        _ => return None,
+    })
+}
+
+/// JVM instruction length, complete for the opcodes the dexer accepts plus all
+/// branch/return forms (so block-boundary walks stay aligned).
+fn jvm_step_len(bc: &[u8], pc: usize) -> usize {
+    match bc[pc] {
+        0x10 | 0x12 | 0x15..=0x19 | 0x36..=0x3a | 0xa9 | 0xbc => 2,
+        0x11 | 0x13 | 0x14 | 0x84 | 0x99..=0xa7 | 0xb2..=0xb8 | 0xbb | 0xbd | 0xc0
+        | 0xc1 | 0xc6 | 0xc7 => 3,
+        0xc5 => 4,
+        0xb9 | 0xba | 0xc8 | 0xc9 => 5,
+        _ => 1,
+    }
+}
+
+/// The local slot a load opcode reads, or `None` if `op` is not a load.
+fn load_slot_of(bc: &[u8], pc: usize) -> Option<u16> {
+    let op = bc[pc];
+    Some(match op {
+        0x1a..=0x1d => (op - 0x1a) as u16,
+        0x1e..=0x21 => (op - 0x1e) as u16,
+        0x22..=0x25 => (op - 0x22) as u16,
+        0x26..=0x29 => (op - 0x26) as u16,
+        0x2a..=0x2d => (op - 0x2a) as u16,
+        0x15..=0x19 => bc[pc + 1] as u16,
+        _ => return None,
+    })
+}
+
+/// True if a method contains any branch/goto/switch — i.e. needs the CFG path.
+fn method_has_branches(bc: &[u8]) -> bool {
+    let mut pc = 0;
+    while pc < bc.len() {
+        let op = bc[pc];
+        if (0x99..=0xa8).contains(&op) || matches!(op, 0xaa | 0xab | 0xc6 | 0xc7 | 0xc8 | 0xc9) {
+            return true;
+        }
+        pc += jvm_step_len(bc, pc);
+    }
+    false
+}
+
+/// The pc of the last instruction in `[start, end)`.
+fn last_instr_pc(bc: &[u8], start: usize, end: usize) -> usize {
+    let mut pc = start;
+    let mut last = start;
+    while pc < end {
+        last = pc;
+        pc += jvm_step_len(bc, pc);
+    }
+    last
+}
+
+/// A block that is exactly `load <slot>; <value-return>` — d8's canonical
+/// "bare return", the shape that participates in shared-exit merging.
+fn is_bare_load_return(bc: &[u8], start: usize, end: usize) -> bool {
+    let first = bc[start];
+    if load_slot_of(bc, start).is_none() {
+        return false;
+    }
+    let len = if matches!(first, 0x15..=0x19) { 2 } else { 1 };
+    let rpc = start + len;
+    rpc < end && matches!(bc[rpc], 0xac..=0xb0) && rpc + 1 == end
+}
+
+/// Splits bytecode into basic blocks with successor edges.
+fn split_blocks(bc: &[u8]) -> Result<Vec<Block>> {
+    use std::collections::BTreeSet;
+    let mut leaders: BTreeSet<usize> = BTreeSet::new();
+    leaders.insert(0);
+    let mut pc = 0;
+    while pc < bc.len() {
+        let op = bc[pc];
+        let len = jvm_step_len(bc, pc);
+        if cond_branch_dex_op(op).is_some() || op == 0xa7 {
+            let target = (pc as i32 + i16::from_be_bytes([bc[pc + 1], bc[pc + 2]]) as i32) as usize;
+            leaders.insert(target);
+            if pc + len < bc.len() {
+                leaders.insert(pc + len);
+            }
+        } else if matches!(op, 0xac..=0xb1 | 0xbf) {
+            if pc + len < bc.len() {
+                leaders.insert(pc + len);
+            }
+        } else if matches!(op, 0xaa | 0xab | 0xc4 | 0xc8 | 0xc9) {
+            bail!("dexer (cfg): unsupported control opcode {op:#x} (goto_w/switch/wide need Phase 1)");
+        }
+        pc += len;
+    }
+    let leaders: Vec<usize> = leaders.into_iter().collect();
+    let block_at = |pc: usize| leaders.iter().position(|&l| l == pc);
+    let mut blocks = Vec::with_capacity(leaders.len());
+    for (i, &start) in leaders.iter().enumerate() {
+        let end = if i + 1 < leaders.len() { leaders[i + 1] } else { bc.len() };
+        let lpc = last_instr_pc(bc, start, end);
+        let op = bc[lpc];
+        let len = jvm_step_len(bc, lpc);
+        let mut succ = Vec::new();
+        if cond_branch_dex_op(op).is_some() {
+            let target = (lpc as i32 + i16::from_be_bytes([bc[lpc + 1], bc[lpc + 2]]) as i32) as usize;
+            if let Some(fb) = block_at(lpc + len) {
+                succ.push(fb);
+            }
+            if let Some(tb) = block_at(target) {
+                succ.push(tb);
+            }
+        } else if op == 0xa7 {
+            let target = (lpc as i32 + i16::from_be_bytes([bc[lpc + 1], bc[lpc + 2]]) as i32) as usize;
+            if let Some(tb) = block_at(target) {
+                succ.push(tb);
+            }
+        } else if matches!(op, 0xac..=0xb1 | 0xbf) {
+            // return / athrow — no successors
+        } else if let Some(fb) = block_at(end) {
+            succ.push(fb);
+        }
+        blocks.push(Block { start, end, succ });
+    }
+    Ok(blocks)
+}
+
+/// Backward dataflow for per-block live-in sets of local slots.
+fn block_liveness(blocks: &[Block], bc: &[u8], _max_locals: usize) -> Vec<std::collections::BTreeSet<u16>> {
+    use std::collections::BTreeSet;
+    let n = blocks.len();
+    let mut used: Vec<BTreeSet<u16>> = vec![BTreeSet::new(); n];
+    let mut defd: Vec<BTreeSet<u16>> = vec![BTreeSet::new(); n];
+    for (bi, blk) in blocks.iter().enumerate() {
+        let mut pc = blk.start;
+        let mut defined = BTreeSet::new();
+        while pc < blk.end {
+            if let Some(slot) = load_slot_of(bc, pc) {
+                if !defined.contains(&slot) {
+                    used[bi].insert(slot);
+                }
+            }
+            if let Some((slot, _)) = store_slot(bc, pc) {
+                defined.insert(slot as u16);
+            }
+            pc += jvm_step_len(bc, pc);
+        }
+        defd[bi] = defined;
+    }
+    let mut live_in: Vec<BTreeSet<u16>> = vec![BTreeSet::new(); n];
+    let mut live_out: Vec<BTreeSet<u16>> = vec![BTreeSet::new(); n];
+    loop {
+        let mut changed = false;
+        for bi in (0..n).rev() {
+            let mut lo = BTreeSet::new();
+            for &s in &blocks[bi].succ {
+                lo.extend(live_in[s].iter().copied());
+            }
+            let mut li = used[bi].clone();
+            for &v in &lo {
+                if !defd[bi].contains(&v) {
+                    li.insert(v);
+                }
+            }
+            if lo != live_out[bi] {
+                live_out[bi] = lo;
+                changed = true;
+            }
+            if li != live_in[bi] {
+                live_in[bi] = li;
+                changed = true;
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+    live_in
+}
+
+/// Lowest free register (a pair if `wide`), marking it used and growing the
+/// register file as needed.
+fn alloc_lowest(used: &mut Vec<bool>, max_reg: &mut i32, wide: bool) -> u16 {
+    let need = if wide { 2 } else { 1 };
+    let mut r = 0;
+    loop {
+        if r + need > used.len() {
+            used.resize(r + need, false);
+        }
+        if (0..need).all(|k| !used[r + k]) {
+            for k in 0..need {
+                used[r + k] = true;
+            }
+            *max_reg = (*max_reg).max((r + need - 1) as i32);
+            return r as u16;
+        }
+        r += 1;
+    }
+}
+
+/// Materializes a CFG-path value into a register, emitting a const if needed.
+fn cfg_materialize(
+    e: &mut Emitter,
+    used: &mut Vec<bool>,
+    max_reg: &mut i32,
+    v: &Val,
+) -> Result<u16> {
+    match v {
+        Val::Local(r, _) | Val::Reg(r, _) => Ok(*r),
+        Val::ConstInt(c) => {
+            let r = alloc_lowest(used, max_reg, false);
+            e.emit_const_int(r, *c);
+            Ok(r)
+        }
+        Val::ConstLong(c) => {
+            let r = alloc_lowest(used, max_reg, true);
+            e.emit_const_long(r, *c);
+            Ok(r)
+        }
+        Val::ConstString(s) => {
+            let r = alloc_lowest(used, max_reg, false);
+            e.emit_const_string(r, s.clone());
+            Ok(r)
+        }
+    }
+}
+
+fn translate_code_cfg(
+    cf: &ClassFile,
+    m: &Member,
+    code: &Code,
+    params: &[String],
+    ins_size: u16,
+    min_api: u32,
+) -> Result<CodeItem> {
+    let bc = &code.bytecode;
+    let lu = count_local_loads(bc, code.max_locals as usize)?;
+    if lu.stores.iter().any(|&s| s > 0) {
+        bail!(
+            "dexer (cfg): stores + control flow need full register allocation (Phase 1) in {}{}",
+            m.name,
+            m.descriptor
+        );
+    }
+    let blocks = split_blocks(bc)?;
+    let live_in = block_liveness(&blocks, bc, code.max_locals as usize);
+    let block_at = |pc: usize| blocks.iter().position(|b| b.start == pc);
+
+    let mut e = Emitter::new(cf, ins_size, &code.line_numbers, lu.loads, min_api);
+    let mut block_unit = vec![0usize; blocks.len()];
+    let mut fixups: Vec<(usize, usize)> = Vec::new();
+    let mut ret_reg: Vec<Option<u16>> = vec![None; blocks.len()];
+    let mut bare_ret: Vec<bool> = vec![false; blocks.len()];
+    let mut max_reg: i32 = ins_size as i32 - 1;
+
+    for (bi, blk) in blocks.iter().enumerate() {
+        block_unit[bi] = e.insns.len();
+        // Per-block register state: live-in locals occupy their (== slot) regs.
+        let mut used = vec![false; (ins_size as usize) + 8];
+        for &slot in &live_in[bi] {
+            let r = slot as usize;
+            if r >= used.len() {
+                used.resize(r + 1, false);
+            }
+            used[r] = true;
+        }
+        let mut stack: Vec<Val> = Vec::new();
+        let mut pc = blk.start;
+        while pc < blk.end {
+            e.set_pc(pc as u32);
+            let op = bc[pc];
+            match op {
+                0x1a..=0x1d => { stack.push(Val::Local((op - 0x1a) as u16, false)); pc += 1; }
+                0x1e..=0x21 => { stack.push(Val::Local((op - 0x1e) as u16, true)); pc += 1; }
+                0x22..=0x25 => { stack.push(Val::Local((op - 0x22) as u16, false)); pc += 1; }
+                0x26..=0x29 => { stack.push(Val::Local((op - 0x26) as u16, true)); pc += 1; }
+                0x2a..=0x2d => { stack.push(Val::Local((op - 0x2a) as u16, false)); pc += 1; }
+                0x15 | 0x17 | 0x19 => { stack.push(Val::Local(bc[pc + 1] as u16, false)); pc += 2; }
+                0x16 | 0x18 => { stack.push(Val::Local(bc[pc + 1] as u16, true)); pc += 2; }
+                0x02..=0x08 => { stack.push(Val::ConstInt(op as i32 - 0x03)); pc += 1; }
+                0x10 => { stack.push(Val::ConstInt(bc[pc + 1] as i8 as i32)); pc += 2; }
+                0x11 => { stack.push(Val::ConstInt(i16::from_be_bytes([bc[pc + 1], bc[pc + 2]]) as i32)); pc += 3; }
+                0x74 => {
+                    // ineg — d8 negates in place (neg-int vR, vR).
+                    let v = stack.pop().unwrap();
+                    let r = cfg_materialize(&mut e, &mut used, &mut max_reg, &v)?;
+                    e.emit_unary(0x7b, r, r);
+                    stack.push(Val::Reg(r, false));
+                    pc += 1;
+                }
+                0x99..=0xa4 => {
+                    let (dexop, two) = cond_branch_dex_op(op).unwrap();
+                    let target = (pc as i32 + i16::from_be_bytes([bc[pc + 1], bc[pc + 2]]) as i32) as usize;
+                    let tb = block_at(target)
+                        .ok_or_else(|| anyhow::anyhow!("dexer (cfg): branch target {target} not a block leader"))?;
+                    let off_unit = if two {
+                        let b = stack.pop().unwrap();
+                        let a = stack.pop().unwrap();
+                        let ra = cfg_materialize(&mut e, &mut used, &mut max_reg, &a)?;
+                        let rb = cfg_materialize(&mut e, &mut used, &mut max_reg, &b)?;
+                        e.emit_if(dexop, ra, rb)
+                    } else {
+                        let a = stack.pop().unwrap();
+                        let ra = cfg_materialize(&mut e, &mut used, &mut max_reg, &a)?;
+                        e.emit_if_z(dexop, ra)
+                    };
+                    fixups.push((off_unit, tb));
+                    pc += 3;
+                }
+                0xac | 0xad | 0xae | 0xaf | 0xb0 => {
+                    let v = stack.pop().unwrap();
+                    let r = cfg_materialize(&mut e, &mut used, &mut max_reg, &v)?;
+                    ret_reg[bi] = Some(r);
+                    bare_ret[bi] = is_bare_load_return(bc, blk.start, blk.end);
+                    e.return_value(Val::Reg(r, v.is_wide()))?;
+                    pc += 1;
+                }
+                0xb1 => { e.return_void(); pc += 1; }
+                other => bail!(
+                    "dexer (cfg): unsupported opcode {other:#04x} in {}{} (needs Phase 1)",
+                    m.name,
+                    m.descriptor
+                ),
+            }
+        }
+        if !stack.is_empty() {
+            bail!("dexer (cfg): non-empty stack at block boundary in {}{}", m.name, m.descriptor);
+        }
+    }
+
+    // d8 collapses a bare `return vR` shared by multiple paths into one exit
+    // block (e.g. `absv`/`clamp0`). We don't model that yet, so bail rather than
+    // emit the un-merged (divergent) form.
+    for bi in 0..blocks.len() {
+        if bare_ret[bi] {
+            let r = ret_reg[bi];
+            if (0..blocks.len()).any(|bj| bj != bi && ret_reg[bj] == r) {
+                bail!(
+                    "dexer (cfg): shared-exit return merging not yet supported in {}{} (needs Phase 1)",
+                    m.name,
+                    m.descriptor
+                );
+            }
+        }
+    }
+
+    // Patch branch offsets: relative to the branch instruction's first unit.
+    for (off_unit, tb) in fixups {
+        let branch_start = off_unit - 1;
+        let off = block_unit[tb] as i32 - branch_start as i32;
+        e.insns[off_unit] = off as i16 as u16;
+    }
+
+    let registers_size = ((max_reg + 1).max(ins_size as i32)) as u16;
+    let debug_info = e.build_debug_info(params);
+    Ok(CodeItem {
+        registers_size,
+        ins_size,
+        outs_size: e.max_outs,
+        insns: e.insns,
+        fixups: e.fixups,
+        tries: vec![],
+        debug_info,
+    })
+}
+
 /// Straight-line DEX emitter with a register allocator matching d8 for the
 /// supported subset (args in the low registers, temps reusing freed registers,
 /// no register above the argument range).

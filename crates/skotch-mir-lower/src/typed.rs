@@ -10636,6 +10636,54 @@ fn lower_rich_expr_to_slot(
     ) {
         return Some(slot);
     }
+    // Kotlin stdlib top-level functions that route to Java statics:
+    // maxOf/minOf (Int) → Math.max/min.
+    if let KtExpr::Call(call) = e {
+        if let Some(KtExpr::Reference(rc)) = call.callee() {
+            if let Some(name) = rc.name() {
+                let mapped: Option<(&str, &str, &str, Ty)> = match name {
+                    "maxOf" => Some(("java/lang/Math", "max", "(II)I", Ty::Int)),
+                    "minOf" => Some(("java/lang/Math", "min", "(II)I", Ty::Int)),
+                    _ => None,
+                };
+                if let Some((cls, method, desc, ret_ty)) = mapped {
+                    let mut arg_slots: Vec<LocalId> = Vec::new();
+                    if let Some(arg_list) = call.value_argument_list() {
+                        for arg in arg_list.arguments() {
+                            let arg_e = arg.expression()?;
+                            let slot = lower_rich_expr_to_slot(
+                                arg_e,
+                                lookup_name,
+                                fn_lookup,
+                                next_slot,
+                                pre_stmts,
+                                extra_locals,
+                                strings,
+                            )?;
+                            arg_slots.push(slot);
+                        }
+                    }
+                    if arg_slots.len() == 2 {
+                        let result_slot = LocalId(*next_slot);
+                        *next_slot += 1;
+                        extra_locals.push(ret_ty);
+                        pre_stmts.push(MStmt::Assign {
+                            dest: result_slot,
+                            value: skotch_mir::Rvalue::Call {
+                                kind: skotch_mir::CallKind::StaticJava {
+                                    class_name: cls.to_string(),
+                                    method_name: method.to_string(),
+                                    descriptor: desc.to_string(),
+                                },
+                                args: arg_slots,
+                            },
+                        });
+                        return Some(result_slot);
+                    }
+                }
+            }
+        }
+    }
     // Constructor call heuristic: capitalized name not in fn_lookup
     // treated as ctor invocation.
     if let KtExpr::Call(call) = e {
