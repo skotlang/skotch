@@ -221,6 +221,34 @@ pub(crate) fn def_sites(cfg: &Cfg, bc: &[u8]) -> BTreeMap<u16, BTreeSet<usize>> 
     sites
 }
 
+/// True if the method body contains a back-edge (a branch whose target precedes
+/// it), i.e. a loop. Loop methods need the SSA/φ pipeline; acyclic methods are
+/// served byte-identically by the bootstrap straight-line / CFG paths.
+pub(crate) fn method_has_loop(bc: &[u8]) -> bool {
+    let mut pc = 0usize;
+    while pc < bc.len() {
+        let op = bc[pc];
+        match op {
+            // conditional branches, goto, jsr, ifnull/ifnonnull — 2-byte offset.
+            0x99..=0xa8 | 0xc6 | 0xc7 => {
+                if i16::from_be_bytes([bc[pc + 1], bc[pc + 2]]) < 0 {
+                    return true;
+                }
+                pc += 3;
+            }
+            // goto_w / jsr_w — 4-byte offset.
+            0xc8 | 0xc9 => {
+                if i32::from_be_bytes([bc[pc + 1], bc[pc + 2], bc[pc + 3], bc[pc + 4]]) < 0 {
+                    return true;
+                }
+                pc += 5;
+            }
+            _ => pc += crate::bootstrap::jvm_step_len(bc, pc),
+        }
+    }
+    false
+}
+
 /// Builds the SSA form of a method body (loop-capable). Handles the integer
 /// loop/branch subset (loads, int constants, iinc, int binops, comparisons,
 /// conditional branches, gotos, returns); bails on anything else for now.
@@ -833,11 +861,116 @@ use skotch_dex::model::CodeItem;
 /// Full IR pipeline for a method body: SSA construction → numbering → live
 /// intervals → linear-scan allocation → DexBuilder.
 pub(crate) fn dex_method_ssa(bc: &[u8], params: &[String], instance: bool) -> Result<CodeItem> {
-    let f = build_ssa(bc, params, instance)?;
+    let mut f = build_ssa(bc, params, instance)?;
+    // d8 builds its IR with lazily-created φ-nodes: a loop variable's φ is created
+    // the first time its slot is *read*, so the φ for the variable used earliest in
+    // the loop (the counter, read in the condition) gets the lower SSA number — and
+    // hence the lower register. d8 then schedules each φ's entry initializer in that
+    // same order. Our φ placement is by slot, so re-derive d8's order from a
+    // preliminary numbering and reorder the entry initializers to match.
+    let num0 = number(&f);
+    let ranks = phi_first_use(&f, &num0);
+    reorder_entry_inits(&mut f, &ranks);
     let num = number(&f);
     let ivs = live_intervals(&f, &num);
     let alloc = allocate(&f, &num, &ivs);
     build_dex(&f, &num, &alloc)
+}
+
+/// For each φ value, the earliest numbered position at which it is used (its
+/// "first read" in d8's lazy-SSA construction order). Used to order the φs — and
+/// their entry initializers — the way d8 does.
+fn phi_first_use(f: &SsaFn, num: &Numbering) -> BTreeMap<ValId, u32> {
+    let is_phi = |v: ValId| matches!(f.values[v as usize].op, SsaOp::Phi { .. });
+    let mut first: BTreeMap<ValId, u32> = BTreeMap::new();
+    let mut note = |phi: ValId, pos: u32, m: &mut BTreeMap<ValId, u32>| {
+        m.entry(phi).and_modify(|x| *x = (*x).min(pos)).or_insert(pos);
+    };
+    for b in 0..f.blocks.len() {
+        for &v in &f.blocks[b].body {
+            let pos = num.def[v as usize];
+            for o in operands(&f.values[v as usize].op) {
+                if is_phi(o) {
+                    note(o, pos, &mut first);
+                }
+            }
+        }
+        let bend = num.block_span[b].1;
+        for o in term_operands(&f.blocks[b].term) {
+            if is_phi(o) {
+                note(o, bend, &mut first);
+            }
+        }
+        // A φ operand contributed across an edge is read at the end of this block
+        // (the back-edge move).
+        for &s in &f.blocks[b].succ {
+            let pred_idx = match f.blocks[s].preds.iter().position(|&p| p == b) {
+                Some(i) => i,
+                None => continue,
+            };
+            for &phi in &f.blocks[s].phis {
+                if let SsaOp::Phi { operands, .. } = &f.values[phi as usize].op {
+                    if let Some(&o) = operands.get(pred_idx) {
+                        if is_phi(o) {
+                            note(o, bend, &mut first);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    first
+}
+
+/// Reorders, within each block, the constant entry-initializers that feed loop
+/// φ-nodes so they appear in φ first-use order (matching d8's scheduling). Only
+/// permutes pure constants among the positions they already occupy, so it never
+/// crosses a data dependency.
+fn reorder_entry_inits(f: &mut SsaFn, ranks: &BTreeMap<ValId, u32>) {
+    let nb = f.blocks.len();
+    for b in 0..nb {
+        // value → rank-of-the-φ-it-initializes, for body values of this block that
+        // are the entry-edge operand of some successor φ.
+        let mut init_rank: BTreeMap<ValId, u32> = BTreeMap::new();
+        for &s in &f.blocks[b].succ.clone() {
+            let pred_idx = match f.blocks[s].preds.iter().position(|&p| p == b) {
+                Some(i) => i,
+                None => continue,
+            };
+            for &phi in &f.blocks[s].phis.clone() {
+                if let SsaOp::Phi { operands, .. } = &f.values[phi as usize].op {
+                    if let Some(&o) = operands.get(pred_idx) {
+                        if f.values[o as usize].block == b {
+                            if let Some(&r) = ranks.get(&phi) {
+                                init_rank.entry(o).and_modify(|x| *x = (*x).min(r)).or_insert(r);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if init_rank.len() < 2 {
+            continue;
+        }
+        // Only reorder pure constants (leaves with no operands) — safe to permute.
+        let all_const = init_rank.keys().all(|&v| {
+            matches!(
+                f.values[v as usize].op,
+                SsaOp::ConstInt(_) | SsaOp::ConstLong(_) | SsaOp::ConstString(_)
+            )
+        });
+        if !all_const {
+            continue;
+        }
+        let body = &mut f.blocks[b].body;
+        let positions: Vec<usize> =
+            body.iter().enumerate().filter(|(_, &v)| init_rank.contains_key(&v)).map(|(i, _)| i).collect();
+        let mut items: Vec<ValId> = positions.iter().map(|&i| body[i]).collect();
+        items.sort_by_key(|v| (init_rank[v], *v));
+        for (k, &pos) in positions.iter().enumerate() {
+            body[pos] = items[k];
+        }
+    }
 }
 
 /// Emits a DEX code item from the SSA form + allocation. φ-nodes are no-ops when
@@ -1165,18 +1298,16 @@ mod tests {
     }
 
     #[test]
-    fn sumto_dex_diff() {
+    fn sumto_dex_byte_identical() {
         let code = dex_method_ssa(&method_bc("sumTo"), &["I".to_string()], false).unwrap();
         // d8: const/4 v0,#0; const/4 v1,#0; if-ge v0,v2,+6; add-int/2addr v1,v0;
         //     add-int/lit8 v0,v0,#1; goto -5; return v1
+        // (i is the counter → v0/low register; s is the accumulator → v1; n → v2).
         let expected: Vec<u16> =
             vec![0x0012, 0x0112, 0x2035, 0x0006, 0x01b0, 0x00d8, 0x0100, 0xfb28, 0x010f];
         eprintln!("sumTo produced: {:04x?} (regs={})", code.insns, code.registers_size);
-        eprintln!("sumTo expected: {expected:04x?}");
-        // Diagnostic only — sumTo needs d8's multi-φ scheduling/allocation order.
-        if code.insns != expected {
-            eprintln!("sumTo DIVERGES (expected — multi-loop-var scheduling TBD)");
-        }
+        assert_eq!(code.registers_size, 3);
+        assert_eq!(code.insns, expected, "two-loop-variable loop must be byte-identical to d8");
     }
 
     #[test]

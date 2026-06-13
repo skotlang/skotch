@@ -510,7 +510,7 @@ pub fn lower_file(
             // empty Return placeholder.
             let wrapper_class = module.wrapper_class.clone();
             let mut exception_handlers: Vec<skotch_mir::ExceptionHandler> = Vec::new();
-            let (blocks, extra_locals) = if is_extension {
+            let (mut blocks, extra_locals) = if is_extension {
                 // Route extension fns through the method body lowerer
                 // so `this` resolves to slot 0 and user params to 1..N.
                 let receiver_class = receiver_type_name.clone().unwrap_or_default();
@@ -538,6 +538,31 @@ pub fn lower_file(
 
             let mut locals = param_tys;
             locals.extend(extra_locals);
+            // For suspend functions: replace bare Return terminator
+            // with a Null assignment + ReturnValue to match legacy
+            // suspend trampoline shape. Also set
+            // suspend_original_return_ty so the backend knows the
+            // original Kotlin return type (Unit becomes Unit.INSTANCE,
+            // non-Unit returns null).
+            let is_suspend = f.is_suspend();
+            let suspend_original_return_ty = if is_suspend {
+                Some(return_ty.clone())
+            } else {
+                None
+            };
+            if is_suspend {
+                if let Some(last_block) = blocks.last_mut() {
+                    if matches!(last_block.terminator, Terminator::Return) {
+                        let null_slot = skotch_mir::LocalId(locals.len() as u32);
+                        locals.push(Ty::Nullable(Box::new(Ty::Any)));
+                        last_block.stmts.push(skotch_mir::Stmt::Assign {
+                            dest: null_slot,
+                            value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Null),
+                        });
+                        last_block.terminator = Terminator::ReturnValue(null_slot);
+                    }
+                }
+            }
             module.functions.push(MirFunction {
                 id: FuncId(fn_id),
                 name,
@@ -552,13 +577,13 @@ pub fn lower_file(
                 is_abstract: false,
                 vararg_index: None,
                 exception_handlers,
-                is_suspend: f.is_suspend(),
+                is_suspend,
                 is_inline: f.is_inline(),
                 has_type_params: f
                     .type_parameter_list()
                     .map(|tpl| tpl.parameters().next().is_some())
                     .unwrap_or(false),
-                suspend_original_return_ty: None,
+                suspend_original_return_ty,
                 suspend_state_machine: None,
                 annotations: Vec::new(),
                 named_locals: Vec::new(),

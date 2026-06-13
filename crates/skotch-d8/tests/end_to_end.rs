@@ -506,6 +506,33 @@ fn multi_class_battery_byte_identical() {
     );
 }
 
+/// Loops through the SSA/φ + linear-scan pipeline (the d8 IR path). `count`
+/// (`while (c < n) c++`) is a one-variable loop → `const/4 v0; if-ge v0,v1;
+/// add-int/lit8 v0,v0,#1; goto; return v0` (the counter coalesced to v0, the
+/// iinc constant rematerialized). `sumTo` (`for (i) s += i`) is a two-variable
+/// loop → d8 gives the counter `i` the low register (v0) and the accumulator `s`
+/// v1, because it creates φ-nodes in first-read order. The full `.dex` (both
+/// loop methods plus the straight-line `<init>`) must be byte-identical to d8.
+#[test]
+fn loop_battery_byte_identical() {
+    let cf = skotch_classfile::parse_class_file(&fixtures().join("Loop.class")).unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let produced = dex_classes(&[cf], &opts).unwrap();
+    let golden = std::fs::read(fixtures().join("Loop.d8.dex")).unwrap();
+    if produced != golden {
+        std::fs::write("/tmp/skotch-Loop-produced.dex", &produced).unwrap();
+    }
+    skotch_dex::validator::validate(&produced).expect("self-validation");
+    assert_eq!(
+        produced,
+        golden,
+        "Loop battery: produced {} vs golden {}; first diff {:?}",
+        produced.len(),
+        golden.len(),
+        (0..produced.len().min(golden.len())).find(|&i| produced[i] != golden[i])
+    );
+}
+
 #[test]
 fn empty_class_end_to_end_byte_identical() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("Empty.class")).unwrap();

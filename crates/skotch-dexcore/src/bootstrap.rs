@@ -98,7 +98,28 @@ fn dex_method(cf: &ClassFile, m: &Member, min_api: u32) -> Result<EncodedMethod>
     let code = if m.is_abstract() || m.is_native() {
         None
     } else if let Some(c) = &m.code {
-        let item = translate_code(cf, m, c, &params, &ret, min_api)?;
+        let instance = m.access_flags & 0x0008 == 0;
+        // Methods with a back-edge (loops) go through the SSA/φ + linear-scan
+        // pipeline, which models d8's loop register allocation (φ-coalescing,
+        // const rematerialization, d8's φ-ordering). That path emits real
+        // (already-remapped) DEX registers, so it bypasses the args-high remap
+        // below. On an opcode it doesn't yet handle it returns Err and we fall
+        // back to the straight-line / CFG path.
+        let ssa_item = if crate::ssa::method_has_loop(&c.bytecode) {
+            crate::ssa::dex_method_ssa(&c.bytecode, &params, instance).ok()
+        } else {
+            None
+        };
+        let item = if let Some(item) = ssa_item {
+            item
+        } else {
+            // Remap allocated → real DEX registers (d8's args-high placement).
+            // This is the identity unless the method has register pressure beyond
+            // its arguments, so it leaves no-pressure methods byte-identical.
+            let mut item = translate_code(cf, m, c, &params, &ret, min_api)?;
+            crate::regalloc::remap_insns(&mut item.insns, item.ins_size, item.registers_size);
+            item
+        };
         // The bootstrap allocator has no spilling / move scheduling, and the
         // 4-bit-register instruction forms it emits cannot encode a register
         // ≥ 16. d8 handles >16 registers with the full allocator's spill moves;
@@ -111,11 +132,6 @@ fn dex_method(cf: &ClassFile, m: &Member, min_api: u32) -> Result<EncodedMethod>
                 m.descriptor
             );
         }
-        let mut item = item;
-        // Remap allocated → real DEX registers (d8's args-high placement). This
-        // is the identity unless the method has register pressure beyond its
-        // arguments, so it leaves no-pressure methods byte-identical.
-        crate::regalloc::remap_insns(&mut item.insns, item.ins_size, item.registers_size);
         Some(item)
     } else {
         None
