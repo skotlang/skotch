@@ -10896,19 +10896,19 @@ fn lower_rich_expr_to_slot(
             {
                 if let (Some(cls), Some(prop)) = (cls_ref.name(), prop_ref.name()) {
                     let static_const: Option<(skotch_mir::MirConst, Ty)> = match (cls, prop) {
-                        ("Long", "MAX_VALUE") => Some((
+                        ("Long", "MAX_VALUE") | ("Long", "MAX") => Some((
                             skotch_mir::MirConst::Long(i64::MAX),
                             Ty::Long,
                         )),
-                        ("Long", "MIN_VALUE") => Some((
+                        ("Long", "MIN_VALUE") | ("Long", "MIN") => Some((
                             skotch_mir::MirConst::Long(i64::MIN),
                             Ty::Long,
                         )),
-                        ("Integer", "MAX_VALUE") => Some((
+                        ("Integer", "MAX_VALUE") | ("Int", "MAX_VALUE") | ("Int", "MAX") => Some((
                             skotch_mir::MirConst::Int(i32::MAX),
                             Ty::Int,
                         )),
-                        ("Integer", "MIN_VALUE") => Some((
+                        ("Integer", "MIN_VALUE") | ("Int", "MIN_VALUE") | ("Int", "MIN") => Some((
                             skotch_mir::MirConst::Int(i32::MIN),
                             Ty::Int,
                         )),
