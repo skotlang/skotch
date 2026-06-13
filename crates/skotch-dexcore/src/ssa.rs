@@ -243,6 +243,29 @@ pub(crate) fn method_has_loop(bc: &[u8]) -> bool {
                 }
                 pc += 5;
             }
+            // tableswitch — variable length, padded to a 4-byte boundary.
+            0xaa => {
+                let base = pc + 1 + (4 - ((pc + 1) % 4)) % 4;
+                let rd = |i: usize| i32::from_be_bytes([bc[i], bc[i + 1], bc[i + 2], bc[i + 3]]);
+                let (default, low, high) = (rd(base), rd(base + 4), rd(base + 8));
+                let n = (high - low + 1) as usize;
+                let jumps = base + 12;
+                if default < 0 || (0..n).any(|k| rd(jumps + 4 * k) < 0) {
+                    return true;
+                }
+                pc = jumps + 4 * n;
+            }
+            // lookupswitch — variable length, padded to a 4-byte boundary.
+            0xab => {
+                let base = pc + 1 + (4 - ((pc + 1) % 4)) % 4;
+                let rd = |i: usize| i32::from_be_bytes([bc[i], bc[i + 1], bc[i + 2], bc[i + 3]]);
+                let (default, npairs) = (rd(base), rd(base + 4) as usize);
+                let pairs = base + 8;
+                if default < 0 || (0..npairs).any(|k| rd(pairs + 8 * k + 4) < 0) {
+                    return true;
+                }
+                pc = pairs + 8 * npairs;
+            }
             _ => pc += crate::bootstrap::jvm_step_len(bc, pc),
         }
     }
@@ -1126,8 +1149,15 @@ fn emit_binop(f: &SsaFn, insns: &mut Vec<u16>, alloc: &Allocation, dest: u16, jv
         }
     }
     let op3 = crate::bootstrap::binop_3addr_op(jvm_op)?;
+    // d8 canonicalizes a commutative 3-address binop's sources into ascending
+    // register order (e.g. `p*i` with p=v1,i=v0 emits `mul-int v1, v0, v1`).
+    let (s1, s2) = if crate::bootstrap::is_commutative(jvm_op) && ra > rb {
+        (rb, ra)
+    } else {
+        (ra, rb)
+    };
     insns.push(op3 | (dest << 8));
-    insns.push((ra & 0xff) | ((rb & 0xff) << 8));
+    insns.push((s1 & 0xff) | ((s2 & 0xff) << 8));
     Ok(())
 }
 
@@ -1308,6 +1338,51 @@ mod tests {
         eprintln!("sumTo produced: {:04x?} (regs={})", code.insns, code.registers_size);
         assert_eq!(code.registers_size, 3);
         assert_eq!(code.insns, expected, "two-loop-variable loop must be byte-identical to d8");
+    }
+
+    fn loops2_bc(name: &str) -> Vec<u8> {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../skotch-dex/tests/fixtures/Loops2.class");
+        let cf = skotch_classfile::parse_class_file(&path).unwrap();
+        let m = cf.methods.iter().find(|m| m.name == name).unwrap();
+        m.code.as_ref().unwrap().bytecode.clone()
+    }
+
+    fn diag(name: &str, expected: &[u16], regs: u16) -> bool {
+        let code = dex_method_ssa(&loops2_bc(name), &["I".to_string()], false).unwrap();
+        eprintln!("{name} produced: {:04x?} (regs={})", code.insns, code.registers_size);
+        eprintln!("{name} expected: {expected:04x?} (regs={regs})");
+        let ok = code.insns == expected && code.registers_size == regs;
+        eprintln!("{name}: {}", if ok { "MATCH" } else { "DIVERGES" });
+        ok
+    }
+
+    #[test]
+    fn down_dex_byte_identical() {
+        // `for(i=n;i>0;i--) s+=i` — counter i coalesces with the arg n (no init
+        // const), if-lez condition, s+=i (2addr), i-- (add-int/lit8 -1).
+        let expected = [0x0012, 0x013d, 0x0006, 0x10b0, 0x01d8, 0xff01, 0xfb28, 0x000f];
+        assert!(diag("down", &expected, 2), "down must match d8");
+    }
+
+    #[test]
+    fn fact_dex_byte_identical() {
+        // `for(i=1;i<=n;i++) p*=i` — if-gt condition, mul-int 3-addr with
+        // commutative source canonicalization (`mul-int v1, v0, v1`).
+        let expected =
+            [0x1012, 0x1112, 0x2036, 0x0007, 0x0192, 0x0001, 0x00d8, 0x0100, 0xfa28, 0x010f];
+        assert!(diag("fact", &expected, 3), "fact must match d8");
+    }
+
+    #[test]
+    fn grid_dex_diff() {
+        // Nested loop, three live loop vars (i, j, accumulator t) + a temp. 6
+        // registers. Diagnostic only — exercises multi-loop φ ordering/allocation.
+        let expected = [
+            0x0012, 0x0112, 0x0212, 0x5135, 0x000e, 0x0312, 0x5335, 0x0008, 0x0492, 0x0301,
+            0x42b0, 0x03d8, 0x0103, 0xf928, 0x01d8, 0x0101, 0xf328, 0x020f,
+        ];
+        let _ = diag("grid", &expected, 6);
     }
 
     #[test]

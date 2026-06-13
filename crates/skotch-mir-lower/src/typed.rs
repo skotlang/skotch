@@ -16462,7 +16462,7 @@ fn method_from_fun_with_class(
     // out: local 0 = this; locals 1..N+1 = user params; local N+2 =
     // result. Bodies that can't be lowered fall back to an empty
     // Return placeholder.
-    let (blocks, extra_locals) = if !is_abstract {
+    let (mut blocks, extra_locals) = if !is_abstract {
         method_simple_body_full(
             f,
             strings,
@@ -16489,6 +16489,27 @@ fn method_from_fun_with_class(
         locals.push(Ty::Any);
     }
     locals.extend(extra_locals);
+    // Suspend trampoline: same fix as in top-level fns — replace
+    // bare Return with Null + ReturnValue.
+    let is_suspend = f.is_suspend();
+    let suspend_original_return_ty = if is_suspend {
+        Some(return_ty.clone())
+    } else {
+        None
+    };
+    if is_suspend && !is_abstract {
+        if let Some(last_block) = blocks.last_mut() {
+            if matches!(last_block.terminator, Terminator::Return) {
+                let null_slot = skotch_mir::LocalId(locals.len() as u32);
+                locals.push(Ty::Nullable(Box::new(Ty::Any)));
+                last_block.stmts.push(skotch_mir::Stmt::Assign {
+                    dest: null_slot,
+                    value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Null),
+                });
+                last_block.terminator = Terminator::ReturnValue(null_slot);
+            }
+        }
+    }
     MirFunction {
         id: FuncId(method_idx),
         name,
@@ -16503,13 +16524,13 @@ fn method_from_fun_with_class(
         is_abstract,
         vararg_index: None,
         exception_handlers: Vec::new(),
-        is_suspend: f.is_suspend(),
+        is_suspend,
         is_inline: f.is_inline(),
         has_type_params: f
             .type_parameter_list()
             .map(|tpl| tpl.parameters().next().is_some())
             .unwrap_or(false),
-        suspend_original_return_ty: None,
+        suspend_original_return_ty,
         suspend_state_machine: None,
         annotations: Vec::new(),
         named_locals: Vec::new(),
