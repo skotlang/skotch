@@ -9018,9 +9018,114 @@ fn try_lower_multi_stmt_block_with_offset(
                     //   block 2N: final else + Goto(join) OR Goto(join) if no else
                     //   block 2N+1: join (trailing + Return)
                     let n = n_arms;
+                    // When ALL arms return and there's no final-else,
+                    // kotlinc emits a synthetic Unit-join block on
+                    // each false-branch:
+                    //   cmp_i: Branch(arm_i = 3i+1, synthetic_i = 3i+2)
+                    //   arm_i: RetV
+                    //   synthetic_i: tmp = Null; phantom = Local(tmp); Goto(next_cmp 3(i+1) or join)
+                    //   join: final return
+                    //
+                    // Otherwise fall back to the 2N+2 compact layout.
+                    let all_return = arm_returns.iter().all(|r| r.is_some());
+                    if all_return && final_else_mstmts.is_none() {
+                        let join_idx = (3 * n) as u32;
+                        // Block 0 = cmp_0 + Branch(1, 2)
+                        let mut block0_stmts = pre_block_stmts.clone();
+                        block0_stmts.extend(first_cmp_extra);
+                        all_blocks.push(BasicBlock {
+                            stmts: block0_stmts,
+                            terminator: Terminator::Branch {
+                                cond: cmp_slots[0],
+                                then_block: 1,
+                                else_block: 2,
+                            },
+                        });
+                        // Block 1 = arm_0 (RetV)
+                        let arm0_slot = arm_returns.remove(0).expect("all_return");
+                        all_blocks.push(BasicBlock {
+                            stmts: arm_mstmts.remove(0),
+                            terminator: Terminator::ReturnValue(arm0_slot),
+                        });
+                        // Block 2 = synthetic_0 (Goto next_cmp 3 or join)
+                        let tmp0 = LocalId(next_slot);
+                        next_slot += 1;
+                        local_tys.push(Ty::Any);
+                        let phantom0 = LocalId(next_slot);
+                        next_slot += 1;
+                        local_tys.push(Ty::Any);
+                        let synth0_next = if n > 1 { 3u32 } else { join_idx };
+                        all_blocks.push(BasicBlock {
+                            stmts: vec![
+                                MStmt::Assign {
+                                    dest: tmp0,
+                                    value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Null),
+                                },
+                                MStmt::Assign {
+                                    dest: phantom0,
+                                    value: skotch_mir::Rvalue::Local(tmp0),
+                                },
+                            ],
+                            terminator: Terminator::Goto(synth0_next),
+                        });
+                        // Blocks 3..3*N-1 = (cmp_i, arm_i, synthetic_i) repeating.
+                        for i in 1..n {
+                            let cmp_stmts = cmp_block_stmts.remove(0);
+                            let arm_i_idx = (3 * i + 1) as u32;
+                            let synth_i_idx = (3 * i + 2) as u32;
+                            let next_synth_target =
+                                if i + 1 < n { (3 * (i + 1)) as u32 } else { join_idx };
+                            all_blocks.push(BasicBlock {
+                                stmts: cmp_stmts,
+                                terminator: Terminator::Branch {
+                                    cond: cmp_slots[i],
+                                    then_block: arm_i_idx,
+                                    else_block: synth_i_idx,
+                                },
+                            });
+                            let armi_slot = arm_returns.remove(0).expect("all_return");
+                            all_blocks.push(BasicBlock {
+                                stmts: arm_mstmts.remove(0),
+                                terminator: Terminator::ReturnValue(armi_slot),
+                            });
+                            let tmpi = LocalId(next_slot);
+                            next_slot += 1;
+                            local_tys.push(Ty::Any);
+                            let phantomi = LocalId(next_slot);
+                            next_slot += 1;
+                            local_tys.push(Ty::Any);
+                            all_blocks.push(BasicBlock {
+                                stmts: vec![
+                                    MStmt::Assign {
+                                        dest: tmpi,
+                                        value: skotch_mir::Rvalue::Const(
+                                            skotch_mir::MirConst::Null,
+                                        ),
+                                    },
+                                    MStmt::Assign {
+                                        dest: phantomi,
+                                        value: skotch_mir::Rvalue::Local(tmpi),
+                                    },
+                                ],
+                                terminator: Terminator::Goto(next_synth_target),
+                            });
+                        }
+                        // Join block.
+                        let join_terminator = match trailing_return_slot {
+                            Some(slot) => Terminator::ReturnValue(slot),
+                            None => Terminator::Return,
+                        };
+                        all_blocks.push(BasicBlock {
+                            stmts: exit_stmts,
+                            terminator: join_terminator,
+                        });
+                        let _ = pre_block_stmts;
+                        return Some((all_blocks, local_tys));
+                    }
+                    // Mixed return/non-return arms: keep the compact
+                    // 2N+2 layout for backward compatibility.
                     let join_idx = (2 * n + 1) as u32;
                     let else_idx = (2 * n) as u32;
-                    // Build the first cmp block.
                     let mut block0_stmts = pre_block_stmts.clone();
                     block0_stmts.extend(first_cmp_extra);
                     let block0_terminator = Terminator::Branch {
@@ -9032,8 +9137,6 @@ fn try_lower_multi_stmt_block_with_offset(
                         stmts: block0_stmts,
                         terminator: block0_terminator,
                     });
-                    // Build arm 0. Terminator depends on whether the
-                    // arm body had a trailing return.
                     let arm0_return = arm_returns.remove(0);
                     let arm0_terminator = match arm0_return {
                         Some(slot) => Terminator::ReturnValue(slot),
@@ -9043,7 +9146,6 @@ fn try_lower_multi_stmt_block_with_offset(
                         stmts: arm_mstmts.remove(0),
                         terminator: arm0_terminator,
                     });
-                    // Build cmp_1..cmp_{n-1} + their arms.
                     for i in 1..n {
                         let cmp_stmts = cmp_block_stmts.remove(0);
                         let next_else = if i + 1 < n {
@@ -9069,13 +9171,11 @@ fn try_lower_multi_stmt_block_with_offset(
                             terminator: armi_terminator,
                         });
                     }
-                    // Else block.
                     let else_block_stmts = final_else_mstmts.unwrap_or_default();
                     all_blocks.push(BasicBlock {
                         stmts: else_block_stmts,
                         terminator: Terminator::Goto(join_idx),
                     });
-                    // Join block.
                     let join_terminator = match trailing_return_slot {
                         Some(slot) => Terminator::ReturnValue(slot),
                         None => Terminator::Return,
