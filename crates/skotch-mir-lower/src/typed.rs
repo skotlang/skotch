@@ -11412,6 +11412,31 @@ fn lower_rich_expr_to_slot(
                 // receiver types — works for the common `n.toString()`
                 // case where n is a known-Int local.
                 if method_n == Some("toString") {
+                    // Class instance toString → invokevirtual on Object.
+                    if let KtExpr::Reference(rr) = &dq_exprs[0] {
+                        if let Some(name) = rr.name() {
+                            if let Some(slot) = lookup_name(name) {
+                                if let Some(Ty::Class(cname)) =
+                                    extra_locals.get(slot.0 as usize).cloned()
+                                {
+                                    let result_slot = LocalId(*next_slot);
+                                    *next_slot += 1;
+                                    extra_locals.push(Ty::String);
+                                    pre_stmts.push(MStmt::Assign {
+                                        dest: result_slot,
+                                        value: skotch_mir::Rvalue::Call {
+                                            kind: skotch_mir::CallKind::Virtual {
+                                                class_name: cname,
+                                                method_name: "toString".to_string(),
+                                            },
+                                            args: vec![slot],
+                                        },
+                                    });
+                                    return Some(result_slot);
+                                }
+                            }
+                        }
+                    }
                     // Filter out cases where receiver shouldn't use
                     // this path (class-name references; class
                     // instances handled by the Virtual fallback).
