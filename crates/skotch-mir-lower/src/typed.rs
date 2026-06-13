@@ -8168,13 +8168,46 @@ fn try_lower_multi_stmt_block_with_offset(
                     return None;
                 };
                 let range_op_text = rb.operation().map(|o| o.text()).unwrap_or_default();
-                let (range_cmp_op, range_step): (skotch_mir::BinOp, i32) =
+                let (mut range_cmp_op, range_step): (skotch_mir::BinOp, i32) =
                     match range_op_text.as_str() {
                         ".." => (skotch_mir::BinOp::CmpLe, 1),
                         "until" => (skotch_mir::BinOp::CmpLt, 1),
                         "downTo" => (skotch_mir::BinOp::CmpGe, -1),
                         _ => return None,
                     };
+                // kotlinc normalizes `lo..hi` with a literal hi into
+                // `lo until (hi+1)` — emits Const(hi+1) and uses CmpLt,
+                // dropping the overflow-safe `check` block entirely.
+                // We replicate that when rhs is an integer literal AND
+                // the op is `..`.
+                let rhs_lit_for_dotdot: Option<i64> = if range_op_text == ".." {
+                    if let Some(KtExpr::Integer(i)) =
+                        rb.rhs().map(unwrap_parens)
+                    {
+                        // Extract integer literal value.
+                        skotch_ast::children(i.syntax())
+                            .iter()
+                            .find_map(|c| {
+                                if let skotch_sil::SilData::Token { text } = &c.data {
+                                    text.parse::<i64>().ok()
+                                } else {
+                                    None
+                                }
+                            })
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+                if rhs_lit_for_dotdot.is_some() {
+                    range_cmp_op = skotch_mir::BinOp::CmpLt;
+                }
+                // Skip the check block for `until` / `downTo` always,
+                // and for `..` when rhs is a literal (the +1 form).
+                let skip_check_block = range_op_text == "until"
+                    || range_op_text == "downTo"
+                    || rhs_lit_for_dotdot.is_some();
                 // Resolve range bounds: literal | Reference (local).
                 let resolve_bound = |e: KtExpr<'_>,
                                      name_to_local: &Vec<(String, LocalId)>,
@@ -8235,14 +8268,29 @@ fn try_lower_multi_stmt_block_with_offset(
                     &mut stmts,
                     strings,
                 )?;
-                let end_slot = resolve_bound(
-                    rb.rhs()?,
-                    &name_to_local,
-                    &mut next_slot,
-                    &mut local_tys,
-                    &mut stmts,
-                    strings,
-                )?;
+                let end_slot = if let Some(lit) = rhs_lit_for_dotdot {
+                    // kotlinc precomputes hi+1 for `lo..hi` and stores
+                    // it in the end slot directly.
+                    let slot = LocalId(next_slot);
+                    next_slot += 1;
+                    local_tys.push(Ty::Int);
+                    stmts.push(MStmt::Assign {
+                        dest: slot,
+                        value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(
+                            (lit + 1) as i32,
+                        )),
+                    });
+                    slot
+                } else {
+                    resolve_bound(
+                        rb.rhs()?,
+                        &name_to_local,
+                        &mut next_slot,
+                        &mut local_tys,
+                        &mut stmts,
+                        strings,
+                    )?
+                };
                 // Allocate the loop var slot and seed from start.
                 let i_slot = LocalId(next_slot);
                 next_slot += 1;
@@ -8405,9 +8453,13 @@ fn try_lower_multi_stmt_block_with_offset(
                     fn_lookup,
                     &function_param_names,
                 )?;
-                // i = i ± 1 in a separate step block (kotlinc's
-                // overflow-safe loop layout): body → check → step → body.
+                // i = i ± 1 in a separate step block. kotlinc's shape
+                // for var update is `tmp = Const(1); add_tmp = i ± 1;
+                // i = Local(add_tmp)` — i.e. var-update-via-temp (3 stmts).
                 let one_slot = LocalId(next_slot);
+                next_slot += 1;
+                local_tys.push(Ty::Int);
+                let add_tmp_slot = LocalId(next_slot);
                 next_slot += 1;
                 local_tys.push(Ty::Int);
                 let step_op = if range_step > 0 {
@@ -8421,12 +8473,16 @@ fn try_lower_multi_stmt_block_with_offset(
                         value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(1)),
                     },
                     MStmt::Assign {
-                        dest: i_slot,
+                        dest: add_tmp_slot,
                         value: skotch_mir::Rvalue::BinOp {
                             op: step_op,
                             lhs: i_slot,
                             rhs: one_slot,
                         },
+                    },
+                    MStmt::Assign {
+                        dest: i_slot,
+                        value: skotch_mir::Rvalue::Local(add_tmp_slot),
                     },
                 ];
                 // Initial cond block stmts: cmp = i ≤/</≥ end.
@@ -8589,19 +8645,29 @@ fn try_lower_multi_stmt_block_with_offset(
                     stmts: std::mem::take(&mut stmts),
                     terminator: Terminator::Goto(1),
                 };
-                // kotlinc's IntRange iteration layout:
-                //   0 pre  : pre stmts, Goto(1)
-                //   1 cond : cmp_le, Branch(body=2, exit=5)
-                //   2 body : body stmts, Goto(check=3)
-                //   3 check: cmp_ne, Branch(step=4, exit=5)
-                //   4 step : i++ , Goto(body=2)
-                //   5 exit : trailing + Return
+                // kotlinc's IntRange iteration layout. The 6-block form
+                // (with separate check) is for dynamic upper bounds in
+                // `..` ranges. For `until`/`downTo` and `..` with a
+                // literal upper bound, kotlinc omits the check.
+                //   6-block layout:
+                //     0 pre  → Goto(1)
+                //     1 cond cmp_le, Branch(2, 5)
+                //     2 body → Goto(3)
+                //     3 check cmp_ne, Branch(4, 5)
+                //     4 step → Goto(2)
+                //     5 exit
+                //   5-block layout (skip_check_block):
+                //     0 pre  → Goto(1)
+                //     1 cond cmp_lt/ge, Branch(2, 4)
+                //     2 body → Goto(3)
+                //     3 step → Goto(1)
+                //     4 exit
                 let cond_block = BasicBlock {
                     stmts: vec![cond_stmt],
                     terminator: Terminator::Branch {
                         cond: cmp_slot,
                         then_block: 2,
-                        else_block: 5,
+                        else_block: if skip_check_block { 4 } else { 5 },
                     },
                 };
                 let body_blk = BasicBlock {
@@ -8618,7 +8684,7 @@ fn try_lower_multi_stmt_block_with_offset(
                 };
                 let step_blk = BasicBlock {
                     stmts: step_stmts,
-                    terminator: Terminator::Goto(2),
+                    terminator: Terminator::Goto(if skip_check_block { 1 } else { 2 }),
                 };
                 let exit_terminator = match trailing_return_slot {
                     Some(slot) => Terminator::ReturnValue(slot),
@@ -8688,6 +8754,18 @@ fn try_lower_multi_stmt_block_with_offset(
                     stmts: exit_stmts,
                     terminator: exit_terminator,
                 };
+                if skip_check_block {
+                    // 5-block layout: pre / cond / body / step / exit.
+                    // The body goes to step (3), step goes back to cond (1).
+                    let body_blk_5 = BasicBlock {
+                        stmts: body_blk.stmts,
+                        terminator: Terminator::Goto(3),
+                    };
+                    return Some((
+                        vec![pre_block, cond_block, body_blk_5, step_blk, exit_block],
+                        local_tys,
+                    ));
+                }
                 return Some((
                     vec![pre_block, cond_block, body_blk, check_blk, step_blk, exit_block],
                     local_tys,
@@ -17484,7 +17562,9 @@ mod tests {
             "InputKt",
         );
         let f = module.functions.iter().find(|f| f.name == "main").unwrap();
-        assert_eq!(f.blocks.len(), 6, "expected 6-block for-in CFG (pre/cond/body/check/step/exit)");
+        // `for i in 1..3` is now lowered as `1 until 4` (literal-end
+        // case): 5-block CFG (pre/cond/body/step/exit).
+        assert_eq!(f.blocks.len(), 5, "expected 5-block for-in CFG (pre/cond/body/step/exit)");
         let body_stmt_count = f.blocks[2].stmts.len();
         assert!(
             body_stmt_count >= 2,
@@ -17502,9 +17582,10 @@ mod tests {
             "InputKt",
         );
         let f = module.functions.iter().find(|f| f.name == "main").unwrap();
-        assert_eq!(f.blocks.len(), 6);
-        // The exit block (index 5) should contain the println("done").
-        assert!(!f.blocks[5].stmts.is_empty());
+        // `1..3` literal-end → 5-block layout.
+        assert_eq!(f.blocks.len(), 5);
+        // The exit block (index 4) should contain the println("done").
+        assert!(!f.blocks[4].stmts.is_empty());
     }
 
     #[test]
