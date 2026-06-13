@@ -9245,13 +9245,27 @@ fn try_lower_multi_stmt_block_with_offset(
                         false
                     }
                 });
+                // When the then-arm returns AND we have no else AND we
+                // have any kind of continuation, kotlinc emits a
+                // synthetic Unit-join block on the false branch. Pre-
+                // compute whether to insert it so the exit-block offset
+                // accounts for the extra block.
+                let want_multi_block_synthetic = else_mstmts.is_none()
+                    && then_return_slot.is_some()
+                    && (before_ret_has_control
+                        || !before_ret.is_empty()
+                        || trailing_children.iter().any(|c| {
+                            matches!(KtExpr::cast(c), Some(KtExpr::Return(_)))
+                        }));
                 let pre_block_stmts_pre = std::mem::take(&mut stmts);
                 let mut exit_stmts: Vec<MStmt> = Vec::new();
                 let mut multi_block_exit: Option<Vec<BasicBlock>> = None;
                 if before_ret_has_control {
                     const SENT_BACK: u32 = 0xfffffffe;
                     const SENT_BREAK: u32 = 0xfffffffd;
-                    let block_offset_exit = if else_mstmts.is_some() { 3 } else { 2 };
+                    let synth_shift = if want_multi_block_synthetic { 1 } else { 0 };
+                    let block_offset_exit =
+                        if else_mstmts.is_some() { 3 } else { 2 + synth_shift };
                     let blocks_v = lower_loop_body_blocks(
                         &before_ret,
                         &mut name_to_local,
@@ -9338,7 +9352,9 @@ fn try_lower_multi_stmt_block_with_offset(
                 if let Some(mut exit_blocks) = multi_block_exit {
                     const SENT_BACK: u32 = 0xfffffffe;
                     const SENT_BREAK: u32 = 0xfffffffd;
-                    let block_offset_exit = if else_mstmts.is_some() { 3 } else { 2 };
+                    let synth_shift = if want_multi_block_synthetic { 1 } else { 0 };
+                    let block_offset_exit =
+                        if else_mstmts.is_some() { 3 } else { 2 + synth_shift };
                     let n = exit_blocks.len() as u32;
                     let final_return_id = block_offset_exit + n;
                     for blk in &mut exit_blocks {
@@ -9371,7 +9387,7 @@ fn try_lower_multi_stmt_block_with_offset(
                         terminator: Terminator::Branch {
                             cond: cmp_slot,
                             then_block: 1,
-                            else_block: block_offset_exit,
+                            else_block: if want_multi_block_synthetic { 2 } else { block_offset_exit },
                         },
                     };
                     let then_block = BasicBlock {
@@ -9386,6 +9402,26 @@ fn try_lower_multi_stmt_block_with_offset(
                     if let Some(else_m) = else_mstmts {
                         all.push(BasicBlock {
                             stmts: else_m,
+                            terminator: Terminator::Goto(block_offset_exit),
+                        });
+                    } else if want_multi_block_synthetic {
+                        let tmp_slot = LocalId(next_slot);
+                        next_slot += 1;
+                        local_tys.push(Ty::Any);
+                        let phantom_slot = LocalId(next_slot);
+                        next_slot += 1;
+                        local_tys.push(Ty::Any);
+                        all.push(BasicBlock {
+                            stmts: vec![
+                                MStmt::Assign {
+                                    dest: tmp_slot,
+                                    value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Null),
+                                },
+                                MStmt::Assign {
+                                    dest: phantom_slot,
+                                    value: skotch_mir::Rvalue::Local(tmp_slot),
+                                },
+                            ],
                             terminator: Terminator::Goto(block_offset_exit),
                         });
                     }
