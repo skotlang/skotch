@@ -633,6 +633,33 @@ fn arrays_in_loop_byte_identical() {
     );
 }
 
+/// Wide (long/double) arithmetic + conversions in loops: `sumLongs` (long
+/// accumulator + `aget-wide` + `add-long/2addr` + `return-wide`), `countUp`
+/// (`int-to-long` conversion + add-long), `scale` (double accumulator +
+/// `add-double/2addr`). Exercises wide constants, the WIDE-first register
+/// allocation (the long/double accumulator takes the lowest register PAIR, v0:v1,
+/// even though the int counter is read first), and register-pair handling through
+/// the args-high remap. Full `.dex` byte-identical.
+#[test]
+fn wide_arith_in_loop_byte_identical() {
+    let cf = skotch_classfile::parse_class_file(&fixtures().join("WideLoop.class")).unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let produced = dex_classes(&[cf], &opts).unwrap();
+    let golden = std::fs::read(fixtures().join("WideLoop.d8.dex")).unwrap();
+    if produced != golden {
+        std::fs::write("/tmp/skotch-WideLoop-produced.dex", &produced).unwrap();
+    }
+    skotch_dex::validator::validate(&produced).expect("self-validation");
+    assert_eq!(
+        produced,
+        golden,
+        "Wide-arith-in-loop battery: produced {} vs golden {}; first diff {:?}",
+        produced.len(),
+        golden.len(),
+        (0..produced.len().min(golden.len())).find(|&i| produced[i] != golden[i])
+    );
+}
+
 #[test]
 fn empty_class_end_to_end_byte_identical() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("Empty.class")).unwrap();

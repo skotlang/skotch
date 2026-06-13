@@ -11089,6 +11089,37 @@ fn lower_rich_expr_to_slot(
             }
         }
     }
+    // IntArray(size) — primitive int[] allocation.
+    if let KtExpr::Call(call) = e {
+        if let Some(KtExpr::Reference(rc)) = call.callee() {
+            if rc.name() == Some("IntArray") {
+                if let Some(arg_list) = call.value_argument_list() {
+                    let args: Vec<_> = arg_list.arguments().collect();
+                    if args.len() == 1 {
+                        if let Some(size_e) = args[0].expression() {
+                            let size_slot = lower_rich_expr_to_slot(
+                                size_e,
+                                lookup_name,
+                                fn_lookup,
+                                next_slot,
+                                pre_stmts,
+                                extra_locals,
+                                strings,
+                            )?;
+                            let result_slot = LocalId(*next_slot);
+                            *next_slot += 1;
+                            extra_locals.push(Ty::IntArray);
+                            pre_stmts.push(MStmt::Assign {
+                                dest: result_slot,
+                                value: skotch_mir::Rvalue::NewIntArray(size_slot),
+                            });
+                            return Some(result_slot);
+                        }
+                    }
+                }
+            }
+        }
+    }
     // Constructor call heuristic: capitalized name not in fn_lookup
     // treated as ctor invocation.
     if let KtExpr::Call(call) = e {
@@ -11100,6 +11131,8 @@ fn lower_rich_expr_to_slot(
                         name,
                         "Math" | "Integer" | "Long" | "Float" | "Double" | "Boolean"
                             | "String" | "System" | "List" | "Map" | "Set"
+                            | "IntArray" | "LongArray" | "DoubleArray" | "FloatArray"
+                            | "ByteArray" | "ShortArray" | "BooleanArray" | "CharArray"
                     )
                 {
                     let mut arg_slots: Vec<LocalId> = Vec::new();

@@ -1468,11 +1468,6 @@ struct LocalUses {
 
 /// Decodes a JVM local store opcode to its slot index and instruction length,
 /// or `None` if `op` is not a store.
-/// Whether a store opcode writes a wide (long/double) local.
-pub(crate) fn store_is_wide(op: u8) -> bool {
-    matches!(op, 0x37 | 0x39 | 0x3f..=0x42 | 0x47..=0x4a)
-}
-
 pub(crate) fn store_slot(bc: &[u8], pc: usize) -> Option<(usize, usize)> {
     let op = bc[pc];
     match op {
@@ -1658,7 +1653,7 @@ pub(crate) fn aput_op(jvm_op: u8) -> u16 {
 
 /// A CONSTANT_Class reference → type descriptor. Array classes are already
 /// stored in descriptor form (`[I`); ordinary classes are internal (`a/b/C`).
-fn class_ref_desc(cf: &ClassFile, idx: u16) -> Result<String> {
+pub(crate) fn class_ref_desc(cf: &ClassFile, idx: u16) -> Result<String> {
     let name = cf.constant_pool.class_name(idx)?;
     Ok(if name.starts_with('[') {
         name.to_string()
@@ -1668,7 +1663,7 @@ fn class_ref_desc(cf: &ClassFile, idx: u16) -> Result<String> {
 }
 
 /// `newarray` atype byte → array type descriptor.
-fn newarray_desc(atype: u8) -> &'static str {
+pub(crate) fn newarray_desc(atype: u8) -> &'static str {
     match atype {
         4 => "[Z", 5 => "[C", 6 => "[F", 7 => "[D",
         8 => "[B", 9 => "[S", 10 => "[I", _ => "[J",

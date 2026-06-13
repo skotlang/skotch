@@ -64,6 +64,10 @@ pub(crate) enum SsaOp {
     ArrayPut { dex_op: u16, array: ValId, index: ValId, value: ValId, jvm_pc: u32 },
     /// Array length (`array-length dest, array`, 12x). Throwing (NPE).
     ArrayLength { array: ValId, jvm_pc: u32 },
+    /// `new-instance dest, type@` (21c). Throwing (OOM/class-init). Result is a ref.
+    NewInstance { type_desc: String, jvm_pc: u32 },
+    /// `new-array dest, size, type@` (22c). Throwing (NegativeArraySize). Ref result.
+    NewArray { type_desc: String, size: ValId, jvm_pc: u32 },
 }
 
 /// The result kind of a non-void call (selects the `move-result` variant).
@@ -88,7 +92,9 @@ pub(crate) enum Terminator {
     /// `fallthrough`.
     If { jvm_op: u8, operands: Vec<ValId>, taken: usize, fallthrough: usize },
     Goto { target: usize },
-    Return(Option<ValId>),
+    /// Returns `value` (None for void); `op` is the DEX return opcode
+    /// (0x0e return-void, 0x0f return, 0x10 return-wide, 0x11 return-object).
+    Return { value: Option<ValId>, op: u16 },
     /// Falls through to the single successor with no explicit branch.
     Fall { target: usize },
 }
@@ -346,7 +352,7 @@ pub(crate) fn build_ssa(
         .map(|b| SsaBlock {
             phis: Vec::new(),
             body: Vec::new(),
-            term: Terminator::Return(None),
+            term: Terminator::Return { value: None, op: 0x0e },
             succ: cfg.blocks[b].succ.clone(),
             preds: cfg.preds[b].clone(),
         })
@@ -398,6 +404,27 @@ pub(crate) fn build_ssa(
     }
 
     rename(cf, &cfg, bc, &children, &block_phi_slots, &mut blocks, &mut b, &mut versions, 0)?;
+
+    // φ-nodes inherit their width from their operands (all the same type). They
+    // were created before their operands existed, so fix it up now — to a fixpoint
+    // since a φ operand can be another (loop-carried) φ.
+    loop {
+        let mut changed = false;
+        for i in 0..values.len() {
+            let opnds: Vec<ValId> = match &values[i].op {
+                SsaOp::Phi { operands, .. } => operands.clone(),
+                _ => continue,
+            };
+            let wide = opnds.iter().any(|&o| values[o as usize].wide);
+            if wide && !values[i].wide {
+                values[i].wide = true;
+                changed = true;
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
 
     Ok(SsaFn { values, blocks, num_arg_registers })
 }
@@ -547,8 +574,13 @@ fn rename(
                 term = Some(Terminator::Goto { target: t });
                 pc += 3;
             }
-            0xb1 => { term = Some(Terminator::Return(None)); pc += 1; }
-            0xac | 0xad | 0xae | 0xaf | 0xb0 => { term = Some(Terminator::Return(Some(stack.pop().unwrap()))); pc += 1; }
+            0xb1 => { term = Some(Terminator::Return { value: None, op: 0x0e }); pc += 1; }
+            // ireturn/lreturn/freturn/dreturn/areturn → return / return-wide / return-object
+            0xac | 0xad | 0xae | 0xaf | 0xb0 => {
+                let rop = match op { 0xad | 0xaf => 0x10, 0xb0 => 0x11, _ => 0x0f };
+                term = Some(Terminator::Return { value: Some(stack.pop().unwrap()), op: rop });
+                pc += 1;
+            }
             // method calls: invokevirtual/special/static/interface
             0xb6 | 0xb7 | 0xb8 | 0xb9 => {
                 let idx = u16::from_be_bytes([bc[pc + 1], bc[pc + 2]]);
@@ -653,6 +685,52 @@ fn rename(
                 let v = b.new(SsaOp::ArrayLength { array, jvm_pc: pc as u32 }, false, blk);
                 blocks[blk].body.push(v);
                 stack.push(v);
+                pc += 1;
+            }
+            // new-instance: `new X` pushes an uninitialized ref (a later <init> call
+            // initializes it in place).
+            0xbb => {
+                let idx = u16::from_be_bytes([bc[pc + 1], bc[pc + 2]]);
+                let internal = cf.constant_pool.class_name(idx)?.to_string();
+                let desc = skotch_classfile::constant_pool::internal_to_descriptor(&internal);
+                let v = b.new(SsaOp::NewInstance { type_desc: desc, jvm_pc: pc as u32 }, false, blk);
+                blocks[blk].body.push(v);
+                stack.push(v);
+                pc += 3;
+            }
+            // newarray (primitive element) / anewarray (reference element)
+            0xbc | 0xbd => {
+                let desc = if op == 0xbc {
+                    crate::bootstrap::newarray_desc(bc[pc + 1]).to_string()
+                } else {
+                    let idx = u16::from_be_bytes([bc[pc + 1], bc[pc + 2]]);
+                    format!("[{}", crate::bootstrap::class_ref_desc(cf, idx)?)
+                };
+                let size = stack.pop().unwrap();
+                let v = b.new(SsaOp::NewArray { type_desc: desc, size, jvm_pc: pc as u32 }, false, blk);
+                blocks[blk].body.push(v);
+                stack.push(v);
+                pc += if op == 0xbc { 2 } else { 3 };
+            }
+            // dup: duplicate the top stack value (the `new X; dup; <init>` idiom).
+            0x59 => { let top = *stack.last().unwrap(); stack.push(top); pc += 1; }
+            // pop / pop2: discard. A discarded call result drops its move-result, so
+            // mark such an Invoke as void (d8 emits the call alone).
+            0x57 => {
+                let v = stack.pop().unwrap();
+                if let SsaOp::Invoke { ret, .. } = &mut b.values[v as usize].op {
+                    *ret = None;
+                }
+                pc += 1;
+            }
+            0x58 => {
+                let v = stack.pop().unwrap();
+                if !b.values[v as usize].wide {
+                    stack.pop();
+                }
+                if let SsaOp::Invoke { ret, .. } = &mut b.values[v as usize].op {
+                    *ret = None;
+                }
                 pc += 1;
             }
             other => bail!("ssa: unsupported opcode {other:#04x} (loop subset only)"),
@@ -924,7 +1002,7 @@ fn produces_value(op: &SsaOp) -> bool {
 fn term_operands(t: &Terminator) -> Vec<ValId> {
     match t {
         Terminator::If { operands, .. } => operands.clone(),
-        Terminator::Return(Some(v)) => vec![*v],
+        Terminator::Return { value: Some(v), .. } => vec![*v],
         _ => Vec::new(),
     }
 }
@@ -1212,7 +1290,11 @@ fn reorder_entry_inits(f: &mut SsaFn, ranks: &BTreeMap<ValId, u32>) {
         let positions: Vec<usize> =
             body.iter().enumerate().filter(|(_, &v)| init_rank.contains_key(&v)).map(|(i, _)| i).collect();
         let mut items: Vec<ValId> = positions.iter().map(|&i| body[i]).collect();
-        items.sort_by_key(|v| (init_rank[v], *v));
+        // d8 orders loop variables WIDE-first (a long/double accumulator takes the
+        // lowest register pair), then by φ first-use order (the counter, read first
+        // in the condition, before later-read accumulators). `!wide` makes wide
+        // sort before narrow.
+        items.sort_by_key(|&v| (!f.values[v as usize].wide, init_rank[&v], v));
         for (k, &pos) in positions.iter().enumerate() {
             body[pos] = items[k];
         }
@@ -1269,10 +1351,8 @@ pub(crate) fn build_dex(
             }
         }
         match &f.blocks[b].term {
-            Terminator::Return(None) => insns.push(0x0e),
-            Terminator::Return(Some(v)) => {
-                let val = &f.values[*v as usize];
-                let op = if val.wide { 0x10 } else { 0x0f };
+            Terminator::Return { value: None, .. } => insns.push(0x0e),
+            Terminator::Return { value: Some(v), op } => {
                 insns.push(op | (reg(*v) << 8));
             }
             Terminator::Fall { target } => {
