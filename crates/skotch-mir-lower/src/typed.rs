@@ -11472,6 +11472,7 @@ fn lower_rich_expr_to_slot(
                         let recv_ty_guess = match &dq_exprs[0] {
                             KtExpr::Float(_) => Ty::Double,
                             KtExpr::Boolean(_) => Ty::Bool,
+                            KtExpr::Character(_) => Ty::Char,
                             KtExpr::Integer(int_e) => {
                                 // Check for LONG_LITERAL child token.
                                 let is_long = skotch_ast::children(int_e.syntax())
@@ -11489,6 +11490,7 @@ fn lower_rich_expr_to_slot(
                             Ty::Float => Some(("java/lang/Float", "(F)Ljava/lang/String;")),
                             Ty::Double => Some(("java/lang/Double", "(D)Ljava/lang/String;")),
                             Ty::Bool => Some(("java/lang/Boolean", "(Z)Ljava/lang/String;")),
+                            Ty::Char => Some(("java/lang/Character", "(C)Ljava/lang/String;")),
                             _ => None,
                         };
                         if let Some((cls, desc)) = cls_desc {
