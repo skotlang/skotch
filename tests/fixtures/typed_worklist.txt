@@ -179,7 +179,6 @@
 0.041	1217-listof-map-element-type	74	3	18	2	1
 0.041	1218-listof-foreach-data-class	74	3	18	2	1
 0.043	1253-extension-fn-not-shadow-field	47	2	17	4	3
-0.043	389-data-class-equals-hashcode-copy	69	3	17	2	1
 0.045	1299-stack-vm-sealed-when	358	16	34	18	12
 0.045	995-enum-cmp-lambda	44	2	18	3	2
 0.051	1331-multi-arg-index-operator	59	3	14	4	3
@@ -304,6 +303,7 @@
 0.365	193-bubble-sort-5	63	23	8	1	0
 0.378	1332-private-constructor-companion-factory	45	17	18	8	6
 0.382	1247-for-loop-virtual-dispatch	34	13	16	7	2
+0.391	389-data-class-equals-hashcode-copy	69	27	17	2	0
 0.400	28-object-decl	5	2	10	3	2
 0.400	391-suspend-state-machine	5	2	13	2	1
 0.400	623-suspend-noop-then-empty	5	2	13	2	1

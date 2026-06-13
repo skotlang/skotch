@@ -11483,6 +11483,49 @@ fn lower_rich_expr_to_slot(
                         });
                         return Some(result_slot);
                     }
+                    // Fallback: receiver is a class instance, method
+                    // not in fn_lookup — emit a Virtual call with
+                    // best-guess receiver class.
+                    if let KtExpr::Reference(rcv_ref) = &dq_exprs[0] {
+                        if let Some(rn) = rcv_ref.name() {
+                            if let Some(slot) = lookup_name(rn) {
+                                if let Some(Ty::Class(cname)) =
+                                    extra_locals.get(slot.0 as usize).cloned()
+                                {
+                                    let mut arg_slots: Vec<LocalId> = vec![slot];
+                                    if let Some(arg_list) = call.value_argument_list() {
+                                        for arg in arg_list.arguments() {
+                                            let arg_e = arg.expression()?;
+                                            let s = lower_rich_expr_to_slot(
+                                                arg_e,
+                                                lookup_name,
+                                                fn_lookup,
+                                                next_slot,
+                                                pre_stmts,
+                                                extra_locals,
+                                                strings,
+                                            )?;
+                                            arg_slots.push(s);
+                                        }
+                                    }
+                                    let result_slot = LocalId(*next_slot);
+                                    *next_slot += 1;
+                                    extra_locals.push(Ty::Any);
+                                    pre_stmts.push(MStmt::Assign {
+                                        dest: result_slot,
+                                        value: skotch_mir::Rvalue::Call {
+                                            kind: skotch_mir::CallKind::Virtual {
+                                                class_name: cname,
+                                                method_name: method_n.to_string(),
+                                            },
+                                            args: arg_slots,
+                                        },
+                                    });
+                                    return Some(result_slot);
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
