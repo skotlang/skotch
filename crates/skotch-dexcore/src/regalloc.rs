@@ -79,8 +79,9 @@ fn set_field(insns: &mut [u16], base: usize, f: Field, v: u16) {
 fn dex_insn_len(op: u8) -> usize {
     match op {
         // 1-word: move-result(0x0a-0x0c), return-void(0x0e), return(0x0f-0x11),
-        //         const/4(0x12), move(0x01), unops(0x7b-0x8f), 2addr(0xb0-0xcf)
-        0x0a..=0x0c | 0x0e..=0x12 | 0x01 | 0x7b..=0x8f | 0xb0..=0xcf => 1,
+        //         const/4(0x12), move(0x01), array-length(0x21), unops(0x7b-0x8f),
+        //         2addr(0xb0-0xcf)
+        0x0a..=0x0c | 0x0e..=0x12 | 0x01 | 0x21 | 0x7b..=0x8f | 0xb0..=0xcf => 1,
         // 3-word: const(0x14), const-wide/32(0x17), invoke 35c(0x6e-0x72)
         0x14 | 0x17 | 0x6e..=0x72 => 3,
         // 5-word: const-wide(0x18)
@@ -99,19 +100,25 @@ fn reg_fields(op: u8) -> &'static [Field] {
         0x0e => &[], // return-void
         // 11n const/4 — A nibble
         0x12 => &[Field::NibbleA { w: 0 }],
-        // 12x: move / unops / 2addr binops — A, B nibbles
-        0x01 | 0x7b..=0x8f | 0xb0..=0xcf => &[Field::NibbleA { w: 0 }, Field::NibbleB { w: 0 }],
+        // 12x: move / array-length / unops / 2addr binops — A, B nibbles
+        0x01 | 0x21 | 0x7b..=0x8f | 0xb0..=0xcf => &[Field::NibbleA { w: 0 }, Field::NibbleB { w: 0 }],
         // 21*: const/16, const/high16, const-wide/16, const-wide/high16,
-        //      const-string, if-testz, sget/sput — AA only (rest is lit/idx/off)
-        0x13 | 0x15 | 0x16 | 0x19 | 0x1a | 0x38..=0x3d | 0x60..=0x6d => &[Field::ByteAA { w: 0 }],
+        //      const-string, check-cast, if-testz, sget/sput — AA only
+        0x13 | 0x15 | 0x16 | 0x19 | 0x1a | 0x1f | 0x38..=0x3d | 0x60..=0x6d => {
+            &[Field::ByteAA { w: 0 }]
+        }
         // 31i / 31t / 51l: const, const-wide/32, const-wide — AA only
         0x14 | 0x17 | 0x18 => &[Field::ByteAA { w: 0 }],
-        // 22c (iget/iput) / 22t (if-test) / 22s (lit16) — A, B nibbles
-        0x52..=0x5f | 0x32..=0x37 | 0xd0..=0xd7 => &[Field::NibbleA { w: 0 }, Field::NibbleB { w: 0 }],
+        // 22c (iget/iput, new-array, instance-of) / 22t (if-test) / 22s (lit16)
+        0x52..=0x5f | 0x32..=0x37 | 0xd0..=0xd7 | 0x23 | 0x20 => {
+            &[Field::NibbleA { w: 0 }, Field::NibbleB { w: 0 }]
+        }
         // 22b (lit8) — AA in word0 + BB in word1 low byte
         0xd8..=0xdf => &[Field::ByteAA { w: 0 }, Field::ByteLo { w: 1 }],
-        // 23x (3addr binops) — AA word0, BB word1 low byte, CC word1 high byte
-        0x90..=0x9a => &[Field::ByteAA { w: 0 }, Field::ByteLo { w: 1 }, Field::ByteHi { w: 1 }],
+        // 23x (3addr binops, aget*/aput*) — AA word0, BB word1 low, CC word1 high
+        0x90..=0x9a | 0x44..=0x51 => {
+            &[Field::ByteAA { w: 0 }, Field::ByteLo { w: 1 }, Field::ByteHi { w: 1 }]
+        }
         _ => &[],
     }
 }

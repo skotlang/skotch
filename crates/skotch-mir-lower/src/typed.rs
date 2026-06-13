@@ -10911,6 +10911,18 @@ fn lower_rich_expr_to_slot(
                                 (Ty::String, "length") => {
                                     Some(("java/lang/String", "length", "()I", Ty::Int))
                                 }
+                                (Ty::Char, "code") => {
+                                    // Char.code is just the underlying int.
+                                    // No-op call: return receiver as Int.
+                                    let result_slot = LocalId(*next_slot);
+                                    *next_slot += 1;
+                                    extra_locals.push(Ty::Int);
+                                    pre_stmts.push(MStmt::Assign {
+                                        dest: result_slot,
+                                        value: skotch_mir::Rvalue::Local(recv_slot),
+                                    });
+                                    return Some(result_slot);
+                                }
                                 (Ty::Class(c), "first") if c == "kotlin/Pair" => Some((
                                     "kotlin/Pair",
                                     "getFirst",

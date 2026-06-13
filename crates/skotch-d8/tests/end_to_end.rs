@@ -32,6 +32,193 @@ fn straightline_battery_byte_identical() {
     );
 }
 
+/// Negation (`neg-int`/`neg-long`, incl. `-(a+b)`) and a 3-argument static call
+/// (`invoke-static {v0,v1,v2}` — the 35c form with three register operands).
+#[test]
+fn neg_and_multiarg_battery_byte_identical() {
+    let cf = skotch_classfile::parse_class_file(&fixtures().join("Misc.class")).unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let produced = dex_classes(&[cf], &opts).unwrap();
+    let golden = std::fs::read(fixtures().join("Misc.d8.dex")).unwrap();
+    if produced != golden {
+        std::fs::write("/tmp/skotch-Misc-produced.dex", &produced).unwrap();
+    }
+    skotch_dex::validator::validate(&produced).expect("self-validation");
+    assert_eq!(
+        produced,
+        golden,
+        "Neg/multiarg battery: produced {} vs golden {}; first diff {:?}",
+        produced.len(),
+        golden.len(),
+        (0..produced.len().min(golden.len())).find(|&i| produced[i] != golden[i])
+    );
+}
+
+/// Integer/long division and remainder: `div-int/2addr`, `rem-int/2addr`,
+/// `div-long/2addr`, and `a/7` → `div-int/lit8` (div/rem DO lit-fold, with the
+/// literal as the right operand). Integer div/rem are throwing instructions.
+#[test]
+fn div_rem_battery_byte_identical() {
+    let cf = skotch_classfile::parse_class_file(&fixtures().join("Div.class")).unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let produced = dex_classes(&[cf], &opts).unwrap();
+    let golden = std::fs::read(fixtures().join("Div.d8.dex")).unwrap();
+    if produced != golden {
+        std::fs::write("/tmp/skotch-Div-produced.dex", &produced).unwrap();
+    }
+    skotch_dex::validator::validate(&produced).expect("self-validation");
+    assert_eq!(
+        produced,
+        golden,
+        "Div/rem battery: produced {} vs golden {}; first diff {:?}",
+        produced.len(),
+        golden.len(),
+        (0..produced.len().min(golden.len())).find(|&i| produced[i] != golden[i])
+    );
+}
+
+/// Casts and `instanceof`: `(String)o` → `check-cast v0, String` (in place),
+/// `(int[])o` → `check-cast v0, [I`, `o instanceof String` → `instance-of v0, v0,
+/// String`. Exercises type-reference operands and array-class descriptors.
+#[test]
+fn cast_battery_byte_identical() {
+    let cf = skotch_classfile::parse_class_file(&fixtures().join("Cast.class")).unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let produced = dex_classes(&[cf], &opts).unwrap();
+    let golden = std::fs::read(fixtures().join("Cast.d8.dex")).unwrap();
+    if produced != golden {
+        std::fs::write("/tmp/skotch-Cast-produced.dex", &produced).unwrap();
+    }
+    skotch_dex::validator::validate(&produced).expect("self-validation");
+    assert_eq!(
+        produced,
+        golden,
+        "Cast battery: produced {} vs golden {}; first diff {:?}",
+        produced.len(),
+        golden.len(),
+        (0..produced.len().min(golden.len())).find(|&i| produced[i] != golden[i])
+    );
+}
+
+/// Array operations: `aget`/`aput` (`a[i]`), `array-length`, `new-array`,
+/// `aget-wide` (long[] element). `firstL` (long[] → long result) exercises the
+/// wide-pair straddle rule: the wide result can't reuse a register pair that
+/// crosses the args/locals boundary, so it lands in `v0:v1` (both locals).
+#[test]
+fn array_battery_byte_identical() {
+    let cf = skotch_classfile::parse_class_file(&fixtures().join("Arr.class")).unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let produced = dex_classes(&[cf], &opts).unwrap();
+    let golden = std::fs::read(fixtures().join("Arr.d8.dex")).unwrap();
+    if produced != golden {
+        std::fs::write("/tmp/skotch-Arr-produced.dex", &produced).unwrap();
+    }
+    skotch_dex::validator::validate(&produced).expect("self-validation");
+    assert_eq!(
+        produced,
+        golden,
+        "Array battery: produced {} vs golden {}; first diff {:?}",
+        produced.len(),
+        golden.len(),
+        (0..produced.len().min(golden.len())).find(|&i| produced[i] != golden[i])
+    );
+}
+
+/// Object allocation: `new X()` → `new-instance v0, X; invoke-direct {v0,..},
+/// X.<init>; return-object v0` (the `new`+`dup`+`<init>` idiom, with the
+/// constructor initializing the object in place so its register survives to the
+/// return). Covers no-arg and one-arg constructors.
+#[test]
+fn object_alloc_battery_byte_identical() {
+    let cf = skotch_classfile::parse_class_file(&fixtures().join("New.class")).unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let produced = dex_classes(&[cf], &opts).unwrap();
+    let golden = std::fs::read(fixtures().join("New.d8.dex")).unwrap();
+    if produced != golden {
+        std::fs::write("/tmp/skotch-New-produced.dex", &produced).unwrap();
+    }
+    skotch_dex::validator::validate(&produced).expect("self-validation");
+    assert_eq!(
+        produced,
+        golden,
+        "Object alloc battery: produced {} vs golden {}; first diff {:?}",
+        produced.len(),
+        golden.len(),
+        (0..produced.len().min(golden.len())).find(|&i| produced[i] != golden[i])
+    );
+}
+
+/// Higher-pressure mixes: `f4=(a+b)+(c+d)` (4 args), `chain=((a+1)*3-2)|4`
+/// (`x-const` folds to `add-int/lit8 x,-const`), `fieldArith=a*1000+7`
+/// (`mul-int/lit16`), `twoConst=(a|BIG)+(a&BIG)` (the result reuses the dead
+/// constant's register, and `a` is shared across two terms → args-high v2).
+#[test]
+fn pressure_mix_battery_byte_identical() {
+    let cf = skotch_classfile::parse_class_file(&fixtures().join("Press2.class")).unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let produced = dex_classes(&[cf], &opts).unwrap();
+    let golden = std::fs::read(fixtures().join("Press2.d8.dex")).unwrap();
+    if produced != golden {
+        std::fs::write("/tmp/skotch-Press2-produced.dex", &produced).unwrap();
+    }
+    skotch_dex::validator::validate(&produced).expect("self-validation");
+    assert_eq!(
+        produced,
+        golden,
+        "Pressure mix battery: produced {} vs golden {}; first diff {:?}",
+        produced.len(),
+        golden.len(),
+        (0..produced.len().min(golden.len())).find(|&i| produced[i] != golden[i])
+    );
+}
+
+/// Multi-temp nested expressions exercising d8's commutative coalescing:
+/// `(a+b)*(a+c)` → `add-int/2addr v1, v0` (the a+b result reuses the DEAD operand
+/// `b`'s register because `a` is still live), plus `a*a+b*b` and `(a+b)|(b+c)`.
+#[test]
+fn nested_expr_battery_byte_identical() {
+    let cf = skotch_classfile::parse_class_file(&fixtures().join("Stress.class")).unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let produced = dex_classes(&[cf], &opts).unwrap();
+    let golden = std::fs::read(fixtures().join("Stress.d8.dex")).unwrap();
+    if produced != golden {
+        std::fs::write("/tmp/skotch-Stress-produced.dex", &produced).unwrap();
+    }
+    skotch_dex::validator::validate(&produced).expect("self-validation");
+    assert_eq!(
+        produced,
+        golden,
+        "Nested expr battery: produced {} vs golden {}; first diff {:?}",
+        produced.len(),
+        golden.len(),
+        (0..produced.len().min(golden.len())).find(|&i| produced[i] != golden[i])
+    );
+}
+
+/// Instance method calls (`invoke-virtual {v0}, getN; move-result`) and combined
+/// field+argument pressure: `addN(k){ n + k }` → `iget v0,v1; add-int/2addr v0,v2`
+/// (this→v1, k→v2 args-high, temp→v0). Exercises the allocator on real receiver
+/// calls and a three-register layout.
+#[test]
+fn instance_call_battery_byte_identical() {
+    let cf = skotch_classfile::parse_class_file(&fixtures().join("Q.class")).unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let produced = dex_classes(&[cf], &opts).unwrap();
+    let golden = std::fs::read(fixtures().join("Q.d8.dex")).unwrap();
+    if produced != golden {
+        std::fs::write("/tmp/skotch-Q-produced.dex", &produced).unwrap();
+    }
+    skotch_dex::validator::validate(&produced).expect("self-validation");
+    assert_eq!(
+        produced,
+        golden,
+        "Instance call battery: produced {} vs golden {}; first diff {:?}",
+        produced.len(),
+        golden.len(),
+        (0..produced.len().min(golden.len())).find(|&i| produced[i] != golden[i])
+    );
+}
+
 /// Straight-line arithmetic with a large (non-lit-foldable) constant forces a
 /// scratch register while the argument is live, so d8 relocates the argument
 /// high: `addBig(a){a+1000000}` → `const v0,#…; add-int/2addr v1,v0; return v1`.

@@ -98,7 +98,20 @@ fn dex_method(cf: &ClassFile, m: &Member, min_api: u32) -> Result<EncodedMethod>
     let code = if m.is_abstract() || m.is_native() {
         None
     } else if let Some(c) = &m.code {
-        let mut item = translate_code(cf, m, c, &params, &ret, min_api)?;
+        let item = translate_code(cf, m, c, &params, &ret, min_api)?;
+        // The bootstrap allocator has no spilling / move scheduling, and the
+        // 4-bit-register instruction forms it emits cannot encode a register
+        // ≥ 16. d8 handles >16 registers with the full allocator's spill moves;
+        // we can't, so bail rather than silently mask a register field.
+        if item.registers_size > 16 {
+            bail!(
+                "dexer: {} registers needed in {}{} — >16 needs spilling (Phase 1 allocator)",
+                item.registers_size,
+                m.name,
+                m.descriptor
+            );
+        }
+        let mut item = item;
         // Remap allocated → real DEX registers (d8's args-high placement). This
         // is the identity unless the method has register pressure beyond its
         // arguments, so it leaves no-pressure methods byte-identical.
@@ -196,12 +209,12 @@ fn translate_code(
                 stack.push(e.int_binop(op, a, b)?);
                 pc += 1;
             }
-            // long / float / double binops (non-throwing: add/sub/mul, bitwise,
-            // shifts). No lit-folding for these — straight to reg form. div/rem
-            // are throwing (need debug positions) and intentionally still bail.
-            0x61 | 0x65 | 0x69 | 0x7f | 0x81 | 0x83 | 0x79 | 0x7b | 0x7d // long
-            | 0x62 | 0x66 | 0x6a // float
-            | 0x63 | 0x67 | 0x6b => { // double
+            // long / float / double binops (add/sub/mul/div/rem, bitwise,
+            // shifts). No lit-folding for these — straight to reg form. Integer
+            // div/rem record a debug position (they throw); float/double don't.
+            0x61 | 0x65 | 0x69 | 0x6d | 0x71 | 0x7f | 0x81 | 0x83 | 0x79 | 0x7b | 0x7d // long
+            | 0x62 | 0x66 | 0x6a | 0x6e | 0x72 // float
+            | 0x63 | 0x67 | 0x6b | 0x6f | 0x73 => { // double
                 let b = stack.pop().unwrap();
                 let a = stack.pop().unwrap();
                 stack.push(e.binop_reg(op, a, b)?);
@@ -237,10 +250,35 @@ fn translate_code(
                 }
                 pc += advance;
             }
+            // object allocation: `new-instance` then (after dup + <init>) the
+            // reference flows on. `dup` duplicates the new reference on the stack.
+            0xbb => { stack.push(e.new_instance(cf, u16::from_be_bytes([bc[pc + 1], bc[pc + 2]]))?); pc += 3; }
+            0x59 => { let top = stack.last().unwrap().clone(); stack.push(top); pc += 1; }
+            // arrays
+            0xbe => { let a = stack.pop().unwrap(); stack.push(e.array_length(a)?); pc += 1; }
+            0x2e..=0x35 => { let i = stack.pop().unwrap(); let a = stack.pop().unwrap(); stack.push(e.array_load(op, a, i)?); pc += 1; }
+            0x4f..=0x56 => { let v = stack.pop().unwrap(); let i = stack.pop().unwrap(); let a = stack.pop().unwrap(); e.array_store(op, a, i, v)?; pc += 1; }
+            0xbc => { let s = stack.pop().unwrap(); stack.push(e.new_array(s, newarray_desc(bc[pc + 1]).to_string())?); pc += 2; }
+            // negation (int/long/float/double)
+            0x74 | 0x75 | 0x76 | 0x77 => { let v = stack.pop().unwrap(); stack.push(e.negate(op, v)?); pc += 1; }
+            // checkcast / instanceof
+            0xc0 => { let o = stack.pop().unwrap(); stack.push(e.check_cast(cf, u16::from_be_bytes([bc[pc + 1], bc[pc + 2]]), o)?); pc += 3; }
+            0xc1 => { let o = stack.pop().unwrap(); stack.push(e.instance_of(cf, u16::from_be_bytes([bc[pc + 1], bc[pc + 2]]), o)?); pc += 3; }
+            0xbd => {
+                let idx = u16::from_be_bytes([bc[pc + 1], bc[pc + 2]]);
+                let elem = cf.constant_pool.class_name(idx)?.to_string();
+                let elem_desc = skotch_classfile::constant_pool::internal_to_descriptor(&elem);
+                let s = stack.pop().unwrap();
+                stack.push(e.new_array(s, format!("[{elem_desc}"))?);
+                pc += 3;
+            }
             // returns
             0xb1 => { e.return_void(); pc += 1; }
-            0xac | 0xb0 => { let v = stack.pop().unwrap(); e.return_value(v)?; pc += 1; }
-            0xad | 0xae | 0xaf => { let v = stack.pop().unwrap(); e.return_value(v)?; pc += 1; }
+            0xac | 0xad | 0xae | 0xaf | 0xb0 => {
+                let v = stack.pop().unwrap();
+                e.return_value(v, jvm_return_dex_op(op))?;
+                pc += 1;
+            }
             other => bail!(
                 "dexer: unsupported JVM opcode {:#04x} in {}{} (needs Phase 1 IR: branches, local stores, or register pressure)",
                 other,
@@ -616,7 +654,7 @@ fn emit_cfg<'a>(
                     // A merged contributor drops its return and falls through to
                     // the shared exit (the value already sits in the exit reg).
                     if !drop_return.contains(&bi) {
-                        e.return_value(Val::Reg(r, v.is_wide()))?;
+                        e.return_value(Val::Reg(r, v.is_wide()), jvm_return_dex_op(op))?;
                     }
                     pc += 1;
                 }
@@ -813,7 +851,11 @@ impl<'a> Emitter<'a> {
             if r + need > self.used.len() {
                 self.used.resize(r + need, false);
             }
-            if (0..need).all(|k| !self.used[r + k]) {
+            // A wide value must not occupy a pair that STRADDLES the args/locals
+            // boundary: the args-high remap is consecutive within the arg region
+            // and within the local region, but not across them, so `[ins-1, ins]`
+            // would map to a non-consecutive real pair. Skip that start.
+            if !self.straddles_args(r as u16, wide) && (0..need).all(|k| !self.used[r + k]) {
                 break;
             }
             r += 1;
@@ -833,6 +875,12 @@ impl<'a> Emitter<'a> {
         for k in 0..need {
             self.used[reg as usize + k] = false;
         }
+    }
+
+    /// Whether a wide pair starting at `r` straddles the args/locals boundary
+    /// (`[ins-1, ins]`), which the args-high remap cannot keep consecutive.
+    fn straddles_args(&self, r: u16, wide: bool) -> bool {
+        wide && self.ins_size > 0 && r == self.ins_size - 1
     }
 
     /// Frees the register backing a value once it has been consumed: a temp
@@ -945,23 +993,34 @@ impl<'a> Emitter<'a> {
     }
 
     fn int_binop(&mut self, jvm_op: u8, a: Val, b: Val) -> Result<Val> {
-        // Lit-folding: `x <op> const` → the lit8/lit16 form (commutative ops),
-        // matching d8.
+        // d8 lit-folds `x - const` as `x + (-const)`: DEX has add-int/lit but no
+        // sub-int/lit (only the reverse rsub-int/lit). Rewrite isub-by-constant
+        // to iadd by the negated constant so the lit folding below can apply.
+        let (jvm_op, b) = match (jvm_op, &b) {
+            (0x64, Val::ConstInt(c)) => (0x60, Val::ConstInt(c.wrapping_neg())),
+            _ => (jvm_op, b),
+        };
+        // Lit-folding: `x <op> const` → the lit8/lit16 form, but only when the
+        // constant fits the literal field. A larger constant falls through to the
+        // register form (binop_reg), which materializes it — pre-allocating a
+        // result register here would leak one, so we don't.
         if let Val::ConstInt(c) = b {
             if let Some((op8, op16)) = lit_ops(jvm_op) {
-                let src = self.materialize(&a)?;
-                self.release(&a);
-                let dest = self.alloc_result(src, false)?;
                 if (-128..=127).contains(&c) {
+                    let src = self.materialize(&a)?;
+                    self.release(&a);
+                    let dest = self.alloc_result(src, false)?;
                     self.insns.push(op8 | (dest << 8));
                     self.insns.push((src & 0xff) | (((c as u16) & 0xff) << 8));
+                    return Ok(Val::Reg(dest, false));
                 } else if (-32768..=32767).contains(&c) {
+                    let src = self.materialize(&a)?;
+                    self.release(&a);
+                    let dest = self.alloc_result(src, false)?;
                     self.insns.push(op16 | ((dest as u16) << 8) | ((src as u16) << 12));
                     self.insns.push(c as u16);
-                } else {
-                    return self.binop_reg(jvm_op, a_from(dest), Val::ConstInt(c));
+                    return Ok(Val::Reg(dest, false));
                 }
-                return Ok(Val::Reg(dest, false));
             }
         }
         self.binop_reg(jvm_op, a, b)
@@ -971,18 +1030,51 @@ impl<'a> Emitter<'a> {
         // The result width follows the first operand (long/double → wide; for
         // shifts the shift-amount `b` is narrow but `a`/result are wide).
         let wide = a.is_wide();
+        let need = if wide { 2 } else { 1 };
         let ra = self.materialize(&a)?;
         let rb = self.materialize(&b)?;
         self.release(&a);
         self.release(&b);
-        let dest = self.alloc_result(ra, wide)?;
-        // d8 normally coalesces `dest = a op b` (dest == a) into the 2-address
-        // form, EXCEPT for `mul` below API 23: `mul-*/2addr` triggers an ART
-        // Marshmallow bug (`canHaveMul2AddrBug`), so d8 keeps the 3-address form.
+        // A constant operand was just materialized into a fresh register that the
+        // binop consumes; free it so the result can coalesce into it as d8 does
+        // (`(a|BIG)` → `or-int/2addr v0,v2` reuses the constant's register).
+        if matches!(a, Val::ConstInt(_) | Val::ConstLong(_) | Val::ConstString(_)) {
+            self.free(ra, a.is_wide());
+        }
+        if matches!(b, Val::ConstInt(_) | Val::ConstLong(_) | Val::ConstString(_)) {
+            self.free(rb, b.is_wide());
+        }
+        let is_free = |e: &Self, r: u16| (0..need).all(|k| !e.used[r as usize + k]);
+        let ra_free = is_free(self, ra);
+        let rb_free = is_free(self, rb);
+        // d8's coalescing (`Binop.isTwoAddr`): the result reuses the FIRST
+        // operand's register if it is now dead, or — for a COMMUTATIVE op — the
+        // second operand's register if THAT is dead (the operands are then
+        // swapped, which is legal for commutative ops). Otherwise a fresh
+        // register. This matches `(a+b)*(a+c)` → `add-int/2addr v1, v0` (the
+        // a+b result reuses the dead `b`, since `a` is still live).
+        let commutative = is_commutative(jvm_op);
+        let (dest, src_for_2addr) = if ra_free {
+            self.mark_reg_used(ra, wide);
+            (ra, Some(rb))
+        } else if commutative && rb_free {
+            self.mark_reg_used(rb, wide);
+            (rb, Some(ra))
+        } else {
+            (self.alloc(wide)?, None)
+        };
+        // Integer div/rem throw ArithmeticException on a zero divisor, so d8
+        // records a debug position at them (a no-op when there are no line
+        // numbers). idiv/irem/ldiv/lrem; float/double div/rem cannot throw.
+        if matches!(jvm_op, 0x6c | 0x70 | 0x6d | 0x71) {
+            self.record_position();
+        }
+        // Below API 23, `mul-*/2addr` triggers an ART Marshmallow bug
+        // (`canHaveMul2AddrBug`), so d8 keeps the 3-address form for `mul`.
         let mul2addr_bug = self.min_api < 23 && is_mul_op(jvm_op);
-        if let Some(op2) = binop_2addr_op(jvm_op) {
-            if dest == ra && !mul2addr_bug {
-                self.insns.push(op2 | ((dest as u16) << 8) | ((rb as u16) << 12));
+        if let (Some(src), Some(op2)) = (src_for_2addr, binop_2addr_op(jvm_op)) {
+            if !mul2addr_bug {
+                self.insns.push(op2 | ((dest as u16) << 8) | ((src as u16) << 12));
                 return Ok(Val::Reg(dest, wide));
             }
         }
@@ -992,12 +1084,21 @@ impl<'a> Emitter<'a> {
         Ok(Val::Reg(dest, wide))
     }
 
+    /// Marks a register (a pair if `wide`) used and extends `max_reg`.
+    fn mark_reg_used(&mut self, reg: u16, wide: bool) {
+        let need = if wide { 2 } else { 1 };
+        for k in 0..need {
+            self.used[reg as usize + k] = true;
+        }
+        self.max_reg = self.max_reg.max((reg as i32) + need as i32 - 1);
+    }
+
     /// Picks the result register (a pair if `wide`) for a binop: reuse the first
     /// operand's register(s) if now free (→ 2addr), else allocate fresh.
     fn alloc_result(&mut self, first_operand: u16, wide: bool) -> Result<u16> {
         let need = if wide { 2 } else { 1 };
         let base = first_operand as usize;
-        if (0..need).all(|k| !self.used[base + k]) {
+        if !self.straddles_args(first_operand, wide) && (0..need).all(|k| !self.used[base + k]) {
             for k in 0..need {
                 self.used[base + k] = true;
             }
@@ -1031,6 +1132,117 @@ impl<'a> Emitter<'a> {
         self.insns.push(0);
         self.fixups.push(Fixup { unit, item: ItemRef::Field(field), wide: false });
         Ok(Val::Reg(r, wide))
+    }
+
+    /// `new-instance vAA, type@CCCC` (21c). The fresh reference lives in `r`
+    /// until consumed; the following `dup`+`<init>` initialize it in place.
+    fn new_instance(&mut self, cf: &ClassFile, idx: u16) -> Result<Val> {
+        let internal = cf.constant_pool.class_name(idx)?.to_string();
+        let desc = skotch_classfile::constant_pool::internal_to_descriptor(&internal);
+        let r = self.alloc(false)?;
+        self.record_position();
+        self.insns.push(0x22 | (r << 8));
+        let unit = self.insns.len();
+        self.insns.push(0);
+        self.fixups.push(Fixup { unit, item: ItemRef::Type(desc), wide: false });
+        Ok(Val::Reg(r, false))
+    }
+
+    /// `neg-int/long/float/double vA, vB` (12x). Result reuses the operand reg.
+    fn negate(&mut self, jvm_op: u8, v: Val) -> Result<Val> {
+        let (dex_op, wide) = match jvm_op {
+            0x74 => (0x7b, false), // ineg → neg-int
+            0x75 => (0x7d, true),  // lneg → neg-long
+            0x76 => (0x7f, false), // fneg → neg-float
+            _ => (0x80, true),     // dneg → neg-double
+        };
+        let src = self.materialize(&v)?;
+        self.release(&v);
+        let dest = self.alloc_result(src, wide)?;
+        self.insns.push(dex_op | ((dest & 0xf) << 8) | ((src & 0xf) << 12));
+        Ok(Val::Reg(dest, wide))
+    }
+
+    /// `check-cast vAA, type@CCCC` (21c). Operates in place: the value stays in
+    /// its register (with a narrowed type), so the same register flows on.
+    fn check_cast(&mut self, cf: &ClassFile, idx: u16, obj: Val) -> Result<Val> {
+        let desc = class_ref_desc(cf, idx)?;
+        let r = self.materialize(&obj)?;
+        self.record_position();
+        self.insns.push(0x1f | (r << 8));
+        let unit = self.insns.len();
+        self.insns.push(0);
+        self.fixups.push(Fixup { unit, item: ItemRef::Type(desc), wide: false });
+        Ok(Val::Reg(r, false))
+    }
+
+    /// `instance-of vA, vB, type@CCCC` (22c). The boolean result reuses the
+    /// (now dead) object register.
+    fn instance_of(&mut self, cf: &ClassFile, idx: u16, obj: Val) -> Result<Val> {
+        let desc = class_ref_desc(cf, idx)?;
+        let rb = self.materialize(&obj)?;
+        self.release(&obj);
+        let dest = self.alloc_result(rb, false)?;
+        self.insns.push(0x20 | ((dest & 0xf) << 8) | ((rb & 0xf) << 12));
+        let unit = self.insns.len();
+        self.insns.push(0);
+        self.fixups.push(Fixup { unit, item: ItemRef::Type(desc), wide: false });
+        Ok(Val::Reg(dest, false))
+    }
+
+    /// `array-length vA, vB` (12x). The result reuses the (now dead) array reg.
+    fn array_length(&mut self, arr: Val) -> Result<Val> {
+        let ra = self.materialize(&arr)?;
+        self.release(&arr);
+        let r = self.alloc_result(ra, false)?;
+        self.record_position();
+        self.insns.push(0x21 | ((r & 0xf) << 8) | ((ra & 0xf) << 12));
+        Ok(Val::Reg(r, false))
+    }
+
+    /// `aget* vDest, vArray, vIndex` (23x). Result reuses the array register.
+    fn array_load(&mut self, jvm_op: u8, arr: Val, idx: Val) -> Result<Val> {
+        let (dex_op, wide) = aget_op(jvm_op);
+        let ra = self.materialize(&arr)?;
+        let ri = self.materialize(&idx)?;
+        self.release(&arr);
+        self.release(&idx);
+        if matches!(idx, Val::ConstInt(_)) {
+            self.free(ri, false);
+        }
+        let dest = self.alloc_result(ra, wide)?;
+        self.record_position();
+        self.insns.push(dex_op | (dest << 8));
+        self.insns.push((ra & 0xff) | ((ri & 0xff) << 8));
+        Ok(Val::Reg(dest, wide))
+    }
+
+    /// `aput* vValue, vArray, vIndex` (23x). No result.
+    fn array_store(&mut self, jvm_op: u8, arr: Val, idx: Val, val: Val) -> Result<()> {
+        let dex_op = aput_op(jvm_op);
+        let rv = self.materialize(&val)?;
+        let ra = self.materialize(&arr)?;
+        let ri = self.materialize(&idx)?;
+        self.release(&val);
+        self.release(&arr);
+        self.release(&idx);
+        self.record_position();
+        self.insns.push(dex_op | (rv << 8));
+        self.insns.push((ra & 0xff) | ((ri & 0xff) << 8));
+        Ok(())
+    }
+
+    /// `new-array vA, vSize, type@CCCC` (22c). Result reuses the size register.
+    fn new_array(&mut self, size: Val, array_desc: String) -> Result<Val> {
+        let rs = self.materialize(&size)?;
+        self.release(&size);
+        let dest = self.alloc_result(rs, false)?;
+        self.record_position();
+        self.insns.push(0x23 | ((dest & 0xf) << 8) | ((rs & 0xf) << 12));
+        let unit = self.insns.len();
+        self.insns.push(0);
+        self.fixups.push(Fixup { unit, item: ItemRef::Type(array_desc), wide: false });
+        Ok(Val::Reg(dest, false))
     }
 
     fn putstatic(&mut self, cf: &ClassFile, idx: u16, v: Val) -> Result<()> {
@@ -1111,7 +1323,15 @@ impl<'a> Emitter<'a> {
                 const_arg_regs.push((r, v.is_wide()));
             }
         }
-        for v in &popped {
+        // A constructor (`<init>`) initializes its receiver in place; the object
+        // continues to live (in `new X; dup; <init>`, the dup'd copy is still on
+        // the stack). So do NOT release the receiver of an `<init>` call — only
+        // its other arguments. For all other invokes, release every operand.
+        let receiver_is_pinned = instance && name == "<init>";
+        for (i, v) in popped.iter().enumerate() {
+            if receiver_is_pinned && i == 0 {
+                continue;
+            }
             self.release(v);
         }
         if regs.len() > 5 || regs.iter().any(|&r| r > 15) {
@@ -1188,17 +1408,11 @@ impl<'a> Emitter<'a> {
         self.insns.push(0x000e);
     }
 
-    fn return_value(&mut self, v: Val) -> Result<()> {
-        let wide = v.is_wide();
+    /// `dex_op` is the DEX return opcode chosen from the JVM return opcode
+    /// (`return`/`return-wide`/`return-object`) — see `jvm_return_dex_op`.
+    fn return_value(&mut self, v: Val, dex_op: u16) -> Result<()> {
         let r = self.materialize(&v)?;
-        let op: u16 = if wide {
-            0x10
-        } else if matches!(v, Val::Local(_, false) | Val::Reg(_, false)) && is_ref_val(&v) {
-            0x11 // return-object
-        } else {
-            0x0f // return
-        };
-        self.insns.push(op | (r << 8));
+        self.insns.push(dex_op | (r << 8));
         Ok(())
     }
 
@@ -1230,9 +1444,6 @@ impl<'a> Emitter<'a> {
     }
 }
 
-fn a_from(reg: u16) -> Val {
-    Val::Reg(reg, false)
-}
 
 /// Per-slot load and store counts. Loads free an argument's register on its last
 /// use; stores let the bootstrap support single-assignment locals (it bails in
@@ -1350,18 +1561,57 @@ fn instr_len(bc: &[u8], pc: usize) -> usize {
 fn is_ref(desc: &str) -> bool {
     desc.starts_with('L') || desc.starts_with('[')
 }
-fn is_ref_val(v: &Val) -> bool {
-    // We don't track full types on Local/Reg; refs only matter for
-    // return-object, which the bootstrap subset doesn't hit (it returns int).
-    let _ = v;
-    false
+/// JVM array-load opcode → (DEX `aget*` op, result-is-wide).
+fn aget_op(jvm_op: u8) -> (u16, bool) {
+    match jvm_op {
+        0x2e | 0x30 => (0x44, false), // iaload / faload → aget
+        0x2f | 0x31 => (0x45, true),  // laload / daload → aget-wide
+        0x32 => (0x46, false),        // aaload → aget-object
+        0x33 => (0x48, false),        // baload → aget-byte
+        0x34 => (0x49, false),        // caload → aget-char
+        _ => (0x4a, false),           // saload → aget-short
+    }
+}
+
+/// JVM array-store opcode → DEX `aput*` op.
+fn aput_op(jvm_op: u8) -> u16 {
+    match jvm_op {
+        0x4f | 0x51 => 0x4b, // iastore / fastore → aput
+        0x50 | 0x52 => 0x4c, // lastore / dastore → aput-wide
+        0x53 => 0x4e,        // aastore → aput-object
+        0x54 => 0x4f,        // bastore → aput-byte
+        0x55 => 0x50,        // castore → aput-char
+        _ => 0x51,           // sastore → aput-short
+    }
+}
+
+/// A CONSTANT_Class reference → type descriptor. Array classes are already
+/// stored in descriptor form (`[I`); ordinary classes are internal (`a/b/C`).
+fn class_ref_desc(cf: &ClassFile, idx: u16) -> Result<String> {
+    let name = cf.constant_pool.class_name(idx)?;
+    Ok(if name.starts_with('[') {
+        name.to_string()
+    } else {
+        skotch_classfile::constant_pool::internal_to_descriptor(name)
+    })
+}
+
+/// `newarray` atype byte → array type descriptor.
+fn newarray_desc(atype: u8) -> &'static str {
+    match atype {
+        4 => "[Z", 5 => "[C", 6 => "[F", 7 => "[D",
+        8 => "[B", 9 => "[S", 10 => "[I", _ => "[J",
+    }
 }
 
 fn lit_ops(jvm_op: u8) -> Option<(u16, u16)> {
-    // (lit8 op, lit16 op) for commutative-with-constant int binops.
+    // (lit8 op, lit16 op) for `x <op> const` int binops. The literal is the
+    // RIGHT operand, so non-commutative div/rem fold too (`a / 7`).
     match jvm_op {
         0x60 => Some((0xd8, 0xd0)), // add
         0x68 => Some((0xda, 0xd2)), // mul
+        0x6c => Some((0xdb, 0xd3)), // div
+        0x70 => Some((0xdc, 0xd4)), // rem
         0x7e => Some((0xdd, 0xd5)), // and
         0x80 => Some((0xde, 0xd6)), // or
         0x82 => Some((0xdf, 0xd7)), // xor
@@ -1373,6 +1623,23 @@ fn lit_ops(jvm_op: u8) -> Option<(u16, u16)> {
 /// `mul-int/2addr` workaround.
 fn is_mul_op(jvm_op: u8) -> bool {
     matches!(jvm_op, 0x68..=0x6b)
+}
+
+/// Commutative arithmetic binops (add/mul/and/or/xor, all widths) — d8's
+/// `Binop.isCommutative()`. Used to let the result coalesce into the second
+/// operand's register when only that one is dead. (sub/div/rem/shifts are not.)
+fn is_commutative(jvm_op: u8) -> bool {
+    matches!(jvm_op, 0x60..=0x63 | 0x68..=0x6b | 0x7e..=0x83)
+}
+
+/// DEX return opcode for a JVM return opcode: `return-wide` for long/double,
+/// `return-object` for areturn, `return` otherwise.
+fn jvm_return_dex_op(jvm_op: u8) -> u16 {
+    match jvm_op {
+        0xad | 0xaf => 0x10, // lreturn / dreturn → return-wide
+        0xb0 => 0x11,        // areturn → return-object
+        _ => 0x0f,           // ireturn / freturn → return
+    }
 }
 
 /// JVM numeric-conversion opcode → (DEX `conv` op, result-is-wide), for the
