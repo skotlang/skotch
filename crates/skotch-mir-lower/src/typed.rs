@@ -11185,6 +11185,15 @@ fn lower_rich_expr_to_slot(
                             ("Math", "random") => (Some("java/lang/Math"), |n| {
                                 if n == 0 { Some(("Math.random", "()D")) } else { None }
                             }),
+                            ("Math", "addExact") => (Some("java/lang/Math"), |n| {
+                                if n == 2 { Some(("Math.addExact", "(II)I")) } else { None }
+                            }),
+                            ("Math", "subtractExact") => (Some("java/lang/Math"), |n| {
+                                if n == 2 { Some(("Math.subtractExact", "(II)I")) } else { None }
+                            }),
+                            ("Math", "multiplyExact") => (Some("java/lang/Math"), |n| {
+                                if n == 2 { Some(("Math.multiplyExact", "(II)I")) } else { None }
+                            }),
                             _ => (None, |_| None),
                         };
                         if let Some(cls_str) = cls_opt {
