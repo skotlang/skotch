@@ -635,7 +635,6 @@
 0.800	227-java-static-call	5	4	8	1	0
 0.800	230-math-random	5	4	8	1	0
 0.800	316-override-tostring	20	16	12	3	0
-0.800	380-pair-infix-to	10	8	8	1	0
 0.800	575-platform-type-java	5	4	8	1	0
 0.800	595-suspend-if-expr	5	4	8	1	0
 0.800	671-suspend-int-mod-2	5	4	8	1	0
@@ -845,8 +844,8 @@
 1.000	335-interface-basic	12	12	14	7	2
 1.000	36-default-args	3	3	8	1	0
 1.000	37-named-args	5	5	9	2	0
+1.000	380-pair-infix-to	10	10	8	1	0
 1.000	39-raw-string	2	2	8	1	0
-1.000	426-range-expression	5	5	8	1	0
 1.000	50-when-basic	23	23	9	2	0
 1.000	571-annotation-runtime	3	3	9	2	0
 1.000	572-annotation-suppress	3	3	9	2	0
@@ -963,6 +962,7 @@
 1.286	286-long-large-values	7	9	8	1	0
 1.333	899-suspend-int-arith-prec	3	4	8	1	0
 1.400	211-bool-string-concat	10	14	8	1	0
+1.400	426-range-expression	5	7	8	1	0
 1.500	758-suspend-tooo	2	3	8	1	0
 1.667	128-string-concat	6	10	8	1	0
 1.667	133-string-int-concat	9	15	8	1	0
