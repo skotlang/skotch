@@ -11413,11 +11413,24 @@ fn lower_rich_expr_to_slot(
                 // case where n is a known-Int local.
                 if method_n == Some("toString") {
                     // Filter out cases where receiver shouldn't use
-                    // this path (DotQualified like "Math.abs" or
-                    // class-name references).
+                    // this path (class-name references).
                     let recv_is_int_like = match &dq_exprs[0] {
-                        KtExpr::Reference(_)
-                        | KtExpr::Integer(_)
+                        KtExpr::Reference(rr) => {
+                            // Skip class-name receivers (Math, etc.)
+                            let n = rr.name();
+                            !matches!(
+                                n,
+                                Some("Math")
+                                    | Some("Integer")
+                                    | Some("Long")
+                                    | Some("Float")
+                                    | Some("Double")
+                                    | Some("Boolean")
+                                    | Some("String")
+                                    | Some("System")
+                            )
+                        }
+                        KtExpr::Integer(_)
                         | KtExpr::Float(_)
                         | KtExpr::Boolean(_)
                         | KtExpr::Prefix(_)
