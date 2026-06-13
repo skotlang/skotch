@@ -7790,6 +7790,132 @@ fn try_lower_multi_stmt_block_with_offset(
                 let loop_var_name = loop_var.name()?;
                 let range_expr = for_e.loop_range().and_then(|r| r.expression())?;
                 let range_expr = unwrap_parens(range_expr);
+                // Reference range: extract first/last via VirtualJava.
+                if let KtExpr::Reference(range_ref) = &range_expr {
+                    if let Some(rname) = range_ref.name() {
+                        if let Some(range_slot) = name_to_local
+                            .iter()
+                            .rev()
+                            .find(|(n, _)| n == rname)
+                            .map(|(_, l)| *l)
+                        {
+                            let recv_ty = local_tys
+                                .get(range_slot.0 as usize)
+                                .cloned()
+                                .unwrap_or(Ty::Any);
+                            if matches!(&recv_ty, Ty::Class(c) if c == "kotlin/ranges/IntRange")
+                            {
+                                // Extract start = range.getFirst()I.
+                                let start_slot = LocalId(next_slot);
+                                next_slot += 1;
+                                local_tys.push(Ty::Int);
+                                stmts.push(MStmt::Assign {
+                                    dest: start_slot,
+                                    value: skotch_mir::Rvalue::Call {
+                                        kind: skotch_mir::CallKind::VirtualJava {
+                                            class_name: "kotlin/ranges/IntRange".to_string(),
+                                            method_name: "getFirst".to_string(),
+                                            descriptor: "()I".to_string(),
+                                        },
+                                        args: vec![range_slot],
+                                    },
+                                });
+                                let end_slot = LocalId(next_slot);
+                                next_slot += 1;
+                                local_tys.push(Ty::Int);
+                                stmts.push(MStmt::Assign {
+                                    dest: end_slot,
+                                    value: skotch_mir::Rvalue::Call {
+                                        kind: skotch_mir::CallKind::VirtualJava {
+                                            class_name: "kotlin/ranges/IntRange".to_string(),
+                                            method_name: "getLast".to_string(),
+                                            descriptor: "()I".to_string(),
+                                        },
+                                        args: vec![range_slot],
+                                    },
+                                });
+                                let i_slot = LocalId(next_slot);
+                                next_slot += 1;
+                                local_tys.push(Ty::Int);
+                                stmts.push(MStmt::Assign {
+                                    dest: i_slot,
+                                    value: skotch_mir::Rvalue::Local(start_slot),
+                                });
+                                name_to_local.push((loop_var_name.to_string(), i_slot));
+                                let body_block = for_e.body().and_then(|b| b.expression());
+                                let body_children: Vec<&skotch_sil::SilNode> = match body_block
+                                {
+                                    Some(KtExpr::Block(bl)) => {
+                                        skotch_ast::children(bl.syntax()).iter().collect()
+                                    }
+                                    Some(other) => vec![other.syntax()],
+                                    None => vec![],
+                                };
+                                let mut body_mstmts = lower_loop_body(
+                                    &body_children,
+                                    &mut name_to_local,
+                                    &mut next_slot,
+                                    &mut local_tys,
+                                    strings,
+                                    fn_lookup,
+                                    &function_param_names,
+                                )?;
+                                let one_slot = LocalId(next_slot);
+                                next_slot += 1;
+                                local_tys.push(Ty::Int);
+                                body_mstmts.push(MStmt::Assign {
+                                    dest: one_slot,
+                                    value: skotch_mir::Rvalue::Const(
+                                        skotch_mir::MirConst::Int(1),
+                                    ),
+                                });
+                                body_mstmts.push(MStmt::Assign {
+                                    dest: i_slot,
+                                    value: skotch_mir::Rvalue::BinOp {
+                                        op: skotch_mir::BinOp::AddI,
+                                        lhs: i_slot,
+                                        rhs: one_slot,
+                                    },
+                                });
+                                let cmp_slot = LocalId(next_slot);
+                                local_tys.push(Ty::Bool);
+                                let cond_stmt = MStmt::Assign {
+                                    dest: cmp_slot,
+                                    value: skotch_mir::Rvalue::BinOp {
+                                        op: skotch_mir::BinOp::CmpLe,
+                                        lhs: i_slot,
+                                        rhs: end_slot,
+                                    },
+                                };
+                                name_to_local.pop();
+                                let pre_block = BasicBlock {
+                                    stmts: std::mem::take(&mut stmts),
+                                    terminator: Terminator::Goto(1),
+                                };
+                                let cond_block = BasicBlock {
+                                    stmts: vec![cond_stmt],
+                                    terminator: Terminator::Branch {
+                                        cond: cmp_slot,
+                                        then_block: 2,
+                                        else_block: 3,
+                                    },
+                                };
+                                let body_blk = BasicBlock {
+                                    stmts: body_mstmts,
+                                    terminator: Terminator::Goto(1),
+                                };
+                                let exit_block = BasicBlock {
+                                    stmts: Vec::new(),
+                                    terminator: Terminator::Return,
+                                };
+                                return Some((
+                                    vec![pre_block, cond_block, body_blk, exit_block],
+                                    local_tys,
+                                ));
+                            }
+                        }
+                    }
+                }
                 let KtExpr::Binary(rb) = range_expr else {
                     return None;
                 };
