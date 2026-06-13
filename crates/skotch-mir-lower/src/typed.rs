@@ -4243,9 +4243,15 @@ fn lower_loop_body_blocks(
                 let KtExpr::Binary(rb) = range_expr else {
                     return None;
                 };
-                if rb.operation().map(|o| o.text()).as_deref() != Some("..") {
-                    return None;
-                }
+                let inner_range_op_text =
+                    rb.operation().map(|o| o.text()).unwrap_or_default();
+                let (inner_cmp_op, inner_step): (skotch_mir::BinOp, i32) =
+                    match inner_range_op_text.as_str() {
+                        ".." => (skotch_mir::BinOp::CmpLe, 1),
+                        "until" => (skotch_mir::BinOp::CmpLt, 1),
+                        "downTo" => (skotch_mir::BinOp::CmpGe, -1),
+                        _ => return None,
+                    };
                 let snap = name_to_local.clone();
                 let lookup = |n: &str| -> Option<LocalId> {
                     snap.iter()
@@ -4288,7 +4294,7 @@ fn lower_loop_body_blocks(
                 let cond_stmt = MStmt::Assign {
                     dest: cmp_slot,
                     value: skotch_mir::Rvalue::BinOp {
-                        op: skotch_mir::BinOp::CmpLe,
+                        op: inner_cmp_op,
                         lhs: i_slot,
                         rhs: hi_slot,
                     },
@@ -4354,6 +4360,11 @@ fn lower_loop_body_blocks(
                 let one_slot = LocalId(*next_slot);
                 *next_slot += 1;
                 local_tys.push(Ty::Int);
+                let inner_step_op = if inner_step > 0 {
+                    skotch_mir::BinOp::AddI
+                } else {
+                    skotch_mir::BinOp::SubI
+                };
                 blocks.push(BasicBlock {
                     stmts: vec![
                         MStmt::Assign {
@@ -4365,7 +4376,7 @@ fn lower_loop_body_blocks(
                         MStmt::Assign {
                             dest: i_slot,
                             value: skotch_mir::Rvalue::BinOp {
-                                op: skotch_mir::BinOp::AddI,
+                                op: inner_step_op,
                                 lhs: i_slot,
                                 rhs: one_slot,
                             },
@@ -11150,6 +11161,9 @@ fn lower_rich_expr_to_slot(
                         let (cls_opt, desc_fn): (Option<&str>, fn(usize) -> Option<(&'static str, &'static str)>) = match (rn, method_n) {
                             ("Math", "abs") => (Some("java/lang/Math"), |n| {
                                 if n == 1 { Some(("Math.abs", "(I)I")) } else { None }
+                            }),
+                            ("Math", "absExact") => (Some("java/lang/Math"), |n| {
+                                if n == 1 { Some(("Math.absExact", "(I)I")) } else { None }
                             }),
                             ("Math", "max") => (Some("java/lang/Math"), |n| {
                                 if n == 2 { Some(("Math.max", "(II)I")) } else { None }

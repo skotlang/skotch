@@ -818,9 +818,9 @@ impl<'a> Emitter<'a> {
             }
             r += 1;
         }
-        if self.ins_size > 0 && (r as u16) >= self.ins_size {
-            bail!("dexer: method needs a temporary register above the argument range (needs Phase 1 args-high allocation)");
-        }
+        // Allocating above the argument range is fine: this is d8's "allocated
+        // space", and the allocated→real remap in `dex_method` moves the
+        // arguments to the high registers afterward (args-high placement).
         for k in 0..need {
             self.used[r + k] = true;
         }
@@ -1049,19 +1049,16 @@ impl<'a> Emitter<'a> {
     }
 
     fn getfield(&mut self, cf: &ClassFile, idx: u16, obj: Val) -> Result<Val> {
-        // d8 places the receiver argument in a HIGH register and the loaded
-        // value in a LOW one (e.g. `get(){return x}` → `iget v0, v1`,
-        // registers=2, ins=1) instead of coalescing the result into the now-dead
-        // receiver register. Matching that needs args-high allocation, so bail
-        // rather than emit the coalesced (byte-divergent) `iget v0, v0`.
-        if self.ins_size > 0 {
-            bail!("dexer: instance getfield needs args-high allocation (Phase 1)");
-        }
         let (field, desc) = self.field_op(cf, idx)?;
         let wide = desc == "J" || desc == "D";
         let ro = self.materialize(&obj)?;
-        self.release(&obj);
+        // The receiver and the loaded value coexist at the `iget` (it reads the
+        // object and writes the result), so d8 does NOT coalesce them: allocate
+        // the result FRESH (before freeing the receiver), then release the
+        // receiver. The args-high remap then places the receiver in a high
+        // register and the result low (`iget v0, v1`).
         let r = self.alloc(wide)?;
+        self.release(&obj);
         let op = iget_op(&desc);
         self.record_position();
         // 22c: op | (B<<12)(obj) | (A<<8)(dest), field@CCCC

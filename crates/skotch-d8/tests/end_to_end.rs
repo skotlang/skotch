@@ -32,6 +32,54 @@ fn straightline_battery_byte_identical() {
     );
 }
 
+/// Straight-line arithmetic with a large (non-lit-foldable) constant forces a
+/// scratch register while the argument is live, so d8 relocates the argument
+/// high: `addBig(a){a+1000000}` → `const v0,#…; add-int/2addr v1,v0; return v1`.
+/// Covers int and wide (long) pressure through the register remap.
+#[test]
+fn arith_pressure_battery_byte_identical() {
+    let cf = skotch_classfile::parse_class_file(&fixtures().join("Press.class")).unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let produced = dex_classes(&[cf], &opts).unwrap();
+    let golden = std::fs::read(fixtures().join("Press.d8.dex")).unwrap();
+    if produced != golden {
+        std::fs::write("/tmp/skotch-Press-produced.dex", &produced).unwrap();
+    }
+    skotch_dex::validator::validate(&produced).expect("self-validation");
+    assert_eq!(
+        produced,
+        golden,
+        "Arith pressure battery: produced {} vs golden {}; first diff {:?}",
+        produced.len(),
+        golden.len(),
+        (0..produced.len().min(golden.len())).find(|&i| produced[i] != golden[i])
+    );
+}
+
+/// Instance fields + methods: `get(){return x}` → `iget v0, v1` (receiver high,
+/// loaded value low — d8 does NOT coalesce the result into the receiver), plus a
+/// field-storing constructor and setter. Exercises args-high allocation on the
+/// straight-line path through the register remap.
+#[test]
+fn instance_field_battery_byte_identical() {
+    let cf = skotch_classfile::parse_class_file(&fixtures().join("P.class")).unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let produced = dex_classes(&[cf], &opts).unwrap();
+    let golden = std::fs::read(fixtures().join("P.d8.dex")).unwrap();
+    if produced != golden {
+        std::fs::write("/tmp/skotch-P-produced.dex", &produced).unwrap();
+    }
+    skotch_dex::validator::validate(&produced).expect("self-validation");
+    assert_eq!(
+        produced,
+        golden,
+        "Instance field battery: produced {} vs golden {}; first diff {:?}",
+        produced.len(),
+        golden.len(),
+        (0..produced.len().min(golden.len())).find(|&i| produced[i] != golden[i])
+    );
+}
+
 /// Static method invocations: `invoke-static {}`/`{v0}` + `move-result`, with the
 /// returned value coalescing into a dead constant-argument register (`viaH`:
 /// `const v0,#5; invoke {v0}; move-result v0`), and a two-call chain.
