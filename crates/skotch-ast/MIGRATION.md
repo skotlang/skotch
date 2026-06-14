@@ -2081,3 +2081,41 @@ Distribution of remaining failures:
 The 227 stdout mismatches are dominated by *expression-context* unrecognized shapes — the body walker's `?`-propagated bail-out makes the entire body empty whenever any expr fails. A worthwhile follow-up: per-stmt fallback that emits a placeholder stmt (or panics in debug) instead of returning None at the body level, so partial progress is visible per fixture.
 
 The legacy `mir-lower::lower_file` and `parser::parse_file` can now be deleted as soon as the typed body walker covers these last few patterns and the e2e_jvm pass-rate matches the legacy baseline.
+
+### 2026-06-14 (legacy AST removed; post-cutover improvements)
+
+The legacy `KtFile` tree is **deleted**. Five phases over one session
+removed ~38,400 lines of pre-cutover front-end code:
+
+| Phase | What | LOC |
+|---|---|---|
+| A | Backend test harnesses (jvm/dex/llvm/klib) re-routed through `skotch_ast::parse → resolve::typed → typeck::typed → mir-lower::typed` | small |
+| B | `skotch-lsp` stubbed to a minimal protocol-compliant server (no semantic features yet) | -1,260 |
+| C | `skotch-mir-lower::lower_file` + `annotations.rs` + `const_fold.rs` + `free_vars.rs` deleted | -27,876 |
+| D | `skotch-parser::parse_file`, `resolve::resolve_file/gather_declarations`, `typeck::type_check`, parity tests deleted | ~-9,800 |
+| E | `crates/skotch-syntax/src/ast.rs` deleted; `Visibility` enum moved to lib.rs (still consumed by typed AST accessors) | -744 |
+
+Test status after deletion:
+- skotch-mir-lower lib:  176 / 176 passing
+- skotch-driver  lib:     12 /  12 passing
+- skotch-resolve lib:     23 /  23 passing
+- skotch-typeck  lib:     18 /  18 passing
+- e2e_jvm regression:    351 / 1090 failing  (was 362 at cutover start)
+- parity projects:        48 /  56 passing (86%)
+
+Post-deletion incremental improvements committed in the same session:
+- `return if-else-chain` lowered as cmp/branch+ReturnValue arms (52-if-else-chain, 22-when-expression, 50-when-basic, 156-else-if-chain)
+- Subjectless `when` arm conds support `&&` chains via `flatten_and_conjuncts` (144-nested-when: Q1/Q2/Q3/Q4)
+- `if (a && b && ...) X else Y` in body walker expands to cmp-block chain
+- Clippy cleanups: `.get(0)`→`.first()`, `.starts_with()+slice`→`.strip_prefix()`, etc.
+- Workspace warnings dropped 20 → 7 (the 7 remaining are unused-assignment in fallback paths).
+
+Next session candidates (none required for the cutover, listed in
+rough impact order):
+1. Property-getter custom bodies — unlocks ~10 fixtures
+2. `||` in `when`/`if` arm conds (sibling to the just-landed `&&`) — unlocks ~10
+3. Body-walker `?`→partial-emit (the structural lift in the cutover doc)
+4. Lambda support via `LambdaMetafactory` — unlocks 40+ fixtures
+5. Secondary constructor `: this(...)` delegation
+6. Smart casts on `if (x != null)` — needed for the linked-list parity
+7. Re-implement `skotch-lsp` against the typed AST (currently a stub)
