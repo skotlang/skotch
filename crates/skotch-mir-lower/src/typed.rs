@@ -799,6 +799,178 @@ fn fixup_call_return_locals(
     }
 }
 
+/// Lower `return if (c1) v1 else if (c2) v2 ... else vN` as a chain
+/// of cmp/branch blocks ending in ReturnValue per arm. The input is
+/// the `return`'s inner `if` expression; we emit the comparison
+/// graph, then each arm's value resolution + ReturnValue.
+///
+/// Block layout for N arms (else included):
+///   block 2*i      : pre + cmp_i,    Branch(2i+1, 2(i+1))
+///   block 2*i+1    : arm_i + RetV
+///   block 2*N      : else arm + RetV
+///
+/// Arms must be lowerable via lower_rich_expr_to_slot (literal,
+/// reference, simple call, etc).
+#[allow(clippy::too_many_arguments)]
+fn lower_return_if_chain<'a>(
+    if_e: skotch_ast::KtIf<'a>,
+    pre_blocks: Vec<BasicBlock>,
+    mut cur_stmts: Vec<skotch_mir::Stmt>,
+    name_to_local: &mut Vec<(String, skotch_mir::LocalId)>,
+    next_slot: &mut u32,
+    local_tys: &mut Vec<Ty>,
+    strings: &mut Vec<String>,
+    fn_lookup: &rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)>,
+    _function_param_names: &[String],
+    block_offset: u32,
+) -> Option<Vec<BasicBlock>> {
+    use skotch_ast::KtExpr;
+    use skotch_mir::{LocalId, Stmt as MStmt};
+
+    // Walk the else chain to collect (cond, then_arm) pairs and a
+    // final else arm.
+    let mut arms: Vec<(KtExpr<'a>, KtExpr<'a>)> = Vec::new();
+    let mut final_else: Option<KtExpr<'a>> = None;
+    let mut cur = if_e;
+    loop {
+        let cond = cur
+            .condition()
+            .and_then(|c| c.expression())
+            .map(unwrap_parens)?;
+        let then_arm = cur
+            .then_branch()
+            .and_then(|t| t.expression())
+            .map(unwrap_parens)?;
+        // Unwrap a single-stmt block to its inner expression.
+        let then_arm_v = match then_arm {
+            KtExpr::Block(bl) => {
+                let stmts: Vec<KtExpr<'_>> = bl.statements().collect();
+                if stmts.len() == 1 {
+                    unwrap_parens(stmts[0])
+                } else {
+                    return None;
+                }
+            }
+            other => other,
+        };
+        arms.push((cond, then_arm_v));
+        let else_e = cur.else_branch().and_then(|e| e.expression()).map(unwrap_parens);
+        match else_e {
+            Some(KtExpr::If(inner)) => {
+                cur = inner;
+                continue;
+            }
+            Some(KtExpr::Block(bl)) => {
+                let stmts: Vec<KtExpr<'_>> = bl.statements().collect();
+                if stmts.len() == 1 {
+                    final_else = Some(unwrap_parens(stmts[0]));
+                    break;
+                }
+                return None;
+            }
+            Some(other) => {
+                final_else = Some(other);
+                break;
+            }
+            None => return None, // every `return if` must have a final else
+        }
+    }
+    let final_else = final_else?;
+    let n = arms.len();
+    let mut out: Vec<BasicBlock> = pre_blocks;
+
+    // Block ID assignments — local to this chain. The cur_stmts buffer
+    // is dropped into block 0 as pre-cmp stmts.
+    let base = block_offset + out.len() as u32;
+    // helper: lower one expression (literal/ref/rich) into a slot,
+    // writing prep stmts into `stmts`. Returns the slot.
+    let lower_expr_into = |e: KtExpr<'a>,
+                           name_to_local: &Vec<(String, LocalId)>,
+                           next_slot: &mut u32,
+                           stmts: &mut Vec<MStmt>,
+                           local_tys: &mut Vec<Ty>,
+                           strings: &mut Vec<String>|
+     -> Option<LocalId> {
+        let snap = name_to_local.clone();
+        let lookup = |n: &str| -> Option<LocalId> {
+            snap.iter()
+                .rev()
+                .find(|(name, _)| name == n)
+                .map(|(_, l)| *l)
+        };
+        lower_rich_expr_to_slot(
+            e,
+            &lookup,
+            fn_lookup,
+            next_slot,
+            stmts,
+            local_tys,
+            strings,
+        )
+    };
+
+    for (i, (cond, then_arm)) in arms.iter().enumerate() {
+        let mut cmp_stmts: Vec<MStmt> = Vec::new();
+        let cmp_slot = lower_expr_into(
+            *cond,
+            name_to_local,
+            next_slot,
+            &mut cmp_stmts,
+            local_tys,
+            strings,
+        )?;
+        // Block 2*i: pre stmts (first iter only) + cmp + Branch.
+        let block_stmts = if i == 0 {
+            let mut s = std::mem::take(&mut cur_stmts);
+            s.extend(cmp_stmts);
+            s
+        } else {
+            cmp_stmts
+        };
+        let then_idx = base + (2 * i as u32 + 1);
+        let next_idx = base + (2 * (i + 1) as u32);
+        out.push(BasicBlock {
+            stmts: block_stmts,
+            terminator: Terminator::Branch {
+                cond: cmp_slot,
+                then_block: then_idx,
+                else_block: next_idx,
+            },
+        });
+        // Block 2*i+1: arm + ReturnValue.
+        let mut arm_stmts: Vec<MStmt> = Vec::new();
+        let arm_slot = lower_expr_into(
+            *then_arm,
+            name_to_local,
+            next_slot,
+            &mut arm_stmts,
+            local_tys,
+            strings,
+        )?;
+        out.push(BasicBlock {
+            stmts: arm_stmts,
+            terminator: Terminator::ReturnValue(arm_slot),
+        });
+    }
+
+    // Block 2*N: final else arm + ReturnValue.
+    let mut else_stmts: Vec<MStmt> = Vec::new();
+    let else_slot = lower_expr_into(
+        final_else,
+        name_to_local,
+        next_slot,
+        &mut else_stmts,
+        local_tys,
+        strings,
+    )?;
+    out.push(BasicBlock {
+        stmts: else_stmts,
+        terminator: Terminator::ReturnValue(else_slot),
+    });
+    let _ = n;
+    Some(out)
+}
+
 fn fixup_getfield_locals(
     f: &mut MirFunction,
     class_fields: &rustc_hash::FxHashMap<String, rustc_hash::FxHashMap<String, Ty>>,
@@ -4215,6 +4387,29 @@ fn lower_loop_body_blocks(
                     .iter()
                     .find_map(KtExpr::cast)
                     .map(unwrap_parens);
+                // `return if (cond) { thenArm } else { elseArm }` —
+                // lower_rich_expr_to_slot can't express control flow, so
+                // we rewrite it as `if (cond) return thenArm else return
+                // elseArm` and emit it as an if/else chain whose arms
+                // both terminate in ReturnValue. Handles arbitrary
+                // else-if chains by walking the else branch.
+                if let Some(KtExpr::If(if_e)) = ret_expr_inner {
+                    if let Some(out) = lower_return_if_chain(
+                        if_e,
+                        std::mem::take(&mut blocks),
+                        std::mem::take(&mut cur_stmts),
+                        name_to_local,
+                        next_slot,
+                        local_tys,
+                        strings,
+                        fn_lookup_ref,
+                        function_param_names,
+                        block_offset,
+                    ) {
+                        return Some(out);
+                    }
+                    return None;
+                }
                 let terminator = match ret_expr_inner {
                     None => Terminator::Return,
                     Some(re) => {
