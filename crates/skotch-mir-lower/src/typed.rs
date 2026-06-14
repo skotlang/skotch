@@ -61,17 +61,31 @@ impl Drop for ParamTyScope {
     }
 }
 
-/// Look up the Ty for a slot, consulting `extra_locals` first then
+/// Look up the Ty for a slot, consulting either `extra_locals` or
 /// the function-scoped param fallback. Returns `Ty::Any` if neither
 /// has a binding (which preserves the historical no-Ty behavior so
 /// handlers that gate on a specific Ty don't accidentally fire).
+///
+/// CRITICAL: body-walker `local_tys` (passed in as `extra_locals`)
+/// is indexed STARTING AT 0 for the first body-introduced local,
+/// NOT at the absolute slot ID. Absolute slot N corresponds to
+/// `extra_locals[N - param_count]` for body locals. Param slots
+/// (0..param_count) need to skip extra_locals entirely and go
+/// straight to the fallback. Without this split, slot 0 (param)
+/// could erroneously return the body's first local Ty.
 fn slot_ty_with_param_fallback(slot: u32, extra_locals: &[Ty]) -> Ty {
-    if let Some(t) = extra_locals.get(slot as usize) {
-        return t.clone();
+    let param_count = PARAM_TY_FALLBACK.with(|cell| cell.borrow().len());
+    if (slot as usize) < param_count {
+        return PARAM_TY_FALLBACK
+            .with(|cell| cell.borrow().get(slot as usize).cloned())
+            .unwrap_or(Ty::Any);
     }
-    PARAM_TY_FALLBACK
-        .with(|cell| cell.borrow().get(slot as usize).cloned())
-        .unwrap_or(Ty::Any)
+    // For body locals (slot >= param_count), the historical
+    // convention indexes extra_locals by absolute slot id — see the
+    // many `local_tys.get(slot.0 as usize)` callers. Match that
+    // convention to stay compatible with the existing handlers; the
+    // PARAM fallback above is the only behavioral change.
+    extra_locals.get(slot as usize).cloned().unwrap_or(Ty::Any)
 }
 
 /// Bail-tracing helper. When the `SKOTCH_DEBUG_BAILS` env var is set
