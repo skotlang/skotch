@@ -326,18 +326,30 @@ fn shift_const_lit_fold_byte_identical() {
     }
 }
 
-/// `Gcd` (`while(b!=0){ t=b; b=a%b; a=t; }`) — the loop header is the entry block (no
-/// pre-header), so dominance-frontier φ-placement skipped it and the loop variables got no
-/// φs (never updated → infinite loop). Must still BAIL, not miscompile (φ-at-entry support
-/// is future work). NOTE: `Fib` USED to be in this bail list (a back-edge parallel copy
-/// where a φ reads a sibling φ — `a=b; b=t` overwrote a sibling before its move read it,
-/// `add v0,v0`); it now DEXES correctly via parallel-copy sequentialization — see
-/// `sibling_phi_parallel_copy_now_dexes`.
+/// `Gcd` (`while(b!=0){ t=a%b; a=b; b=t; }`) — the loop header IS the entry block (no
+/// statement before the `while`), so the header's only CFG pred was the back-edge and
+/// dominance-frontier φ-placement gave the loop variables no φs (they'd never update). It
+/// now DEXES correctly: build_ssa synthesizes an empty PRE-HEADER as the new entry, giving
+/// the header the entry edge as a second predecessor so its φs are placed, with the
+/// argument value as the entry operand. (Only applied when there are no exception regions —
+/// handler/try indices would also shift — else it still bails.) Correctness on a REAL
+/// device for several entry-header loop shapes (Euclid gcd with a sibling-φ swap, a
+/// nested-if collatz, plain count-down) is proven by `tests/art/ArtPreheader`; here: dexes +
+/// self-validates. NOTE: `Fib`/`ArtPhiCycle` (back-edge parallel copies) graduated earlier —
+/// see `sibling_phi_parallel_copy_now_dexes`.
 #[test]
-fn loop_header_is_entry_still_bails() {
-    let cf = skotch_classfile::parse_class_file(&fixtures().join("Gcd.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
-    dex_classes(&[cf], &opts).expect_err("Gcd (loop-header-is-entry) must bail, not miscompile");
+fn loop_header_is_entry_now_dexes_via_preheader() {
+    for name in ["Gcd", "ArtPreheader"] {
+        let path = if name == "ArtPreheader" {
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtPreheader.class")
+        } else {
+            fixtures().join(format!("{name}.class"))
+        };
+        let cf = skotch_classfile::parse_class_file(&path).unwrap();
+        let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+        let dex = dex_classes(&[cf], &opts).unwrap_or_else(|e| panic!("{name}: loop-header-is-entry should dex now: {e:#}"));
+        skotch_dex::validator::validate(&dex).unwrap_or_else(|e| panic!("{name}: invalid dex: {e:#}"));
+    }
 }
 
 /// A φ whose operand is a SIBLING φ in the same loop header is a parallel copy on the

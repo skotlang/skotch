@@ -244,6 +244,41 @@ impl Cfg {
     }
 }
 
+/// Synthesize an empty pre-header as the new entry (block 0), shifting every existing
+/// block index up by one. Used when the original entry block is a loop header (a back-edge
+/// targets pc 0, e.g. `while(b!=0){…}` as the whole method body): the header then has both
+/// the pre-header (the function-entry edge) AND the back-edge as predecessors, so
+/// dominance-frontier φ-placement gives the loop variables their φs, whose entry operand is
+/// the incoming argument value. The pre-header carries no bytecode (start==end==0); rename
+/// gives it a `Fall` to block 1 and seeds the argument values there before the loop. Only
+/// sound with no exception regions (handler/try-block indices would also need shifting) —
+/// the sole caller guards on `exceptions.is_empty()`.
+fn insert_entry_preheader(cfg: Cfg) -> Cfg {
+    let mut blocks: Vec<Block> = Vec::with_capacity(cfg.blocks.len() + 1);
+    // The pre-header: no bytecode, falls through to the former entry (now block 1).
+    blocks.push(Block { start: 0, end: 0, succ: vec![1] });
+    for mut blk in cfg.blocks {
+        blk.succ = blk.succ.iter().map(|&s| s + 1).collect();
+        blocks.push(blk);
+    }
+    let n = blocks.len();
+    let mut preds = vec![Vec::new(); n];
+    for (b, blk) in blocks.iter().enumerate() {
+        for &s in &blk.succ {
+            preds[s].push(b);
+        }
+    }
+    // Exception edges shift with their blocks (empty here, but keep the graph consistent).
+    let exc_edges: Vec<(usize, usize)> = cfg.exc_edges.iter().map(|&(a, h)| (a + 1, h + 1)).collect();
+    for &(from, h) in &exc_edges {
+        if !preds[h].contains(&from) {
+            preds[h].push(from);
+        }
+    }
+    let rpo = reverse_postorder(&blocks, &exc_edges);
+    Cfg { blocks, preds, rpo, exc_edges }
+}
+
 /// Reverse postorder from block 0 over normal + exception successors.
 fn reverse_postorder(blocks: &[Block], exc_edges: &[(usize, usize)]) -> Vec<usize> {
     let n = blocks.len();
@@ -664,18 +699,24 @@ pub(crate) fn build_ssa(
     instance: bool,
     exceptions: &[ExceptionEntry],
 ) -> Result<SsaFn> {
-    let cfg = Cfg::build(bc, exceptions)?;
-    let n = cfg.len();
+    let mut cfg = Cfg::build(bc, exceptions)?;
     // The entry block having a predecessor means a back-edge targets pc 0 — the loop
     // header IS the entry (a `while`/`for` with no pre-header before it, e.g.
     // `while(b!=0){…}` as the whole body). Such a header is a join of the implicit
     // function-entry edge and the back-edge, but the CFG models only the back-edge
     // (1 pred), so dominance-frontier φ-placement (which needs ≥2 preds) skips it and
-    // the loop variables get NO φs — they'd never update (a miscompile). Bail until
-    // φ-at-entry-header (entry-edge operand = the initial/arg value) is implemented.
+    // the loop variables get NO φs — they'd never update (a miscompile). We SYNTHESIZE
+    // an empty pre-header as the new entry (block 0) so the header gains the entry edge
+    // as a second predecessor; the header φ's entry operand is then the incoming
+    // (argument) value, filled by rename when it processes the pre-header. Only sound
+    // with no exception regions (handler/try block indices would also shift); bail then.
     if !cfg.preds[0].is_empty() {
-        bail!("ssa: loop header is the entry block (no pre-header) — φ-at-entry not yet supported");
+        if !exceptions.is_empty() {
+            bail!("ssa: loop header is the entry block with exception regions — φ-at-entry not yet supported");
+        }
+        cfg = insert_entry_preheader(cfg);
     }
+    let n = cfg.len();
     let idom = dominators(&cfg);
     // (Nested loops were bailed only to stay byte-identical with d8, which leaves an
     // un-DCE'd dead `const` for the undefined-φ-entry; our DCE drops it. That's a
@@ -2174,6 +2215,17 @@ pub(crate) fn allocate(f: &SsaFn, num: &Numbering, intervals: &[Interval]) -> Al
     //      values into one register (a miscompile). Loop-φ operands (init vs the
     //      back-edge value) live in different blocks, so they don't interfere and
     //      still coalesce.
+    //  (d) φ vs operand, PRECISE: skip an operand whose live range precisely overlaps
+    //      the φ's. The live-in/out membership checks (a)/(b) look only at the φ's OWN
+    //      block; they miss an operand that interferes with the φ at a PREDECESSOR's
+    //      end. E.g. gcd `while(b!=0){t=a%b; a=b; b=t}`: the b-φ's back-edge operand `t`
+    //      is computed in the latch, and the b-φ is ALSO live-out of that latch (it's
+    //      the a-φ's back-edge operand `a=b`). So `t` and the b-φ both live to the
+    //      latch's end and genuinely interfere — coalescing them puts `t` in the b-φ's
+    //      register, and the body's `rem` (defining `t`) clobbers `b` before the `a=b`
+    //      move reads it. The precise hole-bearing interference catches this; a true
+    //      overlap always means coalescing would miscompile, so this never regresses a
+    //      correctly-coalesced (byte-identical) loop-φ.
     let mut co = Coalesce::new(nv);
     for v in &f.values {
         if let SsaOp::Phi { operands, .. } = &v.op {
@@ -2181,6 +2233,9 @@ pub(crate) fn allocate(f: &SsaFn, num: &Numbering, intervals: &[Interval]) -> Al
             let mut group: Vec<ValId> = Vec::new();
             for &o in operands {
                 if live_in[b].contains(&o) || live_out[b].contains(&o) {
+                    continue;
+                }
+                if ranges_interfere(&ranges, v.id, o) {
                     continue;
                 }
                 if group.iter().any(|&g| ranges_interfere(&ranges, g, o)) {

@@ -1,0 +1,10 @@
+gcd(48,36)=12
+gcd(17,5)=1
+gcd(1071,462)=21
+gcd(0,9)=9
+sum(0)=0 collatz=0 cd=0
+sum(1)=1 collatz=1 cd=0
+sum(2)=3 collatz=7 cd=0
+sum(3)=6 collatz=2 cd=0
+sum(4)=10 collatz=5 cd=0
+sum(5)=15 collatz=8 cd=0
