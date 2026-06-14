@@ -1556,6 +1556,31 @@ fn try_lower_do_while_loop(
 /// that returns the result slot. Each cond expr is materialized via
 /// lower_inline_expr_to_slot (so cmp ops + param/local refs work);
 /// each arm body must be a literal-shaped expression (Int/String/Bool).
+/// Flatten a (left-recursively) `&&`-chained expression into the list
+/// of its conjuncts: `a && b && c` → `[a, b, c]`. Anything else returns
+/// a single-element vec. Used by the subjectless-`when` lowerer so each
+/// conjunct can drive its own cmp/branch block.
+fn flatten_and_conjuncts<'a>(e: skotch_ast::KtExpr<'a>) -> Vec<skotch_ast::KtExpr<'a>> {
+    use skotch_ast::KtExpr;
+    let mut out = Vec::new();
+    fn rec<'a>(e: skotch_ast::KtExpr<'a>, out: &mut Vec<skotch_ast::KtExpr<'a>>) {
+        let e = unwrap_parens(e);
+        if let KtExpr::Binary(b) = e {
+            let op = b.operation().map(|o| o.text()).unwrap_or_default();
+            if op == "&&" {
+                if let (Some(lhs), Some(rhs)) = (b.lhs(), b.rhs()) {
+                    rec(lhs, out);
+                    rec(rhs, out);
+                    return;
+                }
+            }
+        }
+        out.push(e);
+    }
+    rec(e, &mut out);
+    out
+}
+
 fn try_lower_when_subjectless(
     w: &skotch_ast::KtWhen<'_>,
     outer_param_names: &[String],
@@ -1567,8 +1592,11 @@ fn try_lower_when_subjectless(
     use skotch_ast::KtExpr;
     use skotch_mir::{LocalId, Stmt as MStmt};
 
-    // Collect arms.
-    let mut arms: Vec<(KtExpr<'_>, KtExpr<'_>)> = Vec::new();
+    // Collect arms. Each arm's `cond_expr` is flattened on top-level
+    // `&&` operators into a `Vec<KtExpr>` (conjunction): all must be
+    // true for the arm to fire. `||` is rarer in the wild and unhandled
+    // here — those arms still bail.
+    let mut arms: Vec<(Vec<KtExpr<'_>>, KtExpr<'_>)> = Vec::new();
     let mut else_arm: Option<KtExpr<'_>> = None;
     for entry in w.entries() {
         if entry.is_else() {
@@ -1587,7 +1615,8 @@ fn try_lower_when_subjectless(
             .find_map(KtExpr::cast)
             .map(unwrap_parens)?;
         let body = entry.body().map(unwrap_parens)?;
-        arms.push((cond_expr, body));
+        let parts = flatten_and_conjuncts(cond_expr);
+        arms.push((parts, body));
     }
     let else_body = else_arm.map(unwrap_parens)?;
 
@@ -1610,8 +1639,28 @@ fn try_lower_when_subjectless(
     extra_locals.push(result_ty);
 
     let n_arms = arms.len();
-    // Block indices shifted by +1 for the pre-block.
-    let else_block_idx = (2 * n_arms + 1) as u32;
+    // Per-arm block counts: every cond gets a cmp block (so arm with K
+    // conjuncts needs K cmp blocks) + 1 then-block. With N arms the
+    // shape becomes:
+    //   block 0: pre (phantom subject)
+    //   block 1..: arm0's cmp blocks then arm0's then block, then arm1's, ...
+    //   else block, join block
+    let arm_block_counts: Vec<u32> = arms.iter().map(|(c, _)| c.len() as u32 + 1).collect();
+    let arm_block_starts: Vec<u32> = {
+        let mut starts = Vec::with_capacity(n_arms);
+        let mut acc = 1u32; // pre-block is index 0
+        for n in &arm_block_counts {
+            starts.push(acc);
+            acc += n;
+        }
+        starts
+    };
+    let after_arms_idx: u32 = arm_block_starts
+        .last()
+        .copied()
+        .map(|s| s + arm_block_counts[n_arms - 1])
+        .unwrap_or(1);
+    let else_block_idx = after_arms_idx;
     let join_block_idx = else_block_idx + 1;
     let mut blocks: Vec<BasicBlock> = Vec::new();
 
@@ -1631,30 +1680,42 @@ fn try_lower_when_subjectless(
             .map(|i| LocalId(i as u32))
     };
 
-    for (i, (cond_expr, body)) in arms.iter().enumerate() {
-        let mut cmp_stmts: Vec<MStmt> = Vec::new();
-        let cmp_slot = lower_inline_expr_to_slot(
-            *cond_expr,
-            &lookup,
-            &mut next_slot,
-            &mut cmp_stmts,
-            &mut extra_locals,
-            strings,
-        )?;
-        let then_idx = (2 * i + 2) as u32;
-        let next_cmp_or_else = if i + 1 < n_arms {
-            (2 * (i + 1) + 1) as u32
+    for (i, (conds, body)) in arms.iter().enumerate() {
+        let next_arm_or_else = if i + 1 < n_arms {
+            arm_block_starts[i + 1]
         } else {
             else_block_idx
         };
-        blocks.push(BasicBlock {
-            stmts: cmp_stmts,
-            terminator: Terminator::Branch {
-                cond: cmp_slot,
-                then_block: then_idx,
-                else_block: next_cmp_or_else,
-            },
-        });
+        let arm_start = arm_block_starts[i];
+        // Each conjunct emits a cmp block. Each block branches to the
+        // next conjunct's block on true, or to next_arm_or_else on
+        // false. The final conjunct branches to the arm's then-block
+        // on true.
+        let then_block_idx = arm_start + conds.len() as u32;
+        for (j, cond_expr) in conds.iter().enumerate() {
+            let mut cmp_stmts: Vec<MStmt> = Vec::new();
+            let cmp_slot = lower_inline_expr_to_slot(
+                *cond_expr,
+                &lookup,
+                &mut next_slot,
+                &mut cmp_stmts,
+                &mut extra_locals,
+                strings,
+            )?;
+            let on_true = if j + 1 < conds.len() {
+                arm_start + (j as u32 + 1)
+            } else {
+                then_block_idx
+            };
+            blocks.push(BasicBlock {
+                stmts: cmp_stmts,
+                terminator: Terminator::Branch {
+                    cond: cmp_slot,
+                    then_block: on_true,
+                    else_block: next_arm_or_else,
+                },
+            });
+        }
         // Arm body block: kotlinc shape is `tmp = Const(...); result = Local(tmp)`.
         let mut arm_stmts: Vec<MStmt> = Vec::new();
         let (k, ty) = literal_to_const(body, strings)?;
