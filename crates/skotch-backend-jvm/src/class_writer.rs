@@ -1446,6 +1446,14 @@ fn compile_class(class_name: &str, module: &MirModule) -> Vec<u8> {
         if module.enum_entry_funcs.contains_key(&(fn_idx as u32)) {
             continue;
         }
+        // Skip cross-file fn stubs. These are placeholder MirFunctions
+        // mir-lower added so body-walker call-resolution finds a target
+        // by name — they have no body and represent functions defined
+        // in a SIBLING file. The `CallKind::Static` arm in `emit_method`
+        // reroutes `invokestatic` to the recorded owner class.
+        if module.cross_file_fn_stubs.contains_key(&(fn_idx as u32)) {
+            continue;
+        }
         // Skip `<EnumName>$values` / `<EnumName>$valueOf` synthetic
         // helpers — kotlinc emits these on the enum class itself (or
         // doesn't emit them at all when never called), never on the
@@ -15274,6 +15282,50 @@ fn walk_block(
                             store_local(code, stack, slots, next_slot, *dest, &func.locals);
                             continue;
                         }
+                    }
+                    // Cross-file fn short-circuit. The stub has no real
+                    // body — its name/descriptor/owner come from the
+                    // recorded triple. We still push args, then emit
+                    // `invokestatic <owner>.<name>:<descriptor>`. Wide
+                    // args are accounted for in the arg_pop calculation
+                    // below; the return-value handling mirrors the
+                    // normal `Static` path.
+                    if let Some((owner_class, method_name, descriptor)) =
+                        module.cross_file_fn_stubs.get(&target_id.0).cloned()
+                    {
+                        for a in args.iter() {
+                            load_local(code, stack, max_stack, slots, *a, &func.locals);
+                        }
+                        let mref =
+                            cp.methodref(&owner_class, &method_name, &descriptor);
+                        code.push(0xB8); // invokestatic
+                        code.write_u16::<BigEndian>(mref).unwrap();
+                        let arg_pop: i32 = args
+                            .iter()
+                            .map(|a| {
+                                if matches!(
+                                    func.locals.get(a.0 as usize),
+                                    Some(Ty::Long) | Some(Ty::Double)
+                                ) {
+                                    2
+                                } else {
+                                    1
+                                }
+                            })
+                            .sum();
+                        let ret_ty = &func.locals[dest.0 as usize];
+                        let ret_push: i32 = match ret_ty {
+                            Ty::Unit | Ty::Nothing => 0,
+                            Ty::Long | Ty::Double => 2,
+                            _ => 1,
+                        };
+                        bump(stack, max_stack, ret_push - arg_pop);
+                        if !matches!(ret_ty, Ty::Unit | Ty::Nothing) {
+                            store_local(
+                                code, stack, slots, next_slot, *dest, &func.locals,
+                            );
+                        }
+                        continue;
                     }
                     let target = &module.functions[target_id.0 as usize];
                     for (i, a) in args.iter().enumerate() {

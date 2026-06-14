@@ -44,7 +44,7 @@ pub fn lower_file(
     _interner: &mut Interner,
     _diags: &mut Diagnostics,
     wrapper_class: &str,
-    _package_symbols: Option<&PackageSymbolTable>,
+    package_symbols: Option<&PackageSymbolTable>,
 ) -> MirModule {
     let mut module = MirModule {
         wrapper_class: wrapper_class.to_string(),
@@ -56,6 +56,8 @@ pub fn lower_file(
     // resolve sibling top-level fn calls via fn_lookup.
     let mut fn_lookup: rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)> =
         rustc_hash::FxHashMap::default();
+    let mut local_fn_names: rustc_hash::FxHashSet<String> =
+        rustc_hash::FxHashSet::default();
     {
         let mut idx = 0u32;
         for decl in file.decls() {
@@ -64,9 +66,93 @@ pub fn lower_file(
                     let typed_fn = typed.functions.iter().find(|tf| tf.name_index == idx);
                     let ret = typed_fn.map(|tf| tf.return_ty.clone()).unwrap_or(Ty::Unit);
                     fn_lookup.insert(name.to_string(), (FuncId(idx), ret));
+                    local_fn_names.insert(name.to_string());
                 }
                 idx += 1;
             }
+        }
+    }
+
+    // Register cross-file stub MirFunctions for every top-level fn
+    // declared in a sibling file. The stubs let the body walker's
+    // `Static(FuncId)` dispatch resolve `siblingFn(args)` by name —
+    // the JVM backend reroutes the `invokestatic` to the recorded
+    // owner class via `module.cross_file_fn_stubs` and skips emitting
+    // a method for these stubs on the wrapper class. Names that also
+    // exist locally (overrides / shadowing) are skipped so the local
+    // FuncId wins.
+    if let Some(table) = package_symbols {
+        for (name, decls) in table.functions.iter() {
+            if local_fn_names.contains(name) {
+                continue;
+            }
+            // Skip extension fns and overloads — only register the
+            // first plain top-level non-extension decl for each name.
+            // The body walker's name-only dispatch can't handle
+            // extension receivers or overloads here; those paths take
+            // dedicated routes elsewhere in lower.
+            let Some(decl) =
+                decls.iter().find(|d| !d.is_extension && d.receiver_ty.is_none())
+            else {
+                continue;
+            };
+            // Don't register stubs for OUR own wrapper class — that's
+            // a local fn we'd otherwise route back through the stub
+            // path and double-emit.
+            if decl.owner_class == module.wrapper_class {
+                continue;
+            }
+            let stub_id = module.functions.len() as u32;
+            // Build a placeholder MirFunction: empty body + Unit
+            // return. The backend skips emission for FuncIds in
+            // `cross_file_fn_stubs`, so the body shape is irrelevant
+            // — it's just there for the FuncId slot.
+            let params: Vec<skotch_mir::LocalId> = (0..decl.param_tys.len())
+                .map(|i| skotch_mir::LocalId(i as u32))
+                .collect();
+            let locals: Vec<Ty> = decl.param_tys.clone();
+            module.functions.push(MirFunction {
+                id: FuncId(stub_id),
+                name: name.clone(),
+                params,
+                locals,
+                blocks: vec![BasicBlock {
+                    stmts: Vec::new(),
+                    terminator: Terminator::Return,
+                }],
+                return_ty: decl.return_ty.clone(),
+                required_params: decl.param_tys.len(),
+                param_names: Vec::new(),
+                param_receiver_types: Vec::new(),
+                param_defaults: Vec::new(),
+                is_abstract: false,
+                vararg_index: None,
+                exception_handlers: Vec::new(),
+                is_suspend: decl.is_suspend,
+                is_inline: decl.is_inline,
+                has_type_params: false,
+                suspend_original_return_ty: None,
+                suspend_state_machine: None,
+                annotations: Vec::new(),
+                named_locals: Vec::new(),
+                is_private: false,
+                is_static: false,
+                default_call_masks: Vec::new(),
+                needs_leading_nop: false,
+                local_generic_args: rustc_hash::FxHashMap::default(),
+            });
+            fn_lookup.insert(
+                name.clone(),
+                (FuncId(stub_id), decl.return_ty.clone()),
+            );
+            module.cross_file_fn_stubs.insert(
+                stub_id,
+                (
+                    decl.owner_class.clone(),
+                    name.clone(),
+                    decl.descriptor.clone(),
+                ),
+            );
         }
     }
 
@@ -12584,6 +12670,85 @@ fn lower_rich_expr_to_slot(
                         }
                         _ => None,
                     };
+                    // Primitive numeric conversions on Int / Long / Double /
+                    // Float receivers. kotlinc emits a single i2d/l2d/etc.
+                    // opcode for `n.toDouble()` etc.; we represent each as
+                    // `StaticJava { class_name: "$convert", method_name:
+                    // "i2d", ... }` and the JVM backend translates that
+                    // pseudo-class into the right type-conversion opcode.
+                    let prim_conv: Option<(&str, &str, Ty)> = {
+                        let recv_prim = match &recv_ty_candidate {
+                            Some(Ty::Int) => Some("i"),
+                            Some(Ty::Long) => Some("l"),
+                            Some(Ty::Float) => Some("f"),
+                            Some(Ty::Double) => Some("d"),
+                            _ => None,
+                        };
+                        match (recv_prim, method_n) {
+                            (Some(p), "toInt") if p != "i" => Some((
+                                Box::leak(format!("{}2i", p).into_boxed_str()),
+                                "i",
+                                Ty::Int,
+                            )),
+                            (Some(p), "toLong") if p != "l" => Some((
+                                Box::leak(format!("{}2l", p).into_boxed_str()),
+                                "l",
+                                Ty::Long,
+                            )),
+                            (Some(p), "toFloat") if p != "f" => Some((
+                                Box::leak(format!("{}2f", p).into_boxed_str()),
+                                "f",
+                                Ty::Float,
+                            )),
+                            (Some(p), "toDouble") if p != "d" => Some((
+                                Box::leak(format!("{}2d", p).into_boxed_str()),
+                                "d",
+                                Ty::Double,
+                            )),
+                            _ => None,
+                        }
+                    };
+                    if let Some((opcode_name, target_prim, ret_ty)) = prim_conv {
+                        let recv_slot = lower_rich_expr_to_slot(
+                            dq_exprs[0],
+                            lookup_name,
+                            fn_lookup,
+                            next_slot,
+                            pre_stmts,
+                            extra_locals,
+                            strings,
+                        )?;
+                        let src_desc = match &recv_ty_candidate {
+                            Some(Ty::Int) => "I",
+                            Some(Ty::Long) => "J",
+                            Some(Ty::Float) => "F",
+                            Some(Ty::Double) => "D",
+                            _ => "I",
+                        };
+                        let dst_desc = match target_prim {
+                            "i" => "I",
+                            "l" => "J",
+                            "f" => "F",
+                            "d" => "D",
+                            _ => "I",
+                        };
+                        let descriptor = format!("({}){}", src_desc, dst_desc);
+                        let result_slot = LocalId(*next_slot);
+                        *next_slot += 1;
+                        extra_locals.push(ret_ty);
+                        pre_stmts.push(MStmt::Assign {
+                            dest: result_slot,
+                            value: skotch_mir::Rvalue::Call {
+                                kind: skotch_mir::CallKind::StaticJava {
+                                    class_name: "$convert".to_string(),
+                                    method_name: opcode_name.to_string(),
+                                    descriptor,
+                                },
+                                args: vec![recv_slot],
+                            },
+                        });
+                        return Some(result_slot);
+                    }
                     if matches!(recv_ty_candidate, Some(Ty::String)) {
                         let arg_count = call
                             .value_argument_list()

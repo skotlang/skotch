@@ -914,6 +914,18 @@ pub struct MirModule {
     /// these FuncIds entirely.
     #[serde(skip)]
     pub enum_entry_funcs: rustc_hash::FxHashMap<u32, (String, String)>,
+    /// Maps a cross-file fn stub FuncId →
+    /// `(owner_class, method_name, descriptor)`. mir-lower registers a
+    /// stub MirFunction for every top-level fn declared in a sibling
+    /// file (via the gathered `PackageSymbolTable`) so the body walker
+    /// can resolve `someOtherFileFn(args)` as a normal `Static(FuncId)`
+    /// call. The JVM backend skips emitting any method body for these
+    /// FuncIds and reroutes the `invokestatic` to the recorded owner
+    /// class + name + descriptor at call sites. Mirrors the
+    /// [`enum_entry_funcs`](Self::enum_entry_funcs) pattern.
+    #[serde(skip)]
+    pub cross_file_fn_stubs:
+        rustc_hash::FxHashMap<u32, (String, String, String)>,
     /// Transient: while a Companion class's method bodies are being
     /// lowered, this holds `(companion_class_name, method_names)` so
     /// the bare-call resolver can find sibling overloads even though
