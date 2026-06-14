@@ -20,6 +20,60 @@ use skotch_resolve::{PackageSymbolTable, ResolvedFile};
 use skotch_typeck::TypedFile;
 use skotch_types::Ty;
 
+thread_local! {
+    /// Function-scoped param-Ty fallback. Set by `lower_simple_body`
+    /// (and similar entry points) before recursing into the body
+    /// walker; cleared on the way out. Lookup sites that read
+    /// `local_tys.get(recv_slot)` and find the slot out-of-range
+    /// (because params aren't seeded into `local_tys` by default)
+    /// can fall back to this map by slot index to recover the
+    /// source-declared Ty.
+    ///
+    /// This is a per-function scratch slot rather than a thread-wide
+    /// stack — body walkers never recurse across function
+    /// boundaries within a single lower_loop_body call, so the
+    /// single-slot design is enough. The slot is cleared on every
+    /// entry so a panic mid-body doesn't leak stale params into the
+    /// next function.
+    static PARAM_TY_FALLBACK: std::cell::RefCell<Vec<Ty>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// Install the function-scoped param Ty table for the duration of a
+/// body-walker call. Restored to the previous state on drop so
+/// nested entry points (e.g. expression-bodied → block-fallback)
+/// don't clobber each other.
+struct ParamTyScope {
+    prev: Vec<Ty>,
+}
+
+impl ParamTyScope {
+    fn new(tys: Vec<Ty>) -> Self {
+        let prev = PARAM_TY_FALLBACK.with(|cell| std::mem::take(&mut *cell.borrow_mut()));
+        PARAM_TY_FALLBACK.with(|cell| *cell.borrow_mut() = tys);
+        ParamTyScope { prev }
+    }
+}
+
+impl Drop for ParamTyScope {
+    fn drop(&mut self) {
+        PARAM_TY_FALLBACK.with(|cell| *cell.borrow_mut() = std::mem::take(&mut self.prev));
+    }
+}
+
+/// Look up the Ty for a slot, consulting `extra_locals` first then
+/// the function-scoped param fallback. Returns `Ty::Any` if neither
+/// has a binding (which preserves the historical no-Ty behavior so
+/// handlers that gate on a specific Ty don't accidentally fire).
+fn slot_ty_with_param_fallback(slot: u32, extra_locals: &[Ty]) -> Ty {
+    if let Some(t) = extra_locals.get(slot as usize) {
+        return t.clone();
+    }
+    PARAM_TY_FALLBACK
+        .with(|cell| cell.borrow().get(slot as usize).cloned())
+        .unwrap_or(Ty::Any)
+}
+
 /// Bail-tracing helper. When the `SKOTCH_DEBUG_BAILS` env var is set
 /// (to any value), every call emits a single line to stderr describing
 /// where the body walker gave up. This is the development-time surface
@@ -6409,6 +6463,44 @@ fn try_lower_function_body_via_blocks(
         .enumerate()
         .map(|(i, n)| (n.clone(), LocalId(i as u32 + slot_offset)))
         .collect();
+    // Install the function-scoped param Ty fallback so lookup sites
+    // that hit a param slot (which `local_tys` doesn't carry) can
+    // recover the source-declared Ty. Limited to primitive +
+    // primitive-array types so user-Class params stay Ty::Any and
+    // don't trigger method-call handler recursion (which deadlocked
+    // an earlier attempt that seeded Class types directly).
+    let mut param_fallback_tys: Vec<Ty> = Vec::new();
+    for _ in 0..slot_offset {
+        param_fallback_tys.push(Ty::Any);
+    }
+    if let Some(pl) = f.value_parameter_list() {
+        for p in pl.parameters() {
+            let ty = p
+                .type_reference()
+                .and_then(|tr| tr.user_type())
+                .and_then(|u| u.name())
+                .and_then(skotch_types::ty_from_name)
+                .filter(|t| {
+                    matches!(
+                        t,
+                        Ty::Int
+                            | Ty::Long
+                            | Ty::Float
+                            | Ty::Double
+                            | Ty::Bool
+                            | Ty::Char
+                            | Ty::String
+                            | Ty::IntArray
+                            | Ty::LongArray
+                            | Ty::DoubleArray
+                            | Ty::ByteArray
+                    )
+                })
+                .unwrap_or(Ty::Any);
+            param_fallback_tys.push(ty);
+        }
+    }
+    let _param_scope = ParamTyScope::new(param_fallback_tys);
     let mut local_tys: Vec<Ty> = Vec::new();
     let initial_locals_len = local_tys.len();
     let mut next_slot: u32 = param_count as u32 + slot_offset;
@@ -6532,6 +6624,42 @@ fn try_lower_multi_stmt_block_with_offset(
         .map(|(i, n)| (n.clone(), LocalId(i as u32 + slot_offset)))
         .collect();
 
+    // Install the function-scoped param Ty fallback so handlers that
+    // read `slot_ty_with_param_fallback(slot, extra_locals)` recover
+    // the source Ty for param slots. Same scope+filter as the
+    // builder path (try_lower_function_body_via_blocks).
+    let mut param_fallback_tys: Vec<Ty> = Vec::new();
+    for _ in 0..slot_offset {
+        param_fallback_tys.push(Ty::Any);
+    }
+    if let Some(pl) = f.value_parameter_list() {
+        for p in pl.parameters() {
+            let ty = p
+                .type_reference()
+                .and_then(|tr| tr.user_type())
+                .and_then(|u| u.name())
+                .and_then(skotch_types::ty_from_name)
+                .filter(|t| {
+                    matches!(
+                        t,
+                        Ty::Int
+                            | Ty::Long
+                            | Ty::Float
+                            | Ty::Double
+                            | Ty::Bool
+                            | Ty::Char
+                            | Ty::String
+                            | Ty::IntArray
+                            | Ty::LongArray
+                            | Ty::DoubleArray
+                            | Ty::ByteArray
+                    )
+                })
+                .unwrap_or(Ty::Any);
+            param_fallback_tys.push(ty);
+        }
+    }
+    let _param_scope = ParamTyScope::new(param_fallback_tys);
     let mut local_tys: Vec<Ty> = Vec::new();
     let mut stmts: Vec<MStmt> = Vec::new();
     let mut next_slot: u32 = param_count as u32 + slot_offset;
@@ -7971,17 +8099,24 @@ fn try_lower_multi_stmt_block_with_offset(
                             .map(|(_, l)| *l)
                     }
                 };
-                let lhs_slot = lower_inline_expr_to_slot(
+                // Use the rich-expr lowerer (not the inline-only
+                // variant) so cond shapes that touch typed-param
+                // property access — `i < pattern.length`,
+                // `i < arr.size`, `s[k]` etc. — resolve via the
+                // function-scoped param-Ty fallback.
+                let lhs_slot = lower_rich_expr_to_slot(
                     cmp_b.lhs()?,
                     &cond_lookup,
+                    fn_lookup,
                     &mut next_slot,
                     &mut cond_stmts,
                     &mut local_tys,
                     strings,
                 )?;
-                let rhs_slot = lower_inline_expr_to_slot(
+                let rhs_slot = lower_rich_expr_to_slot(
                     cmp_b.rhs()?,
                     &cond_lookup,
+                    fn_lookup,
                     &mut next_slot,
                     &mut cond_stmts,
                     &mut local_tys,
@@ -12720,10 +12855,7 @@ fn lower_rich_expr_to_slot(
                     extra_locals,
                     strings,
                 ) {
-                    let array_ty = extra_locals
-                        .get(array_slot.0 as usize)
-                        .cloned()
-                        .unwrap_or(Ty::Any);
+                    let array_ty = slot_ty_with_param_fallback(array_slot.0, extra_locals);
                     // String indexing routes to `String.charAt(int)` —
                     // kotlinc emits the same call. ArrayLoad on a
                     // reference type would VerifyError at runtime.
@@ -13048,10 +13180,8 @@ fn lower_rich_expr_to_slot(
                                 return Some(result_slot);
                             }
                         }
-                        let recv_ty = extra_locals
-                            .get(recv_slot.0 as usize)
-                            .cloned()
-                            .unwrap_or(Ty::Any);
+                        let recv_ty =
+                            slot_ty_with_param_fallback(recv_slot.0, extra_locals);
                         // (class, method, descriptor, ret_ty)
                         let prop_dispatch: Option<(&str, &str, &str, Ty)> =
                             match (&recv_ty, prop_name) {
