@@ -712,7 +712,91 @@ pub fn lower_file(
         fixup_getfield_locals(&mut c.constructor, &class_fields);
     }
 
+    // Method-return-type fixup: snapshot every class method's
+    // (name → return Ty), then walk Call sites. When a Virtual/
+    // VirtualJava call's dest local is currently typed Any and the
+    // target method's return Ty is known, promote it.
+    let class_methods: rustc_hash::FxHashMap<String, rustc_hash::FxHashMap<String, Ty>> = module
+        .classes
+        .iter()
+        .map(|c| {
+            (
+                c.name.clone(),
+                c.methods
+                    .iter()
+                    .map(|m| (m.name.clone(), m.return_ty.clone()))
+                    .collect(),
+            )
+        })
+        .collect();
+    // Top-level function returns by name.
+    let fn_returns: rustc_hash::FxHashMap<String, Ty> = module
+        .functions
+        .iter()
+        .map(|f| (f.name.clone(), f.return_ty.clone()))
+        .collect();
+    for f in &mut module.functions {
+        fixup_call_return_locals(f, &class_methods, &fn_returns);
+    }
+    for c in &mut module.classes {
+        for m in &mut c.methods {
+            fixup_call_return_locals(m, &class_methods, &fn_returns);
+        }
+        fixup_call_return_locals(&mut c.constructor, &class_methods, &fn_returns);
+    }
+
     module
+}
+
+fn fixup_call_return_locals(
+    f: &mut MirFunction,
+    class_methods: &rustc_hash::FxHashMap<String, rustc_hash::FxHashMap<String, Ty>>,
+    fn_returns: &rustc_hash::FxHashMap<String, Ty>,
+) {
+    use skotch_mir::{CallKind, Rvalue, Stmt};
+    for blk in &f.blocks.clone() {
+        for stmt in &blk.stmts {
+            let Stmt::Assign { dest, value } = stmt;
+            let Rvalue::Call { kind, .. } = value else {
+                continue;
+            };
+            let return_ty = match kind {
+                CallKind::Virtual {
+                    class_name,
+                    method_name,
+                } => class_methods
+                    .get(class_name)
+                    .and_then(|m| m.get(method_name))
+                    .cloned(),
+                CallKind::VirtualJava {
+                    class_name,
+                    method_name,
+                    ..
+                } => class_methods
+                    .get(class_name)
+                    .and_then(|m| m.get(method_name))
+                    .cloned(),
+                CallKind::Static(fid) => f
+                    .blocks
+                    .get(0)
+                    .and_then(|_| {
+                        // Static(FuncId) — we don't have a direct lookup
+                        // by FuncId, so skip.
+                        let _ = fid;
+                        None
+                    }),
+                _ => None,
+            };
+            let _ = fn_returns;
+            let Some(ty) = return_ty else { continue };
+            let idx = dest.0 as usize;
+            if let Some(slot_ty) = f.locals.get_mut(idx) {
+                if matches!(slot_ty, Ty::Any) {
+                    *slot_ty = ty;
+                }
+            }
+        }
+    }
 }
 
 fn fixup_getfield_locals(
