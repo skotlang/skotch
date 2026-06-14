@@ -2040,3 +2040,44 @@ This standardizes the exit semantics across all four loop/branch handlers: anyth
 - mir-lower typed unit tests: **188 passing**
 
 No new fixture graduations because patterns with for/while followed by nested for/while/return are uncommon, but the framework is now in place for any future fixture with that shape.
+
+### 2026-06-13 (cutover landed)
+
+The driver now routes ALL production compilation through the typed pipeline. Legacy `parse_file` / `resolve_file` / `lower_file` are still in their crates but no longer invoked by `skotch_driver::compile_source`, `compile_ast`, or `emit_inner`. Downstream `skotch-cli/kotlinc`, `skotch-build/pipeline`, and `skotch-build/test_runner` were rewritten to parse via `skotch_ast::parse` and gather via `skotch_resolve::typed::gather_declarations`.
+
+**Workspace builds clean.** Per-fixture bisect over 1090 inputs shows zero infinite-loop hangs and zero crash failures from the front-end. The pipeline produces compilable bytecode for every supported fixture.
+
+**End-to-end JVM test (e2e_jvm.rs)** runs each "supported" fixture's compiled `.class` under `java` and compares stdout. Baseline post-cutover: **362 failures**. After this session's fixups: **353 failures**.
+
+Distribution of remaining failures:
+- `Error: Unable to initialize main class InputKt` (JVM `VerifyError` at load time): **65** — down from **141** pre-fixups. Now mostly: secondary constructors, custom property getters/setters, suspend transformations, lambda metafactory shapes.
+- `stdout mismatch`: **227** — the typed body walker emits a placeholder `Return` whenever a stmt or expression shape isn't handled, so many fixtures produce empty output. Common gaps:
+  - `return if-else-chain` / `return when` (40-when-with-subject, 52-if-else-chain, ...)
+  - `&&` / `||` as sub-expressions in arg position
+  - Nested-class instantiation `Outer.Inner(args)` (108-nested-class)
+  - Local function declarations (110-local-function)
+  - Lambdas (23-lambda)
+  - Collections + lambda `.map { it.length }` (113, 114, ...)
+  - Destructuring `val (a, b) = pair` (100-destructuring-pair)
+  - Custom property getters (104, 1261)
+  - Secondary constructors with `: this(...)` delegation (105, ...)
+
+**Fixes shipped this cutover session:**
+
+1. **Type-aware BinOp variant post-process** — typed lowering hardcoded `AddI`/`SubI`/etc and the JVM backend's max-stack analysis diverged on Double/Long operand mismatches (~30-min CPU spin on 1318-newton-sqrt-fibonacci). Added `fixup_binop_variants` at the end of `lower_file` that rewrites Int-coded arithmetic to D/F/L variants based on `func.locals[lhs.0]`.
+2. **`Constructor` / `ConstructorJava` arg convention** — 6 sites in typed.rs were prepending `vec![new_slot]` to constructor args, producing `aload <new_slot>` against an uninitialized local before invokespecial. The backend's Case-1 path (`func.name != "<init>"`) expects args to exclude the receiver — the dup'd reference from NewInstance is consumed by invokespecial. Dropped the prefix and pointed the Constructor `Assign.dest` at `new_slot`. ("Unable to initialize" 141 → 79 over two commits.)
+3. **Wide-arg println swap fix** — `println(<inlined-getstatic>)` emitted `getstatic arg; getstatic out; swap` which is invalid for category-2 stack types. Detect Long/Double via `func.locals[arg.0]` and fall through to the receiver-first emit path.
+4. **String-literal top-level val initializer** — `lower_const_init_typed` returned None for `KtExpr::String`, so `val GREETING = "hi"` got `MirConst::Null` and the JVM backend wrote a null static field. Added `lower_const_or_string_init` that interns plain (non-interpolated) string literals into `module.strings`, plus Ty inference from the init kind so `val_lookup` receives the right Ty for downstream GetStaticField descriptors.
+5. **GetField result-type fixup** — class instance method results were typed `Any` in the local table even when the field's declared `Ty` was known. Added `fixup_getfield_locals` (mirror of binop variant fixup) that promotes `Any` slots to the field's declared type.
+6. **Virtual/VirtualJava call return-type fixup** — same idea for class method calls. Snapshots `class_methods[class][method] → return Ty` and promotes the dest local. ("Unable to initialize" 79 → 65.)
+
+**Path forward.** The remaining JVM-reject failures are concentrated in:
+- Property-getter/setter custom bodies (currently emit default getter but lose the user-supplied body)
+- Secondary constructor delegation (`constructor() : this(1)` shape)
+- Lambdas (full LambdaMetafactory wiring not in typed yet)
+- Suspend transformations
+- Collections via stdlib
+
+The 227 stdout mismatches are dominated by *expression-context* unrecognized shapes — the body walker's `?`-propagated bail-out makes the entire body empty whenever any expr fails. A worthwhile follow-up: per-stmt fallback that emits a placeholder stmt (or panics in debug) instead of returning None at the body level, so partial progress is visible per fixture.
+
+The legacy `mir-lower::lower_file` and `parser::parse_file` can now be deleted as soon as the typed body walker covers these last few patterns and the e2e_jvm pass-rate matches the legacy baseline.
