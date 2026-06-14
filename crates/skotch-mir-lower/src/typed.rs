@@ -684,7 +684,64 @@ pub fn lower_file(
         fixup_binop_variants(&mut c.constructor);
     }
 
+    // Field-type fixup: snapshot class field declarations, then walk
+    // every function looking for `Stmt::Assign { dest, value:
+    // Rvalue::GetField { class_name, field_name } }`. When the local
+    // is currently typed `Any` and the field is declared on a known
+    // class, promote the local to the field's declared `Ty`.
+    let class_fields: rustc_hash::FxHashMap<String, rustc_hash::FxHashMap<String, Ty>> = module
+        .classes
+        .iter()
+        .map(|c| {
+            (
+                c.name.clone(),
+                c.fields
+                    .iter()
+                    .map(|f| (f.name.clone(), f.ty.clone()))
+                    .collect(),
+            )
+        })
+        .collect();
+    for f in &mut module.functions {
+        fixup_getfield_locals(f, &class_fields);
+    }
+    for c in &mut module.classes {
+        for m in &mut c.methods {
+            fixup_getfield_locals(m, &class_fields);
+        }
+        fixup_getfield_locals(&mut c.constructor, &class_fields);
+    }
+
     module
+}
+
+fn fixup_getfield_locals(
+    f: &mut MirFunction,
+    class_fields: &rustc_hash::FxHashMap<String, rustc_hash::FxHashMap<String, Ty>>,
+) {
+    use skotch_mir::{Rvalue, Stmt};
+    for blk in &f.blocks.clone() {
+        for stmt in &blk.stmts {
+            let Stmt::Assign { dest, value } = stmt;
+            if let Rvalue::GetField {
+                class_name,
+                field_name,
+                ..
+            } = value
+            {
+                if let Some(fields) = class_fields.get(class_name) {
+                    if let Some(field_ty) = fields.get(field_name) {
+                        let idx = dest.0 as usize;
+                        if let Some(slot_ty) = f.locals.get_mut(idx) {
+                            if matches!(slot_ty, Ty::Any) {
+                                *slot_ty = field_ty.clone();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// Rewrite `BinOp::AddI` / `SubI` / `MulI` / `DivI` / `ModI` in a
