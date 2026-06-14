@@ -8679,6 +8679,7 @@ fn try_lower_multi_stmt_block_with_offset(
                                     },
                                 });
                                 let cmp_slot = LocalId(next_slot);
+                                next_slot += 1;
                                 local_tys.push(Ty::Bool);
                                 let cond_stmt = MStmt::Assign {
                                     dest: cmp_slot,
@@ -8689,6 +8690,42 @@ fn try_lower_multi_stmt_block_with_offset(
                                     },
                                 };
                                 name_to_local.pop();
+                                // Lower trailing stmts (the children
+                                // that follow `for (i in r) {...}` in
+                                // the enclosing block) so they appear
+                                // in the exit_block instead of being
+                                // dropped. Only handles linear stmts
+                                // — control-flow trailing falls back
+                                // to the legacy empty-Return shape.
+                                let trailing_has_control = trailing_children.iter().any(|c| {
+                                    if let Some(e) = KtExpr::cast(c) {
+                                        matches!(
+                                            e,
+                                            KtExpr::While(_)
+                                                | KtExpr::For(_)
+                                                | KtExpr::Return(_)
+                                                | KtExpr::If(_)
+                                        )
+                                    } else {
+                                        false
+                                    }
+                                });
+                                let exit_stmts: Vec<MStmt> = if !trailing_has_control
+                                    && !trailing_children.is_empty()
+                                {
+                                    lower_loop_body(
+                                        trailing_children,
+                                        &mut name_to_local,
+                                        &mut next_slot,
+                                        &mut local_tys,
+                                        strings,
+                                        fn_lookup,
+                                        &function_param_names,
+                                    )
+                                    .unwrap_or_default()
+                                } else {
+                                    Vec::new()
+                                };
                                 let pre_block = BasicBlock {
                                     stmts: std::mem::take(&mut stmts),
                                     terminator: Terminator::Goto(1),
@@ -8706,7 +8743,7 @@ fn try_lower_multi_stmt_block_with_offset(
                                     terminator: Terminator::Goto(1),
                                 };
                                 let exit_block = BasicBlock {
-                                    stmts: Vec::new(),
+                                    stmts: exit_stmts,
                                     terminator: Terminator::Return,
                                 };
                                 return Some((
