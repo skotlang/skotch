@@ -4978,19 +4978,24 @@ fn lower_loop_body_blocks(
                     stmts: std::mem::take(&mut cur_stmts),
                     terminator: Terminator::Goto(cond_block_id),
                 });
-                // Build the inner cond block.
+                // Build the inner cond block. Use lower_rich_expr_to_slot
+                // (not the inline-only variant) so cond shapes like
+                // `i < arr.size` resolve property/method calls on
+                // primitive arrays.
                 let mut inner_cond_stmts: Vec<MStmt> = Vec::new();
-                let lhs_slot = lower_inline_expr_to_slot(
+                let lhs_slot = lower_rich_expr_to_slot(
                     cmp_b.lhs()?,
                     &lookup,
+                    fn_lookup_ref,
                     next_slot,
                     &mut inner_cond_stmts,
                     local_tys,
                     strings,
                 )?;
-                let rhs_slot = lower_inline_expr_to_slot(
+                let rhs_slot = lower_rich_expr_to_slot(
                     cmp_b.rhs()?,
                     &lookup,
+                    fn_lookup_ref,
                     next_slot,
                     &mut inner_cond_stmts,
                     local_tys,
@@ -6120,6 +6125,7 @@ fn try_lower_function_body_via_blocks(
 
     const SENT: u32 = 0xfffffffe;
     let saved_strings_len = strings.len();
+    let initial_locals_len = local_tys.len();
     let mut blocks = match lower_loop_body_blocks(
         &block_children,
         &mut name_to_local,
@@ -6165,7 +6171,8 @@ fn try_lower_function_body_via_blocks(
         stmts: Vec::new(),
         terminator: Terminator::Return,
     });
-    Some((blocks, local_tys))
+    let body_extras: Vec<Ty> = local_tys.split_off(initial_locals_len);
+    Some((blocks, body_extras))
 }
 
 /// Like try_lower_multi_stmt_block_inner but parameters can start at a
@@ -12370,6 +12377,159 @@ fn lower_rich_expr_to_slot(
             }
         }
     }
+    // `arr[i]` index access on a primitive array (IntArray /
+    // LongArray / DoubleArray / etc.). Lowers to Rvalue::ArrayLoad —
+    // a single `iaload`/`laload`/... opcode on the JVM. The result Ty
+    // matches the array's element type so downstream uses (println,
+    // arithmetic, etc.) pick the right path.
+    if let KtExpr::ArrayAccess(aa) = e {
+        let children: Vec<&skotch_sil::SilNode> =
+            skotch_ast::children(aa.syntax()).iter().collect();
+        let array_expr_opt = children
+            .iter()
+            .find_map(|c| KtExpr::cast(*c))
+            .map(unwrap_parens);
+        let index_expr_opt = children.iter().find_map(|c| {
+            if c.kind == skotch_syntax::SyntaxKind::INDICES {
+                skotch_ast::children(c)
+                    .iter()
+                    .find_map(KtExpr::cast)
+                    .map(unwrap_parens)
+            } else {
+                None
+            }
+        });
+        if let (Some(array_expr), Some(index_expr)) =
+            (array_expr_opt, index_expr_opt)
+        {
+            if let Some(array_slot) = lower_rich_expr_to_slot(
+                array_expr,
+                lookup_name,
+                fn_lookup,
+                next_slot,
+                pre_stmts,
+                extra_locals,
+                strings,
+            ) {
+                if let Some(index_slot) = lower_rich_expr_to_slot(
+                    index_expr,
+                    lookup_name,
+                    fn_lookup,
+                    next_slot,
+                    pre_stmts,
+                    extra_locals,
+                    strings,
+                ) {
+                    let array_ty = extra_locals
+                        .get(array_slot.0 as usize)
+                        .cloned()
+                        .unwrap_or(Ty::Any);
+                    // String indexing routes to `String.charAt(int)` —
+                    // kotlinc emits the same call. ArrayLoad on a
+                    // reference type would VerifyError at runtime.
+                    if matches!(array_ty, Ty::String) {
+                        let result_slot = LocalId(*next_slot);
+                        *next_slot += 1;
+                        extra_locals.push(Ty::Char);
+                        pre_stmts.push(MStmt::Assign {
+                            dest: result_slot,
+                            value: skotch_mir::Rvalue::Call {
+                                kind: skotch_mir::CallKind::VirtualJava {
+                                    class_name: "java/lang/String".to_string(),
+                                    method_name: "charAt".to_string(),
+                                    descriptor: "(I)C".to_string(),
+                                },
+                                args: vec![array_slot, index_slot],
+                            },
+                        });
+                        return Some(result_slot);
+                    }
+                    let elem_ty = match &array_ty {
+                        Ty::IntArray => Ty::Int,
+                        Ty::LongArray => Ty::Long,
+                        Ty::DoubleArray => Ty::Double,
+                        Ty::ByteArray => Ty::Byte,
+                        _ => Ty::Any,
+                    };
+                    let result_slot = LocalId(*next_slot);
+                    *next_slot += 1;
+                    extra_locals.push(elem_ty);
+                    pre_stmts.push(MStmt::Assign {
+                        dest: result_slot,
+                        value: skotch_mir::Rvalue::ArrayLoad {
+                            array: array_slot,
+                            index: index_slot,
+                        },
+                    });
+                    return Some(result_slot);
+                }
+            }
+        }
+    }
+    // intArrayOf(a, b, c) — primitive int[] literal. Materializes the
+    // array, populates each slot, returns the new array slot. Same
+    // shape as kotlinc's `newarray int + dup + iconst + iastore` per
+    // element. Matches the implicit constructor convention used by
+    // `IntArray(size)` below for the result Ty.
+    if let KtExpr::Call(call) = e {
+        if let Some(KtExpr::Reference(rc)) = call.callee() {
+            if rc.name() == Some("intArrayOf") {
+                let arg_list = call.value_argument_list();
+                let args: Vec<_> = arg_list
+                    .as_ref()
+                    .map(|al| al.arguments().collect::<Vec<_>>())
+                    .unwrap_or_default();
+                let size = args.len() as i32;
+                let size_slot = LocalId(*next_slot);
+                *next_slot += 1;
+                extra_locals.push(Ty::Int);
+                pre_stmts.push(MStmt::Assign {
+                    dest: size_slot,
+                    value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(size)),
+                });
+                let array_slot = LocalId(*next_slot);
+                *next_slot += 1;
+                extra_locals.push(Ty::IntArray);
+                pre_stmts.push(MStmt::Assign {
+                    dest: array_slot,
+                    value: skotch_mir::Rvalue::NewIntArray(size_slot),
+                });
+                for (i, arg) in args.iter().enumerate() {
+                    let arg_e = arg.expression()?;
+                    let value_slot = lower_rich_expr_to_slot(
+                        arg_e,
+                        lookup_name,
+                        fn_lookup,
+                        next_slot,
+                        pre_stmts,
+                        extra_locals,
+                        strings,
+                    )?;
+                    let idx_slot = LocalId(*next_slot);
+                    *next_slot += 1;
+                    extra_locals.push(Ty::Int);
+                    pre_stmts.push(MStmt::Assign {
+                        dest: idx_slot,
+                        value: skotch_mir::Rvalue::Const(
+                            skotch_mir::MirConst::Int(i as i32),
+                        ),
+                    });
+                    let unused_slot = LocalId(*next_slot);
+                    *next_slot += 1;
+                    extra_locals.push(Ty::Unit);
+                    pre_stmts.push(MStmt::Assign {
+                        dest: unused_slot,
+                        value: skotch_mir::Rvalue::ArrayStore {
+                            array: array_slot,
+                            index: idx_slot,
+                            value: value_slot,
+                        },
+                    });
+                }
+                return Some(array_slot);
+            }
+        }
+    }
     // IntArray(size) — primitive int[] allocation.
     if let KtExpr::Call(call) = e {
         if let Some(KtExpr::Reference(rc)) = call.callee() {
@@ -12607,6 +12767,25 @@ fn lower_rich_expr_to_slot(
                                     pre_stmts.push(MStmt::Assign {
                                         dest: result_slot,
                                         value: skotch_mir::Rvalue::Local(recv_slot),
+                                    });
+                                    return Some(result_slot);
+                                }
+                                // arr.size on every primitive array type +
+                                // String.length — single `arraylength`
+                                // opcode via Rvalue::ArrayLength. kotlinc
+                                // emits the same shape.
+                                (Ty::IntArray, "size")
+                                | (Ty::LongArray, "size")
+                                | (Ty::DoubleArray, "size")
+                                | (Ty::ByteArray, "size") => {
+                                    let result_slot = LocalId(*next_slot);
+                                    *next_slot += 1;
+                                    extra_locals.push(Ty::Int);
+                                    pre_stmts.push(MStmt::Assign {
+                                        dest: result_slot,
+                                        value: skotch_mir::Rvalue::ArrayLength(
+                                            recv_slot,
+                                        ),
                                     });
                                     return Some(result_slot);
                                 }
