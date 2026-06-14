@@ -3870,6 +3870,12 @@ fn lower_loop_body(
                 name_to_local.push((pname.to_string(), rhs_slot));
                 continue;
             }
+            trace_bail!(
+                "lower_loop_body val handler: lower_rich_expr_to_slot \
+                 returned None for `val {} = ...` (init kind: {})",
+                pname,
+                kt_expr_kind(&init)
+            );
             return None;
         }
         let be: KtExpr<'_> = match KtExpr::cast(bn) {
