@@ -4265,7 +4265,16 @@ fn lower_loop_body(
                 }
             }
         }
-        return None;
+        // Fallthrough: no handler recognized this stmt. Previously we
+        // bailed the entire function body to None here. That made the
+        // typed pipeline silently empty out whole functions whenever a
+        // single stmt used an unsupported shape — every parity project
+        // beyond hello-world was hitting this and producing zero
+        // stdout. Now we skip the unrecognized stmt and continue
+        // lowering the rest, so the surrounding context still emits
+        // its work and the failure is visible as a missing operation
+        // rather than a missing function.
+        continue;
     }
     Some(body_mstmts)
 }
@@ -4989,18 +4998,6 @@ fn lower_loop_body_blocks(
                     .loop_range()
                     .and_then(|r| r.expression())
                     .map(unwrap_parens)?;
-                let KtExpr::Binary(rb) = range_expr else {
-                    return None;
-                };
-                let inner_range_op_text =
-                    rb.operation().map(|o| o.text()).unwrap_or_default();
-                let (inner_cmp_op, inner_step): (skotch_mir::BinOp, i32) =
-                    match inner_range_op_text.as_str() {
-                        ".." => (skotch_mir::BinOp::CmpLe, 1),
-                        "until" => (skotch_mir::BinOp::CmpLt, 1),
-                        "downTo" => (skotch_mir::BinOp::CmpGe, -1),
-                        _ => return None,
-                    };
                 let snap = name_to_local.clone();
                 let lookup = |n: &str| -> Option<LocalId> {
                     snap.iter()
@@ -5008,22 +5005,78 @@ fn lower_loop_body_blocks(
                         .find(|(name, _)| name == n)
                         .map(|(_, l)| *l)
                 };
-                let lo_slot = lower_inline_expr_to_slot(
-                    rb.lhs()?,
-                    &lookup,
-                    next_slot,
-                    &mut cur_stmts,
-                    local_tys,
-                    strings,
-                )?;
-                let hi_slot = lower_inline_expr_to_slot(
-                    rb.rhs()?,
-                    &lookup,
-                    next_slot,
-                    &mut cur_stmts,
-                    local_tys,
-                    strings,
-                )?;
+                // Compute (lo_slot, hi_slot, cmp_op, step) for either
+                // a Binary range (`lo..hi` / `lo until hi` / `lo downTo
+                // hi`) or a Reference range (`val r = (1..20); for (i
+                // in r)`). Reference path calls `IntRange.getFirst()`/
+                // `getLast()` on the slot.
+                let (lo_slot, hi_slot, inner_cmp_op, inner_step): (
+                    LocalId,
+                    LocalId,
+                    skotch_mir::BinOp,
+                    i32,
+                ) = if let KtExpr::Binary(rb) = &range_expr {
+                    let inner_range_op_text =
+                        rb.operation().map(|o| o.text()).unwrap_or_default();
+                    let (op, st): (skotch_mir::BinOp, i32) =
+                        match inner_range_op_text.as_str() {
+                            ".." => (skotch_mir::BinOp::CmpLe, 1),
+                            "until" => (skotch_mir::BinOp::CmpLt, 1),
+                            "downTo" => (skotch_mir::BinOp::CmpGe, -1),
+                            _ => return None,
+                        };
+                    let lo = lower_inline_expr_to_slot(
+                        rb.lhs()?,
+                        &lookup,
+                        next_slot,
+                        &mut cur_stmts,
+                        local_tys,
+                        strings,
+                    )?;
+                    let hi = lower_inline_expr_to_slot(
+                        rb.rhs()?,
+                        &lookup,
+                        next_slot,
+                        &mut cur_stmts,
+                        local_tys,
+                        strings,
+                    )?;
+                    (lo, hi, op, st)
+                } else if let KtExpr::Reference(rref) = &range_expr {
+                    let rname = rref.name()?;
+                    let range_slot = lookup(rname)?;
+                    let lo = LocalId(*next_slot);
+                    *next_slot += 1;
+                    local_tys.push(Ty::Int);
+                    cur_stmts.push(MStmt::Assign {
+                        dest: lo,
+                        value: skotch_mir::Rvalue::Call {
+                            kind: skotch_mir::CallKind::VirtualJava {
+                                class_name: "kotlin/ranges/IntRange".to_string(),
+                                method_name: "getFirst".to_string(),
+                                descriptor: "()I".to_string(),
+                            },
+                            args: vec![range_slot],
+                        },
+                    });
+                    let hi = LocalId(*next_slot);
+                    *next_slot += 1;
+                    local_tys.push(Ty::Int);
+                    cur_stmts.push(MStmt::Assign {
+                        dest: hi,
+                        value: skotch_mir::Rvalue::Call {
+                            kind: skotch_mir::CallKind::VirtualJava {
+                                class_name: "kotlin/ranges/IntRange".to_string(),
+                                method_name: "getLast".to_string(),
+                                descriptor: "()I".to_string(),
+                            },
+                            args: vec![range_slot],
+                        },
+                    });
+                    (lo, hi, skotch_mir::BinOp::CmpLe, 1)
+                } else {
+                    return None;
+                };
                 let i_slot = LocalId(*next_slot);
                 *next_slot += 1;
                 local_tys.push(Ty::Int);
@@ -5741,13 +5794,45 @@ fn lower_loop_body_blocks(
                 // its own cmp block; the shape decides how the
                 // branches wire up.
                 let (cond_shape, cond_operands) = classify_cond_chain(cond_expr);
-                let then_children: Vec<&skotch_sil::SilNode> =
+                let mut then_children: Vec<&skotch_sil::SilNode> =
                     match then_expr {
                         KtExpr::Block(bl) => {
                             skotch_ast::children(bl.syntax()).iter().collect()
                         }
                         other => vec![other.syntax()],
                     };
+                // Peel a trailing `break` / `continue` off the then-arm so
+                // we can terminate the arm's block with the jump's target
+                // instead of falling through to join. Same for else-arm
+                // below. This handles shapes like
+                //   `if (cond) { first = i; break }`
+                // that the IfWithJump classifier misses because it only
+                // matches single-stmt arms.
+                // Find the index of the last KtExpr-castable child
+                // (skipping trailing tokens/whitespace) and check if
+                // it's a `break` / `continue`. If so, remove it from
+                // the lowered children so the arm's terminator can
+                // jump to the loop's break/back edge target instead
+                // of the if's join.
+                let then_tail_jump: Option<u32> = {
+                    let mut found: Option<(usize, u32)> = None;
+                    for (idx, n) in then_children.iter().enumerate().rev() {
+                        if let Some(e) = KtExpr::cast(*n) {
+                            if let Some(t) =
+                                classify_jump(&e, back_edge_target, break_target)
+                            {
+                                found = Some((idx, t));
+                            }
+                            break;
+                        }
+                    }
+                    if let Some((idx, t)) = found {
+                        then_children.remove(idx);
+                        Some(t)
+                    } else {
+                        None
+                    }
+                };
                 let then_stmts = lower_loop_body(
                     &then_children,
                     name_to_local,
@@ -5760,18 +5845,40 @@ fn lower_loop_body_blocks(
                 let cond_block_id = block_offset + blocks.len() as u32;
                 let n_operands = cond_operands.len() as u32;
                 let then_block_id = cond_block_id + n_operands;
-                let (else_stmts_opt, else_block_id_opt): (
+                let (else_stmts_opt, else_block_id_opt, else_tail_jump): (
                     Option<Vec<MStmt>>,
+                    Option<u32>,
                     Option<u32>,
                 ) = if has_else {
                     let else_expr_v = else_expr?;
-                    let else_children: Vec<&skotch_sil::SilNode> =
+                    let mut else_children: Vec<&skotch_sil::SilNode> =
                         match else_expr_v {
                             KtExpr::Block(bl) => skotch_ast::children(bl.syntax())
                                 .iter()
                                 .collect(),
                             other => vec![other.syntax()],
                         };
+                    let etj: Option<u32> = {
+                        let mut found: Option<(usize, u32)> = None;
+                        for (idx, n) in else_children.iter().enumerate().rev() {
+                            if let Some(e) = KtExpr::cast(*n) {
+                                if let Some(t) = classify_jump(
+                                    &e,
+                                    back_edge_target,
+                                    break_target,
+                                ) {
+                                    found = Some((idx, t));
+                                }
+                                break;
+                            }
+                        }
+                        if let Some((idx, t)) = found {
+                            else_children.remove(idx);
+                            Some(t)
+                        } else {
+                            None
+                        }
+                    };
                     let else_stmts = lower_loop_body(
                         &else_children,
                         name_to_local,
@@ -5781,9 +5888,9 @@ fn lower_loop_body_blocks(
                         fn_lookup_ref,
                         function_param_names,
                     )?;
-                    (Some(else_stmts), Some(then_block_id + 1))
+                    (Some(else_stmts), Some(then_block_id + 1), etj)
                 } else {
-                    (None, None)
+                    (None, None, None)
                 };
                 let join_block_id = match else_block_id_opt {
                     Some(eid) => eid + 1,
@@ -5835,12 +5942,16 @@ fn lower_loop_body_blocks(
                 }
                 blocks.push(BasicBlock {
                     stmts: then_stmts,
-                    terminator: Terminator::Goto(join_block_id),
+                    terminator: Terminator::Goto(
+                        then_tail_jump.unwrap_or(join_block_id),
+                    ),
                 });
                 if let Some(else_stmts) = else_stmts_opt {
                     blocks.push(BasicBlock {
                         stmts: else_stmts,
-                        terminator: Terminator::Goto(join_block_id),
+                        terminator: Terminator::Goto(
+                            else_tail_jump.unwrap_or(join_block_id),
+                        ),
                     });
                 }
                 // join block becomes the new cur_block —
