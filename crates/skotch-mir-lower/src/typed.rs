@@ -13,12 +13,170 @@
 //! [`skotch_typeck::typed`].
 
 use skotch_ast::{AstNode, KtDecl, KtFile};
-use skotch_diagnostics::Diagnostics;
+use skotch_diagnostics::{Diagnostic, Diagnostics};
 use skotch_intern::Interner;
 use skotch_mir::{BasicBlock, FuncId, MirFunction, MirModule, Terminator};
 use skotch_resolve::{PackageSymbolTable, ResolvedFile};
 use skotch_typeck::TypedFile;
 use skotch_types::Ty;
+
+/// Bail-tracing helper. When the `SKOTCH_DEBUG_BAILS` env var is set
+/// (to any value), every call emits a single line to stderr describing
+/// where the body walker gave up. This is the development-time surface
+/// for ranking which Kotlin shapes most often defeat the current
+/// lowerer — no flag is required at compile time, the env var alone
+/// activates the trace. Cost when off is one `std::env::var_os` call
+/// per bail site (memoized via `OnceLock` to keep it cheap).
+fn bail_trace_enabled() -> bool {
+    use std::sync::OnceLock;
+    static ENABLED: OnceLock<bool> = OnceLock::new();
+    *ENABLED.get_or_init(|| std::env::var_os("SKOTCH_DEBUG_BAILS").is_some())
+}
+
+macro_rules! trace_bail {
+    ($($arg:tt)*) => {
+        if $crate::typed::bail_trace_enabled() {
+            eprintln!("[skotch bail] {}", format!($($arg)*));
+        }
+    };
+}
+
+/// Render the kind of an unhandled body child for the trace and
+/// empty-body diagnostic. Returns a short Rust-style debug tag like
+/// `"DotQualified"` or `"Lambda"` so the report tells you what shape
+/// to look at without dumping the full expression.
+fn kt_expr_kind(e: &skotch_ast::KtExpr<'_>) -> &'static str {
+    use skotch_ast::KtExpr::*;
+    match e {
+        Reference(_) => "Reference",
+        Integer(_) => "Integer",
+        Float(_) => "Float",
+        Boolean(_) => "Boolean",
+        Character(_) => "Character",
+        Null(_) => "Null",
+        String(_) => "String",
+        Binary(_) => "Binary",
+        BinaryWithTypeRhs(_) => "BinaryWithTypeRhs",
+        Prefix(_) => "Prefix",
+        Postfix(_) => "Postfix",
+        Unary(_) => "Unary",
+        DotQualified(_) => "DotQualified",
+        SafeAccess(_) => "SafeAccess",
+        This(_) => "This",
+        Super(_) => "Super",
+        Call(_) => "Call",
+        Lambda(_) => "Lambda",
+        ArrayAccess(_) => "ArrayAccess",
+        CallableRef(_) => "CallableRef",
+        ClassLiteral(_) => "ClassLiteral",
+        Parenthesized(_) => "Parenthesized",
+        Collection(_) => "Collection",
+        Annotated(_) => "Annotated",
+        Labeled(_) => "Labeled",
+        Is(_) => "Is",
+        ObjectLiteral(_) => "ObjectLiteral",
+        If(_) => "If",
+        When(_) => "When",
+        For(_) => "For",
+        While(_) => "While",
+        DoWhile(_) => "DoWhile",
+        Try(_) => "Try",
+        Return(_) => "Return",
+        Throw(_) => "Throw",
+        Break(_) => "Break",
+        Continue(_) => "Continue",
+        Block(_) => "Block",
+    }
+}
+
+/// Render the kind of an unhandled SilNode child for the trace. Most
+/// body children are KtExpr-castable, but a few (KtProperty,
+/// whitespace tokens) aren't — this returns the SyntaxKind name so the
+/// trace stays informative for those too.
+fn sil_node_kind(n: &skotch_sil::SilNode) -> String {
+    format!("{:?}", n.kind)
+}
+
+/// True when a lowered function body is "trivially empty" — every
+/// block has no statements and ends in plain `Return` (or the suspend
+/// equivalent). This is the signal that the body walker silently
+/// bailed because some shape wasn't recognized: kotlinc would have
+/// produced bytecode for the body's statements, we produced nothing.
+fn function_body_is_empty(blocks: &[BasicBlock]) -> bool {
+    if blocks.is_empty() {
+        return true;
+    }
+    blocks.iter().all(|b| b.stmts.is_empty())
+        && blocks.iter().all(|b| {
+            matches!(
+                b.terminator,
+                Terminator::Return | Terminator::Goto(_)
+            )
+        })
+}
+
+/// Inspect a KtFun's source body and pick a short tag describing the
+/// first child that the body walker would have needed to handle. For
+/// expression-bodied fns that's the expression itself; for block
+/// bodies it's the first statement. Returns `"<no-body>"` for purely
+/// abstract / external decls (where empty MIR is correct).
+fn first_unhandled_kind<'a>(f: skotch_ast::KtFun<'a>) -> Option<String> {
+    if let Some(expr) = f.body_expression() {
+        return Some(kt_expr_kind(&expr).to_string());
+    }
+    if let Some(block) = f.body_block() {
+        for child in skotch_ast::children(block.syntax()) {
+            // Skip whitespace / brace tokens — only interested in the
+            // first semantic child.
+            if matches!(
+                child.kind,
+                skotch_syntax::SyntaxKind::WHITE_SPACE
+                    | skotch_syntax::SyntaxKind::LBRACE
+                    | skotch_syntax::SyntaxKind::RBRACE
+                    | skotch_syntax::SyntaxKind::SEMICOLON
+                    | skotch_syntax::SyntaxKind::LINE_COMMENT
+                    | skotch_syntax::SyntaxKind::BLOCK_COMMENT
+            ) {
+                continue;
+            }
+            if let Some(e) = skotch_ast::KtExpr::cast(child) {
+                return Some(kt_expr_kind(&e).to_string());
+            }
+            if skotch_ast::KtProperty::cast(child).is_some() {
+                return Some("Property".to_string());
+            }
+            return Some(sil_node_kind(child));
+        }
+    }
+    None
+}
+
+/// Emit the "function lowered to empty body" diagnostic. Becomes
+/// a Warning by default and an Error under `SKOTCH_STRICT=1`. The
+/// span points at the source declaration so the IDE / build-log
+/// reader can jump straight to the failing function.
+fn emit_empty_body_diagnostic(
+    diags: &mut Diagnostics,
+    fn_name: &str,
+    span: skotch_span::Span,
+    first_kind: &str,
+    strict: bool,
+) {
+    let msg = format!(
+        "skotch mir-lower bailed on `{}`: function body produced empty \
+         MIR (first unhandled shape: {}). The compiler accepted the source \
+         but emitted no bytecode for the body — runtime behavior will be \
+         a no-op. Set SKOTCH_DEBUG_BAILS=1 for a trace of the rejected \
+         shape, or implement the handler in mir-lower/typed.rs.",
+        fn_name, first_kind
+    );
+    let diag = if strict {
+        Diagnostic::error(span, msg)
+    } else {
+        Diagnostic::warning(span, msg)
+    };
+    diags.push(diag);
+}
 
 /// Lower a single typed file to MIR.
 ///
@@ -42,10 +200,16 @@ pub fn lower_file(
     _resolved: &ResolvedFile,
     typed: &TypedFile,
     _interner: &mut Interner,
-    _diags: &mut Diagnostics,
+    diags: &mut Diagnostics,
     wrapper_class: &str,
     package_symbols: Option<&PackageSymbolTable>,
 ) -> MirModule {
+    // Strict mode: when set, the empty-body diagnostic is emitted as
+    // Error (failing compilation) instead of Warning. Triggered by
+    // `SKOTCH_STRICT=1` env var (set by the CLI's `-Xskotch-strict`
+    // flag) so the toggle reaches mir-lower without re-plumbing every
+    // call site through the workspace.
+    let strict = std::env::var_os("SKOTCH_STRICT").is_some();
     let mut module = MirModule {
         wrapper_class: wrapper_class.to_string(),
         ..MirModule::default()
@@ -620,6 +784,26 @@ pub fn lower_file(
                     &mut exception_handlers,
                 )
             };
+
+            // Empty-body diagnostic: when the source provides a body
+            // but the lowered blocks are trivial Returns, the body
+            // walker bailed silently. Surface it so unsupported shapes
+            // are visible rather than hiding behind compiles-clean +
+            // runtime-no-op. Skipped for abstract / external decls
+            // (where first_unhandled_kind returns None).
+            let source_has_body =
+                f.body_block().is_some() || f.body_expression().is_some();
+            if source_has_body && function_body_is_empty(&blocks) {
+                if let Some(kind) = first_unhandled_kind(f) {
+                    let span = f.syntax().span;
+                    trace_bail!(
+                        "fn `{}` produced empty MIR (first unhandled: {})",
+                        name,
+                        kind
+                    );
+                    emit_empty_body_diagnostic(diags, &name, span, &kind, strict);
+                }
+            }
 
             let mut locals = param_tys;
             locals.extend(extra_locals);
@@ -4360,6 +4544,16 @@ fn lower_loop_body(
         // lowering the rest, so the surrounding context still emits
         // its work and the failure is visible as a missing operation
         // rather than a missing function.
+        if bail_trace_enabled() {
+            let kind = skotch_ast::KtExpr::cast(bn)
+                .map(|e| kt_expr_kind(&e).to_string())
+                .unwrap_or_else(|| sil_node_kind(bn));
+            trace_bail!(
+                "lower_loop_body skipping unrecognized stmt: {} @ span {:?}",
+                kind,
+                bn.span
+            );
+        }
         continue;
     }
     Some(body_mstmts)
@@ -6140,6 +6334,11 @@ fn try_lower_function_body_via_blocks(
     ) {
         Some(b) => b,
         None => {
+            trace_bail!(
+                "try_lower_function_body_via_blocks: lower_loop_body_blocks \
+                 returned None for fn `{}`",
+                f.name().unwrap_or("<anon>")
+            );
             strings.truncate(saved_strings_len);
             return None;
         }
@@ -6147,6 +6346,10 @@ fn try_lower_function_body_via_blocks(
     // Require non-trivial output before accepting.
     let total_stmts: usize = blocks.iter().map(|b| b.stmts.len()).sum();
     if total_stmts == 0 {
+        trace_bail!(
+            "try_lower_function_body_via_blocks: zero-stmt blocks for fn `{}`",
+            f.name().unwrap_or("<anon>")
+        );
         strings.truncate(saved_strings_len);
         return None;
     }

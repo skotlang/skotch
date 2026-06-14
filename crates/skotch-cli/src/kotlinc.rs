@@ -40,6 +40,13 @@ pub struct KotlincOptions {
     pub kotlin_home: Option<PathBuf>,
     /// Positional `.kt` / `.kts` source files (or directories).
     pub sources: Vec<PathBuf>,
+    /// `-Xskotch-strict` — promote skotch's "function body lowered to
+    /// empty" warning to an error so unsupported Kotlin shapes fail
+    /// compilation immediately instead of compiling to a runtime
+    /// no-op. Useful for parity sweeps and CI gates; not a kotlinc
+    /// flag (lives under the `-X` advanced-flag namespace per
+    /// kotlinc's wire convention).
+    pub strict: bool,
 }
 
 /// Top-level entry point invoked from `main` for both `skotch kotlinc …`
@@ -73,6 +80,15 @@ pub fn run(raw_args: &[String]) -> Result<()> {
         if opts.script {
             eprintln!("verbose: script mode");
         }
+    }
+
+    // Surface `-Xskotch-strict` to mir-lower (which lives several
+    // crate hops away) via an env var rather than threading a flag
+    // through every signature in the workspace. mir-lower reads it
+    // once per file via OnceLock, so the cost is one syscall per
+    // compile.
+    if opts.strict {
+        std::env::set_var("SKOTCH_STRICT", "1");
     }
 
     // Surface the classpath to the rest of skotch by setting CLASSPATH
@@ -408,6 +424,12 @@ fn parse_args(raw: &[String]) -> Result<KotlincOptions> {
                 } else {
                     eprintln!("warning: option {a} is accepted but not implemented yet");
                 }
+            }
+            // skotch-specific advanced flag: promote mir-lower's
+            // empty-body warning to an error. Matched before the
+            // generic `-X` accept-and-warn fallback below.
+            "-Xskotch-strict" => {
+                opts.strict = true;
             }
             // Unknown `-X` advanced flag — warn instead of erroring so
             // builds that pass implementation-specific tuning options
