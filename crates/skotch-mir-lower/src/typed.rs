@@ -5669,15 +5669,10 @@ fn lower_loop_body_blocks(
                         .find(|(name, _)| name == n)
                         .map(|(_, l)| *l)
                 };
-                let cmp_slot = lower_rich_expr_to_slot(
-                    cond_expr,
-                    &lookup,
-                    fn_lookup_ref,
-                    next_slot,
-                    &mut cur_stmts,
-                    local_tys,
-                    strings,
-                )?;
+                // Flatten `if (a && b && ...) X else Y` into a chain
+                // of cmp blocks: each conjunct's cmp branches to the
+                // next on true, to the else-or-join target on false.
+                let conjuncts = flatten_and_conjuncts(cond_expr);
                 let then_children: Vec<&skotch_sil::SilNode> =
                     match then_expr {
                         KtExpr::Block(bl) => {
@@ -5695,7 +5690,8 @@ fn lower_loop_body_blocks(
                     function_param_names,
                 )?;
                 let cond_block_id = block_offset + blocks.len() as u32;
-                let then_block_id = cond_block_id + 1;
+                let n_conjuncts = conjuncts.len() as u32;
+                let then_block_id = cond_block_id + n_conjuncts;
                 let (else_stmts_opt, else_block_id_opt): (
                     Option<Vec<MStmt>>,
                     Option<u32>,
@@ -5725,15 +5721,38 @@ fn lower_loop_body_blocks(
                     Some(eid) => eid + 1,
                     None => then_block_id + 1,
                 };
-                blocks.push(BasicBlock {
-                    stmts: std::mem::take(&mut cur_stmts),
-                    terminator: Terminator::Branch {
-                        cond: cmp_slot,
-                        then_block: then_block_id,
-                        else_block: else_block_id_opt
-                            .unwrap_or(join_block_id),
-                    },
-                });
+                let false_target = else_block_id_opt.unwrap_or(join_block_id);
+                // Emit one cmp block per conjunct. The first conjunct's
+                // block carries any prefix stmts that landed in cur_stmts.
+                for (k, conj) in conjuncts.iter().enumerate() {
+                    let mut block_stmts = if k == 0 {
+                        std::mem::take(&mut cur_stmts)
+                    } else {
+                        Vec::new()
+                    };
+                    let cmp_slot = lower_rich_expr_to_slot(
+                        *conj,
+                        &lookup,
+                        fn_lookup_ref,
+                        next_slot,
+                        &mut block_stmts,
+                        local_tys,
+                        strings,
+                    )?;
+                    let on_true = if (k as u32 + 1) < n_conjuncts {
+                        cond_block_id + (k as u32 + 1)
+                    } else {
+                        then_block_id
+                    };
+                    blocks.push(BasicBlock {
+                        stmts: block_stmts,
+                        terminator: Terminator::Branch {
+                            cond: cmp_slot,
+                            then_block: on_true,
+                            else_block: false_target,
+                        },
+                    });
+                }
                 blocks.push(BasicBlock {
                     stmts: then_stmts,
                     terminator: Terminator::Goto(join_block_id),
@@ -5747,8 +5766,6 @@ fn lower_loop_body_blocks(
                 // join block becomes the new cur_block —
                 // we accumulate subsequent stmts into
                 // cur_stmts which will become the join.
-                // Sanity: the next pushed block must have
-                // ID == join_block_id.
                 i = j + 1;
                 continue;
             }
