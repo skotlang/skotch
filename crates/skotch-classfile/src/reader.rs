@@ -58,6 +58,10 @@ pub fn parse_class(data: &[u8]) -> Result<ClassFile> {
     // Class attributes.
     let mut source_file = None;
     let mut bootstrap_methods = Vec::new();
+    let mut annotations = Vec::new();
+    let mut signature = None;
+    let mut inner_classes = Vec::new();
+    let mut enclosing_method = None;
     let attr_count = c.u16();
     for _ in 0..attr_count {
         let name = cp.utf8(c.u16())?.to_string();
@@ -71,6 +75,14 @@ pub fn parse_class(data: &[u8]) -> Result<ClassFile> {
             "BootstrapMethods" => {
                 bootstrap_methods = parse_bootstrap_methods(body);
             }
+            // visibility 1 = RUNTIME, 0 = BUILD (RuntimeInvisible)
+            "RuntimeVisibleAnnotations" => parse_class_annotations(body, &cp, 1, &mut annotations)?,
+            "RuntimeInvisibleAnnotations" => parse_class_annotations(body, &cp, 0, &mut annotations)?,
+            "Signature" => {
+                signature = Some(cp.utf8(u16::from_be_bytes([body[0], body[1]]))?.to_string());
+            }
+            "InnerClasses" => inner_classes = parse_inner_classes(body, &cp)?,
+            "EnclosingMethod" => enclosing_method = Some(parse_enclosing_method(body, &cp)?),
             _ => {}
         }
     }
@@ -89,7 +101,152 @@ pub fn parse_class(data: &[u8]) -> Result<ClassFile> {
         methods,
         source_file,
         bootstrap_methods,
+        annotations,
+        signature,
+        inner_classes,
+        enclosing_method,
     })
+}
+
+fn parse_inner_classes(body: &[u8], cp: &ConstantPool) -> Result<Vec<InnerClassEntry>> {
+    let num = be_u16(body, 0);
+    let mut out = Vec::with_capacity(num as usize);
+    let mut p = 2;
+    for _ in 0..num {
+        let inner_idx = be_u16(body, p);
+        let outer_idx = be_u16(body, p + 2);
+        let name_idx = be_u16(body, p + 4);
+        let access_flags = be_u16(body, p + 6);
+        p += 8;
+        out.push(InnerClassEntry {
+            inner: cp.class_name(inner_idx)?.to_string(),
+            outer: if outer_idx == 0 { None } else { Some(cp.class_name(outer_idx)?.to_string()) },
+            inner_name: if name_idx == 0 { None } else { Some(cp.utf8(name_idx)?.to_string()) },
+            access_flags,
+        });
+    }
+    Ok(out)
+}
+
+fn parse_enclosing_method(body: &[u8], cp: &ConstantPool) -> Result<EnclosingMethod> {
+    use crate::constant_pool::Constant;
+    let class = cp.class_name(be_u16(body, 0))?.to_string();
+    let nt_idx = be_u16(body, 2);
+    let method = if nt_idx == 0 {
+        None
+    } else if let Constant::NameAndType { name_index, descriptor_index } = cp.get(nt_idx) {
+        Some((cp.utf8(*name_index)?.to_string(), cp.utf8(*descriptor_index)?.to_string()))
+    } else {
+        None
+    };
+    Ok(EnclosingMethod { class, method })
+}
+
+/// Parses a `Runtime{Visible,Invisible}Annotations` attribute body, fully decoding each
+/// annotation's type and element-value pairs (recursively for arrays / nested annotations).
+fn parse_class_annotations(
+    body: &[u8],
+    cp: &ConstantPool,
+    visibility: u8,
+    out: &mut Vec<ClassAnnotation>,
+) -> Result<()> {
+    if body.len() < 2 {
+        return Ok(());
+    }
+    let num = u16::from_be_bytes([body[0], body[1]]);
+    let mut p = 2usize;
+    for _ in 0..num {
+        let (ann, np) = parse_annotation(body, p, cp, visibility)?;
+        out.push(ann);
+        p = np;
+    }
+    Ok(())
+}
+
+#[inline]
+fn be_u16(b: &[u8], p: usize) -> u16 {
+    u16::from_be_bytes([b[p], b[p + 1]])
+}
+
+/// Parses one `annotation` structure at `body[p]`, returning it and the position after it.
+fn parse_annotation(
+    body: &[u8],
+    p: usize,
+    cp: &ConstantPool,
+    visibility: u8,
+) -> Result<(ClassAnnotation, usize)> {
+    let type_desc = cp.utf8(be_u16(body, p))?.to_string();
+    let num = be_u16(body, p + 2);
+    let mut p = p + 4;
+    let mut elements = Vec::with_capacity(num as usize);
+    for _ in 0..num {
+        let name = cp.utf8(be_u16(body, p))?.to_string();
+        let (value, np) = parse_element_value(body, p + 2, cp)?;
+        elements.push(AnnotationElement { name, value });
+        p = np;
+    }
+    Ok((ClassAnnotation { visibility, type_desc, elements }, p))
+}
+
+/// Parses one `element_value` at `body[p]`, returning it and the position after it. Every
+/// branch advances `p` correctly (even when the value maps to `Unsupported`) so the caller
+/// never desyncs.
+fn parse_element_value(body: &[u8], p: usize, cp: &ConstantPool) -> Result<(AnnElemValue, usize)> {
+    use crate::constant_pool::Constant;
+    let tag = body[p];
+    let mut p = p + 1;
+    let v = match tag {
+        b'I' => {
+            let v = match cp.get(be_u16(body, p)) { Constant::Integer(v) => AnnElemValue::Int(*v), _ => AnnElemValue::Unsupported };
+            p += 2; v
+        }
+        b'J' => {
+            let v = match cp.get(be_u16(body, p)) { Constant::Long(v) => AnnElemValue::Long(*v), _ => AnnElemValue::Unsupported };
+            p += 2; v
+        }
+        b'F' => {
+            let v = match cp.get(be_u16(body, p)) { Constant::Float(v) => AnnElemValue::Float(*v), _ => AnnElemValue::Unsupported };
+            p += 2; v
+        }
+        b'D' => {
+            let v = match cp.get(be_u16(body, p)) { Constant::Double(v) => AnnElemValue::Double(*v), _ => AnnElemValue::Unsupported };
+            p += 2; v
+        }
+        b'Z' => {
+            let v = match cp.get(be_u16(body, p)) { Constant::Integer(v) => AnnElemValue::Boolean(*v != 0), _ => AnnElemValue::Unsupported };
+            p += 2; v
+        }
+        b's' => {
+            let v = AnnElemValue::Str(cp.utf8(be_u16(body, p))?.to_string());
+            p += 2; v
+        }
+        // byte/char/short carry distinct DEX value_types not yet emitted; class likewise.
+        b'B' | b'C' | b'S' | b'c' => { p += 2; AnnElemValue::Unsupported }
+        b'e' => {
+            // enum_const_value: type_name_index (descriptor) + const_name_index
+            let type_desc = cp.utf8(be_u16(body, p))?.to_string();
+            let const_name = cp.utf8(be_u16(body, p + 2))?.to_string();
+            p += 4;
+            AnnElemValue::Enum { type_desc, const_name }
+        }
+        b'@' => {
+            let (_, np) = parse_annotation(body, p, cp, 0)?; // skip nested annotation
+            p = np; AnnElemValue::Unsupported
+        }
+        b'[' => {
+            let count = be_u16(body, p);
+            p += 2;
+            let mut vs = Vec::with_capacity(count as usize);
+            for _ in 0..count {
+                let (ev, np) = parse_element_value(body, p, cp)?;
+                vs.push(ev);
+                p = np;
+            }
+            AnnElemValue::Array(vs)
+        }
+        other => anyhow::bail!("unknown annotation element tag {other:#x}"),
+    };
+    Ok((v, p))
 }
 
 fn parse_members(c: &mut Cursor, cp: &ConstantPool, is_field: bool) -> Result<Vec<Member>> {
@@ -102,6 +259,8 @@ fn parse_members(c: &mut Cursor, cp: &ConstantPool, is_field: bool) -> Result<Ve
         let attr_count = c.u16();
         let mut code = None;
         let mut constant_value = None;
+        let mut annotations = Vec::new();
+        let mut signature = None;
         for _ in 0..attr_count {
             let aname = cp.utf8(c.u16())?.to_string();
             let len = c.u32() as usize;
@@ -112,11 +271,20 @@ fn parse_members(c: &mut Cursor, cp: &ConstantPool, is_field: bool) -> Result<Ve
                     let idx = u16::from_be_bytes([c.d[body_start], c.d[body_start + 1]]);
                     constant_value = Some(cp.get(idx).clone());
                 }
+                "RuntimeVisibleAnnotations" => {
+                    parse_class_annotations(&c.d[body_start..body_start + len], cp, 1, &mut annotations)?;
+                }
+                "RuntimeInvisibleAnnotations" => {
+                    parse_class_annotations(&c.d[body_start..body_start + len], cp, 0, &mut annotations)?;
+                }
+                "Signature" => {
+                    signature = Some(cp.utf8(u16::from_be_bytes([c.d[body_start], c.d[body_start + 1]]))?.to_string());
+                }
                 _ => {}
             }
             c.p = body_start + len;
         }
-        out.push(Member { access_flags, name, descriptor, code, constant_value });
+        out.push(Member { access_flags, name, descriptor, code, constant_value, annotations, signature });
     }
     Ok(out)
 }

@@ -137,6 +137,8 @@ pub struct CodeItem {
 pub struct EncodedField {
     pub field: FieldRef,
     pub access_flags: u32,
+    /// Annotations on this field (`field_annotation` in the annotation_directory), if any.
+    pub annotations: Vec<Annotation>,
 }
 
 /// A method with its access flags and optional code.
@@ -145,6 +147,8 @@ pub struct EncodedMethod {
     pub method: MethodRef,
     pub access_flags: u32,
     pub code: Option<CodeItem>,
+    /// Annotations on this method (`method_annotation` in the annotation_directory), if any.
+    pub annotations: Vec<Annotation>,
 }
 
 /// A class definition.
@@ -161,6 +165,21 @@ pub struct ClassDef {
     pub virtual_methods: Vec<EncodedMethod>,
     /// `static_field` initial values (`encoded_array`), if any.
     pub static_values: Vec<EncodedValue>,
+    /// Class-level annotations (`annotation_directory_item.class_annotations`), if any.
+    pub annotations: Vec<Annotation>,
+}
+
+/// A single DEX annotation (`annotation_item`: visibility + `encoded_annotation`).
+/// Only no-element (marker) annotations are modeled so far.
+#[derive(Debug, Clone)]
+pub struct Annotation {
+    /// 1 = VISIBILITY_RUNTIME, 0 = VISIBILITY_BUILD, 2 = VISIBILITY_SYSTEM.
+    pub visibility: u8,
+    /// Type descriptor, e.g. `LAnn;`.
+    pub type_: String,
+    /// Element name → value pairs (empty for a marker annotation). The writer emits them
+    /// sorted by element-name string index, as d8 requires.
+    pub elements: Vec<(String, EncodedValue)>,
 }
 
 /// A subset of `encoded_value` sufficient for static field initializers.
@@ -168,9 +187,19 @@ pub struct ClassDef {
 pub enum EncodedValue {
     Int(i32),
     Long(i64),
+    Float(f32),
+    Double(f64),
     Boolean(bool),
     String(String),
     Null,
+    /// `encoded_array` (VALUE_ARRAY 0x1c): a nested array of values (annotation elements).
+    Array(Vec<EncodedValue>),
+    /// `VALUE_ENUM` (0x1b): an enum constant, encoded as the constant's static field index.
+    Enum(FieldRef),
+    /// `VALUE_TYPE` (0x18): a type, encoded as a type index.
+    Type(String),
+    /// `VALUE_METHOD` (0x1a): a method, encoded as a method index.
+    Method(MethodRef),
 }
 
 /// A whole DEX file model.

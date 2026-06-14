@@ -1,0 +1,9 @@
+@JvmInline
+value class Buf(val s: IntArray)
+
+fun main() {
+    val a = Buf(intArrayOf(1, 2, 3))
+    val b = Buf(intArrayOf(1, 2, 3))
+    val c = Buf(intArrayOf(9, 9))
+    println("${a == b},${a == c}")
+}

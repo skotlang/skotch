@@ -66,6 +66,25 @@ impl Pools {
             for ef in c.static_fields.iter().chain(&c.instance_fields) {
                 collect_field(&ef.field, &mut strings, &mut types, &mut fields);
             }
+            for v in &c.static_values {
+                if let EncodedValue::String(s) = v {
+                    strings.insert(s.clone());
+                }
+            }
+            for a in c
+                .annotations
+                .iter()
+                .chain(c.static_fields.iter().flat_map(|f| &f.annotations))
+                .chain(c.instance_fields.iter().flat_map(|f| &f.annotations))
+                .chain(c.direct_methods.iter().flat_map(|m| &m.annotations))
+                .chain(c.virtual_methods.iter().flat_map(|m| &m.annotations))
+            {
+                add_type(&mut types, &mut strings, &a.type_);
+                for (name, value) in &a.elements {
+                    strings.insert(name.clone());
+                    collect_value_refs(value, &mut strings, &mut types, &mut fields, &mut methods, &mut protos);
+                }
+            }
             for em in c.direct_methods.iter().chain(&c.virtual_methods) {
                 collect_method(&em.method, &mut strings, &mut types, &mut protos, &mut methods);
                 if let Some(code) = &em.code {
@@ -110,16 +129,20 @@ impl Pools {
         // walking the (already-sorted) protos and then class interfaces — NOT
         // sorted by content. (ConvAll's `(I)F`/`(J)F`/`(D)F` protos expose this:
         // type_lists come out D,I,J,F by first use, not D,F,I,J by content.)
+        // d8 adds each class's interfaces type_list (from the class_def) BEFORE the proto
+        // param type_lists (collected later from method protos), so interfaces come first in
+        // the section. (ConvAll — no interfaces — only exposed the proto order: D,I,J,F by
+        // first use; AbstractMutableList exposes interfaces-before-protos.)
         let mut type_lists: Vec<Vec<String>> = Vec::new();
         let mut tl_seen: std::collections::HashSet<Vec<String>> = Default::default();
-        for p in &protos {
-            if !p.params.is_empty() && tl_seen.insert(p.params.clone()) {
-                type_lists.push(p.params.clone());
-            }
-        }
         for c in &file.classes {
             if !c.interfaces.is_empty() && tl_seen.insert(c.interfaces.clone()) {
                 type_lists.push(c.interfaces.clone());
+            }
+        }
+        for p in &protos {
+            if !p.params.is_empty() && tl_seen.insert(p.params.clone()) {
+                type_lists.push(p.params.clone());
             }
         }
 
@@ -245,7 +268,70 @@ impl Pools {
             data.put_u8(0);
         }
 
-        // (5 annotation, 6 class_data, 7 encoded_array, 8 annotation_set, …)
+        // Per-class annotation layout in d8's order: annotated methods (by method_idx), then
+        // annotated fields (by field_idx), then the class itself. Within an owner, annotations
+        // are sorted by type_idx. Items and sets are both laid out in this order.
+        struct Owner<'a> {
+            idx: u32, // field_idx / method_idx (unused for class)
+            anns: Vec<&'a Annotation>,
+        }
+        let mut layouts: Vec<(Vec<Owner>, Vec<Owner>, Vec<&Annotation>)> = Vec::new();
+        for c in &file.classes {
+            let mut methods: Vec<Owner> = c
+                .direct_methods
+                .iter()
+                .chain(&c.virtual_methods)
+                .filter(|m| !m.annotations.is_empty())
+                .map(|m| Owner {
+                    idx: self.method_idx[&m.method],
+                    anns: sort_anns_by_type(&m.annotations, &self.type_idx),
+                })
+                .collect();
+            methods.sort_by_key(|o| o.idx);
+            let mut fields: Vec<Owner> = c
+                .static_fields
+                .iter()
+                .chain(&c.instance_fields)
+                .filter(|f| !f.annotations.is_empty())
+                .map(|f| Owner {
+                    idx: self.field_idx[&f.field],
+                    anns: sort_anns_by_type(&f.annotations, &self.type_idx),
+                })
+                .collect();
+            fields.sort_by_key(|o| o.idx);
+            layouts.push((methods, fields, sort_anns_by_type(&c.annotations, &self.type_idx)));
+        }
+
+        // 5. annotation_item (no align): emitted in layout order (methods, fields, class per
+        //    class), deduped by full content. MUST precede class_data.
+        let mut item_off: std::collections::HashMap<Vec<u8>, u32> = std::collections::HashMap::new();
+        let mut item_count = 0u32;
+        let mut first_item_off = 0u32;
+        {
+            let mut emit = |data: &mut DataSection, a: &Annotation, this: &Self| {
+                let bytes = this.encode_annotation(a);
+                if !item_off.contains_key(&bytes) {
+                    let off = data.pos();
+                    if item_count == 0 {
+                        first_item_off = off;
+                    }
+                    item_count += 1;
+                    data.put_bytes(&bytes);
+                    item_off.insert(bytes, off);
+                }
+            };
+            for (methods, fields, class) in &layouts {
+                for o in methods.iter().chain(fields.iter()) {
+                    for a in &o.anns {
+                        emit(&mut data, a, self);
+                    }
+                }
+                for a in class {
+                    emit(&mut data, a, self);
+                }
+            }
+        }
+
         // 6. class_data (no align)
         let mut class_data_off: Vec<u32> = vec![0; file.classes.len()];
         for (ci, c) in file.classes.iter().enumerate() {
@@ -255,13 +341,102 @@ impl Pools {
             }
         }
 
-        // 8. annotation_set (align 4): d8 always materializes one empty
-        //    annotation_set_item (DexAnnotationSet.empty singleton) per DEX.
+        // 7. encoded_array (static_values), no alignment — between class_data and
+        //    annotation_set. One per class whose static fields have constant inits.
+        let mut static_values_off: Vec<u32> = vec![0; file.classes.len()];
+        for (ci, c) in file.classes.iter().enumerate() {
+            if !c.static_values.is_empty() {
+                static_values_off[ci] = data.pos();
+                let mut buf = Vec::new();
+                write_uleb128(&mut buf, c.static_values.len() as u32);
+                for v in &c.static_values {
+                    self.encode_value(&mut buf, v);
+                }
+                data.put_bytes(&buf);
+            }
+        }
+
+        // 8. annotation_set (align 4): d8 materializes the empty annotation_set singleton ONLY
+        //    when the dex has a class_data_item (e.g. a pure abstract marker annotation interface
+        //    with no methods/fields omits it). Then one set per annotated owner in layout order
+        //    (methods, fields, class per class), deduped by content.
+        let dex_has_class_data = class_data_off.iter().any(|&o| o != 0);
         let annotation_set_off = data.align(4);
-        data.put_u32(0); // empty annotation_set_item (size 0)
+        let mut set_off: std::collections::HashMap<Vec<u8>, u32> = std::collections::HashMap::new();
+        let mut set_count = 0u32;
+        if dex_has_class_data {
+            data.put_u32(0); // empty annotation_set_item (size 0)
+            set_count = 1;
+        }
+        let mut class_set_off: Vec<u32> = vec![0; file.classes.len()];
+        let mut field_dir: Vec<Vec<(u32, u32)>> = vec![Vec::new(); file.classes.len()];
+        let mut method_dir: Vec<Vec<(u32, u32)>> = vec![Vec::new(); file.classes.len()];
+        for (ci, (methods, fields, class)) in layouts.iter().enumerate() {
+            // Build a set's bytes (item offsets, in the owner's type_idx order) and emit-or-reuse.
+            let mut emit_set = |data: &mut DataSection, anns: &[&Annotation]| -> u32 {
+                let mut bytes = Vec::new();
+                push_u32(&mut bytes, anns.len() as u32);
+                for a in anns {
+                    push_u32(&mut bytes, item_off[&self.encode_annotation(a)]);
+                }
+                if let Some(&o) = set_off.get(&bytes) {
+                    return o;
+                }
+                let o = data.align(4);
+                data.put_bytes(&bytes);
+                set_off.insert(bytes, o);
+                set_count += 1;
+                o
+            };
+            for o in methods {
+                let so = emit_set(&mut data, &o.anns);
+                method_dir[ci].push((o.idx, so));
+            }
+            for o in fields {
+                let so = emit_set(&mut data, &o.anns);
+                field_dir[ci].push((o.idx, so));
+            }
+            if !class.is_empty() {
+                class_set_off[ci] = emit_set(&mut data, class);
+            }
+        }
+
+        // 9. annotation_directory_item (align 4): one per class with ANY annotation. class/field/
+        //    method arrays; d8 points class_annotations at the empty set when only members are
+        //    annotated. field_annotation[] sorted by field_idx, method_annotation[] by method_idx.
+        let mut annotation_dir_off: Vec<u32> = vec![0; file.classes.len()];
+        for ci in 0..file.classes.len() {
+            let has_any =
+                class_set_off[ci] != 0 || !field_dir[ci].is_empty() || !method_dir[ci].is_empty();
+            if !has_any {
+                continue;
+            }
+            annotation_dir_off[ci] = data.align(4);
+            let class_off =
+                if class_set_off[ci] != 0 { class_set_off[ci] } else { annotation_set_off };
+            data.put_u32(class_off);
+            data.put_u32(field_dir[ci].len() as u32);
+            data.put_u32(method_dir[ci].len() as u32);
+            data.put_u32(0); // annotated_parameters_size
+            for &(fi, so) in &field_dir[ci] {
+                data.put_u32(fi);
+                data.put_u32(so);
+            }
+            for &(mi, so) in &method_dir[ci] {
+                data.put_u32(mi);
+                data.put_u32(so);
+            }
+        }
+        let annotation_set_count = set_count;
 
         // map_list (align 4)
         let map_off = data.align(4);
+        let annotation_item_map: Option<(u32, u32)> =
+            if item_count > 0 { Some((item_count, first_item_off)) } else { None };
+        let annotation_dir_first = annotation_dir_off.iter().copied().filter(|&o| o != 0).min();
+        let annotation_dir_map: Option<(u32, u32)> = annotation_dir_first.map(|first| {
+            (annotation_dir_off.iter().filter(|&&o| o != 0).count() as u32, first)
+        });
         let map = self.build_map(
             file,
             string_ids_off,
@@ -275,7 +450,11 @@ impl Pools {
             &type_list_off,
             string_data_off[0],
             &class_data_off,
+            &static_values_off,
+            annotation_item_map,
             annotation_set_off,
+            annotation_set_count as u32,
+            annotation_dir_map,
             map_off,
         );
         data.put_bytes(&map);
@@ -343,9 +522,9 @@ impl Pools {
                 base + 16,
                 c.source_file.as_ref().map(|s| self.string_idx[s]).unwrap_or(NO_INDEX),
             );
-            put_u32(&mut out, base + 20, 0); // annotations_off (TODO)
+            put_u32(&mut out, base + 20, annotation_dir_off[ci]); // annotations_off
             put_u32(&mut out, base + 24, class_data_off[ci]);
-            put_u32(&mut out, base + 28, 0); // static_values_off (TODO)
+            put_u32(&mut out, base + 28, static_values_off[ci]);
         }
 
         // header
@@ -541,6 +720,49 @@ impl Pools {
         }
     }
 
+    /// Encodes one `encoded_value` (DEX §encoded_value): a `(value_arg<<5)|value_type`
+    /// header byte then the value bytes. Ints/longs use the minimal sign-extended
+    /// length; the string index uses minimal unsigned length; booleans/null carry the
+    /// payload in `value_arg` with no trailing bytes.
+    fn encode_value(&self, buf: &mut Vec<u8>, v: &EncodedValue) {
+        match v {
+            EncodedValue::Int(c) => put_signed_value(buf, 0x04, *c as i64),
+            EncodedValue::Long(c) => put_signed_value(buf, 0x06, *c),
+            EncodedValue::Float(f) => put_right_zero_extended(buf, 0x10, (f.to_bits() as u64) << 32),
+            EncodedValue::Double(d) => put_right_zero_extended(buf, 0x11, d.to_bits()),
+            EncodedValue::String(s) => put_unsigned_value(buf, 0x17, self.string_idx[s]),
+            EncodedValue::Boolean(b) => buf.push((u8::from(*b) << 5) | 0x1f),
+            EncodedValue::Null => buf.push(0x1e),
+            EncodedValue::Array(items) => {
+                // VALUE_ARRAY (0x1c): no value_arg, then an encoded_array (uleb size + values).
+                buf.push(0x1c);
+                write_uleb128(buf, items.len() as u32);
+                for it in items {
+                    self.encode_value(buf, it);
+                }
+            }
+            EncodedValue::Enum(f) => put_unsigned_value(buf, 0x1b, self.field_idx[f]),
+            EncodedValue::Type(t) => put_unsigned_value(buf, 0x18, self.type_idx[t]),
+            EncodedValue::Method(m) => put_unsigned_value(buf, 0x1a, self.method_idx[m]),
+        }
+    }
+
+    /// Encodes one `annotation_item`'s body: `visibility` byte + `encoded_annotation`
+    /// (`uleb(type_idx) uleb(size)` then each `uleb(name_idx) encoded_value`, the pairs
+    /// SORTED by element-name string index as d8 requires).
+    fn encode_annotation(&self, a: &Annotation) -> Vec<u8> {
+        let mut buf = vec![a.visibility];
+        write_uleb128(&mut buf, self.type_idx[&a.type_]);
+        write_uleb128(&mut buf, a.elements.len() as u32);
+        let mut els: Vec<&(String, EncodedValue)> = a.elements.iter().collect();
+        els.sort_by_key(|(name, _)| self.string_idx[name]);
+        for (name, value) in els {
+            write_uleb128(&mut buf, self.string_idx[name]);
+            self.encode_value(&mut buf, value);
+        }
+        buf
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn build_map(
         &self,
@@ -556,7 +778,11 @@ impl Pools {
         type_list_off: &BTreeMap<Vec<String>, u32>,
         first_string_data_off: u32,
         class_data_off: &[u32],
+        static_values_off: &[u32],
+        annotation_item_map: Option<(u32, u32)>,
         annotation_set_off: u32,
+        annotation_set_count: u32,
+        annotation_dir_map: Option<(u32, u32)>,
         map_off: u32,
     ) -> Vec<u8> {
         let mut entries: Vec<(u16, u32, u32)> = Vec::new();
@@ -593,7 +819,23 @@ impl Pools {
             let first = *class_data_off.iter().filter(|&&o| o != 0).min().unwrap();
             entries.push((0x2000, class_data_count as u32, first));
         }
-        entries.push((0x1003, 1, annotation_set_off)); // empty annotation set
+        let sv_count = static_values_off.iter().filter(|&&o| o != 0).count();
+        if sv_count > 0 {
+            let first = *static_values_off.iter().filter(|&&o| o != 0).min().unwrap();
+            entries.push((0x2005, sv_count as u32, first));
+        }
+        // annotation_item (0x2004) precedes class_data in the data section.
+        if let Some((count, first)) = annotation_item_map {
+            entries.push((0x2004, count, first));
+        }
+        // annotation_set_item (0x1003): the empty singleton (only with class_data) + per-owner sets.
+        if annotation_set_count > 0 {
+            entries.push((0x1003, annotation_set_count, annotation_set_off));
+        }
+        // annotation_directory_item (0x2006): one per annotated class.
+        if let Some((count, first)) = annotation_dir_map {
+            entries.push((0x2006, count, first));
+        }
         entries.push((0x1000, 1, map_off));
 
         // Map must be sorted by offset.
@@ -611,6 +853,51 @@ impl Pools {
 }
 
 const NO_INDEX: u32 = 0xffff_ffff;
+
+/// Writes a signed `encoded_value` (int/long): header `(value_arg<<5)|type` where
+/// value_arg = byte_count-1, then the minimal sign-extended little-endian bytes.
+fn put_signed_value(buf: &mut Vec<u8>, value_type: u8, mut v: i64) {
+    let mut bytes = Vec::new();
+    loop {
+        let b = (v & 0xff) as u8;
+        bytes.push(b);
+        v >>= 8; // arithmetic shift keeps the sign
+        if (v == 0 && b & 0x80 == 0) || (v == -1 && b & 0x80 != 0) {
+            break;
+        }
+    }
+    buf.push(((bytes.len() as u8 - 1) << 5) | value_type);
+    buf.extend_from_slice(&bytes);
+}
+
+/// Writes a float/double `encoded_value` (DEX VALUE_FLOAT/VALUE_DOUBLE): the value's
+/// raw bit pattern, trailing-zero-*byte*-trimmed and stored as the *high* bytes
+/// little-endian (the reader right-zero-extends back to 4/8 bytes). Float bits are
+/// passed left-shifted into the high 32 bits of `bits`. Mirrors dx's
+/// `EncodedValueCodec.writeRightZeroExtendedValue`.
+fn put_right_zero_extended(buf: &mut Vec<u8>, value_type: u8, bits: u64) {
+    let required_bits = 64 - bits.trailing_zeros() as usize; // 0 only when bits == 0
+    let required_bytes = if required_bits == 0 { 1 } else { required_bits.div_ceil(8) };
+    let v = bits >> (64 - required_bytes * 8); // bring the high bytes down
+    buf.push(((required_bytes as u8 - 1) << 5) | value_type);
+    for i in 0..required_bytes {
+        buf.push(((v >> (i * 8)) & 0xff) as u8);
+    }
+}
+
+/// Writes an unsigned `encoded_value` (e.g. a string index): minimal little-endian.
+fn put_unsigned_value(buf: &mut Vec<u8>, value_type: u8, mut v: u32) {
+    let mut bytes = Vec::new();
+    loop {
+        bytes.push((v & 0xff) as u8);
+        v >>= 8;
+        if v == 0 {
+            break;
+        }
+    }
+    buf.push(((bytes.len() as u8 - 1) << 5) | value_type);
+    buf.extend_from_slice(&bytes);
+}
 
 fn class_has_data(c: &ClassDef) -> bool {
     !c.static_fields.is_empty()
@@ -753,6 +1040,46 @@ fn descriptor_to_source(desc: &str) -> String {
         s.push_str("[]");
     }
     s
+}
+
+/// Adds every `String` referenced by an annotation element value (including nested array
+/// elements) to the string pool, so they get string ids before encoding.
+/// The annotations of one owner, sorted ascending by type_idx (d8's set/item order).
+fn sort_anns_by_type<'a>(
+    list: &'a [Annotation],
+    type_idx: &BTreeMap<String, u32>,
+) -> Vec<&'a Annotation> {
+    let mut v: Vec<&Annotation> = list.iter().collect();
+    v.sort_by_key(|a| type_idx[&a.type_]);
+    v
+}
+
+#[allow(clippy::too_many_arguments)]
+fn collect_value_refs(
+    v: &EncodedValue,
+    strings: &mut std::collections::BTreeSet<String>,
+    types: &mut std::collections::BTreeSet<String>,
+    fields: &mut std::collections::BTreeSet<FieldRef>,
+    methods: &mut std::collections::BTreeSet<MethodRef>,
+    protos: &mut std::collections::BTreeSet<ProtoRef>,
+) {
+    match v {
+        EncodedValue::String(s) => {
+            strings.insert(s.clone());
+        }
+        EncodedValue::Array(items) => {
+            for it in items {
+                collect_value_refs(it, strings, types, fields, methods, protos);
+            }
+        }
+        EncodedValue::Enum(f) => collect_field(f, strings, types, fields),
+        EncodedValue::Type(t) => {
+            types.insert(t.clone());
+            strings.insert(t.clone());
+        }
+        EncodedValue::Method(m) => collect_method(m, strings, types, protos, methods),
+        _ => {}
+    }
 }
 
 fn collect_field(

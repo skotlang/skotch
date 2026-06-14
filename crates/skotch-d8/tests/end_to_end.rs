@@ -660,6 +660,252 @@ fn wide_arith_in_loop_byte_identical() {
     );
 }
 
+/// Object allocation in/around loops: `iota` (`new-array v0, v2, [I` + aput +
+/// `return-object`) and `build` (`new-instance StringBuilder` + invoke-direct
+/// `<init>` + a loop calling `sb.append(i)` whose StringBuilder result is DISCARDED
+/// — no move-result — then `sb.length()` whose result IS used). Exercises
+/// new-instance/new-array (type fixups), the new+dup+<init> idiom, discarded call
+/// results (pop), and return-object. Full `.dex` byte-identical.
+#[test]
+fn new_instance_and_array_in_loop_byte_identical() {
+    let cf = skotch_classfile::parse_class_file(&fixtures().join("NewLoop.class")).unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let produced = dex_classes(&[cf], &opts).unwrap();
+    let golden = std::fs::read(fixtures().join("NewLoop.d8.dex")).unwrap();
+    if produced != golden {
+        std::fs::write("/tmp/skotch-NewLoop-produced.dex", &produced).unwrap();
+    }
+    skotch_dex::validator::validate(&produced).expect("self-validation");
+    assert_eq!(
+        produced,
+        golden,
+        "New-instance/array battery: produced {} vs golden {}; first diff {:?}",
+        produced.len(),
+        golden.len(),
+        (0..produced.len().min(golden.len())).find(|&i| produced[i] != golden[i])
+    );
+}
+
+/// String constants in loops: `useStr` (`c += "abc".length()`) emits
+/// `const-string v2, "abc"` (a string-ref fixup, throwing in d8's model → a debug
+/// position) + invoke-virtual length. Exercises ldc resolution + const-string.
+/// Full `.dex` byte-identical.
+#[test]
+fn const_string_in_loop_byte_identical() {
+    let cf = skotch_classfile::parse_class_file(&fixtures().join("StrLoop.class")).unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let produced = dex_classes(&[cf], &opts).unwrap();
+    let golden = std::fs::read(fixtures().join("StrLoop.d8.dex")).unwrap();
+    if produced != golden {
+        std::fs::write("/tmp/skotch-StrLoop-produced.dex", &produced).unwrap();
+    }
+    skotch_dex::validator::validate(&produced).expect("self-validation");
+    assert_eq!(
+        produced,
+        golden,
+        "Const-string-in-loop battery: produced {} vs golden {}; first diff {:?}",
+        produced.len(),
+        golden.len(),
+        (0..produced.len().min(golden.len())).find(|&i| produced[i] != golden[i])
+    );
+}
+
+/// Integer div/rem in loops (throwing → debug positions): `sumDiv` (`n / i` →
+/// 3-addr `div-int`), `halves` (`i / 2` → `div-int/lit8`), `mods` (`n % i` →
+/// `rem-int`). `sumDiv`/`mods` use `for(i=1;...)`, so the loop-var inits DIFFER
+/// (s=0, i=1) → d8 keeps the accumulator in the low register (v0); this validates
+/// the GVN-identical-inits φ-ordering rule. Full `.dex` byte-identical.
+#[test]
+fn int_div_rem_in_loop_byte_identical() {
+    let cf = skotch_classfile::parse_class_file(&fixtures().join("DivLoop.class")).unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let produced = dex_classes(&[cf], &opts).unwrap();
+    let golden = std::fs::read(fixtures().join("DivLoop.d8.dex")).unwrap();
+    if produced != golden {
+        std::fs::write("/tmp/skotch-DivLoop-produced.dex", &produced).unwrap();
+    }
+    skotch_dex::validator::validate(&produced).expect("self-validation");
+    assert_eq!(
+        produced,
+        golden,
+        "Int-div/rem-in-loop battery: produced {} vs golden {}; first diff {:?}",
+        produced.len(),
+        golden.len(),
+        (0..produced.len().min(golden.len())).find(|&i| produced[i] != golden[i])
+    );
+}
+
+/// Forward branches INSIDE a loop body: `condAdd` (`if (i>2) s += i` — a
+/// conditional in-place update; the merge-φ for `s` coalesces, no move) and
+/// `ifElse` (`if (i>2) s += i; else s -= i` — both arms update `s` in place,
+/// merge-φ coalesces). Exercises an intra-loop if-merge φ + the forward
+/// if/goto branch fixups. Full `.dex` byte-identical.
+#[test]
+fn forward_branch_in_loop_byte_identical() {
+    let cf = skotch_classfile::parse_class_file(&fixtures().join("IfLoop.class")).unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let produced = dex_classes(&[cf], &opts).unwrap();
+    let golden = std::fs::read(fixtures().join("IfLoop.d8.dex")).unwrap();
+    if produced != golden {
+        std::fs::write("/tmp/skotch-IfLoop-produced.dex", &produced).unwrap();
+    }
+    skotch_dex::validator::validate(&produced).expect("self-validation");
+    assert_eq!(
+        produced,
+        golden,
+        "Forward-branch-in-loop battery: produced {} vs golden {}; first diff {:?}",
+        produced.len(),
+        golden.len(),
+        (0..produced.len().min(golden.len())).find(|&i| produced[i] != golden[i])
+    );
+}
+
+/// A ternary with constant arms inside a loop: `int x = (i>0) ? 1 : 2; s += x`.
+/// The ternary result lives on the OPERAND STACK across the branch merge, so this
+/// exercises stack-merge φs (modeling the operand stack as SSA values). Both const
+/// arms rematerialize into the shared φ register (`const v2,#1` / `const v2,#2`) —
+/// the stack-φ coalesces, no move. Full `.dex` byte-identical.
+#[test]
+fn const_ternary_in_loop_byte_identical() {
+    let cf = skotch_classfile::parse_class_file(&fixtures().join("TernLoop.class")).unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let produced = dex_classes(&[cf], &opts).unwrap();
+    let golden = std::fs::read(fixtures().join("TernLoop.d8.dex")).unwrap();
+    if produced != golden {
+        std::fs::write("/tmp/skotch-TernLoop-produced.dex", &produced).unwrap();
+    }
+    skotch_dex::validator::validate(&produced).expect("self-validation");
+    assert_eq!(
+        produced,
+        golden,
+        "Const-ternary-in-loop battery: produced {} vs golden {}; first diff {:?}",
+        produced.len(),
+        golden.len(),
+        (0..produced.len().min(golden.len())).find(|&i| produced[i] != golden[i])
+    );
+}
+
+/// `break` and `continue` inside a loop: `withBreak` (`if(i>5) break`) and
+/// `withContinue` (`if(i>5) continue`). These are forward branches out of / to the
+/// loop's back-edge region; the merge-φ for `s` coalesces. Full `.dex`
+/// byte-identical.
+#[test]
+fn break_continue_in_loop_byte_identical() {
+    let cf = skotch_classfile::parse_class_file(&fixtures().join("BreakLoop.class")).unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let produced = dex_classes(&[cf], &opts).unwrap();
+    let golden = std::fs::read(fixtures().join("BreakLoop.d8.dex")).unwrap();
+    if produced != golden {
+        std::fs::write("/tmp/skotch-BreakLoop-produced.dex", &produced).unwrap();
+    }
+    skotch_dex::validator::validate(&produced).expect("self-validation");
+    assert_eq!(
+        produced,
+        golden,
+        "Break/continue battery: produced {} vs golden {}; first diff {:?}",
+        produced.len(),
+        golden.len(),
+        (0..produced.len().min(golden.len())).find(|&i| produced[i] != golden[i])
+    );
+}
+
+/// Compound conditions and nesting inside a loop: `andCond` (`if(i>2 && i<8)` —
+/// short-circuit &&), `orCond` (`if(i<2 || i>8)` — short-circuit ||), `nestedIf`
+/// (`if(i>2){ if(i<8) ... }`). All are forward short-circuit branches with a
+/// coalescing merge-φ for `s`. Full `.dex` byte-identical.
+#[test]
+fn compound_conditions_in_loop_byte_identical() {
+    let cf = skotch_classfile::parse_class_file(&fixtures().join("CondLoop.class")).unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let produced = dex_classes(&[cf], &opts).unwrap();
+    let golden = std::fs::read(fixtures().join("CondLoop.d8.dex")).unwrap();
+    if produced != golden {
+        std::fs::write("/tmp/skotch-CondLoop-produced.dex", &produced).unwrap();
+    }
+    skotch_dex::validator::validate(&produced).expect("self-validation");
+    assert_eq!(
+        produced,
+        golden,
+        "Compound-conditions battery: produced {} vs golden {}; first diff {:?}",
+        produced.len(),
+        golden.len(),
+        (0..produced.len().min(golden.len())).find(|&i| produced[i] != golden[i])
+    );
+}
+
+/// A live-through φ-MOVE: `int x = (i>5) ? a : b` where `a`/`b` are live params, so
+/// the x merge-φ can't coalesce with either — d8 emits `move v2,v3` (x=a) on one
+/// arm and `move v2,v4` (x=b) on the other (each predecessor is single-successor →
+/// no edge split). Exercises φ-move insertion + `is_ref`/width move-op selection.
+/// Full `.dex` byte-identical.
+#[test]
+fn phi_move_select_in_loop_byte_identical() {
+    let cf = skotch_classfile::parse_class_file(&fixtures().join("SelLoop.class")).unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let produced = dex_classes(&[cf], &opts).unwrap();
+    let golden = std::fs::read(fixtures().join("SelLoop.d8.dex")).unwrap();
+    if produced != golden {
+        std::fs::write("/tmp/skotch-SelLoop-produced.dex", &produced).unwrap();
+    }
+    skotch_dex::validator::validate(&produced).expect("self-validation");
+    assert_eq!(
+        produced,
+        golden,
+        "φ-move select battery: produced {} vs golden {}; first diff {:?}",
+        produced.len(),
+        golden.len(),
+        (0..produced.len().min(golden.len())).find(|&i| produced[i] != golden[i])
+    );
+}
+
+/// Two conditionally-selected variables at one merge: `if(i>0){x=a;y=c;}else{...}`.
+/// Each edge needs TWO φ-moves (`move v2,v4; move v3,v6` etc.) — validates the
+/// multi-move-per-edge path (independent moves, no parallel-copy cycle) in φ-move
+/// order. Full `.dex` byte-identical.
+#[test]
+fn two_phi_moves_per_edge_byte_identical() {
+    let cf = skotch_classfile::parse_class_file(&fixtures().join("Sel2.class")).unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let produced = dex_classes(&[cf], &opts).unwrap();
+    let golden = std::fs::read(fixtures().join("Sel2.d8.dex")).unwrap();
+    if produced != golden {
+        std::fs::write("/tmp/skotch-Sel2-produced.dex", &produced).unwrap();
+    }
+    skotch_dex::validator::validate(&produced).expect("self-validation");
+    assert_eq!(
+        produced,
+        golden,
+        "Two-φ-move battery: produced {} vs golden {}; first diff {:?}",
+        produced.len(),
+        golden.len(),
+        (0..produced.len().min(golden.len())).find(|&i| produced[i] != golden[i])
+    );
+}
+
+/// try/catch inside a loop: `for(...) { try { s += n/i } catch(ArithmeticException e) { s += 1 } }`.
+/// Exercises the exception-handler SSA path — a handler-φ snapshots `s` at the
+/// throw point (the `div-int`), the dead catch var emits no `move-exception`, and
+/// the `try_item` narrows to just the guarded `div-int` (0x0004–0x0006).
+#[test]
+fn try_catch_in_loop_byte_identical() {
+    let cf = skotch_classfile::parse_class_file(&fixtures().join("TryLoop.class")).unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let produced = dex_classes(&[cf], &opts).unwrap();
+    let golden = std::fs::read(fixtures().join("TryLoop.d8.dex")).unwrap();
+    if produced != golden {
+        std::fs::write("/tmp/skotch-TryLoop-produced.dex", &produced).unwrap();
+    }
+    skotch_dex::validator::validate(&produced).expect("self-validation");
+    assert_eq!(
+        produced,
+        golden,
+        "TryLoop: produced {} vs golden {}; first diff {:?}",
+        produced.len(),
+        golden.len(),
+        (0..produced.len().min(golden.len())).find(|&i| produced[i] != golden[i])
+    );
+}
+
 #[test]
 fn empty_class_end_to_end_byte_identical() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("Empty.class")).unwrap();

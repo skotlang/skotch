@@ -16,10 +16,10 @@
 //! are not yet read.
 #![allow(dead_code)]
 
-use crate::bootstrap::{split_blocks, Block};
+use crate::bootstrap::{split_blocks_with, Block};
 use anyhow::{bail, Result};
-use skotch_classfile::model::ClassFile;
-use skotch_dex::model::{FieldRef, Fixup, ItemRef, MethodRef, ProtoRef};
+use skotch_classfile::model::{ClassFile, ExceptionEntry};
+use skotch_dex::model::{CatchHandler, FieldRef, Fixup, ItemRef, MethodRef, ProtoRef, TryItem};
 use std::collections::{BTreeMap, BTreeSet};
 
 // ───────────────────────────── SSA IR ─────────────────────────────
@@ -35,8 +35,14 @@ pub(crate) enum SsaOp {
     Argument { index: usize },
     ConstInt(i32),
     ConstLong(i64),
-    ConstString(String),
-    Binop { jvm_op: u8, a: ValId, b: ValId },
+    /// A string constant (`const-string dest, string@`). Throwing in d8's model,
+    /// so it records a debug position (`jvm_pc` locates the source line).
+    ConstString { value: String, jvm_pc: u32 },
+    /// `const-class dest, type@` (21c) — the `X.class` literal. Throwing (class init /
+    /// NoClassDefFound). Result is a `Ljava/lang/Class;` ref.
+    ConstClass { type_desc: String, jvm_pc: u32 },
+    /// `jvm_pc` locates the source line for div/rem (which are throwing).
+    Binop { jvm_op: u8, a: ValId, b: ValId, jvm_pc: u32 },
     Unop { jvm_op: u8, a: ValId },
     Cmp { jvm_op: u8, a: ValId, b: ValId },
     /// A method call: emits `invoke-* {args}` (+ `move-result` if non-void). The
@@ -68,6 +74,34 @@ pub(crate) enum SsaOp {
     NewInstance { type_desc: String, jvm_pc: u32 },
     /// `new-array dest, size, type@` (22c). Throwing (NegativeArraySize). Ref result.
     NewArray { type_desc: String, size: ValId, jvm_pc: u32 },
+    /// The caught exception at an exception-handler's entry (`move-exception dest`,
+    /// 11x). A ref result; emitted only if the caught value is actually used.
+    CaughtException,
+    /// `check-cast vAA, type@` (21c). Throwing (ClassCastException). In-place in DEX
+    /// (operates on one register); SSA models a result value that aliases `obj`, so
+    /// emission moves `obj` into the result register first if they didn't coalesce.
+    /// Result is a ref.
+    CheckCast { obj: ValId, type_desc: String, jvm_pc: u32 },
+    /// `instance-of vA, vB, type@` (22c). Non-throwing (null → false). Result is an
+    /// int (boolean 0/1).
+    InstanceOf { obj: ValId, type_desc: String, jvm_pc: u32 },
+}
+
+/// Whether a JVM opcode can throw (for placing exception edges from a try region
+/// to its handler). Conservative over the subset the SSA path emits.
+fn is_throwing_op(op: u8) -> bool {
+    matches!(op,
+        0xb6..=0xb9            // invoke*
+        | 0xb2..=0xb5          // get/put field/static
+        | 0x2e..=0x35          // *aload
+        | 0x4f..=0x56          // *astore
+        | 0xbe                 // arraylength
+        | 0x6c | 0x6d | 0x70 | 0x71  // i/l div/rem
+        | 0xbb..=0xbd          // new / newarray / anewarray
+        | 0xbf | 0xc0          // athrow / checkcast
+        | 0xc2 | 0xc3          // monitorenter / monitorexit
+        | 0x12 | 0x13          // ldc / ldc_w (const-string)
+    )
 }
 
 /// The result kind of a non-void call (selects the `move-result` variant).
@@ -82,6 +116,9 @@ pub(crate) struct SsaValue {
     pub(crate) id: ValId,
     pub(crate) op: SsaOp,
     pub(crate) wide: bool,
+    /// Holds an object reference (selects `move-object` for a φ-move / `return-object`).
+    /// Inferred in a post-pass after construction.
+    pub(crate) is_ref: bool,
     pub(crate) block: usize,
 }
 
@@ -97,6 +134,17 @@ pub(crate) enum Terminator {
     Return { value: Option<ValId>, op: u16 },
     /// Falls through to the single successor with no explicit branch.
     Fall { target: usize },
+    /// `throw vAA` (0x27, 11x). Ends the block with no NORMAL successor; the
+    /// exceptional edge to a covering handler is carried by `exc_succ`/the handler-φ
+    /// snapshot (athrow is in `is_throwing_op`), not by `succ`. `jvm_pc` locates the
+    /// athrow so its emitted span joins the try_item range (it IS a guarded throwing
+    /// instruction — the one that actually raises, so the handler must cover it).
+    Throw { value: ValId, jvm_pc: u32 },
+    /// `tableswitch`/`lookupswitch` on `value`. Lowered (functional-correctness, not
+    /// d8's packed/sparse-switch payload) to a `const tmp,k; if-eq value,tmp,case`
+    /// chain + `goto default` in the emit phase. `cases` is `(key, target-block)`;
+    /// `default` is the fall-through block.
+    Switch { value: ValId, default: usize, cases: Vec<(i32, usize)> },
 }
 
 #[derive(Clone, Debug)]
@@ -108,25 +156,49 @@ pub(crate) struct SsaBlock {
     pub(crate) term: Terminator,
     pub(crate) succ: Vec<usize>,
     pub(crate) preds: Vec<usize>,
+    /// Exception-handler blocks reachable from a throwing instruction in this block
+    /// (for liveness — a handler's live-in flows back as this block's live-out).
+    pub(crate) exc_succ: Vec<usize>,
+}
+
+/// A resolved try region for DEX `try_item` emission: a JVM pc range whose throwing
+/// instructions are guarded by `handler_block` catching `catch_type` (None = any).
+#[derive(Clone, Debug)]
+pub(crate) struct ExcRegion {
+    pub(crate) start_pc: usize,
+    pub(crate) end_pc: usize,
+    pub(crate) handler_block: usize,
+    pub(crate) catch_type: Option<String>,
 }
 
 pub(crate) struct SsaFn {
     pub(crate) values: Vec<SsaValue>,
     pub(crate) blocks: Vec<SsaBlock>,
     pub(crate) num_arg_registers: u16,
+    /// Try regions (for try_item emission); empty when the method has no try/catch.
+    pub(crate) exc_regions: Vec<ExcRegion>,
+    /// Per block: the caught-exception value at a handler's entry (`None` otherwise).
+    pub(crate) caught: Vec<Option<ValId>>,
 }
 
-/// The control-flow graph: blocks with successor AND predecessor edges.
+/// The control-flow graph: blocks with successor AND predecessor edges. Exception
+/// edges (a try-region block → its handler) are reflected in `preds` (so dominance
+/// and φ-placement treat the handler as dominated by the try) and listed in
+/// `exc_edges` (so rename can give the handler the throw-point state, not the
+/// block-exit state).
 pub(crate) struct Cfg {
     pub(crate) blocks: Vec<Block>,
     pub(crate) preds: Vec<Vec<usize>>,
     /// Reverse-postorder (entry first); the order dominance iterates in.
     pub(crate) rpo: Vec<usize>,
+    /// (try-region block, handler block) exception edges.
+    pub(crate) exc_edges: Vec<(usize, usize)>,
 }
 
 impl Cfg {
-    pub(crate) fn build(bc: &[u8]) -> Result<Cfg> {
-        let blocks = split_blocks(bc)?;
+    pub(crate) fn build(bc: &[u8], exceptions: &[ExceptionEntry]) -> Result<Cfg> {
+        let handler_pcs: Vec<usize> = exceptions.iter().map(|e| e.handler_pc as usize).collect();
+        let blocks = split_blocks_with(bc, &handler_pcs)?;
         let n = blocks.len();
         let mut preds = vec![Vec::new(); n];
         for (b, blk) in blocks.iter().enumerate() {
@@ -134,8 +206,37 @@ impl Cfg {
                 preds[s].push(b);
             }
         }
-        let rpo = reverse_postorder(&blocks);
-        Ok(Cfg { blocks, preds, rpo })
+        // Exception edges: a block overlapping a try region [start,end) and holding
+        // a throwing instruction there gets an edge to that region's handler.
+        let leader_block = |pc: usize| blocks.iter().position(|b| b.start == pc);
+        let mut exc_edges: Vec<(usize, usize)> = Vec::new();
+        for e in exceptions {
+            let h = leader_block(e.handler_pc as usize)
+                .ok_or_else(|| anyhow::anyhow!("ssa: handler pc {} not a block leader", e.handler_pc))?;
+            let (s, t) = (e.start_pc as usize, e.end_pc as usize);
+            for (bi, blk) in blocks.iter().enumerate() {
+                if blk.start >= t || blk.end <= s {
+                    continue; // no overlap with the try region
+                }
+                let mut pc = blk.start.max(s);
+                let mut throws = false;
+                while pc < blk.end.min(t) {
+                    if is_throwing_op(bc[pc]) {
+                        throws = true;
+                        break;
+                    }
+                    pc += crate::bootstrap::jvm_step_len(bc, pc);
+                }
+                if throws {
+                    exc_edges.push((bi, h));
+                    if !preds[h].contains(&bi) {
+                        preds[h].push(bi);
+                    }
+                }
+            }
+        }
+        let rpo = reverse_postorder(&blocks, &exc_edges);
+        Ok(Cfg { blocks, preds, rpo, exc_edges })
     }
 
     pub(crate) fn len(&self) -> usize {
@@ -143,19 +244,24 @@ impl Cfg {
     }
 }
 
-/// Reverse postorder from block 0 (a DFS finishing-order reversal).
-fn reverse_postorder(blocks: &[Block]) -> Vec<usize> {
+/// Reverse postorder from block 0 over normal + exception successors.
+fn reverse_postorder(blocks: &[Block], exc_edges: &[(usize, usize)]) -> Vec<usize> {
     let n = blocks.len();
+    let mut succ: Vec<Vec<usize>> = blocks.iter().map(|b| b.succ.clone()).collect();
+    for &(from, h) in exc_edges {
+        if !succ[from].contains(&h) {
+            succ[from].push(h);
+        }
+    }
     let mut visited = vec![false; n];
     let mut post = Vec::with_capacity(n);
-    // Iterative DFS to avoid recursion on deep CFGs.
     let mut stack: Vec<(usize, usize)> = vec![(0, 0)];
     visited[0] = true;
-    while let Some(&(b, ref _i)) = stack.last() {
+    while let Some(&(b, _)) = stack.last() {
         let i = stack.last().unwrap().1;
-        if i < blocks[b].succ.len() {
+        if i < succ[b].len() {
             stack.last_mut().unwrap().1 += 1;
-            let s = blocks[b].succ[i];
+            let s = succ[b][i];
             if !visited[s] {
                 visited[s] = true;
                 stack.push((s, 0));
@@ -262,6 +368,241 @@ pub(crate) fn def_sites(cfg: &Cfg, bc: &[u8]) -> BTreeMap<u16, BTreeSet<usize>> 
     sites
 }
 
+/// Whether `a` dominates `b` (walking `b`'s immediate-dominator chain to `a`).
+fn dominates(idom: &[usize], a: usize, b: usize) -> bool {
+    let mut x = b;
+    loop {
+        if x == a {
+            return true;
+        }
+        if x == 0 || idom[x] == usize::MAX || idom[x] == x {
+            return false;
+        }
+        x = idom[x];
+    }
+}
+
+/// The local slot a load opcode reads at `pc`, or `None` if not a load.
+fn load_slot_at(bc: &[u8], pc: usize) -> Option<u16> {
+    Some(match bc[pc] {
+        0x15..=0x19 => bc[pc + 1] as u16,         // i/l/f/d/aload <idx>
+        0x1a..=0x1d => (bc[pc] - 0x1a) as u16,     // iload_n
+        0x1e..=0x21 => (bc[pc] - 0x1e) as u16,     // lload_n
+        0x22..=0x25 => (bc[pc] - 0x22) as u16,     // fload_n
+        0x26..=0x29 => (bc[pc] - 0x26) as u16,     // dload_n
+        0x2a..=0x2d => (bc[pc] - 0x2a) as u16,     // aload_n
+        _ => return None,
+    })
+}
+
+/// Collects the local slots assigned (`*store` / `iinc`) within the JVM pc range
+/// `[start, end)` — the locals a try region can redefine before throwing.
+fn collect_def_slots(bc: &[u8], start: usize, end: usize, out: &mut BTreeSet<u16>) {
+    let mut pc = start;
+    while pc < end {
+        if let Some((s, len)) = crate::bootstrap::store_slot(bc, pc) {
+            out.insert(s as u16);
+            pc += len;
+        } else if bc[pc] == 0x84 {
+            out.insert(bc[pc + 1] as u16); // iinc
+            pc += 3;
+        } else {
+            pc += crate::bootstrap::jvm_step_len(bc, pc);
+        }
+    }
+}
+
+/// Live-in sets of LOCAL slots per block (backward dataflow). Used for PRUNED SSA:
+/// a φ is placed for slot `s` at block `B` only when `s` is live-in at `B`, so
+/// loop-body-only locals don't get spurious loop-header φs with undefined pre-loop
+/// entries (the cause of "use of undefined local slot" bails).
+fn slot_liveness(cfg: &Cfg, bc: &[u8]) -> Vec<BTreeSet<u16>> {
+    let n = cfg.len();
+    let mut use_: Vec<BTreeSet<u16>> = vec![BTreeSet::new(); n];
+    let mut def_: Vec<BTreeSet<u16>> = vec![BTreeSet::new(); n];
+    for (bi, blk) in cfg.blocks.iter().enumerate() {
+        let mut defined: BTreeSet<u16> = BTreeSet::new();
+        let mut pc = blk.start;
+        while pc < blk.end {
+            if let Some(s) = load_slot_at(bc, pc) {
+                if !defined.contains(&s) {
+                    use_[bi].insert(s);
+                }
+                pc += crate::bootstrap::jvm_step_len(bc, pc);
+            } else if let Some((s, len)) = crate::bootstrap::store_slot(bc, pc) {
+                def_[bi].insert(s as u16);
+                defined.insert(s as u16);
+                pc += len;
+            } else if bc[pc] == 0x84 {
+                let s = bc[pc + 1] as u16; // iinc: a use AND a def
+                if !defined.contains(&s) {
+                    use_[bi].insert(s);
+                }
+                def_[bi].insert(s);
+                defined.insert(s);
+                pc += 3;
+            } else {
+                pc += crate::bootstrap::jvm_step_len(bc, pc);
+            }
+        }
+    }
+    let mut live_in: Vec<BTreeSet<u16>> = vec![BTreeSet::new(); n];
+    loop {
+        let mut changed = false;
+        for b in (0..n).rev() {
+            let mut lo: BTreeSet<u16> = BTreeSet::new();
+            for &s in &cfg.blocks[b].succ {
+                for &v in &live_in[s] {
+                    lo.insert(v);
+                }
+            }
+            // A throw in `b` transfers control to its handler with everything live
+            // at the handler entry still live — so the handler's live-in is part of
+            // `b`'s live-out (keeps try-region locals from being pruned away).
+            for &(from, h) in &cfg.exc_edges {
+                if from == b {
+                    for &v in &live_in[h] {
+                        lo.insert(v);
+                    }
+                }
+            }
+            let mut li = use_[b].clone();
+            for &v in &lo {
+                if !def_[b].contains(&v) {
+                    li.insert(v);
+                }
+            }
+            if li != live_in[b] {
+                live_in[b] = li;
+                changed = true;
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+    live_in
+}
+
+/// Simulates a block's net effect on the operand stack, tracking the WIDTH (one
+/// entry per value, wide=true for long/double) of each entry — mirroring the stack
+/// effects in `rename`. Used to compute per-block entry stacks for stack-merge φs.
+fn sim_block(bc: &[u8], start: usize, end: usize, cf: &ClassFile, entry: &[bool]) -> Result<Vec<bool>> {
+    let mut st: Vec<bool> = entry.to_vec();
+    let pop = |st: &mut Vec<bool>| { st.pop(); };
+    let mut pc = start;
+    while pc < end {
+        let op = bc[pc];
+        match op {
+            0x1a..=0x1d | 0x22..=0x25 | 0x2a..=0x2d => { st.push(false); pc += 1; }   // i/f/a load_n
+            0x1e..=0x21 | 0x26..=0x29 => { st.push(true); pc += 1; }                  // l/d load_n
+            0x15 | 0x17 | 0x19 => { st.push(false); pc += 2; }                         // iload/fload/aload
+            0x16 | 0x18 => { st.push(true); pc += 2; }                                 // lload/dload
+            0x02..=0x08 | 0x0b..=0x0d => { st.push(false); pc += 1; }                  // iconst/fconst
+            0x10 => { st.push(false); pc += 2; }                                       // bipush
+            0x11 => { st.push(false); pc += 3; }                                       // sipush
+            0x09 | 0x0a | 0x0e | 0x0f => { st.push(true); pc += 1; }                   // lconst/dconst
+            0x12 => { st.push(false); pc += 2; }                                       // ldc
+            0x13 => { st.push(false); pc += 3; }                                       // ldc_w
+            0x14 => { st.push(true); pc += 3; }                                        // ldc2_w
+            0x36..=0x3a => { pop(&mut st); pc += 2; }                                  // store <idx>
+            0x3b..=0x4e => { pop(&mut st); pc += 1; }                                  // store_n
+            0x84 => { pc += 3; }                                                       // iinc
+            0x60..=0x73 | 0x78..=0x83 => { pop(&mut st); pop(&mut st); st.push(binop_result_wide(op)); pc += 1; }
+            0x74..=0x77 => { let w = st.pop().unwrap_or(false); st.push(w); pc += 1; } // neg
+            0x85..=0x93 => { pop(&mut st); st.push(conv_result_wide(op)); pc += 1; }   // conversions
+            0x94..=0x98 => { pop(&mut st); pop(&mut st); st.push(false); pc += 1; }    // cmp
+            0x99..=0x9e | 0xc6 | 0xc7 => { pop(&mut st); pc += 3; }                    // if<cond> / ifnull / ifnonnull
+            0x9f..=0xa6 => { pop(&mut st); pop(&mut st); pc += 3; }                    // if_icmp<cond> / if_acmp<eq,ne>
+            0xa7 => { pc += 3; }                                                       // goto
+            0xac..=0xb0 => { pop(&mut st); pc += 1; }                                  // <t>return
+            0xb1 => { pc += 1; }                                                       // return-void
+            0xb6..=0xb9 => {
+                let idx = u16::from_be_bytes([bc[pc + 1], bc[pc + 2]]);
+                let (_, _, desc) = cf.constant_pool.member_ref(idx)?;
+                let (mparams, ret) = crate::bootstrap::parse_descriptor(&desc)?;
+                for _ in 0..(mparams.len() + if op == 0xb8 { 0 } else { 1 }) { pop(&mut st); }
+                if ret != "V" { st.push(ret == "J" || ret == "D"); }
+                pc += if op == 0xb9 { 5 } else { 3 };
+            }
+            // invokedynamic — string-concat: pops the dynamic args, pushes the String result.
+            0xba => {
+                let idx = u16::from_be_bytes([bc[pc + 1], bc[pc + 2]]);
+                let nt = match cf.constant_pool.get(idx) {
+                    skotch_classfile::constant_pool::Constant::InvokeDynamic { name_and_type_index, .. } => *name_and_type_index,
+                    _ => return Err(anyhow::anyhow!("ssa stack-sim: indy not InvokeDynamic")),
+                };
+                let (_, desc) = cf.constant_pool.name_and_type(nt)?;
+                let (params, _) = crate::bootstrap::parse_descriptor(desc)?;
+                for _ in 0..params.len() { pop(&mut st); }
+                st.push(false); // String result
+                pc += 5;
+            }
+            0xb2 => { let (_, _, d) = cf.constant_pool.member_ref(u16::from_be_bytes([bc[pc+1], bc[pc+2]]))?; st.push(d == "J" || d == "D"); pc += 3; }
+            0xb3 => { pop(&mut st); pc += 3; }
+            0xb4 => { let (_, _, d) = cf.constant_pool.member_ref(u16::from_be_bytes([bc[pc+1], bc[pc+2]]))?; pop(&mut st); st.push(d == "J" || d == "D"); pc += 3; }
+            0xb5 => { pop(&mut st); pop(&mut st); pc += 3; }
+            0xbe => { pop(&mut st); st.push(false); pc += 1; }                         // arraylength
+            0x2e..=0x35 => { pop(&mut st); pop(&mut st); st.push(op == 0x2f || op == 0x31); pc += 1; } // aget
+            0x4f..=0x56 => { pop(&mut st); pop(&mut st); pop(&mut st); pc += 1; }      // astore
+            0xbb => { st.push(false); pc += 3; }                                       // new
+            0xbc => { pop(&mut st); st.push(false); pc += 2; }                         // newarray
+            0xbd => { pop(&mut st); st.push(false); pc += 3; }                         // anewarray
+            0x59 => { let w = *st.last().unwrap_or(&false); st.push(w); pc += 1; }      // dup
+            // swap: `..., v2, v1 → ..., v1, v2` (both category-1).
+            0x5f => { let n = st.len(); st.swap(n - 2, n - 1); pc += 1; }
+            // dup_x1: `..., v2, v1 → ..., v1, v2, v1` (both category-1).
+            0x5a => {
+                let v1 = st.pop().unwrap(); let v2 = st.pop().unwrap();
+                st.push(v1); st.push(v2); st.push(v1); pc += 1;
+            }
+            // dup2: a category-2 (wide) top duplicates it; else duplicates the top two
+            // category-1 values (`a[i]++` / `a[i]+=x` duplicate the array+index).
+            0x5c => {
+                if *st.last().unwrap_or(&false) {
+                    st.push(true);
+                } else {
+                    let n = st.len();
+                    let (a, b) = (st[n - 2], st[n - 1]);
+                    st.push(a); st.push(b);
+                }
+                pc += 1;
+            }
+            0x57 => { pop(&mut st); pc += 1; }                                         // pop
+            0x58 => { let w = st.pop().unwrap_or(false); if !w { pop(&mut st); } pc += 1; } // pop2
+            0x00 => { pc += 1; }                                                        // nop (d8 drops it)
+            0x01 => { st.push(false); pc += 1; }                                        // aconst_null (→ const 0)
+            0xaa | 0xab => { pop(&mut st); pc = crate::bootstrap::parse_switch(bc, pc).2; } // switch (pops key)
+            0xbf => { pop(&mut st); pc += 1; }                                          // athrow (block ends)
+            0xc0 => { pop(&mut st); st.push(false); pc += 3; }                          // checkcast (in-place ref)
+            0xc1 => { pop(&mut st); st.push(false); pc += 3; }                          // instanceof (int result)
+            other => bail!("ssa stack-sim: unsupported opcode {other:#04x}"),
+        }
+    }
+    Ok(st)
+}
+
+/// Per-block entry operand-stack (widths). Forward-propagated in RPO; back-edges
+/// agree with the forward entry per JVM verification (loop headers enter empty).
+fn entry_stacks(cfg: &Cfg, bc: &[u8], cf: &ClassFile) -> Result<Vec<Vec<bool>>> {
+    let n = cfg.len();
+    let mut entry: Vec<Option<Vec<bool>>> = vec![None; n];
+    entry[0] = Some(Vec::new());
+    for &b in &cfg.rpo {
+        let e = match &entry[b] {
+            Some(e) => e.clone(),
+            None => continue,
+        };
+        let exit = sim_block(bc, cfg.blocks[b].start, cfg.blocks[b].end, cf, &e)?;
+        for &s in &cfg.blocks[b].succ {
+            if entry[s].is_none() {
+                entry[s] = Some(exit.clone());
+            }
+        }
+    }
+    Ok(entry.into_iter().map(|x| x.unwrap_or_default()).collect())
+}
+
 /// True if the method body contains a back-edge (a branch whose target precedes
 /// it), i.e. a loop. Loop methods need the SSA/φ pipeline; acyclic methods are
 /// served byte-identically by the bootstrap straight-line / CFG paths.
@@ -321,10 +662,24 @@ pub(crate) fn build_ssa(
     bc: &[u8],
     params: &[String],
     instance: bool,
+    exceptions: &[ExceptionEntry],
 ) -> Result<SsaFn> {
-    let cfg = Cfg::build(bc)?;
+    let cfg = Cfg::build(bc, exceptions)?;
     let n = cfg.len();
+    // The entry block having a predecessor means a back-edge targets pc 0 — the loop
+    // header IS the entry (a `while`/`for` with no pre-header before it, e.g.
+    // `while(b!=0){…}` as the whole body). Such a header is a join of the implicit
+    // function-entry edge and the back-edge, but the CFG models only the back-edge
+    // (1 pred), so dominance-frontier φ-placement (which needs ≥2 preds) skips it and
+    // the loop variables get NO φs — they'd never update (a miscompile). Bail until
+    // φ-at-entry-header (entry-edge operand = the initial/arg value) is implemented.
+    if !cfg.preds[0].is_empty() {
+        bail!("ssa: loop header is the entry block (no pre-header) — φ-at-entry not yet supported");
+    }
     let idom = dominators(&cfg);
+    // (Nested loops were bailed only to stay byte-identical with d8, which leaves an
+    // un-DCE'd dead `const` for the undefined-φ-entry; our DCE drops it. That's a
+    // SMALLER-but-correct divergence, fine in functional-correctness mode — no bail.)
     let df = dominance_frontiers(&cfg, &idom);
     let sites = def_sites(&cfg, bc);
 
@@ -345,7 +700,15 @@ pub(crate) fn build_ssa(
             num_arg_registers += if wide { 2 } else { 1 };
         }
     }
-    let phis = phi_blocks(&df, &sites, &arg_slots);
+    // Pruned SSA: place a φ for slot `s` at block `B` only when `s` is live-in at
+    // `B`. Removes spurious loop-header φs for loop-body-only locals (whose pre-loop
+    // entry would be undefined), matching d8.
+    let live_in = slot_liveness(&cfg, bc);
+    let phis: BTreeMap<u16, BTreeSet<usize>> = phi_blocks(&df, &sites, &arg_slots)
+        .into_iter()
+        .map(|(slot, blks)| (slot, blks.into_iter().filter(|&bb| live_in[bb].contains(&slot)).collect()))
+        .filter(|(_, blks): &(u16, BTreeSet<usize>)| !blks.is_empty())
+        .collect();
 
     let mut values: Vec<SsaValue> = Vec::new();
     let mut blocks: Vec<SsaBlock> = (0..n)
@@ -355,6 +718,7 @@ pub(crate) fn build_ssa(
             term: Terminator::Return { value: None, op: 0x0e },
             succ: cfg.blocks[b].succ.clone(),
             preds: cfg.preds[b].clone(),
+            exc_succ: cfg.exc_edges.iter().filter(|&&(from, _)| from == b).map(|&(_, h)| h).collect(),
         })
         .collect();
 
@@ -389,6 +753,116 @@ pub(crate) fn build_ssa(
         }
     }
 
+    // Stack-merge φs: at a merge (≥2 preds) where the operand stack is non-empty on
+    // entry (e.g. a ternary's result before its `store`), each stack slot needs a φ
+    // — like a local, but for a stack position. They go into `blocks[blk].phis`
+    // AFTER the local φs (so numbering/coalescing/allocation/φ-resolution treat them
+    // uniformly) and are tracked in `block_stack_phis` for rename's stack threading.
+    let estacks = entry_stacks(&cfg, bc, cf)?;
+    let mut block_stack_phis: Vec<Vec<ValId>> = vec![Vec::new(); n];
+    for blk in 0..n {
+        if cfg.preds[blk].len() >= 2 && !estacks[blk].is_empty() {
+            for &wide in &estacks[blk] {
+                let id = b.new(SsaOp::Phi { slot: u16::MAX, operands: Vec::new() }, wide, blk);
+                blocks[blk].phis.push(id);
+                block_stack_phis[blk].push(id);
+            }
+        }
+    }
+
+    // Exception handlers (try/catch). For each handler block we create:
+    //   • a `CaughtException` value (the exception on the handler's entry stack;
+    //     materialized as `move-exception` only if it's actually read), and
+    //   • a handler-φ for each local that is BOTH defined within a guarded try
+    //     region AND live at the handler entry — to snapshot the version current at
+    //     each throw point (which may differ from the try block's exit version).
+    // Operands of the handler-φs are filled by `rename` at each throwing instruction.
+    // Conservative bail-guards keep us byte-identical-or-bail: typed catches only,
+    // no nested/overlapping regions, a single-block try, a handler with exactly one
+    // exceptional predecessor and no normal/stack φs.
+    let mut exc_regions: Vec<ExcRegion> = Vec::new();
+    let mut handler_phis: Vec<Vec<(u16, ValId)>> = vec![Vec::new(); n];
+    let mut caught: Vec<Option<ValId>> = vec![None; n];
+    if !exceptions.is_empty() {
+        for e in exceptions {
+            let catch_type = match &e.catch_type {
+                Some(c) => Some(skotch_classfile::constant_pool::internal_to_descriptor(c)),
+                // catch-all (finally / synchronized exception path): carried as None →
+                // the DEX try_item's catch_all_addr at emission. The handler block is
+                // modeled like a typed one (CaughtException → move-exception); the rethrow
+                // now emits move-exception (the `used` set counts terminator operands).
+                None => None,
+            };
+            let hb = cfg
+                .blocks
+                .iter()
+                .position(|x| x.start == e.handler_pc as usize)
+                .ok_or_else(|| anyhow::anyhow!("ssa: handler pc {} not a block leader", e.handler_pc))?;
+            exc_regions.push(ExcRegion {
+                start_pc: e.start_pc as usize,
+                end_pc: e.end_pc as usize,
+                handler_block: hb,
+                catch_type,
+            });
+        }
+        // No partially-overlapping or nested try regions (identical ranges that share
+        // a handler are fine — that's one logical region).
+        for i in 0..exc_regions.len() {
+            for j in 0..exc_regions.len() {
+                if i == j {
+                    continue;
+                }
+                let (a, c) = (&exc_regions[i], &exc_regions[j]);
+                let overlap = a.start_pc < c.end_pc && c.start_pc < a.end_pc;
+                let identical = a.start_pc == c.start_pc && a.end_pc == c.end_pc;
+                if overlap && !identical {
+                    bail!("ssa: overlapping / nested try regions not yet supported");
+                }
+            }
+        }
+        let handler_blocks: BTreeSet<usize> = exc_regions.iter().map(|r| r.handler_block).collect();
+        for &hb in &handler_blocks {
+            // A handler entered by normal control flow (loop/fallthrough into it), or
+            // by more than one try block, would need pred-indexed φ wiring we don't do.
+            if (0..n).any(|p| cfg.blocks[p].succ.contains(&hb)) {
+                bail!("ssa: handler block is also a normal successor — unsupported");
+            }
+            // N>1 exceptional predecessors (a try with multiple throwing ops) is now
+            // allowed: each throw point snapshots the slot versions into the handler-φs,
+            // and a post-allocation check (in dex_method_ssa) BAILS unless all of a
+            // handler-φ's operands coalesced into one register — exceptional edges can't
+            // carry φ-moves, so they must already agree (or we bail, never miscompile).
+            let exc_preds = cfg.exc_edges.iter().filter(|&&(_, h)| h == hb).count();
+            if exc_preds == 0 {
+                bail!("ssa: handler with no exceptional predecessor — unsupported");
+            }
+            if !block_phi_slots[hb].is_empty() || !block_stack_phis[hb].is_empty() {
+                bail!("ssa: handler block needs normal/stack φs — unsupported");
+            }
+            // A handler nested inside another try region (try-in-catch / rethrow paths).
+            let h_pc = cfg.blocks[hb].start;
+            if exc_regions.iter().any(|r| r.start_pc <= h_pc && h_pc < r.end_pc) {
+                bail!("ssa: handler nested inside a try region — unsupported");
+            }
+            // The caught exception value (created unconditionally; emitted as
+            // move-exception only when read).
+            caught[hb] = Some(b.new(SsaOp::CaughtException, false, hb));
+            // Locals defined within a guarded region targeting this handler.
+            let mut slots: BTreeSet<u16> = BTreeSet::new();
+            for r in exc_regions.iter().filter(|r| r.handler_block == hb) {
+                collect_def_slots(bc, r.start_pc, r.end_pc, &mut slots);
+            }
+            for slot in slots {
+                if !live_in[hb].contains(&slot) {
+                    continue; // dead at the handler entry — no snapshot needed
+                }
+                let id = b.new(SsaOp::Phi { slot, operands: Vec::new() }, false, hb);
+                blocks[hb].phis.push(id);
+                handler_phis[hb].push((slot, id));
+            }
+        }
+    }
+
     // Dominator-tree children.
     let mut children: Vec<Vec<usize>> = vec![Vec::new(); n];
     for blk in 0..n {
@@ -403,7 +877,8 @@ pub(crate) fn build_ssa(
         versions.entry(slot).or_default().push(v);
     }
 
-    rename(cf, &cfg, bc, &children, &block_phi_slots, &mut blocks, &mut b, &mut versions, 0)?;
+    let mut exit_stacks: Vec<Option<Vec<ValId>>> = vec![None; n];
+    rename(cf, &cfg, bc, &children, &block_phi_slots, &block_stack_phis, &exc_regions, &handler_phis, &caught, &mut exit_stacks, &mut blocks, &mut b, &mut versions, 0)?;
 
     // φ-nodes inherit their width from their operands (all the same type). They
     // were created before their operands existed, so fix it up now — to a fixpoint
@@ -426,7 +901,104 @@ pub(crate) fn build_ssa(
         }
     }
 
-    Ok(SsaFn { values, blocks, num_arg_registers })
+    // Infer object-reference-ness per value (selects move-object / return-object for
+    // φ-moves). Base cases from the producing op; φs to a fixpoint over operands.
+    {
+        let arg_is_ref: Vec<bool> = {
+            let mut v = Vec::new();
+            if instance {
+                v.push(true); // `this`
+            }
+            for p in params {
+                v.push(p.starts_with('L') || p.starts_with('['));
+            }
+            v
+        };
+        for i in 0..values.len() {
+            values[i].is_ref = match &values[i].op {
+                SsaOp::Argument { index } => arg_is_ref.get(*index).copied().unwrap_or(false),
+                SsaOp::NewInstance { .. } | SsaOp::NewArray { .. } | SsaOp::ConstString { .. } | SsaOp::CaughtException => true,
+                SsaOp::CheckCast { .. } | SsaOp::ConstClass { .. } => true, // cast / Class literal are references
+                SsaOp::ArrayGet { dex_op, .. } => *dex_op == 0x46, // aget-object
+                SsaOp::GetField { field, .. } | SsaOp::GetStatic { field, .. } => {
+                    field.type_.starts_with('L') || field.type_.starts_with('[')
+                }
+                SsaOp::Invoke { ret: Some(rk), .. } => rk.is_ref,
+                _ => false,
+            };
+        }
+        loop {
+            let mut changed = false;
+            for i in 0..values.len() {
+                let opnds: Vec<ValId> = match &values[i].op {
+                    SsaOp::Phi { operands, .. } => operands.clone(),
+                    _ => continue,
+                };
+                let r = opnds.iter().any(|&o| values[o as usize].is_ref);
+                if r && !values[i].is_ref {
+                    values[i].is_ref = true;
+                    changed = true;
+                }
+            }
+            if !changed {
+                break;
+            }
+        }
+    }
+
+    // An unused caught exception (e.g. `catch (E e) { ... }` where `e` is never
+    // read) needs no `move-exception` and no register — it stays out of the block
+    // body, matching d8. A *used* caught value becomes the handler's first body
+    // instruction (allocated a register, emitted as `move-exception`); the precise-
+    // interference allocator keeps it off any value live into the handler.
+    //
+    // ACYCLIC used-catch works (byte-identical). A LOOP used-catch is bailed: the
+    // handler sits on the loop's path (handler → increment → header), and d8 also
+    // shares the post-catch continuation (`s += e.hashCode()` → the catch computes
+    // into the try's register and jumps back to the shared add), neither of which we
+    // model — leaving it on would clobber a loop-carried value and diverge.
+    let used_catch = caught.iter().enumerate().any(|(hb, cv)| {
+        cv.is_some()
+            && values.iter().any(|val| {
+                let mut us = operands(&val.op);
+                if let SsaOp::Phi { operands, .. } = &val.op {
+                    us.extend_from_slice(operands);
+                }
+                us.contains(&caught[hb].unwrap())
+            })
+    });
+    if used_catch && method_has_loop(bc) {
+        bail!("ssa: used catch variable in a loop (d8 shares the post-catch continuation) not yet supported");
+    }
+    let mut used: BTreeSet<ValId> = BTreeSet::new();
+    for val in &values {
+        for o in operands(&val.op) {
+            used.insert(o);
+        }
+        if let SsaOp::Phi { operands, .. } = &val.op {
+            for &o in operands {
+                used.insert(o);
+            }
+        }
+    }
+    // TERMINATOR operands count as uses too — crucially a catch-all/finally handler's
+    // caught exception is used ONLY by its rethrow (`Terminator::Throw`); without this it
+    // wouldn't be marked used, the move-exception wouldn't emit, and the rethrow would
+    // throw an undefined register (an ART VerifyError caught earlier).
+    for blk in &blocks {
+        for o in term_operands(&blk.term) {
+            used.insert(o);
+        }
+    }
+    for hb in 0..blocks.len() {
+        if let Some(cv) = caught[hb] {
+            if used.contains(&cv) {
+                blocks[hb].body.insert(0, cv);
+            }
+        }
+    }
+
+    Ok(SsaFn { values, blocks, num_arg_registers, exc_regions, caught })
 }
 
 struct Builder<'a> {
@@ -435,9 +1007,18 @@ struct Builder<'a> {
 impl<'a> Builder<'a> {
     fn new(&mut self, op: SsaOp, wide: bool, block: usize) -> ValId {
         let id = self.values.len() as ValId;
-        self.values.push(SsaValue { id, op, wide, block });
+        self.values.push(SsaValue { id, op, wide, is_ref: false, block });
         id
     }
+}
+
+/// Pop one operand from the SSA build stack, BAILING (not panicking) on underflow — an
+/// unmodeled-construct/unbalanced-stack situation should fail loudly-but-safely, never
+/// crash the dexer (a panic was observed on real-world bytecode; must stay a clean bail).
+macro_rules! pop_stack {
+    ($s:expr) => {
+        $s.pop().ok_or_else(|| anyhow::anyhow!("ssa: operand-stack underflow (unmodeled construct)"))?
+    };
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -447,6 +1028,11 @@ fn rename(
     bc: &[u8],
     children: &[Vec<usize>],
     block_phi_slots: &[Vec<u16>],
+    block_stack_phis: &[Vec<ValId>],
+    exc_regions: &[ExcRegion],
+    handler_phis: &[Vec<(u16, ValId)>],
+    caught: &[Option<ValId>],
+    exit_stacks: &mut Vec<Option<Vec<ValId>>>,
     blocks: &mut [SsaBlock],
     b: &mut Builder,
     versions: &mut BTreeMap<u16, Vec<ValId>>,
@@ -461,9 +1047,24 @@ fn rename(
         versions.entry(slot).or_default().push(id);
         pushed.push(slot);
     }
+    // Handler-φ outputs are likewise the handler's entry version of their slot.
+    for &(slot, id) in &handler_phis[blk] {
+        versions.entry(slot).or_default().push(id);
+        pushed.push(slot);
+    }
 
-    // Abstract-interpret the block (operand stack empty at entry).
-    let mut stack: Vec<ValId> = Vec::new();
+    // The operand stack at block entry: the caught exception for a handler block,
+    // the stack-merge φs for a merge block, the (already-processed, dominating)
+    // single predecessor's exit stack otherwise, or empty (entry / depth-0 merge).
+    let mut stack: Vec<ValId> = if let Some(cv) = caught[blk] {
+        vec![cv]
+    } else if !block_stack_phis[blk].is_empty() {
+        block_stack_phis[blk].clone()
+    } else if cfg.preds[blk].len() == 1 {
+        exit_stacks[cfg.preds[blk][0]].clone().unwrap_or_default()
+    } else {
+        Vec::new()
+    };
     let cur = |versions: &BTreeMap<u16, Vec<ValId>>, slot: u16| -> Result<ValId> {
         versions
             .get(&slot)
@@ -475,6 +1076,21 @@ fn rename(
     let mut term: Option<Terminator> = None;
     while pc < end {
         let op = bc[pc];
+        // A throwing instruction inside a guarded region snapshots each handler-φ's
+        // slot at its current version — the handler sees the state AS OF the throw,
+        // not the try block's exit.
+        if !exc_regions.is_empty() && is_throwing_op(op) {
+            for r in exc_regions {
+                if r.start_pc <= pc && pc < r.end_pc {
+                    for &(slot, phi) in &handler_phis[r.handler_block] {
+                        let v = cur(versions, slot)?;
+                        if let SsaOp::Phi { operands, .. } = &mut b.values[phi as usize].op {
+                            operands.push(v);
+                        }
+                    }
+                }
+            }
+        }
         match op {
             // loads
             0x1a..=0x1d => { stack.push(cur(versions, (op - 0x1a) as u16)?); pc += 1; }
@@ -483,6 +1099,9 @@ fn rename(
             0x26..=0x29 => { stack.push(cur(versions, (op - 0x26) as u16)?); pc += 1; }
             0x2a..=0x2d => { stack.push(cur(versions, (op - 0x2a) as u16)?); pc += 1; }
             0x15..=0x19 => { stack.push(cur(versions, bc[pc + 1] as u16)?); pc += 2; }
+            // aconst_null — d8 materializes null as `const/4 v, 0` (the "zero" type
+            // unifies with any reference; φ-moves use the φ's is_ref for move-object).
+            0x01 => { let v = b.new(SsaOp::ConstInt(0), false, blk); blocks[blk].body.push(v); stack.push(v); pc += 1; }
             // int constants
             0x02..=0x08 => { let v = b.new(SsaOp::ConstInt(op as i32 - 0x03), false, blk); blocks[blk].body.push(v); stack.push(v); pc += 1; }
             0x10 => { let v = b.new(SsaOp::ConstInt(bc[pc + 1] as i8 as i32), false, blk); blocks[blk].body.push(v); stack.push(v); pc += 2; }
@@ -495,13 +1114,47 @@ fn rename(
             0x0b => { let v = b.new(SsaOp::ConstInt(0), false, blk); blocks[blk].body.push(v); stack.push(v); pc += 1; }
             0x0c => { let v = b.new(SsaOp::ConstInt(0x3f80_0000u32 as i32), false, blk); blocks[blk].body.push(v); stack.push(v); pc += 1; }
             0x0d => { let v = b.new(SsaOp::ConstInt(0x4000_0000u32 as i32), false, blk); blocks[blk].body.push(v); stack.push(v); pc += 1; }
+            // ldc / ldc_w — int / float / String constant from the pool.
+            0x12 | 0x13 => {
+                use skotch_classfile::constant_pool::Constant;
+                let idx = if op == 0x12 { bc[pc + 1] as u16 } else { u16::from_be_bytes([bc[pc + 1], bc[pc + 2]]) };
+                let v = match cf.constant_pool.get(idx) {
+                    Constant::Integer(c) => b.new(SsaOp::ConstInt(*c), false, blk),
+                    Constant::Float(fl) => b.new(SsaOp::ConstInt(fl.to_bits() as i32), false, blk),
+                    Constant::String { string_index } => {
+                        let s = cf.constant_pool.utf8(*string_index)?.to_string();
+                        b.new(SsaOp::ConstString { value: s, jvm_pc: pc as u32 }, false, blk)
+                    }
+                    Constant::Class { .. } => {
+                        let desc = crate::bootstrap::class_ref_desc(cf, idx)?;
+                        b.new(SsaOp::ConstClass { type_desc: desc, jvm_pc: pc as u32 }, false, blk)
+                    }
+                    _ => bail!("ssa: unsupported ldc constant (methodhandle/methodtype)"),
+                };
+                blocks[blk].body.push(v);
+                stack.push(v);
+                pc += if op == 0x12 { 2 } else { 3 };
+            }
+            // ldc2_w — long / double constant from the pool (wide).
+            0x14 => {
+                use skotch_classfile::constant_pool::Constant;
+                let idx = u16::from_be_bytes([bc[pc + 1], bc[pc + 2]]);
+                let v = match cf.constant_pool.get(idx) {
+                    Constant::Long(c) => b.new(SsaOp::ConstLong(*c), true, blk),
+                    Constant::Double(d) => b.new(SsaOp::ConstLong(d.to_bits() as i64), true, blk),
+                    _ => bail!("ssa: bad ldc2 constant"),
+                };
+                blocks[blk].body.push(v);
+                stack.push(v);
+                pc += 3;
+            }
             // stores: rename the slot to the popped value (no instruction)
-            0x36..=0x3a => { let v = stack.pop().unwrap(); versions.entry(bc[pc + 1] as u16).or_default().push(v); pushed.push(bc[pc + 1] as u16); pc += 2; }
-            0x3b..=0x3e => { let v = stack.pop().unwrap(); let s = (op - 0x3b) as u16; versions.entry(s).or_default().push(v); pushed.push(s); pc += 1; }
-            0x3f..=0x42 => { let v = stack.pop().unwrap(); let s = (op - 0x3f) as u16; versions.entry(s).or_default().push(v); pushed.push(s); pc += 1; }
-            0x43..=0x46 => { let v = stack.pop().unwrap(); let s = (op - 0x43) as u16; versions.entry(s).or_default().push(v); pushed.push(s); pc += 1; }
-            0x47..=0x4a => { let v = stack.pop().unwrap(); let s = (op - 0x47) as u16; versions.entry(s).or_default().push(v); pushed.push(s); pc += 1; }
-            0x4b..=0x4e => { let v = stack.pop().unwrap(); let s = (op - 0x4b) as u16; versions.entry(s).or_default().push(v); pushed.push(s); pc += 1; }
+            0x36..=0x3a => { let v = pop_stack!(stack); versions.entry(bc[pc + 1] as u16).or_default().push(v); pushed.push(bc[pc + 1] as u16); pc += 2; }
+            0x3b..=0x3e => { let v = pop_stack!(stack); let s = (op - 0x3b) as u16; versions.entry(s).or_default().push(v); pushed.push(s); pc += 1; }
+            0x3f..=0x42 => { let v = pop_stack!(stack); let s = (op - 0x3f) as u16; versions.entry(s).or_default().push(v); pushed.push(s); pc += 1; }
+            0x43..=0x46 => { let v = pop_stack!(stack); let s = (op - 0x43) as u16; versions.entry(s).or_default().push(v); pushed.push(s); pc += 1; }
+            0x47..=0x4a => { let v = pop_stack!(stack); let s = (op - 0x47) as u16; versions.entry(s).or_default().push(v); pushed.push(s); pc += 1; }
+            0x4b..=0x4e => { let v = pop_stack!(stack); let s = (op - 0x4b) as u16; versions.entry(s).or_default().push(v); pushed.push(s); pc += 1; }
             // iinc slot, const → slot = slot + const
             0x84 => {
                 let slot = bc[pc + 1] as u16;
@@ -509,26 +1162,25 @@ fn rename(
                 let cst = b.new(SsaOp::ConstInt(c), false, blk);
                 blocks[blk].body.push(cst);
                 let old = cur(versions, slot)?;
-                let sum = b.new(SsaOp::Binop { jvm_op: 0x60, a: old, b: cst }, false, blk);
+                let sum = b.new(SsaOp::Binop { jvm_op: 0x60, a: old, b: cst, jvm_pc: pc as u32 }, false, blk);
                 blocks[blk].body.push(sum);
                 versions.entry(slot).or_default().push(sum);
                 pushed.push(slot);
                 pc += 3;
             }
-            // arithmetic/bitwise/shift binops (int/long/float/double). Integer and
-            // long div/rem (0x6c/0x6d/0x70/0x71) are throwing — they need a debug
-            // position the binop path doesn't yet carry, so they bail below.
-            0x60..=0x73 | 0x78..=0x83 if !matches!(op, 0x6c | 0x6d | 0x70 | 0x71) => {
-                let rb = stack.pop().unwrap();
-                let ra = stack.pop().unwrap();
-                let v = b.new(SsaOp::Binop { jvm_op: op, a: ra, b: rb }, binop_result_wide(op), blk);
+            // arithmetic/bitwise/shift binops (int/long/float/double). Integer/long
+            // div/rem are throwing — `jvm_pc` lets the emitter record a position.
+            0x60..=0x73 | 0x78..=0x83 => {
+                let rb = pop_stack!(stack);
+                let ra = pop_stack!(stack);
+                let v = b.new(SsaOp::Binop { jvm_op: op, a: ra, b: rb, jvm_pc: pc as u32 }, binop_result_wide(op), blk);
                 blocks[blk].body.push(v);
                 stack.push(v);
                 pc += 1;
             }
             // unary negation (ineg/lneg/fneg/dneg) — result width = operand width.
             0x74..=0x77 => {
-                let a = stack.pop().unwrap();
+                let a = pop_stack!(stack);
                 let wide = op == 0x75 || op == 0x77;
                 let v = b.new(SsaOp::Unop { jvm_op: op, a }, wide, blk);
                 blocks[blk].body.push(v);
@@ -537,7 +1189,7 @@ fn rename(
             }
             // numeric conversions (i2l..i2s). Result width per the target type.
             0x85..=0x93 => {
-                let a = stack.pop().unwrap();
+                let a = pop_stack!(stack);
                 let v = b.new(SsaOp::Unop { jvm_op: op, a }, conv_result_wide(op), blk);
                 blocks[blk].body.push(v);
                 stack.push(v);
@@ -545,23 +1197,24 @@ fn rename(
             }
             // comparisons (produce a narrow result, used by a following branch)
             0x94..=0x98 => {
-                let rb = stack.pop().unwrap();
-                let ra = stack.pop().unwrap();
+                let rb = pop_stack!(stack);
+                let ra = pop_stack!(stack);
                 let v = b.new(SsaOp::Cmp { jvm_op: op, a: ra, b: rb }, false, blk);
                 blocks[blk].body.push(v);
                 stack.push(v);
                 pc += 1;
             }
-            // conditional branches
-            0x99..=0xa4 => {
+            // conditional branches (int if<cond>z, if_icmp<cond>, and ref
+            // ifnull/ifnonnull — the latter compare an object to null = if-eqz/if-nez)
+            0x99..=0xa6 | 0xc6 | 0xc7 => {
                 let target = (pc as i32 + i16::from_be_bytes([bc[pc + 1], bc[pc + 2]]) as i32) as usize;
-                let two = (0x9f..=0xa4).contains(&op);
+                let two = (0x9f..=0xa6).contains(&op);
                 let operands = if two {
-                    let r = stack.pop().unwrap();
-                    let l = stack.pop().unwrap();
+                    let r = pop_stack!(stack);
+                    let l = pop_stack!(stack);
                     vec![l, r]
                 } else {
-                    vec![stack.pop().unwrap()]
+                    vec![pop_stack!(stack)]
                 };
                 let taken = cfg.blocks.iter().position(|x| x.start == target).unwrap();
                 let fallthrough = *cfg.blocks[blk].succ.iter().find(|&&s| s != taken).unwrap_or(&taken);
@@ -574,13 +1227,26 @@ fn rename(
                 term = Some(Terminator::Goto { target: t });
                 pc += 3;
             }
+            // tableswitch / lookupswitch — key on top of stack; lowered to an if-eq chain.
+            0xaa | 0xab => {
+                let value = pop_stack!(stack);
+                let (default_pc, raw_cases, end) = crate::bootstrap::parse_switch(bc, pc);
+                let blk_at = |p: usize| cfg.blocks.iter().position(|x| x.start == p).unwrap();
+                let default = blk_at(default_pc);
+                let cases = raw_cases.iter().map(|&(k, t)| (k, blk_at(t))).collect();
+                term = Some(Terminator::Switch { value, default, cases });
+                pc = end;
+            }
             0xb1 => { term = Some(Terminator::Return { value: None, op: 0x0e }); pc += 1; }
             // ireturn/lreturn/freturn/dreturn/areturn → return / return-wide / return-object
             0xac | 0xad | 0xae | 0xaf | 0xb0 => {
                 let rop = match op { 0xad | 0xaf => 0x10, 0xb0 => 0x11, _ => 0x0f };
-                term = Some(Terminator::Return { value: Some(stack.pop().unwrap()), op: rop });
+                term = Some(Terminator::Return { value: Some(pop_stack!(stack)), op: rop });
                 pc += 1;
             }
+            // athrow → `throw v` — ends the block; the handler-φ snapshot at line ~1083
+            // already captured locals (athrow is a throwing op), so no successor wiring.
+            0xbf => { term = Some(Terminator::Throw { value: pop_stack!(stack), jvm_pc: pc as u32 }); pc += 1; }
             // method calls: invokevirtual/special/static/interface
             0xb6 | 0xb7 | 0xb8 | 0xb9 => {
                 let idx = u16::from_be_bytes([bc[pc + 1], bc[pc + 2]]);
@@ -590,7 +1256,7 @@ fn rename(
                 let argc = mparams.len() + if is_static { 0 } else { 1 };
                 let mut args: Vec<ValId> = Vec::with_capacity(argc);
                 for _ in 0..argc {
-                    args.push(stack.pop().unwrap());
+                    args.push(pop_stack!(stack));
                 }
                 args.reverse();
                 let dex_op: u16 = match op {
@@ -622,6 +1288,151 @@ fn rename(
                 }
                 pc += if op == 0xb9 { 5 } else { 3 };
             }
+            // invokedynamic — ONLY string concatenation (StringConcatFactory
+            // makeConcat/makeConcatWithConstants) is supported, DESUGARED here to a
+            // `new StringBuilder; append…; toString()` chain of ordinary SsaOps (so emit/
+            // regalloc need no changes). Any other indy (lambda metafactory, …) bails.
+            0xba => {
+                use skotch_classfile::constant_pool::Constant;
+                let idx = u16::from_be_bytes([bc[pc + 1], bc[pc + 2]]);
+                let (bsm_idx, nt_idx) = match cf.constant_pool.get(idx) {
+                    Constant::InvokeDynamic { bootstrap_method_attr_index, name_and_type_index } => {
+                        (*bootstrap_method_attr_index, *name_and_type_index)
+                    }
+                    _ => bail!("ssa: indy constant {idx} is not InvokeDynamic"),
+                };
+                let (name, desc) = cf.constant_pool.name_and_type(nt_idx)?;
+                let (name, desc) = (name.to_string(), desc.to_string());
+                if name != "makeConcatWithConstants" && name != "makeConcat" {
+                    bail!("ssa: unsupported invokedynamic '{name}' (only string-concat)");
+                }
+                let (param_tys, _ret) = crate::bootstrap::parse_descriptor(&desc)?;
+                let mut args: Vec<ValId> = Vec::with_capacity(param_tys.len());
+                for _ in 0..param_tys.len() {
+                    args.push(pop_stack!(stack));
+                }
+                args.reverse();
+                let bsm = &cf.bootstrap_methods[bsm_idx as usize];
+                // makeConcatWithConstants: arg[0] is the recipe String (=arg,
+                // =constant from arg[1..], else literal). makeConcat: implicit *n.
+                let recipe: String = if name == "makeConcatWithConstants" {
+                    match cf.constant_pool.get(bsm.arguments[0]) {
+                        Constant::String { string_index } => cf.constant_pool.utf8(*string_index)?.to_string(),
+                        _ => bail!("ssa: string-concat recipe is not a String constant"),
+                    }
+                } else {
+                    "\u{1}".repeat(param_tys.len())
+                };
+                // Parse the recipe into append pieces.
+                enum Piece { Lit(String), Arg, Const(u16) }
+                let mut pieces: Vec<Piece> = Vec::new();
+                let mut lit = String::new();
+                let mut const_i = 1usize;
+                for ch in recipe.chars() {
+                    match ch {
+                        '\u{1}' => {
+                            if !lit.is_empty() { pieces.push(Piece::Lit(std::mem::take(&mut lit))); }
+                            pieces.push(Piece::Arg);
+                        }
+                        '\u{2}' => {
+                            if !lit.is_empty() { pieces.push(Piece::Lit(std::mem::take(&mut lit))); }
+                            let c = bsm.arguments[const_i];
+                            const_i += 1;
+                            pieces.push(Piece::Const(c));
+                        }
+                        c => lit.push(c),
+                    }
+                }
+                if !lit.is_empty() { pieces.push(Piece::Lit(lit)); }
+                // `new StringBuilder` + `<init>()`.
+                let sb_desc = "Ljava/lang/StringBuilder;".to_string();
+                let sb = b.new(SsaOp::NewInstance { type_desc: sb_desc.clone(), jvm_pc: pc as u32 }, false, blk);
+                blocks[blk].body.push(sb);
+                let init = b.new(
+                    SsaOp::Invoke {
+                        dex_op: 0x70,
+                        method: MethodRef { class: sb_desc.clone(), proto: ProtoRef { return_type: "V".into(), params: vec![] }, name: "<init>".into() },
+                        args: vec![sb],
+                        ret: None,
+                        jvm_pc: pc as u32,
+                    },
+                    false,
+                    blk,
+                );
+                blocks[blk].body.push(init);
+                // `StringBuilder.append(<piece>)` for each piece. append returns `this`
+                // (the builder is mutated in place), so we DISCARD the result (ret: None)
+                // and keep using `sb`.
+                let append_param = |jvm: &str| -> &'static str {
+                    match jvm {
+                        "I" | "B" | "S" => "I",
+                        "J" => "J",
+                        "F" => "F",
+                        "D" => "D",
+                        "Z" => "Z",
+                        "C" => "C",
+                        "Ljava/lang/String;" => "Ljava/lang/String;",
+                        _ => "Ljava/lang/Object;",
+                    }
+                };
+                let mut arg_i = 0usize;
+                for piece in pieces {
+                    let (val, ptype): (ValId, String) = match piece {
+                        Piece::Lit(s) => {
+                            let cv = b.new(SsaOp::ConstString { value: s, jvm_pc: pc as u32 }, false, blk);
+                            blocks[blk].body.push(cv);
+                            (cv, "Ljava/lang/String;".to_string())
+                        }
+                        Piece::Arg => {
+                            let v = args[arg_i];
+                            let pt = append_param(&param_tys[arg_i]).to_string();
+                            arg_i += 1;
+                            (v, pt)
+                        }
+                        Piece::Const(c) => match cf.constant_pool.get(c) {
+                            Constant::String { string_index } => {
+                                let s = cf.constant_pool.utf8(*string_index)?.to_string();
+                                let cv = b.new(SsaOp::ConstString { value: s, jvm_pc: pc as u32 }, false, blk);
+                                blocks[blk].body.push(cv);
+                                (cv, "Ljava/lang/String;".to_string())
+                            }
+                            Constant::Integer(n) => {
+                                let cv = b.new(SsaOp::ConstInt(*n), false, blk);
+                                blocks[blk].body.push(cv);
+                                (cv, "I".to_string())
+                            }
+                            _ => bail!("ssa: string-concat \\u0002 constant kind unsupported"),
+                        },
+                    };
+                    let ap = b.new(
+                        SsaOp::Invoke {
+                            dex_op: 0x6e,
+                            method: MethodRef { class: sb_desc.clone(), proto: ProtoRef { return_type: sb_desc.clone(), params: vec![ptype] }, name: "append".into() },
+                            args: vec![sb, val],
+                            ret: None,
+                            jvm_pc: pc as u32,
+                        },
+                        false,
+                        blk,
+                    );
+                    blocks[blk].body.push(ap);
+                }
+                // `toString()` → the concatenated String result.
+                let result = b.new(
+                    SsaOp::Invoke {
+                        dex_op: 0x6e,
+                        method: MethodRef { class: sb_desc, proto: ProtoRef { return_type: "Ljava/lang/String;".into(), params: vec![] }, name: "toString".into() },
+                        args: vec![sb],
+                        ret: Some(RetKind { wide: false, is_ref: true }),
+                        jvm_pc: pc as u32,
+                    },
+                    false,
+                    blk,
+                );
+                blocks[blk].body.push(result);
+                stack.push(result);
+                pc += 5;
+            }
             // field access: getstatic/putstatic/getfield/putfield
             0xb2 | 0xb3 | 0xb4 | 0xb5 => {
                 let idx = u16::from_be_bytes([bc[pc + 1], bc[pc + 2]]);
@@ -639,19 +1450,19 @@ fn rename(
                         stack.push(v);
                     }
                     0xb4 => {
-                        let obj = stack.pop().unwrap();
+                        let obj = pop_stack!(stack);
                         let v = b.new(SsaOp::GetField { dex_op: crate::bootstrap::iget_op(&desc), field, obj, jvm_pc: pc as u32 }, wide, blk);
                         blocks[blk].body.push(v);
                         stack.push(v);
                     }
                     0xb3 => {
-                        let value = stack.pop().unwrap();
+                        let value = pop_stack!(stack);
                         let v = b.new(SsaOp::PutStatic { dex_op: crate::bootstrap::sput_op(&desc), field, value, jvm_pc: pc as u32 }, false, blk);
                         blocks[blk].body.push(v);
                     }
                     0xb5 => {
-                        let value = stack.pop().unwrap();
-                        let obj = stack.pop().unwrap();
+                        let value = pop_stack!(stack);
+                        let obj = pop_stack!(stack);
                         let v = b.new(SsaOp::PutField { dex_op: crate::bootstrap::iput_op(&desc), field, obj, value, jvm_pc: pc as u32 }, false, blk);
                         blocks[blk].body.push(v);
                     }
@@ -662,8 +1473,8 @@ fn rename(
             // array element load: iaload/laload/faload/daload/aaload/baload/caload/saload
             0x2e..=0x35 => {
                 let (dex_op, wide) = crate::bootstrap::aget_op(op);
-                let index = stack.pop().unwrap();
-                let array = stack.pop().unwrap();
+                let index = pop_stack!(stack);
+                let array = pop_stack!(stack);
                 let v = b.new(SsaOp::ArrayGet { dex_op, array, index, jvm_pc: pc as u32 }, wide, blk);
                 blocks[blk].body.push(v);
                 stack.push(v);
@@ -672,16 +1483,16 @@ fn rename(
             // array element store: i/l/f/d/a/b/c/sastore
             0x4f..=0x56 => {
                 let dex_op = crate::bootstrap::aput_op(op);
-                let value = stack.pop().unwrap();
-                let index = stack.pop().unwrap();
-                let array = stack.pop().unwrap();
+                let value = pop_stack!(stack);
+                let index = pop_stack!(stack);
+                let array = pop_stack!(stack);
                 let v = b.new(SsaOp::ArrayPut { dex_op, array, index, value, jvm_pc: pc as u32 }, false, blk);
                 blocks[blk].body.push(v);
                 pc += 1;
             }
             // arraylength
             0xbe => {
-                let array = stack.pop().unwrap();
+                let array = pop_stack!(stack);
                 let v = b.new(SsaOp::ArrayLength { array, jvm_pc: pc as u32 }, false, blk);
                 blocks[blk].body.push(v);
                 stack.push(v);
@@ -706,7 +1517,7 @@ fn rename(
                     let idx = u16::from_be_bytes([bc[pc + 1], bc[pc + 2]]);
                     format!("[{}", crate::bootstrap::class_ref_desc(cf, idx)?)
                 };
-                let size = stack.pop().unwrap();
+                let size = pop_stack!(stack);
                 let v = b.new(SsaOp::NewArray { type_desc: desc, size, jvm_pc: pc as u32 }, false, blk);
                 blocks[blk].body.push(v);
                 stack.push(v);
@@ -714,17 +1525,43 @@ fn rename(
             }
             // dup: duplicate the top stack value (the `new X; dup; <init>` idiom).
             0x59 => { let top = *stack.last().unwrap(); stack.push(top); pc += 1; }
+            // swap: exchange the top two category-1 values — pure value-stack reorder.
+            0x5f => { let n = stack.len(); stack.swap(n - 2, n - 1); pc += 1; }
+            // dup_x1: `..., v2, v1 → ..., v1, v2, v1` — duplicate top below the second.
+            0x5a => {
+                let v1 = pop_stack!(stack);
+                let v2 = pop_stack!(stack);
+                stack.push(v1);
+                stack.push(v2);
+                stack.push(v1);
+                pc += 1;
+            }
+            // dup2: a wide (category-2) top duplicates that one value; else duplicates the
+            // top TWO category-1 values — `a[i]++`/`a[i]+=x` dup the array+index so one
+            // aget + one aput share them (the SSA values are reused, no new instruction).
+            0x5c => {
+                let top = *stack.last().unwrap();
+                if b.values[top as usize].wide {
+                    stack.push(top);
+                } else {
+                    let n = stack.len();
+                    let (v2, v1) = (stack[n - 2], stack[n - 1]);
+                    stack.push(v2);
+                    stack.push(v1);
+                }
+                pc += 1;
+            }
             // pop / pop2: discard. A discarded call result drops its move-result, so
             // mark such an Invoke as void (d8 emits the call alone).
             0x57 => {
-                let v = stack.pop().unwrap();
+                let v = pop_stack!(stack);
                 if let SsaOp::Invoke { ret, .. } = &mut b.values[v as usize].op {
                     *ret = None;
                 }
                 pc += 1;
             }
             0x58 => {
-                let v = stack.pop().unwrap();
+                let v = pop_stack!(stack);
                 if !b.values[v as usize].wide {
                     stack.pop();
                 }
@@ -733,18 +1570,42 @@ fn rename(
                 }
                 pc += 1;
             }
+            // checkcast — `check-cast vAA, type@`. Throwing (ClassCastException). The
+            // result aliases the object (in-place in DEX); emission inserts a move if
+            // the result register didn't coalesce with the object's.
+            0xc0 => {
+                let idx = u16::from_be_bytes([bc[pc + 1], bc[pc + 2]]);
+                let desc = crate::bootstrap::class_ref_desc(cf, idx)?;
+                let obj = pop_stack!(stack);
+                let v = b.new(SsaOp::CheckCast { obj, type_desc: desc, jvm_pc: pc as u32 }, false, blk);
+                blocks[blk].body.push(v);
+                stack.push(v);
+                pc += 3;
+            }
+            // instanceof — `instance-of vA, vB, type@`. Non-throwing; int (boolean) result.
+            0xc1 => {
+                let idx = u16::from_be_bytes([bc[pc + 1], bc[pc + 2]]);
+                let desc = crate::bootstrap::class_ref_desc(cf, idx)?;
+                let obj = pop_stack!(stack);
+                let v = b.new(SsaOp::InstanceOf { obj, type_desc: desc, jvm_pc: pc as u32 }, false, blk);
+                blocks[blk].body.push(v);
+                stack.push(v);
+                pc += 3;
+            }
+            0x00 => { pc += 1; } // nop — d8 drops it
             other => bail!("ssa: unsupported opcode {other:#04x} (loop subset only)"),
         }
     }
-    if !stack.is_empty() {
-        bail!("ssa: non-empty operand stack at block boundary (needs stack-merge φ)");
-    }
+    // The remaining stack values flow to successors (e.g. a ternary's result on a
+    // branch arm); a successor merge resolves them via its stack-merge φs.
+    exit_stacks[blk] = Some(stack);
     // A block with no explicit terminator falls through to its single successor.
     blocks[blk].term = term.unwrap_or_else(|| {
         Terminator::Fall { target: cfg.blocks[blk].succ.first().copied().unwrap_or(blk) }
     });
 
-    // Fill φ operands in successors for this predecessor edge.
+    // Fill φ operands in successors for this predecessor edge — local φs from the
+    // current versions, stack-merge φs from this block's exit stack (by position).
     let succ = cfg.blocks[blk].succ.clone();
     for &s in &succ {
         let pred_idx = cfg.preds[s].iter().position(|&p| p == blk).unwrap();
@@ -759,11 +1620,21 @@ fn rename(
                 operands[pred_idx] = operand;
             }
         }
+        let sphis = block_stack_phis[s].clone();
+        for (p, &phi_id) in sphis.iter().enumerate() {
+            let operand = exit_stacks[blk].as_ref().unwrap()[p];
+            if let SsaOp::Phi { operands, .. } = &mut b.values[phi_id as usize].op {
+                if operands.len() <= pred_idx {
+                    operands.resize(pred_idx + 1, operand);
+                }
+                operands[pred_idx] = operand;
+            }
+        }
     }
 
     // Recurse into dominator-tree children.
     for &c in &children[blk] {
-        rename(cf, cfg, bc, children, block_phi_slots, blocks, b, versions, c)?;
+        rename(cf, cfg, bc, children, block_phi_slots, block_stack_phis, exc_regions, handler_phis, caught, exit_stacks, blocks, b, versions, c)?;
     }
 
     // Pop versions defined in this block.
@@ -822,19 +1693,17 @@ pub(crate) struct Interval {
     pub(crate) end: u32,
 }
 
-/// Computes per-value live intervals. live-in/out are found by backward dataflow
-/// over the CFG (including back-edges, so loop-carried values stay live across
-/// the whole loop); intervals then span each value's def to its last live point.
-pub(crate) fn live_intervals(f: &SsaFn, num: &Numbering) -> Vec<Interval> {
+/// Per-block live-in / live-out value sets (backward dataflow). A φ operand is
+/// live-out of exactly the predecessor edge it comes from (NOT a general live-in
+/// of the φ's block) — so a value that is ONLY a φ operand is not live-in of the
+/// φ's block, which the coalescer relies on.
+pub(crate) fn block_liveness(f: &SsaFn) -> (Vec<BTreeSet<ValId>>, Vec<BTreeSet<ValId>>) {
     let n = f.blocks.len();
-    // uses[b] = values used in b before any (local) def; defs[b] = values defined.
     let mut use_: Vec<BTreeSet<ValId>> = vec![BTreeSet::new(); n];
     let mut def_: Vec<BTreeSet<ValId>> = vec![BTreeSet::new(); n];
     for b in 0..n {
         let blk = &f.blocks[b];
         let mut defined: BTreeSet<ValId> = BTreeSet::new();
-        // φ outputs are defined at entry; their OPERANDS are uses in the
-        // predecessor blocks (handled below as live-out contributions).
         for &p in &blk.phis {
             defined.insert(p);
             def_[b].insert(p);
@@ -854,8 +1723,6 @@ pub(crate) fn live_intervals(f: &SsaFn, num: &Numbering) -> Vec<Interval> {
             }
         }
     }
-    // Backward dataflow to a fixpoint. A φ operand is live-out of exactly the
-    // predecessor it comes from (not a general block use).
     let mut live_in: Vec<BTreeSet<ValId>> = vec![BTreeSet::new(); n];
     let mut live_out: Vec<BTreeSet<ValId>> = vec![BTreeSet::new(); n];
     loop {
@@ -863,15 +1730,28 @@ pub(crate) fn live_intervals(f: &SsaFn, num: &Numbering) -> Vec<Interval> {
         for b in (0..n).rev() {
             let mut lo: BTreeSet<ValId> = BTreeSet::new();
             for &s in &f.blocks[b].succ {
-                // successor live-in minus its φ outputs (those don't flow back).
                 for &v in &live_in[s] {
                     lo.insert(v);
                 }
-                // plus this edge's φ operands.
                 let pred_idx = f.blocks[s].preds.iter().position(|&p| p == b).unwrap();
                 for &phi in &f.blocks[s].phis {
                     if let SsaOp::Phi { operands, .. } = &f.values[phi as usize].op {
                         if let Some(&opnd) = operands.get(pred_idx) {
+                            lo.insert(opnd);
+                        }
+                    }
+                }
+            }
+            // Exceptional edges: a throw in `b` reaches its handler. Everything live
+            // at the handler's entry, plus every handler-φ operand (the throw-point
+            // snapshots `b` contributes), is live-out of `b`.
+            for &h in &f.blocks[b].exc_succ {
+                for &v in &live_in[h] {
+                    lo.insert(v);
+                }
+                for &phi in &f.blocks[h].phis {
+                    if let SsaOp::Phi { operands, .. } = &f.values[phi as usize].op {
+                        for &opnd in operands {
                             lo.insert(opnd);
                         }
                     }
@@ -896,6 +1776,15 @@ pub(crate) fn live_intervals(f: &SsaFn, num: &Numbering) -> Vec<Interval> {
             break;
         }
     }
+    (live_in, live_out)
+}
+
+/// Computes per-value live intervals. live-in/out are found by backward dataflow
+/// over the CFG (including back-edges, so loop-carried values stay live across
+/// the whole loop); intervals then span each value's def to its last live point.
+pub(crate) fn live_intervals(f: &SsaFn, num: &Numbering) -> Vec<Interval> {
+    let n = f.blocks.len();
+    let (live_in, live_out) = block_liveness(f);
     // Build intervals: for each value, [def, last point it's live]. A value
     // live-out of a block extends to that block's end; live across a loop body
     // (live-in at the header and live-out of the back-edge block) yields one
@@ -951,10 +1840,94 @@ pub(crate) fn live_intervals(f: &SsaFn, num: &Numbering) -> Vec<Interval> {
     intervals
 }
 
+/// Per-value PRECISE live ranges: one (start,end) segment per block the value is
+/// live in, over the global numbering. Unlike `live_intervals`' single coarse
+/// [min,max] span, these carry the holes needed for an exact interference test —
+/// two values interfere iff a segment of one overlaps a segment of the other. The
+/// distinction matters for φ-coalescing: an acyclic merge-φ's operands (e.g.
+/// clamp's `x` and `lo`, both live at the `if`) interfere and must NOT share a
+/// register, whereas a loop-φ's operands (init in the preheader vs the back-edge
+/// value in the latch) live in DIFFERENT blocks and don't interfere — a single
+/// [min,max] span (extended over the loop) can't tell them apart.
+fn live_ranges(f: &SsaFn, num: &Numbering) -> Vec<Vec<(u32, u32)>> {
+    let n = f.blocks.len();
+    let (live_in, live_out) = block_liveness(f);
+    let nv = f.values.len();
+    let mut ranges: Vec<Vec<(u32, u32)>> = vec![Vec::new(); nv];
+    for b in 0..n {
+        let (bstart, bend) = num.block_span[b];
+        // Last-use position of each value within this block, including φ-operand uses
+        // contributed across this block's outgoing edges (modeled at the block end).
+        let mut last_use: BTreeMap<ValId, u32> = BTreeMap::new();
+        let mut pos = bstart + NUMBER_DELTA;
+        for &v in &f.blocks[b].body {
+            for u in operands(&f.values[v as usize].op) {
+                last_use.insert(u, pos);
+            }
+            pos += NUMBER_DELTA;
+        }
+        for u in term_operands(&f.blocks[b].term) {
+            last_use.insert(u, bend);
+        }
+        for &s in &f.blocks[b].succ {
+            if let Some(pi) = f.blocks[s].preds.iter().position(|&p| p == b) {
+                for &phi in &f.blocks[s].phis {
+                    if let SsaOp::Phi { operands, .. } = &f.values[phi as usize].op {
+                        if let Some(&o) = operands.get(pi) {
+                            last_use.insert(o, bend);
+                        }
+                    }
+                }
+            }
+        }
+        // Values live somewhere in this block: live-in, defined here, or used here.
+        let mut cands: BTreeSet<ValId> = live_in[b].clone();
+        cands.extend(f.blocks[b].phis.iter().copied());
+        for &v in &f.blocks[b].body {
+            if produces_value(&f.values[v as usize].op) {
+                cands.insert(v);
+            }
+        }
+        cands.extend(last_use.keys().copied());
+        for v in cands {
+            let lo = if live_in[b].contains(&v) { bstart } else { num.def[v as usize] };
+            let hi = if live_out[b].contains(&v) {
+                bend
+            } else {
+                last_use.get(&v).copied().unwrap_or(lo)
+            };
+            if hi >= lo {
+                ranges[v as usize].push((lo, hi));
+            }
+        }
+    }
+    ranges
+}
+
+/// Whether two sets of live-range segments overlap. Half-open at the shared
+/// endpoint: a value's last use and another's def at the SAME position (the result
+/// of `r = op a, b` reusing a dying operand's register — d8's 2addr) do NOT
+/// interfere; genuine simultaneous liveness (both live strictly across a point) does.
+fn segs_interfere(a: &[(u32, u32)], b: &[(u32, u32)]) -> bool {
+    for &(alo, ahi) in a {
+        for &(blo, bhi) in b {
+            if alo < bhi && blo < ahi {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Whether two values' precise live ranges overlap (they cannot share a register).
+fn ranges_interfere(ranges: &[Vec<(u32, u32)>], a: ValId, b: ValId) -> bool {
+    a != b && segs_interfere(&ranges[a as usize], &ranges[b as usize])
+}
+
 /// The value operands an op reads.
 fn operands(op: &SsaOp) -> Vec<ValId> {
     match op {
-        SsaOp::Phi { .. } | SsaOp::Argument { .. } | SsaOp::ConstInt(_) | SsaOp::ConstLong(_) | SsaOp::ConstString(_) => Vec::new(),
+        SsaOp::Phi { .. } | SsaOp::Argument { .. } | SsaOp::ConstInt(_) | SsaOp::ConstLong(_) | SsaOp::ConstString { .. } | SsaOp::ConstClass { .. } => Vec::new(),
         SsaOp::Binop { a, b, .. } | SsaOp::Cmp { a, b, .. } => vec![*a, *b],
         SsaOp::Unop { a, .. } => vec![*a],
         SsaOp::Invoke { args, .. } => args.clone(),
@@ -965,6 +1938,55 @@ fn operands(op: &SsaOp) -> Vec<ValId> {
         SsaOp::ArrayGet { array, index, .. } => vec![*array, *index],
         SsaOp::ArrayPut { array, index, value, .. } => vec![*array, *index, *value],
         SsaOp::ArrayLength { array, .. } => vec![*array],
+        SsaOp::NewInstance { .. } => Vec::new(),
+        SsaOp::NewArray { size, .. } => vec![*size],
+        SsaOp::CheckCast { obj, .. } | SsaOp::InstanceOf { obj, .. } => vec![*obj],
+        SsaOp::CaughtException => Vec::new(),
+    }
+}
+
+/// The JVM pc of an op that carries one (for mapping throwing instructions to DEX
+/// addresses when narrowing try_item ranges).
+fn op_jvm_pc(op: &SsaOp) -> Option<u32> {
+    match op {
+        SsaOp::Invoke { jvm_pc, .. }
+        | SsaOp::GetField { jvm_pc, .. }
+        | SsaOp::GetStatic { jvm_pc, .. }
+        | SsaOp::PutField { jvm_pc, .. }
+        | SsaOp::PutStatic { jvm_pc, .. }
+        | SsaOp::ArrayGet { jvm_pc, .. }
+        | SsaOp::ArrayPut { jvm_pc, .. }
+        | SsaOp::ArrayLength { jvm_pc, .. }
+        | SsaOp::NewInstance { jvm_pc, .. }
+        | SsaOp::NewArray { jvm_pc, .. }
+        | SsaOp::ConstString { jvm_pc, .. }
+        | SsaOp::ConstClass { jvm_pc, .. }
+        | SsaOp::CheckCast { jvm_pc, .. }
+        | SsaOp::InstanceOf { jvm_pc, .. }
+        | SsaOp::Binop { jvm_pc, .. } => Some(*jvm_pc),
+        _ => None,
+    }
+}
+
+/// Whether an emitted SSA op can throw (mirrors `is_throwing_op` over the ops the
+/// SSA path produces) — used to narrow a try_item to its guarded instructions.
+fn ssa_op_can_throw(op: &SsaOp) -> bool {
+    match op {
+        SsaOp::Invoke { .. }
+        | SsaOp::GetField { .. }
+        | SsaOp::GetStatic { .. }
+        | SsaOp::PutField { .. }
+        | SsaOp::PutStatic { .. }
+        | SsaOp::ArrayGet { .. }
+        | SsaOp::ArrayPut { .. }
+        | SsaOp::ArrayLength { .. }
+        | SsaOp::NewInstance { .. }
+        | SsaOp::NewArray { .. }
+        | SsaOp::CheckCast { .. }
+        | SsaOp::ConstString { .. }
+        | SsaOp::ConstClass { .. } => true,
+        SsaOp::Binop { jvm_op, .. } => matches!(jvm_op, 0x6c | 0x6d | 0x70 | 0x71),
+        _ => false,
     }
 }
 
@@ -1003,6 +2025,8 @@ fn term_operands(t: &Terminator) -> Vec<ValId> {
     match t {
         Terminator::If { operands, .. } => operands.clone(),
         Terminator::Return { value: Some(v), .. } => vec![*v],
+        Terminator::Throw { value, .. } => vec![*value],
+        Terminator::Switch { value, .. } => vec![*value],
         _ => Vec::new(),
     }
 }
@@ -1030,24 +2054,72 @@ fn is_rematerialized(f: &SsaFn, v: ValId) -> bool {
         SsaOp::ConstInt(c) => c,
         _ => return false,
     };
-    if !(-128..=127).contains(&c) {
+    // Foldable into a lit8 (`x op #-128..127`) or lit16 (`x op #-32768..32767`) form;
+    // all `lit_ops` have both, and emit_binop picks the narrower that fits. A const
+    // outside lit16 range can't fold, so it keeps its own register.
+    if !(-32768..=32767).contains(&c) {
         return false;
     }
-    // Every use must be a lit-foldable binop with this constant as the RIGHT operand.
+    // EVERY use must be a lit-foldable binop operand: as the RIGHT operand, or the LEFT
+    // operand of a COMMUTATIVE op (d8 folds `3*n` as `mul-int/lit8 n,#3`). ANY other use
+    // (array index/element, field obj, call arg, cmp/unop operand, φ operand, new-array
+    // size, a branch/return value) needs the const in a register — rematerializing it
+    // would leave that operand with NO_REG (a miscompile: e.g. `aget v2,v3,vNO_REG`).
     let mut any_use = false;
     for u in &f.values {
-        let (jop, a, b) = match u.op {
-            SsaOp::Binop { jvm_op, a, b } => (jvm_op, a, b),
-            _ => continue,
-        };
-        if a == v {
-            return false; // constant as left operand can't lit-fold
-        }
-        if b == v {
-            any_use = true;
-            if crate::bootstrap::lit_ops(jop).is_none() {
-                return false;
+        match &u.op {
+            SsaOp::Binop { jvm_op, a, b, .. } => {
+                let (jop, a, b) = (*jvm_op, *a, *b);
+                let on_left = a == v;
+                let on_right = b == v;
+                if !on_left && !on_right {
+                    continue;
+                }
+                // `c op c` needs the const in a register (the lit-fold's source) AND as
+                // the literal. A const LEFT of a NON-commutative op can't fold — EXCEPT
+                // isub (`c - x`), which DEX folds via rsub-int (reverse subtract). Other
+                // non-commutative left (shift/div/rem) keep the const's register.
+                let isub_left = jop == 0x64 && on_left;
+                if (on_left && on_right)
+                    || (on_left && !crate::bootstrap::is_commutative(jop) && !isub_left)
+                {
+                    return false;
+                }
+                any_use = true;
+                // isub: `x - c` folds as `x + (-c)` (NEGATED const must fit); `c - x` folds
+                // as `rsub-int x, #c` (the const itself, fits the outer lit16 range). Shifts
+                // are lit8-only; others use lit_ops (commutative left-const folds via swap).
+                let foldable = if jop == 0x64 {
+                    if on_left {
+                        (-32768..=32767).contains(&(c as i64))
+                    } else {
+                        (-32768..=32767).contains(&-(c as i64))
+                    }
+                } else if crate::bootstrap::shift_lit8_op(jop).is_some() {
+                    (-128..=127).contains(&c)
+                } else {
+                    crate::bootstrap::lit_ops(jop).is_some()
+                };
+                if !foldable {
+                    return false;
+                }
             }
+            SsaOp::Phi { operands, .. } => {
+                if operands.contains(&v) {
+                    return false;
+                }
+            }
+            other => {
+                if operands(other).contains(&v) {
+                    return false;
+                }
+            }
+        }
+    }
+    // A const read by an if-test or returned directly also needs a register.
+    for blk in &f.blocks {
+        if term_operands(&blk.term).contains(&v) {
+            return false;
         }
     }
     any_use
@@ -1081,12 +2153,41 @@ impl Coalesce {
 
 pub(crate) fn allocate(f: &SsaFn, num: &Numbering, intervals: &[Interval]) -> Allocation {
     let nv = f.values.len();
-    // 1. Coalesce φ-nodes with their operands (loop-carried values share a reg).
+    let (live_in, live_out) = block_liveness(f);
+    let ranges = live_ranges(f, num);
+    // 1. Coalesce φ-nodes with their operands, subject to two interference checks:
+    //  (a) φ vs operand: skip an operand that is also live-in of the φ's block (it's
+    //      independently live past the merge — e.g. a loop counter a conditional
+    //      reassignment reads but that lives on to `i++`; coalescing would clobber
+    //      it, so leave it for a φ-move / bail rather than miscompile).
+    //  (b) φ vs operand, live-OUT: skip an operand that is live-OUT of the φ's block
+    //      — it stays live past the φ's definition, so it coexists with (interferes
+    //      with) the φ. This catches a φ whose operand is ANOTHER φ in the same block
+    //      that is itself live (e.g. Fibonacci `a=b; b=t`: the a-φ's back-edge operand
+    //      is the b-φ, which is live across the loop body — coalescing a and b into one
+    //      register is a miscompile, `add v0,v0`). The live-IN check misses it because
+    //      the b-φ is DEFINED in the header (not live-in there).
+    //  (c) operand vs operand: skip an operand that interferes (precise live-range
+    //      overlap) with one already coalesced into THIS φ's group — e.g. clamp's
+    //      `if(r<lo)r=lo` merge-φ has operands `x` and `lo` that are both live at the
+    //      `if(x<lo)` compare; coalescing both would merge two simultaneously-live
+    //      values into one register (a miscompile). Loop-φ operands (init vs the
+    //      back-edge value) live in different blocks, so they don't interfere and
+    //      still coalesce.
     let mut co = Coalesce::new(nv);
     for v in &f.values {
         if let SsaOp::Phi { operands, .. } = &v.op {
+            let b = v.block;
+            let mut group: Vec<ValId> = Vec::new();
             for &o in operands {
+                if live_in[b].contains(&o) || live_out[b].contains(&o) {
+                    continue;
+                }
+                if group.iter().any(|&g| ranges_interfere(&ranges, g, o)) {
+                    continue;
+                }
                 co.union(v.id, o);
+                group.push(o);
             }
         }
     }
@@ -1104,59 +2205,116 @@ pub(crate) fn allocate(f: &SsaFn, num: &Numbering, intervals: &[Interval]) -> Al
     }
     let num_arg = f.num_arg_registers;
 
-    // 3. Linear scan over coalescing-group leaders, by interval start.
-    //    Group interval = union of members' [start,end). Rematerialized
-    //    constants get no register.
-    let mut group_iv: BTreeMap<u32, (u32, u32, bool)> = BTreeMap::new(); // leader -> (start,end,wide)
-    for iv in intervals {
-        if is_rematerialized(f, iv.value) {
+    // 3. Register assignment via PRECISE interference. Each coalescing group's live
+    //    range is the union of its members' (hole-bearing) segments; a register is
+    //    free for the current group iff no already-assigned group whose segments
+    //    OVERLAP this group's holds it. This is what lets a fresh value reuse the
+    //    register of an argument/value that is DEAD in the block where the new value
+    //    is defined (e.g. `if(x>0)s=1;...` reusing `x`'s register for `s`) — a coarse
+    //    [min,max] span would falsely keep that register busy across the hole.
+    let _ = intervals;
+    let mut group_segs: BTreeMap<u32, Vec<(u32, u32)>> = BTreeMap::new();
+    let mut group_wide: BTreeMap<u32, bool> = BTreeMap::new();
+    let mut group_start: BTreeMap<u32, u32> = BTreeMap::new();
+    for v in 0..nv as u32 {
+        if is_rematerialized(f, v) || ranges[v as usize].is_empty() {
             continue;
         }
-        let leader = co.find(iv.value);
-        let wide = f.values[iv.value as usize].wide;
-        let e = group_iv.entry(leader).or_insert((iv.start, iv.end, wide));
-        e.0 = e.0.min(iv.start);
-        e.1 = e.1.max(iv.end);
-        e.2 |= wide;
+        let leader = co.find(v);
+        group_segs.entry(leader).or_default().extend_from_slice(&ranges[v as usize]);
+        *group_wide.entry(leader).or_insert(false) |= f.values[v as usize].wide;
+        let st = ranges[v as usize].iter().map(|s| s.0).min().unwrap();
+        group_start.entry(leader).and_modify(|x| *x = (*x).min(st)).or_insert(st);
     }
-    let mut order: Vec<u32> = group_iv.keys().copied().collect();
-    order.sort_by_key(|&g| (group_iv[&g].0, g));
+    let mut order: Vec<u32> = group_segs.keys().copied().collect();
+    order.sort_by_key(|&g| (group_start[&g], g));
 
-    // Active groups: (end, leader, reg, wide).
-    let mut active: Vec<(u32, u32, u16, bool)> = Vec::new();
     let mut max_reg: i32 = num_arg as i32 - 1;
+    let mut assigned: Vec<u32> = Vec::new(); // group leaders with a register
     for &g in &order {
-        let (start, end, wide) = group_iv[&g];
-        // Pre-colored (argument) groups: already have a register.
+        let wide = group_wide[&g];
+        let need = if wide { 2 } else { 1 };
+        // Pre-colored (argument) groups already have a register.
         if reg[g as usize] != NO_REG {
-            active.push((end, g, reg[g as usize], wide));
+            max_reg = max_reg.max(reg[g as usize] as i32 + need as i32 - 1);
+            assigned.push(g);
             continue;
         }
-        // Expire groups that ended at/before this start.
-        let mut occupied = vec![false; (max_reg + 2).max(num_arg as i32 + 2) as usize + 2];
-        active.retain(|&(e, _, _, _)| e > start);
-        for &(_, _, r, w) in &active {
-            occupied[r as usize] = true;
-            if w {
-                occupied[r as usize + 1] = true;
+        // Registers held by already-assigned groups whose ranges overlap g's.
+        let mut occupied = vec![false; (max_reg + 3).max(num_arg as i32 + 3) as usize];
+        for &h in &assigned {
+            if segs_interfere(&group_segs[&g], &group_segs[&h]) {
+                let r = reg[h as usize] as usize;
+                if r + 1 >= occupied.len() {
+                    occupied.resize(r + 2, false);
+                }
+                occupied[r] = true;
+                if group_wide[&h] {
+                    occupied[r + 1] = true;
+                }
             }
         }
-        // Lowest free allocated register (a pair if wide), not straddling args.
-        let need = if wide { 2 } else { 1 };
-        let mut r = 0usize;
-        loop {
-            if r + need > occupied.len() {
-                occupied.resize(r + need, false);
+        // d8 reuses an operand's register for a result ONLY when a 2addr form exists; a
+        // comparison (cmp-long / cmpl/cmpg-float/double — all 23x, no 2addr form) never
+        // does, so its result must NOT land on a (dead) operand's register. Mark the
+        // operands occupied so the result takes a fresh register, matching d8. (Additive
+        // — can only push the result to a higher register, never a miscompile. Live
+        // operands are already occupied, so byte-identical cmps like DblCmp are unchanged.)
+        if let SsaOp::Cmp { a, b, .. } = f.values[g as usize].op {
+            for o in [a, b] {
+                let r = reg[co.find(o) as usize];
+                if r != NO_REG {
+                    let r = r as usize;
+                    if r + 1 >= occupied.len() {
+                        occupied.resize(r + 2, false);
+                    }
+                    occupied[r] = true;
+                    if f.values[o as usize].wide {
+                        occupied[r + 1] = true;
+                    }
+                }
             }
+        }
+        let fits = |r: usize, occ: &[bool]| -> bool {
             let straddle = wide && num_arg > 0 && r == (num_arg as usize - 1);
-            if !straddle && (0..need).all(|k| !occupied[r + k]) {
-                break;
+            !straddle && (0..need).all(|k| r + k >= occ.len() || !occ[r + k])
+        };
+        // d8 hints a binop/unop RESULT to a dying operand's register (the 2addr form
+        // `add-int/2addr vA,vB` reuses the left operand vA; a commutative op may reuse
+        // the right). A dead operand doesn't interfere with the result, so its
+        // register is free here — prefer it over the lowest free one to match d8.
+        let cands: Vec<ValId> = match &f.values[g as usize].op {
+            SsaOp::Binop { a, b, jvm_op, .. } => {
+                if crate::bootstrap::is_commutative(*jvm_op) {
+                    vec![*a, *b]
+                } else {
+                    vec![*a]
+                }
             }
-            r += 1;
-        }
+            SsaOp::Unop { a, .. } => vec![*a],
+            _ => Vec::new(),
+        };
+        let preferred = cands.iter().find_map(|&o| {
+            let r = reg[co.find(o) as usize];
+            (r != NO_REG && fits(r as usize, &occupied)).then_some(r as usize)
+        });
+        let r = preferred.unwrap_or_else(|| {
+            // Lowest free allocated register (a pair if wide), not straddling args.
+            let mut r = 0usize;
+            loop {
+                if r + need > occupied.len() {
+                    occupied.resize(r + need, false);
+                }
+                if fits(r, &occupied) {
+                    break;
+                }
+                r += 1;
+            }
+            r
+        });
         reg[g as usize] = r as u16;
         max_reg = max_reg.max((r + need - 1) as i32);
-        active.push((end, g, r as u16, wide));
+        assigned.push(g);
     }
 
     // 4. Propagate group registers to all members.
@@ -1184,8 +2342,41 @@ pub(crate) fn dex_method_ssa(
     params: &[String],
     instance: bool,
     line_numbers: &[(u16, u16)],
+    exceptions: &[ExceptionEntry],
 ) -> Result<CodeItem> {
-    let mut f = build_ssa(cf, bc, params, instance)?;
+    let mut f = build_ssa(cf, bc, params, instance, exceptions)?;
+    // `bastore`/`baload` are shared by byte[] AND boolean[]; pick the right DEX variant
+    // from the array's component type (the JVM op alone is ambiguous). Runs first so the
+    // corrected dex_op flows into cse_loads' value-numbering keys.
+    fix_byte_boolean_array_ops(&mut f, params, instance)?;
+    // Algebraic identity folding, like d8: `x+0`, `x-0`, `x|0`, `x^0`, `x<<0` → `x`,
+    // `x*1` → `x` (the const operand is then dead and DCE removes it). Rewrites uses
+    // of the binop to the surviving operand.
+    constant_fold(&mut f);
+    // Combine chained int add/sub-by-constant (`(i+7)-1` → `i+6`), like d8, when the
+    // intermediate is single-use.
+    combine_const_adds(&mut f);
+    // Block-local redundant-load elimination (LVN), like d8: a repeated `aget`/`iget`/
+    // `sget`/`array-length` with the same operands and no intervening store/call reads
+    // the same value (`a[i]*a[i]`, `this.x*this.x`) — replaced by the first load.
+    cse_loads(&mut f);
+    // Dead-code elimination, like d8: a pure value (no side effect, can't throw)
+    // with no remaining users is removed — e.g. an `int s = 0` init that every path
+    // overwrites before reading, and any φ that only fed it.
+    dce(&mut f);
+    // d8 SINKS a partially-dead initializer (`int r = 0; if (c) r = …; return r;`) into
+    // the branch where it survives. We DON'T sink — we materialize the const before the
+    // `if` and let it flow via its register / a φ-move on the merge edge (now that
+    // φ-moves on branching edges are emitted). That's functionally correct, just not
+    // d8's byte-identical sunk shape; we've relaxed byte-identity for coverage.
+    // A φ whose operand is a SIBLING φ in the same block is a parallel copy at the loop
+    // back-edge (`a = b; b = a` swap, 3-way rotation, sliding windows). A sibling φ updated
+    // in place would make the move reading it run AFTER it was overwritten — a lost copy.
+    // This is now handled: the back-edge's φ-moves are emitted as ONE set through a single
+    // emit_move_list call (at the latch end, or the If's inline/trampoline path), which
+    // SEQUENTIALIZES the parallel copy — dependency-ordering chains and breaking cycles with
+    // the `registers_used` scratch temp. (emit_move_list still bails — never miscompiles —
+    // on the residue it can't sequentialize: wide cycles, scratch ≥ 16.)
     // d8 builds its IR with lazily-created φ-nodes: a loop variable's φ is created
     // the first time its slot is *read*, so the φ for the variable used earliest in
     // the loop (the counter, read in the condition) gets the lower SSA number — and
@@ -1198,7 +2389,484 @@ pub(crate) fn dex_method_ssa(
     let num = number(&f);
     let ivs = live_intervals(&f, &num);
     let alloc = allocate(&f, &num, &ivs);
+    // Safety net against OVER-COALESCING (never miscompile): if a binop/cmp/branch reads
+    // two DISTINCT value-operands that landed in the SAME register, the coalescer merged
+    // two simultaneously-live values (e.g. `m = x>m ? x : m` coalescing x with m → the
+    // compare becomes `if-le v0,v0`). That conflates the operands — bail rather than emit
+    // wrong code. Precise (no false positives): legitimately-coalesced values are never
+    // both distinct operands of one instruction; a proper fix needs precise interference.
+    let conflated = |a: ValId, b: ValId| a != b && alloc.reg[a as usize] == alloc.reg[b as usize];
+    for v in &f.values {
+        if let SsaOp::Binop { a, b, .. } | SsaOp::Cmp { a, b, .. } = v.op {
+            if conflated(a, b) {
+                bail!("ssa: over-coalesce conflated two live operands into one register");
+            }
+        }
+    }
+    for blk in &f.blocks {
+        if let Terminator::If { operands, .. } = &blk.term {
+            if operands.len() == 2 && conflated(operands[0], operands[1]) {
+                bail!("ssa: over-coalesce conflated two live branch operands into one register");
+            }
+        }
+    }
+    // Multi-predecessor handler safety (never miscompile): a handler-φ snapshots a slot's
+    // version at EACH throw point in the guarded region. Exceptional edges can't carry
+    // φ-moves (the exception transfers control abruptly), so EVERY operand must already
+    // share the φ's register — the slot's value is then in that register whichever throw
+    // fires. If the coalescer couldn't unify them all, BAIL (a move on the exceptional
+    // edge is impossible) rather than let the handler read a stale register.
+    for hb in 0..f.blocks.len() {
+        if f.caught[hb].is_none() {
+            continue; // not an exception handler block
+        }
+        for &phi in &f.blocks[hb].phis {
+            if let SsaOp::Phi { operands, .. } = &f.values[phi as usize].op {
+                let r = alloc.reg[phi as usize];
+                if operands.iter().any(|&o| alloc.reg[o as usize] != r) {
+                    bail!("ssa: multi-pred handler-φ operands not coalesced into one register (no move on an exceptional edge)");
+                }
+            }
+        }
+    }
     build_dex(&f, &num, &alloc, line_numbers, params)
+}
+
+/// Rewrites every operand ValId of `op` through `g` (for value substitution).
+fn map_operands(op: &mut SsaOp, mut g: impl FnMut(ValId) -> ValId) {
+    match op {
+        SsaOp::Phi { operands, .. } => {
+            for o in operands {
+                *o = g(*o);
+            }
+        }
+        SsaOp::Binop { a, b, .. } | SsaOp::Cmp { a, b, .. } => {
+            *a = g(*a);
+            *b = g(*b);
+        }
+        SsaOp::Unop { a, .. } => *a = g(*a),
+        SsaOp::Invoke { args, .. } => {
+            for o in args {
+                *o = g(*o);
+            }
+        }
+        SsaOp::GetField { obj, .. } => *obj = g(*obj),
+        SsaOp::PutStatic { value, .. } => *value = g(*value),
+        SsaOp::PutField { obj, value, .. } => {
+            *obj = g(*obj);
+            *value = g(*value);
+        }
+        SsaOp::ArrayGet { array, index, .. } => {
+            *array = g(*array);
+            *index = g(*index);
+        }
+        SsaOp::ArrayPut { array, index, value, .. } => {
+            *array = g(*array);
+            *index = g(*index);
+            *value = g(*value);
+        }
+        SsaOp::ArrayLength { array, .. } => *array = g(*array),
+        SsaOp::NewArray { size, .. } => *size = g(*size),
+        SsaOp::CheckCast { obj, .. } | SsaOp::InstanceOf { obj, .. } => *obj = g(*obj),
+        SsaOp::Argument { .. }
+        | SsaOp::ConstInt(_)
+        | SsaOp::ConstLong(_)
+        | SsaOp::ConstString { .. }
+        | SsaOp::ConstClass { .. }
+        | SsaOp::GetStatic { .. }
+        | SsaOp::NewInstance { .. }
+        | SsaOp::CaughtException => {}
+    }
+}
+
+/// Algebraic-identity constant folding (matches d8). A binop with a constant
+/// identity operand is replaced by its other operand: `x+0`/`0+x`, `x-0`, `x|0`/
+/// `0|x`, `x^0`/`0^x`, `x<<0`/`x>>0`/`x>>>0` → `x`; `x*1`/`1*x` → `x`. (div/rem are
+/// throwing and left alone.) Uses are rewritten to the surviving operand; the now-
+/// dead binop and constant are swept by `dce`.
+/// Combines a chained int add/sub by constants into one, matching d8: `(y±c1)±c2` →
+/// `y + (±c1±c2)` (`(i+7)-1` → `i+6`). Only when the intermediate `y±c1` is SINGLE-USE
+/// (so it's eliminated, not recomputed — d8 keeps it if shared). The rewritten op uses a
+/// fresh combined ConstInt; the dead intermediate + old consts are swept by dce.
+fn combine_const_adds(f: &mut SsaFn) {
+    let n = f.values.len();
+    // Use count of each value across all operands + terminators.
+    let mut uses = vec![0u32; n];
+    for u in &f.values {
+        match &u.op {
+            SsaOp::Phi { operands, .. } => {
+                for &o in operands {
+                    uses[o as usize] += 1;
+                }
+            }
+            other => {
+                for o in operands(other) {
+                    uses[o as usize] += 1;
+                }
+            }
+        }
+    }
+    for b in &f.blocks {
+        for o in term_operands(&b.term) {
+            uses[o as usize] += 1;
+        }
+    }
+    let cint = |f: &SsaFn, x: ValId| match f.values[x as usize].op {
+        SsaOp::ConstInt(c) => Some(c),
+        _ => None,
+    };
+    // (V, y, jvm_pc, combined-const)
+    let mut rewrites: Vec<(usize, ValId, u32, i32)> = Vec::new();
+    for v in 0..n {
+        let (op2, x, b2, pc2) = match f.values[v].op {
+            SsaOp::Binop { jvm_op, a, b, jvm_pc } => (jvm_op, a, b, jvm_pc),
+            _ => continue,
+        };
+        if !matches!(op2, 0x60 | 0x64) {
+            continue; // iadd / isub only (int)
+        }
+        let c2 = match cint(f, b2) {
+            Some(c) => c,
+            None => continue, // c2 must be a constant (right operand)
+        };
+        if uses[x as usize] != 1 {
+            continue; // intermediate must be single-use (else d8 keeps it)
+        }
+        let (op1, y, b1) = match f.values[x as usize].op {
+            SsaOp::Binop { jvm_op, a, b, .. } => (jvm_op, a, b),
+            _ => continue,
+        };
+        if !matches!(op1, 0x60 | 0x64) {
+            continue;
+        }
+        let c1 = match cint(f, b1) {
+            Some(c) => c,
+            None => continue,
+        };
+        let d1 = if op1 == 0x60 { c1 } else { c1.wrapping_neg() };
+        let d2 = if op2 == 0x60 { c2 } else { c2.wrapping_neg() };
+        rewrites.push((v, y, pc2, d1.wrapping_add(d2)));
+    }
+    if rewrites.is_empty() {
+        return;
+    }
+    let base = f.values.len() as ValId;
+    for (i, &(_, _, _, combined)) in rewrites.iter().enumerate() {
+        let id = base + i as u32;
+        f.values.push(SsaValue { id, op: SsaOp::ConstInt(combined), wide: false, is_ref: false, block: 0 });
+    }
+    for (i, &(v, y, pc, _)) in rewrites.iter().enumerate() {
+        f.values[v].op = SsaOp::Binop { jvm_op: 0x60, a: y, b: base + i as u32, jvm_pc: pc };
+    }
+}
+
+fn constant_fold(f: &mut SsaFn) {
+    let n = f.values.len();
+    let cv = |f: &SsaFn, x: ValId| -> Option<i64> {
+        match &f.values[x as usize].op {
+            SsaOp::ConstInt(c) => Some(*c as i64),
+            SsaOp::ConstLong(c) => Some(*c),
+            _ => None,
+        }
+    };
+    let mut repl: Vec<ValId> = (0..n as ValId).collect();
+    for v in 0..n {
+        if let SsaOp::Binop { jvm_op, a, b, .. } = f.values[v].op {
+            let (lc, rc) = (cv(f, a), cv(f, b));
+            let surviving = match jvm_op {
+                // add / or / xor — identity 0, either side.
+                0x60 | 0x61 | 0x80 | 0x81 | 0x82 | 0x83 => {
+                    if rc == Some(0) {
+                        Some(a)
+                    } else if lc == Some(0) {
+                        Some(b)
+                    } else {
+                        None
+                    }
+                }
+                // sub — identity 0 on the right (0-x ≠ x).
+                0x64 | 0x65 => (rc == Some(0)).then_some(a),
+                // mul — identity 1, either side.
+                0x68 | 0x69 => {
+                    if rc == Some(1) {
+                        Some(a)
+                    } else if lc == Some(1) {
+                        Some(b)
+                    } else {
+                        None
+                    }
+                }
+                // shifts (i/l shl, shr, ushr) — shift by 0 on the right.
+                0x78..=0x7d => (rc == Some(0)).then_some(a),
+                _ => None,
+            };
+            if let Some(s) = surviving {
+                repl[v] = s;
+            }
+        }
+    }
+    fn find(repl: &[ValId], mut x: ValId) -> ValId {
+        while repl[x as usize] != x {
+            x = repl[x as usize];
+        }
+        x
+    }
+    if repl.iter().enumerate().all(|(i, &r)| i as ValId == r) {
+        return; // nothing folded
+    }
+    for v in 0..n {
+        let r = &repl;
+        map_operands(&mut f.values[v].op, |x| find(r, x));
+    }
+    for b in &mut f.blocks {
+        match &mut b.term {
+            Terminator::If { operands, .. } => {
+                for o in operands {
+                    *o = find(&repl, *o);
+                }
+            }
+            Terminator::Return { value: Some(v), .. } => *v = find(&repl, *v),
+            Terminator::Throw { value, .. } => *value = find(&repl, *value),
+            Terminator::Switch { value, .. } => *value = find(&repl, *value),
+            _ => {}
+        }
+    }
+}
+
+/// `bastore`/`baload` (JVM) are SHARED by `byte[]` and `boolean[]`; DEX splits them by
+/// the array's component type — aput-byte/aget-byte (0x4f/0x48) for byte[],
+/// aput-boolean/aget-boolean (0x4e/0x47) for boolean[]. The SSA builder defaults to the
+/// byte variant (it only sees the JVM op). Here we trace each such op's array operand to
+/// its declared element type and rewrite to the boolean variant for a `boolean[]`. Using
+/// the byte op on a `boolean[]` is an ART VerifyError, so when the element type can't be
+/// determined we BAIL rather than risk a miscompile. (The boolean op is exactly one
+/// opcode below its byte counterpart, hence `dex_op - 1`.)
+fn fix_byte_boolean_array_ops(f: &mut SsaFn, params: &[String], instance: bool) -> Result<()> {
+    // The descriptor of the array a value holds, if statically determinable.
+    fn array_desc(
+        f: &SsaFn,
+        params: &[String],
+        instance: bool,
+        v: ValId,
+        depth: u32,
+    ) -> Option<String> {
+        if depth > 32 {
+            return None;
+        }
+        match &f.values[v as usize].op {
+            SsaOp::Argument { index } => {
+                let pi = if instance { index.checked_sub(1)? } else { *index };
+                params.get(pi).cloned()
+            }
+            SsaOp::NewArray { type_desc, .. } => Some(type_desc.clone()),
+            SsaOp::GetField { field, .. } | SsaOp::GetStatic { field, .. } => {
+                Some(field.type_.clone())
+            }
+            SsaOp::Invoke { method, .. } => Some(method.proto.return_type.clone()),
+            // element of an array-of-arrays: "[[Z" → "[Z".
+            SsaOp::ArrayGet { array, .. } => {
+                array_desc(f, params, instance, *array, depth + 1)?.strip_prefix('[').map(str::to_string)
+            }
+            // all φ operands must agree on a descriptor.
+            SsaOp::Phi { operands, .. } => {
+                let mut desc: Option<String> = None;
+                for &o in operands.iter().filter(|&&o| o != v) {
+                    let d = array_desc(f, params, instance, o, depth + 1)?;
+                    match &desc {
+                        None => desc = Some(d),
+                        Some(prev) if *prev == d => {}
+                        Some(_) => return None,
+                    }
+                }
+                desc
+            }
+            _ => None,
+        }
+    }
+    let mut rewrites: Vec<(usize, u16)> = Vec::new();
+    for v in 0..f.values.len() {
+        let (dex_op, array) = match &f.values[v].op {
+            SsaOp::ArrayGet { dex_op, array, .. } if *dex_op == 0x48 => (*dex_op, *array),
+            SsaOp::ArrayPut { dex_op, array, .. } if *dex_op == 0x4f => (*dex_op, *array),
+            _ => continue,
+        };
+        match array_desc(f, params, instance, array, 0).as_deref() {
+            Some("[Z") => rewrites.push((v, dex_op - 1)), // boolean[] → boolean variant
+            Some("[B") => {}                              // byte[] → keep byte variant
+            _ => bail!("ssa: bastore/baload on an array of undetermined byte-vs-boolean type"),
+        }
+    }
+    for (v, op) in rewrites {
+        match &mut f.values[v].op {
+            SsaOp::ArrayGet { dex_op, .. } | SsaOp::ArrayPut { dex_op, .. } => *dex_op = op,
+            _ => unreachable!(),
+        }
+    }
+    Ok(())
+}
+
+/// Block-local memory value-numbering, matching d8 — two complementary rewrites over a
+/// single block's `aget`/`iget`/`sget`/`array-length` reads:
+///   • REDUNDANT-LOAD CSE: a second read with the SAME operands as an earlier read,
+///     with no intervening store/call, yields the identical value and throws under
+///     identical conditions (the earlier read dominates it within the block) — so it's
+///     replaced by the earlier read.
+///   • STORE-TO-LOAD FORWARDING: a read of a location that was just STORED, with no
+///     intervening store/call, yields the stored value (`a[i]=v; …a[i]` → v;
+///     `this.x=v; …this.x` → v) — so it's replaced by the stored operand. d8 forwards
+///     the stored operand directly even for narrowing element types (`byte[]`): valid
+///     bytecode normalizes the value (`int-to-byte`) BEFORE the store, so it already
+///     equals what an `aget-byte` would read back. The matching load op is always the
+///     store op minus 7 (aput→aget / iput→iget / sput→sget).
+/// Loads are `can_throw`, so `dce` keeps a dead replaced load; this pass removes it from
+/// the block body directly. Invalidation is maximally conservative: ANY store or call
+/// clears the whole cache (could alias any array/field). Block-local only, so the
+/// earlier read/store always dominates the later read — no cross-block reasoning.
+fn cse_loads(f: &mut SsaFn) {
+    #[derive(PartialEq, Clone)]
+    enum Key {
+        Arr(u16, ValId, ValId),
+        Field(u16, ValId, FieldRef),
+        Static(u16, FieldRef),
+        Len(ValId),
+    }
+    fn load_key(op: &SsaOp) -> Option<Key> {
+        match op {
+            SsaOp::ArrayGet { dex_op, array, index, .. } => Some(Key::Arr(*dex_op, *array, *index)),
+            SsaOp::GetField { dex_op, field, obj, .. } => {
+                Some(Key::Field(*dex_op, *obj, field.clone()))
+            }
+            SsaOp::GetStatic { dex_op, field, .. } => Some(Key::Static(*dex_op, field.clone())),
+            SsaOp::ArrayLength { array, .. } => Some(Key::Len(*array)),
+            _ => None,
+        }
+    }
+    // Process one block's body, threading the available-loads/forwards cache `avail`.
+    // When `record`, rewrites redundant loads (repl/removed); otherwise it only updates
+    // `avail` (to compute avail_out for the cross-block step). A store clears the cache
+    // (any aliasing) then publishes the stored value (forwarding); a call clears it.
+    fn cse_block(
+        f: &SsaFn,
+        b: usize,
+        avail: &mut Vec<(Key, ValId)>,
+        repl: &mut [ValId],
+        removed: &mut [bool],
+        record: bool,
+    ) {
+        for &v in &f.blocks[b].body {
+            match &f.values[v as usize].op {
+                SsaOp::ArrayPut { dex_op, array, index, value, .. } => {
+                    let k = Key::Arr(*dex_op - 7, *array, *index);
+                    avail.clear();
+                    avail.push((k, *value));
+                }
+                SsaOp::PutField { dex_op, field, obj, value, .. } => {
+                    let k = Key::Field(*dex_op - 7, *obj, field.clone());
+                    avail.clear();
+                    avail.push((k, *value));
+                }
+                SsaOp::PutStatic { dex_op, field, value, .. } => {
+                    let k = Key::Static(*dex_op - 7, field.clone());
+                    avail.clear();
+                    avail.push((k, *value));
+                }
+                SsaOp::Invoke { .. } => avail.clear(),
+                op => {
+                    if let Some(k) = load_key(op) {
+                        if let Some(&(_, first)) = avail.iter().find(|(ek, _)| *ek == k) {
+                            if record {
+                                repl[v as usize] = first;
+                                removed[v as usize] = true;
+                            }
+                        } else {
+                            avail.push((k, v));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    let n = f.values.len();
+    let nb = f.blocks.len();
+    let mut repl: Vec<ValId> = (0..n as ValId).collect();
+    let mut removed = vec![false; n];
+    // BLOCK-LOCAL only: each block starts with an empty cache. (Cross-block CSE was
+    // attempted but reverted — extending a load's live range across blocks lets the
+    // φ-coalescer wrongly merge it with an INTERFERING value: `m = a[i]>m ? a[i] : m`
+    // coalesced a[i] into m's register and clobbered m before the compare. The
+    // over-coalescing is the real bug to fix before cross-block CSE — see memory.)
+    for b in 0..nb {
+        let mut avail: Vec<(Key, ValId)> = Vec::new();
+        cse_block(f, b, &mut avail, &mut repl, &mut removed, true);
+    }
+    if !removed.iter().any(|&r| r) {
+        return; // nothing redundant
+    }
+    fn find(repl: &[ValId], mut x: ValId) -> ValId {
+        while repl[x as usize] != x {
+            x = repl[x as usize];
+        }
+        x
+    }
+    for v in 0..n {
+        let r = &repl;
+        map_operands(&mut f.values[v].op, |x| find(r, x));
+    }
+    for blk in &mut f.blocks {
+        match &mut blk.term {
+            Terminator::If { operands, .. } => {
+                for o in operands {
+                    *o = find(&repl, *o);
+                }
+            }
+            Terminator::Return { value: Some(v), .. } => *v = find(&repl, *v),
+            Terminator::Throw { value, .. } => *value = find(&repl, *value),
+            Terminator::Switch { value, .. } => *value = find(&repl, *value),
+            _ => {}
+        }
+        blk.body.retain(|&v| !removed[v as usize]);
+    }
+}
+
+/// Dead-code elimination over the SSA value graph (matches d8's): a value is LIVE
+/// if it can throw / has a side effect (`ssa_op_can_throw` — calls, stores, field/
+/// array access, div/rem, new, const-string), or is used by a terminator, or is an
+/// operand of another live value. Everything else (pure, unused — a const, φ,
+/// arithmetic, conversion, comparison) is removed from its block's body/φ list.
+/// Iterated to a fixpoint so a dead φ feeding only another dead value also goes.
+fn dce(f: &mut SsaFn) {
+    let nv = f.values.len();
+    let mut live = vec![false; nv];
+    let mut work: Vec<ValId> = Vec::new();
+    let mark = |v: ValId, live: &mut Vec<bool>, work: &mut Vec<ValId>| {
+        if !live[v as usize] {
+            live[v as usize] = true;
+            work.push(v);
+        }
+    };
+    for b in 0..f.blocks.len() {
+        for &v in &f.blocks[b].body {
+            if ssa_op_can_throw(&f.values[v as usize].op) {
+                mark(v, &mut live, &mut work);
+            }
+        }
+        for u in term_operands(&f.blocks[b].term) {
+            mark(u, &mut live, &mut work);
+        }
+    }
+    while let Some(v) = work.pop() {
+        let opnds: Vec<ValId> = match &f.values[v as usize].op {
+            SsaOp::Phi { operands, .. } => operands.clone(),
+            other => operands(other),
+        };
+        for o in opnds {
+            mark(o, &mut live, &mut work);
+        }
+    }
+    for b in 0..f.blocks.len() {
+        f.blocks[b].body.retain(|&v| live[v as usize]);
+        f.blocks[b].phis.retain(|&v| live[v as usize]);
+    }
 }
 
 /// For each φ value, the earliest numbered position at which it is used (its
@@ -1246,10 +2914,25 @@ fn phi_first_use(f: &SsaFn, num: &Numbering) -> BTreeMap<ValId, u32> {
     first
 }
 
+/// The (kind, value) of a constant, for identity comparison; `None` if not a
+/// numeric constant. Two loop-var inits with the same key are GVN-identical in d8.
+fn const_key(op: &SsaOp) -> Option<(u8, i64)> {
+    match op {
+        SsaOp::ConstInt(c) => Some((0, *c as i64)),
+        SsaOp::ConstLong(c) => Some((1, *c)),
+        _ => None,
+    }
+}
+
 /// Reorders, within each block, the constant entry-initializers that feed loop
-/// φ-nodes so they appear in φ first-use order (matching d8's scheduling). Only
-/// permutes pure constants among the positions they already occupy, so it never
-/// crosses a data dependency.
+/// φ-nodes into φ first-use order (counter before accumulator) — but ONLY when all
+/// those inits are GVN-IDENTICAL constants. d8 shares identical init constants
+/// (removing them from the φ coalesce groups), which flips the loop-variable
+/// register order to first-read (counter gets v0). When the inits differ (e.g.
+/// `s=0, i=1`, or a wide `0L` accumulator vs an int `0` counter), d8 keeps
+/// source/bytecode order (the accumulator, declared first, gets the low register),
+/// so we leave the block body untouched. Only permutes pure constants among the
+/// positions they already occupy, never crossing a data dependency.
 fn reorder_entry_inits(f: &mut SsaFn, ranks: &BTreeMap<ValId, u32>) {
     let nb = f.blocks.len();
     for b in 0..nb {
@@ -1276,25 +2959,29 @@ fn reorder_entry_inits(f: &mut SsaFn, ranks: &BTreeMap<ValId, u32>) {
         if init_rank.len() < 2 {
             continue;
         }
-        // Only reorder pure constants (leaves with no operands) — safe to permute.
-        let all_const = init_rank.keys().all(|&v| {
-            matches!(
-                f.values[v as usize].op,
-                SsaOp::ConstInt(_) | SsaOp::ConstLong(_) | SsaOp::ConstString(_)
-            )
-        });
-        if !all_const {
-            continue;
-        }
+        // d8 shares GVN-identical init constants, so φs initialized by the SAME const
+        // are ordered among themselves by FIRST READ (counter before accumulator),
+        // while distinct-const groups keep their source order. Generalize: group the
+        // const-inits by value, order the groups by first source occurrence, and order
+        // within each group by φ first-use rank. Only applies when ALL reordered inits
+        // are constants (else d8's scheduling is murkier — leave source order).
         let body = &mut f.blocks[b].body;
         let positions: Vec<usize> =
             body.iter().enumerate().filter(|(_, &v)| init_rank.contains_key(&v)).map(|(i, _)| i).collect();
         let mut items: Vec<ValId> = positions.iter().map(|&i| body[i]).collect();
-        // d8 orders loop variables WIDE-first (a long/double accumulator takes the
-        // lowest register pair), then by φ first-use order (the counter, read first
-        // in the condition, before later-read accumulators). `!wide` makes wide
-        // sort before narrow.
-        items.sort_by_key(|&v| (!f.values[v as usize].wide, init_rank[&v], v));
+        if items.iter().any(|&v| const_key(&f.values[v as usize].op).is_none()) {
+            continue;
+        }
+        // Anchor (source position) of each const group = the lowest item index it holds.
+        let mut group_anchor: BTreeMap<(u8, i64), usize> = BTreeMap::new();
+        for (i, &v) in items.iter().enumerate() {
+            let k = const_key(&f.values[v as usize].op).unwrap();
+            group_anchor.entry(k).and_modify(|x| *x = (*x).min(i)).or_insert(i);
+        }
+        items.sort_by_key(|&v| {
+            let k = const_key(&f.values[v as usize].op).unwrap();
+            (group_anchor[&k], init_rank[&v], v)
+        });
         for (k, &pos) in positions.iter().enumerate() {
             body[pos] = items[k];
         }
@@ -1321,25 +3008,147 @@ pub(crate) fn build_dex(
     let mut positions: Vec<(u32, u32)> = Vec::new();
     let mut outs: u16 = 0;
     let reg = |v: ValId| alloc.reg[v as usize];
+    // A switch is lowered to a `const tmp,k; if-eq key,tmp,case` chain needing ONE
+    // scratch register, reserved just above the allocated set (it remaps cleanly below
+    // the args and is live only transiently within the chain). registers_size is bumped
+    // by 1 below iff a switch actually used it.
+    let switch_scratch = alloc.registers_used;
+    let mut used_switch_scratch = false;
+    // Critical taken-edge trampolines: (target block, φ-moves). Each becomes a synthetic
+    // block (id = f.blocks.len() + index) emitted after all code — `moves; goto target` —
+    // and the critical `if`'s taken branch is redirected to it (edge-splitting on the
+    // taken side; the fall-through side is handled inline in the If terminator).
+    let mut trampolines: Vec<(usize, Vec<(ValId, ValId)>)> = Vec::new();
+    // Range-invoke arg-marshalling block: also reserved just above the allocated set
+    // (`alloc.registers_used`). Tracks the LARGEST block any range-invoke needed; the
+    // block is transient per call, so calls reuse it (and it temporally never overlaps
+    // the 1-reg switch scratch at the same base). registers_size is bumped to cover it.
+    let mut range_block_words: u16 = 0;
+    // φ-move cycle-breaking scratch (parallel-copy sequentialization): a swap needs ONE temp
+    // at `registers_used` (the guaranteed-dead high-water mark, same base as switch_scratch /
+    // range_block — temporally disjoint, so they max rather than sum). Bumped iff a cycle hit.
+    let mut phi_scratch_words: u16 = 0;
 
+    // Return tail-duplication (d8's): a goto/fall predecessor of a TRIVIAL return
+    // block (empty body, `return v`/`return-void`, not an exception handler) inlines
+    // that return — `return <the φ-operand for this edge>` — instead of branching to
+    // it, in either of two cases:
+    //   • the return block has NO `if`-predecessor and this pred isn't the one laid
+    //     out immediately before it (so inlining drops a `goto`); the adjacent pred
+    //     falls through and the block emits its return once (deadCatch), OR
+    //   • this edge carries a pending φ-move (the returned value's φ-operand for this
+    //     edge isn't in the φ's register) — inlining `return operand` ABSORBS the
+    //     move (clamp/max3's `r=hi; return r` → `return hi`), even when the block has
+    //     other (`if`) predecessors.
+    // A return block reached by a kept `if`/goto edge stays a real block (loops are
+    // unaffected — their exit return is the loop condition's `if` target).
+    let n = f.blocks.len();
+    let is_tret = |blk: usize| {
+        f.blocks[blk].body.is_empty()
+            && matches!(f.blocks[blk].term, Terminator::Return { .. })
+            && f.caught[blk].is_none()
+    };
+    let no_if_pred = |t: usize| {
+        f.blocks[t].preds.iter().all(|&p| !matches!(f.blocks[p].term, Terminator::If { .. }))
+    };
+    // The value returned on edge P→T (φ resolved per-edge) and whether that differs
+    // from the φ's own register (a φ-move the inline would absorb).
+    let edge_return = |t: usize, p: usize| -> (Option<ValId>, u16, bool) {
+        match &f.blocks[t].term {
+            Terminator::Return { value: None, op } => (None, *op, false),
+            Terminator::Return { value: Some(v), op } => {
+                if let SsaOp::Phi { operands, .. } = &f.values[*v as usize].op {
+                    // A φ/pred bookkeeping mismatch (seen on some real-world bytecode)
+                    // must DEGRADE, not panic: treat the edge as carrying no absorbable
+                    // move (no tail-dup benefit) rather than index out of bounds.
+                    match f.blocks[t].preds.iter().position(|&x| x == p).and_then(|pi| operands.get(pi).copied()) {
+                        Some(o) => (Some(o), *op, alloc.reg[o as usize] != alloc.reg[*v as usize]),
+                        None => (Some(*v), *op, false),
+                    }
+                } else {
+                    (Some(*v), *op, false)
+                }
+            }
+            _ => unreachable!("is_tret guarantees a Return terminator"),
+        }
+    };
+    let mut inline_ret = vec![false; n];
     for (pos, &b) in num.layout.iter().enumerate() {
-        block_unit[b] = insns.len();
-        // φ resolution: a no-op when every operand shares the φ's register.
-        for &phi in &f.blocks[b].phis {
-            let pr = reg(phi);
-            if let SsaOp::Phi { operands, .. } = &f.values[phi as usize].op {
-                if operands.iter().any(|&o| reg(o) != pr) {
-                    bail!("ssa dexbuilder: non-coalesced φ needs moves (not yet supported)");
+        if let Terminator::Goto { target } | Terminator::Fall { target } = f.blocks[b].term {
+            if is_tret(target) {
+                let adjacent = num.layout.get(pos + 1).copied() == Some(target);
+                let (.., has_move) = edge_return(target, b);
+                if (no_if_pred(target) && !adjacent) || has_move {
+                    inline_ret[b] = true;
                 }
             }
         }
+    }
+    // A trivial return block is still emitted iff some predecessor reaches it without
+    // inlining (an `if` edge, or a goto/fall that kept its branch / fell through).
+    let mut tret_emitted = vec![false; n];
+    for t in 0..n {
+        if !is_tret(t) {
+            continue;
+        }
+        tret_emitted[t] = f.blocks[t].preds.iter().any(|&p| match &f.blocks[p].term {
+            Terminator::Goto { target } | Terminator::Fall { target } if *target == t => !inline_ret[p],
+            _ => true,
+        });
+    }
+
+    // (jvm_pc, dex_start, dex_end) of each emitted throwing instruction — used to
+    // narrow each try_item to its guarded DEX address range.
+    let mut throw_spans: Vec<(u32, usize, usize)> = Vec::new();
+    for (pos, &b) in num.layout.iter().enumerate() {
+        block_unit[b] = insns.len();
+        // φ-moves for an incoming edge from a BRANCHING single-... predecessor land here,
+        // at this block's entry (before the body), since they can't sit at the branching
+        // pred's end. block_unit[b] points at them so the branch lands here first.
+        emit_entry_phi_moves(f, &mut insns, alloc, b, &mut phi_scratch_words)?;
+        // Wide-const sharing (d8): within a block, a wide const equal to one still held
+        // live in a register is copied via `move-wide` (1 word) instead of re-materialized
+        // (`const-wide*` ≥2 words) — e.g. `long i=0, s=0` → `const-wide v0; move-wide v2,v0`.
+        // (value, register) pairs currently known to hold a wide const. Reset per block
+        // (we only share within a block, so the source always still holds the value).
+        let mut wide_consts: Vec<(i64, u16)> = Vec::new();
         for &v in &f.blocks[b].body {
             if is_rematerialized(f, v) {
                 continue;
             }
+            let dex_start = insns.len();
+            // Maintain the wide-const tracker: a non-const op may clobber any register, so
+            // clear it; a narrow const clobbers only its own register.
+            match &f.values[v as usize].op {
+                SsaOp::ConstLong(_) => {}
+                SsaOp::ConstInt(_) => {
+                    let r = reg(v);
+                    wide_consts.retain(|&(_, s)| s != r && s + 1 != r);
+                }
+                _ => wide_consts.clear(),
+            }
+            if let SsaOp::ConstLong(c) = f.values[v as usize].op {
+                let r = reg(v);
+                // a wide write to [r,r+1] invalidates any tracked pair within one register.
+                wide_consts.retain(|&(_, s)| (s as i32 - r as i32).abs() > 1);
+                // Share via move-wide (12x) when both regs fit a nibble, copying from the
+                // MOST-RECENTLY materialized same-value reg (d8 chains: a→b→c, each copies
+                // from the previous, not all from the first).
+                let src = if r <= 15 {
+                    wide_consts.iter().rev().find(|&&(val, s)| val == c && s <= 15).map(|&(_, s)| s)
+                } else {
+                    None
+                };
+                match src {
+                    Some(s) => insns.push(0x04 | (r << 8) | (s << 12)), // move-wide r, s
+                    None => emit_const_long(&mut insns, r, c),
+                }
+                wide_consts.push((c, r));
+                continue;
+            }
             match &f.values[v as usize].op {
                 SsaOp::Invoke { .. } => {
-                    emit_invoke(f, &mut insns, alloc, v, &mut pool_fixups, &mut outs, &mut positions, line_numbers)?;
+                    emit_invoke(f, &mut insns, alloc, v, &mut pool_fixups, &mut outs, &mut positions, line_numbers, &mut range_block_words)?;
                 }
                 SsaOp::GetField { .. } | SsaOp::GetStatic { .. } | SsaOp::PutField { .. } | SsaOp::PutStatic { .. } => {
                     emit_field(f, &mut insns, alloc, v, &mut pool_fixups, &mut positions, line_numbers)?;
@@ -1347,10 +3156,81 @@ pub(crate) fn build_dex(
                 SsaOp::ArrayGet { .. } | SsaOp::ArrayPut { .. } | SsaOp::ArrayLength { .. } => {
                     emit_array(f, &mut insns, alloc, v, &mut positions, line_numbers);
                 }
-                _ => emit_value(f, &mut insns, alloc, v)?,
+                SsaOp::NewInstance { .. } | SsaOp::NewArray { .. } => {
+                    emit_alloc(f, &mut insns, alloc, v, &mut pool_fixups, &mut positions, line_numbers);
+                }
+                SsaOp::ConstString { .. } => {
+                    emit_const_string(f, &mut insns, alloc, v, &mut pool_fixups, &mut positions, line_numbers);
+                }
+                SsaOp::ConstClass { .. } => {
+                    emit_const_class(f, &mut insns, alloc, v, &mut pool_fixups, &mut positions, line_numbers);
+                }
+                SsaOp::CheckCast { .. } => {
+                    emit_check_cast(f, &mut insns, alloc, v, &mut pool_fixups, &mut positions, line_numbers)?;
+                }
+                SsaOp::InstanceOf { .. } => {
+                    emit_instance_of(f, &mut insns, alloc, v, &mut pool_fixups, &mut positions, line_numbers)?;
+                }
+                SsaOp::CaughtException => {
+                    // `move-exception dest` (11x) — only reached when the caught value
+                    // is read (build_ssa keeps unused ones out of the block body).
+                    insns.push(0x0d | (reg(v) << 8));
+                }
+                _ => {
+                    // div/rem are throwing — record a position at the instruction.
+                    if let SsaOp::Binop { jvm_op, jvm_pc, .. } = &f.values[v as usize].op {
+                        if matches!(jvm_op, 0x6c | 0x6d | 0x70 | 0x71) {
+                            if let Some(line) = crate::bootstrap::line_for(line_numbers, *jvm_pc) {
+                                positions.push((insns.len() as u32, line));
+                            }
+                        }
+                    }
+                    emit_value(f, &mut insns, alloc, v)?;
+                }
+            }
+            // Record the DEX span of a guarded throwing instruction. A call's
+            // trailing move-result stays inside the range (d8 keeps invoke+result an
+            // atomic unit); only NON-throwing instructions are trimmed.
+            if !f.exc_regions.is_empty() && ssa_op_can_throw(&f.values[v as usize].op) {
+                if let Some(jpc) = op_jvm_pc(&f.values[v as usize].op) {
+                    throw_spans.push((jpc, dex_start, insns.len()));
+                }
             }
         }
+        // A block that inlines its target's return doesn't branch there, so its
+        // successor φ-moves are dead — skip them.
+        if !inline_ret[b] {
+            // Resolve φ-nodes that didn't coalesce: insert a `move φ ← operand` at the
+            // end of this (predecessor) block, before its terminator. Coalesced φs need
+            // no move (operand already in the φ's register).
+            emit_phi_moves(f, &mut insns, alloc, b, &mut phi_scratch_words)?;
+        }
+        if inline_ret[b] {
+            // Inline the (trivial) return of this block's goto/fall target.
+            let target = match &f.blocks[b].term {
+                Terminator::Goto { target } | Terminator::Fall { target } => *target,
+                _ => unreachable!("inline_ret only set for goto/fall"),
+            };
+            match &f.blocks[target].term {
+                Terminator::Return { value: None, .. } => insns.push(0x0e),
+                Terminator::Return { value: Some(v), op } => {
+                    // The returned value, as seen on the b→target edge: a φ resolves
+                    // to its operand for this predecessor; otherwise the value itself.
+                    let operand = if let SsaOp::Phi { operands, .. } = &f.values[*v as usize].op {
+                        let pred_idx = f.blocks[target].preds.iter().position(|&p| p == b).unwrap();
+                        operands[pred_idx]
+                    } else {
+                        *v
+                    };
+                    insns.push(op | (reg(operand) << 8));
+                }
+                _ => unreachable!("inline_ret target is a trivial return block"),
+            }
+            continue;
+        }
         match &f.blocks[b].term {
+            // A trivial return block reached only by inlined edges is skipped.
+            Terminator::Return { .. } if is_tret(b) && !tret_emitted[b] => {}
             Terminator::Return { value: None, .. } => insns.push(0x0e),
             Terminator::Return { value: Some(v), op } => {
                 insns.push(op | (reg(*v) << 8));
@@ -1372,7 +3252,22 @@ pub(crate) fn build_dex(
                     fixups.push((off, *target, true));
                 }
             }
-            Terminator::If { jvm_op, operands, taken, .. } => {
+            Terminator::If { jvm_op, operands, taken, fallthrough } => {
+                // A TAKEN critical edge (taken block has >1 pred) needing a φ-move routes
+                // through a trampoline block (moves + goto taken) emitted after all code;
+                // the taken branch is redirected there.
+                let taken_target = if f.blocks[*taken].preds.len() > 1 {
+                    let moves = phi_moves_for_edge(f, alloc, b, *taken);
+                    if moves.is_empty() {
+                        *taken
+                    } else {
+                        let t = f.blocks.len() + trampolines.len();
+                        trampolines.push((*taken, moves));
+                        t
+                    }
+                } else {
+                    *taken
+                };
                 let (dexop, two) = crate::bootstrap::cond_branch_dex_op(*jvm_op).unwrap();
                 if two {
                     let a = reg(operands[0]);
@@ -1383,8 +3278,120 @@ pub(crate) fn build_dex(
                 }
                 let off = insns.len();
                 insns.push(0);
-                fixups.push((off, *taken, false));
+                fixups.push((off, taken_target, false));
+                // FALL-THROUGH critical edge: φ-moves emitted HERE (after the `if`, before
+                // the adjacent fall-through block) run ONLY on the fall-through path — the
+                // taken branch jumped away. Other predecessors of the fall-through block
+                // branch to its block_unit (set AFTER these moves), so they skip them.
+                let ft_moves = phi_moves_for_edge(f, alloc, b, *fallthrough);
+                if !ft_moves.is_empty() && f.blocks[*fallthrough].preds.len() > 1 {
+                    emit_move_list(f, &mut insns, alloc, &ft_moves, &mut phi_scratch_words)?;
+                }
             }
+            Terminator::Throw { value, jvm_pc } => {
+                let r = reg(*value);
+                if r > 0xff {
+                    bail!("ssa dexbuilder: throw operand register > 255 (0x27 is 11x)");
+                }
+                let dex_start = insns.len();
+                insns.push(0x27 | (r << 8));
+                // The throw IS the guarded raising instruction — extend its try_item to
+                // cover it (else the exception escapes the catch). Mirrors the body-loop
+                // throw_spans recording for SsaOp throwing instructions.
+                if !f.exc_regions.is_empty() {
+                    throw_spans.push((*jvm_pc, dex_start, insns.len()));
+                }
+            }
+            // Switch lowered to a comparison chain: per case `const tmp,k; if-eq key,tmp,
+            // case`, then `goto default`. Functional-correct (not d8's packed/sparse-
+            // switch payload); reuses the if-eq/const/goto fixup machinery.
+            Terminator::Switch { value, default, cases } => {
+                if switch_scratch >= 16 {
+                    bail!("ssa dexbuilder: switch scratch register {switch_scratch} >= 16 (if-eq is nibble-encoded)");
+                }
+                used_switch_scratch = true;
+                let key = reg(*value);
+                for &(k, target) in cases {
+                    emit_const_int(&mut insns, switch_scratch, k);
+                    insns.push(0x32 | ((key & 0xf) << 8) | ((switch_scratch & 0xf) << 12)); // if-eq key, tmp
+                    let off = insns.len();
+                    insns.push(0);
+                    fixups.push((off, target, false));
+                }
+                let goff = insns.len();
+                insns.push(0x28); // goto default
+                fixups.push((goff, *default, true));
+            }
+        }
+    }
+
+    // Emit critical taken-edge trampolines (after all blocks): `moves; goto target`. Each
+    // got synthetic id f.blocks.len()+i; record its offset in block_unit (extended) so the
+    // redirected taken branch resolves to it.
+    for (target, moves) in &trampolines {
+        block_unit.push(insns.len());
+        emit_move_list(f, &mut insns, alloc, moves, &mut phi_scratch_words)?;
+        let off = insns.len();
+        insns.push(0x28); // goto target
+        fixups.push((off, *target, true));
+    }
+
+    // Branch relaxation (goto 8-bit → goto/16): a `goto` (0x28, 1 word, ±127) whose
+    // target is too far is widened to `goto/16` (0x29, 2 words: opcode word + signed-16
+    // offset word). Widening inserts a word, shifting every later word-offset, which can
+    // push other gotos over ±127 — so iterate to a fixpoint. The wide set only grows, so
+    // it converges. (16-bit reaches ±32k; a goto past that would need goto/32 — bail.)
+    loop {
+        let mut widened = false;
+        for fi in 0..fixups.len() {
+            let (off, target, is_goto) = fixups[fi];
+            if !is_goto || (insns[off] & 0xff) == 0x29 {
+                continue; // not a goto, or already widened
+            }
+            let rel = block_unit[target] as i32 - off as i32;
+            if (-128..=127).contains(&rel) {
+                continue; // fits the 8-bit form
+            }
+            if !(-32768..=32767).contains(&rel) {
+                bail!("ssa dexbuilder: goto offset {rel} needs goto/32 (not yet supported)");
+            }
+            // Widen: opcode word → 0x29 (offset goes in the inserted next word).
+            insns[off] = 0x29;
+            insns.insert(off + 1, 0);
+            // Bump every word-offset reference strictly after the inserted word.
+            for bu in block_unit.iter_mut() {
+                if *bu > off {
+                    *bu += 1;
+                }
+            }
+            for (o, _, _) in fixups.iter_mut() {
+                if *o > off {
+                    *o += 1;
+                }
+            }
+            for pf in pool_fixups.iter_mut() {
+                if pf.unit > off {
+                    pf.unit += 1;
+                }
+            }
+            for (p, _) in positions.iter_mut() {
+                if *p as usize > off {
+                    *p += 1;
+                }
+            }
+            for (_, ds, de) in throw_spans.iter_mut() {
+                if *ds > off {
+                    *ds += 1;
+                }
+                if *de > off {
+                    *de += 1;
+                }
+            }
+            widened = true;
+            break; // offsets changed — restart the scan
+        }
+        if !widened {
+            break;
         }
     }
 
@@ -1393,17 +3400,69 @@ pub(crate) fn build_dex(
         let tgt = block_unit[target] as i32;
         if is_goto {
             let rel = tgt - off as i32; // goto offset is from the op word itself
-            if !(-128..=127).contains(&rel) {
-                bail!("ssa dexbuilder: goto offset {rel} needs goto/16 (not yet supported)");
+            if (insns[off] & 0xff) == 0x29 {
+                insns[off + 1] = rel as i16 as u16; // goto/16: signed-16 offset in word 2
+            } else {
+                if !(-128..=127).contains(&rel) {
+                    bail!("ssa dexbuilder: goto offset {rel} unexpectedly un-relaxed");
+                }
+                insns[off] = 0x28 | (((rel as i8) as u8 as u16) << 8);
             }
-            insns[off] = 0x28 | (((rel as i8) as u8 as u16) << 8);
         } else {
             let rel = tgt - (off as i32 - 1); // if offset is from the op word (off-1)
+            if !(-32768..=32767).contains(&rel) {
+                bail!("ssa dexbuilder: if/branch offset {rel} needs 32-bit form (not yet supported)");
+            }
             insns[off] = rel as i16 as u16;
         }
     }
 
-    let registers_size = alloc.registers_used.max(f.num_arg_registers);
+    // try_items: each region narrows to the DEX span of its guarded throwing
+    // instructions ([first_start, last_end)); the handler points at the catch block.
+    let mut tries: Vec<TryItem> = Vec::new();
+    for r in &f.exc_regions {
+        let mut lo = usize::MAX;
+        let mut hi = 0usize;
+        for &(jpc, ds, de) in &throw_spans {
+            if (r.start_pc..r.end_pc).contains(&(jpc as usize)) {
+                lo = lo.min(ds);
+                hi = hi.max(de);
+            }
+        }
+        if lo == usize::MAX {
+            bail!("ssa: try region has no guarded throwing instruction");
+        }
+        // A catch-all (catch_type None — finally / synchronized) goes in catch_all_addr
+        // with no typed handler; a typed catch goes in the handlers list.
+        let handler_addr = block_unit[r.handler_block] as u32;
+        let (handlers, catch_all_addr) = match &r.catch_type {
+            Some(ct) => (vec![CatchHandler { exception_type: ct.clone(), addr: handler_addr }], None),
+            None => (vec![], Some(handler_addr)),
+        };
+        tries.push(TryItem {
+            start_addr: lo as u32,
+            insn_count: (hi - lo) as u16,
+            handlers,
+            catch_all_addr,
+        });
+    }
+    tries.sort_by_key(|t| t.start_addr);
+
+    // Reserve scratch above the allocated set: +1 for a switch's if-eq-chain temp, and
+    // the range-invoke marshalling block (both based at `registers_used`, temporally
+    // disjoint, so the frame just needs to cover the larger).
+    let scratch = u16::from(used_switch_scratch)
+        .max(range_block_words)
+        .max(phi_scratch_words);
+    let registers_size = (alloc.registers_used + scratch).max(f.num_arg_registers);
+    // Safety net: every register operand must be in allocated space [0, registers_size).
+    // An out-of-range operand means a value got NO_REG (e.g. a const wrongly rematerialized
+    // despite a register-requiring use) and emitted garbage — bail rather than miscompile.
+    if let Some(max_reg) = crate::regalloc::max_register_used(&insns) {
+        if max_reg >= registers_size {
+            bail!("ssa: register operand v{max_reg} out of range (>= {registers_size}) — a value got no register (NO_REG)");
+        }
+    }
     crate::regalloc::remap_insns(&mut insns, f.num_arg_registers, registers_size);
     let debug_info = crate::bootstrap::build_debug_info(&positions, params);
     Ok(CodeItem {
@@ -1412,7 +3471,7 @@ pub(crate) fn build_dex(
         outs_size: outs,
         insns,
         fixups: pool_fixups,
-        tries: Vec::new(),
+        tries,
         debug_info,
     })
 }
@@ -1430,6 +3489,7 @@ fn emit_invoke(
     outs: &mut u16,
     positions: &mut Vec<(u32, u32)>,
     line_numbers: &[(u16, u16)],
+    range_block_words: &mut u16,
 ) -> Result<()> {
     let reg = |x: ValId| alloc.reg[x as usize];
     let (dex_op, method, args, ret, jvm_pc) = match &f.values[v as usize].op {
@@ -1446,7 +3506,51 @@ fn emit_invoke(
         }
     }
     if regs.len() > 5 || regs.iter().any(|&r| r > 15) {
-        bail!("ssa dexbuilder: invoke needs range form / >16 registers (not yet supported)");
+        // RANGE FORM: marshal the args into a CONSECUTIVE scratch block just above the
+        // allocated set, then `invoke-*/range` over it. The block stays consecutive under
+        // the args-high remap (every non-arg register shifts by the same -num_arg), so
+        // remapping the move dests + the invoke's CCCC start register is sound. The block
+        // is above registers_used, so it clobbers no live value; registers_size is bumped
+        // to cover it (range_block_words). invoke/range's CCCC is 16-bit, but the move
+        // dest (AA, 22x) is 8-bit, so bail if the block top exceeds 255 (that genuinely
+        // needs spilling).
+        let base = alloc.registers_used;
+        let nwords = regs.len() as u16;
+        if base as usize + regs.len() > 256 {
+            bail!("ssa dexbuilder: range-invoke block top > 255 (needs spilling)");
+        }
+        let mut off: u16 = 0;
+        for &a in args {
+            let src = reg(a);
+            let dest = base + off;
+            let (mv, w): (u16, u16) = if f.values[a as usize].wide {
+                (0x05, 2) // move-wide/from16
+            } else if f.values[a as usize].is_ref {
+                (0x08, 1) // move-object/from16
+            } else {
+                (0x02, 1) // move/from16
+            };
+            insns.push(mv | (dest << 8)); // 22x: AA dest in word0 high byte
+            insns.push(src); // BBBB src in word1
+            off += w;
+        }
+        *range_block_words = (*range_block_words).max(nwords);
+        if let Some(line) = crate::bootstrap::line_for(line_numbers, jvm_pc) {
+            positions.push((insns.len() as u32, line));
+        }
+        let range_op = 0x74 + (dex_op - 0x6e); // 0x6e→0x74 … 0x72→0x78 (virtual/super/direct/static/interface)
+        insns.push(range_op | (nwords << 8)); // AA = arg-register count
+        let method_unit = insns.len();
+        insns.push(0); // method-ref placeholder (word1), patched via the fixup
+        insns.push(base); // CCCC = first register of the consecutive arg block (word2)
+        pool_fixups.push(Fixup { unit: method_unit, item: ItemRef::Method(method.clone()), wide: false });
+        *outs = (*outs).max(nwords);
+        if let Some(rk) = ret {
+            let dest = reg(v);
+            let mvr: u16 = if rk.wide { 0x0b } else if rk.is_ref { 0x0c } else { 0x0a };
+            insns.push(mvr | (dest << 8));
+        }
+        return Ok(());
     }
     // A throwing instruction records a debug position at its dex address.
     if let Some(line) = crate::bootstrap::line_for(line_numbers, jvm_pc) {
@@ -1549,6 +3653,327 @@ fn emit_array(
     }
 }
 
+/// Emits object allocation: `new-instance dest, type@` (21c) or `new-array dest,
+/// size, type@` (22c). Both are throwing → a debug position; the type-ref word is
+/// a fixup placeholder.
+fn emit_alloc(
+    f: &SsaFn,
+    insns: &mut Vec<u16>,
+    alloc: &Allocation,
+    v: ValId,
+    pool_fixups: &mut Vec<Fixup>,
+    positions: &mut Vec<(u32, u32)>,
+    line_numbers: &[(u16, u16)],
+) {
+    let reg = |x: ValId| alloc.reg[x as usize];
+    let (type_desc, jvm_pc) = match &f.values[v as usize].op {
+        SsaOp::NewInstance { type_desc, jvm_pc } | SsaOp::NewArray { type_desc, jvm_pc, .. } => {
+            (type_desc.clone(), *jvm_pc)
+        }
+        _ => unreachable!(),
+    };
+    if let Some(line) = crate::bootstrap::line_for(line_numbers, jvm_pc) {
+        positions.push((insns.len() as u32, line));
+    }
+    match &f.values[v as usize].op {
+        SsaOp::NewInstance { .. } => insns.push(0x22 | (reg(v) << 8)), // 21c
+        SsaOp::NewArray { size, .. } => {
+            insns.push(0x23 | ((reg(v) & 0xf) << 8) | ((reg(*size) & 0xf) << 12)); // 22c
+        }
+        _ => unreachable!(),
+    }
+    let unit = insns.len();
+    insns.push(0); // type-ref placeholder, patched via the fixup
+    pool_fixups.push(Fixup { unit, item: ItemRef::Type(type_desc), wide: false });
+}
+
+/// Emits `check-cast vAA, type@` (21c). check-cast is IN-PLACE in DEX (it asserts the
+/// type of one register, leaving its value unchanged), but the SSA result is a fresh
+/// value that may have been allocated a different register than the object. So if the
+/// result register differs, copy the object into it first (`move-object`), then assert
+/// on the result register. Throwing (ClassCastException) → records a debug position.
+fn emit_check_cast(
+    f: &SsaFn,
+    insns: &mut Vec<u16>,
+    alloc: &Allocation,
+    v: ValId,
+    pool_fixups: &mut Vec<Fixup>,
+    positions: &mut Vec<(u32, u32)>,
+    line_numbers: &[(u16, u16)],
+) -> Result<()> {
+    let reg = |x: ValId| alloc.reg[x as usize];
+    let (obj, type_desc, jvm_pc) = match &f.values[v as usize].op {
+        SsaOp::CheckCast { obj, type_desc, jvm_pc } => (*obj, type_desc.clone(), *jvm_pc),
+        _ => unreachable!(),
+    };
+    let (dest, src) = (reg(v), reg(obj));
+    if dest != src {
+        // Copy the object into the result register before the in-place cast. Only the
+        // 12x nibble form is safe here — move-object/from16 (0x08) isn't in regalloc's
+        // reg_fields, so its registers wouldn't be remapped args-high. Bail above 15
+        // (matches emit_phi_moves) rather than emit an unremapped move (a miscompile).
+        if dest <= 15 && src <= 15 {
+            insns.push(0x07 | ((dest & 0xf) << 8) | ((src & 0xf) << 12)); // move-object (12x)
+        } else {
+            bail!("ssa dexbuilder: check-cast move-object register > 15 (needs move-object/from16 remap)");
+        }
+    }
+    if let Some(line) = crate::bootstrap::line_for(line_numbers, jvm_pc) {
+        positions.push((insns.len() as u32, line));
+    }
+    insns.push(0x1f | (dest << 8));
+    let unit = insns.len();
+    insns.push(0); // type-ref placeholder, patched via the fixup
+    pool_fixups.push(Fixup { unit, item: ItemRef::Type(type_desc), wide: false });
+    Ok(())
+}
+
+/// Emits `instance-of vA, vB, type@` (22c, nibble dest + nibble src). Non-throwing
+/// (null → false), so no debug position. Result is an int (boolean 0/1).
+fn emit_instance_of(
+    f: &SsaFn,
+    insns: &mut Vec<u16>,
+    alloc: &Allocation,
+    v: ValId,
+    pool_fixups: &mut Vec<Fixup>,
+    _positions: &mut [(u32, u32)],
+    _line_numbers: &[(u16, u16)],
+) -> Result<()> {
+    let reg = |x: ValId| alloc.reg[x as usize];
+    let (obj, type_desc) = match &f.values[v as usize].op {
+        SsaOp::InstanceOf { obj, type_desc, .. } => (*obj, type_desc.clone()),
+        _ => unreachable!(),
+    };
+    let (dest, src) = (reg(v), reg(obj));
+    if dest > 15 || src > 15 {
+        bail!("ssa dexbuilder: instance-of register > 15 (22c is nibble-encoded)");
+    }
+    insns.push(0x20 | ((dest & 0xf) << 8) | ((src & 0xf) << 12));
+    let unit = insns.len();
+    insns.push(0); // type-ref placeholder, patched via the fixup
+    pool_fixups.push(Fixup { unit, item: ItemRef::Type(type_desc), wide: false });
+    Ok(())
+}
+
+/// Emits `const-string dest, string@` (21c). Throwing in d8's model, so it records
+/// a debug position; the string-ref word is a fixup placeholder.
+fn emit_const_string(
+    f: &SsaFn,
+    insns: &mut Vec<u16>,
+    alloc: &Allocation,
+    v: ValId,
+    pool_fixups: &mut Vec<Fixup>,
+    positions: &mut Vec<(u32, u32)>,
+    line_numbers: &[(u16, u16)],
+) {
+    let (value, jvm_pc) = match &f.values[v as usize].op {
+        SsaOp::ConstString { value, jvm_pc } => (value.clone(), *jvm_pc),
+        _ => unreachable!(),
+    };
+    if let Some(line) = crate::bootstrap::line_for(line_numbers, jvm_pc) {
+        positions.push((insns.len() as u32, line));
+    }
+    insns.push(0x1a | (alloc.reg[v as usize] << 8));
+    let unit = insns.len();
+    insns.push(0); // string-ref placeholder, patched via the fixup
+    pool_fixups.push(Fixup { unit, item: ItemRef::String(value), wide: false });
+}
+
+/// Emits `const-class dest, type@` (0x1c, 21c) — the `X.class` literal. Throwing
+/// (class init), so it records a debug position; the type-ref word is a fixup.
+fn emit_const_class(
+    f: &SsaFn,
+    insns: &mut Vec<u16>,
+    alloc: &Allocation,
+    v: ValId,
+    pool_fixups: &mut Vec<Fixup>,
+    positions: &mut Vec<(u32, u32)>,
+    line_numbers: &[(u16, u16)],
+) {
+    let (type_desc, jvm_pc) = match &f.values[v as usize].op {
+        SsaOp::ConstClass { type_desc, jvm_pc } => (type_desc.clone(), *jvm_pc),
+        _ => unreachable!(),
+    };
+    if let Some(line) = crate::bootstrap::line_for(line_numbers, jvm_pc) {
+        positions.push((insns.len() as u32, line));
+    }
+    insns.push(0x1c | (alloc.reg[v as usize] << 8));
+    let unit = insns.len();
+    insns.push(0); // type-ref placeholder, patched via the fixup
+    pool_fixups.push(Fixup { unit, item: ItemRef::Type(type_desc), wide: false });
+}
+
+/// Inserts φ-resolution moves at the end of block `b` (a predecessor): for each
+/// successor's φ whose operand from `b` is in a different register than the φ, emit
+/// `move/move-wide/move-object φ-reg ← operand-reg` (12x). Bails for the cases not
+/// yet supported: a move needed on a BRANCHING edge (needs edge-splitting) or a
+/// register > 15 (12x is nibble-encoded) or a parallel-copy cycle.
+/// The (φ, operand) move pairs needed on the edge `pred → s` (φ operand allocated to a
+/// different register than the φ).
+fn phi_moves_for_edge(f: &SsaFn, alloc: &Allocation, pred: usize, s: usize) -> Vec<(ValId, ValId)> {
+    let reg = |x: ValId| alloc.reg[x as usize];
+    let pred_idx = match f.blocks[s].preds.iter().position(|&p| p == pred) {
+        Some(i) => i,
+        None => return Vec::new(),
+    };
+    let mut moves = Vec::new();
+    for &phi in &f.blocks[s].phis {
+        if let SsaOp::Phi { operands, .. } = &f.values[phi as usize].op {
+            if let Some(&o) = operands.get(pred_idx) {
+                if reg(o) != reg(phi) {
+                    moves.push((phi, o));
+                }
+            }
+        }
+    }
+    moves
+}
+
+/// Emits a parallel-copy of φ-moves (`move`/`move-wide`/`move-object`, 12x). Bails on a
+/// copy cycle (one move's dest is another's src) or a register > 15 (needs move/16).
+fn emit_move_list(
+    f: &SsaFn,
+    insns: &mut Vec<u16>,
+    alloc: &Allocation,
+    moves: &[(ValId, ValId)],
+    scratch_words: &mut u16,
+) -> Result<()> {
+    let reg = |x: ValId| alloc.reg[x as usize];
+    // A φ-move set is a PARALLEL copy: every source is read in the original register state,
+    // all destinations written "simultaneously". Sequentializing requires (1) ordering so a
+    // move's source isn't clobbered by an earlier move (chains: a←b, b←c emits a←b first),
+    // and (2) a scratch temp to break cycles (a swap r0↔r1 needs t←r0; r0←r1; r1←t). The
+    // temp is `registers_used` — the allocator's high-water mark, guaranteed dead (above
+    // every allocated value); registers_size is bumped to cover it via *scratch_words.
+    #[derive(Clone, Copy)]
+    struct M {
+        dst: u16,
+        src: u16,
+        wide: bool,
+        isref: bool,
+    }
+    // Register range a value occupies (wide = 2 consecutive registers).
+    let occ = |base: u16, wide: bool| (base, if wide { base + 1 } else { base });
+    let overlap = |a: (u16, u16), b: (u16, u16)| a.0 <= b.1 && b.0 <= a.1;
+    let mut pend: Vec<M> = Vec::new();
+    for &(phi, o) in moves {
+        let (dst, src) = (reg(phi), reg(o));
+        let wide = f.values[phi as usize].wide;
+        let isref = f.values[phi as usize].is_ref;
+        if dst == src {
+            continue; // self-move: no-op
+        }
+        if dst.max(occ(dst, wide).1) > 15 || src.max(occ(src, wide).1) > 15 {
+            bail!("ssa dexbuilder: φ-move register > 15 needs move/16 (not yet supported)");
+        }
+        // A move whose dst range overlaps its OWN src range (e.g. wide r2←r3) would corrupt
+        // mid-copy — pathological for a well-formed φ; refuse rather than miscompile.
+        if overlap(occ(dst, wide), occ(src, wide)) {
+            bail!("ssa dexbuilder: φ-move self-overlapping wide registers (not yet supported)");
+        }
+        pend.push(M { dst, src, wide, isref });
+    }
+    let mut out: Vec<M> = Vec::new();
+    // φ dests are distinct, so `n.dst != m.dst` uniquely identifies "a different move".
+    let guard = pend.len() * 4 + 4; // sequentialization terminates; this is a safety net.
+    let mut iters = 0usize;
+    while !pend.is_empty() {
+        iters += 1;
+        if iters > guard {
+            bail!("ssa dexbuilder: φ-move sequentialization did not converge");
+        }
+        // A move is READY when its destination isn't (part of) any OTHER pending move's
+        // source — overwriting it then clobbers no value still needed. Drains chains.
+        let ready = pend.iter().position(|m| {
+            let dr = occ(m.dst, m.wide);
+            !pend
+                .iter()
+                .any(|n| n.dst != m.dst && overlap(dr, occ(n.src, n.wide)))
+        });
+        if let Some(i) = ready {
+            out.push(pend.remove(i));
+            continue;
+        }
+        // No ready move ⇒ the remainder is one or more cycles. Break one: copy pend[0]'s
+        // source into the scratch temp, then redirect every reader of that source to the
+        // temp — which frees the register feeding pend[0], making progress next round. A
+        // wide value needs a 2-register temp (both above the high-water mark → dead).
+        let m0 = pend[0];
+        let w: u16 = if m0.wide { 2 } else { 1 };
+        let temp = alloc.registers_used;
+        if temp + (w - 1) > 15 {
+            bail!("ssa dexbuilder: φ-move cycle scratch register {temp} >= 16 (nibble move)");
+        }
+        *scratch_words = (*scratch_words).max(w);
+        out.push(M { dst: temp, src: m0.src, wide: m0.wide, isref: m0.isref });
+        let sr = occ(m0.src, m0.wide);
+        for n in pend.iter_mut() {
+            if overlap(sr, occ(n.src, n.wide)) {
+                if n.src != m0.src || n.wide != m0.wide {
+                    bail!("ssa dexbuilder: φ-move cycle partial-overlap (not yet supported)");
+                }
+                n.src = temp;
+            }
+        }
+    }
+    for m in &out {
+        // move-wide(0x04) / move-object(0x07) / move(0x01) — all 12x (nibble regs).
+        let op: u16 = if m.wide { 0x04 } else if m.isref { 0x07 } else { 0x01 };
+        insns.push(op | ((m.dst & 0xf) << 8) | ((m.src & 0xf) << 12));
+    }
+    Ok(())
+}
+
+/// φ-moves on this (predecessor) block's OUTGOING edges, emitted at its end. A move on a
+/// branch edge P→S (P has >1 successor) can't go at P's end; if S has a SINGLE predecessor
+/// it's emitted at S's entry instead (emit_entry_phi_moves), so only a TRUE critical edge
+/// (P>1 succ AND S>1 pred) still bails.
+fn emit_phi_moves(
+    f: &SsaFn,
+    insns: &mut Vec<u16>,
+    alloc: &Allocation,
+    b: usize,
+    scratch_words: &mut u16,
+) -> Result<()> {
+    // A BRANCHING block's edge φ-moves can't sit at its end (they'd run on every arm).
+    // Each is handled elsewhere: a single-pred successor at its own entry
+    // (emit_entry_phi_moves); a critical (multi-pred) successor in the If terminator
+    // (fallthrough inline, or taken via a split block). So nothing to do here.
+    if f.blocks[b].succ.len() > 1 {
+        return Ok(());
+    }
+    // Single-successor block: the move runs unconditionally at the block's end.
+    for &s in &f.blocks[b].succ.clone() {
+        let moves = phi_moves_for_edge(f, alloc, b, s);
+        if !moves.is_empty() {
+            emit_move_list(f, insns, alloc, &moves, scratch_words)?;
+        }
+    }
+    Ok(())
+}
+
+/// φ-moves emitted at THIS block's entry (before its body): the case where this block has
+/// a single predecessor that BRANCHES (so the moves can't sit at the pred's end, but the
+/// edge isn't critical because this block is entered only from that pred). Skips handler
+/// blocks (entered via exception, not a normal pred edge).
+fn emit_entry_phi_moves(
+    f: &SsaFn,
+    insns: &mut Vec<u16>,
+    alloc: &Allocation,
+    s: usize,
+    scratch_words: &mut u16,
+) -> Result<()> {
+    if f.blocks[s].preds.len() != 1 || f.caught[s].is_some() {
+        return Ok(());
+    }
+    let p = f.blocks[s].preds[0];
+    if f.blocks[p].succ.len() <= 1 {
+        return Ok(()); // pred single-succ → handled at the pred's end
+    }
+    let moves = phi_moves_for_edge(f, alloc, p, s);
+    emit_move_list(f, insns, alloc, &moves, scratch_words)
+}
+
 /// Emits the instruction defining `v` (the result lands in `reg(v)`).
 fn emit_value(f: &SsaFn, insns: &mut Vec<u16>, alloc: &Allocation, v: ValId) -> Result<()> {
     let reg = |x: ValId| alloc.reg[x as usize];
@@ -1573,12 +3998,13 @@ fn emit_value(f: &SsaFn, insns: &mut Vec<u16>, alloc: &Allocation, v: ValId) -> 
             insns.push(dop | (dest << 8));
             insns.push((reg(*a) & 0xff) | ((reg(*b) & 0xff) << 8));
         }
-        SsaOp::Binop { jvm_op, a, b } => emit_binop(f, insns, alloc, dest, *jvm_op, *a, *b)?,
+        SsaOp::Binop { jvm_op, a, b, .. } => emit_binop(f, insns, alloc, dest, *jvm_op, *a, *b)?,
         // Invokes/field-accesses are emitted by `emit_invoke`/`emit_field` (they
         // carry extra state); the rest define no emittable instruction on their own.
         SsaOp::Phi { .. }
         | SsaOp::Argument { .. }
-        | SsaOp::ConstString(_)
+        | SsaOp::ConstString { .. }
+        | SsaOp::ConstClass { .. }
         | SsaOp::Invoke { .. }
         | SsaOp::GetField { .. }
         | SsaOp::GetStatic { .. }
@@ -1586,7 +4012,12 @@ fn emit_value(f: &SsaFn, insns: &mut Vec<u16>, alloc: &Allocation, v: ValId) -> 
         | SsaOp::PutStatic { .. }
         | SsaOp::ArrayGet { .. }
         | SsaOp::ArrayPut { .. }
-        | SsaOp::ArrayLength { .. } => {
+        | SsaOp::ArrayLength { .. }
+        | SsaOp::NewInstance { .. }
+        | SsaOp::NewArray { .. }
+        | SsaOp::CheckCast { .. }
+        | SsaOp::InstanceOf { .. }
+        | SsaOp::CaughtException => {
             bail!("ssa dexbuilder: value {v} has no emittable instruction")
         }
     }
@@ -1595,19 +4026,64 @@ fn emit_value(f: &SsaFn, insns: &mut Vec<u16>, alloc: &Allocation, v: ValId) -> 
 
 fn emit_binop(f: &SsaFn, insns: &mut Vec<u16>, alloc: &Allocation, dest: u16, jvm_op: u8, a: ValId, b: ValId) -> Result<()> {
     let reg = |x: ValId| alloc.reg[x as usize];
-    // Lit-fold when the right operand is a rematerialized small constant.
+    // Lit-fold when the right operand is a rematerialized small constant. `x - c`
+    // has no DEX lit form, so d8 folds it as `x + (-c)` (iadd lit op, negated const).
     if is_rematerialized(f, b) {
         if let SsaOp::ConstInt(c) = f.values[b as usize].op {
-            if let Some((op8, op16)) = crate::bootstrap::lit_ops(jvm_op) {
-                if (-128..=127).contains(&c) {
+            let (fold_op, fold_c) = if jvm_op == 0x64 { (0x60u8, -c) } else { (jvm_op, c) };
+            if let Some((op8, op16)) = crate::bootstrap::lit_ops(fold_op) {
+                if (-128..=127).contains(&fold_c) {
                     insns.push(op8 | (dest << 8));
-                    insns.push((reg(a) & 0xff) | (((c as u16) & 0xff) << 8));
+                    insns.push((reg(a) & 0xff) | (((fold_c as u16) & 0xff) << 8));
                     return Ok(());
                 } else {
                     insns.push(op16 | ((dest as u16) << 8) | ((reg(a) as u16) << 12));
+                    insns.push(fold_c as u16);
+                    return Ok(());
+                }
+            }
+            // Shift by a constant: `shl/shr/ushr-int/lit8` (22b). No lit16 form; the
+            // amount fits a byte (guaranteed by is_rematerialized). The const is the
+            // shift amount, never negated.
+            if let Some(op8) = crate::bootstrap::shift_lit8_op(jvm_op) {
+                insns.push(op8 | (dest << 8));
+                insns.push((reg(a) & 0xff) | (((c as u16) & 0xff) << 8));
+                return Ok(());
+            }
+        }
+    }
+    // Lit-fold a COMMUTATIVE op whose LEFT operand is the rematerialized const: d8 folds
+    // `3*n` as `mul-int/lit8 n, #3` (the variable `b` is the source, the const the
+    // literal). Only int commutative ops have a lit form; others fall through to 3-addr.
+    if crate::bootstrap::is_commutative(jvm_op) && !is_rematerialized(f, b) && is_rematerialized(f, a)
+    {
+        if let SsaOp::ConstInt(c) = f.values[a as usize].op {
+            if let Some((op8, op16)) = crate::bootstrap::lit_ops(jvm_op) {
+                if (-128..=127).contains(&c) {
+                    insns.push(op8 | (dest << 8));
+                    insns.push((reg(b) & 0xff) | (((c as u16) & 0xff) << 8));
+                    return Ok(());
+                } else {
+                    insns.push(op16 | ((dest as u16) << 8) | ((reg(b) as u16) << 12));
                     insns.push(c as u16);
                     return Ok(());
                 }
+            }
+        }
+    }
+    // `c - x` (const minus variable): DEX's reverse-subtract `rsub-int/lit8 x,#c` (0xd9,
+    // 22b) or `rsub-int/lit16 x,#c` (0xd1, 22s). (Plain sub has no const form; `x - c`
+    // folds as add-neg above.)
+    if jvm_op == 0x64 && !is_rematerialized(f, b) && is_rematerialized(f, a) {
+        if let SsaOp::ConstInt(c) = f.values[a as usize].op {
+            if (-128..=127).contains(&c) {
+                insns.push(0xd9 | (dest << 8));
+                insns.push((reg(b) & 0xff) | (((c as u16) & 0xff) << 8));
+                return Ok(());
+            } else {
+                insns.push(0xd1 | ((dest as u16) << 8) | ((reg(b) as u16) << 12));
+                insns.push(c as u16);
+                return Ok(());
             }
         }
     }
@@ -1623,11 +4099,20 @@ fn emit_binop(f: &SsaFn, insns: &mut Vec<u16>, alloc: &Allocation, dest: u16, jv
             return Ok(());
         }
     }
-    // 3-address form keeps the operands in source order (d8 does NOT canonicalize
-    // commutative sources: `p*i` with p=v1,i=v0 stays `mul-int v1, v1, v0`).
+    // 3-address form. d8 keeps source order when the dest already matches the LEFT
+    // source (`p*i` with p=v1,i=v0 → `mul-int v1, v1, v0`), but for a COMMUTATIVE op
+    // whose result reuses the RIGHT operand it swaps so the reused (dest) register is
+    // the LEFT source — `x*i` with x=v5 live, i=v3 dying → `mul-long v3, v3, v5`, not
+    // `mul-long v3, v5, v3` (mirrors the 2addr `op/2addr vDest, vOther`; reached for
+    // the mul-2addr-bug 3-addr form below API 23).
     let op3 = crate::bootstrap::binop_3addr_op(jvm_op)?;
+    let (bb, cc) = if crate::bootstrap::is_commutative(jvm_op) && dest == rb && dest != ra {
+        (rb, ra)
+    } else {
+        (ra, rb)
+    };
     insns.push(op3 | (dest << 8));
-    insns.push((ra & 0xff) | ((rb & 0xff) << 8));
+    insns.push((bb & 0xff) | ((cc & 0xff) << 8));
     Ok(())
 }
 
@@ -1683,7 +4168,7 @@ mod tests {
         let cf = skotch_classfile::parse_class_file(&path).unwrap();
         let m = cf.methods.iter().find(|m| m.name == "count").unwrap();
         let bc = &m.code.as_ref().unwrap().bytecode;
-        let cfg = Cfg::build(bc).unwrap();
+        let cfg = Cfg::build(bc, &[]).unwrap();
         let idom = dominators(&cfg);
         let df = dominance_frontiers(&cfg, &idom);
         let sites = def_sites(&cfg, bc);
@@ -1710,7 +4195,7 @@ mod tests {
         let m = cf.methods.iter().find(|m| m.name == method).unwrap();
         let bc = &m.code.as_ref().unwrap().bytecode;
         let ps: Vec<String> = params.iter().map(|s| s.to_string()).collect();
-        build_ssa(&cf, bc, &ps, false).unwrap()
+        build_ssa(&cf, bc, &ps, false, &[]).unwrap()
     }
 
     /// Runs the full SSA dexer on a method of a fixture class, returning the code.
@@ -1722,7 +4207,7 @@ mod tests {
         let m = cf.methods.iter().find(|m| m.name == method).unwrap();
         let code = m.code.as_ref().unwrap();
         let ps: Vec<String> = params.iter().map(|s| s.to_string()).collect();
-        dex_method_ssa(&cf, &code.bytecode, &ps, false, &code.line_numbers).unwrap()
+        dex_method_ssa(&cf, &code.bytecode, &ps, false, &code.line_numbers, &code.exceptions).unwrap()
     }
 
     #[test]
@@ -1802,6 +4287,23 @@ mod tests {
     }
 
     #[test]
+    fn clamp_now_dexes_correctly() {
+        // `int x = i; if (x>5) x = 5; s += x` — the x merge-φ has the live loop counter
+        // `i` as an operand. Interference-aware coalescing keeps x and i in DISTINCT
+        // registers (not merged — that would clobber i), leaving a φ-move on a critical
+        // edge. That move is now emitted (entry-move / fall-through inline / taken
+        // trampoline) instead of bailing. Correctness PROVEN on ART by tests/art/ArtClamp
+        // (clampSum(10/3/20) → 35,3,85); here we just assert it dexes (no bail).
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../skotch-dex/tests/fixtures/Clamp.class");
+        let cf = skotch_classfile::parse_class_file(&path).unwrap();
+        let m = cf.methods.iter().find(|m| m.name == "clampSum").unwrap();
+        let c = m.code.as_ref().unwrap();
+        let r = dex_method_ssa(&cf, &c.bytecode, &["I".to_string()], false, &c.line_numbers, &c.exceptions);
+        assert!(r.is_ok(), "clampSum should dex now (φ-move on a critical edge): {:#}", r.err().unwrap());
+    }
+
+    #[test]
     fn sumtwice_static_call_in_loop() {
         // `for(i=0;i<n;i++) s += twice(i)` — a static call inside a loop:
         // invoke-static {v0} + move-result v2 + add-int/2addr; the call is a
@@ -1845,7 +4347,7 @@ mod tests {
         let cf = skotch_classfile::parse_class_file(&path).unwrap();
         let m = cf.methods.iter().find(|m| m.name == name).unwrap();
         let c = m.code.as_ref().unwrap();
-        let code = match dex_method_ssa(&cf, &c.bytecode, &["I".to_string()], false, &c.line_numbers) {
+        let code = match dex_method_ssa(&cf, &c.bytecode, &["I".to_string()], false, &c.line_numbers, &c.exceptions) {
             Ok(c) => c,
             Err(e) => {
                 eprintln!("{name} BAILS: {e}");
@@ -1878,16 +4380,16 @@ mod tests {
 
     #[test]
     fn grid_dex_diff() {
-        // Nested loop, three live loop vars (i, j, accumulator t) + a temp. 6
-        // registers. Diagnostic only — the SSA path currently BAILS (the nested
-        // loop needs d8's φ-move insertion + partial coalescing, which leaves a
-        // dead `const/4 v0`; we fully coalesce instead). Falls back to the CFG
-        // path in the real dexer. Marks the nested-loop frontier.
+        // Nested loop. The SSA path BUILDS it correctly and produces VALID, MORE-OPTIMAL
+        // code (5 registers) that DIVERGES from d8: d8 leaves a dead `const/4 v0` (an
+        // un-DCE'd undefined-φ-entry materialization → 6 registers) we don't reproduce.
+        // We now DEX nested loops (functional-correctness; ART-validated via ArtNested) —
+        // this diagnostic just confirms the (acceptable, smaller) byte divergence from d8.
         let expected = [
             0x0012, 0x0112, 0x0212, 0x5135, 0x000e, 0x0312, 0x5335, 0x0008, 0x0492, 0x0301,
             0x42b0, 0x03d8, 0x0103, 0xf928, 0x01d8, 0x0101, 0xf328, 0x020f,
         ];
-        let _ = diag("grid", &expected, 6);
+        assert!(!diag("grid", &expected, 6), "grid: expected (acceptable) divergence from d8's dead-const shape");
     }
 
     #[test]
