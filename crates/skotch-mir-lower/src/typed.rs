@@ -122,7 +122,7 @@ fn function_body_is_empty(blocks: &[BasicBlock]) -> bool {
 /// abstract / external decls (where empty MIR is correct).
 fn first_unhandled_kind<'a>(f: skotch_ast::KtFun<'a>) -> Option<String> {
     if let Some(expr) = f.body_expression() {
-        return Some(kt_expr_kind(&expr).to_string());
+        return Some(describe_expr_shape(&expr, 2));
     }
     if let Some(block) = f.body_block() {
         for child in skotch_ast::children(block.syntax()) {
@@ -140,15 +140,112 @@ fn first_unhandled_kind<'a>(f: skotch_ast::KtFun<'a>) -> Option<String> {
                 continue;
             }
             if let Some(e) = skotch_ast::KtExpr::cast(child) {
-                return Some(kt_expr_kind(&e).to_string());
+                return Some(describe_expr_shape(&e, 2));
             }
-            if skotch_ast::KtProperty::cast(child).is_some() {
-                return Some("Property".to_string());
+            if let Some(prop) = skotch_ast::KtProperty::cast(child) {
+                // Properties (`val x = ...`) are the dominant blocker.
+                // Drill into the initializer so the diagnostic shows
+                // the actual unhandled init shape — `Property(Call)`,
+                // `Property(Lambda)`, `Property(DotQualified(Call))`,
+                // etc. — instead of just "Property".
+                let inner = prop
+                    .initializer()
+                    .map(|e| describe_expr_shape(&e, 2))
+                    .unwrap_or_else(|| "<no-init>".to_string());
+                return Some(format!("Property({})", inner));
             }
             return Some(sil_node_kind(child));
         }
     }
     None
+}
+
+/// Render an expression's shape recursively up to `depth` levels deep.
+/// `describe_expr_shape(Call, 0)` returns `"Call"`;
+/// `describe_expr_shape(Call(Reference + Lambda), 2)` returns
+/// `"Call(Reference, Lambda)"`. The shape descriptor goes into the
+/// empty-body diagnostic so the user sees *what* about the init was
+/// rejected (e.g. `Property(Call(Reference, Lambda))` clearly says
+/// "a function call with a lambda arg"), not just the outermost
+/// constructor name.
+fn describe_expr_shape(e: &skotch_ast::KtExpr<'_>, depth: u8) -> String {
+    let head = kt_expr_kind(e);
+    if depth == 0 {
+        return head.to_string();
+    }
+    use skotch_ast::KtExpr::*;
+    let children: Vec<std::string::String> = match e {
+        Call(c) => {
+            let mut out = Vec::new();
+            if let Some(callee) = c.callee() {
+                out.push(describe_expr_shape(&callee, depth - 1));
+            }
+            // Take the first 2 args at most so the diagnostic stays
+            // short. The shape signal is in the kinds, not the count.
+            if let Some(al) = c.value_argument_list() {
+                for arg in al.arguments().take(2) {
+                    if let Some(ae) = arg.expression() {
+                        out.push(describe_expr_shape(&ae, depth - 1));
+                    }
+                }
+            }
+            // Trailing lambda? Surface it as a separate `Lambda` so
+            // the user knows the call carries a closure.
+            if c.lambda_argument().is_some() {
+                out.push("Lambda".to_string());
+            }
+            out
+        }
+        DotQualified(dq) => skotch_ast::children(dq.syntax())
+            .iter()
+            .filter_map(|n| skotch_ast::KtExpr::cast(n))
+            .map(|inner| describe_expr_shape(&inner, depth - 1))
+            .collect(),
+        Binary(b) => {
+            let mut out = Vec::new();
+            if let Some(lhs) = b.lhs() {
+                out.push(describe_expr_shape(&lhs, depth - 1));
+            }
+            if let Some(rhs) = b.rhs() {
+                out.push(describe_expr_shape(&rhs, depth - 1));
+            }
+            out
+        }
+        Parenthesized(p) => skotch_ast::children(p.syntax())
+            .iter()
+            .filter_map(|n| skotch_ast::KtExpr::cast(n))
+            .map(|inner| describe_expr_shape(&inner, depth - 1))
+            .collect(),
+        If(i) => {
+            let mut out = Vec::new();
+            if let Some(c) = i.condition().and_then(|c| c.expression()) {
+                out.push(describe_expr_shape(&c, depth - 1));
+            }
+            if let Some(t) = i.then_branch().and_then(|t| t.expression()) {
+                out.push(describe_expr_shape(&t, depth - 1));
+            }
+            if let Some(el) = i.else_branch().and_then(|e| e.expression()) {
+                out.push(describe_expr_shape(&el, depth - 1));
+            }
+            out
+        }
+        Return(r) => skotch_ast::children(r.syntax())
+            .iter()
+            .filter_map(|n| skotch_ast::KtExpr::cast(n))
+            .map(|inner| describe_expr_shape(&inner, depth - 1))
+            .collect(),
+        ArrayAccess(aa) => skotch_ast::children(aa.syntax())
+            .iter()
+            .filter_map(|n| skotch_ast::KtExpr::cast(n))
+            .map(|inner| describe_expr_shape(&inner, depth - 1))
+            .collect(),
+        _ => Vec::new(),
+    };
+    if children.is_empty() {
+        head.to_string()
+    } else {
+        format!("{}({})", head, children.join(", "))
+    }
 }
 
 /// Emit the "function lowered to empty body" diagnostic. Becomes
@@ -6313,13 +6410,13 @@ fn try_lower_function_body_via_blocks(
         .map(|(i, n)| (n.clone(), LocalId(i as u32 + slot_offset)))
         .collect();
     let mut local_tys: Vec<Ty> = Vec::new();
+    let initial_locals_len = local_tys.len();
     let mut next_slot: u32 = param_count as u32 + slot_offset;
     let block_children: Vec<&skotch_sil::SilNode> =
         skotch_ast::children(block.syntax()).iter().collect();
 
     const SENT: u32 = 0xfffffffe;
     let saved_strings_len = strings.len();
-    let initial_locals_len = local_tys.len();
     let mut blocks = match lower_loop_body_blocks(
         &block_children,
         &mut name_to_local,
