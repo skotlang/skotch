@@ -6133,7 +6133,11 @@ fn try_lower_multi_stmt_block_with_offset(
                                 dest: new_slot,
                                 value: skotch_mir::Rvalue::NewInstance(cname.to_string()),
                             });
-                            let mut arg_slots: Vec<LocalId> = vec![new_slot];
+                            // Backend convention: Constructor args do NOT include
+                            // the receiver — the dup'd ref from NewInstance is
+                            // consumed by invokespecial, and the Constructor
+                            // Assign's dest receives the remaining copy.
+                            let mut arg_slots: Vec<LocalId> = Vec::new();
                             let mut ok = true;
                             if let Some(arg_list) = call.value_argument_list() {
                                 for arg in arg_list.arguments() {
@@ -6178,11 +6182,8 @@ fn try_lower_multi_stmt_block_with_offset(
                                 }
                             }
                             if ok {
-                                let dummy = LocalId(next_slot);
-                                next_slot += 1;
-                                local_tys.push(Ty::Unit);
                                 stmts.push(MStmt::Assign {
-                                    dest: dummy,
+                                    dest: new_slot,
                                     value: skotch_mir::Rvalue::Call {
                                         kind: skotch_mir::CallKind::Constructor(cname.to_string()),
                                         args: arg_slots,
@@ -10242,7 +10243,12 @@ fn try_lower_multi_stmt_block_with_offset(
                             dest: new_slot,
                             value: skotch_mir::Rvalue::NewInstance(name.to_string()),
                         });
-                        let mut arg_slots: Vec<LocalId> = vec![new_slot];
+                        // Backend convention: Constructor `args` does
+                        // NOT include the receiver; the dup'd reference
+                        // from NewInstance is consumed by invokespecial.
+                        // The Constructor Assign's dest receives the
+                        // remaining dup'd ref after invokespecial.
+                        let mut arg_slots: Vec<LocalId> = Vec::new();
                         if let Some(arg_list) = call.value_argument_list() {
                             for arg in arg_list.arguments() {
                                 let arg_e = arg.expression()?;
@@ -10270,11 +10276,8 @@ fn try_lower_multi_stmt_block_with_offset(
                                 }
                             }
                         }
-                        let dummy = LocalId(next_slot);
-                        next_slot += 1;
-                        local_tys.push(Ty::Unit);
                         stmts.push(MStmt::Assign {
-                            dest: dummy,
+                            dest: new_slot,
                             value: skotch_mir::Rvalue::Call {
                                 kind: skotch_mir::CallKind::Constructor(name.to_string()),
                                 args: arg_slots,
@@ -11708,16 +11711,14 @@ fn lower_rich_expr_to_slot(
                         dest: new_slot,
                         value: skotch_mir::Rvalue::NewInstance(name.to_string()),
                     });
-                    let mut ctor_args: Vec<LocalId> = vec![new_slot];
-                    ctor_args.extend(arg_slots);
-                    let init_slot = LocalId(*next_slot);
-                    *next_slot += 1;
-                    extra_locals.push(Ty::Unit);
+                    // Backend convention: Constructor args do NOT include
+                    // the receiver. Constructor Assign's dest receives
+                    // the remaining ref from the NewInstance+dup pair.
                     pre_stmts.push(MStmt::Assign {
-                        dest: init_slot,
+                        dest: new_slot,
                         value: skotch_mir::Rvalue::Call {
                             kind: skotch_mir::CallKind::Constructor(name.to_string()),
-                            args: ctor_args,
+                            args: arg_slots,
                         },
                     });
                     return Some(new_slot);
@@ -13828,7 +13829,10 @@ fn lower_simple_body(
                         dest: new_slot,
                         value: skotch_mir::Rvalue::NewInstance(jvm_cls.clone()),
                     });
-                    let mut arg_slots: Vec<skotch_mir::LocalId> = vec![new_slot];
+                    // Backend convention: Constructor args do NOT include
+                    // the receiver. Constructor Assign's dest receives
+                    // the remaining ref from NewInstance+dup.
+                    let mut arg_slots: Vec<skotch_mir::LocalId> = Vec::new();
                     let mut ok = true;
                     if let Some(arg_list) = call.value_argument_list() {
                         for arg in arg_list.arguments() {
@@ -13869,10 +13873,8 @@ fn lower_simple_body(
                         }
                     }
                     if ok {
-                        let dummy_slot = skotch_mir::LocalId(next_slot);
-                        extra_locals.push(Ty::Unit);
                         stmts.push(skotch_mir::Stmt::Assign {
-                            dest: dummy_slot,
+                            dest: new_slot,
                             value: skotch_mir::Rvalue::Call {
                                 kind: skotch_mir::CallKind::Constructor(jvm_cls),
                                 args: arg_slots,
@@ -13959,7 +13961,10 @@ fn lower_simple_body(
                         value: skotch_mir::Rvalue::NewInstance(name.to_string()),
                     });
 
-                    let mut arg_slots: Vec<skotch_mir::LocalId> = vec![new_slot];
+                    // Backend convention: Constructor args do NOT include
+                    // the receiver. Constructor Assign's dest receives
+                    // the remaining ref from NewInstance+dup.
+                    let mut arg_slots: Vec<skotch_mir::LocalId> = Vec::new();
                     let mut ok = true;
                     if let Some(arg_list) = call.value_argument_list() {
                         for arg in arg_list.arguments() {
@@ -14103,11 +14108,8 @@ fn lower_simple_body(
                         }
                     }
                     if ok {
-                        // Constructor call writes into a dummy slot.
-                        let dummy_slot = skotch_mir::LocalId(next_slot);
-                        extra_locals.push(Ty::Unit);
                         pre_stmts.push(skotch_mir::Stmt::Assign {
-                            dest: dummy_slot,
+                            dest: new_slot,
                             value: skotch_mir::Rvalue::Call {
                                 kind: skotch_mir::CallKind::Constructor(name.to_string()),
                                 args: arg_slots,
@@ -16571,7 +16573,10 @@ fn method_simple_body_full(
                         dest: new_slot,
                         value: skotch_mir::Rvalue::NewInstance(jvm_cls.clone()),
                     });
-                    let mut arg_slots: Vec<skotch_mir::LocalId> = vec![new_slot];
+                    // Backend convention: Constructor args do NOT include
+                    // the receiver. Constructor Assign's dest receives
+                    // the remaining ref from NewInstance+dup.
+                    let mut arg_slots: Vec<skotch_mir::LocalId> = Vec::new();
                     let mut ok = true;
                     if let Some(arg_list) = call.value_argument_list() {
                         for arg in arg_list.arguments() {
@@ -16640,10 +16645,8 @@ fn method_simple_body_full(
                         }
                     }
                     if ok {
-                        let dummy_slot = skotch_mir::LocalId(next_slot);
-                        extra_locals.push(Ty::Unit);
                         stmts.push(skotch_mir::Stmt::Assign {
-                            dest: dummy_slot,
+                            dest: new_slot,
                             value: skotch_mir::Rvalue::Call {
                                 kind: skotch_mir::CallKind::Constructor(jvm_cls),
                                 args: arg_slots,
@@ -20369,8 +20372,10 @@ mod tests {
                 _ => None,
             },
         });
+        // Constructor convention: args are EXPLICIT only — the receiver
+        // comes from the NewInstance dup, not from args[0].
         let args = ctor_args.unwrap();
-        assert_eq!(args.len(), 3, "expected receiver + 2 args, got {args:?}");
+        assert_eq!(args.len(), 2, "expected 2 explicit args, got {args:?}");
     }
 
     #[test]
