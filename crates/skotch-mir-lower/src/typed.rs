@@ -11584,17 +11584,17 @@ fn lower_rich_expr_to_slot(
                     "kotlin/ranges/IntRange".to_string(),
                 ),
             });
-            let init_slot = LocalId(*next_slot);
-            *next_slot += 1;
-            extra_locals.push(Ty::Unit);
+            // Backend convention: ConstructorJava args exclude the
+            // receiver; Constructor Assign's dest receives the
+            // remaining ref after the NewInstance+dup pair.
             pre_stmts.push(MStmt::Assign {
-                dest: init_slot,
+                dest: new_slot,
                 value: skotch_mir::Rvalue::Call {
                     kind: skotch_mir::CallKind::ConstructorJava {
                         class_name: "kotlin/ranges/IntRange".to_string(),
                         descriptor: "(II)V".to_string(),
                     },
-                    args: vec![new_slot, lhs_slot, rhs_slot],
+                    args: vec![lhs_slot, rhs_slot],
                 },
             });
             return Some(new_slot);
