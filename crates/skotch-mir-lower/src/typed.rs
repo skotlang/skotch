@@ -1580,6 +1580,65 @@ fn flatten_and_conjuncts<'a>(e: skotch_ast::KtExpr<'a>) -> Vec<skotch_ast::KtExp
     out
 }
 
+/// Inspect the top-level operator of an expression used as a Boolean
+/// condition. Returns the conjuncts/disjuncts plus a tag that tells
+/// the caller how to wire the cmp blocks. Mixed `&&`/`||` at the top
+/// level → `Single` (the caller emits one cmp block and lets
+/// `lower_rich_expr_to_slot` try to handle the operator — usually it
+/// can't, and the caller bails).
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+enum CondShape {
+    /// A single cmp produces the result. Caller emits one block.
+    Single,
+    /// All conjuncts must be true (`a && b && c`). Each block branches
+    /// to the next on true, to the false target on false.
+    AllAnd,
+    /// At least one disjunct must be true (`a || b || c`). Each block
+    /// branches to the true target on true, to the next on false.
+    AnyOr,
+}
+
+/// Flatten a top-level `&&` or `||` chain into its operand list and
+/// return the shape tag. If the top-level operator is neither, returns
+/// `CondShape::Single` with a one-element vec.
+fn classify_cond_chain<'a>(
+    e: skotch_ast::KtExpr<'a>,
+) -> (CondShape, Vec<skotch_ast::KtExpr<'a>>) {
+    use skotch_ast::KtExpr;
+    let e = unwrap_parens(e);
+    if let KtExpr::Binary(b) = e {
+        let op = b.operation().map(|o| o.text()).unwrap_or_default();
+        match op.as_str() {
+            "&&" => return (CondShape::AllAnd, flatten_and_conjuncts(e)),
+            "||" => return (CondShape::AnyOr, flatten_or_disjuncts(e)),
+            _ => {}
+        }
+    }
+    (CondShape::Single, vec![e])
+}
+
+/// Mirror of [`flatten_and_conjuncts`] for `||`.
+fn flatten_or_disjuncts<'a>(e: skotch_ast::KtExpr<'a>) -> Vec<skotch_ast::KtExpr<'a>> {
+    use skotch_ast::KtExpr;
+    let mut out = Vec::new();
+    fn rec<'a>(e: skotch_ast::KtExpr<'a>, out: &mut Vec<skotch_ast::KtExpr<'a>>) {
+        let e = unwrap_parens(e);
+        if let KtExpr::Binary(b) = e {
+            let op = b.operation().map(|o| o.text()).unwrap_or_default();
+            if op == "||" {
+                if let (Some(lhs), Some(rhs)) = (b.lhs(), b.rhs()) {
+                    rec(lhs, out);
+                    rec(rhs, out);
+                    return;
+                }
+            }
+        }
+        out.push(e);
+    }
+    rec(e, &mut out);
+    out
+}
+
 fn try_lower_when_subjectless(
     w: &skotch_ast::KtWhen<'_>,
     outer_param_names: &[String],
@@ -1591,11 +1650,11 @@ fn try_lower_when_subjectless(
     use skotch_ast::KtExpr;
     use skotch_mir::{LocalId, Stmt as MStmt};
 
-    // Collect arms. Each arm's `cond_expr` is flattened on top-level
-    // `&&` operators into a `Vec<KtExpr>` (conjunction): all must be
-    // true for the arm to fire. `||` is rarer in the wild and unhandled
-    // here — those arms still bail.
-    let mut arms: Vec<(Vec<KtExpr<'_>>, KtExpr<'_>)> = Vec::new();
+    // Collect arms. Each arm's `cond_expr` is classified into a
+    // `(CondShape, Vec<KtExpr>)` tuple: AllAnd (`a && b && c`), AnyOr
+    // (`a || b || c`), or Single. The shape decides the cmp-block
+    // branch wiring at lowering time.
+    let mut arms: Vec<(CondShape, Vec<KtExpr<'_>>, KtExpr<'_>)> = Vec::new();
     let mut else_arm: Option<KtExpr<'_>> = None;
     for entry in w.entries() {
         if entry.is_else() {
@@ -1614,8 +1673,8 @@ fn try_lower_when_subjectless(
             .find_map(KtExpr::cast)
             .map(unwrap_parens)?;
         let body = entry.body().map(unwrap_parens)?;
-        let parts = flatten_and_conjuncts(cond_expr);
-        arms.push((parts, body));
+        let (shape, parts) = classify_cond_chain(cond_expr);
+        arms.push((shape, parts, body));
     }
     let else_body = else_arm.map(unwrap_parens)?;
 
@@ -1644,7 +1703,7 @@ fn try_lower_when_subjectless(
     //   block 0: pre (phantom subject)
     //   block 1..: arm0's cmp blocks then arm0's then block, then arm1's, ...
     //   else block, join block
-    let arm_block_counts: Vec<u32> = arms.iter().map(|(c, _)| c.len() as u32 + 1).collect();
+    let arm_block_counts: Vec<u32> = arms.iter().map(|(_, c, _)| c.len() as u32 + 1).collect();
     let arm_block_starts: Vec<u32> = {
         let mut starts = Vec::with_capacity(n_arms);
         let mut acc = 1u32; // pre-block is index 0
@@ -1679,18 +1738,19 @@ fn try_lower_when_subjectless(
             .map(|i| LocalId(i as u32))
     };
 
-    for (i, (conds, body)) in arms.iter().enumerate() {
+    for (i, (shape, conds, body)) in arms.iter().enumerate() {
         let next_arm_or_else = if i + 1 < n_arms {
             arm_block_starts[i + 1]
         } else {
             else_block_idx
         };
         let arm_start = arm_block_starts[i];
-        // Each conjunct emits a cmp block. Each block branches to the
-        // next conjunct's block on true, or to next_arm_or_else on
-        // false. The final conjunct branches to the arm's then-block
-        // on true.
+        // Each operand emits a cmp block. Wiring depends on `shape`:
+        //   AllAnd: on_true → next operand (or then), on_false → next_arm
+        //   AnyOr:  on_true → then, on_false → next operand (or next_arm)
+        //   Single: on_true → then, on_false → next_arm
         let then_block_idx = arm_start + conds.len() as u32;
+        let n_operands = conds.len() as u32;
         for (j, cond_expr) in conds.iter().enumerate() {
             let mut cmp_stmts: Vec<MStmt> = Vec::new();
             let cmp_slot = lower_inline_expr_to_slot(
@@ -1701,17 +1761,25 @@ fn try_lower_when_subjectless(
                 &mut extra_locals,
                 strings,
             )?;
-            let on_true = if j + 1 < conds.len() {
-                arm_start + (j as u32 + 1)
-            } else {
-                then_block_idx
+            let is_last = (j as u32 + 1) >= n_operands;
+            let next_operand_id = arm_start + (j as u32 + 1);
+            let (on_true, on_false) = match shape {
+                CondShape::Single => (then_block_idx, next_arm_or_else),
+                CondShape::AllAnd => {
+                    let t = if is_last { then_block_idx } else { next_operand_id };
+                    (t, next_arm_or_else)
+                }
+                CondShape::AnyOr => {
+                    let f = if is_last { next_arm_or_else } else { next_operand_id };
+                    (then_block_idx, f)
+                }
             };
             blocks.push(BasicBlock {
                 stmts: cmp_stmts,
                 terminator: Terminator::Branch {
                     cond: cmp_slot,
                     then_block: on_true,
-                    else_block: next_arm_or_else,
+                    else_block: on_false,
                 },
             });
         }
@@ -5668,10 +5736,11 @@ fn lower_loop_body_blocks(
                         .find(|(name, _)| name == n)
                         .map(|(_, l)| *l)
                 };
-                // Flatten `if (a && b && ...) X else Y` into a chain
-                // of cmp blocks: each conjunct's cmp branches to the
-                // next on true, to the else-or-join target on false.
-                let conjuncts = flatten_and_conjuncts(cond_expr);
+                // Flatten the cond's top-level `&&` or `||` chain into
+                // a list of operands + a shape tag. Each operand emits
+                // its own cmp block; the shape decides how the
+                // branches wire up.
+                let (cond_shape, cond_operands) = classify_cond_chain(cond_expr);
                 let then_children: Vec<&skotch_sil::SilNode> =
                     match then_expr {
                         KtExpr::Block(bl) => {
@@ -5689,8 +5758,8 @@ fn lower_loop_body_blocks(
                     function_param_names,
                 )?;
                 let cond_block_id = block_offset + blocks.len() as u32;
-                let n_conjuncts = conjuncts.len() as u32;
-                let then_block_id = cond_block_id + n_conjuncts;
+                let n_operands = cond_operands.len() as u32;
+                let then_block_id = cond_block_id + n_operands;
                 let (else_stmts_opt, else_block_id_opt): (
                     Option<Vec<MStmt>>,
                     Option<u32>,
@@ -5721,16 +5790,20 @@ fn lower_loop_body_blocks(
                     None => then_block_id + 1,
                 };
                 let false_target = else_block_id_opt.unwrap_or(join_block_id);
-                // Emit one cmp block per conjunct. The first conjunct's
-                // block carries any prefix stmts that landed in cur_stmts.
-                for (k, conj) in conjuncts.iter().enumerate() {
+                // Emit one cmp block per operand. Branch wiring:
+                //   `&&` shape: on_true → next operand (or then block),
+                //               on_false → false_target.
+                //   `||` shape: on_true → then block,
+                //               on_false → next operand (or false_target).
+                //   `Single`:   on_true → then block, on_false → false_target.
+                for (k, operand) in cond_operands.iter().enumerate() {
                     let mut block_stmts = if k == 0 {
                         std::mem::take(&mut cur_stmts)
                     } else {
                         Vec::new()
                     };
                     let cmp_slot = lower_rich_expr_to_slot(
-                        *conj,
+                        *operand,
                         &lookup,
                         fn_lookup_ref,
                         next_slot,
@@ -5738,17 +5811,25 @@ fn lower_loop_body_blocks(
                         local_tys,
                         strings,
                     )?;
-                    let on_true = if (k as u32 + 1) < n_conjuncts {
-                        cond_block_id + (k as u32 + 1)
-                    } else {
-                        then_block_id
+                    let is_last = (k as u32 + 1) >= n_operands;
+                    let next_operand_id = cond_block_id + (k as u32 + 1);
+                    let (on_true, on_false) = match cond_shape {
+                        CondShape::Single => (then_block_id, false_target),
+                        CondShape::AllAnd => {
+                            let t = if is_last { then_block_id } else { next_operand_id };
+                            (t, false_target)
+                        }
+                        CondShape::AnyOr => {
+                            let f = if is_last { false_target } else { next_operand_id };
+                            (then_block_id, f)
+                        }
                     };
                     blocks.push(BasicBlock {
                         stmts: block_stmts,
                         terminator: Terminator::Branch {
                             cond: cmp_slot,
                             then_block: on_true,
-                            else_block: false_target,
+                            else_block: on_false,
                         },
                     });
                 }
