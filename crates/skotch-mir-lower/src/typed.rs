@@ -777,8 +777,7 @@ fn fixup_call_return_locals(
                     .and_then(|m| m.get(method_name))
                     .cloned(),
                 CallKind::Static(fid) => f
-                    .blocks
-                    .get(0)
+                    .blocks.first()
                     .and_then(|_| {
                         // Static(FuncId) — we don't have a direct lookup
                         // by FuncId, so skip.
@@ -12343,7 +12342,7 @@ fn lower_rich_expr_to_slot(
                     let recv_ty_candidate = match &dq_exprs[0] {
                         KtExpr::Reference(rr) => rr
                             .name()
-                            .and_then(|n| lookup_name(n))
+                            .and_then(lookup_name)
                             .and_then(|s| extra_locals.get(s.0 as usize).cloned()),
                         KtExpr::String(_) => Some(Ty::String),
                         KtExpr::DotQualified(_) => {
@@ -12493,8 +12492,7 @@ fn lower_rich_expr_to_slot(
                             extra_locals.push(ret_ty);
                             // toInt/toLong/toDouble route to Integer/Long/Double.parseX
                             // (static call with String arg).
-                            let kind = if jvm_name.starts_with("@StringsKt.") {
-                                let m = &jvm_name["@StringsKt.".len()..];
+                            let kind = if let Some(m) = jvm_name.strip_prefix("@StringsKt.") {
                                 skotch_mir::CallKind::StaticJava {
                                     class_name: "kotlin/text/StringsKt".to_string(),
                                     method_name: m.to_string(),
@@ -12669,9 +12667,7 @@ fn lower_rich_expr_to_slot(
                                 }
                                 // Determine return ty from descriptor.
                                 let ret_ty = match descriptor
-                                    .chars()
-                                    .rev()
-                                    .next()
+                                    .chars().next_back()
                                     .unwrap_or('V')
                                 {
                                     'I' => Ty::Int,
@@ -12750,7 +12746,7 @@ fn lower_rich_expr_to_slot(
                                     | Some("System")
                             );
                             let is_class_instance = n
-                                .and_then(|name| lookup_name(name))
+                                .and_then(lookup_name)
                                 .and_then(|s| extra_locals.get(s.0 as usize).cloned())
                                 .map(|ty| matches!(ty, Ty::Class(_) | Ty::String))
                                 .unwrap_or(false);
