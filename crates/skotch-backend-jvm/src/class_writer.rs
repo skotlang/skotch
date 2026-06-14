@@ -15134,9 +15134,19 @@ fn walk_block(
                     // then push the receiver and `swap` — kotlinc's pattern
                     // for `println(<getstatic field>)`. Otherwise fall back
                     // to the receiver-first form.
+                    //
+                    // The swap (0x5F) requires both stack entries to be
+                    // category-1 (narrow). For wide types (Long/Double)
+                    // the JVM raises VerifyError "Bad type on operand
+                    // stack: not assignable to category1 type". So when
+                    // the inlined arg is wide, skip the swap path and
+                    // fall back to receiver-first emission.
+                    let arg_ty_opt = args.first().map(|a| &func.locals[a.0 as usize]);
+                    let arg_is_wide =
+                        matches!(arg_ty_opt, Some(Ty::Long) | Some(Ty::Double));
                     let arg_is_inlinable_getstatic = args.first().is_some_and(|a| {
                         INLINABLE_GETSTATIC.with(|cell| cell.borrow().contains_key(&a.0))
-                    });
+                    }) && !arg_is_wide;
                     if arg_is_inlinable_getstatic {
                         let a = args[0];
                         load_local(code, stack, max_stack, slots, a, &func.locals);
