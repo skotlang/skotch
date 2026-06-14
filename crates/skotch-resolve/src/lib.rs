@@ -14,9 +14,8 @@
 
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
-use skotch_diagnostics::{Diagnostic, Diagnostics};
-use skotch_intern::{Interner, Symbol};
-use skotch_span::{FileId, Span};
+use skotch_intern::Symbol;
+use skotch_span::Span;
 // (legacy `use skotch_syntax::{...}` removed; kept Annotation/Param/Stmt etc were only used by the legacy resolve_file impl which is gone now)
 use skotch_types::Ty;
 

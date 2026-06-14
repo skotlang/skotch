@@ -18,7 +18,6 @@ use rayon::prelude::*;
 use skotch_buildscript::{parse_buildfile_with_catalog, parse_settings, BuildTarget, ProjectModel};
 use skotch_diagnostics::{render, Diagnostics};
 use skotch_intern::Interner;
-use skotch_lexer::lex;
 use skotch_mir::MirModule;
 use skotch_resolve::typed::gather_declarations;
 use skotch_span::SourceMap;
@@ -2168,8 +2167,8 @@ fn compile_multi_module_classes(
 
         // Store symbols for downstream modules.
         {
-            let mut tmp_interner = skotch_intern::Interner::new();
-            let mut tmp_diags = skotch_diagnostics::Diagnostics::new();
+            let tmp_interner = skotch_intern::Interner::new();
+            let _tmp_diags = skotch_diagnostics::Diagnostics::new();
             let mut tmp_sm = skotch_span::SourceMap::new();
             let mut re_parsed: Vec<(skotch_ast::ParsedFile, String)> = Vec::new();
             for path in &src_files {
@@ -3098,8 +3097,8 @@ fn build_multi_module(
                 src_files.extend(discover_sources(&module.dir.join(subdir)).unwrap_or_default());
             }
             if !src_files.is_empty() {
-                let mut tmp_interner = skotch_intern::Interner::new();
-                let mut tmp_diags = skotch_diagnostics::Diagnostics::new();
+                let tmp_interner = skotch_intern::Interner::new();
+                let tmp_diags = skotch_diagnostics::Diagnostics::new();
                 let mut tmp_sm = skotch_span::SourceMap::new();
                 let mut parsed: Vec<(skotch_ast::ParsedFile, String)> = Vec::new();
                 for path in &src_files {

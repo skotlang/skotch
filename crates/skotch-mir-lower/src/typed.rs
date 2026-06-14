@@ -7350,7 +7350,7 @@ fn try_lower_multi_stmt_block_with_offset(
                         return true;
                     }
                     if let KtExpr::If(if_e) = expr {
-                        let is_jump_arm = |arm: Option<KtExpr<'_>>| -> bool {
+                        let _is_jump_arm = |arm: Option<KtExpr<'_>>| -> bool {
                             let Some(arm) = arm.map(unwrap_parens) else {
                                 return false;
                             };
@@ -7368,8 +7368,8 @@ fn try_lower_multi_stmt_block_with_offset(
                             }
                             false
                         };
-                        let then_e = if_e.then_branch().and_then(|t| t.expression());
-                        let else_e = if_e.else_branch().and_then(|e| e.expression());
+                        let _then_e = if_e.then_branch().and_then(|t| t.expression());
+                        let _else_e = if_e.else_branch().and_then(|e| e.expression());
                         return true; // any if triggers multi-block path
                     }
                     false
@@ -7759,7 +7759,7 @@ fn try_lower_multi_stmt_block_with_offset(
                         return true;
                     }
                     if let KtExpr::If(if_e) = expr {
-                        let is_jump_arm = |arm: Option<KtExpr<'_>>| -> bool {
+                        let _is_jump_arm = |arm: Option<KtExpr<'_>>| -> bool {
                             let Some(arm) = arm.map(unwrap_parens) else {
                                 return false;
                             };
@@ -7777,8 +7777,8 @@ fn try_lower_multi_stmt_block_with_offset(
                             }
                             false
                         };
-                        let then_e = if_e.then_branch().and_then(|t| t.expression());
-                        let else_e = if_e.else_branch().and_then(|e| e.expression());
+                        let _then_e = if_e.then_branch().and_then(|t| t.expression());
+                        let _else_e = if_e.else_branch().and_then(|e| e.expression());
                         return true; // any if triggers multi-block path
                     }
                     false
@@ -8714,7 +8714,7 @@ fn try_lower_multi_stmt_block_with_offset(
                         return true;
                     }
                     if let KtExpr::If(if_e) = expr {
-                        let is_jump_arm = |arm: Option<KtExpr<'_>>| -> bool {
+                        let _is_jump_arm = |arm: Option<KtExpr<'_>>| -> bool {
                             let Some(arm) = arm.map(unwrap_parens) else {
                                 return false;
                             };
@@ -8732,8 +8732,8 @@ fn try_lower_multi_stmt_block_with_offset(
                             }
                             false
                         };
-                        let then_e = if_e.then_branch().and_then(|t| t.expression());
-                        let else_e = if_e.else_branch().and_then(|e| e.expression());
+                        let _then_e = if_e.then_branch().and_then(|t| t.expression());
+                        let _else_e = if_e.else_branch().and_then(|e| e.expression());
                         return true; // any if triggers multi-block path
                     }
                     false

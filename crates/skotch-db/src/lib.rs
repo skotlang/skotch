@@ -72,7 +72,7 @@ pub fn gather_exports<'db>(db: &'db dyn salsa::Database, file: SourceFile) -> Fi
     let wrapper = file.wrapper_class(db);
     let path = file.path(db);
 
-    let mut interner = skotch_intern::Interner::new();
+    let interner = skotch_intern::Interner::new();
     let mut diags = skotch_diagnostics::Diagnostics::new();
     let mut sm = skotch_span::SourceMap::new();
     let file_id = sm.add(std::path::PathBuf::from(path), text.to_string());
