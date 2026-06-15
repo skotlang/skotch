@@ -640,6 +640,23 @@ fn ctor_ref_wide_parameter_now_dexes() {
     skotch_dex::validator::validate(&dex).expect("ArtLongCtorRef dex must validate");
 }
 
+/// `baload`/`bastore` (DEX aget-byte/aput-byte, op 0x48/0x4f) are shared by byte[] AND boolean[];
+/// fix_byte_boolean_array_ops disambiguates from the array's static descriptor and bailed when it
+/// couldn't trace the source. It now follows a `check-cast` (`(byte[])x` / `(boolean[])x`, common
+/// after a null-check), so a cast array element resolves correctly. ArtCastArray 1/30/1 (runtime-
+/// proven): boolean[]/byte[] obtained via `(boolean[])o` / `(byte[])o` casts use aget-boolean/aput-
+/// boolean vs aget-byte (disasm-confirmed). Here: dexes + self-validates.
+#[test]
+fn baload_bastore_via_checkcast_array_resolves_byte_vs_boolean() {
+    let cf = skotch_classfile::parse_class_file(
+        &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtCastArray.class"),
+    )
+    .unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let dex = dex_classes(&[cf], &opts).expect("ArtCastArray (cast byte/boolean array) should dex");
+    skotch_dex::validator::validate(&dex).expect("ArtCastArray dex must validate");
+}
+
 /// >16-register `iget`/`iput` (22c, nibble-only register fields) now DEX rather than bail: the
 /// dexbuilder reserves 2 low scratch registers and routes any operand whose FINAL register is ≥16
 /// through them via `move(-object)/from16`. The object operand always moves with

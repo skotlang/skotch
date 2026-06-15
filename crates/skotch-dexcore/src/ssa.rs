@@ -3033,6 +3033,9 @@ fn fix_byte_boolean_array_ops(f: &mut SsaFn, params: &[String], instance: bool) 
                 Some(field.type_.clone())
             }
             SsaOp::Invoke { method, .. } => Some(method.proto.return_type.clone()),
+            // `(byte[])x` / `(boolean[])x` — the cast names the exact array type (common after a
+            // null-check, e.g. `((byte[]) requireNonNull(table))[i]`).
+            SsaOp::CheckCast { type_desc, .. } => Some(type_desc.clone()),
             // element of an array-of-arrays: "[[Z" → "[Z".
             SsaOp::ArrayGet { array, .. } => {
                 array_desc(f, params, instance, *array, depth + 1)?.strip_prefix('[').map(str::to_string)
