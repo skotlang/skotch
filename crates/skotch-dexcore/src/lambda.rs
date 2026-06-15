@@ -53,6 +53,21 @@ fn box_of(prim: &str) -> Option<&'static str> {
     })
 }
 
+/// For a (non-wide) primitive, the (wrapper class, unboxing accessor) used to adapt a boxed SAM
+/// argument down to a primitive impl parameter — the inverse of box_of. None for long/double
+/// (a 2-register result we don't handle yet).
+fn unbox_of(prim: &str) -> Option<(&'static str, &'static str)> {
+    Some(match prim {
+        "I" => ("Ljava/lang/Integer;", "intValue"),
+        "Z" => ("Ljava/lang/Boolean;", "booleanValue"),
+        "B" => ("Ljava/lang/Byte;", "byteValue"),
+        "C" => ("Ljava/lang/Character;", "charValue"),
+        "S" => ("Ljava/lang/Short;", "shortValue"),
+        "F" => ("Ljava/lang/Float;", "floatValue"),
+        _ => return None,
+    })
+}
+
 /// How the synthetic SAM adapts the impl call's result to the SAM's declared return.
 enum RetAdapt {
     /// Return the impl's result directly (same type, or a covariant reference).
@@ -249,9 +264,17 @@ pub fn try_lambda_metafactory(cf: &ClassFile, indy_idx: u16) -> Result<Option<La
     }
     let is_ref = |d: &str| d.starts_with('L') || d.starts_with('[');
     for (e, i) in expected.iter().zip(impl_params.iter()) {
-        if e != i && !(is_ref(e) && is_ref(i)) {
-            bail!("lambda: impl param {i} vs SAM-side {e} adaptation (param-boxing/widening) not supported");
+        // e = SAM-side (instantiated) type, i = the impl's declared parameter.
+        if e == i {
+            continue; // exact
         }
+        if is_ref(e) && is_ref(i) {
+            continue; // covariant reference widening (subtype → supertype, no cast)
+        }
+        if box_of(i) == Some(e.as_str()) {
+            continue; // param-unbox: the SAM gives a boxed value, the impl wants the primitive
+        }
+        bail!("lambda: impl param {i} vs SAM-side {e} adaptation (param-boxing/widening) not supported");
     }
     // Return adaptation: void SAM discards the impl result; exact returns directly; a boxed
     // instantiated return over the impl's (non-wide) primitive boxes via valueOf. Anything else
@@ -288,7 +311,10 @@ pub fn try_lambda_metafactory(cf: &ClassFile, indy_idx: u16) -> Result<Option<La
         let instance = FieldRef { class: syn.clone(), type_: fi_type.clone(), name: "INSTANCE".into() };
         PENDING.with(|p| -> Result<()> {
             if !p.borrow().contains_key(&syn) {
-                let cd = build_lambda_class(&syn, &fi_type, &sam_name, &sam_desc, &inst_params, invoke_op, &ret_adapt, &impl_class, &impl_name, &impl_desc, &instance)?;
+                // An unbound instance ref's first SAM param is the receiver (no impl-param slot),
+                // so impl parameter k aligns to SAM parameter recv_offset+k.
+                let recv_offset = if instance_ref { 1 } else { 0 };
+                let cd = build_lambda_class(&syn, &fi_type, &sam_name, &sam_desc, &inst_params, invoke_op, recv_offset, &ret_adapt, &impl_class, &impl_name, &impl_desc, &instance)?;
                 p.borrow_mut().insert(syn.clone(), cd);
             }
             Ok(())
@@ -373,7 +399,7 @@ fn build_clinit(syn: &str, instance: &FieldRef) -> EncodedMethod {
 /// layout: `this` is v0, the SAM parameters follow at v1.. (no captures). The impl takes exactly
 /// the SAM parameters (verified by the caller), so we `invoke-static {param regs}, impl`.
 #[allow(clippy::too_many_arguments)]
-fn build_sam(syn: &str, sam_name: &str, sam_desc: &str, inst_params: &[String], invoke_op: u16, ret_adapt: &RetAdapt, impl_class: &str, impl_name: &str, impl_desc: &str) -> Result<EncodedMethod> {
+fn build_sam(syn: &str, sam_name: &str, sam_desc: &str, inst_params: &[String], invoke_op: u16, recv_offset: usize, ret_adapt: &RetAdapt, impl_class: &str, impl_name: &str, impl_desc: &str) -> Result<EncodedMethod> {
     let (params, _ret) = parse_descriptor(sam_desc)?;
     let mut ins: u16 = 1; // this
     let mut param_regs: Vec<u16> = Vec::new();
@@ -400,6 +426,35 @@ fn build_sam(syn: &str, sam_name: &str, sam_desc: &str, inst_params: &[String], 
             fixups.push(Fixup { unit, item: ItemRef::Type(i.clone()), wide: false });
         }
     }
+    // Unbox each boxed argument the impl wants as a primitive. impl declared parameter k maps to
+    // SAM parameter recv_offset+k (an unbound instance ref's receiver has no impl parameter slot).
+    let (impl_p, _impl_ret) = parse_descriptor(impl_desc)?;
+    let mut did_unbox = false;
+    for (k, ip) in impl_p.iter().enumerate() {
+        let sam_idx = recv_offset + k;
+        if sam_idx >= inst_params.len() {
+            break;
+        }
+        if box_of(ip) != Some(inst_params[sam_idx].as_str()) {
+            continue; // not a boxed→primitive position
+        }
+        if ip == "J" || ip == "D" {
+            bail!("lambda: wide parameter unbox not yet supported");
+        }
+        let (bx, m) = unbox_of(ip).ok_or_else(|| anyhow::anyhow!("lambda: no unbox accessor for {ip}"))?;
+        // invoke-virtual {paramReg} <Wrapper>.<accessor>()prim ; move-result paramReg (in place).
+        insns.push(0x6e | ((1u16 << 4) << 8)); // invoke-virtual, argn=1 → 0x106e
+        let unit = insns.len();
+        insns.push(0);
+        insns.push(param_regs[sam_idx]); // 35c arg nibble vC = the boxed receiver
+        fixups.push(Fixup {
+            unit,
+            item: ItemRef::Method(MethodRef { class: bx.into(), proto: ProtoRef { return_type: ip.clone(), params: vec![] }, name: m.into() }),
+            wide: false,
+        });
+        insns.push(0x0a | (param_regs[sam_idx] << 8)); // move-result paramReg
+        did_unbox = true;
+    }
     // invoke {param regs}, impl — invoke-static for a static impl/method-ref, or
     // invoke-virtual/interface/direct for an unbound instance method reference (arg0 = receiver).
     let argn = param_regs.len() as u16;
@@ -418,10 +473,11 @@ fn build_sam(syn: &str, sam_name: &str, sam_desc: &str, inst_params: &[String], 
     let (_, impl_ret) = parse_descriptor(impl_desc)?;
     let (min_regs, extra_outs) = emit_boxed_return(&mut insns, &mut fixups, &impl_ret, ret_adapt);
     let registers_size = ins.max(min_regs);
+    let unbox_outs = if did_unbox { 1 } else { 0 };
     Ok(EncodedMethod {
         method: MethodRef { class: syn.into(), proto: proto(sam_desc)?, name: sam_name.into() },
         access_flags: ACC_PUBLIC,
-        code: Some(CodeItem { registers_size, ins_size: ins, outs_size: argn.max(extra_outs), insns, fixups, tries: vec![], debug_info: None }),
+        code: Some(CodeItem { registers_size, ins_size: ins, outs_size: argn.max(extra_outs).max(unbox_outs), insns, fixups, tries: vec![], debug_info: None }),
         annotations: vec![],
     })
 }
@@ -434,6 +490,7 @@ fn build_lambda_class(
     sam_desc: &str,
     inst_params: &[String],
     invoke_op: u16,
+    recv_offset: usize,
     ret_adapt: &RetAdapt,
     impl_class: &str,
     impl_name: &str,
@@ -448,7 +505,7 @@ fn build_lambda_class(
     // Direct methods must be encoded ascending by method index (name then proto); "<clinit>" <
     // "<init>" lexicographically, so this order is always correct.
     let direct = vec![build_clinit(syn, instance), build_init(syn)];
-    let virtual_ = vec![build_sam(syn, sam_name, sam_desc, inst_params, invoke_op, ret_adapt, impl_class, impl_name, impl_desc)?];
+    let virtual_ = vec![build_sam(syn, sam_name, sam_desc, inst_params, invoke_op, recv_offset, ret_adapt, impl_class, impl_name, impl_desc)?];
     Ok(ClassDef {
         class_type: syn.into(),
         access_flags: ACC_PUBLIC | ACC_FINAL | ACC_SYNTHETIC,
@@ -592,6 +649,19 @@ fn build_capturing_sam(syn: &str, sam_name: &str, sam_desc: &str, inst_params: &
     let (sam_params, _ret) = parse_descriptor(sam_desc)?;
     if sam_params.iter().any(|p| p == "J" || p == "D") {
         bail!("lambda: wide SAM parameter (capturing) not yet supported");
+    }
+    // The capturing path forwards SAM params as-is; it does NOT emit parameter unboxing. The shape
+    // check accepts a boxed SAM param vs a primitive impl param (handled in build_sam), so bail
+    // here if any such adaptation is needed for a captured impl (the SAM params are the LAST
+    // inst_params.len() of impl_params; captures precede them).
+    {
+        let (impl_p, _) = parse_descriptor(impl_desc)?;
+        let off = impl_p.len().saturating_sub(inst_params.len());
+        for (k, sam_ty) in inst_params.iter().enumerate() {
+            if box_of(&impl_p[off + k]) == Some(sam_ty.as_str()) {
+                bail!("lambda: capturing/bound parameter unbox not yet supported");
+            }
+        }
     }
     let p = sam_params.len();
     let regs = (c + 1 + p) as u16; // captures + this + sam params

@@ -516,6 +516,22 @@ fn lambda_signature_adaptations_now_dex() {
     skotch_dex::validator::validate(&dex).unwrap_or_else(|e| panic!("ArtLambdaAdapt: invalid dex: {e:#}"));
 }
 
+/// PARAMETER UNBOXING: when an instantiated SAM parameter is a boxed wrapper (Integer) but the impl
+/// wants the primitive (int), the synthetic SAM unboxes it (`<Wrapper>.xxxValue()`) after the
+/// check-cast and before the impl invoke. The impl's declared parameter k maps to SAM parameter
+/// recv_offset+k (an unbound instance ref's receiver has no impl slot). ArtLambdaUnbox covers a
+/// static method ref needing param-unbox + return-box (`::dbl` as Function<Integer,Integer>), a
+/// two-argument ref (`::add` as BiFunction), and a Predicate<Integer> lambda. Proven on a REAL
+/// device by `tests/art/ArtLambdaUnbox`; here: dexes + self-validates. Wide (long/double) unbox and
+/// capturing/bound param-unbox still bail.
+#[test]
+fn lambda_param_unboxing_now_dexes() {
+    let cf = skotch_classfile::parse_class_file(&PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtLambdaUnbox.class")).unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let dex = dex_classes(&[cf], &opts).unwrap_or_else(|e| panic!("ArtLambdaUnbox: param unboxing should dex now: {e:#}"));
+    skotch_dex::validator::validate(&dex).unwrap_or_else(|e| panic!("ArtLambdaUnbox: invalid dex: {e:#}"));
+}
+
 /// A φ whose operand is a SIBLING φ in the same loop header is a parallel copy on the
 /// back-edge — a swap (`a=b; b=a`, a 2-cycle), a 3-way rotation, or a chain (`a=b; b=t`,
 /// Fibonacci). This used to bail (a naive in-place update read a sibling AFTER it was
