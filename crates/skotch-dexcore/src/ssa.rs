@@ -3251,10 +3251,10 @@ pub(crate) fn build_dex(
                     emit_field(f, &mut insns, alloc, v, &mut pool_fixups, &mut positions, line_numbers)?;
                 }
                 SsaOp::ArrayGet { .. } | SsaOp::ArrayPut { .. } | SsaOp::ArrayLength { .. } => {
-                    emit_array(f, &mut insns, alloc, v, &mut positions, line_numbers);
+                    emit_array(f, &mut insns, alloc, v, &mut positions, line_numbers)?;
                 }
                 SsaOp::NewInstance { .. } | SsaOp::NewArray { .. } => {
-                    emit_alloc(f, &mut insns, alloc, v, &mut pool_fixups, &mut positions, line_numbers);
+                    emit_alloc(f, &mut insns, alloc, v, &mut pool_fixups, &mut positions, line_numbers)?;
                 }
                 SsaOp::ConstString { .. } => {
                     emit_const_string(f, &mut insns, alloc, v, &mut pool_fixups, &mut positions, line_numbers);
@@ -3369,7 +3369,7 @@ pub(crate) fn build_dex(
                 if two {
                     let a = reg(operands[0]);
                     let b2 = reg(operands[1]);
-                    insns.push(dexop | ((a & 0xf) << 8) | ((b2 & 0xf) << 12));
+                    insns.push(dexop | (nib(a)? << 8) | (nib(b2)? << 12));
                 } else {
                     insns.push(dexop | (reg(operands[0]) << 8));
                 }
@@ -3410,7 +3410,7 @@ pub(crate) fn build_dex(
                 let key = reg(*value);
                 for &(k, target) in cases {
                     emit_const_int(&mut insns, switch_scratch, k);
-                    insns.push(0x32 | ((key & 0xf) << 8) | ((switch_scratch & 0xf) << 12)); // if-eq key, tmp
+                    insns.push(0x32 | (nib(key)? << 8) | (nib(switch_scratch)? << 12)); // if-eq key, tmp
                     let off = insns.len();
                     insns.push(0);
                     fixups.push((off, target, false));
@@ -3700,12 +3700,13 @@ fn emit_field(
         // 21c: sget/sput AA = dest/value.
         SsaOp::GetStatic { .. } => insns.push(dex_op | (reg(v) << 8)),
         SsaOp::PutStatic { value, .. } => insns.push(dex_op | (reg(*value) << 8)),
-        // 22c: iget/iput A = dest/value (low nibble), B = object (high nibble).
+        // 22c: iget/iput A = dest/value (low nibble), B = object (high nibble). No wider
+        // form exists, so a register ≥16 must spill — bail loudly (never truncate).
         SsaOp::GetField { obj, .. } => {
-            insns.push(dex_op | ((reg(v) & 0xf) << 8) | ((reg(*obj) & 0xf) << 12));
+            insns.push(dex_op | (nib(reg(v))? << 8) | (nib(reg(*obj))? << 12));
         }
         SsaOp::PutField { obj, value, .. } => {
-            insns.push(dex_op | ((reg(*value) & 0xf) << 8) | ((reg(*obj) & 0xf) << 12));
+            insns.push(dex_op | (nib(reg(*value))? << 8) | (nib(reg(*obj))? << 12));
         }
         _ => unreachable!(),
     }
@@ -3724,7 +3725,7 @@ fn emit_array(
     v: ValId,
     positions: &mut Vec<(u32, u32)>,
     line_numbers: &[(u16, u16)],
-) {
+) -> Result<()> {
     let reg = |x: ValId| alloc.reg[x as usize];
     let jvm_pc = match &f.values[v as usize].op {
         SsaOp::ArrayGet { jvm_pc, .. } | SsaOp::ArrayPut { jvm_pc, .. } | SsaOp::ArrayLength { jvm_pc, .. } => *jvm_pc,
@@ -3742,12 +3743,14 @@ fn emit_array(
             insns.push(dex_op | (reg(*value) << 8));
             insns.push((reg(*array) & 0xff) | ((reg(*index) & 0xff) << 8));
         }
-        // array-length (0x21, 12x): A = dest (low nibble), B = array (high nibble).
+        // array-length (0x21, 12x): A = dest (low nibble), B = array (high nibble). No wider
+        // form, so a register ≥16 must spill — bail loudly (never truncate).
         SsaOp::ArrayLength { array, .. } => {
-            insns.push(0x21 | ((reg(v) & 0xf) << 8) | ((reg(*array) & 0xf) << 12));
+            insns.push(0x21 | (nib(reg(v))? << 8) | (nib(reg(*array))? << 12));
         }
         _ => unreachable!(),
     }
+    Ok(())
 }
 
 /// Emits object allocation: `new-instance dest, type@` (21c) or `new-array dest,
@@ -3761,7 +3764,7 @@ fn emit_alloc(
     pool_fixups: &mut Vec<Fixup>,
     positions: &mut Vec<(u32, u32)>,
     line_numbers: &[(u16, u16)],
-) {
+) -> Result<()> {
     let reg = |x: ValId| alloc.reg[x as usize];
     let (type_desc, jvm_pc) = match &f.values[v as usize].op {
         SsaOp::NewInstance { type_desc, jvm_pc } | SsaOp::NewArray { type_desc, jvm_pc, .. } => {
@@ -3773,15 +3776,18 @@ fn emit_alloc(
         positions.push((insns.len() as u32, line));
     }
     match &f.values[v as usize].op {
-        SsaOp::NewInstance { .. } => insns.push(0x22 | (reg(v) << 8)), // 21c
+        SsaOp::NewInstance { .. } => insns.push(0x22 | (reg(v) << 8)), // 21c (AA, 8-bit)
+        // 22c: new-array dest (low nibble) + size (high nibble). No wider form, so a register
+        // ≥16 must spill — bail loudly (never truncate).
         SsaOp::NewArray { size, .. } => {
-            insns.push(0x23 | ((reg(v) & 0xf) << 8) | ((reg(*size) & 0xf) << 12)); // 22c
+            insns.push(0x23 | (nib(reg(v))? << 8) | (nib(reg(*size))? << 12));
         }
         _ => unreachable!(),
     }
     let unit = insns.len();
     insns.push(0); // type-ref placeholder, patched via the fixup
     pool_fixups.push(Fixup { unit, item: ItemRef::Type(type_desc), wide: false });
+    Ok(())
 }
 
 /// Emits `check-cast vAA, type@` (21c). check-cast is IN-PLACE in DEX (it asserts the
@@ -4071,6 +4077,22 @@ fn emit_entry_phi_moves(
     emit_move_list(f, insns, alloc, &moves, scratch_words)
 }
 
+/// A 4-bit register nibble. The 12x/22c/22t/22s/11n forms encode a register in a 4-bit
+/// nibble that can't hold a value ≥16. Emit writes ALLOCATED registers and `remap_insns`
+/// remaps them in place afterward — but a nibble masked at emit time loses the high bits
+/// BEFORE remap can see them, so the remap's fail-not-truncate guard can't catch it. This
+/// helper bails LOUDLY instead, for nibble forms that have NO wider alternative (iget/iput,
+/// if-test, array-length, new-array, unops, lit16). Forms that CAN widen (binop→3addr,
+/// const/4→const/16, invoke→range) gate on `r <= 15` and pick the wide form directly.
+/// For ≤16-register methods every allocated register is <16, so `nib` is the identity and
+/// the emitted code is byte-identical to before — only >16-register methods can hit a bail.
+fn nib(r: u16) -> Result<u16> {
+    if r > 15 {
+        bail!("ssa dexbuilder: register v{r} does not fit a 4-bit nibble form (no wider form exists) — needs spilling");
+    }
+    Ok(r)
+}
+
 /// Emits the instruction defining `v` (the result lands in `reg(v)`).
 fn emit_value(f: &SsaFn, insns: &mut Vec<u16>, alloc: &Allocation, v: ValId) -> Result<()> {
     let reg = |x: ValId| alloc.reg[x as usize];
@@ -4088,7 +4110,7 @@ fn emit_value(f: &SsaFn, insns: &mut Vec<u16>, alloc: &Allocation, v: ValId) -> 
                 0x8f => 0x8b, 0x90 => 0x8c, 0x91 => 0x8d, 0x92 => 0x8e, 0x93 => 0x8f,
                 other => bail!("ssa dexbuilder: unop {other:#x} unsupported"),
             };
-            insns.push(dop | ((dest & 0xf) << 8) | ((reg(*a) & 0xf) << 12));
+            insns.push(dop | (nib(dest)? << 8) | (nib(reg(*a))? << 12));
         }
         SsaOp::Cmp { jvm_op, a, b } => {
             let (dop, _) = crate::bootstrap::cmp_op(*jvm_op);
@@ -4123,6 +4145,32 @@ fn emit_value(f: &SsaFn, insns: &mut Vec<u16>, alloc: &Allocation, v: ValId) -> 
 
 fn emit_binop(f: &SsaFn, insns: &mut Vec<u16>, alloc: &Allocation, dest: u16, jvm_op: u8, a: ValId, b: ValId) -> Result<()> {
     let reg = |x: ValId| alloc.reg[x as usize];
+    // The compact /2addr form encodes both registers in 4-bit nibbles. Emit writes ALLOCATED
+    // registers and `remap_insns` later remaps them args-high — so the choice of /2addr vs the
+    // 3-address (8-bit) form must be made against the FINAL register, not the allocated one.
+    // Compute it here (the remap is the identity for no-pressure methods). This estimate ignores
+    // scratch registers (range-invoke/φ-cycle/switch temps not yet accumulated at emit time),
+    // which can only push ARG registers HIGHER — so when it underestimates we may pick /2addr and
+    // `remap_insns` bails (never truncates). The form choice is purely a bail-vs-succeed lever:
+    // BOTH forms are semantically identical, so this can never cause a miscompile.
+    let num_arg = f.num_arg_registers;
+    let regs_used = alloc.registers_used.max(num_arg);
+    // /2addr is usable for a register only when BOTH its allocated number (so the nibble emit
+    // doesn't truncate it before remap reads it) AND its FINAL number (so remap doesn't overflow
+    // the nibble) are ≤15. Locals remap DOWN (final = allocated - num_arg ≤ allocated), so for them
+    // the allocated check implies the final; args remap UP (pushed high), so for them the final
+    // check is the binding one. Requiring both is correct for every operand.
+    let fits_nibble = |r: u16| -> bool {
+        if r > 15 {
+            return false;
+        }
+        let fr = if num_arg == 0 || regs_used == num_arg {
+            r
+        } else {
+            crate::regalloc::remap_register(r, num_arg, regs_used)
+        };
+        fr <= 15
+    };
     // Lit-fold when the right operand is a rematerialized small constant. `x - c`
     // has no DEX lit form, so d8 folds it as `x + (-c)` (iadd lit op, negated const).
     if is_rematerialized(f, b) {
@@ -4134,7 +4182,7 @@ fn emit_binop(f: &SsaFn, insns: &mut Vec<u16>, alloc: &Allocation, dest: u16, jv
                     insns.push((reg(a) & 0xff) | (((fold_c as u16) & 0xff) << 8));
                     return Ok(());
                 } else {
-                    insns.push(op16 | ((dest as u16) << 8) | ((reg(a) as u16) << 12));
+                    insns.push(op16 | (nib(dest)? << 8) | (nib(reg(a))? << 12));
                     insns.push(fold_c as u16);
                     return Ok(());
                 }
@@ -4161,7 +4209,7 @@ fn emit_binop(f: &SsaFn, insns: &mut Vec<u16>, alloc: &Allocation, dest: u16, jv
                     insns.push((reg(b) & 0xff) | (((c as u16) & 0xff) << 8));
                     return Ok(());
                 } else {
-                    insns.push(op16 | ((dest as u16) << 8) | ((reg(b) as u16) << 12));
+                    insns.push(op16 | (nib(dest)? << 8) | (nib(reg(b))? << 12));
                     insns.push(c as u16);
                     return Ok(());
                 }
@@ -4178,7 +4226,7 @@ fn emit_binop(f: &SsaFn, insns: &mut Vec<u16>, alloc: &Allocation, dest: u16, jv
                 insns.push((reg(b) & 0xff) | (((c as u16) & 0xff) << 8));
                 return Ok(());
             } else {
-                insns.push(0xd1 | ((dest as u16) << 8) | ((reg(b) as u16) << 12));
+                insns.push(0xd1 | (nib(dest)? << 8) | (nib(reg(b))? << 12));
                 insns.push(c as u16);
                 return Ok(());
             }
@@ -4186,12 +4234,17 @@ fn emit_binop(f: &SsaFn, insns: &mut Vec<u16>, alloc: &Allocation, dest: u16, jv
     }
     let (ra, rb) = (reg(a), reg(b));
     let mul_bug = is_mul_bug_min_api() && crate::bootstrap::is_mul_op(jvm_op);
+    // The compact /2addr (12x) form encodes both registers in 4-bit nibbles, so it's only
+    // usable when both fit (≤15). When a register is ≥16 (a >16-register method) fall through
+    // to the 3-address form below, whose 8-bit fields carry the value correctly through remap
+    // (remap_insns then bails-not-truncates if even the byte overflows). For ≤16-register
+    // methods every register is <16, so /2addr is still chosen — byte-identical to before.
     if let Some(op2) = crate::bootstrap::binop_2addr_op(jvm_op) {
-        if !mul_bug && dest == ra {
+        if !mul_bug && dest == ra && fits_nibble(dest) && fits_nibble(rb) {
             insns.push(op2 | ((dest as u16) << 8) | ((rb as u16) << 12));
             return Ok(());
         }
-        if !mul_bug && crate::bootstrap::is_commutative(jvm_op) && dest == rb {
+        if !mul_bug && crate::bootstrap::is_commutative(jvm_op) && dest == rb && fits_nibble(dest) && fits_nibble(ra) {
             insns.push(op2 | ((dest as u16) << 8) | ((ra as u16) << 12));
             return Ok(());
         }
@@ -4219,7 +4272,10 @@ fn is_mul_bug_min_api() -> bool {
 }
 
 fn emit_const_int(insns: &mut Vec<u16>, reg: u16, c: i32) {
-    if (-8..=7).contains(&c) {
+    // const/4 (11n) packs the dest in a 4-bit nibble; only use it when the register fits.
+    // A register ≥16 (a >16-register method) falls to const/16 (21s, 8-bit AA), which covers
+    // the same small constants. ≤16-register methods keep const/4 — byte-identical to before.
+    if (-8..=7).contains(&c) && reg <= 15 {
         insns.push(0x12 | (((c as u16 & 0xf) << 4 | reg) << 8));
     } else if (-32768..=32767).contains(&c) {
         insns.push(0x13 | (reg << 8));

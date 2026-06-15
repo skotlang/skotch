@@ -522,32 +522,27 @@ fn dex_method(cf: &ClassFile, m: &Member, min_api: u32, emit_annotations: bool) 
             // switch. Fall back to the SSA pipeline for those (it handles them and bails
             // loudly on the rest), so this only ADDS coverage without losing byte-identity.
             match translate_code(cf, m, c, &params, &ret, min_api) {
-                Ok(mut item) => {
+                Ok(mut item) if item.registers_size <= 16 => {
                     crate::regalloc::remap_insns(&mut item.insns, item.ins_size, item.registers_size)?;
                     item
                 }
-                Err(_bootstrap_bail) => crate::ssa::dex_method_ssa(
+                // A >16-register bootstrap item can't be trusted: the bootstrap path masks each
+                // nibble form's ALLOCATED register to 4 bits AT EMIT TIME, silently truncating a
+                // register ≥16 before remap_insns can catch it. So discard it and re-translate via
+                // the SSA path, which IS form-safe for >16 registers — it widens binops (→3addr)
+                // and const/4 (→const/16), marshals high-reg invokes to invoke/range, and bails
+                // loudly (never truncates) on any nibble form it can't widen. (This `_` arm also
+                // catches a genuine bootstrap bail, the original SSA fallback.)
+                _ => crate::ssa::dex_method_ssa(
                     cf, &c.bytecode, &params, instance, &c.line_numbers, &c.exceptions,
                 )?,
             }
         };
-        // >16 registers still bails. remap_insns now FAILS rather than truncating a register that
-        // overflows its instruction field, but that is NOT sufficient on its own: the bootstrap
-        // straight-line path's binop emit picks the compact /2addr (4-bit) form and TRUNCATES a
-        // register ≥16 into the nibble at EMIT time (before remap), so get_field later reads the
-        // already-truncated value and the remap check can't see it. Full >16-register support needs
-        // emit-time nibble-fit checks + wide-form (3-address / move-16) selection or real spilling
-        // in BOTH the bootstrap and SSA paths — a dedicated multi-iteration effort. Until then,
-        // bail (never miscompile). (Validated: a 20-local method otherwise miscompiled on ART —
-        // `add-int/2addr v0, v16` truncated v16→v0.)
-        if item.registers_size > 16 {
-            bail!(
-                "dexer: {} registers needed in {}{} — >16 needs spilling (Phase 1 allocator)",
-                item.registers_size,
-                m.name,
-                m.descriptor
-            );
-        }
+        // No blanket >16-register bail any more: the SSA path is form-safe for >16 registers
+        // (the per-site nibble-fit guards in ssa.rs AND remap_insns both bail loudly — never
+        // truncate — on a register that can't fit its instruction form), and the bootstrap path
+        // routes its >16 cases to SSA above. A method that genuinely needs spilling (a high
+        // register in an unwidenable nibble form) bails cleanly; it never miscompiles.
         Some(item)
     } else {
         None

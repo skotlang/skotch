@@ -355,18 +355,31 @@ fn loop_header_is_entry_now_dexes_via_preheader() {
     }
 }
 
-/// A method needing >16 registers must BAIL, never miscompile. The compact 4-bit (nibble) forms
-/// the emit prefers (move 12x, add-int/2addr 12x, invoke 35c args) cannot encode a register ≥ 16,
-/// and the bootstrap binop emit picks /2addr and would TRUNCATE the second operand into the nibble
-/// at emit time (ART then runs `add-int/2addr v0, v16` as `add v0, v0` — a silent miscompile, which
-/// this fixture exhibited before the >16 guard was kept). `ArtManyRegs.combine` has 20 live locals;
-/// it must bail until full register spilling lands. (`remap_insns` also now fails-loudly rather
-/// than truncating, as defense in depth.)
+/// >16-register support: a binop whose register doesn't fit the compact 4-bit `/2addr` nibble
+/// form now emits the 3-address form (8-bit fields) instead, where both the allocated and the
+/// remapped register fit. `ArtManyRegs.combine` has 20 live locals; its add chain previously
+/// TRUNCATED `add-int/2addr v0, v16` into `add v0, v0` at emit time (the 1500-vs-1430 miscompile)
+/// and so had to bail. It now DEXES correctly via widening. Real-device correctness is proven by
+/// `tests/art/ArtWideArith`; ArtManyRegs itself was verified on ART (combine(0)=1430, combine(3)=2300).
 #[test]
-fn over_16_registers_bails_not_miscompiles() {
+fn over_16_registers_arith_now_dexes_via_widening() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("ArtManyRegs.class")).unwrap();
     let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
-    dex_classes(&[cf], &opts).expect_err("ArtManyRegs (>16 registers) must bail, not miscompile");
+    let dex = dex_classes(&[cf], &opts).expect("ArtManyRegs (>16 registers) should now dex via widening");
+    skotch_dex::validator::validate(&dex).expect("ArtManyRegs dex must validate");
+}
+
+/// A >16-register method whose high registers land in a nibble form with NO wider alternative
+/// still BAILS — never miscompiles. `ArtWideLoop.run` has 16 loop-carried accumulators (>16
+/// registers); its `t < n` loop comparison is an `if-test` (22t, nibble) that has no 8-bit form
+/// to widen to and isn't yet spilled, so dexing bails loudly (the per-site nibble guard /
+/// `remap_insns` fail-not-truncate). This preserves the never-truncate guarantee for the >16
+/// cases this slice does not yet cover (unwidenable nibbles: if-test/iget/iput/array-length/...).
+#[test]
+fn over_16_registers_unwidenable_nibble_still_bails() {
+    let cf = skotch_classfile::parse_class_file(&fixtures().join("ArtWideLoop.class")).unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    dex_classes(&[cf], &opts).expect_err("ArtWideLoop (>16 regs, unwidenable if-test) must bail, not miscompile");
 }
 
 /// A NON-CAPTURING lambda (`invokedynamic` → `LambdaMetafactory.metafactory`, no captured args,
