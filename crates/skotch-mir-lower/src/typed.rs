@@ -3867,7 +3867,30 @@ fn lower_loop_body(
                 local_tys,
                 strings,
             ) {
-                name_to_local.push((pname.to_string(), rhs_slot));
+                // For `var x = <expr>`, the variable must live in its
+                // own mutable slot — otherwise later reassignments
+                // (`x = …`) would overwrite the source slot (an
+                // outer param or local) instead of x. For `val x =
+                // <expr>`, aliasing to the source slot is safe and
+                // matches kotlinc's slot-reuse pattern when the
+                // initializer is a pure reference, so we keep that
+                // behavior for val.
+                if prop.is_var() {
+                    let rhs_ty = local_tys
+                        .get(rhs_slot.0 as usize)
+                        .cloned()
+                        .unwrap_or(Ty::Any);
+                    let new_slot = LocalId(*next_slot);
+                    *next_slot += 1;
+                    local_tys.push(rhs_ty);
+                    body_mstmts.push(MStmt::Assign {
+                        dest: new_slot,
+                        value: skotch_mir::Rvalue::Local(rhs_slot),
+                    });
+                    name_to_local.push((pname.to_string(), new_slot));
+                } else {
+                    name_to_local.push((pname.to_string(), rhs_slot));
+                }
                 continue;
             }
             trace_bail!(
