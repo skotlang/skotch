@@ -2287,6 +2287,21 @@ fn lambda_capturing_param_unbox_now_dexes() {
     skotch_dex::validator::validate(&dex).expect("ArtCapUnbox dex must validate");
 }
 
+/// A capturing lambda that captures a WIDE (long/double) value: the synthetic class now gets a
+/// long/double field (a 2-register pair), the ctor iput-wide's it, and the SAM iget-wide's it and
+/// forwards BOTH register halves to the impl. Register layout is per-capture variable width.
+/// Runtime correctness (the wide register pairs are right) is proven on ART by `tests/art/ArtWideCap`.
+#[test]
+fn lambda_wide_capture_now_dexes() {
+    let cf = skotch_classfile::parse_class_file(
+        &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtWideCap.class"),
+    )
+    .unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let dex = dex_classes(&[cf], &opts).expect("ArtWideCap (wide capture) should dex");
+    skotch_dex::validator::validate(&dex).expect("ArtWideCap dex must validate");
+}
+
 /// 11th semantic stress round, byte-identical — fresh idioms + over-coalesce-net probes
 /// that DON'T over-coalesce:
 ///  - `S11Max3` (`m=a; if(b>m)m=b; if(c>m)m=c` — chained max via plain ifs, no ternary φ).

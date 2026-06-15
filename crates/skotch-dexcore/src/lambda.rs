@@ -288,9 +288,6 @@ pub fn try_lambda_metafactory(cf: &ClassFile, indy_idx: u16) -> Result<Option<La
     } else {
         bail!("lambda: return adaptation {impl_ret} -> {inst_ret} not supported");
     };
-    if captures.iter().any(|c| c == "J" || c == "D") {
-        bail!("lambda: wide capture not yet supported");
-    }
     // Where the SAM (erased) param differs from the instantiated one, the synthetic SAM method
     // adapts by a check-cast (Object/bound → specific). Only reference→reference adaptation is a
     // plain checkcast; a primitive mismatch would need (un)boxing → bail. Same for the return
@@ -624,24 +621,28 @@ fn build_ctor_class(syn: &str, fi_type: &str, sam_name: &str, sam_desc: &str, in
 /// `<init>(captures)V`: `invoke-direct {v0}, Object.<init>()V` then `iput vN, v0, f$(N-1)` for
 /// each capture, `return-void`. Register layout: `this` = v0, capture args = v1.. (the ins).
 fn build_capturing_init(syn: &str, captures: &[String]) -> Result<EncodedMethod> {
-    let c = captures.len();
-    if c > 14 {
-        bail!("lambda: {c} captures (too many for nibble registers) not supported");
+    // Per-capture starting register after `this` (v0); a wide (long/double) capture occupies a pair.
+    let cap_width = |ty: &str| -> u16 { if ty == "J" || ty == "D" { 2 } else { 1 } };
+    let total: u16 = captures.iter().map(|t| cap_width(t)).sum();
+    let regs = 1 + total; // this + capture params
+    // iget/iput nibble (22c) caps the object (v0) and value at v15; bail if a capture lands ≥16.
+    if regs > 16 {
+        bail!("lambda: capture register block needs {regs} registers (>16) not supported");
     }
-    let regs = 1 + c as u16; // this + captures
     let mut insns: Vec<u16> = vec![0x1070, 0, 0x0000]; // invoke-direct {v0} Object.<init>
     let mut fixups = vec![Fixup {
         unit: 1,
         item: ItemRef::Method(MethodRef { class: "Ljava/lang/Object;".into(), proto: ProtoRef { return_type: "V".into(), params: vec![] }, name: "<init>".into() }),
         wide: false,
     }];
+    let mut valreg = 1u16; // v1.. (after this)
     for (i, ty) in captures.iter().enumerate() {
-        let valreg = (i + 1) as u16; // v1..vc
-        // iput valreg, v0, f$i (22c: op low byte, value in bits 8-11, object v0 in bits 12-15).
+        // iput*(-wide) valreg, v0, f$i (22c: op low byte, value in bits 8-11, object v0 in bits 12-15).
         insns.push(crate::bootstrap::iput_op(ty) | (valreg << 8));
         let unit = insns.len();
         insns.push(0);
         fixups.push(Fixup { unit, item: ItemRef::Field(FieldRef { class: syn.into(), type_: ty.clone(), name: format!("f${i}") }), wide: false });
+        valreg += cap_width(ty);
     }
     insns.push(0x000e); // return-void
     Ok(EncodedMethod {
@@ -656,26 +657,34 @@ fn build_capturing_init(syn: &str, captures: &[String]) -> Result<EncodedMethod>
 /// impl with `[captures.., sam params]` and return. Register layout: captures load into v0..v(c-1);
 /// `this` is at vc; the SAM parameters are the ins at v(c+1)... .
 fn build_capturing_sam(syn: &str, sam_name: &str, sam_desc: &str, inst_params: &[String], invoke_op: u16, ret_adapt: &RetAdapt, impl_class: &str, impl_name: &str, impl_desc: &str, captures: &[String]) -> Result<EncodedMethod> {
-    let c = captures.len();
     let (sam_params, _ret) = parse_descriptor(sam_desc)?;
     if sam_params.iter().any(|p| p == "J" || p == "D") {
         bail!("lambda: wide SAM parameter (capturing) not yet supported");
     }
+    let cap_width = |ty: &str| -> u16 { if ty == "J" || ty == "D" { 2 } else { 1 } };
+    // Per-capture starting register; captures load into the LOW registers v0.. (a wide capture
+    // occupies a consecutive pair). `this` follows them, then the SAM parameters.
+    let mut cap_start: Vec<u16> = Vec::with_capacity(captures.len());
+    let mut total_cap = 0u16;
+    for ty in captures {
+        cap_start.push(total_cap);
+        total_cap += cap_width(ty);
+    }
     let p = sam_params.len();
-    let regs = (c + 1 + p) as u16; // captures + this + sam params
+    let regs = total_cap + 1 + p as u16; // captures + this + sam params
     if regs > 16 {
         bail!("lambda: capturing SAM needs {regs} registers (>16) not supported");
     }
-    let this_reg = c as u16;
-    let argn = (c + p) as u16;
+    let this_reg = total_cap;
+    let argn = total_cap + p as u16; // reg-WORDS passed to the impl (a wide capture is 2)
     if argn > 5 {
-        bail!("lambda: capturing SAM impl has {argn} args (>5, needs range form) not supported");
+        bail!("lambda: capturing SAM impl has {argn} arg words (>5, needs range form) not supported");
     }
     let mut insns: Vec<u16> = Vec::new();
     let mut fixups: Vec<Fixup> = Vec::new();
-    // Load captures: iget vi, this, f$i.
+    // Load captures: iget*(-wide) v(cap_start), this, f$i (a wide value lands in cap_start, cap_start+1).
     for (i, ty) in captures.iter().enumerate() {
-        insns.push(crate::bootstrap::iget_op(ty) | ((i as u16) << 8) | (this_reg << 12));
+        insns.push(crate::bootstrap::iget_op(ty) | (cap_start[i] << 8) | (this_reg << 12));
         let unit = insns.len();
         insns.push(0);
         fixups.push(Fixup { unit, item: ItemRef::Field(FieldRef { class: syn.into(), type_: ty.clone(), name: format!("f${i}") }), wide: false });
@@ -719,8 +728,14 @@ fn build_capturing_sam(syn: &str, sam_name: &str, sam_desc: &str, inst_params: &
         insns.push(0x0a | (reg << 8)); // move-result reg
         did_unbox = true;
     }
-    // invoke-static {captures.., sam params}, impl.
-    let mut arg_regs: Vec<u16> = (0..c as u16).collect();
+    // invoke {captures.. (both halves of a wide), sam params}, impl.
+    let mut arg_regs: Vec<u16> = Vec::new();
+    for (i, ty) in captures.iter().enumerate() {
+        arg_regs.push(cap_start[i]);
+        if cap_width(ty) == 2 {
+            arg_regs.push(cap_start[i] + 1);
+        }
+    }
     for k in 0..p as u16 {
         arg_regs.push(this_reg + 1 + k);
     }
