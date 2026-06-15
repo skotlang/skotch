@@ -1048,7 +1048,39 @@ pub(crate) fn build_ssa(
     // shares the post-catch continuation (`s += e.hashCode()` → the catch computes
     // into the try's register and jumps back to the shared add), neither of which we
     // model — leaving it on would clobber a loop-carried value and diverge.
-    let used_catch = caught.iter().enumerate().any(|(hb, cv)| {
+    // A used caught value is only problematic when the try/catch is INSIDE A LOOP — the handler's
+    // continuation flows back into the guarded region (handler → … → loop header → … → try →
+    // throws → handler), so the handler sits on the loop path and d8 shares the post-catch
+    // continuation. That holds EXACTLY when the handler block can reach a block of its OWN try
+    // region via normal successor edges (the cycle closes through the exceptional try→handler
+    // edge). Handlers are laid out AFTER their try, so reaching the try forward is impossible —
+    // reaching it means a back-edge, i.e. a loop. An ACYCLIC used-catch is correct even when the
+    // method has an UNRELATED loop elsewhere, so check the handler's reachability, not the whole
+    // method (`method_has_loop` over-bailed those). Conservative: if it reaches the try at all, bail.
+    let handler_loops_back = |hb: usize| -> bool {
+        let in_try = |blk: usize| {
+            let pc = cfg.blocks[blk].start;
+            exc_regions
+                .iter()
+                .any(|r| r.handler_block == hb && r.start_pc <= pc && pc < r.end_pc)
+        };
+        let mut seen = vec![false; cfg.blocks.len()];
+        seen[hb] = true;
+        let mut stack = vec![hb];
+        while let Some(b) = stack.pop() {
+            for &s in &cfg.blocks[b].succ {
+                if in_try(s) {
+                    return true;
+                }
+                if !seen[s] {
+                    seen[s] = true;
+                    stack.push(s);
+                }
+            }
+        }
+        false
+    };
+    let used_catch_in_loop = caught.iter().enumerate().any(|(hb, cv)| {
         cv.is_some()
             && values.iter().any(|val| {
                 let mut us = operands(&val.op);
@@ -1057,8 +1089,9 @@ pub(crate) fn build_ssa(
                 }
                 us.contains(&caught[hb].unwrap())
             })
+            && handler_loops_back(hb)
     });
-    if used_catch && method_has_loop(bc) {
+    if used_catch_in_loop {
         bail!("ssa: used catch variable in a loop (d8 shares the post-catch continuation) not yet supported");
     }
     let mut used: BTreeSet<ValId> = BTreeSet::new();

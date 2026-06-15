@@ -528,6 +528,28 @@ fn dead_catch_all_handler_over_nonthrowing_body_is_elided() {
     skotch_dex::validator::validate(&dex).expect("ArtTryNoThrow dex must validate");
 }
 
+/// A USED caught variable (`catch (E e) { … e … }`) is only bailed when the try/catch is INSIDE a
+/// loop (the handler's continuation flows back into the guarded region). An ACYCLIC used-catch is
+/// fine even when the method has an UNRELATED loop elsewhere — the bail now checks whether the
+/// handler can reach its own try region via successor edges, not the method-wide `method_has_loop`.
+/// ArtCatchUnrelatedLoop 1003/4003/4000 (runtime-proven, throwing AND non-throwing paths) catches
+/// into `e.getMessage().length()` then runs a separate `for` loop. ArtLoopCatchUsed (a used catch
+/// INSIDE the loop) must STILL bail — the safety net is exact, not loosened.
+#[test]
+fn acyclic_used_catch_with_unrelated_loop_now_dexes() {
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let ok = skotch_classfile::parse_class_file(
+        &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtCatchUnrelatedLoop.class"),
+    )
+    .unwrap();
+    let dex = dex_classes(&[ok], &opts).expect("ArtCatchUnrelatedLoop (acyclic used-catch) should dex");
+    skotch_dex::validator::validate(&dex).expect("ArtCatchUnrelatedLoop dex must validate");
+
+    let bail = skotch_classfile::parse_class_file(&fixtures().join("ArtLoopCatchUsed.class")).unwrap();
+    dex_classes(&[bail], &opts)
+        .expect_err("ArtLoopCatchUsed (used catch INSIDE a loop) must still bail, not miscompile");
+}
+
 /// >16-register `iget`/`iput` (22c, nibble-only register fields) now DEX rather than bail: the
 /// dexbuilder reserves 2 low scratch registers and routes any operand whose FINAL register is ≥16
 /// through them via `move(-object)/from16`. The object operand always moves with
