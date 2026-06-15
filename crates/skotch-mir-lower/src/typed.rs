@@ -80,11 +80,17 @@ fn slot_ty_with_param_fallback(slot: u32, extra_locals: &[Ty]) -> Ty {
             .with(|cell| cell.borrow().get(slot as usize).cloned())
             .unwrap_or(Ty::Any);
     }
-    // For body locals (slot >= param_count), the historical
-    // convention indexes extra_locals by absolute slot id — see the
-    // many `local_tys.get(slot.0 as usize)` callers. Match that
-    // convention to stay compatible with the existing handlers; the
-    // PARAM fallback above is the only behavioral change.
+    // For body locals, the body walker pushes one Ty into
+    // `local_tys` per allocated slot starting at LocalId(param_count),
+    // so absolute slot N maps to `extra_locals[N - param_count]`.
+    // Fall back to the historical `extra_locals[N]` lookup when the
+    // shifted index is out of range, so existing callers that pass
+    // a `local_tys` already indexed by absolute slot (e.g. class
+    // method bodies that prefix `this` + params) still work.
+    let local_idx = (slot as usize) - param_count;
+    if let Some(t) = extra_locals.get(local_idx) {
+        return t.clone();
+    }
     extra_locals.get(slot as usize).cloned().unwrap_or(Ty::Any)
 }
 
