@@ -382,6 +382,24 @@ fn over_16_registers_unwidenable_nibble_still_bails() {
     dex_classes(&[cf], &opts).expect_err("ArtWideLoop (>16 regs, unwidenable if-test) must bail, not miscompile");
 }
 
+/// A >16-register method calling a multi-arg method with its own PARAMETERS as arguments: the
+/// params have LOW allocated registers but the args-high remap moves them to HIGH final registers,
+/// so the compact 35c invoke form passes the allocated check yet would overflow its 4-bit arg
+/// nibble after remap. `emit_invoke` now selects the invoke/range form on the FINAL register (not
+/// just the allocated one), so `ArtWideCall.run` DEXES instead of bailing. Real-device correctness
+/// is proven by `tests/art/ArtWideCall` (276/5916/-1098). (Verified to BAIL when the final-register
+/// check is removed — the allocated-only trigger left it as 35c and `remap_insns` then bailed.)
+#[test]
+fn over_16_registers_invoke_args_use_range_via_final_check() {
+    let cf = skotch_classfile::parse_class_file(
+        &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtWideCall.class"),
+    )
+    .unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let dex = dex_classes(&[cf], &opts).expect("ArtWideCall (>16 regs, param args) should dex via range form");
+    skotch_dex::validator::validate(&dex).expect("ArtWideCall dex must validate");
+}
+
 /// A NON-CAPTURING lambda (`invokedynamic` → `LambdaMetafactory.metafactory`, no captured args,
 /// static impl, non-generic SAM) is desugared d8-style: a SYNTHETIC class implementing the
 /// functional interface is generated (singleton INSTANCE + a SAM method forwarding to the impl),

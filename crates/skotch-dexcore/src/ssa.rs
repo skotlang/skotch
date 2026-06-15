@@ -3602,7 +3602,24 @@ fn emit_invoke(
             regs.push(r + 1);
         }
     }
-    if regs.len() > 5 || regs.iter().any(|&r| r > 15) {
+    // The compact 35c form encodes each arg in a 4-bit nibble: usable only when ≤5 args AND every
+    // arg fits a nibble — both its ALLOCATED number (else the nibble emit truncates it before remap
+    // reads it) AND its FINAL args-high number (else remap overflows). Args remap UP, so an arg with
+    // a low allocated number can still land ≥16 after remap; checking only the allocated number (as
+    // before) wrongly kept 35c and then bailed in remap. Estimate the final with the scratch-free
+    // size (it only UNDER-counts args, so a borderline case may still bail in remap — safe, never a
+    // miscompile). For ≤16-register methods every final is ≤15, so this never newly forces range —
+    // those methods stay byte-identical; only >16-register methods are affected.
+    let num_arg = f.num_arg_registers;
+    let regs_size_est = alloc.registers_used.max(num_arg);
+    let final_of = |r: u16| -> u16 {
+        if num_arg == 0 || regs_size_est == num_arg {
+            r
+        } else {
+            crate::regalloc::remap_register(r, num_arg, regs_size_est)
+        }
+    };
+    if regs.len() > 5 || regs.iter().any(|&r| r > 15 || final_of(r) > 15) {
         // RANGE FORM: marshal the args into a CONSECUTIVE scratch block just above the
         // allocated set, then `invoke-*/range` over it. The block stays consecutive under
         // the args-high remap (every non-arg register shifts by the same -num_arg), so
