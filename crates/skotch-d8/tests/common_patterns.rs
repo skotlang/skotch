@@ -407,12 +407,17 @@ fn over_16_registers_invoke_args_use_range_via_final_check() {
 /// type=Reference`. Runtime correctness on a REAL device is proven by `tests/art/ArtSpill*`
 /// (ArtSpillThis 2153/338/105 int iget+dest reload; ArtSpillObj 158/240/126 iget-object dest
 /// reload via 0x08; ArtSpillPut 153/238/119 iput obj-high; ArtSpillLoop 3153/388/98 iget in a
-/// loop, spill inserted across the back-edge with offsets intact). Here: each dexes + self-validates.
+/// loop, spill inserted across the back-edge with offsets intact). ArtSpillArg 1000/50/-7 covers
+/// the SCRATCH-AWARE retry: a 16-arg range invoke inflates `registers_size` beyond
+/// `alloc.registers_used`, pushing `this` (an argument) to a real register ≥16, so its iget AND
+/// iput must spill even though the pre-emit decision (which uses `registers_used`) saw it as low —
+/// `build_dex` re-emits with the true frame once the range-block scratch is known. Here: each
+/// dexes + self-validates.
 #[test]
 fn over_16_registers_iget_iput_now_spill_through_scratch() {
     let art = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art");
     let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
-    for name in ["ArtSpillThis", "ArtSpillObj", "ArtSpillPut", "ArtSpillLoop"] {
+    for name in ["ArtSpillThis", "ArtSpillObj", "ArtSpillPut", "ArtSpillLoop", "ArtSpillArg"] {
         let cf = skotch_classfile::parse_class_file(&art.join(format!("{name}.class"))).unwrap();
         let dex = dex_classes(&[cf], &opts)
             .unwrap_or_else(|e| panic!("{name} (>16-reg iget/iput) should dex via scratch spill: {e:#}"));

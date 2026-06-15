@@ -2219,6 +2219,7 @@ fn term_operands(t: &Terminator) -> Vec<ValId> {
 /// `[0, num_arg_registers)`; the allocated→real args-high remap is applied later
 /// by `crate::regalloc`). Coalesced values (a φ and its operands; an in-place
 /// update and its source) share a register so loop-carried values need no moves.
+#[derive(Clone)]
 pub(crate) struct Allocation {
     /// allocated register per value id (NO_REG for rematerialized constants).
     pub(crate) reg: Vec<u16>,
@@ -2694,7 +2695,7 @@ pub(crate) fn dex_method_ssa(
             spill_base = Some(num_arg);
         }
     }
-    build_dex(&f, &num, &alloc, line_numbers, params, spill_base)
+    build_dex(&f, &num, &alloc, line_numbers, params, spill_base, None)
 }
 
 /// Rewrites every operand ValId of `op` through `g` (for value substitution).
@@ -3264,6 +3265,11 @@ pub(crate) fn build_dex(
     line_numbers: &[(u16, u16)],
     params: &[String],
     spill_base: Option<u16>,
+    // The true frame size (`registers_size`, incl. scratch) for `emit_field`'s high-operand
+    // test. Set on the spill RE-EMIT pass (below) so an arg whose real register is pushed ≥16
+    // by scratch inflation is detected; `None` on the first pass (uses `registers_used`). The
+    // remap is frame-independent for locals, so this only matters for argument operands.
+    frame_hint: Option<u16>,
 ) -> Result<CodeItem> {
     let mut insns: Vec<u16> = Vec::new();
     let mut block_unit = vec![0usize; f.blocks.len()];
@@ -3418,7 +3424,7 @@ pub(crate) fn build_dex(
                     emit_invoke(f, &mut insns, alloc, v, &mut pool_fixups, &mut outs, &mut positions, line_numbers, &mut range_block_words)?;
                 }
                 SsaOp::GetField { .. } | SsaOp::GetStatic { .. } | SsaOp::PutField { .. } | SsaOp::PutStatic { .. } => {
-                    emit_field(f, &mut insns, alloc, v, &mut pool_fixups, &mut positions, line_numbers, spill_base)?;
+                    emit_field(f, &mut insns, alloc, v, &mut pool_fixups, &mut positions, line_numbers, spill_base, frame_hint)?;
                 }
                 SsaOp::ArrayGet { .. } | SsaOp::ArrayPut { .. } | SsaOp::ArrayLength { .. } => {
                     emit_array(f, &mut insns, alloc, v, &mut positions, line_numbers)?;
@@ -3732,6 +3738,39 @@ pub(crate) fn build_dex(
         .max(range_block_words)
         .max(phi_scratch_words);
     let registers_size = (alloc.registers_used + scratch).max(f.num_arg_registers);
+    // Scratch-aware iget/iput spill retry. Scratch (range-invoke / switch / φ) inflates
+    // `registers_size` beyond `alloc.registers_used`, pushing ARGUMENTS to the top of the larger
+    // frame. The pre-emit spill decision in `dex_method_ssa` uses `registers_used` and so misses
+    // an argument-based iget/iput whose REAL register only reaches ≥16 once scratch is added
+    // (e.g. `this.field` in a method that also makes a wide / many-arg range invoke). Now that
+    // the true `registers_size` is known, re-check the field ops against it; if one is high and we
+    // have not already reserved scratch, reserve and re-emit with the true frame as the
+    // high-operand test. This ONLY fires for methods that would otherwise bail at `remap_insns`
+    // below — it never turns a passing method into a bailing one. `reserve_scratch` bumps
+    // `registers_used` by 2 and leaves the scratch counts unchanged, so the re-emit's frame is
+    // exactly `registers_size + 2`; pass that as the hint. `num_arg <= 14` keeps the 2 low scratch
+    // slots remap-clean. A LOCAL field operand can't be high here (it would have bailed in
+    // `emit_field`'s `nib()` before reaching this point), so this targets argument operands.
+    if spill_base.is_none() && frame_hint.is_none() && f.num_arg_registers <= 14 && registers_size > 16 {
+        let na = f.num_arg_registers;
+        let high = |r: u16| r != NO_REG && crate::regalloc::remap_register(r, na, registers_size) >= 16;
+        let field_op_high = f.values.iter().enumerate().any(|(i, val)| match &val.op {
+            SsaOp::GetField { dex_op, obj, .. } if *dex_op != 0x53 => {
+                high(alloc.reg[i]) || high(alloc.reg[*obj as usize])
+            }
+            SsaOp::PutField { dex_op, obj, value, .. }
+                if *dex_op != 0x5a && !f.values[*value as usize].wide =>
+            {
+                high(alloc.reg[*value as usize]) || high(alloc.reg[*obj as usize])
+            }
+            _ => false,
+        });
+        if field_op_high {
+            let mut alloc2 = alloc.clone();
+            reserve_scratch(&mut alloc2, na, 2);
+            return build_dex(f, num, &alloc2, line_numbers, params, Some(na), Some(registers_size + 2));
+        }
+    }
     // Safety net: every register operand must be in allocated space [0, registers_size).
     // An out-of-range operand means a value got NO_REG (e.g. a const wrongly rematerialized
     // despite a register-requiring use) and emitted garbage — bail rather than miscompile.
@@ -3882,6 +3921,7 @@ fn emit_field(
     positions: &mut Vec<(u32, u32)>,
     line_numbers: &[(u16, u16)],
     spill_base: Option<u16>,
+    frame_hint: Option<u16>,
 ) -> Result<()> {
     let reg = |x: ValId| alloc.reg[x as usize];
     let (dex_op, field, jvm_pc) = match &f.values[v as usize].op {
@@ -3897,7 +3937,9 @@ fn emit_field(
     // >16-register iget/iput spill: move a high operand through reserved scratch (sb, sb+1).
     if let Some(sb) = spill_base {
         let na = f.num_arg_registers;
-        let est = alloc.registers_used.max(na);
+        // Use the true frame size when re-emitting after a scratch-aware retry so an argument
+        // pushed ≥16 by scratch inflation is spilled; else fall back to `registers_used`.
+        let est = frame_hint.unwrap_or(alloc.registers_used.max(na));
         let high = |r: u16| r >= 16 || crate::regalloc::remap_register(r, na, est) >= 16;
         match &f.values[v as usize].op {
             SsaOp::GetField { obj, .. } if dex_op != 0x53 && (high(reg(v)) || high(reg(*obj))) => {
