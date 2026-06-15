@@ -650,10 +650,23 @@ fn sim_block(bc: &[u8], start: usize, end: usize, cf: &ClassFile, entry: &[bool]
 
 /// Per-block entry operand-stack (widths). Forward-propagated in RPO; back-edges
 /// agree with the forward entry per JVM verification (loop headers enter empty).
-fn entry_stacks(cfg: &Cfg, bc: &[u8], cf: &ClassFile) -> Result<Vec<Vec<bool>>> {
+///
+/// A handler block is reached ONLY via an exception edge (absent from any block's normal
+/// `succ`), so the forward walk would never reach it — nor its body. We seed each handler's
+/// entry with the caught exception (one reference slot) so the walk continues INTO the
+/// handler body and computes correct entry stacks there; otherwise a stack-spanning merge
+/// inside a handler body (e.g. Kotlin's `catch { throw if (c) a else b }`, where two
+/// checkcast-Throwable branches converge on one `athrow`) gets an empty entry stack, no
+/// stack-φ is built for it, and `rename` underflows at the consuming op.
+fn entry_stacks(cfg: &Cfg, bc: &[u8], cf: &ClassFile, handler_blocks: &BTreeSet<usize>) -> Result<Vec<Vec<bool>>> {
     let n = cfg.len();
     let mut entry: Vec<Option<Vec<bool>>> = vec![None; n];
     entry[0] = Some(Vec::new());
+    for &hb in handler_blocks {
+        // The exception reference is on the handler's entry stack (the first op pops it,
+        // e.g. `astore`/`pop`). One non-wide slot.
+        entry[hb].get_or_insert_with(|| vec![false]);
+    }
     for &b in &cfg.rpo {
         let e = match &entry[b] {
             Some(e) => e.clone(),
@@ -845,7 +858,7 @@ pub(crate) fn build_ssa(
     // — like a local, but for a stack position. They go into `blocks[blk].phis`
     // AFTER the local φs (so numbering/coalescing/allocation/φ-resolution treat them
     // uniformly) and are tracked in `block_stack_phis` for rename's stack threading.
-    let estacks = entry_stacks(&cfg, bc, cf)?;
+    let estacks = entry_stacks(&cfg, bc, cf, &handler_block_set)?;
     let mut block_stack_phis: Vec<Vec<ValId>> = vec![Vec::new(); n];
     for blk in 0..n {
         if handler_block_set.contains(&blk) {

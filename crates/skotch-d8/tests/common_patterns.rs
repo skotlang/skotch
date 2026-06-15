@@ -497,6 +497,26 @@ fn two_rematerializable_const_binop_keeps_left_in_register() {
     skotch_dex::validator::validate(&dex).expect("ArtTwoConst dex must validate");
 }
 
+/// A stack-spanning operand-stack value that merges inside an EXCEPTION HANDLER body (e.g. Kotlin
+/// `catch (e) { throw if (c) A else B }`, where two `checkcast Throwable` branches converge on one
+/// `athrow`). A handler block is reached only via an exception edge — absent from any block's normal
+/// `succ` — so `entry_stacks`' forward walk never reached the handler body, the merge got an empty
+/// entry stack, no stack-φ was built, and `rename` underflowed at the consuming op. `entry_stacks`
+/// now seeds each handler block's entry with the caught exception so the walk continues into the
+/// handler body. ArtCatchMergeKt 20/30/threw RuntimeException/threw IllegalStateException
+/// (runtime-proven, both merge branches) bails `operand-stack underflow` without the fix.
+/// (Kotlin fixture: javac stores merge results to locals and never produces this shape.)
+#[test]
+fn stack_merge_in_handler_body_seeds_entry_stack() {
+    let cf = skotch_classfile::parse_class_file(
+        &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtCatchMergeKt.class"),
+    )
+    .unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let dex = dex_classes(&[cf], &opts).expect("ArtCatchMergeKt (handler-body stack merge) should dex");
+    skotch_dex::validator::validate(&dex).expect("ArtCatchMergeKt dex must validate");
+}
+
 /// array-length (0x21, 12x) and instance-of (0x20, 22c) — nibble forms with no wider encoding —
 /// now spill a high object operand through the reserved low scratch (move-object/from16 then the
 /// op on scratch, dest reloaded if high), via the shared `spill_dest_obj`. ArtArrInst 31/0/51
