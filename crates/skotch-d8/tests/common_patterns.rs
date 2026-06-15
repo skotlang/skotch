@@ -517,6 +517,24 @@ fn stack_merge_in_handler_body_seeds_entry_stack() {
     skotch_dex::validator::validate(&dex).expect("ArtCatchMergeKt dex must validate");
 }
 
+/// The over-coalesce safety net iterated ALL of `f.values`, but DCE removes dead values only from
+/// `blocks[].body`/`phis` (not from `f.values`). A folded-then-dead op — e.g. a discarded `x + y`
+/// where skotch const-propagated `x=0, y=2`, so `constant_fold`'s identity-0 rewrite leaves the add
+/// unused → DCE'd — stayed in `f.values` with its two const operands sharing a register by legitimate
+/// hole reuse, and got flagged: a false-positive bail. The net now checks only values still in a
+/// block body (i.e. actually emitted). ArtDeadFoldKt 0/1/36/100 (runtime-proven) bails `over-coalesce`
+/// without the fix. (kotlinc fixture: kotlinc keeps `var x=0; var y=2` as distinct loads.)
+#[test]
+fn over_coalesce_net_skips_dead_dce_removed_values() {
+    let cf = skotch_classfile::parse_class_file(
+        &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtDeadFoldKt.class"),
+    )
+    .unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let dex = dex_classes(&[cf], &opts).expect("ArtDeadFoldKt (dead folded binop) should dex");
+    skotch_dex::validator::validate(&dex).expect("ArtDeadFoldKt dex must validate");
+}
+
 /// array-length (0x21, 12x) and instance-of (0x20, 22c) — nibble forms with no wider encoding —
 /// now spill a high object operand through the reserved low scratch (move-object/from16 then the
 /// op on scratch, dest reloaded if high), via the shared `spill_dest_obj`. ArtArrInst 31/0/51

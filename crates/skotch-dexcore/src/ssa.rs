@@ -2769,8 +2769,21 @@ pub(crate) fn dex_method_ssa(
     let any_conflated = |ops: &[ValId]| -> bool {
         ops.iter().enumerate().any(|(i, &a)| ops[i + 1..].iter().any(|&b| conflated(a, b)))
     };
+    // Only EMITTED values matter: DCE removed dead values from `blocks[].body`/`phis` but left them
+    // in `f.values`, so iterating `f.values` would flag a folded-then-dead op (e.g. `0 + 2`, whose
+    // identity-0 made `constant_fold` replace it with its operand) whose two const operands happen to
+    // share a register by legitimate hole reuse — a false positive. Check only values still in a body.
+    let in_body = {
+        let mut s = vec![false; f.values.len()];
+        for blk in &f.blocks {
+            for &v in &blk.body {
+                s[v as usize] = true;
+            }
+        }
+        s
+    };
     for v in &f.values {
-        if any_conflated(&operands(&v.op)) {
+        if in_body[v.id as usize] && any_conflated(&operands(&v.op)) {
             bail!("ssa: over-coalesce conflated two live operands into one register");
         }
     }
