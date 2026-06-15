@@ -2253,6 +2253,24 @@ fn dup_x2_and_dup2_x1_now_dex() {
     skotch_dex::validator::validate(&dex).expect("ArtDupX dex must validate");
 }
 
+/// `synchronized` blocks. javac compiles them to monitor-enter/monitor-exit plus an implicit
+/// SELF-COVERING catch-all handler (`[handler, handler_end) → handler`) so the handler's own
+/// monitor-exit re-runs if it throws. The SSA path now models monitor-enter (0x1d) / monitor-exit
+/// (0x1e) and DROPS that self-covering region (functionally exact — the monitor is held when the
+/// handler runs, so its monitor-exit can't throw), leaving the body's normal try/catch. The
+/// monitorenter bucket was the largest single ssa-sim opcode; ~80 corpus methods now dex. Runtime
+/// correctness AND no-deadlock are proven on ART by `tests/art/ArtSync`.
+#[test]
+fn synchronized_monitor_now_dexes() {
+    let cf = skotch_classfile::parse_class_file(
+        &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtSync.class"),
+    )
+    .unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let dex = dex_classes(&[cf], &opts).expect("ArtSync (synchronized) should dex");
+    skotch_dex::validator::validate(&dex).expect("ArtSync dex must validate");
+}
+
 /// 11th semantic stress round, byte-identical — fresh idioms + over-coalesce-net probes
 /// that DON'T over-coalesce:
 ///  - `S11Max3` (`m=a; if(b>m)m=b; if(c>m)m=c` — chained max via plain ifs, no ternary φ).

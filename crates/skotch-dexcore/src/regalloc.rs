@@ -85,9 +85,9 @@ fn dex_insn_len(op: u8) -> usize {
         // 1-word: move-result(0x0a-0x0c), move-exception(0x0d), return-void(0x0e),
         //         return(0x0f-0x11), const/4(0x12), move(0x01), move-wide(0x04),
         //         move-object(0x07), throw(0x27), goto(0x28), array-length(0x21),
-        //         unops(0x7b-0x8f), 2addr(0xb0-0xcf)
+        //         monitor-enter(0x1d)/monitor-exit(0x1e), unops(0x7b-0x8f), 2addr(0xb0-0xcf)
         //         (NOTE: 0x05 move-wide/from16 is 22x = 2 words — NOT here.)
-        0x0a..=0x12 | 0x01 | 0x04 | 0x07 | 0x21 | 0x27 | 0x28 | 0x7b..=0x8f | 0xb0..=0xcf => 1,
+        0x0a..=0x12 | 0x01 | 0x04 | 0x07 | 0x1d | 0x1e | 0x21 | 0x27 | 0x28 | 0x7b..=0x8f | 0xb0..=0xcf => 1,
         // 3-word: const(0x14), const-wide/32(0x17), goto/32(0x2a), invoke 35c(0x6e-0x72),
         //         invoke/range 3rc(0x74-0x78)
         0x14 | 0x17 | 0x2a | 0x6e..=0x72 | 0x74..=0x78 => 3,
@@ -102,8 +102,9 @@ fn dex_insn_len(op: u8) -> usize {
 /// 35c invoke the caller handles the variable argument nibbles separately.
 fn reg_fields(op: u8) -> &'static [Field] {
     match op {
-        // 11x: move-result / move-exception(0x0d) / return / throw(0x27) — AA in word0 high byte
-        0x0a..=0x0d | 0x0f..=0x11 | 0x27 => &[Field::ByteAA { w: 0 }],
+        // 11x: move-result / move-exception(0x0d) / return / throw(0x27) /
+        //      monitor-enter(0x1d) / monitor-exit(0x1e) — AA (objectref) in word0 high byte
+        0x0a..=0x0d | 0x0f..=0x11 | 0x1d | 0x1e | 0x27 => &[Field::ByteAA { w: 0 }],
         0x0e => &[], // return-void
         // 11n const/4 — A nibble
         0x12 => &[Field::NibbleA { w: 0 }],

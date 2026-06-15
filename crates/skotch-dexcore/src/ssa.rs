@@ -64,6 +64,10 @@ pub(crate) enum SsaOp {
     PutField { dex_op: u16, field: FieldRef, obj: ValId, value: ValId, jvm_pc: u32 },
     /// Static field write (`sput* value, field@`). A statement (no result).
     PutStatic { dex_op: u16, field: FieldRef, value: ValId, jvm_pc: u32 },
+    /// `monitor-enter vAA` (0x1d) / `monitor-exit vAA` (0x1e), 11x — the `synchronized`
+    /// lock acquire/release. A statement (no result). Throwing (NPE on a null monitor;
+    /// monitor-exit can also throw IllegalMonitorStateException). `enter` selects the op.
+    Monitor { enter: bool, obj: ValId, jvm_pc: u32 },
     /// Array element read (`aget* dest, array, index`, 23x). Throwing (NPE/AIOOBE).
     ArrayGet { dex_op: u16, array: ValId, index: ValId, jvm_pc: u32 },
     /// Array element write (`aput* value, array, index`, 23x). A statement.
@@ -637,6 +641,7 @@ fn sim_block(bc: &[u8], start: usize, end: usize, cf: &ClassFile, entry: &[bool]
             0xbf => { pop(&mut st); pc += 1; }                                          // athrow (block ends)
             0xc0 => { pop(&mut st); st.push(false); pc += 3; }                          // checkcast (in-place ref)
             0xc1 => { pop(&mut st); st.push(false); pc += 3; }                          // instanceof (int result)
+            0xc2 | 0xc3 => { pop(&mut st); pc += 1; }                                   // monitorenter / monitorexit (pop objectref)
             other => bail!("ssa stack-sim: unsupported opcode {other:#04x}"),
         }
     }
@@ -871,6 +876,18 @@ pub(crate) fn build_ssa(
                 catch_type,
             });
         }
+        // Drop SELF-COVERING catch-all regions. A `synchronized(o){…}` block compiles to an
+        // EXTRA exception entry `[handler_start, handler_end) → handler` so that if the handler's
+        // own monitor-exit throws, the handler re-runs. That throw is unreachable in practice (the
+        // monitor IS held when the handler runs after a body exception, so its monitor-exit always
+        // succeeds), and modeling a handler that guards ITSELF would need an exceptional self-edge.
+        // Dropping this entry leaves the body's `[body, monitor-exit) → handler` region — a normal
+        // single try/catch — intact, and the handler still emits its monitor-exit, so the lock is
+        // released on every path (functionally exact, never a dropped monitor → no deadlock). The
+        // condition `start_pc == handler-block start` matches ONLY a region whose try begins at its
+        // own handler; a try-nested-in-a-handler has a DIFFERENT handler block, so it isn't dropped.
+        exc_regions
+            .retain(|r| !(r.catch_type.is_none() && r.start_pc == cfg.blocks[r.handler_block].start));
         // No partially-overlapping or nested try regions (identical ranges that share
         // a handler are fine — that's one logical region).
         for i in 0..exc_regions.len() {
@@ -1565,6 +1582,14 @@ fn rename(
                 }
                 pc += 3;
             }
+            // monitorenter (0xc2) / monitorexit (0xc3) — `synchronized` lock acquire/release.
+            // A statement (pops the monitor objectref, defines no value); throwing.
+            0xc2 | 0xc3 => {
+                let obj = pop_stack!(stack);
+                let v = b.new(SsaOp::Monitor { enter: op == 0xc2, obj, jvm_pc: pc as u32 }, false, blk);
+                blocks[blk].body.push(v);
+                pc += 1;
+            }
             // array element load: iaload/laload/faload/daload/aaload/baload/caload/saload
             0x2e..=0x35 => {
                 let (dex_op, wide) = crate::bootstrap::aget_op(op);
@@ -2094,6 +2119,7 @@ fn operands(op: &SsaOp) -> Vec<ValId> {
         SsaOp::NewInstance { .. } => Vec::new(),
         SsaOp::NewArray { size, .. } => vec![*size],
         SsaOp::CheckCast { obj, .. } | SsaOp::InstanceOf { obj, .. } => vec![*obj],
+        SsaOp::Monitor { obj, .. } => vec![*obj],
         SsaOp::CaughtException => Vec::new(),
     }
 }
@@ -2116,6 +2142,7 @@ fn op_jvm_pc(op: &SsaOp) -> Option<u32> {
         | SsaOp::ConstClass { jvm_pc, .. }
         | SsaOp::CheckCast { jvm_pc, .. }
         | SsaOp::InstanceOf { jvm_pc, .. }
+        | SsaOp::Monitor { jvm_pc, .. }
         | SsaOp::Binop { jvm_pc, .. } => Some(*jvm_pc),
         _ => None,
     }
@@ -2137,7 +2164,8 @@ fn ssa_op_can_throw(op: &SsaOp) -> bool {
         | SsaOp::NewArray { .. }
         | SsaOp::CheckCast { .. }
         | SsaOp::ConstString { .. }
-        | SsaOp::ConstClass { .. } => true,
+        | SsaOp::ConstClass { .. }
+        | SsaOp::Monitor { .. } => true,
         SsaOp::Binop { jvm_op, .. } => matches!(jvm_op, 0x6c | 0x6d | 0x70 | 0x71),
         _ => false,
     }
@@ -2171,6 +2199,7 @@ fn produces_value(op: &SsaOp) -> bool {
             | SsaOp::PutField { .. }
             | SsaOp::PutStatic { .. }
             | SsaOp::ArrayPut { .. }
+            | SsaOp::Monitor { .. }
     )
 }
 
@@ -2656,6 +2685,7 @@ fn map_operands(op: &mut SsaOp, mut g: impl FnMut(ValId) -> ValId) {
         }
         SsaOp::ArrayLength { array, .. } => *array = g(*array),
         SsaOp::NewArray { size, .. } => *size = g(*size),
+        SsaOp::Monitor { obj, .. } => *obj = g(*obj),
         SsaOp::CheckCast { obj, .. } | SsaOp::InstanceOf { obj, .. } => *obj = g(*obj),
         SsaOp::Argument { .. }
         | SsaOp::ConstInt(_)
@@ -3364,6 +3394,16 @@ pub(crate) fn build_dex(
                     // `move-exception dest` (11x) — only reached when the caught value
                     // is read (build_ssa keeps unused ones out of the block body).
                     insns.push(0x0d | (reg(v) << 8));
+                }
+                SsaOp::Monitor { enter, obj, jvm_pc } => {
+                    // monitor-enter (0x1d) / monitor-exit (0x1e), 11x: AA = objectref reg.
+                    // Throwing → record a debug position; the throw_spans coverage below
+                    // (via ssa_op_can_throw/op_jvm_pc) extends any enclosing try_item over it.
+                    if let Some(line) = crate::bootstrap::line_for(line_numbers, *jvm_pc) {
+                        positions.push((insns.len() as u32, line));
+                    }
+                    let dexop: u16 = if *enter { 0x1d } else { 0x1e };
+                    insns.push(dexop | (reg(*obj) << 8));
                 }
                 _ => {
                     // div/rem are throwing — record a position at the instruction.
@@ -4245,6 +4285,7 @@ fn emit_value(f: &SsaFn, insns: &mut Vec<u16>, alloc: &Allocation, v: ValId) -> 
         | SsaOp::NewArray { .. }
         | SsaOp::CheckCast { .. }
         | SsaOp::InstanceOf { .. }
+        | SsaOp::Monitor { .. }
         | SsaOp::CaughtException => {
             bail!("ssa dexbuilder: value {v} has no emittable instruction")
         }
