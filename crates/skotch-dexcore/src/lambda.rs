@@ -402,25 +402,36 @@ fn build_clinit(syn: &str, instance: &FieldRef) -> EncodedMethod {
 fn build_sam(syn: &str, sam_name: &str, sam_desc: &str, inst_params: &[String], invoke_op: u16, recv_offset: usize, ret_adapt: &RetAdapt, impl_class: &str, impl_name: &str, impl_desc: &str) -> Result<EncodedMethod> {
     let (params, _ret) = parse_descriptor(sam_desc)?;
     let mut ins: u16 = 1; // this
-    let mut param_regs: Vec<u16> = Vec::new();
+    // First register + wide flag per SAM parameter (a long/double occupies the pair r, r+1).
+    let mut param_start: Vec<u16> = Vec::new();
+    let mut param_wide: Vec<bool> = Vec::new();
     let mut r = 1u16;
     for p in &params {
-        if p == "J" || p == "D" {
-            bail!("lambda: wide SAM parameter not yet supported");
-        }
-        param_regs.push(r);
-        r += 1;
-        ins += 1;
+        let wide = p == "J" || p == "D";
+        param_start.push(r);
+        param_wide.push(wide);
+        let w = if wide { 2 } else { 1 };
+        r += w;
+        ins += w;
     }
-    if param_regs.len() > 5 || param_regs.iter().any(|&x| x > 15) {
-        bail!("lambda: SAM with too many parameters not yet supported");
+    // The flat register list the impl invoke passes — a wide arg lists BOTH halves consecutively.
+    let mut invoke_regs: Vec<u16> = Vec::new();
+    for (i, &st) in param_start.iter().enumerate() {
+        invoke_regs.push(st);
+        if param_wide[i] {
+            invoke_regs.push(st + 1);
+        }
+    }
+    if invoke_regs.len() > 5 || invoke_regs.iter().any(|&x| x > 15) {
+        bail!("lambda: SAM invoke needs range form (too many/high register words) not yet supported");
     }
     let mut insns: Vec<u16> = Vec::new();
     let mut fixups: Vec<Fixup> = Vec::new();
-    // Adapt each erased reference parameter to its instantiated type (in-place check-cast).
+    // Adapt each erased reference parameter to its instantiated type (in-place check-cast). Wide
+    // primitive params never need this (erased == instantiated == J/D).
     for (k, (s, i)) in params.iter().zip(inst_params.iter()).enumerate() {
-        if s != i {
-            insns.push(0x1f | (param_regs[k] << 8)); // check-cast vReg, InstType (21c)
+        if s != i && !param_wide[k] {
+            insns.push(0x1f | (param_start[k] << 8)); // check-cast vReg, InstType (21c)
             let unit = insns.len();
             insns.push(0);
             fixups.push(Fixup { unit, item: ItemRef::Type(i.clone()), wide: false });
@@ -446,24 +457,24 @@ fn build_sam(syn: &str, sam_name: &str, sam_desc: &str, inst_params: &[String], 
         insns.push(0x6e | ((1u16 << 4) << 8)); // invoke-virtual, argn=1 → 0x106e
         let unit = insns.len();
         insns.push(0);
-        insns.push(param_regs[sam_idx]); // 35c arg nibble vC = the boxed receiver
+        insns.push(param_start[sam_idx]); // 35c arg nibble vC = the boxed receiver
         fixups.push(Fixup {
             unit,
             item: ItemRef::Method(MethodRef { class: bx.into(), proto: ProtoRef { return_type: ip.clone(), params: vec![] }, name: m.into() }),
             wide: false,
         });
-        insns.push(0x0a | (param_regs[sam_idx] << 8)); // move-result paramReg
+        insns.push(0x0a | (param_start[sam_idx] << 8)); // move-result paramReg
         did_unbox = true;
     }
     // invoke {param regs}, impl — invoke-static for a static impl/method-ref, or
     // invoke-virtual/interface/direct for an unbound instance method reference (arg0 = receiver).
-    let argn = param_regs.len() as u16;
-    let g = if param_regs.len() == 5 { param_regs[4] } else { 0 };
+    let argn = invoke_regs.len() as u16;
+    let g = if invoke_regs.len() == 5 { invoke_regs[4] } else { 0 };
     insns.push(invoke_op | (((argn << 4) | g) << 8));
     let munit = insns.len();
     insns.push(0); // method-ref placeholder (fixup)
     let mut nib: u16 = 0;
-    for (k, &rr) in param_regs.iter().take(4).enumerate() {
+    for (k, &rr) in invoke_regs.iter().take(4).enumerate() {
         nib |= rr << (4 * k);
     }
     insns.push(nib);

@@ -532,6 +532,21 @@ fn lambda_param_unboxing_now_dexes() {
     skotch_dex::validator::validate(&dex).unwrap_or_else(|e| panic!("ArtLambdaUnbox: invalid dex: {e:#}"));
 }
 
+/// WIDE (long/double) lambda SAM parameters and returns. A wide value occupies a register PAIR, so
+/// the synthetic SAM tracks each parameter's start register + wide flag (rather than flattening),
+/// advances by 2 for wide, and lists both halves of each wide argument in the impl invoke; the wide
+/// return uses move-result-wide/return-wide. ArtLambdaWide covers DoubleUnaryOperator (wide
+/// param+return), LongUnaryOperator, DoubleBinaryOperator (two wide params), and DoubleSupplier
+/// (wide return). Proven on a REAL device by `tests/art/ArtLambdaWide`; here: dexes + self-validates.
+/// (Wide captures and >5-word invokes still bail.)
+#[test]
+fn lambda_wide_params_now_dex() {
+    let cf = skotch_classfile::parse_class_file(&PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtLambdaWide.class")).unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let dex = dex_classes(&[cf], &opts).unwrap_or_else(|e| panic!("ArtLambdaWide: wide lambda params should dex now: {e:#}"));
+    skotch_dex::validator::validate(&dex).unwrap_or_else(|e| panic!("ArtLambdaWide: invalid dex: {e:#}"));
+}
+
 /// A φ whose operand is a SIBLING φ in the same loop header is a parallel copy on the
 /// back-edge — a swap (`a=b; b=a`, a 2-cycle), a 3-way rotation, or a chain (`a=b; b=t`,
 /// Fibonacci). This used to bail (a naive in-place update read a sibling AFTER it was
