@@ -590,6 +590,25 @@ fn lambda_covariant_reference_return() {
     skotch_dex::validator::validate(&dex).expect("ArtCovRet dex must validate");
 }
 
+/// A CAPTURING SAM bridge whose impl wants a wide primitive (long/double) the interface provides
+/// boxed — e.g. a bound method ref `map::add` where `add(Object,long)` used as `BiConsumer<Object,
+/// Long>`. build_capturing_sam already lays captures LOW / params HIGH; the wide unbox now reserves a
+/// scratch PAIR just above the captures (so this+params shift up by scratch_words), unboxes via
+/// `longValue`/`move-result-wide`, and the impl invoke passes the pair. ArtCapWide 1129
+/// (runtime-proven) bails `wide capturing parameter unbox` without the fix; disasm shows
+/// `iget-object v0; check-cast v5,Long; invoke longValue {v5}; move-result-wide v1; invoke add
+/// {v0,v4,v1,v2}`.
+#[test]
+fn lambda_capturing_wide_primitive_param_unbox() {
+    let cf = skotch_classfile::parse_class_file(
+        &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtCapWide.class"),
+    )
+    .unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let dex = dex_classes(&[cf], &opts).expect("ArtCapWide (capturing wide unbox) should dex");
+    skotch_dex::validator::validate(&dex).expect("ArtCapWide dex must validate");
+}
+
 /// array-length (0x21, 12x) and instance-of (0x20, 22c) — nibble forms with no wider encoding —
 /// now spill a high object operand through the reserved low scratch (move-object/from16 then the
 /// op on scratch, dest reloaded if high), via the shared `spill_dest_obj`. ArtArrInst 31/0/51

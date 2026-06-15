@@ -764,12 +764,32 @@ fn build_capturing_sam(syn: &str, sam_name: &str, sam_desc: &str, inst_params: &
         param_start.push(param_words);
         param_words += cap_width(ty);
     }
-    let regs = total_cap + 1 + param_words; // captures + this + sam params
+    // The impl's params are [captures.. , sam params], so SAM param k maps to impl parameter
+    // `off + k` (the captures that precede them — except a bound-receiver capture, which is the
+    // invoke receiver and not in impl_desc, leaving off == 0).
+    let (impl_p, _impl_ret0) = parse_descriptor(impl_desc)?;
+    let off = impl_p.len().saturating_sub(inst_params.len());
+    // A boxed Long/Double SAM param the impl wants as a primitive long/double unboxes into a scratch
+    // PAIR (1 ref slot → 2-slot pair). DEX puts the `ins` params (this + sam params) in the HIGH
+    // registers, so the scratch goes at the LOW registers just above the captures, and `this`/params
+    // shift up by `scratch_words`. (No wide-unbox → scratch_words == 0 → layout unchanged.)
+    let mut unbox_scratch: Vec<Option<u16>> = vec![None; p];
+    let mut scratch_words = 0u16;
+    for k in 0..inst_params.len() {
+        let ip = &impl_p[off + k];
+        if is_wide_prim(ip) && box_of(ip) == Some(inst_params[k].as_str()) {
+            unbox_scratch[k] = Some(total_cap + scratch_words);
+            scratch_words += 2;
+        }
+    }
+    let regs = total_cap + scratch_words + 1 + param_words; // captures + scratch + this + sam params
     if regs > 16 {
         bail!("lambda: capturing SAM needs {regs} registers (>16) not supported");
     }
-    let this_reg = total_cap;
-    let argn = total_cap + param_words; // reg-WORDS passed to the impl (a wide capture/param is 2)
+    let this_reg = total_cap + scratch_words;
+    // reg-WORDS passed to the impl: captures (each its width) + each impl param's width (a wide-unbox
+    // param contributes the 2-word primitive, not the 1-word boxed ref).
+    let argn = total_cap + (0..inst_params.len()).map(|k| cap_width(&impl_p[off + k])).sum::<u16>();
     if argn > 5 {
         bail!("lambda: capturing SAM impl has {argn} arg words (>5, needs range form) not supported");
     }
@@ -792,23 +812,17 @@ fn build_capturing_sam(syn: &str, sam_name: &str, sam_desc: &str, inst_params: &
             fixups.push(Fixup { unit, item: ItemRef::Type(i.clone()), wide: false });
         }
     }
-    // Unbox each boxed SAM parameter the impl wants as a primitive (in place, like build_sam).
-    // The impl's parameters are [captures.. , sam params], so SAM param k maps to impl parameter
-    // `off + k` where off = impl_p.len() - inst_params.len() (the captures that precede them).
-    let (impl_p, _) = parse_descriptor(impl_desc)?;
-    let off = impl_p.len().saturating_sub(inst_params.len());
+    // Unbox each boxed SAM parameter the impl wants as a primitive. A wide (long/double) unbox
+    // writes its 2-register result into the reserved scratch pair; a narrow one unboxes in place.
     let mut did_unbox = false;
     for (k, sam_ty) in inst_params.iter().enumerate() {
         let ip = &impl_p[off + k];
         if box_of(ip) != Some(sam_ty.as_str()) {
             continue; // not a boxed→primitive position
         }
-        if ip == "J" || ip == "D" {
-            bail!("lambda: wide capturing parameter unbox not yet supported");
-        }
         let (bx, m) = unbox_of(ip).ok_or_else(|| anyhow::anyhow!("lambda: no unbox accessor for {ip}"))?;
         let reg = this_reg + 1 + param_start[k];
-        // invoke-virtual {reg} <Wrapper>.<accessor>()prim ; move-result reg (in place).
+        // invoke-virtual {boxedReg} <Wrapper>.<accessor>()prim
         insns.push(0x6e | ((1u16 << 4) << 8)); // invoke-virtual, argn=1 → 0x106e
         let unit = insns.len();
         insns.push(0);
@@ -818,7 +832,11 @@ fn build_capturing_sam(syn: &str, sam_name: &str, sam_desc: &str, inst_params: &
             item: ItemRef::Method(MethodRef { class: bx.into(), proto: ProtoRef { return_type: ip.clone(), params: vec![] }, name: m.into() }),
             wide: false,
         });
-        insns.push(0x0a | (reg << 8)); // move-result reg
+        if let Some(sc) = unbox_scratch[k] {
+            insns.push(0x0b | (sc << 8)); // move-result-wide scratch pair (low registers)
+        } else {
+            insns.push(0x0a | (reg << 8)); // move-result reg (in place)
+        }
         did_unbox = true;
     }
     // invoke {captures.. (both halves of a wide), sam params}, impl.
@@ -830,10 +848,15 @@ fn build_capturing_sam(syn: &str, sam_name: &str, sam_desc: &str, inst_params: &
         }
     }
     for (k, ty) in sam_params.iter().enumerate() {
-        let reg = this_reg + 1 + param_start[k];
-        arg_regs.push(reg);
-        if cap_width(ty) == 2 {
-            arg_regs.push(reg + 1);
+        if let Some(sc) = unbox_scratch[k] {
+            arg_regs.push(sc); // the unboxed primitive's scratch pair (low registers)
+            arg_regs.push(sc + 1);
+        } else {
+            let reg = this_reg + 1 + param_start[k];
+            arg_regs.push(reg);
+            if cap_width(ty) == 2 {
+                arg_regs.push(reg + 1);
+            }
         }
     }
     let g = if arg_regs.len() == 5 { arg_regs[4] } else { 0 };
