@@ -389,6 +389,22 @@ fn lambda_metafactory_capturing_now_dexes() {
     skotch_dex::validator::validate(&dex).unwrap_or_else(|e| panic!("ArtLambdaCapture: invalid dex: {e:#}"));
 }
 
+/// A GENERIC functional interface (e.g. `Function<String,Integer>`) has an ERASED SAM
+/// (`apply(Object)Object`) while the lambda impl uses the instantiated types (`(String)Integer`).
+/// The synthetic class implements the erased abstract method but check-casts each generic
+/// reference parameter down to its instantiated type before calling the impl; the covariant
+/// reference return needs no cast. Works for non-capturing AND capturing generic lambdas, and for
+/// non-Function SAMs (Predicate). ArtLambdaGeneric covers Function<String,Integer> (non-capturing
+/// + capturing), Predicate<String>, and Function<Integer,Integer>. Correctness on a REAL device is
+/// proven by `tests/art/ArtLambdaGeneric`; here: dexes (incl. synthetics) + self-validates.
+#[test]
+fn lambda_metafactory_generic_sam_now_dexes() {
+    let cf = skotch_classfile::parse_class_file(&PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtLambdaGeneric.class")).unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let dex = dex_classes(&[cf], &opts).unwrap_or_else(|e| panic!("ArtLambdaGeneric: generic SAM lambda should dex now: {e:#}"));
+    skotch_dex::validator::validate(&dex).unwrap_or_else(|e| panic!("ArtLambdaGeneric: invalid dex: {e:#}"));
+}
+
 /// A φ whose operand is a SIBLING φ in the same loop header is a parallel copy on the
 /// back-edge — a swap (`a=b; b=a`, a 2-cycle), a 3-way rotation, or a chain (`a=b; b=t`,
 /// Fibonacci). This used to bail (a naive in-place update read a sibling AFTER it was

@@ -1593,9 +1593,20 @@ fn rename(
                 pc += if op == 0xbc { 2 } else { 3 };
             }
             // dup: duplicate the top stack value (the `new X; dup; <init>` idiom).
-            0x59 => { let top = *stack.last().unwrap(); stack.push(top); pc += 1; }
+            0x59 => {
+                let top = *stack.last().ok_or_else(|| anyhow::anyhow!("ssa: dup on empty operand stack"))?;
+                stack.push(top);
+                pc += 1;
+            }
             // swap: exchange the top two category-1 values — pure value-stack reorder.
-            0x5f => { let n = stack.len(); stack.swap(n - 2, n - 1); pc += 1; }
+            0x5f => {
+                let n = stack.len();
+                if n < 2 {
+                    bail!("ssa: swap with fewer than 2 operands");
+                }
+                stack.swap(n - 2, n - 1);
+                pc += 1;
+            }
             // dup_x1: `..., v2, v1 → ..., v1, v2, v1` — duplicate top below the second.
             0x5a => {
                 let v1 = pop_stack!(stack);
@@ -1609,11 +1620,14 @@ fn rename(
             // top TWO category-1 values — `a[i]++`/`a[i]+=x` dup the array+index so one
             // aget + one aput share them (the SSA values are reused, no new instruction).
             0x5c => {
-                let top = *stack.last().unwrap();
+                let top = *stack.last().ok_or_else(|| anyhow::anyhow!("ssa: dup2 on empty operand stack"))?;
                 if b.values[top as usize].wide {
                     stack.push(top);
                 } else {
                     let n = stack.len();
+                    if n < 2 {
+                        bail!("ssa: dup2 with fewer than 2 category-1 operands");
+                    }
                     let (v2, v1) = (stack[n - 2], stack[n - 1]);
                     stack.push(v2);
                     stack.push(v1);

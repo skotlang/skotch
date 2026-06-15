@@ -1,0 +1,4 @@
+len(hello)=5
+lenPlus(hi)=102
+empty()=true empty(x)=false
+dbl(21)=42
