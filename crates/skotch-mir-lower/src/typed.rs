@@ -3876,10 +3876,15 @@ fn lower_loop_body(
                 // initializer is a pure reference, so we keep that
                 // behavior for val.
                 if prop.is_var() {
-                    let rhs_ty = local_tys
-                        .get(rhs_slot.0 as usize)
-                        .cloned()
-                        .unwrap_or(Ty::Any);
+                    // Resolve the rhs slot's Ty via the param-fallback
+                    // helper — for a Reference init like `var k = q`
+                    // (q a param), the param fallback returns Int,
+                    // while a raw `local_tys.get(rhs_slot)` returns
+                    // the first body-local Ty (off-by-param_count)
+                    // which would land us with Ty::Any and trigger
+                    // unnecessary boxing in the JVM backend.
+                    let rhs_ty =
+                        slot_ty_with_param_fallback(rhs_slot.0, local_tys);
                     let new_slot = LocalId(*next_slot);
                     *next_slot += 1;
                     local_tys.push(rhs_ty);
@@ -4631,6 +4636,37 @@ fn lower_loop_body(
                             }
                         }
                     }
+                }
+            }
+            // Generic fallback for var-reassign RHS: route through
+            // `lower_rich_expr_to_slot`, then copy the result slot
+            // into `lhs_slot`. Catches ArrayAccess (`x = arr[i]`),
+            // DotQualified (`x = s.length`), and other expressions
+            // not handled by the typed paths above. Mirrors the
+            // val-handler's final-fallback strategy so var reassign
+            // is at least as expressive as val init.
+            {
+                let snap = name_to_local.clone();
+                let lookup = |n: &str| -> Option<LocalId> {
+                    snap.iter()
+                        .rev()
+                        .find(|(name, _)| name == n)
+                        .map(|(_, l)| *l)
+                };
+                if let Some(rhs_slot) = lower_rich_expr_to_slot(
+                    rhs,
+                    &lookup,
+                    fn_lookup_ref,
+                    next_slot,
+                    &mut body_mstmts,
+                    local_tys,
+                    strings,
+                ) {
+                    body_mstmts.push(MStmt::Assign {
+                        dest: lhs_slot,
+                        value: skotch_mir::Rvalue::Local(rhs_slot),
+                    });
+                    continue;
                 }
             }
             return None;
