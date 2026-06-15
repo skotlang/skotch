@@ -486,6 +486,22 @@ fn lambda_constructor_references_now_dex() {
     skotch_dex::validator::validate(&dex).unwrap_or_else(|e| panic!("ArtCtorRef: invalid dex: {e:#}"));
 }
 
+/// Lambda metafactory SIGNATURE ADAPTATIONS that don't require (un)boxing: (1) RETURN-TO-VOID — a
+/// non-void impl result is discarded when the SAM returns void (`Consumer<String> = list::add`,
+/// add returns boolean); (2) COVARIANT CONSTRUCTOR-REF return — the constructed class is a subtype
+/// of the SAM's instantiated return (`Supplier<CharSequence> = StringBuilder::new`); (3) COVARIANT
+/// PARAMETER widening — the SAM provides a subtype where the (erased) impl parameter is a supertype
+/// (the String passed to `add(Object)`). All are reference-safe with no cast. ArtLambdaAdapt covers
+/// all three. Proven on a REAL device by `tests/art/ArtLambdaAdapt`; here: dexes + self-validates.
+/// Primitive (un)boxing adaptations still bail.
+#[test]
+fn lambda_signature_adaptations_now_dex() {
+    let cf = skotch_classfile::parse_class_file(&PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtLambdaAdapt.class")).unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let dex = dex_classes(&[cf], &opts).unwrap_or_else(|e| panic!("ArtLambdaAdapt: signature adaptations should dex now: {e:#}"));
+    skotch_dex::validator::validate(&dex).unwrap_or_else(|e| panic!("ArtLambdaAdapt: invalid dex: {e:#}"));
+}
+
 /// A φ whose operand is a SIBLING φ in the same loop header is a parallel copy on the
 /// back-edge — a swap (`a=b; b=a`, a 2-cycle), a 3-way rotation, or a chain (`a=b; b=t`,
 /// Fibonacci). This used to bail (a naive in-place update read a sibling AFTER it was
