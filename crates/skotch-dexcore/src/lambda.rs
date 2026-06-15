@@ -39,6 +39,53 @@ fn proto(desc: &str) -> Result<ProtoRef> {
     Ok(ProtoRef { return_type, params })
 }
 
+/// The boxed wrapper descriptor for a (non-wide) primitive. Long/Double return None — we don't
+/// synthesize their boxing yet (the value would occupy a register pair).
+fn box_of(prim: &str) -> Option<&'static str> {
+    Some(match prim {
+        "I" => "Ljava/lang/Integer;",
+        "Z" => "Ljava/lang/Boolean;",
+        "B" => "Ljava/lang/Byte;",
+        "C" => "Ljava/lang/Character;",
+        "S" => "Ljava/lang/Short;",
+        "F" => "Ljava/lang/Float;",
+        _ => return None,
+    })
+}
+
+/// Emit the synthetic SAM method's return: `move-result*` of the impl's actual return type into v0,
+/// then either return it directly or — when the SAM's instantiated return is the boxed form of the
+/// impl's primitive (`box_return = Some((boxed, prim))`) — box it via `<boxed>.valueOf(prim)` and
+/// return-object. Returns `(min_registers, extra_outs)` the caller folds into the CodeItem.
+fn emit_boxed_return(insns: &mut Vec<u16>, fixups: &mut Vec<Fixup>, impl_ret: &str, box_return: &Option<(String, String)>) -> (u16, u16) {
+    if impl_ret == "V" {
+        insns.push(0x000e); // return-void
+        return (0, 0);
+    }
+    let wide = impl_ret == "J" || impl_ret == "D";
+    let is_ref = impl_ret.starts_with('L') || impl_ret.starts_with('[');
+    // move-result(-wide/-object) of the impl call into v0.
+    insns.push(if wide { 0x0b } else if is_ref { 0x0c } else { 0x0a });
+    if let Some((boxed, prim)) = box_return {
+        // Box the (non-wide) primitive in v0: invoke-static {v0} <boxed>.valueOf(prim)boxed.
+        insns.push(0x1071); // invoke-static, argn=1
+        let u = insns.len();
+        insns.push(0);
+        insns.push(0x0000); // register nibbles: v0
+        fixups.push(Fixup {
+            unit: u,
+            item: ItemRef::Method(MethodRef { class: boxed.clone(), proto: ProtoRef { return_type: boxed.clone(), params: vec![prim.clone()] }, name: "valueOf".into() }),
+            wide: false,
+        });
+        insns.push(0x000c); // move-result-object v0
+        insns.push(0x0011); // return-object v0
+        (1, 1)
+    } else {
+        insns.push(if wide { 0x10 } else if is_ref { 0x11 } else { 0x0f }); // return(-wide/-object) v0
+        (if wide { 2 } else { 1 }, 0)
+    }
+}
+
 /// Resolve a `MethodHandle` constant to `(reference_kind, internal_class, name, descriptor)`.
 fn resolve_handle(cf: &ClassFile, mh_idx: u16) -> Result<(u8, String, String, String)> {
     match cf.constant_pool.get(mh_idx) {
@@ -138,9 +185,18 @@ pub fn try_lambda_metafactory(cf: &ClassFile, indy_idx: u16) -> Result<Option<La
     } else {
         captures.iter().cloned().chain(inst_params.iter().cloned()).collect()
     };
-    if impl_params != expected || impl_ret != inst_ret {
-        bail!("lambda: impl shape {impl_desc} != expected (boxing/instance-capture/odd impl) not supported");
+    if impl_params != expected {
+        bail!("lambda: impl shape {impl_desc} params != expected (param-boxing/instance-capture/odd impl) not supported");
     }
+    // Return adaptation: exact, or the instantiated SAM return is the boxed form of the impl's
+    // (non-wide) primitive return — then box via valueOf. Anything else (widening, wide box) bails.
+    let box_return: Option<(String, String)> = if impl_ret == inst_ret {
+        None
+    } else if box_of(&impl_ret) == Some(inst_ret.as_str()) {
+        Some((inst_ret.clone(), impl_ret.clone()))
+    } else {
+        bail!("lambda: return adaptation {impl_ret} -> {inst_ret} not supported");
+    };
     if captures.iter().any(|c| c == "J" || c == "D") {
         bail!("lambda: wide capture not yet supported");
     }
@@ -168,7 +224,7 @@ pub fn try_lambda_metafactory(cf: &ClassFile, indy_idx: u16) -> Result<Option<La
         let instance = FieldRef { class: syn.clone(), type_: fi_type.clone(), name: "INSTANCE".into() };
         PENDING.with(|p| -> Result<()> {
             if !p.borrow().contains_key(&syn) {
-                let cd = build_lambda_class(&syn, &fi_type, &sam_name, &sam_desc, &inst_params, invoke_op, &impl_class, &impl_name, &impl_desc, &instance)?;
+                let cd = build_lambda_class(&syn, &fi_type, &sam_name, &sam_desc, &inst_params, invoke_op, &box_return, &impl_class, &impl_name, &impl_desc, &instance)?;
                 p.borrow_mut().insert(syn.clone(), cd);
             }
             Ok(())
@@ -180,7 +236,7 @@ pub fn try_lambda_metafactory(cf: &ClassFile, indy_idx: u16) -> Result<Option<La
         let ctor = MethodRef { class: syn.clone(), proto: ProtoRef { return_type: "V".into(), params: captures.clone() }, name: "<init>".into() };
         PENDING.with(|p| -> Result<()> {
             if !p.borrow().contains_key(&syn) {
-                let cd = build_capturing_class(&syn, &fi_type, &sam_name, &sam_desc, &inst_params, invoke_op, &impl_class, &impl_name, &impl_desc, &captures)?;
+                let cd = build_capturing_class(&syn, &fi_type, &sam_name, &sam_desc, &inst_params, invoke_op, &box_return, &impl_class, &impl_name, &impl_desc, &captures)?;
                 p.borrow_mut().insert(syn.clone(), cd);
             }
             Ok(())
@@ -253,8 +309,8 @@ fn build_clinit(syn: &str, instance: &FieldRef) -> EncodedMethod {
 /// layout: `this` is v0, the SAM parameters follow at v1.. (no captures). The impl takes exactly
 /// the SAM parameters (verified by the caller), so we `invoke-static {param regs}, impl`.
 #[allow(clippy::too_many_arguments)]
-fn build_sam(syn: &str, sam_name: &str, sam_desc: &str, inst_params: &[String], invoke_op: u16, impl_class: &str, impl_name: &str, impl_desc: &str) -> Result<EncodedMethod> {
-    let (params, ret) = parse_descriptor(sam_desc)?;
+fn build_sam(syn: &str, sam_name: &str, sam_desc: &str, inst_params: &[String], invoke_op: u16, box_return: &Option<(String, String)>, impl_class: &str, impl_name: &str, impl_desc: &str) -> Result<EncodedMethod> {
+    let (params, _ret) = parse_descriptor(sam_desc)?;
     let mut ins: u16 = 1; // this
     let mut param_regs: Vec<u16> = Vec::new();
     let mut r = 1u16;
@@ -293,23 +349,15 @@ fn build_sam(syn: &str, sam_name: &str, sam_desc: &str, inst_params: &[String], 
     }
     insns.push(nib);
     fixups.push(Fixup { unit: munit, item: ItemRef::Method(MethodRef { class: impl_class.into(), proto: proto(impl_desc)?, name: impl_name.into() }), wide: false });
-    let mut registers_size = ins;
-    if ret == "V" {
-        insns.push(0x000e); // return-void (10x, opcode 0x0e in the low byte)
-    } else if ret == "J" || ret == "D" {
-        bail!("lambda: wide SAM return not yet supported");
-    } else {
-        // The impl returns the instantiated type (a subtype of the erased SAM return), so
-        // move-result(-object) into v0 (this, now dead) + return(-object) needs no extra cast.
-        let is_ref = ret.starts_with('L') || ret.starts_with('[');
-        insns.push(if is_ref { 0x0c } else { 0x0a });
-        insns.push(if is_ref { 0x11 } else { 0x0f });
-        registers_size = registers_size.max(1);
-    }
+    // Return the impl's actual result into v0 (this, now dead), boxing it if the SAM return is a
+    // boxed wrapper of the impl's primitive.
+    let (_, impl_ret) = parse_descriptor(impl_desc)?;
+    let (min_regs, extra_outs) = emit_boxed_return(&mut insns, &mut fixups, &impl_ret, box_return);
+    let registers_size = ins.max(min_regs);
     Ok(EncodedMethod {
         method: MethodRef { class: syn.into(), proto: proto(sam_desc)?, name: sam_name.into() },
         access_flags: ACC_PUBLIC,
-        code: Some(CodeItem { registers_size, ins_size: ins, outs_size: argn, insns, fixups, tries: vec![], debug_info: None }),
+        code: Some(CodeItem { registers_size, ins_size: ins, outs_size: argn.max(extra_outs), insns, fixups, tries: vec![], debug_info: None }),
         annotations: vec![],
     })
 }
@@ -322,6 +370,7 @@ fn build_lambda_class(
     sam_desc: &str,
     inst_params: &[String],
     invoke_op: u16,
+    box_return: &Option<(String, String)>,
     impl_class: &str,
     impl_name: &str,
     impl_desc: &str,
@@ -335,7 +384,7 @@ fn build_lambda_class(
     // Direct methods must be encoded ascending by method index (name then proto); "<clinit>" <
     // "<init>" lexicographically, so this order is always correct.
     let direct = vec![build_clinit(syn, instance), build_init(syn)];
-    let virtual_ = vec![build_sam(syn, sam_name, sam_desc, inst_params, invoke_op, impl_class, impl_name, impl_desc)?];
+    let virtual_ = vec![build_sam(syn, sam_name, sam_desc, inst_params, invoke_op, box_return, impl_class, impl_name, impl_desc)?];
     Ok(ClassDef {
         class_type: syn.into(),
         access_flags: ACC_PUBLIC | ACC_FINAL | ACC_SYNTHETIC,
@@ -387,9 +436,9 @@ fn build_capturing_init(syn: &str, captures: &[String]) -> Result<EncodedMethod>
 /// The SAM method for a capturing lambda: load each `this.f$N` capture, then `invoke-static` the
 /// impl with `[captures.., sam params]` and return. Register layout: captures load into v0..v(c-1);
 /// `this` is at vc; the SAM parameters are the ins at v(c+1)... .
-fn build_capturing_sam(syn: &str, sam_name: &str, sam_desc: &str, inst_params: &[String], invoke_op: u16, impl_class: &str, impl_name: &str, impl_desc: &str, captures: &[String]) -> Result<EncodedMethod> {
+fn build_capturing_sam(syn: &str, sam_name: &str, sam_desc: &str, inst_params: &[String], invoke_op: u16, box_return: &Option<(String, String)>, impl_class: &str, impl_name: &str, impl_desc: &str, captures: &[String]) -> Result<EncodedMethod> {
     let c = captures.len();
-    let (sam_params, ret) = parse_descriptor(sam_desc)?;
+    let (sam_params, _ret) = parse_descriptor(sam_desc)?;
     if sam_params.iter().any(|p| p == "J" || p == "D") {
         bail!("lambda: wide SAM parameter (capturing) not yet supported");
     }
@@ -441,27 +490,21 @@ fn build_capturing_sam(syn: &str, sam_name: &str, sam_desc: &str, inst_params: &
         item: ItemRef::Method(MethodRef { class: impl_class.into(), proto: proto(impl_desc)?, name: impl_name.into() }),
         wide: false,
     });
-    if ret == "V" {
-        insns.push(0x000e); // return-void
-    } else if ret == "J" || ret == "D" {
-        bail!("lambda: wide SAM return (capturing) not yet supported");
-    } else {
-        let is_ref = ret.starts_with('L') || ret.starts_with('[');
-        // move-result(-object) into v0 (capture 0, now dead), then return(-object) v0.
-        insns.push(if is_ref { 0x0c } else { 0x0a });
-        insns.push(if is_ref { 0x11 } else { 0x0f });
-    }
+    // Return the impl's actual result into v0 (capture 0, now dead), boxing if the SAM return is a
+    // boxed wrapper of the impl's primitive.
+    let (_, impl_ret) = parse_descriptor(impl_desc)?;
+    let (_min_regs, extra_outs) = emit_boxed_return(&mut insns, &mut fixups, &impl_ret, box_return);
     let ins_size = (1 + p) as u16; // this + sam params
     Ok(EncodedMethod {
         method: MethodRef { class: syn.into(), proto: proto(sam_desc)?, name: sam_name.into() },
         access_flags: ACC_PUBLIC,
-        code: Some(CodeItem { registers_size: regs, ins_size, outs_size: argn, insns, fixups, tries: vec![], debug_info: None }),
+        code: Some(CodeItem { registers_size: regs, ins_size, outs_size: argn.max(extra_outs), insns, fixups, tries: vec![], debug_info: None }),
         annotations: vec![],
     })
 }
 
 #[allow(clippy::too_many_arguments)]
-fn build_capturing_class(syn: &str, fi_type: &str, sam_name: &str, sam_desc: &str, inst_params: &[String], invoke_op: u16, impl_class: &str, impl_name: &str, impl_desc: &str, captures: &[String]) -> Result<ClassDef> {
+fn build_capturing_class(syn: &str, fi_type: &str, sam_name: &str, sam_desc: &str, inst_params: &[String], invoke_op: u16, box_return: &Option<(String, String)>, impl_class: &str, impl_name: &str, impl_desc: &str, captures: &[String]) -> Result<ClassDef> {
     // One private-final field per capture. Encoded order must ascend by field name; sort to be
     // safe (f$0..f$9 already ascend lexicographically, but f$10+ would not).
     let mut fields: Vec<EncodedField> = captures
@@ -475,7 +518,7 @@ fn build_capturing_class(syn: &str, fi_type: &str, sam_name: &str, sam_desc: &st
         .collect();
     fields.sort_by(|a, b| a.field.name.cmp(&b.field.name));
     let ctor = build_capturing_init(syn, captures)?;
-    let sam = build_capturing_sam(syn, sam_name, sam_desc, inst_params, invoke_op, impl_class, impl_name, impl_desc, captures)?;
+    let sam = build_capturing_sam(syn, sam_name, sam_desc, inst_params, invoke_op, box_return, impl_class, impl_name, impl_desc, captures)?;
     Ok(ClassDef {
         class_type: syn.into(),
         access_flags: ACC_PUBLIC | ACC_FINAL | ACC_SYNTHETIC,

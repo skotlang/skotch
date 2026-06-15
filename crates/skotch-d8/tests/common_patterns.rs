@@ -438,6 +438,21 @@ fn lambda_bound_method_references_now_dex() {
     skotch_dex::validator::validate(&dex).unwrap_or_else(|e| panic!("ArtBoundRef: invalid dex: {e:#}"));
 }
 
+/// RETURN-BOXING adaptation: when a method reference's impl returns a primitive but the
+/// functional interface's instantiated return is the boxed wrapper (e.g. `String::length` as
+/// `Function<String,Integer>` — int → Integer), the synthetic SAM boxes the result with
+/// `<Wrapper>.valueOf(prim)` before returning it. ArtLambdaBox covers unbound (String::length),
+/// bound ("x"::isEmpty → Boolean), and static (Integer::parseInt) return-box references. Proven on
+/// a REAL device by `tests/art/ArtLambdaBox`; here: dexes + self-validates. Parameter-unboxing and
+/// wide (Long/Double) boxing still bail.
+#[test]
+fn lambda_return_boxing_now_dexes() {
+    let cf = skotch_classfile::parse_class_file(&PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtLambdaBox.class")).unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let dex = dex_classes(&[cf], &opts).unwrap_or_else(|e| panic!("ArtLambdaBox: return-boxing lambda should dex now: {e:#}"));
+    skotch_dex::validator::validate(&dex).unwrap_or_else(|e| panic!("ArtLambdaBox: invalid dex: {e:#}"));
+}
+
 /// A φ whose operand is a SIBLING φ in the same loop header is a parallel copy on the
 /// back-edge — a swap (`a=b; b=a`, a 2-cycle), a 3-way rotation, or a chain (`a=b; b=t`,
 /// Fibonacci). This used to bail (a naive in-place update read a sibling AFTER it was
