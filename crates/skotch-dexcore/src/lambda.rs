@@ -62,7 +62,7 @@ fn method_type(cf: &ClassFile, idx: u16) -> Result<String> {
 /// can desugar, register the synthetic class and return the `INSTANCE` field to load at the call
 /// site (the indy result). Returns `Ok(None)` if this isn't a lambda metafactory indy (caller
 /// then tries other indy desugarings); bails (never miscompiles) on shapes we don't model yet.
-pub fn try_lambda_metafactory(cf: &ClassFile, indy_idx: u16) -> Result<Option<FieldRef>> {
+pub fn try_lambda_metafactory(cf: &ClassFile, indy_idx: u16) -> Result<Option<LambdaSite>> {
     let (bsm_idx, nt_idx) = match cf.constant_pool.get(indy_idx) {
         Constant::InvokeDynamic { bootstrap_method_attr_index, name_and_type_index } => {
             (*bootstrap_method_attr_index, *name_and_type_index)
@@ -81,10 +81,8 @@ pub fn try_lambda_metafactory(cf: &ClassFile, indy_idx: u16) -> Result<Option<Fi
     // The indy NameAndType: name = the SAM method name, descriptor = (captures)FunctionalInterface.
     let (sam_name, indy_desc) = cf.constant_pool.name_and_type(nt_idx)?;
     let (sam_name, indy_desc) = (sam_name.to_string(), indy_desc.to_string());
+    // The indy descriptor's parameters are the CAPTURED values; its return is the FI type.
     let (captures, fi_type) = parse_descriptor(&indy_desc)?;
-    if !captures.is_empty() {
-        bail!("lambda: capturing lambda ({} captures) not yet supported", captures.len());
-    }
     if !fi_type.starts_with('L') {
         bail!("lambda: functional-interface return {fi_type} is not a class type");
     }
@@ -95,31 +93,64 @@ pub fn try_lambda_metafactory(cf: &ClassFile, indy_idx: u16) -> Result<Option<Fi
         bail!("lambda: generic/bridge SAM ({sam_desc} vs {inst_desc}) not yet supported");
     }
     let (impl_kind, impl_class_internal, impl_name, impl_desc) = resolve_handle(cf, bsm.arguments[1])?;
-    // reference_kind 6 = REF_invokeStatic. Only static impls (non-capturing) for now.
+    // reference_kind 6 = REF_invokeStatic. Only static impls for now (javac emits a static impl
+    // for both non-capturing and value-capturing lambdas; instance-capturing/method-refs differ).
     if impl_kind != 6 {
         bail!("lambda: impl method-handle kind {impl_kind} (only invokestatic/6) not yet supported");
     }
-    if impl_desc != sam_desc {
-        bail!("lambda: impl descriptor {impl_desc} differs from SAM {sam_desc} (capturing?) not supported");
+    // The static impl takes the captured values FOLLOWED BY the SAM parameters.
+    let (sam_params, sam_ret) = parse_descriptor(&sam_desc)?;
+    let (impl_params, impl_ret) = parse_descriptor(&impl_desc)?;
+    let expected: Vec<String> = captures.iter().cloned().chain(sam_params.iter().cloned()).collect();
+    if impl_params != expected || impl_ret != sam_ret {
+        bail!("lambda: impl shape {impl_desc} != captures++SAM (instance-capture/odd impl) not supported");
+    }
+    if captures.iter().any(|c| c == "J" || c == "D") {
+        bail!("lambda: wide capture not yet supported");
     }
     let impl_class = internal_to_descriptor(&impl_class_internal);
 
     // Deterministic synthetic class descriptor derived from the enclosing class + bsm slot.
     let enclosing = internal_to_descriptor(&cf.this_class); // "Lfoo/Bar;"
     let syn = format!("{}$$SkLambda${};", &enclosing[..enclosing.len() - 1], bsm_idx);
-    let instance = FieldRef { class: syn.clone(), type_: fi_type.clone(), name: "INSTANCE".into() };
 
-    PENDING.with(|p| -> Result<()> {
-        if !p.borrow().contains_key(&syn) {
-            let cd = build_lambda_class(&syn, &fi_type, &sam_name, &sam_desc, &impl_class, &impl_name, &impl_desc, &instance)?;
-            p.borrow_mut().insert(syn.clone(), cd);
-        }
-        Ok(())
-    })?;
-    Ok(Some(instance))
+    if captures.is_empty() {
+        // Non-capturing: a singleton INSTANCE; the call site loads it with sget-object.
+        let instance = FieldRef { class: syn.clone(), type_: fi_type.clone(), name: "INSTANCE".into() };
+        PENDING.with(|p| -> Result<()> {
+            if !p.borrow().contains_key(&syn) {
+                let cd = build_lambda_class(&syn, &fi_type, &sam_name, &sam_desc, &impl_class, &impl_name, &impl_desc, &instance)?;
+                p.borrow_mut().insert(syn.clone(), cd);
+            }
+            Ok(())
+        })?;
+        Ok(Some(LambdaSite::Singleton(instance)))
+    } else {
+        // Capturing: one instance field per capture + a constructor taking them; the call site
+        // is `new-instance + invoke-direct <init>(captures)`.
+        let ctor = MethodRef { class: syn.clone(), proto: ProtoRef { return_type: "V".into(), params: captures.clone() }, name: "<init>".into() };
+        PENDING.with(|p| -> Result<()> {
+            if !p.borrow().contains_key(&syn) {
+                let cd = build_capturing_class(&syn, &fi_type, &sam_name, &sam_desc, &impl_class, &impl_name, &impl_desc, &captures)?;
+                p.borrow_mut().insert(syn.clone(), cd);
+            }
+            Ok(())
+        })?;
+        Ok(Some(LambdaSite::Capturing { class: syn, ctor, captures }))
+    }
+}
+
+/// How an `invokedynamic` lambda is materialized at its call site.
+pub enum LambdaSite {
+    /// Non-capturing: load the synthetic class's singleton INSTANCE (`sget-object`).
+    Singleton(FieldRef),
+    /// Capturing: `new-instance` the synthetic class and `invoke-direct` its constructor with
+    /// the captured values (popped from the operand stack, in `captures` order).
+    Capturing { class: String, ctor: MethodRef, captures: Vec<String> },
 }
 
 const ACC_PUBLIC: u32 = 0x1;
+const ACC_PRIVATE: u32 = 0x2;
 const ACC_STATIC: u32 = 0x8;
 const ACC_FINAL: u32 = 0x10;
 const ACC_SYNTHETIC: u32 = 0x1000;
@@ -254,6 +285,136 @@ fn build_lambda_class(
         instance_fields: vec![],
         direct_methods: direct,
         virtual_methods: virtual_,
+        static_values: vec![],
+        annotations: vec![],
+    })
+}
+
+// ──────────────────────────── capturing lambdas ────────────────────────────
+
+/// `<init>(captures)V`: `invoke-direct {v0}, Object.<init>()V` then `iput vN, v0, f$(N-1)` for
+/// each capture, `return-void`. Register layout: `this` = v0, capture args = v1.. (the ins).
+fn build_capturing_init(syn: &str, captures: &[String]) -> Result<EncodedMethod> {
+    let c = captures.len();
+    if c > 14 {
+        bail!("lambda: {c} captures (too many for nibble registers) not supported");
+    }
+    let regs = 1 + c as u16; // this + captures
+    let mut insns: Vec<u16> = vec![0x1070, 0, 0x0000]; // invoke-direct {v0} Object.<init>
+    let mut fixups = vec![Fixup {
+        unit: 1,
+        item: ItemRef::Method(MethodRef { class: "Ljava/lang/Object;".into(), proto: ProtoRef { return_type: "V".into(), params: vec![] }, name: "<init>".into() }),
+        wide: false,
+    }];
+    for (i, ty) in captures.iter().enumerate() {
+        let valreg = (i + 1) as u16; // v1..vc
+        // iput valreg, v0, f$i (22c: op low byte, value in bits 8-11, object v0 in bits 12-15).
+        insns.push(crate::bootstrap::iput_op(ty) | (valreg << 8));
+        let unit = insns.len();
+        insns.push(0);
+        fixups.push(Fixup { unit, item: ItemRef::Field(FieldRef { class: syn.into(), type_: ty.clone(), name: format!("f${i}") }), wide: false });
+    }
+    insns.push(0x000e); // return-void
+    Ok(EncodedMethod {
+        method: MethodRef { class: syn.into(), proto: ProtoRef { return_type: "V".into(), params: captures.to_vec() }, name: "<init>".into() },
+        access_flags: ACC_PUBLIC | ACC_CONSTRUCTOR,
+        code: Some(CodeItem { registers_size: regs, ins_size: regs, outs_size: 1, insns, fixups, tries: vec![], debug_info: None }),
+        annotations: vec![],
+    })
+}
+
+/// The SAM method for a capturing lambda: load each `this.f$N` capture, then `invoke-static` the
+/// impl with `[captures.., sam params]` and return. Register layout: captures load into v0..v(c-1);
+/// `this` is at vc; the SAM parameters are the ins at v(c+1)... .
+fn build_capturing_sam(syn: &str, sam_name: &str, sam_desc: &str, impl_class: &str, impl_name: &str, impl_desc: &str, captures: &[String]) -> Result<EncodedMethod> {
+    let c = captures.len();
+    let (sam_params, ret) = parse_descriptor(sam_desc)?;
+    if sam_params.iter().any(|p| p == "J" || p == "D") {
+        bail!("lambda: wide SAM parameter (capturing) not yet supported");
+    }
+    let p = sam_params.len();
+    let regs = (c + 1 + p) as u16; // captures + this + sam params
+    if regs > 16 {
+        bail!("lambda: capturing SAM needs {regs} registers (>16) not supported");
+    }
+    let this_reg = c as u16;
+    let argn = (c + p) as u16;
+    if argn > 5 {
+        bail!("lambda: capturing SAM impl has {argn} args (>5, needs range form) not supported");
+    }
+    let mut insns: Vec<u16> = Vec::new();
+    let mut fixups: Vec<Fixup> = Vec::new();
+    // Load captures: iget vi, this, f$i.
+    for (i, ty) in captures.iter().enumerate() {
+        insns.push(crate::bootstrap::iget_op(ty) | ((i as u16) << 8) | (this_reg << 12));
+        let unit = insns.len();
+        insns.push(0);
+        fixups.push(Fixup { unit, item: ItemRef::Field(FieldRef { class: syn.into(), type_: ty.clone(), name: format!("f${i}") }), wide: false });
+    }
+    // invoke-static {captures.., sam params}, impl.
+    let mut arg_regs: Vec<u16> = (0..c as u16).collect();
+    for k in 0..p as u16 {
+        arg_regs.push(this_reg + 1 + k);
+    }
+    let g = if arg_regs.len() == 5 { arg_regs[4] } else { 0 };
+    insns.push(0x71 | (((argn << 4) | g) << 8));
+    let munit = insns.len();
+    insns.push(0);
+    let mut nib: u16 = 0;
+    for (k, &rr) in arg_regs.iter().take(4).enumerate() {
+        nib |= rr << (4 * k);
+    }
+    insns.push(nib);
+    fixups.push(Fixup {
+        unit: munit,
+        item: ItemRef::Method(MethodRef { class: impl_class.into(), proto: proto(impl_desc)?, name: impl_name.into() }),
+        wide: false,
+    });
+    if ret == "V" {
+        insns.push(0x000e); // return-void
+    } else if ret == "J" || ret == "D" {
+        bail!("lambda: wide SAM return (capturing) not yet supported");
+    } else {
+        let is_ref = ret.starts_with('L') || ret.starts_with('[');
+        // move-result(-object) into v0 (capture 0, now dead), then return(-object) v0.
+        insns.push(if is_ref { 0x0c } else { 0x0a });
+        insns.push(if is_ref { 0x11 } else { 0x0f });
+    }
+    let ins_size = (1 + p) as u16; // this + sam params
+    Ok(EncodedMethod {
+        method: MethodRef { class: syn.into(), proto: proto(sam_desc)?, name: sam_name.into() },
+        access_flags: ACC_PUBLIC,
+        code: Some(CodeItem { registers_size: regs, ins_size, outs_size: argn, insns, fixups, tries: vec![], debug_info: None }),
+        annotations: vec![],
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+fn build_capturing_class(syn: &str, fi_type: &str, sam_name: &str, sam_desc: &str, impl_class: &str, impl_name: &str, impl_desc: &str, captures: &[String]) -> Result<ClassDef> {
+    // One private-final field per capture. Encoded order must ascend by field name; sort to be
+    // safe (f$0..f$9 already ascend lexicographically, but f$10+ would not).
+    let mut fields: Vec<EncodedField> = captures
+        .iter()
+        .enumerate()
+        .map(|(i, ty)| EncodedField {
+            field: FieldRef { class: syn.into(), type_: ty.clone(), name: format!("f${i}") },
+            access_flags: ACC_PRIVATE | ACC_FINAL | ACC_SYNTHETIC,
+            annotations: vec![],
+        })
+        .collect();
+    fields.sort_by(|a, b| a.field.name.cmp(&b.field.name));
+    let ctor = build_capturing_init(syn, captures)?;
+    let sam = build_capturing_sam(syn, sam_name, sam_desc, impl_class, impl_name, impl_desc, captures)?;
+    Ok(ClassDef {
+        class_type: syn.into(),
+        access_flags: ACC_PUBLIC | ACC_FINAL | ACC_SYNTHETIC,
+        superclass: Some("Ljava/lang/Object;".into()),
+        interfaces: vec![fi_type.into()],
+        source_file: None,
+        static_fields: vec![],
+        instance_fields: fields,
+        direct_methods: vec![ctor],
+        virtual_methods: vec![sam],
         static_values: vec![],
         annotations: vec![],
     })

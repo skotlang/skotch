@@ -371,6 +371,24 @@ fn lambda_metafactory_non_capturing_now_dexes() {
     skotch_dex::validator::validate(&dex).unwrap_or_else(|e| panic!("ArtLambda: invalid dex: {e:#}"));
 }
 
+/// A CAPTURING lambda (`invokedynamic` → LambdaMetafactory whose indy descriptor has dynamic
+/// args = the captured values) is desugared to a synthetic class with one instance field per
+/// capture, a constructor storing them, and a SAM method that loads `this.f$N` then invokes the
+/// static impl with `captures ++ SAM-params`. The call site becomes `new-instance + invoke-direct
+/// <init>(captures)`. ArtLambdaCapture captures an int, two ints, and a String ref (all via the
+/// non-generic IntUnaryOperator SAM), and also dispatches through a helper that takes the
+/// interface as a parameter — which exercises the invokeinterface bootstrap path (a pre-existing
+/// `0xb9 → 0x74` mis-mapping, now `0x72`). Correctness on a REAL device is proven by
+/// `tests/art/ArtLambdaCapture`; here: dexes (incl. synthetics) + self-validates. Instance-capture
+/// / method-ref / generic-bridge lambdas still bail (never miscompile).
+#[test]
+fn lambda_metafactory_capturing_now_dexes() {
+    let cf = skotch_classfile::parse_class_file(&PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtLambdaCapture.class")).unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let dex = dex_classes(&[cf], &opts).unwrap_or_else(|e| panic!("ArtLambdaCapture: capturing lambda should dex now: {e:#}"));
+    skotch_dex::validator::validate(&dex).unwrap_or_else(|e| panic!("ArtLambdaCapture: invalid dex: {e:#}"));
+}
+
 /// A φ whose operand is a SIBLING φ in the same loop header is a parallel copy on the
 /// back-edge — a swap (`a=b; b=a`, a 2-cycle), a 3-way rotation, or a chain (`a=b; b=t`,
 /// Fibonacci). This used to bail (a naive in-place update read a sibling AFTER it was

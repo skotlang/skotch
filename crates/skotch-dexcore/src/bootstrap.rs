@@ -2302,10 +2302,10 @@ impl<'a> Emitter<'a> {
             bail!("dexer: invoke needs range form / register moves (Phase 1)");
         }
         let dex_op: u16 = match jvm_op {
-            0xb6 => 0x6e,
-            0xb7 => if name == "<init>" { 0x70 } else { 0x6f },
-            0xb8 => 0x71,
-            0xb9 => 0x74,
+            0xb6 => 0x6e,                                    // invokevirtual → invoke-virtual
+            0xb7 => if name == "<init>" { 0x70 } else { 0x6f }, // invokespecial → direct/super
+            0xb8 => 0x71,                                    // invokestatic → invoke-static
+            0xb9 => 0x72,                                    // invokeinterface → invoke-interface
             _ => bail!("bad invoke op"),
         };
         self.record_position();

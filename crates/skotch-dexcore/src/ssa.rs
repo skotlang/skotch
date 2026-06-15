@@ -1343,14 +1343,34 @@ fn rename(
                 };
                 let (name, desc) = cf.constant_pool.name_and_type(nt_idx)?;
                 let (name, desc) = (name.to_string(), desc.to_string());
-                // LAMBDA metafactory: desugar to a synthetic class; the indy result is its
-                // singleton INSTANCE (non-capturing). Returns None for other bootstraps.
-                if let Some(instance) = crate::lambda::try_lambda_metafactory(cf, idx)? {
-                    let v = b.new(SsaOp::GetStatic { dex_op: 0x62, field: instance, jvm_pc: pc as u32 }, false, blk);
-                    blocks[blk].body.push(v);
-                    stack.push(v);
-                    pc += 5;
-                    continue;
+                // LAMBDA metafactory: desugar to a synthetic class. Non-capturing → load its
+                // singleton INSTANCE; capturing → new-instance + invoke-direct with the captured
+                // values popped off the stack. Returns None for other bootstraps (e.g. concat).
+                match crate::lambda::try_lambda_metafactory(cf, idx)? {
+                    Some(crate::lambda::LambdaSite::Singleton(field)) => {
+                        let v = b.new(SsaOp::GetStatic { dex_op: 0x62, field, jvm_pc: pc as u32 }, false, blk);
+                        blocks[blk].body.push(v);
+                        stack.push(v);
+                        pc += 5;
+                        continue;
+                    }
+                    Some(crate::lambda::LambdaSite::Capturing { class, ctor, captures }) => {
+                        let mut cap_args: Vec<ValId> = Vec::with_capacity(captures.len());
+                        for _ in 0..captures.len() {
+                            cap_args.push(pop_stack!(stack));
+                        }
+                        cap_args.reverse();
+                        let obj = b.new(SsaOp::NewInstance { type_desc: class, jvm_pc: pc as u32 }, false, blk);
+                        blocks[blk].body.push(obj);
+                        let mut init_args = vec![obj];
+                        init_args.extend(cap_args);
+                        let init = b.new(SsaOp::Invoke { dex_op: 0x70, method: ctor, args: init_args, ret: None, jvm_pc: pc as u32 }, false, blk);
+                        blocks[blk].body.push(init);
+                        stack.push(obj);
+                        pc += 5;
+                        continue;
+                    }
+                    None => {}
                 }
                 if name != "makeConcatWithConstants" && name != "makeConcat" {
                     bail!("ssa: unsupported invokedynamic '{name}' (only string-concat)");
