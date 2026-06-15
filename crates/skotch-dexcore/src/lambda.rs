@@ -661,19 +661,6 @@ fn build_capturing_sam(syn: &str, sam_name: &str, sam_desc: &str, inst_params: &
     if sam_params.iter().any(|p| p == "J" || p == "D") {
         bail!("lambda: wide SAM parameter (capturing) not yet supported");
     }
-    // The capturing path forwards SAM params as-is; it does NOT emit parameter unboxing. The shape
-    // check accepts a boxed SAM param vs a primitive impl param (handled in build_sam), so bail
-    // here if any such adaptation is needed for a captured impl (the SAM params are the LAST
-    // inst_params.len() of impl_params; captures precede them).
-    {
-        let (impl_p, _) = parse_descriptor(impl_desc)?;
-        let off = impl_p.len().saturating_sub(inst_params.len());
-        for (k, sam_ty) in inst_params.iter().enumerate() {
-            if box_of(&impl_p[off + k]) == Some(sam_ty.as_str()) {
-                bail!("lambda: capturing/bound parameter unbox not yet supported");
-            }
-        }
-    }
     let p = sam_params.len();
     let regs = (c + 1 + p) as u16; // captures + this + sam params
     if regs > 16 {
@@ -703,6 +690,35 @@ fn build_capturing_sam(syn: &str, sam_name: &str, sam_desc: &str, inst_params: &
             fixups.push(Fixup { unit, item: ItemRef::Type(i.clone()), wide: false });
         }
     }
+    // Unbox each boxed SAM parameter the impl wants as a primitive (in place, like build_sam).
+    // The impl's parameters are [captures.. , sam params], so SAM param k maps to impl parameter
+    // `off + k` where off = impl_p.len() - inst_params.len() (the captures that precede them).
+    let (impl_p, _) = parse_descriptor(impl_desc)?;
+    let off = impl_p.len().saturating_sub(inst_params.len());
+    let mut did_unbox = false;
+    for (k, sam_ty) in inst_params.iter().enumerate() {
+        let ip = &impl_p[off + k];
+        if box_of(ip) != Some(sam_ty.as_str()) {
+            continue; // not a boxed→primitive position
+        }
+        if ip == "J" || ip == "D" {
+            bail!("lambda: wide capturing parameter unbox not yet supported");
+        }
+        let (bx, m) = unbox_of(ip).ok_or_else(|| anyhow::anyhow!("lambda: no unbox accessor for {ip}"))?;
+        let reg = this_reg + 1 + k as u16;
+        // invoke-virtual {reg} <Wrapper>.<accessor>()prim ; move-result reg (in place).
+        insns.push(0x6e | ((1u16 << 4) << 8)); // invoke-virtual, argn=1 → 0x106e
+        let unit = insns.len();
+        insns.push(0);
+        insns.push(reg); // 35c arg nibble vC = the boxed receiver
+        fixups.push(Fixup {
+            unit,
+            item: ItemRef::Method(MethodRef { class: bx.into(), proto: ProtoRef { return_type: ip.clone(), params: vec![] }, name: m.into() }),
+            wide: false,
+        });
+        insns.push(0x0a | (reg << 8)); // move-result reg
+        did_unbox = true;
+    }
     // invoke-static {captures.., sam params}, impl.
     let mut arg_regs: Vec<u16> = (0..c as u16).collect();
     for k in 0..p as u16 {
@@ -730,7 +746,7 @@ fn build_capturing_sam(syn: &str, sam_name: &str, sam_desc: &str, inst_params: &
     Ok(EncodedMethod {
         method: MethodRef { class: syn.into(), proto: proto(sam_desc)?, name: sam_name.into() },
         access_flags: ACC_PUBLIC,
-        code: Some(CodeItem { registers_size: regs, ins_size, outs_size: argn.max(extra_outs), insns, fixups, tries: vec![], debug_info: None }),
+        code: Some(CodeItem { registers_size: regs, ins_size, outs_size: argn.max(extra_outs).max(u16::from(did_unbox)), insns, fixups, tries: vec![], debug_info: None }),
         annotations: vec![],
     })
 }

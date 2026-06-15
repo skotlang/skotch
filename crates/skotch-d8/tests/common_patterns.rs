@@ -2271,6 +2271,22 @@ fn synchronized_monitor_now_dexes() {
     skotch_dex::validator::validate(&dex).expect("ArtSync dex must validate");
 }
 
+/// A CAPTURING bound method reference whose target takes a primitive while the SAM gives a boxed
+/// value (`s::charAt` as `Function<Integer,Character>`): the synthetic capturing SAM now unboxes
+/// the boxed parameter in place (invoke-virtual intValue + move-result) before forwarding to the
+/// impl, mirroring the non-capturing param-unbox. Runtime correctness is proven on ART by
+/// `tests/art/ArtCapUnbox`.
+#[test]
+fn lambda_capturing_param_unbox_now_dexes() {
+    let cf = skotch_classfile::parse_class_file(
+        &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtCapUnbox.class"),
+    )
+    .unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let dex = dex_classes(&[cf], &opts).expect("ArtCapUnbox (capturing param unbox) should dex");
+    skotch_dex::validator::validate(&dex).expect("ArtCapUnbox dex must validate");
+}
+
 /// 11th semantic stress round, byte-identical — fresh idioms + over-coalesce-net probes
 /// that DON'T over-coalesce:
 ///  - `S11Max3` (`m=a; if(b>m)m=b; if(c>m)m=c` — chained max via plain ifs, no ternary φ).
