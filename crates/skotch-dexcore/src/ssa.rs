@@ -2677,19 +2677,26 @@ pub(crate) fn dex_method_ssa(
     let num_arg = f.num_arg_registers;
     let mut spill_base: Option<u16> = None;
     let est = alloc.registers_used.max(num_arg);
-    if est > 16 && num_arg <= 14 {
+    // A switch lowers to a `const tmp,k; if-eq key,tmp` chain whose temp sits at
+    // `registers_used`; once that's ≥16 the nibble `if-eq` can't hold it, and (unlike the field/
+    // invoke cases) this is knowable PRE-emit (it doesn't depend on scratch), so reserve here so
+    // the Switch terminator routes the temp (and a high key) through the 2 low scratch.
+    let switch_needs_low_tmp = alloc.registers_used >= 16
+        && f.blocks.iter().any(|b| matches!(b.term, Terminator::Switch { .. }));
+    if (est > 16 || switch_needs_low_tmp) && num_arg <= 14 {
         let high = |r: u16| r != NO_REG && crate::regalloc::remap_register(r, num_arg, est) >= 16;
-        let needs_spill = f.values.iter().enumerate().any(|(i, val)| match &val.op {
-            SsaOp::GetField { dex_op, obj, .. } if *dex_op != 0x53 => {
-                high(alloc.reg[i]) || high(alloc.reg[*obj as usize])
-            }
-            SsaOp::PutField { dex_op, obj, value, .. }
-                if *dex_op != 0x5a && !f.values[*value as usize].wide =>
-            {
-                high(alloc.reg[*value as usize]) || high(alloc.reg[*obj as usize])
-            }
-            _ => false,
-        });
+        let needs_spill = switch_needs_low_tmp
+            || f.values.iter().enumerate().any(|(i, val)| match &val.op {
+                SsaOp::GetField { dex_op, obj, .. } if *dex_op != 0x53 => {
+                    high(alloc.reg[i]) || high(alloc.reg[*obj as usize])
+                }
+                SsaOp::PutField { dex_op, obj, value, .. }
+                    if *dex_op != 0x5a && !f.values[*value as usize].wide =>
+                {
+                    high(alloc.reg[*value as usize]) || high(alloc.reg[*obj as usize])
+                }
+                _ => false,
+            });
         if needs_spill {
             reserve_scratch(&mut alloc, num_arg, 2);
             spill_base = Some(num_arg);
@@ -3612,15 +3619,35 @@ pub(crate) fn build_dex(
             // case`, then `goto default`. Functional-correct (not d8's packed/sparse-
             // switch payload); reuses the if-eq/const/goto fixup machinery.
             Terminator::Switch { value, default, cases } => {
-                if switch_scratch >= 16 {
-                    bail!("ssa dexbuilder: switch scratch register {switch_scratch} >= 16 (if-eq is nibble-encoded)");
-                }
-                used_switch_scratch = true;
+                let na = f.num_arg_registers;
+                let est = frame_hint.unwrap_or(alloc.registers_used.max(na));
                 let key = reg(*value);
+                let key_hi = key >= 16 || crate::regalloc::remap_register(key, na, est) >= 16;
+                // The if-eq-chain temp (`const tmp,k`) lives at `switch_scratch` = registers_used.
+                // When that's ≥16 (or the key register is high), route through the 2 reserved low
+                // scratch (sb = temp, sb+1 = spilled key): the nibble `if-eq` then fits. For
+                // ≤16-register methods this path isn't taken — byte-identical to before.
+                let (tmp, key_use) = match spill_base {
+                    Some(sb) if switch_scratch >= 16 || key_hi => {
+                        let ku = if key_hi {
+                            emit_copy(&mut insns, sb + 1, key, false, false, na, est)?;
+                            sb + 1
+                        } else {
+                            key
+                        };
+                        (sb, ku)
+                    }
+                    _ => {
+                        if switch_scratch >= 16 {
+                            bail!("ssa dexbuilder: switch scratch register {switch_scratch} >= 16 (if-eq is nibble-encoded)");
+                        }
+                        used_switch_scratch = true;
+                        (switch_scratch, key)
+                    }
+                };
                 for &(k, target) in cases {
-                    let na = f.num_arg_registers;
-                    emit_const_int(&mut insns, switch_scratch, k, na, frame_hint.unwrap_or(alloc.registers_used.max(na)));
-                    insns.push(0x32 | (nib(key)? << 8) | (nib(switch_scratch)? << 12)); // if-eq key, tmp
+                    emit_const_int(&mut insns, tmp, k, na, est);
+                    insns.push(0x32 | (nib(key_use)? << 8) | (nib(tmp)? << 12)); // if-eq key, tmp
                     let off = insns.len();
                     insns.push(0);
                     fixups.push((off, target, false));
@@ -3814,6 +3841,14 @@ pub(crate) fn build_dex(
             }
             _ => false,
         });
+        // A switch lowers to a `const tmp,k; if-eq key,tmp` chain whose temp sits at
+        // `registers_used`; when that's ≥16 (or the key register is high) it needs the 2 low scratch.
+        let switch_high = f.blocks.iter().any(|blk| match &blk.term {
+            Terminator::Switch { value, .. } => {
+                alloc.registers_used >= 16 || high(alloc.reg[*value as usize])
+            }
+            _ => false,
+        });
         // Invoke args (→ range form), φ-move operands and check-cast objects (→ …/from16 copy)
         // self-widen given the true frame — no reserve needed, just re-emit with the hint.
         let move_or_invoke_high = f.values.iter().enumerate().any(|(i, val)| match &val.op {
@@ -3824,10 +3859,10 @@ pub(crate) fn build_dex(
             SsaOp::CheckCast { obj, .. } => high(alloc.reg[i]) || high(alloc.reg[*obj as usize]),
             _ => false,
         });
-        if spill_base.is_none() && na <= 14 && (field_op_high || if_test_high) {
+        if spill_base.is_none() && na <= 14 && (field_op_high || if_test_high || switch_high) {
             let mut alloc2 = alloc.clone();
             reserve_scratch(&mut alloc2, na, 2);
-            // frame_hint covers the +2; emit_invoke / emit_copy / if-test spill use it too.
+            // frame_hint covers the +2; emit_invoke / emit_copy / if-test / switch spill use it too.
             return build_dex(f, num, &alloc2, line_numbers, params, Some(na), Some(registers_size + 2));
         } else if move_or_invoke_high {
             return build_dex(f, num, alloc, line_numbers, params, spill_base, Some(registers_size));

@@ -493,6 +493,23 @@ fn over_16_iget_iput_wide_obj_spills() {
     skotch_dex::validator::validate(&dex).expect("ArtWideField dex must validate");
 }
 
+/// A switch in a >16-register method lowers to a `const tmp,k; if-eq key,tmp` chain whose temp sits
+/// at registers_used (≥16 → the nibble if-eq can't hold it) and whose key may be a high argument.
+/// Both now route through the 2 reserved low scratch: temp = sb, key spilled once to sb+1 (the
+/// pre-emit decision reserves when registers_used≥16; the retry covers a scratch-pushed key).
+/// ArtSwitchWide 100/500/900/-1 (runtime-proven, all cases + default) does this; disasm shows
+/// `move/from16 v1,v28; const/4 v0,#k; if-eq v1,v0`. Here: dexes + validates.
+#[test]
+fn over_16_switch_chain_spills_through_scratch() {
+    let cf = skotch_classfile::parse_class_file(
+        &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtSwitchWide.class"),
+    )
+    .unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let dex = dex_classes(&[cf], &opts).expect("ArtSwitchWide (>16 switch scratch spill) should dex");
+    skotch_dex::validator::validate(&dex).expect("ArtSwitchWide dex must validate");
+}
+
 /// >16-register `iget`/`iput` (22c, nibble-only register fields) now DEX rather than bail: the
 /// dexbuilder reserves 2 low scratch registers and routes any operand whose FINAL register is ≥16
 /// through them via `move(-object)/from16`. The object operand always moves with
