@@ -537,27 +537,37 @@ fn build_lambda_class(
 /// the SAM parameters (cast to the constructor's parameter types) follow at v1.. .
 fn build_ctor_sam(syn: &str, sam_name: &str, sam_desc: &str, inst_params: &[String], ctor_class: &str, ctor_desc: &str) -> Result<EncodedMethod> {
     let (params, _ret) = parse_descriptor(sam_desc)?;
-    let mut ins: u16 = 1; // this
-    let mut param_regs: Vec<u16> = Vec::new();
+    let mut ins: u16 = 1; // this (v0, reused for the new object after entry)
+    // First register + wide flag per SAM param (a long/double occupies the pair r, r+1).
+    let mut param_start: Vec<u16> = Vec::new();
+    let mut param_wide: Vec<bool> = Vec::new();
     let mut r = 1u16;
     for p in &params {
-        if p == "J" || p == "D" {
-            bail!("lambda: wide constructor-ref parameter not yet supported");
-        }
-        param_regs.push(r);
-        r += 1;
-        ins += 1;
+        let wide = p == "J" || p == "D";
+        param_start.push(r);
+        param_wide.push(wide);
+        let w = if wide { 2 } else { 1 };
+        r += w;
+        ins += w;
     }
-    // invoke-direct passes the new object (v0) plus the params: argn = 1 + params.
-    if param_regs.len() + 1 > 5 || param_regs.iter().any(|&x| x > 15) {
+    // invoke-direct passes the new object (v0) plus the params (a wide param lists BOTH halves).
+    let mut invoke_regs: Vec<u16> = vec![0];
+    for (i, &st) in param_start.iter().enumerate() {
+        invoke_regs.push(st);
+        if param_wide[i] {
+            invoke_regs.push(st + 1);
+        }
+    }
+    if invoke_regs.len() > 5 || invoke_regs.iter().any(|&x| x > 15) {
         bail!("lambda: constructor reference with too many parameters not yet supported");
     }
     let mut insns: Vec<u16> = Vec::new();
     let mut fixups: Vec<Fixup> = Vec::new();
-    // Adapt each erased reference parameter to the constructor's parameter type (check-cast).
+    // Adapt each erased reference parameter to the constructor's parameter type (check-cast). A wide
+    // primitive param never needs this (erased == instantiated == J/D).
     for (k, (s, i)) in params.iter().zip(inst_params.iter()).enumerate() {
-        if s != i {
-            insns.push(0x1f | (param_regs[k] << 8));
+        if s != i && !param_wide[k] {
+            insns.push(0x1f | (param_start[k] << 8));
             let unit = insns.len();
             insns.push(0);
             fixups.push(Fixup { unit, item: ItemRef::Type(i.clone()), wide: false });
@@ -569,7 +579,6 @@ fn build_ctor_sam(syn: &str, sam_name: &str, sam_desc: &str, inst_params: &[Stri
     insns.push(0);
     fixups.push(Fixup { unit: nu, item: ItemRef::Type(ctor_class.into()), wide: false });
     // invoke-direct {v0(new), params..}, ctor_class.<init>(params)V.
-    let invoke_regs: Vec<u16> = std::iter::once(0u16).chain(param_regs.iter().copied()).collect();
     let argn = invoke_regs.len() as u16;
     let g = if invoke_regs.len() == 5 { invoke_regs[4] } else { 0 };
     insns.push(0x70 | (((argn << 4) | g) << 8));

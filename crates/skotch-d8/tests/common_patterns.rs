@@ -623,6 +623,23 @@ fn capturing_lambda_wide_sam_parameter_now_dexes() {
     skotch_dex::validator::validate(&dex).expect("ArtLongSam dex must validate");
 }
 
+/// A constructor reference whose SAM has a WIDE (long/double) parameter now desugars: build_ctor_sam
+/// uses the same cumulative-width offsets as build_sam (a long param spans a register PAIR), so the
+/// new-instance + invoke-direct to the constructor pass both halves. ArtLongCtorRef 42/-7 (runtime-
+/// proven): `AtomicLong::new` as a LongFunction — the synthetic apply(J)Object does
+/// `new-instance v0, AtomicLong; invoke-direct {v0,v1,v2}, AtomicLong.<init>:(J)V`. Here: dexes +
+/// self-validates.
+#[test]
+fn ctor_ref_wide_parameter_now_dexes() {
+    let cf = skotch_classfile::parse_class_file(
+        &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtLongCtorRef.class"),
+    )
+    .unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let dex = dex_classes(&[cf], &opts).expect("ArtLongCtorRef (wide ctor-ref param) should dex");
+    skotch_dex::validator::validate(&dex).expect("ArtLongCtorRef dex must validate");
+}
+
 /// >16-register `iget`/`iput` (22c, nibble-only register fields) now DEX rather than bail: the
 /// dexbuilder reserves 2 low scratch registers and routes any operand whose FINAL register is ≥16
 /// through them via `move(-object)/from16`. The object operand always moves with
