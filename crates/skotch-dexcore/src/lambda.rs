@@ -306,9 +306,16 @@ pub fn try_lambda_metafactory(cf: &ClassFile, indy_idx: u16) -> Result<Option<La
     // Return adaptation: void SAM discards the impl result; exact returns directly; a boxed
     // instantiated return over the impl's (non-wide) primitive boxes via valueOf. Anything else
     // (widening, wide box) bails.
+    let is_ref_desc = |d: &str| d.starts_with('L') || d.starts_with('[');
     let ret_adapt: RetAdapt = if inst_ret == "V" {
         RetAdapt::DropToVoid
     } else if impl_ret == inst_ret {
+        RetAdapt::Direct
+    } else if is_ref_desc(&impl_ret) && is_ref_desc(&inst_ret) {
+        // Covariant reference return: the impl returns a SUBTYPE of the SAM's declared return (e.g.
+        // ArrayList where the SAM returns List). The synthetic SAM method's return type is the
+        // ERASED type (Object), so returning the impl result directly (return-object) is type-safe —
+        // a subtype reference is valid wherever the supertype is expected, no cast.
         RetAdapt::Direct
     } else if box_of(&impl_ret) == Some(inst_ret.as_str()) {
         RetAdapt::Box(inst_ret.clone(), impl_ret.clone())

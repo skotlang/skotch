@@ -574,6 +574,22 @@ fn lambda_widens_primitive_to_wide_impl_param() {
     skotch_dex::validator::validate(&dex).expect("ArtWiden dex must validate");
 }
 
+/// A SAM bridge whose impl returns a SUBTYPE of the interface's declared return (covariant
+/// reference return — e.g. `ArrayList` where `Supplier<Collection>` declares `Collection`). The
+/// synthetic SAM method's return type is the ERASED type (`Object`), so returning the impl result
+/// directly (`return-object`) is type-safe with no cast. ArtCovRet 3/2 (ArrayList→Collection,
+/// HashMap→Map) bails `return adaptation ArrayList -> Collection not supported` without the fix.
+#[test]
+fn lambda_covariant_reference_return() {
+    let cf = skotch_classfile::parse_class_file(
+        &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtCovRet.class"),
+    )
+    .unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let dex = dex_classes(&[cf], &opts).expect("ArtCovRet (covariant ref return) should dex");
+    skotch_dex::validator::validate(&dex).expect("ArtCovRet dex must validate");
+}
+
 /// array-length (0x21, 12x) and instance-of (0x20, 22c) — nibble forms with no wider encoding —
 /// now spill a high object operand through the reserved low scratch (move-object/from16 then the
 /// op on scratch, dest reloaded if high), via the shared `spill_dest_obj`. ArtArrInst 31/0/51
