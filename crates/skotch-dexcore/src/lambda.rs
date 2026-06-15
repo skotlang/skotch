@@ -60,6 +60,19 @@ fn is_wide_prim(d: &str) -> bool {
     d == "J" || d == "D"
 }
 
+/// The conversion opcode (12x) that widens a SAM-provided primitive `from` to a WIDE impl param
+/// `to` (long/double) — the only widenings whose result needs a scratch PAIR. (char/short/byte
+/// arrive as int.) None if `from`→`to` isn't such a widening.
+fn widen_to_wide_op(from: &str, to: &str) -> Option<u16> {
+    Some(match (from, to) {
+        ("I" | "C" | "S" | "B", "J") => 0x81, // int→long    (int-to-long)
+        ("I" | "C" | "S" | "B", "D") => 0x83, // int→double  (int-to-double)
+        ("J", "D") => 0x86,                   // long→double  (long-to-double)
+        ("F", "D") => 0x89,                   // float→double (float-to-double)
+        _ => return None,
+    })
+}
+
 /// The (wrapper class, unboxing accessor) used to adapt a boxed SAM argument down to a primitive
 /// impl parameter — the inverse of box_of. Long/double accessors return a 2-register (wide) result
 /// (`move-result-wide` into a scratch pair); the caller handles their wide layout.
@@ -285,6 +298,9 @@ pub fn try_lambda_metafactory(cf: &ClassFile, indy_idx: u16) -> Result<Option<La
         if box_of(i) == Some(e.as_str()) {
             continue; // param-unbox: the SAM gives a boxed value, the impl wants the primitive
         }
+        if widen_to_wide_op(e, i).is_some() {
+            continue; // primitive widening to a wide impl param (e.g. int→double), emitted in build_sam
+        }
         bail!("lambda: impl param {i} vs SAM-side {e} adaptation (param-boxing/widening) not supported");
     }
     // Return adaptation: void SAM discards the impl result; exact returns directly; a boxed
@@ -410,22 +426,29 @@ fn build_clinit(syn: &str, instance: &FieldRef) -> EncodedMethod {
 fn build_sam(syn: &str, sam_name: &str, sam_desc: &str, inst_params: &[String], invoke_op: u16, recv_offset: usize, ret_adapt: &RetAdapt, impl_class: &str, impl_name: &str, impl_desc: &str) -> Result<EncodedMethod> {
     let (params, _ret) = parse_descriptor(sam_desc)?;
     let (impl_p, _impl_ret0) = parse_descriptor(impl_desc)?;
-    // A boxed Long/Double SAM param the impl wants as a primitive long/double can't unbox in place
-    // (1 ref slot → 2-slot pair), so it unboxes into a scratch PAIR. DEX places the `ins` incoming
-    // params in the HIGH registers, so the scratch goes at the LOW registers (v0..) and the params
-    // shift ABOVE it. (With no wide-unbox, scratch_words == 0 and the layout is unchanged.)
-    let mut unbox_scratch: Vec<Option<u16>> = vec![None; params.len()];
+    // A wide (long/double) impl param produced from a narrower SAM value — either UNBOXED from a
+    // boxed wrapper, or WIDENED from a smaller primitive (e.g. int→double) — lands in a 2-register
+    // PAIR that can't sit in the 1-slot source. It goes to a scratch pair; DEX places the `ins`
+    // incoming params in the HIGH registers, so the scratch goes at the LOW registers (v0..) and the
+    // params shift ABOVE it. `widen_conv[k]` is Some(conversion-opcode) for a widen, None for an
+    // unbox. (With no wide adaptation, scratch_words == 0 and the layout is unchanged.)
+    let mut wide_scratch: Vec<Option<u16>> = vec![None; params.len()];
+    let mut widen_conv: Vec<Option<u16>> = vec![None; params.len()];
     let mut scratch_words = 0u16;
     for k in 0..params.len() {
         if k < recv_offset {
             continue; // receiver (unbound instance ref) has no impl-param slot
         }
         let ii = k - recv_offset;
-        if ii < impl_p.len()
-            && is_wide_prim(&impl_p[ii])
-            && box_of(&impl_p[ii]) == Some(inst_params[k].as_str())
-        {
-            unbox_scratch[k] = Some(scratch_words);
+        if ii >= impl_p.len() || !is_wide_prim(&impl_p[ii]) {
+            continue;
+        }
+        if box_of(&impl_p[ii]) == Some(inst_params[k].as_str()) {
+            wide_scratch[k] = Some(scratch_words);
+            scratch_words += 2;
+        } else if let Some(op) = widen_to_wide_op(&inst_params[k], &impl_p[ii]) {
+            wide_scratch[k] = Some(scratch_words);
+            widen_conv[k] = Some(op);
             scratch_words += 2;
         }
     }
@@ -443,10 +466,10 @@ fn build_sam(syn: &str, sam_name: &str, sam_desc: &str, inst_params: &[String], 
         ins += w;
     }
     // The flat register list the impl invoke passes — a wide arg lists BOTH halves consecutively;
-    // a wide-unbox param lists its scratch pair.
+    // a wide-adapted (unbox/widen) param lists its scratch pair.
     let mut invoke_regs: Vec<u16> = Vec::new();
     for (i, &st) in param_start.iter().enumerate() {
-        if let Some(sc) = unbox_scratch[i] {
+        if let Some(sc) = wide_scratch[i] {
             invoke_regs.push(sc);
             invoke_regs.push(sc + 1);
         } else {
@@ -471,14 +494,24 @@ fn build_sam(syn: &str, sam_name: &str, sam_desc: &str, inst_params: &[String], 
             fixups.push(Fixup { unit, item: ItemRef::Type(i.clone()), wide: false });
         }
     }
-    // Unbox each boxed argument the impl wants as a primitive. impl declared parameter k maps to
-    // SAM parameter recv_offset+k. A wide (long/double) unbox writes its 2-register result into the
-    // reserved scratch pair; a narrow one unboxes in place at the param register.
+    // Adapt each argument the impl wants as a primitive. impl declared parameter k maps to SAM
+    // parameter recv_offset+k. A WIDEN (e.g. int→double) emits a single 12x conversion into the
+    // scratch pair. An UNBOX invoke-virtuals the accessor: a wide result goes to the scratch pair,
+    // a narrow one unboxes in place at the param register.
     let mut did_unbox = false;
     for (k, ip) in impl_p.iter().enumerate() {
         let sam_idx = recv_offset + k;
         if sam_idx >= inst_params.len() {
             break;
+        }
+        if let Some(op) = widen_conv[sam_idx] {
+            // <conv> vScratch, vParam (12x) — e.g. `int-to-double v0, v3`.
+            let sc = wide_scratch[sam_idx].expect("widen implies a scratch pair");
+            if sc > 15 || param_start[sam_idx] > 15 {
+                bail!("lambda: widen conversion register out of nibble range");
+            }
+            insns.push(op | (sc << 8) | (param_start[sam_idx] << 12));
+            continue;
         }
         if box_of(ip) != Some(inst_params[sam_idx].as_str()) {
             continue; // not a boxed→primitive position
@@ -494,7 +527,7 @@ fn build_sam(syn: &str, sam_name: &str, sam_desc: &str, inst_params: &[String], 
             item: ItemRef::Method(MethodRef { class: bx.into(), proto: ProtoRef { return_type: ip.clone(), params: vec![] }, name: m.into() }),
             wide: false,
         });
-        if let Some(sc) = unbox_scratch[sam_idx] {
+        if let Some(sc) = wide_scratch[sam_idx] {
             insns.push(0x0b | (sc << 8)); // move-result-wide scratch pair (low registers)
         } else {
             insns.push(0x0a | (param_start[sam_idx] << 8)); // move-result paramReg (in place)

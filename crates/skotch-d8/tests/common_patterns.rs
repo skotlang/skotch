@@ -556,6 +556,24 @@ fn lambda_wide_primitive_param_unbox_and_return_box() {
     skotch_dex::validator::validate(&dex).expect("ArtWideAdapt dex must validate");
 }
 
+/// A SAM bridge that WIDENS a narrower SAM-provided primitive to a wide impl param (e.g.
+/// `IntConsumer.accept(int)` forwarded to `impl(double)` → int-to-double). The widened long/double
+/// lands in a 2-register pair (the same low-scratch layout the wide-unbox uses), emitted as a single
+/// 12x conversion. widen_to_wide_op covers int→long (0x81), int→double (0x83), long→double (0x86),
+/// float→double (0x89). ArtWiden 191.5/21 (runtime-proven: i2d + l2d into `dacc`, i2l into `lacc`)
+/// bails `impl param D vs SAM-side I` without the fix. (l2d/f2d opcodes were initially wrong — 0x87
+/// is float-to-int, 0x8d is int-to-byte — caught by ART's verifier, NOT dexdump/validator.)
+#[test]
+fn lambda_widens_primitive_to_wide_impl_param() {
+    let cf = skotch_classfile::parse_class_file(
+        &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtWiden.class"),
+    )
+    .unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let dex = dex_classes(&[cf], &opts).expect("ArtWiden (primitive-widening SAM bridge) should dex");
+    skotch_dex::validator::validate(&dex).expect("ArtWiden dex must validate");
+}
+
 /// array-length (0x21, 12x) and instance-of (0x20, 22c) — nibble forms with no wider encoding —
 /// now spill a high object operand through the reserved low scratch (move-object/from16 then the
 /// op on scratch, dest reloaded if high), via the shared `spill_dest_obj`. ArtArrInst 31/0/51
