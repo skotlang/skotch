@@ -3555,7 +3555,30 @@ pub(crate) fn build_dex(
                 if two {
                     let a = reg(operands[0]);
                     let b2 = reg(operands[1]);
-                    insns.push(dexop | (nib(a)? << 8) | (nib(b2)? << 12));
+                    // if-test (22t) has no wider form, so a high operand spills through the 2 low
+                    // scratch (reserved by the build_dex retry): move it down (move-object/from16
+                    // for a reference operand, else move/from16) and compare on the scratch.
+                    let (a_use, b_use) = if let Some(sb) = spill_base {
+                        let na = f.num_arg_registers;
+                        let est = frame_hint.unwrap_or(alloc.registers_used.max(na));
+                        let hi = |r: u16| r >= 16 || crate::regalloc::remap_register(r, na, est) >= 16;
+                        let au = if hi(a) {
+                            emit_copy(&mut insns, sb, a, false, f.values[operands[0] as usize].is_ref, na, est)?;
+                            sb
+                        } else {
+                            a
+                        };
+                        let bu = if hi(b2) {
+                            emit_copy(&mut insns, sb + 1, b2, false, f.values[operands[1] as usize].is_ref, na, est)?;
+                            sb + 1
+                        } else {
+                            b2
+                        };
+                        (au, bu)
+                    } else {
+                        (a, b2)
+                    };
+                    insns.push(dexop | (nib(a_use)? << 8) | (nib(b_use)? << 12));
                 } else {
                     insns.push(dexop | (reg(operands[0]) << 8));
                 }
@@ -3756,22 +3779,29 @@ pub(crate) fn build_dex(
     //   • a high INVOKE arg needs only the true frame: `emit_invoke` already marshals args into a
     //     consecutive range block and emits `invoke/range`, but only when it SEES an arg as high —
     //     so just re-emit with the frame hint (no reserve; the gather reuses the existing block).
+    //   • a two-register if-test (22t, no wider form) with a high operand ALSO needs the 2 low
+    //     scratch — the If terminator moves the high operand(s) down before the compare.
     if frame_hint.is_none() && registers_size > 16 {
         let na = f.num_arg_registers;
         let high = |r: u16| r != NO_REG && crate::regalloc::remap_register(r, na, registers_size) >= 16;
-        let field_op_high = spill_base.is_none()
-            && na <= 14
-            && f.values.iter().enumerate().any(|(i, val)| match &val.op {
-                SsaOp::GetField { dex_op, obj, .. } if *dex_op != 0x53 => {
-                    high(alloc.reg[i]) || high(alloc.reg[*obj as usize])
-                }
-                SsaOp::PutField { dex_op, obj, value, .. }
-                    if *dex_op != 0x5a && !f.values[*value as usize].wide =>
-                {
-                    high(alloc.reg[*value as usize]) || high(alloc.reg[*obj as usize])
-                }
-                _ => false,
-            });
+        let field_op_high = f.values.iter().enumerate().any(|(i, val)| match &val.op {
+            SsaOp::GetField { dex_op, obj, .. } if *dex_op != 0x53 => {
+                high(alloc.reg[i]) || high(alloc.reg[*obj as usize])
+            }
+            SsaOp::PutField { dex_op, obj, value, .. }
+                if *dex_op != 0x5a && !f.values[*value as usize].wide =>
+            {
+                high(alloc.reg[*value as usize]) || high(alloc.reg[*obj as usize])
+            }
+            _ => false,
+        });
+        let if_test_high = f.blocks.iter().any(|blk| match &blk.term {
+            Terminator::If { jvm_op, operands, .. } => {
+                matches!(crate::bootstrap::cond_branch_dex_op(*jvm_op), Some((_, true)))
+                    && operands.iter().any(|&o| high(alloc.reg[o as usize]))
+            }
+            _ => false,
+        });
         // Invoke args (→ range form), φ-move operands and check-cast objects (→ …/from16 copy)
         // self-widen given the true frame — no reserve needed, just re-emit with the hint.
         let move_or_invoke_high = f.values.iter().enumerate().any(|(i, val)| match &val.op {
@@ -3782,10 +3812,10 @@ pub(crate) fn build_dex(
             SsaOp::CheckCast { obj, .. } => high(alloc.reg[i]) || high(alloc.reg[*obj as usize]),
             _ => false,
         });
-        if field_op_high {
+        if spill_base.is_none() && na <= 14 && (field_op_high || if_test_high) {
             let mut alloc2 = alloc.clone();
             reserve_scratch(&mut alloc2, na, 2);
-            // frame_hint covers the +2; emit_invoke / emit_copy pick up high operands via it too.
+            // frame_hint covers the +2; emit_invoke / emit_copy / if-test spill use it too.
             return build_dex(f, num, &alloc2, line_numbers, params, Some(na), Some(registers_size + 2));
         } else if move_or_invoke_high {
             return build_dex(f, num, alloc, line_numbers, params, spill_base, Some(registers_size));

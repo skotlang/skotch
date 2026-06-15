@@ -369,17 +369,21 @@ fn over_16_registers_arith_now_dexes_via_widening() {
     skotch_dex::validator::validate(&dex).expect("ArtManyRegs dex must validate");
 }
 
-/// A >16-register method whose high registers land in a nibble form with NO wider alternative
-/// still BAILS — never miscompiles. `ArtWideLoop.run` has 16 loop-carried accumulators (>16
-/// registers); its `t < n` loop comparison is an `if-test` (22t, nibble) that has no 8-bit form
-/// to widen to and isn't yet spilled, so dexing bails loudly (the per-site nibble guard /
-/// `remap_insns` fail-not-truncate). This preserves the never-truncate guarantee for the >16
-/// cases this slice does not yet cover (unwidenable nibbles: if-test/iget/iput/array-length/...).
+/// A two-register `if-test` (22t, no wider form) with a high operand now SPILLS through 2 reserved
+/// low scratch registers (move the operand down, compare on the scratch), so a >16-register loop
+/// whose `t < n` comparison has a high bound now dexes instead of bailing. `ArtWideLoop.run` has 16
+/// loop-carried accumulators (>16 registers) and a `t < n` loop; its bound `n` is an argument
+/// pushed ≥16 by the args-high remap, so the `if-ge` spills it (`move/from16` then compare on the
+/// scratch — disasm-confirmed) with the loop back-edge offset intact. Real-device correctness is
+/// proven by `tests/art/ArtWideLoop` (1920/0/408). Remaining unwidenable nibble forms (array-length
+/// 0x21, instance-of 0x20, iget-wide 0x53) still bail loudly via the `nib()` / `remap_insns`
+/// fail-not-truncate guards — never miscompile.
 #[test]
-fn over_16_registers_unwidenable_nibble_still_bails() {
+fn over_16_registers_if_test_spills_through_scratch() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("ArtWideLoop.class")).unwrap();
     let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
-    dex_classes(&[cf], &opts).expect_err("ArtWideLoop (>16 regs, unwidenable if-test) must bail, not miscompile");
+    let dex = dex_classes(&[cf], &opts).expect("ArtWideLoop (>16 regs, if-test spill) should now dex");
+    skotch_dex::validator::validate(&dex).expect("ArtWideLoop dex must validate");
 }
 
 /// A >16-register method calling a multi-arg method with its own PARAMETERS as arguments: the
@@ -438,6 +442,22 @@ fn over_16_phi_and_const_widen_via_frame_hint() {
     let dex = dex_classes(&[cf], &opts)
         .expect("ArtPhiWideMove (>16 φ-move/const widening) should dex");
     skotch_dex::validator::validate(&dex).expect("ArtPhiWideMove dex must validate");
+}
+
+/// A two-register `if-test` whose operands are arguments pushed ≥16 by scratch inflation spills
+/// them through the 2 reserved low scratch before the compare. ArtIfWide (157/117/130, runtime-
+/// proven on both branch directions) inflates the frame with a 13-arg range invoke, then `if (n >
+/// threshold)` spills both args (`move/from16 v0,vN; move/from16 v1,vM; if-le v0,v1,off`) with the
+/// forward branch offset intact. Here: dexes + self-validates.
+#[test]
+fn over_16_if_test_args_spill_through_scratch() {
+    let cf = skotch_classfile::parse_class_file(
+        &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtIfWide.class"),
+    )
+    .unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let dex = dex_classes(&[cf], &opts).expect("ArtIfWide (>16 if-test spill) should dex");
+    skotch_dex::validator::validate(&dex).expect("ArtIfWide dex must validate");
 }
 
 /// >16-register `iget`/`iput` (22c, nibble-only register fields) now DEX rather than bail: the
