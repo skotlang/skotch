@@ -2326,7 +2326,17 @@ fn try_lower_when_expression(
     // (comma-separated literals share a body); we unfold multi-cond
     // arms into 1-cond arms with the body duplicated so the existing
     // CFG construction below sees uniform single-cond arms.
-    let mut arms: Vec<(KtExpr<'_>, KtExpr<'_>)> = Vec::new();
+    enum ArmCond<'a> {
+        Eq(KtExpr<'a>),
+        // `in lo..hi`: pre-computed bounds of the closed-interval
+        // range. The cmp emits two compares (subject >= lo, subject
+        // <= hi) wired with short-circuit AND.
+        InRange {
+            lo: KtExpr<'a>,
+            hi: KtExpr<'a>,
+        },
+    }
+    let mut arms: Vec<(ArmCond<'_>, KtExpr<'_>)> = Vec::new();
     let mut else_arm: Option<KtExpr<'_>> = None;
     for entry in w.entries() {
         if entry.is_else() {
@@ -2339,14 +2349,35 @@ fn try_lower_when_expression(
         }
         let body = entry.body().map(unwrap_parens)?;
         for c in conds {
-            if c.kind != skotch_syntax::SyntaxKind::WHEN_CONDITION_WITH_EXPRESSION {
-                return None;
+            match c.kind {
+                skotch_syntax::SyntaxKind::WHEN_CONDITION_WITH_EXPRESSION => {
+                    let ce = skotch_ast::children(c)
+                        .iter()
+                        .find_map(KtExpr::cast)
+                        .map(unwrap_parens)?;
+                    arms.push((ArmCond::Eq(ce), body));
+                }
+                skotch_syntax::SyntaxKind::WHEN_CONDITION_IN_RANGE => {
+                    // The child KtExpr is the range expression
+                    // `lo..hi` (or `lo until hi`, etc.). For now
+                    // accept only Binary `..` and split the bounds.
+                    let range_expr = skotch_ast::children(c)
+                        .iter()
+                        .find_map(KtExpr::cast)
+                        .map(unwrap_parens)?;
+                    let KtExpr::Binary(rb) = range_expr else {
+                        return None;
+                    };
+                    let op = rb.operation().map(|o| o.text()).unwrap_or_default();
+                    if op != ".." {
+                        return None;
+                    }
+                    let lo = rb.lhs().map(unwrap_parens)?;
+                    let hi = rb.rhs().map(unwrap_parens)?;
+                    arms.push((ArmCond::InRange { lo, hi }, body));
+                }
+                _ => return None,
             }
-            let ce = skotch_ast::children(c)
-                .iter()
-                .find_map(KtExpr::cast)
-                .map(unwrap_parens)?;
-            arms.push((ce, body));
         }
     }
     let else_body = else_arm.map(unwrap_parens)?; // require else
@@ -2410,50 +2441,132 @@ fn try_lower_when_expression(
     // the param slot directly.
     let subject_slot = subject_capture_slot.unwrap_or(subject_param_slot);
 
-    // Each arm contributes: cmp_block (with stmts) + then_block.
-    // After all arms, an else_block, then join_block.
-    // All indices are shifted by +1 because of the pre-block.
+    // Pre-compute the starting block index for each arm so that
+    // both literal arms (1 cmp + 1 then = 2 blocks) and `in`-range
+    // arms (2 cmps + 1 then = 3 blocks) lay out cleanly. Block 0
+    // is the pre-block; arm_block_starts[i] is the FIRST block of
+    // arm i (always a cmp block).
     let n_arms = arms.len();
-    let else_block_idx = (2 * n_arms + 1) as u32;
+    let mut arm_block_starts: Vec<u32> = Vec::with_capacity(n_arms);
+    let mut next_block: u32 = 1;
+    for (cond, _) in &arms {
+        arm_block_starts.push(next_block);
+        let cmp_count: u32 = match cond {
+            ArmCond::Eq(_) => 1,
+            ArmCond::InRange { .. } => 2,
+        };
+        next_block += cmp_count + 1; // +1 for the then-block
+    }
+    let else_block_idx = next_block;
     let join_block_idx = else_block_idx + 1;
 
-    for (i, (cond_expr, body)) in arms.iter().enumerate() {
-        let mut cmp_stmts: Vec<MStmt> = Vec::new();
-        // Lower the literal to a Const slot.
-        let (k, ty) = literal_to_const(cond_expr, strings)?;
-        let lit_slot = LocalId(next_slot);
-        next_slot += 1;
-        extra_locals.push(ty);
-        cmp_stmts.push(MStmt::Assign {
-            dest: lit_slot,
-            value: Rvalue::Const(k),
-        });
-        let cmp_slot = LocalId(next_slot);
-        next_slot += 1;
-        extra_locals.push(Ty::Bool);
-        cmp_stmts.push(MStmt::Assign {
-            dest: cmp_slot,
-            value: Rvalue::BinOp {
-                op: skotch_mir::BinOp::CmpEq,
-                lhs: subject_slot,
-                rhs: lit_slot,
-            },
-        });
-        // Shifted by +1 to account for the pre subject-capture block.
-        let then_block_idx = (2 * i + 2) as u32;
-        let next_cmp_block_idx = if i + 1 < n_arms {
-            (2 * (i + 1) + 1) as u32
+    for (i, (cond, body)) in arms.iter().enumerate() {
+        let arm_start = arm_block_starts[i];
+        let next_arm_start = if i + 1 < n_arms {
+            arm_block_starts[i + 1]
         } else {
             else_block_idx
         };
-        blocks.push(BasicBlock {
-            stmts: cmp_stmts,
-            terminator: Terminator::Branch {
-                cond: cmp_slot,
-                then_block: then_block_idx,
-                else_block: next_cmp_block_idx,
-            },
-        });
+        let then_block_idx = match cond {
+            ArmCond::Eq(_) => arm_start + 1,
+            ArmCond::InRange { .. } => arm_start + 2,
+        };
+        match cond {
+            ArmCond::Eq(cond_expr) => {
+                let mut cmp_stmts: Vec<MStmt> = Vec::new();
+                let (k, ty) = literal_to_const(cond_expr, strings)?;
+                let lit_slot = LocalId(next_slot);
+                next_slot += 1;
+                extra_locals.push(ty);
+                cmp_stmts.push(MStmt::Assign {
+                    dest: lit_slot,
+                    value: Rvalue::Const(k),
+                });
+                let cmp_slot = LocalId(next_slot);
+                next_slot += 1;
+                extra_locals.push(Ty::Bool);
+                cmp_stmts.push(MStmt::Assign {
+                    dest: cmp_slot,
+                    value: Rvalue::BinOp {
+                        op: skotch_mir::BinOp::CmpEq,
+                        lhs: subject_slot,
+                        rhs: lit_slot,
+                    },
+                });
+                blocks.push(BasicBlock {
+                    stmts: cmp_stmts,
+                    terminator: Terminator::Branch {
+                        cond: cmp_slot,
+                        then_block: then_block_idx,
+                        else_block: next_arm_start,
+                    },
+                });
+            }
+            ArmCond::InRange { lo, hi } => {
+                // Block arm_start: cmp1 = subject >= lo
+                //   true  -> arm_start + 1 (cmp2 block)
+                //   false -> next_arm_start
+                // Block arm_start + 1: cmp2 = subject <= hi
+                //   true  -> then_block
+                //   false -> next_arm_start
+                let mut cmp1_stmts: Vec<MStmt> = Vec::new();
+                let (lo_k, lo_ty) = literal_to_const(lo, strings)?;
+                let lo_slot = LocalId(next_slot);
+                next_slot += 1;
+                extra_locals.push(lo_ty);
+                cmp1_stmts.push(MStmt::Assign {
+                    dest: lo_slot,
+                    value: Rvalue::Const(lo_k),
+                });
+                let ge_slot = LocalId(next_slot);
+                next_slot += 1;
+                extra_locals.push(Ty::Bool);
+                cmp1_stmts.push(MStmt::Assign {
+                    dest: ge_slot,
+                    value: Rvalue::BinOp {
+                        op: skotch_mir::BinOp::CmpGe,
+                        lhs: subject_slot,
+                        rhs: lo_slot,
+                    },
+                });
+                blocks.push(BasicBlock {
+                    stmts: cmp1_stmts,
+                    terminator: Terminator::Branch {
+                        cond: ge_slot,
+                        then_block: arm_start + 1,
+                        else_block: next_arm_start,
+                    },
+                });
+                let mut cmp2_stmts: Vec<MStmt> = Vec::new();
+                let (hi_k, hi_ty) = literal_to_const(hi, strings)?;
+                let hi_slot = LocalId(next_slot);
+                next_slot += 1;
+                extra_locals.push(hi_ty);
+                cmp2_stmts.push(MStmt::Assign {
+                    dest: hi_slot,
+                    value: Rvalue::Const(hi_k),
+                });
+                let le_slot = LocalId(next_slot);
+                next_slot += 1;
+                extra_locals.push(Ty::Bool);
+                cmp2_stmts.push(MStmt::Assign {
+                    dest: le_slot,
+                    value: Rvalue::BinOp {
+                        op: skotch_mir::BinOp::CmpLe,
+                        lhs: subject_slot,
+                        rhs: hi_slot,
+                    },
+                });
+                blocks.push(BasicBlock {
+                    stmts: cmp2_stmts,
+                    terminator: Terminator::Branch {
+                        cond: le_slot,
+                        then_block: then_block_idx,
+                        else_block: next_arm_start,
+                    },
+                });
+            }
+        }
 
         // then_block: result_slot = (literal | param ref | Binary | Call);
         // Goto join.
