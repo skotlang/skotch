@@ -13312,6 +13312,121 @@ fn lower_rich_expr_to_slot(
     use skotch_ast::KtExpr;
     use skotch_mir::{LocalId, Stmt as MStmt};
     let e = unwrap_parens(e);
+    // String concatenation via Binary `+` chain. Handled BEFORE the
+    // generic Binary path so `"hello " + name` doesn't take the
+    // integer-addition fallback. The chain is flattened
+    // recursively; each leaf becomes either a recipe-string segment
+    // (String literal) or a placeholder + dynamic arg. We only fire
+    // when at least one leaf is a String literal — otherwise it's
+    // plain int/long/float/double addition.
+    if let KtExpr::Binary(b) = &e {
+        if b.operation().map(|o| o.text()).as_deref() == Some("+") {
+            let mut parts: Vec<KtExpr<'_>> = Vec::new();
+            fn flatten<'a>(e: KtExpr<'a>, out: &mut Vec<KtExpr<'a>>) {
+                use skotch_ast::KtExpr;
+                let e = unwrap_parens(e);
+                if let KtExpr::Binary(bb) = e {
+                    if bb.operation().map(|o| o.text()).as_deref() == Some("+") {
+                        if let (Some(l), Some(r)) = (bb.lhs(), bb.rhs()) {
+                            flatten(l, out);
+                            flatten(r, out);
+                            return;
+                        }
+                    }
+                }
+                out.push(e);
+            }
+            flatten(e, &mut parts);
+            let has_string = parts.iter().any(|p| matches!(p, KtExpr::String(_)));
+            if has_string && parts.len() >= 2 {
+                let mut recipe = String::new();
+                let mut dyn_args: Vec<LocalId> = Vec::new();
+                let mut desc = String::from("(");
+                let mut ok = true;
+                for p in &parts {
+                    if let KtExpr::String(_) = p {
+                        // Treat as literal segment — interpolation
+                        // inside the literal isn't handled here
+                        // (would need the full template walker). For
+                        // a no-interp literal, extract its text.
+                        let mut buf = String::new();
+                        let mut had_interp = false;
+                        for child in skotch_ast::children(p.syntax()) {
+                            match child.kind {
+                                skotch_syntax::SyntaxKind::LITERAL_STRING_TEMPLATE_ENTRY => {
+                                    for cc in skotch_ast::children(child) {
+                                        if cc.kind == skotch_syntax::SyntaxKind::STRING_CHUNK {
+                                            if let skotch_sil::SilData::Token { text } = &cc.data {
+                                                buf.push_str(text);
+                                            }
+                                        }
+                                    }
+                                }
+                                skotch_syntax::SyntaxKind::SHORT_STRING_TEMPLATE_ENTRY
+                                | skotch_syntax::SyntaxKind::LONG_STRING_TEMPLATE_ENTRY => {
+                                    had_interp = true;
+                                    break;
+                                }
+                                _ => {}
+                            }
+                        }
+                        if had_interp {
+                            ok = false;
+                            break;
+                        }
+                        // Recipe placeholder bytes \u{1} and \u{2}
+                        // are reserved; bail and fall back if the
+                        // literal contains them.
+                        if buf.contains('\u{1}') || buf.contains('\u{2}') {
+                            ok = false;
+                            break;
+                        }
+                        recipe.push_str(&buf);
+                    } else {
+                        let slot = lower_rich_expr_to_slot(
+                            *p,
+                            lookup_name,
+                            fn_lookup,
+                            next_slot,
+                            pre_stmts,
+                            extra_locals,
+                            strings,
+                        );
+                        let Some(slot) = slot else {
+                            ok = false;
+                            break;
+                        };
+                        let ty = extra_locals
+                            .get(slot.0 as usize)
+                            .cloned()
+                            .unwrap_or_else(|| {
+                                slot_ty_with_param_fallback(slot.0, extra_locals)
+                            });
+                        recipe.push('\u{1}');
+                        desc.push_str(&ty_to_descriptor(&ty));
+                        dyn_args.push(slot);
+                    }
+                }
+                if ok {
+                    desc.push_str(")Ljava/lang/String;");
+                    let result_slot = LocalId(*next_slot);
+                    *next_slot += 1;
+                    extra_locals.push(Ty::String);
+                    pre_stmts.push(MStmt::Assign {
+                        dest: result_slot,
+                        value: skotch_mir::Rvalue::Call {
+                            kind: skotch_mir::CallKind::MakeConcatWithConstants {
+                                recipe,
+                                descriptor: desc,
+                            },
+                            args: dyn_args,
+                        },
+                    });
+                    return Some(result_slot);
+                }
+            }
+        }
+    }
     // Try inline first.
     if let Some(slot) = lower_inline_expr_to_slot(
         e,
