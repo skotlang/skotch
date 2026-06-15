@@ -12439,6 +12439,146 @@ fn try_lower_println_template_with_rich_lookup(
     if arg_exprs.len() != 1 {
         return None;
     }
+    // Also accept `"a" + b + "c"` Binary-`+` chains as a fused
+    // concat: kotlinc lowers `println("a" + b + "c")` and
+    // `println("a$b" + "c")` to the same makeConcatWithConstants
+    // shape. We flatten any top-level `+` chain whose operands are
+    // a mix of String literals, References, literals, and rich
+    // expressions, then route the resulting parts to PrintlnConcat /
+    // PrintConcat just like a template.
+    if let KtExpr::Binary(b) = &arg_exprs[0] {
+        if b.operation().map(|o| o.text()).as_deref() == Some("+") {
+            let mut parts: Vec<KtExpr<'_>> = Vec::new();
+            fn flatten<'a>(e: KtExpr<'a>, out: &mut Vec<KtExpr<'a>>) {
+                use skotch_ast::KtExpr;
+                let e = unwrap_parens(e);
+                if let KtExpr::Binary(b) = e {
+                    if b.operation().map(|o| o.text()).as_deref() == Some("+") {
+                        if let (Some(l), Some(r)) = (b.lhs(), b.rhs()) {
+                            flatten(l, out);
+                            flatten(r, out);
+                            return;
+                        }
+                    }
+                }
+                out.push(e);
+            }
+            flatten(KtExpr::Binary(*b), &mut parts);
+            // Need at least one String operand to treat this as
+            // string concat (otherwise it's plain integer addition).
+            let has_string = parts.iter().any(|p| matches!(p, KtExpr::String(_)));
+            if has_string && !parts.is_empty() {
+                let mut part_slots: Vec<LocalId> = Vec::new();
+                for p in parts {
+                    // String literals: pre-extract into the strings
+                    // pool so they ride the recipe-string path in
+                    // the backend (kotlinc shape).
+                    if let KtExpr::String(_) = &p {
+                        // Treat as a template with no interpolation:
+                        // a single LITERAL_STRING_TEMPLATE_ENTRY.
+                        let mut buf = String::new();
+                        let mut had_escape = false;
+                        for child in skotch_ast::children(p.syntax()) {
+                            match child.kind {
+                                S::LITERAL_STRING_TEMPLATE_ENTRY => {
+                                    for cc in skotch_ast::children(child) {
+                                        if cc.kind == S::STRING_CHUNK {
+                                            if let skotch_sil::SilData::Token {
+                                                text,
+                                            } = &cc.data
+                                            {
+                                                buf.push_str(text);
+                                            }
+                                        }
+                                    }
+                                }
+                                S::ESCAPE_STRING_TEMPLATE_ENTRY => {
+                                    had_escape = true;
+                                    for cc in skotch_ast::children(child) {
+                                        if let skotch_sil::SilData::Token { text } =
+                                            &cc.data
+                                        {
+                                            let raw = text.as_str();
+                                            if let Some(stripped) =
+                                                raw.strip_prefix('\\')
+                                            {
+                                                match stripped.chars().next() {
+                                                    Some('n') => buf.push('\n'),
+                                                    Some('t') => buf.push('\t'),
+                                                    Some('r') => buf.push('\r'),
+                                                    Some('\\') => buf.push('\\'),
+                                                    Some('"') => buf.push('"'),
+                                                    Some('\'') => buf.push('\''),
+                                                    Some('$') => buf.push('$'),
+                                                    Some('b') => buf.push('\u{0008}'),
+                                                    Some('0') => buf.push('\0'),
+                                                    Some(other) => buf.push(other),
+                                                    None => {}
+                                                }
+                                            } else {
+                                                buf.push_str(raw);
+                                            }
+                                        }
+                                    }
+                                }
+                                S::STRING_START
+                                | S::STRING_END
+                                | S::WHITE_SPACE => {}
+                                _ => return None,
+                            }
+                        }
+                        let _ = had_escape;
+                        let sid = match strings.iter().position(|s| s == &buf) {
+                            Some(i) => skotch_mir::StringId(i as u32),
+                            None => {
+                                let id = skotch_mir::StringId(strings.len() as u32);
+                                strings.push(buf);
+                                id
+                            }
+                        };
+                        let slot = LocalId(*next_slot);
+                        *next_slot += 1;
+                        extra_locals.push(Ty::String);
+                        pre_stmts.push(MStmt::Assign {
+                            dest: slot,
+                            value: skotch_mir::Rvalue::Const(
+                                skotch_mir::MirConst::String(sid),
+                            ),
+                        });
+                        part_slots.push(slot);
+                        continue;
+                    }
+                    // Non-string operand: lower via rich, push slot.
+                    let slot = match fn_lookup {
+                        Some(fl) => lower_rich_expr_to_slot(
+                            p,
+                            lookup_name,
+                            fl,
+                            next_slot,
+                            pre_stmts,
+                            extra_locals,
+                            strings,
+                        )?,
+                        None => lower_inline_expr_to_slot(
+                            p,
+                            lookup_name,
+                            next_slot,
+                            pre_stmts,
+                            extra_locals,
+                            strings,
+                        )?,
+                    };
+                    part_slots.push(slot);
+                }
+                let kind = match name {
+                    "println" => skotch_mir::CallKind::PrintlnConcat,
+                    "print" => skotch_mir::CallKind::PrintConcat,
+                    _ => return None,
+                };
+                return Some((kind, part_slots));
+            }
+        }
+    }
     let KtExpr::String(_) = &arg_exprs[0] else {
         return None;
     };
