@@ -3378,7 +3378,7 @@ pub(crate) fn build_dex(
         // φ-moves for an incoming edge from a BRANCHING single-... predecessor land here,
         // at this block's entry (before the body), since they can't sit at the branching
         // pred's end. block_unit[b] points at them so the branch lands here first.
-        emit_entry_phi_moves(f, &mut insns, alloc, b, &mut phi_scratch_words)?;
+        emit_entry_phi_moves(f, &mut insns, alloc, b, &mut phi_scratch_words, frame_hint)?;
         // Wide-const sharing (d8): within a block, a wide const equal to one still held
         // live in a register is copied via `move-wide` (1 word) instead of re-materialized
         // (`const-wide*` ≥2 words) — e.g. `long i=0, s=0` → `const-wide v0; move-wide v2,v0`.
@@ -3439,7 +3439,7 @@ pub(crate) fn build_dex(
                     emit_const_class(f, &mut insns, alloc, v, &mut pool_fixups, &mut positions, line_numbers);
                 }
                 SsaOp::CheckCast { .. } => {
-                    emit_check_cast(f, &mut insns, alloc, v, &mut pool_fixups, &mut positions, line_numbers)?;
+                    emit_check_cast(f, &mut insns, alloc, v, &mut pool_fixups, &mut positions, line_numbers, frame_hint)?;
                 }
                 SsaOp::InstanceOf { .. } => {
                     emit_instance_of(f, &mut insns, alloc, v, &mut pool_fixups, &mut positions, line_numbers)?;
@@ -3468,7 +3468,7 @@ pub(crate) fn build_dex(
                             }
                         }
                     }
-                    emit_value(f, &mut insns, alloc, v)?;
+                    emit_value(f, &mut insns, alloc, v, frame_hint)?;
                 }
             }
             // Record the DEX span of a guarded throwing instruction. A call's
@@ -3486,7 +3486,7 @@ pub(crate) fn build_dex(
             // Resolve φ-nodes that didn't coalesce: insert a `move φ ← operand` at the
             // end of this (predecessor) block, before its terminator. Coalesced φs need
             // no move (operand already in the φ's register).
-            emit_phi_moves(f, &mut insns, alloc, b, &mut phi_scratch_words)?;
+            emit_phi_moves(f, &mut insns, alloc, b, &mut phi_scratch_words, frame_hint)?;
         }
         if inline_ret[b] {
             // Inline the (trivial) return of this block's goto/fall target.
@@ -3568,7 +3568,7 @@ pub(crate) fn build_dex(
                 // branch to its block_unit (set AFTER these moves), so they skip them.
                 let ft_moves = phi_moves_for_edge(f, alloc, b, *fallthrough);
                 if !ft_moves.is_empty() && f.blocks[*fallthrough].preds.len() > 1 {
-                    emit_move_list(f, &mut insns, alloc, &ft_moves, &mut phi_scratch_words)?;
+                    emit_move_list(f, &mut insns, alloc, &ft_moves, &mut phi_scratch_words, frame_hint)?;
                 }
             }
             Terminator::Throw { value, jvm_pc } => {
@@ -3595,7 +3595,8 @@ pub(crate) fn build_dex(
                 used_switch_scratch = true;
                 let key = reg(*value);
                 for &(k, target) in cases {
-                    emit_const_int(&mut insns, switch_scratch, k);
+                    let na = f.num_arg_registers;
+                    emit_const_int(&mut insns, switch_scratch, k, na, frame_hint.unwrap_or(alloc.registers_used.max(na)));
                     insns.push(0x32 | (nib(key)? << 8) | (nib(switch_scratch)? << 12)); // if-eq key, tmp
                     let off = insns.len();
                     insns.push(0);
@@ -3613,7 +3614,7 @@ pub(crate) fn build_dex(
     // redirected taken branch resolves to it.
     for (target, moves) in &trampolines {
         block_unit.push(insns.len());
-        emit_move_list(f, &mut insns, alloc, moves, &mut phi_scratch_words)?;
+        emit_move_list(f, &mut insns, alloc, moves, &mut phi_scratch_words, frame_hint)?;
         let off = insns.len();
         insns.push(0x28); // goto target
         fixups.push((off, *target, true));
@@ -3771,16 +3772,22 @@ pub(crate) fn build_dex(
                 }
                 _ => false,
             });
-        let invoke_arg_high = f.values.iter().any(|val| match &val.op {
+        // Invoke args (→ range form), φ-move operands and check-cast objects (→ …/from16 copy)
+        // self-widen given the true frame — no reserve needed, just re-emit with the hint.
+        let move_or_invoke_high = f.values.iter().enumerate().any(|(i, val)| match &val.op {
             SsaOp::Invoke { args, .. } => args.iter().any(|&a| high(alloc.reg[a as usize])),
+            SsaOp::Phi { operands, .. } => {
+                high(alloc.reg[i]) || operands.iter().any(|&o| high(alloc.reg[o as usize]))
+            }
+            SsaOp::CheckCast { obj, .. } => high(alloc.reg[i]) || high(alloc.reg[*obj as usize]),
             _ => false,
         });
         if field_op_high {
             let mut alloc2 = alloc.clone();
             reserve_scratch(&mut alloc2, na, 2);
-            // frame_hint covers the +2; emit_invoke picks up any high invoke args via it too.
+            // frame_hint covers the +2; emit_invoke / emit_copy pick up high operands via it too.
             return build_dex(f, num, &alloc2, line_numbers, params, Some(na), Some(registers_size + 2));
-        } else if invoke_arg_high {
+        } else if move_or_invoke_high {
             return build_dex(f, num, alloc, line_numbers, params, spill_base, Some(registers_size));
         }
     }
@@ -4124,6 +4131,7 @@ fn emit_check_cast(
     pool_fixups: &mut Vec<Fixup>,
     positions: &mut Vec<(u32, u32)>,
     line_numbers: &[(u16, u16)],
+    frame_hint: Option<u16>,
 ) -> Result<()> {
     let reg = |x: ValId| alloc.reg[x as usize];
     let (obj, type_desc, jvm_pc) = match &f.values[v as usize].op {
@@ -4132,15 +4140,12 @@ fn emit_check_cast(
     };
     let (dest, src) = (reg(v), reg(obj));
     if dest != src {
-        // Copy the object into the result register before the in-place cast. Only the
-        // 12x nibble form is safe here — move-object/from16 (0x08) isn't in regalloc's
-        // reg_fields, so its registers wouldn't be remapped args-high. Bail above 15
-        // (matches emit_phi_moves) rather than emit an unremapped move (a miscompile).
-        if dest <= 15 && src <= 15 {
-            insns.push(0x07 | ((dest & 0xf) << 8) | ((src & 0xf) << 12)); // move-object (12x)
-        } else {
-            bail!("ssa dexbuilder: check-cast move-object register > 15 (needs move-object/from16 remap)");
-        }
+        // Copy the object into the result register before the in-place cast. emit_copy picks the
+        // 12x move-object or the wider move-object/from16 (both remapped by reg_fields) per the
+        // registers' final args-high numbers.
+        let num_arg = f.num_arg_registers;
+        let est = frame_hint.unwrap_or(alloc.registers_used.max(num_arg));
+        emit_copy(insns, dest, src, false, true, num_arg, est)?;
     }
     if let Some(line) = crate::bootstrap::line_for(line_numbers, jvm_pc) {
         positions.push((insns.len() as u32, line));
@@ -4253,16 +4258,60 @@ fn phi_moves_for_edge(f: &SsaFn, alloc: &Allocation, pred: usize, s: usize) -> V
     moves
 }
 
-/// Emits a parallel-copy of φ-moves (`move`/`move-wide`/`move-object`, 12x). Bails on a
-/// copy cycle (one move's dest is another's src) or a register > 15 (needs move/16).
+/// Emits one copy `dst <- src` (`move`/`move-wide`/`move-object`), picking the compact 12x
+/// nibble form when every occupied register fits a nibble — both ALLOCATED (else the 12x emit
+/// truncates before remap) AND FINAL after the args-high remap — and otherwise the wider
+/// `…/from16` form (move 0x02 / move-wide 0x05 / move-object 0x08, 22x: 8-bit AA dst + 16-bit
+/// BBBB src). Registers are written in ALLOCATED space; `remap_insns` remaps both forms in place
+/// (its `reg_fields` covers 0x01/0x04/0x07 12x AND 0x02/0x05/0x08 22x). `est` is the frame size
+/// used for the FINAL test (the true `registers_size` on a scratch-aware retry, else
+/// `registers_used`). For ≤16-register methods every final is ≤15 so this always picks 12x —
+/// byte-identical to before; only >16-register methods take the wide form. Bails only if even the
+/// wide form can't hold it (allocated dst ≥256, the 8-bit AA field — genuinely needs move/16).
+fn emit_copy(
+    insns: &mut Vec<u16>,
+    dst: u16,
+    src: u16,
+    wide: bool,
+    isref: bool,
+    num_arg: u16,
+    est: u16,
+) -> Result<()> {
+    let remap = |r: u16| crate::regalloc::remap_register(r, num_arg, est);
+    // The value occupies `r` (and `r+1` if wide); a nibble form needs every occupied register
+    // ≤15 in BOTH allocated and final space.
+    let hi = |r: u16| {
+        let top = if wide { r + 1 } else { r };
+        r > 15 || top > 15 || remap(r) > 15 || remap(top) > 15
+    };
+    if !hi(dst) && !hi(src) {
+        let op: u16 = if wide { 0x04 } else if isref { 0x07 } else { 0x01 };
+        insns.push(op | ((dst & 0xf) << 8) | ((src & 0xf) << 12));
+    } else {
+        if dst > 0xff {
+            bail!("ssa dexbuilder: copy dst v{dst} ≥256 (8-bit /from16 AA) — needs move/16");
+        }
+        let op: u16 = if wide { 0x05 } else if isref { 0x08 } else { 0x02 };
+        insns.push(op | (dst << 8)); // 22x: AA dst in word0 high byte (allocated; remapped later)
+        insns.push(src); // BBBB src in word1 (allocated; remapped later)
+    }
+    Ok(())
+}
+
+/// Emits a parallel-copy of φ-moves (`move`/`move-wide`/`move-object`). Each copy uses the 12x
+/// nibble form or the wider `…/from16` form per `emit_copy`. Bails on a self-overlapping wide
+/// move or a cycle whose scratch temp can't be encoded.
 fn emit_move_list(
     f: &SsaFn,
     insns: &mut Vec<u16>,
     alloc: &Allocation,
     moves: &[(ValId, ValId)],
     scratch_words: &mut u16,
+    frame_hint: Option<u16>,
 ) -> Result<()> {
     let reg = |x: ValId| alloc.reg[x as usize];
+    let num_arg = f.num_arg_registers;
+    let est = frame_hint.unwrap_or(alloc.registers_used.max(num_arg));
     // A φ-move set is a PARALLEL copy: every source is read in the original register state,
     // all destinations written "simultaneously". Sequentializing requires (1) ordering so a
     // move's source isn't clobbered by an earlier move (chains: a←b, b←c emits a←b first),
@@ -4287,9 +4336,7 @@ fn emit_move_list(
         if dst == src {
             continue; // self-move: no-op
         }
-        if dst.max(occ(dst, wide).1) > 15 || src.max(occ(src, wide).1) > 15 {
-            bail!("ssa dexbuilder: φ-move register > 15 needs move/16 (not yet supported)");
-        }
+        // A register ≥16 (allocated or remapped) is fine — emit_copy widens to …/from16 below.
         // A move whose dst range overlaps its OWN src range (e.g. wide r2←r3) would corrupt
         // mid-copy — pathological for a well-formed φ; refuse rather than miscompile.
         if overlap(occ(dst, wide), occ(src, wide)) {
@@ -4325,8 +4372,10 @@ fn emit_move_list(
         let m0 = pend[0];
         let w: u16 = if m0.wide { 2 } else { 1 };
         let temp = alloc.registers_used;
-        if temp + (w - 1) > 15 {
-            bail!("ssa dexbuilder: φ-move cycle scratch register {temp} >= 16 (nibble move)");
+        // The cycle-break temp copies go through emit_copy too, so the temp may be ≥16 (…/from16);
+        // bail only if its allocated number won't fit the 8-bit /from16 dst (needs move/16).
+        if temp + (w - 1) > 0xff {
+            bail!("ssa dexbuilder: φ-move cycle scratch register {temp} ≥256 (needs move/16)");
         }
         *scratch_words = (*scratch_words).max(w);
         out.push(M { dst: temp, src: m0.src, wide: m0.wide, isref: m0.isref });
@@ -4341,9 +4390,7 @@ fn emit_move_list(
         }
     }
     for m in &out {
-        // move-wide(0x04) / move-object(0x07) / move(0x01) — all 12x (nibble regs).
-        let op: u16 = if m.wide { 0x04 } else if m.isref { 0x07 } else { 0x01 };
-        insns.push(op | ((m.dst & 0xf) << 8) | ((m.src & 0xf) << 12));
+        emit_copy(insns, m.dst, m.src, m.wide, m.isref, num_arg, est)?;
     }
     Ok(())
 }
@@ -4358,6 +4405,7 @@ fn emit_phi_moves(
     alloc: &Allocation,
     b: usize,
     scratch_words: &mut u16,
+    frame_hint: Option<u16>,
 ) -> Result<()> {
     // A BRANCHING block's edge φ-moves can't sit at its end (they'd run on every arm).
     // Each is handled elsewhere: a single-pred successor at its own entry
@@ -4370,7 +4418,7 @@ fn emit_phi_moves(
     for &s in &f.blocks[b].succ.clone() {
         let moves = phi_moves_for_edge(f, alloc, b, s);
         if !moves.is_empty() {
-            emit_move_list(f, insns, alloc, &moves, scratch_words)?;
+            emit_move_list(f, insns, alloc, &moves, scratch_words, frame_hint)?;
         }
     }
     Ok(())
@@ -4386,6 +4434,7 @@ fn emit_entry_phi_moves(
     alloc: &Allocation,
     s: usize,
     scratch_words: &mut u16,
+    frame_hint: Option<u16>,
 ) -> Result<()> {
     if f.blocks[s].preds.len() != 1 || f.caught[s].is_some() {
         return Ok(());
@@ -4395,7 +4444,7 @@ fn emit_entry_phi_moves(
         return Ok(()); // pred single-succ → handled at the pred's end
     }
     let moves = phi_moves_for_edge(f, alloc, p, s);
-    emit_move_list(f, insns, alloc, &moves, scratch_words)
+    emit_move_list(f, insns, alloc, &moves, scratch_words, frame_hint)
 }
 
 /// A 4-bit register nibble. The 12x/22c/22t/22s/11n forms encode a register in a 4-bit
@@ -4415,11 +4464,13 @@ fn nib(r: u16) -> Result<u16> {
 }
 
 /// Emits the instruction defining `v` (the result lands in `reg(v)`).
-fn emit_value(f: &SsaFn, insns: &mut Vec<u16>, alloc: &Allocation, v: ValId) -> Result<()> {
+fn emit_value(f: &SsaFn, insns: &mut Vec<u16>, alloc: &Allocation, v: ValId, frame_hint: Option<u16>) -> Result<()> {
     let reg = |x: ValId| alloc.reg[x as usize];
     let dest = reg(v);
+    let num_arg = f.num_arg_registers;
+    let est = frame_hint.unwrap_or(alloc.registers_used.max(num_arg));
     match &f.values[v as usize].op {
-        SsaOp::ConstInt(c) => emit_const_int(insns, dest, *c),
+        SsaOp::ConstInt(c) => emit_const_int(insns, dest, *c, num_arg, est),
         SsaOp::ConstLong(c) => emit_const_long(insns, dest, *c),
         SsaOp::Unop { jvm_op, a } => {
             let dop = match jvm_op {
@@ -4438,7 +4489,7 @@ fn emit_value(f: &SsaFn, insns: &mut Vec<u16>, alloc: &Allocation, v: ValId) -> 
             insns.push(dop | (dest << 8));
             insns.push((reg(*a) & 0xff) | ((reg(*b) & 0xff) << 8));
         }
-        SsaOp::Binop { jvm_op, a, b, .. } => emit_binop(f, insns, alloc, dest, *jvm_op, *a, *b)?,
+        SsaOp::Binop { jvm_op, a, b, .. } => emit_binop(f, insns, alloc, dest, *jvm_op, *a, *b, frame_hint)?,
         // Invokes/field-accesses are emitted by `emit_invoke`/`emit_field` (they
         // carry extra state); the rest define no emittable instruction on their own.
         SsaOp::Phi { .. }
@@ -4465,7 +4516,7 @@ fn emit_value(f: &SsaFn, insns: &mut Vec<u16>, alloc: &Allocation, v: ValId) -> 
     Ok(())
 }
 
-fn emit_binop(f: &SsaFn, insns: &mut Vec<u16>, alloc: &Allocation, dest: u16, jvm_op: u8, a: ValId, b: ValId) -> Result<()> {
+fn emit_binop(f: &SsaFn, insns: &mut Vec<u16>, alloc: &Allocation, dest: u16, jvm_op: u8, a: ValId, b: ValId, frame_hint: Option<u16>) -> Result<()> {
     let reg = |x: ValId| alloc.reg[x as usize];
     // The compact /2addr form encodes both registers in 4-bit nibbles. Emit writes ALLOCATED
     // registers and `remap_insns` later remaps them args-high — so the choice of /2addr vs the
@@ -4476,7 +4527,9 @@ fn emit_binop(f: &SsaFn, insns: &mut Vec<u16>, alloc: &Allocation, dest: u16, jv
     // `remap_insns` bails (never truncates). The form choice is purely a bail-vs-succeed lever:
     // BOTH forms are semantically identical, so this can never cause a miscompile.
     let num_arg = f.num_arg_registers;
-    let regs_used = alloc.registers_used.max(num_arg);
+    // The true frame on a scratch-aware retry (else the scratch-free size); only ever UNDER-counts
+    // without the hint, so a missed case bails in remap rather than miscompiling.
+    let regs_used = frame_hint.unwrap_or(alloc.registers_used.max(num_arg));
     // /2addr is usable for a register only when BOTH its allocated number (so the nibble emit
     // doesn't truncate it before remap reads it) AND its FINAL number (so remap doesn't overflow
     // the nibble) are ≤15. Locals remap DOWN (final = allocated - num_arg ≤ allocated), so for them
@@ -4593,11 +4646,15 @@ fn is_mul_bug_min_api() -> bool {
     true
 }
 
-fn emit_const_int(insns: &mut Vec<u16>, reg: u16, c: i32) {
-    // const/4 (11n) packs the dest in a 4-bit nibble; only use it when the register fits.
-    // A register ≥16 (a >16-register method) falls to const/16 (21s, 8-bit AA), which covers
-    // the same small constants. ≤16-register methods keep const/4 — byte-identical to before.
-    if (-8..=7).contains(&c) && reg <= 15 {
+fn emit_const_int(insns: &mut Vec<u16>, reg: u16, c: i32, num_arg: u16, est: u16) {
+    // const/4 (11n) packs the dest in a 4-bit nibble; only use it when the register fits — BOTH
+    // its allocated number (else the nibble emit truncates before remap) AND its FINAL args-high
+    // number (a const can be allocated to a dead-argument register that remaps high). A register
+    // ≥16 falls to const/16 (21s, 8-bit AA), which covers the same small constants. ≤16-register
+    // methods keep const/4 — byte-identical to before.
+    let fits_nibble = reg <= 15
+        && crate::regalloc::remap_register(reg, num_arg, est.max(num_arg).max(1)) <= 15;
+    if (-8..=7).contains(&c) && fits_nibble {
         insns.push(0x12 | (((c as u16 & 0xf) << 4 | reg) << 8));
     } else if (-32768..=32767).contains(&c) {
         insns.push(0x13 | (reg << 8));

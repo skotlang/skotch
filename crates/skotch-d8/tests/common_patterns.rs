@@ -421,6 +421,25 @@ fn invoke_arg_pushed_high_by_scratch_uses_range_via_frame_hint() {
     skotch_dex::validator::validate(&dex).expect("ArtRangeGather dex must validate");
 }
 
+/// >16-register φ-moves / check-cast moves / binops / const-ints now widen their nibble forms to
+/// the wider encodings (move→move/from16, move-object→move-object/from16, /2addr→3addr,
+/// const/4→const/16) based on the FINAL args-high register — closing the same `registers_used`-vs-
+/// `registers_size` frame gap as the field/invoke retries (an argument or dead-arg-slot value
+/// pushed ≥16 by scratch). ArtPhiWideMove (102/53/7, runtime-proven) holds loop-carried φs
+/// initialized from arguments in a frame inflated past 16 by a 13-arg range invoke, so the φ-moves
+/// `acc←seed` / `z←n` must use move/from16. Here: dexes + self-validates.
+#[test]
+fn over_16_phi_and_const_widen_via_frame_hint() {
+    let cf = skotch_classfile::parse_class_file(
+        &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtPhiWideMove.class"),
+    )
+    .unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let dex = dex_classes(&[cf], &opts)
+        .expect("ArtPhiWideMove (>16 φ-move/const widening) should dex");
+    skotch_dex::validator::validate(&dex).expect("ArtPhiWideMove dex must validate");
+}
+
 /// >16-register `iget`/`iput` (22c, nibble-only register fields) now DEX rather than bail: the
 /// dexbuilder reserves 2 low scratch registers and routes any operand whose FINAL register is ≥16
 /// through them via `move(-object)/from16`. The object operand always moves with
