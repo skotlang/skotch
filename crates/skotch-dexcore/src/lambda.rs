@@ -658,9 +658,6 @@ fn build_capturing_init(syn: &str, captures: &[String]) -> Result<EncodedMethod>
 /// `this` is at vc; the SAM parameters are the ins at v(c+1)... .
 fn build_capturing_sam(syn: &str, sam_name: &str, sam_desc: &str, inst_params: &[String], invoke_op: u16, ret_adapt: &RetAdapt, impl_class: &str, impl_name: &str, impl_desc: &str, captures: &[String]) -> Result<EncodedMethod> {
     let (sam_params, _ret) = parse_descriptor(sam_desc)?;
-    if sam_params.iter().any(|p| p == "J" || p == "D") {
-        bail!("lambda: wide SAM parameter (capturing) not yet supported");
-    }
     let cap_width = |ty: &str| -> u16 { if ty == "J" || ty == "D" { 2 } else { 1 } };
     // Per-capture starting register; captures load into the LOW registers v0.. (a wide capture
     // occupies a consecutive pair). `this` follows them, then the SAM parameters.
@@ -671,12 +668,20 @@ fn build_capturing_sam(syn: &str, sam_name: &str, sam_desc: &str, inst_params: &
         total_cap += cap_width(ty);
     }
     let p = sam_params.len();
-    let regs = total_cap + 1 + p as u16; // captures + this + sam params
+    // Per-SAM-param starting word offset (a wide long/double param occupies a consecutive PAIR), so
+    // the param registers and the impl-invoke marshalling account for width, not just count.
+    let mut param_start: Vec<u16> = Vec::with_capacity(p);
+    let mut param_words = 0u16;
+    for ty in &sam_params {
+        param_start.push(param_words);
+        param_words += cap_width(ty);
+    }
+    let regs = total_cap + 1 + param_words; // captures + this + sam params
     if regs > 16 {
         bail!("lambda: capturing SAM needs {regs} registers (>16) not supported");
     }
     let this_reg = total_cap;
-    let argn = total_cap + p as u16; // reg-WORDS passed to the impl (a wide capture is 2)
+    let argn = total_cap + param_words; // reg-WORDS passed to the impl (a wide capture/param is 2)
     if argn > 5 {
         bail!("lambda: capturing SAM impl has {argn} arg words (>5, needs range form) not supported");
     }
@@ -692,7 +697,7 @@ fn build_capturing_sam(syn: &str, sam_name: &str, sam_desc: &str, inst_params: &
     // Adapt each erased reference SAM parameter (at v(c+1)..) to its instantiated type in place.
     for (k, (s, i)) in sam_params.iter().zip(inst_params.iter()).enumerate() {
         if s != i {
-            let reg = this_reg + 1 + k as u16;
+            let reg = this_reg + 1 + param_start[k];
             insns.push(0x1f | (reg << 8)); // check-cast vReg, InstType (21c)
             let unit = insns.len();
             insns.push(0);
@@ -714,7 +719,7 @@ fn build_capturing_sam(syn: &str, sam_name: &str, sam_desc: &str, inst_params: &
             bail!("lambda: wide capturing parameter unbox not yet supported");
         }
         let (bx, m) = unbox_of(ip).ok_or_else(|| anyhow::anyhow!("lambda: no unbox accessor for {ip}"))?;
-        let reg = this_reg + 1 + k as u16;
+        let reg = this_reg + 1 + param_start[k];
         // invoke-virtual {reg} <Wrapper>.<accessor>()prim ; move-result reg (in place).
         insns.push(0x6e | ((1u16 << 4) << 8)); // invoke-virtual, argn=1 → 0x106e
         let unit = insns.len();
@@ -736,8 +741,12 @@ fn build_capturing_sam(syn: &str, sam_name: &str, sam_desc: &str, inst_params: &
             arg_regs.push(cap_start[i] + 1);
         }
     }
-    for k in 0..p as u16 {
-        arg_regs.push(this_reg + 1 + k);
+    for (k, ty) in sam_params.iter().enumerate() {
+        let reg = this_reg + 1 + param_start[k];
+        arg_regs.push(reg);
+        if cap_width(ty) == 2 {
+            arg_regs.push(reg + 1);
+        }
     }
     let g = if arg_regs.len() == 5 { arg_regs[4] } else { 0 };
     insns.push(invoke_op | (((argn << 4) | g) << 8));
@@ -757,7 +766,7 @@ fn build_capturing_sam(syn: &str, sam_name: &str, sam_desc: &str, inst_params: &
     // boxed wrapper of the impl's primitive.
     let (_, impl_ret) = parse_descriptor(impl_desc)?;
     let (_min_regs, extra_outs) = emit_boxed_return(&mut insns, &mut fixups, &impl_ret, ret_adapt);
-    let ins_size = (1 + p) as u16; // this + sam params
+    let ins_size = 1 + param_words; // this + sam params (a wide param is 2 regs)
     Ok(EncodedMethod {
         method: MethodRef { class: syn.into(), proto: proto(sam_desc)?, name: sam_name.into() },
         access_flags: ACC_PUBLIC,

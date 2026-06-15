@@ -605,6 +605,24 @@ fn over_16_unop_conversion_spills_through_scratch() {
     skotch_dex::validator::validate(&dex).expect("ArtI2lDest dex must validate");
 }
 
+/// A capturing lambda whose functional-interface (SAM) method has a WIDE (long/double) parameter
+/// now desugars: the synthetic SAM method's register layout + the impl-invoke marshalling account
+/// for wide params via cumulative-width offsets (a long param occupies a consecutive register
+/// PAIR), not a per-param count. ArtLongSam 105/70 (runtime-proven): `(v) -> v + cap` for a
+/// LongUnaryOperator capturing an int — the synthetic applyAsLong(J)J passes the long param as a
+/// pair to the impl (disasm: invoke-static {v0, v2, v3}, lambda$compute$0:(IJ)J). Here: dexes +
+/// self-validates (incl. the synthetic lambda class).
+#[test]
+fn capturing_lambda_wide_sam_parameter_now_dexes() {
+    let cf = skotch_classfile::parse_class_file(
+        &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtLongSam.class"),
+    )
+    .unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let dex = dex_classes(&[cf], &opts).expect("ArtLongSam (wide SAM param) should dex");
+    skotch_dex::validator::validate(&dex).expect("ArtLongSam dex must validate");
+}
+
 /// >16-register `iget`/`iput` (22c, nibble-only register fields) now DEX rather than bail: the
 /// dexbuilder reserves 2 low scratch registers and routes any operand whose FINAL register is ≥16
 /// through them via `move(-object)/from16`. The object operand always moves with
