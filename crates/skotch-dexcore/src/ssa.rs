@@ -3427,7 +3427,7 @@ pub(crate) fn build_dex(
                     emit_field(f, &mut insns, alloc, v, &mut pool_fixups, &mut positions, line_numbers, spill_base, frame_hint)?;
                 }
                 SsaOp::ArrayGet { .. } | SsaOp::ArrayPut { .. } | SsaOp::ArrayLength { .. } => {
-                    emit_array(f, &mut insns, alloc, v, &mut positions, line_numbers)?;
+                    emit_array(f, &mut insns, alloc, v, &mut positions, line_numbers, spill_base, frame_hint)?;
                 }
                 SsaOp::NewInstance { .. } | SsaOp::NewArray { .. } => {
                     emit_alloc(f, &mut insns, alloc, v, &mut pool_fixups, &mut positions, line_numbers)?;
@@ -3442,7 +3442,7 @@ pub(crate) fn build_dex(
                     emit_check_cast(f, &mut insns, alloc, v, &mut pool_fixups, &mut positions, line_numbers, frame_hint)?;
                 }
                 SsaOp::InstanceOf { .. } => {
-                    emit_instance_of(f, &mut insns, alloc, v, &mut pool_fixups, &mut positions, line_numbers)?;
+                    emit_instance_of(f, &mut insns, alloc, v, &mut pool_fixups, &mut positions, line_numbers, spill_base, frame_hint)?;
                 }
                 SsaOp::CaughtException => {
                     // `move-exception dest` (11x) — only reached when the caught value
@@ -3793,6 +3793,9 @@ pub(crate) fn build_dex(
             {
                 high(alloc.reg[*value as usize]) || high(alloc.reg[*obj as usize])
             }
+            // array-length (0x21) / instance-of (0x20): same nibble-form spill (dest + ref operand)
+            SsaOp::ArrayLength { array, .. } => high(alloc.reg[i]) || high(alloc.reg[*array as usize]),
+            SsaOp::InstanceOf { obj, .. } => high(alloc.reg[i]) || high(alloc.reg[*obj as usize]),
             _ => false,
         });
         let if_test_high = f.blocks.iter().any(|blk| match &blk.term {
@@ -4083,6 +4086,8 @@ fn emit_array(
     v: ValId,
     positions: &mut Vec<(u32, u32)>,
     line_numbers: &[(u16, u16)],
+    spill_base: Option<u16>,
+    frame_hint: Option<u16>,
 ) -> Result<()> {
     let reg = |x: ValId| alloc.reg[x as usize];
     let jvm_pc = match &f.values[v as usize].op {
@@ -4101,10 +4106,21 @@ fn emit_array(
             insns.push(dex_op | (reg(*value) << 8));
             insns.push((reg(*array) & 0xff) | ((reg(*index) & 0xff) << 8));
         }
-        // array-length (0x21, 12x): A = dest (low nibble), B = array (high nibble). No wider
-        // form, so a register ≥16 must spill — bail loudly (never truncate).
+        // array-length (0x21, 12x): A = dest (low nibble), B = array (high nibble). No wider form,
+        // so a high dest/array routes through the 2 low scratch reserved by the build_dex retry.
         SsaOp::ArrayLength { array, .. } => {
-            insns.push(0x21 | (nib(reg(v))? << 8) | (nib(reg(*array))? << 12));
+            let (dest, arr) = (reg(v), reg(*array));
+            if let Some(sb) = spill_base {
+                let na = f.num_arg_registers;
+                let est = frame_hint.unwrap_or(alloc.registers_used.max(na));
+                let (dest_use, arr_use, reload) = spill_dest_obj(insns, sb, na, est, dest, arr)?;
+                insns.push(0x21 | (nib(dest_use)? << 8) | (nib(arr_use)? << 12));
+                if reload {
+                    emit_copy(insns, dest, dest_use, false, false, na, est)?;
+                }
+            } else {
+                insns.push(0x21 | (nib(dest)? << 8) | (nib(arr)? << 12));
+            }
         }
         _ => unreachable!(),
     }
@@ -4197,6 +4213,8 @@ fn emit_instance_of(
     pool_fixups: &mut Vec<Fixup>,
     _positions: &mut [(u32, u32)],
     _line_numbers: &[(u16, u16)],
+    spill_base: Option<u16>,
+    frame_hint: Option<u16>,
 ) -> Result<()> {
     let reg = |x: ValId| alloc.reg[x as usize];
     let (obj, type_desc) = match &f.values[v as usize].op {
@@ -4204,13 +4222,23 @@ fn emit_instance_of(
         _ => unreachable!(),
     };
     let (dest, src) = (reg(v), reg(obj));
-    if dest > 15 || src > 15 {
-        bail!("ssa dexbuilder: instance-of register > 15 (22c is nibble-encoded)");
-    }
-    insns.push(0x20 | ((dest & 0xf) << 8) | ((src & 0xf) << 12));
+    // instance-of (22c) has no wider form, so a high dest/obj routes through the 2 low scratch.
+    let (dest_use, src_use, reload) = if let Some(sb) = spill_base {
+        let na = f.num_arg_registers;
+        let est = frame_hint.unwrap_or(alloc.registers_used.max(na));
+        spill_dest_obj(insns, sb, na, est, dest, src)?
+    } else {
+        (dest, src, false)
+    };
+    insns.push(0x20 | (nib(dest_use)? << 8) | (nib(src_use)? << 12));
     let unit = insns.len();
     insns.push(0); // type-ref placeholder, patched via the fixup
     pool_fixups.push(Fixup { unit, item: ItemRef::Type(type_desc), wide: false });
+    if reload {
+        let na = f.num_arg_registers;
+        let est = frame_hint.unwrap_or(alloc.registers_used.max(na));
+        emit_copy(insns, dest, dest_use, false, false, na, est)?; // move/from16 dest <- scratch
+    }
     Ok(())
 }
 
@@ -4326,6 +4354,32 @@ fn emit_copy(
         insns.push(src); // BBBB src in word1 (allocated; remapped later)
     }
     Ok(())
+}
+
+/// Routes a nibble-form `op dest, obj[, ref]` (the iget / instance-of / array-length shape: a
+/// 32-bit result `dest` plus one object/array operand `obj`) through the 2 low scratch registers
+/// reserved by the build_dex retry (`sb`, `sb+1`) when an operand's FINAL args-high register is
+/// ≥16. Spills the object operand DOWN to `sb+1` (move-object/from16 — `obj` is always a
+/// reference) and, if `dest` is high, redirects the op's output to `sb` and signals a reload.
+/// Returns `(dest_use, obj_use, reload_dest)`: the caller emits the op with `dest_use`/`obj_use`,
+/// then if `reload_dest` copies `sb` back into `dest` (move/from16 — `dest` is the 32-bit result).
+fn spill_dest_obj(
+    insns: &mut Vec<u16>,
+    sb: u16,
+    na: u16,
+    est: u16,
+    dest: u16,
+    obj: u16,
+) -> Result<(u16, u16, bool)> {
+    let hi = |r: u16| r >= 16 || crate::regalloc::remap_register(r, na, est) >= 16;
+    let obj_use = if hi(obj) {
+        emit_copy(insns, sb + 1, obj, false, true, na, est)?;
+        sb + 1
+    } else {
+        obj
+    };
+    let (dest_use, reload) = if hi(dest) { (sb, true) } else { (dest, false) };
+    Ok((dest_use, obj_use, reload))
 }
 
 /// Emits a parallel-copy of φ-moves (`move`/`move-wide`/`move-object`). Each copy uses the 12x
