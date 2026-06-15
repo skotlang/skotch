@@ -523,7 +523,7 @@ fn dex_method(cf: &ClassFile, m: &Member, min_api: u32, emit_annotations: bool) 
             // loudly on the rest), so this only ADDS coverage without losing byte-identity.
             match translate_code(cf, m, c, &params, &ret, min_api) {
                 Ok(mut item) => {
-                    crate::regalloc::remap_insns(&mut item.insns, item.ins_size, item.registers_size);
+                    crate::regalloc::remap_insns(&mut item.insns, item.ins_size, item.registers_size)?;
                     item
                 }
                 Err(_bootstrap_bail) => crate::ssa::dex_method_ssa(
@@ -531,10 +531,15 @@ fn dex_method(cf: &ClassFile, m: &Member, min_api: u32, emit_annotations: bool) 
                 )?,
             }
         };
-        // The bootstrap allocator has no spilling / move scheduling, and the
-        // 4-bit-register instruction forms it emits cannot encode a register
-        // ≥ 16. d8 handles >16 registers with the full allocator's spill moves;
-        // we can't, so bail rather than silently mask a register field.
+        // >16 registers still bails. remap_insns now FAILS rather than truncating a register that
+        // overflows its instruction field, but that is NOT sufficient on its own: the bootstrap
+        // straight-line path's binop emit picks the compact /2addr (4-bit) form and TRUNCATES a
+        // register ≥16 into the nibble at EMIT time (before remap), so get_field later reads the
+        // already-truncated value and the remap check can't see it. Full >16-register support needs
+        // emit-time nibble-fit checks + wide-form (3-address / move-16) selection or real spilling
+        // in BOTH the bootstrap and SSA paths — a dedicated multi-iteration effort. Until then,
+        // bail (never miscompile). (Validated: a 20-local method otherwise miscompiled on ART —
+        // `add-int/2addr v0, v16` truncated v16→v0.)
         if item.registers_size > 16 {
             bail!(
                 "dexer: {} registers needed in {}{} — >16 needs spilling (Phase 1 allocator)",

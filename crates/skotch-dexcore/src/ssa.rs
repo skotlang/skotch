@@ -3560,7 +3560,7 @@ pub(crate) fn build_dex(
             bail!("ssa: register operand v{max_reg} out of range (>= {registers_size}) — a value got no register (NO_REG)");
         }
     }
-    crate::regalloc::remap_insns(&mut insns, f.num_arg_registers, registers_size);
+    crate::regalloc::remap_insns(&mut insns, f.num_arg_registers, registers_size)?;
     let debug_info = crate::bootstrap::build_debug_info(&positions, params);
     Ok(CodeItem {
         registers_size,

@@ -145,7 +145,23 @@ fn reg_fields(op: u8) -> &'static [Field] {
 
 /// Remaps every register operand in `insns` from allocated space to real DEX
 /// registers (args-high), in place.
-pub fn remap_insns(insns: &mut [u16], num_arg: u16, registers_used: u16) {
+/// The largest register a field can ENCODE: 15 for a 4-bit nibble, 255 for an 8-bit byte, 65535
+/// for a 16-bit word. Used to detect when a remapped register no longer fits its instruction form
+/// (which would otherwise be silently truncated by `set_field` — a miscompile).
+fn field_max(f: Field) -> u16 {
+    match f {
+        Field::NibbleA { .. } | Field::NibbleB { .. } | Field::NibbleLo0 { .. } | Field::NibbleLo1 { .. } => 15,
+        Field::ByteAA { .. } | Field::ByteLo { .. } | Field::ByteHi { .. } => 255,
+        Field::Word { .. } => u16::MAX,
+    }
+}
+
+/// Remap allocated register numbers to real DEX numbers (args to the top). A method may legitimately
+/// use >16 registers: the wide instruction forms (8/16-bit fields) encode high registers fine, and
+/// only the 4-bit nibble forms (move 12x, if 22t, invoke 35c args, …) cap at 15. So instead of a
+/// blanket >16 bail, we check each field as we remap and FAIL (never truncate) when a register
+/// doesn't fit — that operand genuinely needs spilling, which this allocator doesn't do.
+pub fn remap_insns(insns: &mut [u16], num_arg: u16, registers_used: u16) -> anyhow::Result<()> {
     // Identity remap — nothing to do (and avoids touching anything).
     let identity = num_arg == 0 || registers_used == num_arg;
     let map = |r: u16| if identity { r } else { remap_register(r, num_arg, registers_used) };
@@ -156,16 +172,25 @@ pub fn remap_insns(insns: &mut [u16], num_arg: u16, registers_used: u16) {
         let len = dex_insn_len(op);
         // Fixed register fields.
         for &f in reg_fields(op) {
-            let r = get_field(insns, base, f);
-            set_field(insns, base, f, map(r));
+            let r = map(get_field(insns, base, f));
+            if r > field_max(f) {
+                anyhow::bail!(
+                    "regalloc: register v{r} does not fit the instruction form for op {op:#04x} (max v{}) — needs spilling",
+                    field_max(f)
+                );
+            }
+            set_field(insns, base, f, r);
         }
-        // 35c invoke: variable argument registers.
+        // 35c invoke: variable argument registers (all 4-bit nibbles, cap 15).
         if (0x6e..=0x72).contains(&op) {
             let count = (insns[base] >> 12) & 0xf;
             // vG (5th reg) is word0 bits 8..12; vC..vF are word2 nibbles.
             if count == 5 {
-                let g = get_field(insns, base, Field::NibbleA { w: 0 });
-                set_field(insns, base, Field::NibbleA { w: 0 }, map(g));
+                let g = map(get_field(insns, base, Field::NibbleA { w: 0 }));
+                if g > 15 {
+                    anyhow::bail!("regalloc: invoke 5th-arg register v{g} > 15 — needs range form/spilling");
+                }
+                set_field(insns, base, Field::NibbleA { w: 0 }, g);
             }
             let arg_fields = [
                 Field::NibbleLo0 { w: 2 },
@@ -174,12 +199,16 @@ pub fn remap_insns(insns: &mut [u16], num_arg: u16, registers_used: u16) {
                 Field::NibbleB { w: 2 },
             ];
             for k in 0..(count.min(4) as usize) {
-                let r = get_field(insns, base, arg_fields[k]);
-                set_field(insns, base, arg_fields[k], map(r));
+                let r = map(get_field(insns, base, arg_fields[k]));
+                if r > 15 {
+                    anyhow::bail!("regalloc: invoke arg register v{r} > 15 — needs range form/spilling");
+                }
+                set_field(insns, base, arg_fields[k], r);
             }
         }
         base += len;
     }
+    Ok(())
 }
 
 /// The highest register operand referenced anywhere in `insns` (in allocated space, i.e.

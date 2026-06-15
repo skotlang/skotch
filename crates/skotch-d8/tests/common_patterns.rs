@@ -355,6 +355,20 @@ fn loop_header_is_entry_now_dexes_via_preheader() {
     }
 }
 
+/// A method needing >16 registers must BAIL, never miscompile. The compact 4-bit (nibble) forms
+/// the emit prefers (move 12x, add-int/2addr 12x, invoke 35c args) cannot encode a register ≥ 16,
+/// and the bootstrap binop emit picks /2addr and would TRUNCATE the second operand into the nibble
+/// at emit time (ART then runs `add-int/2addr v0, v16` as `add v0, v0` — a silent miscompile, which
+/// this fixture exhibited before the >16 guard was kept). `ArtManyRegs.combine` has 20 live locals;
+/// it must bail until full register spilling lands. (`remap_insns` also now fails-loudly rather
+/// than truncating, as defense in depth.)
+#[test]
+fn over_16_registers_bails_not_miscompiles() {
+    let cf = skotch_classfile::parse_class_file(&fixtures().join("ArtManyRegs.class")).unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    dex_classes(&[cf], &opts).expect_err("ArtManyRegs (>16 registers) must bail, not miscompile");
+}
+
 /// A NON-CAPTURING lambda (`invokedynamic` → `LambdaMetafactory.metafactory`, no captured args,
 /// static impl, non-generic SAM) is desugared d8-style: a SYNTHETIC class implementing the
 /// functional interface is generated (singleton INSTANCE + a SAM method forwarding to the impl),
