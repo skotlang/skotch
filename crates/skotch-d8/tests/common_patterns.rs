@@ -331,17 +331,20 @@ fn shift_const_lit_fold_byte_identical() {
 /// dominance-frontier φ-placement gave the loop variables no φs (they'd never update). It
 /// now DEXES correctly: build_ssa synthesizes an empty PRE-HEADER as the new entry, giving
 /// the header the entry edge as a second predecessor so its φs are placed, with the
-/// argument value as the entry operand. (Only applied when there are no exception regions —
-/// handler/try indices would also shift — else it still bails.) Correctness on a REAL
-/// device for several entry-header loop shapes (Euclid gcd with a sibling-φ swap, a
-/// nested-if collatz, plain count-down) is proven by `tests/art/ArtPreheader`; here: dexes +
-/// self-validates. NOTE: `Fib`/`ArtPhiCycle` (back-edge parallel copies) graduated earlier —
-/// see `sibling_phi_parallel_copy_now_dexes`.
+/// argument value as the entry operand. The transform shifts every block index up by one,
+/// INCLUDING exception edges (insert_entry_preheader shifts cfg.exc_edges and exc_regions are
+/// rebuilt from the raw handler PCs against the shifted blocks), so it produces the same graph a
+/// natural pre-header would and works with try/catch too. Correctness on a REAL device for
+/// several entry-header loop shapes (Euclid gcd with a sibling-φ swap, a nested-if collatz,
+/// plain count-down) is proven by `tests/art/ArtPreheader`, and for entry-header loops with a
+/// try/catch in the body (typed catch + whole-body div-by-zero catch, accumulator threaded as
+/// an arg) by `tests/art/ArtPreheaderTry`; here: dexes + self-validates. NOTE: `Fib`/`ArtPhiCycle`
+/// (back-edge parallel copies) graduated earlier — see `sibling_phi_parallel_copy_now_dexes`.
 #[test]
 fn loop_header_is_entry_now_dexes_via_preheader() {
-    for name in ["Gcd", "ArtPreheader"] {
-        let path = if name == "ArtPreheader" {
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtPreheader.class")
+    for name in ["Gcd", "ArtPreheader", "ArtPreheaderTry"] {
+        let path = if name.starts_with("Art") {
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("tests/art/{name}.class"))
         } else {
             fixtures().join(format!("{name}.class"))
         };

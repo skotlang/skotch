@@ -708,12 +708,11 @@ pub(crate) fn build_ssa(
     // the loop variables get NO φs — they'd never update (a miscompile). We SYNTHESIZE
     // an empty pre-header as the new entry (block 0) so the header gains the entry edge
     // as a second predecessor; the header φ's entry operand is then the incoming
-    // (argument) value, filled by rename when it processes the pre-header. Only sound
-    // with no exception regions (handler/try block indices would also shift); bail then.
+    // (argument) value, filled by rename when it processes the pre-header. The transform
+    // shifts every block index up by one — including exception edges (insert_entry_preheader
+    // shifts cfg.exc_edges, and exc_regions are rebuilt below from the raw handler PCs against
+    // the SHIFTED blocks), so it is sound with try/catch as well.
     if !cfg.preds[0].is_empty() {
-        if !exceptions.is_empty() {
-            bail!("ssa: loop header is the entry block with exception regions — φ-at-entry not yet supported");
-        }
         cfg = insert_entry_preheader(cfg);
     }
     let n = cfg.len();
