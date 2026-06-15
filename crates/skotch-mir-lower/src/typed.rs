@@ -5304,9 +5304,21 @@ fn lower_loop_body_blocks(
                 }
             }
             Some((j, Special::NestedWhile)) => {
-                // Nested `while (cmp) { body }` inside the
-                // outer loop body. Allocates inner cond /
-                // body / exit blocks.
+                // Nested `while (cond) { body }` inside the outer
+                // loop body. Supports cond shapes:
+                //   - single cmp:  `while (i < n)`
+                //   - && chain:    `while (k > 0 && pat[k] != c)`
+                //   - || chain:    `while (a || b)`
+                //   - any bool ref / call: `while (matched)`
+                //
+                // CFG layout for an N-operand cond chain:
+                //   block 0 (pre):        Goto(cond_0)
+                //   block cond_k for k in 0..N:
+                //     emit cmp k → bool slot,
+                //     Branch wiring per CondShape (AllAnd/AnyOr/Single)
+                //   block body..body+M-1:  Goto(cond_0) on back edge,
+                //                          Goto(after) on break edge
+                //   block after:          caller continues
                 let while_node = body_children[j];
                 let KtExpr::While(w) = KtExpr::cast(while_node)? else {
                     return None;
@@ -5315,19 +5327,10 @@ fn lower_loop_body_blocks(
                     .condition()
                     .and_then(|c| c.expression())
                     .map(unwrap_parens)?;
-                let KtExpr::Binary(cmp_b) = cond_expr else {
+                let (cond_shape, cond_operands) = classify_cond_chain(cond_expr);
+                if cond_operands.is_empty() {
                     return None;
-                };
-                let cmp_text = cmp_b.operation().map(|o| o.text()).unwrap_or_default();
-                let cmp_mir = match cmp_text.as_str() {
-                    "==" => Some(skotch_mir::BinOp::CmpEq),
-                    "!=" => Some(skotch_mir::BinOp::CmpNe),
-                    "<" => Some(skotch_mir::BinOp::CmpLt),
-                    ">" => Some(skotch_mir::BinOp::CmpGt),
-                    "<=" => Some(skotch_mir::BinOp::CmpLe),
-                    ">=" => Some(skotch_mir::BinOp::CmpGe),
-                    _ => None,
-                }?;
+                }
                 let snap = name_to_local.clone();
                 let lookup = |n: &str| -> Option<LocalId> {
                     snap.iter()
@@ -5335,48 +5338,51 @@ fn lower_loop_body_blocks(
                         .find(|(name, _)| name == n)
                         .map(|(_, l)| *l)
                 };
-                // First flush the cur_stmts as the
-                // "pre-while" block which goes to the
-                // inner cond.
+
+                // Flush the cur_stmts as the pre-while block; goto cond_0.
                 let cond_block_id = block_offset + blocks.len() as u32 + 1;
                 blocks.push(BasicBlock {
                     stmts: std::mem::take(&mut cur_stmts),
                     terminator: Terminator::Goto(cond_block_id),
                 });
-                // Build the inner cond block. Use lower_rich_expr_to_slot
-                // (not the inline-only variant) so cond shapes like
-                // `i < arr.size` resolve property/method calls on
-                // primitive arrays.
-                let mut inner_cond_stmts: Vec<MStmt> = Vec::new();
-                let lhs_slot = lower_rich_expr_to_slot(
-                    cmp_b.lhs()?,
-                    &lookup,
-                    fn_lookup_ref,
-                    next_slot,
-                    &mut inner_cond_stmts,
-                    local_tys,
-                    strings,
-                )?;
-                let rhs_slot = lower_rich_expr_to_slot(
-                    cmp_b.rhs()?,
-                    &lookup,
-                    fn_lookup_ref,
-                    next_slot,
-                    &mut inner_cond_stmts,
-                    local_tys,
-                    strings,
-                )?;
-                let cmp_slot = LocalId(*next_slot);
-                *next_slot += 1;
-                local_tys.push(Ty::Bool);
-                inner_cond_stmts.push(MStmt::Assign {
-                    dest: cmp_slot,
-                    value: skotch_mir::Rvalue::BinOp {
-                        op: cmp_mir,
-                        lhs: lhs_slot,
-                        rhs: rhs_slot,
-                    },
-                });
+
+                // Reserve block IDs for each cmp block + body + after.
+                // Lower cmp blocks FIRST (matching the historical
+                // slot-allocation order so downstream Ty-aware fixups
+                // see the same slot numbering they were tuned for),
+                // then body, then after.
+                let n_operands = cond_operands.len() as u32;
+                let body_first_id = cond_block_id + n_operands;
+
+                let mut cmp_blocks: Vec<BasicBlock> =
+                    Vec::with_capacity(cond_operands.len());
+                // Pre-allocate cmp slots in order so the cmp block at
+                // index k uses cmp_slot_k. The cmp slot's Bool Ty is
+                // pushed into local_tys before the body is lowered,
+                // matching the legacy ordering.
+                for operand in &cond_operands {
+                    let mut cmp_stmts: Vec<MStmt> = Vec::new();
+                    let cmp_slot = lower_rich_expr_to_slot(
+                        *operand,
+                        &lookup,
+                        fn_lookup_ref,
+                        next_slot,
+                        &mut cmp_stmts,
+                        local_tys,
+                        strings,
+                    )?;
+                    // Placeholder Branch — wired up after we know
+                    // the body's block count.
+                    cmp_blocks.push(BasicBlock {
+                        stmts: cmp_stmts,
+                        terminator: Terminator::Branch {
+                            cond: cmp_slot,
+                            then_block: 0,
+                            else_block: 0,
+                        },
+                    });
+                }
+
                 let body_block_opt = w.body().and_then(|b| b.expression());
                 let inner_body_children: Vec<&skotch_sil::SilNode> =
                     match body_block_opt {
@@ -5396,12 +5402,12 @@ fn lower_loop_body_blocks(
                     strings,
                     fn_lookup_ref,
                     function_param_names,
-                    cond_block_id + 1,
+                    body_first_id,
                     SENT_BACK,
                     SENT_BREAK,
                 )?;
-                let n = inner_body_blocks.len() as u32;
-                let after_inner_id = cond_block_id + 1 + n;
+                let body_block_count = inner_body_blocks.len() as u32;
+                let after_inner_id = body_first_id + body_block_count;
                 for blk in &mut inner_body_blocks {
                     let remap = |t: u32| -> u32 {
                         if t == SENT_BACK {
@@ -5425,18 +5431,39 @@ fn lower_loop_body_blocks(
                         _ => {}
                     }
                 }
-                blocks.push(BasicBlock {
-                    stmts: inner_cond_stmts,
-                    terminator: Terminator::Branch {
-                        cond: cmp_slot,
-                        then_block: cond_block_id + 1,
-                        else_block: after_inner_id,
-                    },
-                });
+
+                // Now wire up cmp block branch targets per CondShape.
+                let true_target = body_first_id;
+                let false_target = after_inner_id;
+                for (k, blk) in cmp_blocks.iter_mut().enumerate() {
+                    let is_last = (k as u32 + 1) >= n_operands;
+                    let next_cmp_id = cond_block_id + (k as u32 + 1);
+                    let (on_true, on_false) = match cond_shape {
+                        CondShape::Single => (true_target, false_target),
+                        CondShape::AllAnd => {
+                            let t = if is_last { true_target } else { next_cmp_id };
+                            (t, false_target)
+                        }
+                        CondShape::AnyOr => {
+                            let f = if is_last { false_target } else { next_cmp_id };
+                            (true_target, f)
+                        }
+                    };
+                    if let Terminator::Branch {
+                        then_block,
+                        else_block,
+                        ..
+                    } = &mut blk.terminator
+                    {
+                        *then_block = on_true;
+                        *else_block = on_false;
+                    }
+                }
+
+                blocks.extend(cmp_blocks);
                 blocks.extend(inner_body_blocks);
-                // Continue accumulating into the after-
-                // inner block (next push has id ==
-                // after_inner_id).
+                // Continue accumulating into the after-inner block
+                // (next push has id == after_inner_id).
                 i = j + 1;
                 continue;
             }
