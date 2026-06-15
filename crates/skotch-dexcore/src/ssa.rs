@@ -2323,6 +2323,16 @@ pub(crate) fn reserve_scratch(alloc: &mut Allocation, num_arg: u16, k: u16) {
 /// than allocated: a small int constant used only by lit-foldable ops, mirroring
 /// d8's const handling (`iinc`'s constant becomes `add-int/lit8`, no register).
 fn is_rematerialized(f: &SsaFn, v: ValId) -> bool {
+    is_rematerialized_impl(f, v, true)
+}
+
+/// `pair_guard` enables the two-const-binop guard: a lit form encodes ONE register +
+/// ONE literal, so a binop whose BOTH operands are foldable consts must keep its LEFT
+/// const in a register (emit_binop then folds the RIGHT one via `reg(left)`). Without
+/// it both consts would be NO_REG and emit_binop would fold via `reg(NO_REG)` — a
+/// miscompile the over-coalesce net otherwise has to bail on. The guard tests the RIGHT
+/// operand with `pair_guard = false` so it never recurses back through this guard.
+fn is_rematerialized_impl(f: &SsaFn, v: ValId, pair_guard: bool) -> bool {
     let val = &f.values[v as usize];
     let c = match val.op {
         SsaOp::ConstInt(c) => c,
@@ -2357,6 +2367,15 @@ fn is_rematerialized(f: &SsaFn, v: ValId) -> bool {
                 if (on_left && on_right)
                     || (on_left && !crate::bootstrap::is_commutative(jop) && !isub_left)
                 {
+                    return false;
+                }
+                // Two foldable consts on one binop: keep THIS const in a register when it is the
+                // LEFT operand and the RIGHT operand is itself a (base-)rematerializable const —
+                // exactly one of the pair must hold a register for the fold's source. (Tested with
+                // pair_guard=false so it can't recurse back here. Identity binops are already
+                // collapsed by constant_fold, so a surviving two-const binop is genuinely unfoldable
+                // both-ways.)
+                if pair_guard && on_left && is_rematerialized_impl(f, b, false) {
                     return false;
                 }
                 any_use = true;

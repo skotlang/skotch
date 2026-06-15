@@ -479,6 +479,24 @@ fn over_16_if_test_high_local_spills_via_pre_emit_reserve() {
     skotch_dex::validator::validate(&dex).expect("ArtHiLocalIf dex must validate");
 }
 
+/// A binop `a op b` whose BOTH operands are rematerializable consts (every use lit-foldable, so each
+/// would otherwise fold to a literal with NO register). A DEX lit form encodes ONE register + ONE
+/// literal, so emit_binop folds the RIGHT operand via `reg(LEFT)` — if the LEFT is also NO_REG that
+/// emits `add-int/lit8 dest,(NO_REG&0xff),#c`, a miscompile the over-coalesce net otherwise bails on.
+/// `is_rematerialized` now keeps the LEFT const of such a pair in a register (the fold source).
+/// ArtTwoConst 6/6/66/276 (runtime-proven) has `7 + (-1)` with 7 and -1 each also used in foldable
+/// `*i` muls inside a loop (→ SSA path); without the fix it bails `over-coalesce`. Here: dexes + validates.
+#[test]
+fn two_rematerializable_const_binop_keeps_left_in_register() {
+    let cf = skotch_classfile::parse_class_file(
+        &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtTwoConst.class"),
+    )
+    .unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let dex = dex_classes(&[cf], &opts).expect("ArtTwoConst (two-const binop) should dex");
+    skotch_dex::validator::validate(&dex).expect("ArtTwoConst dex must validate");
+}
+
 /// array-length (0x21, 12x) and instance-of (0x20, 22c) — nibble forms with no wider encoding —
 /// now spill a high object operand through the reserved low scratch (move-object/from16 then the
 /// op on scratch, dest reloaded if high), via the shared `spill_dest_obj`. ArtArrInst 31/0/51
