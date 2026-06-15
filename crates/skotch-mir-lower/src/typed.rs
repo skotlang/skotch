@@ -21,6 +21,58 @@ use skotch_typeck::TypedFile;
 use skotch_types::Ty;
 
 thread_local! {
+    /// Class-method context: when set, the body walker is inside a
+    /// class method whose receiver class is `class_name` and whose
+    /// declared fields are listed in `fields`. Bare-identifier
+    /// reads/writes in method bodies that don't resolve to a local
+    /// fall back to this list to emit `this.field` GetField/PutField.
+    static CLASS_METHOD_CTX: std::cell::RefCell<Option<(String, Vec<(String, Ty)>)>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Install the class-method context for the duration of a body
+/// walker call. Restored on drop so nested entry points (lambdas
+/// inside class methods, etc.) don't leak state into siblings.
+struct ClassMethodScope {
+    prev: Option<(String, Vec<(String, Ty)>)>,
+}
+
+impl ClassMethodScope {
+    fn new(class_name: Option<&str>, fields: &[(String, Ty)]) -> Self {
+        let prev = CLASS_METHOD_CTX.with(|cell| cell.borrow_mut().take());
+        if let Some(c) = class_name {
+            CLASS_METHOD_CTX.with(|cell| {
+                *cell.borrow_mut() = Some((c.to_string(), fields.to_vec()))
+            });
+        }
+        ClassMethodScope { prev }
+    }
+}
+
+impl Drop for ClassMethodScope {
+    fn drop(&mut self) {
+        CLASS_METHOD_CTX.with(|cell| *cell.borrow_mut() = self.prev.take());
+    }
+}
+
+/// Look up a name in the current class-method context. Returns
+/// `Some((class_name, field_name, field_ty))` when the name matches
+/// a declared field, `None` otherwise (or when no context is
+/// active).
+fn class_field_lookup(name: &str) -> Option<(String, String, Ty)> {
+    CLASS_METHOD_CTX.with(|cell| {
+        let borrow = cell.borrow();
+        let Some((class_name, fields)) = borrow.as_ref() else {
+            return None;
+        };
+        fields
+            .iter()
+            .find(|(n, _)| n == name)
+            .map(|(n, t)| (class_name.clone(), n.clone(), t.clone()))
+    })
+}
+
+thread_local! {
     /// Function-scoped param-Ty fallback. Set by `lower_simple_body`
     /// (and similar entry points) before recursing into the body
     /// walker; cleared on the way out. Lookup sites that read
@@ -4547,11 +4599,55 @@ fn lower_loop_body(
                 return None;
             };
             let lname = lref.name()?;
-            let lhs_slot = name_to_local
+            // Try local first; if not found, fall back to a class
+            // field write (this.field = expr) via PutField. Only
+            // applies inside class methods (the CLASS_METHOD_CTX
+            // scope is active).
+            let lhs_local = name_to_local
                 .iter()
                 .rev()
                 .find(|(n, _)| n == lname)
-                .map(|(_, l)| *l)?;
+                .map(|(_, l)| *l);
+            let lhs_field = if lhs_local.is_none() {
+                class_field_lookup(lname)
+            } else {
+                None
+            };
+            if let Some((class_name, field_name, _field_ty)) = lhs_field {
+                // Lower the rhs to a slot, then emit a PutField on
+                // `this` (slot 0).
+                let snap = name_to_local.clone();
+                let lookup = |n: &str| -> Option<LocalId> {
+                    snap.iter()
+                        .rev()
+                        .find(|(name, _)| name == n)
+                        .map(|(_, l)| *l)
+                };
+                let value_slot = lower_rich_expr_to_slot(
+                    rhs,
+                    &lookup,
+                    fn_lookup_ref,
+                    next_slot,
+                    &mut body_mstmts,
+                    local_tys,
+                    strings,
+                )?;
+                let this_slot = LocalId(0);
+                let unused = LocalId(*next_slot);
+                *next_slot += 1;
+                local_tys.push(Ty::Unit);
+                body_mstmts.push(MStmt::Assign {
+                    dest: unused,
+                    value: skotch_mir::Rvalue::PutField {
+                        receiver: this_slot,
+                        class_name,
+                        field_name,
+                        value: value_slot,
+                    },
+                });
+                continue;
+            }
+            let lhs_slot = lhs_local?;
             let resolve = |e: KtExpr<'_>,
                            next_slot: &mut u32,
                            local_tys: &mut Vec<Ty>,
@@ -7006,6 +7102,10 @@ fn try_lower_multi_stmt_block_with_offset(
         }
     }
     let _param_scope = ParamTyScope::new(param_fallback_tys);
+    // Install the class-method context so bare-identifier reads/
+    // writes in this body can fall back to `this.field` PutField /
+    // GetField when they don't match a local. Restored on drop.
+    let _class_scope = ClassMethodScope::new(class_name, field_names);
     let mut local_tys: Vec<Ty> = Vec::new();
     let mut stmts: Vec<MStmt> = Vec::new();
     let mut next_slot: u32 = param_count as u32 + slot_offset;
@@ -12874,7 +12974,30 @@ fn lower_inline_expr_to_slot(
         KtExpr::This(_) => Some(skotch_mir::LocalId(0)),
         KtExpr::Reference(r) => {
             let n = r.name()?;
-            lookup_name(n)
+            if let Some(slot) = lookup_name(n) {
+                return Some(slot);
+            }
+            // Implicit `this.field` fallback for class-method bodies:
+            // when the bare identifier doesn't resolve to a local
+            // and the current method context advertises the name as
+            // a class field, emit a GetField read from `this`.
+            if let Some((class_name, field_name, field_ty)) =
+                class_field_lookup(n)
+            {
+                let slot = LocalId(*next_slot);
+                *next_slot += 1;
+                extra_locals.push(field_ty);
+                pre_stmts.push(MStmt::Assign {
+                    dest: slot,
+                    value: skotch_mir::Rvalue::GetField {
+                        receiver: LocalId(0),
+                        class_name,
+                        field_name,
+                    },
+                });
+                return Some(slot);
+            }
+            None
         }
         KtExpr::Binary(b) => {
             let op_text = b.operation().map(|o| o.text()).unwrap_or_default();
