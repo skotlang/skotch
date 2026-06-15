@@ -49,13 +49,20 @@ fn box_of(prim: &str) -> Option<&'static str> {
         "C" => "Ljava/lang/Character;",
         "S" => "Ljava/lang/Short;",
         "F" => "Ljava/lang/Float;",
+        "J" => "Ljava/lang/Long;",
+        "D" => "Ljava/lang/Double;",
         _ => return None,
     })
 }
 
-/// For a (non-wide) primitive, the (wrapper class, unboxing accessor) used to adapt a boxed SAM
-/// argument down to a primitive impl parameter — the inverse of box_of. None for long/double
-/// (a 2-register result we don't handle yet).
+/// Whether a primitive descriptor is a wide (2-register) type.
+fn is_wide_prim(d: &str) -> bool {
+    d == "J" || d == "D"
+}
+
+/// The (wrapper class, unboxing accessor) used to adapt a boxed SAM argument down to a primitive
+/// impl parameter — the inverse of box_of. Long/double accessors return a 2-register (wide) result
+/// (`move-result-wide` into a scratch pair); the caller handles their wide layout.
 fn unbox_of(prim: &str) -> Option<(&'static str, &'static str)> {
     Some(match prim {
         "I" => ("Ljava/lang/Integer;", "intValue"),
@@ -64,6 +71,8 @@ fn unbox_of(prim: &str) -> Option<(&'static str, &'static str)> {
         "C" => ("Ljava/lang/Character;", "charValue"),
         "S" => ("Ljava/lang/Short;", "shortValue"),
         "F" => ("Ljava/lang/Float;", "floatValue"),
+        "J" => ("Ljava/lang/Long;", "longValue"),
+        "D" => ("Ljava/lang/Double;", "doubleValue"),
         _ => return None,
     })
 }
@@ -91,11 +100,13 @@ fn emit_boxed_return(insns: &mut Vec<u16>, fixups: &mut Vec<Fixup>, impl_ret: &s
     // move-result(-wide/-object) of the impl call into v0.
     insns.push(if wide { 0x0b } else if is_ref { 0x0c } else { 0x0a });
     if let RetAdapt::Box(boxed, prim) = adapt {
-        // Box the (non-wide) primitive in v0: invoke-static {v0} <boxed>.valueOf(prim)boxed.
-        insns.push(0x1071); // invoke-static, argn=1
+        // Box the primitive (now in v0, or the pair v0,v1 for a wide long/double) via
+        // invoke-static {v0[,v1]} <boxed>.valueOf(prim)boxed.
+        let argn: u16 = if wide { 2 } else { 1 };
+        insns.push(0x71 | (argn << 12)); // invoke-static, argn args
         let u = insns.len();
         insns.push(0);
-        insns.push(0x0000); // register nibbles: v0
+        insns.push(if wide { 0x0010 } else { 0x0000 }); // nibbles: v0 (and vD=v1 for a wide arg)
         fixups.push(Fixup {
             unit: u,
             item: ItemRef::Method(MethodRef { class: boxed.clone(), proto: ProtoRef { return_type: boxed.clone(), params: vec![prim.clone()] }, name: "valueOf".into() }),
@@ -103,7 +114,7 @@ fn emit_boxed_return(insns: &mut Vec<u16>, fixups: &mut Vec<Fixup>, impl_ret: &s
         });
         insns.push(0x000c); // move-result-object v0
         insns.push(0x0011); // return-object v0
-        (1, 1)
+        (if wide { 2 } else { 1 }, argn)
     } else {
         insns.push(if wide { 0x10 } else if is_ref { 0x11 } else { 0x0f }); // return(-wide/-object) v0
         (if wide { 2 } else { 1 }, 0)
@@ -398,11 +409,31 @@ fn build_clinit(syn: &str, instance: &FieldRef) -> EncodedMethod {
 #[allow(clippy::too_many_arguments)]
 fn build_sam(syn: &str, sam_name: &str, sam_desc: &str, inst_params: &[String], invoke_op: u16, recv_offset: usize, ret_adapt: &RetAdapt, impl_class: &str, impl_name: &str, impl_desc: &str) -> Result<EncodedMethod> {
     let (params, _ret) = parse_descriptor(sam_desc)?;
+    let (impl_p, _impl_ret0) = parse_descriptor(impl_desc)?;
+    // A boxed Long/Double SAM param the impl wants as a primitive long/double can't unbox in place
+    // (1 ref slot → 2-slot pair), so it unboxes into a scratch PAIR. DEX places the `ins` incoming
+    // params in the HIGH registers, so the scratch goes at the LOW registers (v0..) and the params
+    // shift ABOVE it. (With no wide-unbox, scratch_words == 0 and the layout is unchanged.)
+    let mut unbox_scratch: Vec<Option<u16>> = vec![None; params.len()];
+    let mut scratch_words = 0u16;
+    for k in 0..params.len() {
+        if k < recv_offset {
+            continue; // receiver (unbound instance ref) has no impl-param slot
+        }
+        let ii = k - recv_offset;
+        if ii < impl_p.len()
+            && is_wide_prim(&impl_p[ii])
+            && box_of(&impl_p[ii]) == Some(inst_params[k].as_str())
+        {
+            unbox_scratch[k] = Some(scratch_words);
+            scratch_words += 2;
+        }
+    }
     let mut ins: u16 = 1; // this
     // First register + wide flag per SAM parameter (a long/double occupies the pair r, r+1).
     let mut param_start: Vec<u16> = Vec::new();
     let mut param_wide: Vec<bool> = Vec::new();
-    let mut r = 1u16;
+    let mut r = scratch_words + 1; // params sit above the low scratch (this = v[scratch_words])
     for p in &params {
         let wide = p == "J" || p == "D";
         param_start.push(r);
@@ -411,12 +442,18 @@ fn build_sam(syn: &str, sam_name: &str, sam_desc: &str, inst_params: &[String], 
         r += w;
         ins += w;
     }
-    // The flat register list the impl invoke passes — a wide arg lists BOTH halves consecutively.
+    // The flat register list the impl invoke passes — a wide arg lists BOTH halves consecutively;
+    // a wide-unbox param lists its scratch pair.
     let mut invoke_regs: Vec<u16> = Vec::new();
     for (i, &st) in param_start.iter().enumerate() {
-        invoke_regs.push(st);
-        if param_wide[i] {
-            invoke_regs.push(st + 1);
+        if let Some(sc) = unbox_scratch[i] {
+            invoke_regs.push(sc);
+            invoke_regs.push(sc + 1);
+        } else {
+            invoke_regs.push(st);
+            if param_wide[i] {
+                invoke_regs.push(st + 1);
+            }
         }
     }
     if invoke_regs.len() > 5 || invoke_regs.iter().any(|&x| x > 15) {
@@ -435,8 +472,8 @@ fn build_sam(syn: &str, sam_name: &str, sam_desc: &str, inst_params: &[String], 
         }
     }
     // Unbox each boxed argument the impl wants as a primitive. impl declared parameter k maps to
-    // SAM parameter recv_offset+k (an unbound instance ref's receiver has no impl parameter slot).
-    let (impl_p, _impl_ret) = parse_descriptor(impl_desc)?;
+    // SAM parameter recv_offset+k. A wide (long/double) unbox writes its 2-register result into the
+    // reserved scratch pair; a narrow one unboxes in place at the param register.
     let mut did_unbox = false;
     for (k, ip) in impl_p.iter().enumerate() {
         let sam_idx = recv_offset + k;
@@ -446,11 +483,8 @@ fn build_sam(syn: &str, sam_name: &str, sam_desc: &str, inst_params: &[String], 
         if box_of(ip) != Some(inst_params[sam_idx].as_str()) {
             continue; // not a boxed→primitive position
         }
-        if ip == "J" || ip == "D" {
-            bail!("lambda: wide parameter unbox not yet supported");
-        }
         let (bx, m) = unbox_of(ip).ok_or_else(|| anyhow::anyhow!("lambda: no unbox accessor for {ip}"))?;
-        // invoke-virtual {paramReg} <Wrapper>.<accessor>()prim ; move-result paramReg (in place).
+        // invoke-virtual {boxedReg} <Wrapper>.<accessor>()prim
         insns.push(0x6e | ((1u16 << 4) << 8)); // invoke-virtual, argn=1 → 0x106e
         let unit = insns.len();
         insns.push(0);
@@ -460,7 +494,11 @@ fn build_sam(syn: &str, sam_name: &str, sam_desc: &str, inst_params: &[String], 
             item: ItemRef::Method(MethodRef { class: bx.into(), proto: ProtoRef { return_type: ip.clone(), params: vec![] }, name: m.into() }),
             wide: false,
         });
-        insns.push(0x0a | (param_start[sam_idx] << 8)); // move-result paramReg
+        if let Some(sc) = unbox_scratch[sam_idx] {
+            insns.push(0x0b | (sc << 8)); // move-result-wide scratch pair (low registers)
+        } else {
+            insns.push(0x0a | (param_start[sam_idx] << 8)); // move-result paramReg (in place)
+        }
         did_unbox = true;
     }
     // invoke {param regs}, impl — invoke-static for a static impl/method-ref, or
@@ -480,7 +518,8 @@ fn build_sam(syn: &str, sam_name: &str, sam_desc: &str, inst_params: &[String], 
     // boxed wrapper of the impl's primitive.
     let (_, impl_ret) = parse_descriptor(impl_desc)?;
     let (min_regs, extra_outs) = emit_boxed_return(&mut insns, &mut fixups, &impl_ret, ret_adapt);
-    let registers_size = ins.max(min_regs);
+    // ins params (high) + the low scratch pairs; min_regs covers a wide return-box needing v0,v1.
+    let registers_size = (ins + scratch_words).max(min_regs);
     let unbox_outs = if did_unbox { 1 } else { 0 };
     Ok(EncodedMethod {
         method: MethodRef { class: syn.into(), proto: proto(sam_desc)?, name: sam_name.into() },

@@ -535,6 +535,27 @@ fn over_coalesce_net_skips_dead_dce_removed_values() {
     skotch_dex::validator::validate(&dex).expect("ArtDeadFoldKt dex must validate");
 }
 
+/// A SAM bridge where the impl takes/returns a WIDE primitive (`long`/`double`) but the instantiated
+/// interface type is the boxed wrapper (`Function<Long,_>` / `Function<Double,Double>`). The boxed
+/// arg is 1 register but the unboxed primitive is a 2-register pair, so it can't unbox in place — it
+/// unboxes (`longValue`/`doubleValue`, `move-result-wide`) into a LOW scratch pair, and (since DEX
+/// puts the `ins` incoming params in the HIGH registers) the SAM params shift ABOVE the scratch; a
+/// wide return boxes via `valueOf(J/D)`. box_of/unbox_of gained J→Long, D→Double. ArtWideAdapt
+/// 43/201/L105/4.75 (runtime-proven: long param-unbox + long return-box, long param-unbox + String
+/// return, double param-unbox + double return-box) bails `impl param J vs SAM-side Long` without the
+/// fix. (The param shift is why a naive in-place layout VerifyError'd "check-cast on non-reference in
+/// v1" — the params had moved to the high registers.)
+#[test]
+fn lambda_wide_primitive_param_unbox_and_return_box() {
+    let cf = skotch_classfile::parse_class_file(
+        &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtWideAdapt.class"),
+    )
+    .unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let dex = dex_classes(&[cf], &opts).expect("ArtWideAdapt (wide param-unbox/return-box) should dex");
+    skotch_dex::validator::validate(&dex).expect("ArtWideAdapt dex must validate");
+}
+
 /// array-length (0x21, 12x) and instance-of (0x20, 22c) — nibble forms with no wider encoding —
 /// now spill a high object operand through the reserved low scratch (move-object/from16 then the
 /// op on scratch, dest reloaded if high), via the shared `spill_dest_obj`. ArtArrInst 31/0/51
