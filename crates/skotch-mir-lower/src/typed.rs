@@ -6465,6 +6465,38 @@ fn lower_loop_body_blocks(
                         None
                     }
                 };
+                // Also peel a trailing bare `return` (Unit) — same as
+                // break/continue, but the arm's terminator becomes
+                // Terminator::Return so control exits the enclosing
+                // function instead of falling through to the join.
+                let then_tail_return: bool = {
+                    let mut found: Option<usize> = None;
+                    for (idx, n) in then_children.iter().enumerate().rev() {
+                        if let Some(e) = KtExpr::cast(*n) {
+                            if matches!(e, KtExpr::Return(_)) {
+                                // Only the bare `return` form (no
+                                // value expression) is supported here;
+                                // valued returns need to know the
+                                // function's return Ty.
+                                let has_value = skotch_ast::children(
+                                    n,
+                                )
+                                .iter()
+                                .any(|c| KtExpr::cast(c).is_some());
+                                if !has_value {
+                                    found = Some(idx);
+                                }
+                            }
+                            break;
+                        }
+                    }
+                    if let Some(idx) = found {
+                        then_children.remove(idx);
+                        true
+                    } else {
+                        false
+                    }
+                };
                 let then_stmts = lower_loop_body(
                     &then_children,
                     name_to_local,
@@ -6572,11 +6604,16 @@ fn lower_loop_body_blocks(
                         },
                     });
                 }
+                let then_terminator = if then_tail_return {
+                    Terminator::Return
+                } else {
+                    Terminator::Goto(
+                        then_tail_jump.unwrap_or(join_block_id),
+                    )
+                };
                 blocks.push(BasicBlock {
                     stmts: then_stmts,
-                    terminator: Terminator::Goto(
-                        then_tail_jump.unwrap_or(join_block_id),
-                    ),
+                    terminator: then_terminator,
                 });
                 if let Some(else_stmts) = else_stmts_opt {
                     blocks.push(BasicBlock {
@@ -12488,6 +12525,53 @@ fn try_lower_println_template_with_rich_lookup(
                 part_slots.push(slot);
             }
             S::BLOCK_STRING_TEMPLATE_ENTRY => return None,
+            S::ESCAPE_STRING_TEMPLATE_ENTRY => {
+                // `\n`, `\t`, `\"`, etc. Emit the unescaped character
+                // as a String constant part, joining the surrounding
+                // recipe text.
+                let mut buf = String::new();
+                for cc in skotch_ast::children(child) {
+                    if let skotch_sil::SilData::Token { text } = &cc.data {
+                        let raw = text.as_str();
+                        // Token text is e.g. `\\n` (literal backslash-n).
+                        // Translate the common escapes; pass anything
+                        // else through verbatim.
+                        if let Some(stripped) = raw.strip_prefix('\\') {
+                            match stripped.chars().next() {
+                                Some('n') => buf.push('\n'),
+                                Some('t') => buf.push('\t'),
+                                Some('r') => buf.push('\r'),
+                                Some('\\') => buf.push('\\'),
+                                Some('"') => buf.push('"'),
+                                Some('\'') => buf.push('\''),
+                                Some('$') => buf.push('$'),
+                                Some('b') => buf.push('\u{0008}'),
+                                Some('0') => buf.push('\0'),
+                                Some(other) => buf.push(other),
+                                None => {}
+                            }
+                        } else {
+                            buf.push_str(raw);
+                        }
+                    }
+                }
+                let sid = match strings.iter().position(|s| s == &buf) {
+                    Some(i) => skotch_mir::StringId(i as u32),
+                    None => {
+                        let id = skotch_mir::StringId(strings.len() as u32);
+                        strings.push(buf);
+                        id
+                    }
+                };
+                let slot = LocalId(*next_slot);
+                *next_slot += 1;
+                extra_locals.push(Ty::String);
+                pre_stmts.push(MStmt::Assign {
+                    dest: slot,
+                    value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::String(sid)),
+                });
+                part_slots.push(slot);
+            }
             _ => return None,
         }
     }
@@ -12498,6 +12582,7 @@ fn try_lower_println_template_with_rich_lookup(
 
     let kind = match name {
         "println" => skotch_mir::CallKind::PrintlnConcat,
+        "print" => skotch_mir::CallKind::PrintConcat,
         _ => return None,
     };
     Some((kind, part_slots))

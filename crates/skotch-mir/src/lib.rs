@@ -288,6 +288,10 @@ pub enum CallKind {
     /// support all use string templates as the immediate argument
     /// of `println`, so this fused form covers everything we need.
     PrintlnConcat,
+    /// Like `PrintlnConcat` but without the trailing newline — fuses
+    /// a string-template concat with `print(String)` instead of
+    /// `println(String)`. Args are the template parts in source order.
+    PrintConcat,
     /// Static method call on a Java/Kotlin class: `System.currentTimeMillis()`.
     StaticJava {
         class_name: std::string::String,

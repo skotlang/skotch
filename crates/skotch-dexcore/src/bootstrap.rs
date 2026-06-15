@@ -43,7 +43,15 @@ pub fn dex_class(cf: &ClassFile, min_api: u32) -> Result<ClassDef> {
         let em = if m.name == "<clinit>" && empty_clinit {
             empty_clinit_method(cf, m)?
         } else {
-            dex_method(cf, m, min_api, annotations_ok)?
+            match dex_method(cf, m, min_api, annotations_ok) {
+                Ok(em) => em,
+                Err(e) => {
+                    if std::env::var("SKOTCH_DBGOC").is_ok() && format!("{e:#}").contains("over-coalesce") {
+                        eprintln!("DBGOC over-coalesce in {}{}", m.name, m.descriptor);
+                    }
+                    return Err(e);
+                }
+            }
         };
         if is_direct(m) {
             direct.push(em);

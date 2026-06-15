@@ -15591,6 +15591,130 @@ fn walk_block(
                         // Don't store the result — it doesn't exist.
                     }
                 }
+                CallKind::PrintConcat => {
+                    // Mirrors PrintlnConcat below but routes the
+                    // concatenated String through `print(Object)`
+                    // instead of `println(Object)` so no trailing
+                    // newline is appended.
+                    let const_string_for = |id: LocalId| -> Option<String> {
+                        INLINABLE_CONSTS.with(|cell| match cell.borrow().get(&id.0) {
+                            Some(MirConst::String(sid)) => {
+                                Some(module.lookup_string(*sid).to_string())
+                            }
+                            _ => None,
+                        })
+                    };
+                    let mut recipe = String::new();
+                    let mut dyn_args: Vec<LocalId> = Vec::new();
+                    let mut recipe_safe = true;
+                    let mut descriptor = String::from("(");
+                    for &arg in args {
+                        if let Some(s) = const_string_for(arg) {
+                            if s.contains('\u{1}') || s.contains('\u{2}') {
+                                recipe_safe = false;
+                                break;
+                            }
+                            recipe.push_str(&s);
+                        } else {
+                            let ty = &func.locals[arg.0 as usize];
+                            if matches!(ty, Ty::Unit) {
+                                recipe.push_str("kotlin.Unit");
+                            } else {
+                                recipe.push('\u{1}');
+                                dyn_args.push(arg);
+                                descriptor.push_str(&jvm_param_type_string(ty));
+                            }
+                        }
+                    }
+                    descriptor.push_str(")Ljava/lang/String;");
+                    if recipe_safe {
+                        if dyn_args.is_empty() {
+                            let s_idx = cp.string(&recipe);
+                            if s_idx <= 0xFF {
+                                code.push(0x12);
+                                code.push(s_idx as u8);
+                            } else {
+                                code.push(0x13);
+                                code.write_u16::<BigEndian>(s_idx).unwrap();
+                            }
+                            bump(stack, max_stack, 1);
+                        } else {
+                            for &dyn_arg in &dyn_args {
+                                load_local(code, stack, max_stack, slots, dyn_arg, &func.locals);
+                            }
+                            emit_make_concat_with_constants(
+                                code,
+                                cp,
+                                stack,
+                                max_stack,
+                                &descriptor,
+                                &recipe,
+                            );
+                        }
+                        let ps = cp.fieldref("java/lang/System", "out", "Ljava/io/PrintStream;");
+                        code.push(0xB2);
+                        code.write_u16::<BigEndian>(ps).unwrap();
+                        bump(stack, max_stack, 1);
+                        code.push(0x5F); // swap
+                        let print_m =
+                            cp.methodref("java/io/PrintStream", "print", "(Ljava/lang/Object;)V");
+                        code.push(0xB6);
+                        code.write_u16::<BigEndian>(print_m).unwrap();
+                        bump(stack, max_stack, -2);
+                        let _ = dest;
+                        continue;
+                    }
+                    // StringBuilder fallback.
+                    let fr = cp.fieldref("java/lang/System", "out", "Ljava/io/PrintStream;");
+                    code.push(0xB2);
+                    code.write_u16::<BigEndian>(fr).unwrap();
+                    bump(stack, max_stack, 1);
+                    let sb_class = cp.class("java/lang/StringBuilder");
+                    code.push(0xBB);
+                    code.write_u16::<BigEndian>(sb_class).unwrap();
+                    bump(stack, max_stack, 1);
+                    code.push(0x59);
+                    bump(stack, max_stack, 1);
+                    let init = cp.methodref("java/lang/StringBuilder", "<init>", "()V");
+                    code.push(0xB7);
+                    code.write_u16::<BigEndian>(init).unwrap();
+                    bump(stack, max_stack, -1);
+                    for &arg in args {
+                        load_local(code, stack, max_stack, slots, arg, &func.locals);
+                        let arg_ty = &func.locals[arg.0 as usize];
+                        let append_desc = match arg_ty {
+                            Ty::String => "(Ljava/lang/String;)Ljava/lang/StringBuilder;",
+                            Ty::Int => "(I)Ljava/lang/StringBuilder;",
+                            Ty::Bool => "(Z)Ljava/lang/StringBuilder;",
+                            Ty::Long => "(J)Ljava/lang/StringBuilder;",
+                            Ty::Double => "(D)Ljava/lang/StringBuilder;",
+                            _ => "(Ljava/lang/Object;)Ljava/lang/StringBuilder;",
+                        };
+                        let append = cp.methodref("java/lang/StringBuilder", "append", append_desc);
+                        code.push(0xB6);
+                        code.write_u16::<BigEndian>(append).unwrap();
+                        let append_effect = if matches!(arg_ty, Ty::Long | Ty::Double) {
+                            -2
+                        } else {
+                            -1
+                        };
+                        bump(stack, max_stack, append_effect);
+                    }
+                    let to_string = cp.methodref(
+                        "java/lang/StringBuilder",
+                        "toString",
+                        "()Ljava/lang/String;",
+                    );
+                    code.push(0xB6);
+                    code.write_u16::<BigEndian>(to_string).unwrap();
+                    let _ = stack;
+                    let print_m =
+                        cp.methodref("java/io/PrintStream", "print", "(Ljava/lang/Object;)V");
+                    code.push(0xB6);
+                    code.write_u16::<BigEndian>(print_m).unwrap();
+                    bump(stack, max_stack, -2);
+                    let _ = dest;
+                }
                 CallKind::PrintlnConcat => {
                     // Try the kotlinc shape first: invokedynamic
                     // makeConcatWithConstants over the dynamic args, then

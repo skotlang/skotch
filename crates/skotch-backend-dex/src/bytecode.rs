@@ -321,7 +321,7 @@ fn compute_scratch(block: &BasicBlock) -> u16 {
         if let Rvalue::Call { kind, .. } = value {
             let n = match kind {
                 CallKind::Println | CallKind::Print => 1,
-                CallKind::PrintlnConcat => 2,
+                CallKind::PrintlnConcat | CallKind::PrintConcat => 2,
                 CallKind::Static(_)
                 | CallKind::StaticJava { .. }
                 | CallKind::Constructor(_)
@@ -990,7 +990,7 @@ fn emit_call(
             }
             n
         }
-        CallKind::PrintlnConcat => {
+        CallKind::PrintConcat | CallKind::PrintlnConcat => {
             // Layout (matching `compute_scratch`'s reservation):
             //
             //   v0 — `StringBuilder`, then the resulting `String`

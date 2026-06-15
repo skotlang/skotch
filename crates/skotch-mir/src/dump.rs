@@ -196,6 +196,7 @@ fn format_callkind(k: &CallKind) -> String {
         CallKind::Println => "println".to_string(),
         CallKind::Print => "print".to_string(),
         CallKind::PrintlnConcat => "println-concat".to_string(),
+        CallKind::PrintConcat => "print-concat".to_string(),
         CallKind::StaticJava {
             class_name,
             method_name,

@@ -802,7 +802,7 @@ impl<'a> BlockWalker<'a> {
             }
             Rvalue::Call { kind, args } => match kind {
                 CallKind::Println | CallKind::Print => self.lower_println(args),
-                CallKind::PrintlnConcat => self.lower_println_concat(args),
+                CallKind::PrintlnConcat | CallKind::PrintConcat => self.lower_println_concat(args),
                 CallKind::Static(target_id) => self.lower_static_call(*target_id, args, dest),
                 CallKind::StaticJava { .. }
                 | CallKind::Constructor(_)
@@ -881,7 +881,7 @@ impl<'a> BlockWalker<'a> {
         };
         match kind {
             CallKind::Println | CallKind::Print => self.lower_println(args),
-            CallKind::PrintlnConcat => self.lower_println_concat(args),
+            CallKind::PrintlnConcat | CallKind::PrintConcat => self.lower_println_concat(args),
             CallKind::Static(target_id) => self.lower_static_call(*target_id, args, dest),
             CallKind::StaticJava { .. }
             | CallKind::Constructor(_)
