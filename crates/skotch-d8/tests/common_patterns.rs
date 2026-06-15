@@ -422,6 +422,22 @@ fn lambda_method_references_now_dex() {
     skotch_dex::validator::validate(&dex).unwrap_or_else(|e| panic!("ArtMethodRef: invalid dex: {e:#}"));
 }
 
+/// BOUND instance method references (`sb::toString`, `"key"::equals`, `prefix::startsWith`) capture
+/// the receiver as the single dynamic argument; the synthetic class stores it in a field and the
+/// SAM `iget`s it then forwards via the instance invoke (invoke-virtual/interface/direct). This
+/// reuses the capturing-lambda machinery — the receiver is just the lone capture and the impl's
+/// declared params equal the instantiated SAM params. ArtBoundRef covers a kind-5 no-arg supplier
+/// (with a mutated captured receiver), a one-arg predicate, and a local-capturing predicate, all
+/// boxing-free. Correctness on a REAL device is proven by `tests/art/ArtBoundRef`; here: dexes +
+/// self-validates. Constructor refs (kind 8) and boxing adaptations still bail.
+#[test]
+fn lambda_bound_method_references_now_dex() {
+    let cf = skotch_classfile::parse_class_file(&PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtBoundRef.class")).unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let dex = dex_classes(&[cf], &opts).unwrap_or_else(|e| panic!("ArtBoundRef: bound method references should dex now: {e:#}"));
+    skotch_dex::validator::validate(&dex).unwrap_or_else(|e| panic!("ArtBoundRef: invalid dex: {e:#}"));
+}
+
 /// A φ whose operand is a SIBLING φ in the same loop header is a parallel copy on the
 /// back-edge — a swap (`a=b; b=a`, a 2-cycle), a 3-way rotation, or a chain (`a=b; b=t`,
 /// Fibonacci). This used to bail (a naive in-place update read a sibling AFTER it was

@@ -1,0 +1,4 @@
+str=hello
+str2=hello world
+eq(key)=true eq(no)=false
+sw(f)=true sw(x)=false

@@ -118,13 +118,23 @@ pub fn try_lambda_metafactory(cf: &ClassFile, indy_idx: u16) -> Result<Option<La
     // captures. (impl_ret must equal inst_ret exactly — a primitive/boxed mismatch would need
     // (un)boxing, which we don't synthesize → bail.)
     let expected: Vec<String> = if instance_ref {
-        if !captures.is_empty() {
-            bail!("lambda: bound / instance-capturing method reference not yet supported");
+        if captures.is_empty() {
+            // UNBOUND instance ref: the receiver is the first instantiated SAM parameter; the
+            // impl's declared params are the rest.
+            if inst_params.is_empty() {
+                bail!("lambda: instance method reference with no receiver parameter");
+            }
+            inst_params[1..].to_vec()
+        } else if captures.len() == 1 {
+            // BOUND instance ref (e.g. `sb::toString`): the receiver is the single captured value
+            // and ALL instantiated SAM params are the method's arguments. The capturing path
+            // synthesizes a receiver field + ctor, and the SAM igets it then forwards via the
+            // instance invoke_op — `invoke-virtual {f$0(receiver), args}` — so the impl's declared
+            // params (which omit the receiver) equal the instantiated SAM params.
+            inst_params.clone()
+        } else {
+            bail!("lambda: instance method reference with {} captures (expected 0 or 1) not yet supported", captures.len());
         }
-        if inst_params.is_empty() {
-            bail!("lambda: instance method reference with no receiver parameter");
-        }
-        inst_params[1..].to_vec()
     } else {
         captures.iter().cloned().chain(inst_params.iter().cloned()).collect()
     };
