@@ -17423,8 +17423,22 @@ fn collect_class_fields(c: skotch_ast::KtClass<'_>) -> Vec<skotch_mir::MirField>
                         .and_then(|tr| tr.user_type())
                         .and_then(|u| u.name())
                     {
-                        Some(name) => skotch_types::ty_from_name(name).unwrap_or(Ty::Any),
-                        None => Ty::Any,
+                        Some(name) => {
+                            skotch_types::ty_from_name(name).unwrap_or(Ty::Any)
+                        }
+                        // No explicit type annotation: peek at the
+                        // initializer literal to infer Int/Long/
+                        // Double/Bool/String. Falls back to Ty::Any
+                        // when the init isn't a simple literal.
+                        None => p
+                            .initializer()
+                            .map(unwrap_parens)
+                            .and_then(|init| {
+                                let mut strings_scratch: Vec<String> = Vec::new();
+                                literal_to_const(&init, &mut strings_scratch)
+                                    .map(|(_, t)| t)
+                            })
+                            .unwrap_or(Ty::Any),
                     };
                     fields.push(skotch_mir::MirField {
                         name: n.to_string(),

@@ -3417,10 +3417,13 @@ fn emit_method_body(
             }
         }
         MethodKind::Instance => {
-            // Slot 0 = this for all instance methods.
+            // Slot 0 = `this` for all instance methods. The MIR
+            // `params` list may omit `this` (top-level method
+            // emission sometimes records only user params), so
+            // reserve slot 0 unconditionally.
+            next_slot = 1;
             if !func.params.is_empty() {
                 slots.insert(func.params[0].0, 0);
-                next_slot = 1;
             }
             // Assign slots for remaining params (wide types take 2 slots).
             for &p in func.params.iter().skip(1) {
@@ -4220,7 +4223,21 @@ fn emit_method_body(
                 param_slot_count
             }
         }
-        MethodKind::Instance => param_slot_count,
+        // Instance methods always have `this` at slot 0, even when
+        // there are no user params. param_slot_count (computed from
+        // func.params) may be 0 for a zero-arg method like
+        // `fun bump()`, but the JVM verifier requires max_locals ≥ 1
+        // to fit the implicit `this`.
+        MethodKind::Instance => {
+            // If params is empty, `this` still takes slot 0 → 1.
+            // If params has entries, params[0] IS `this`, so its
+            // contribution is already in param_slot_count.
+            if func.params.is_empty() {
+                1
+            } else {
+                param_slot_count.max(1)
+            }
+        }
     };
     if no_branches {
         // Compute JVM slots for named MIR locals (vals/vars). These slots
