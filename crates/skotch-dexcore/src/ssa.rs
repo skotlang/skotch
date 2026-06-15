@@ -3421,7 +3421,7 @@ pub(crate) fn build_dex(
             }
             match &f.values[v as usize].op {
                 SsaOp::Invoke { .. } => {
-                    emit_invoke(f, &mut insns, alloc, v, &mut pool_fixups, &mut outs, &mut positions, line_numbers, &mut range_block_words)?;
+                    emit_invoke(f, &mut insns, alloc, v, &mut pool_fixups, &mut outs, &mut positions, line_numbers, &mut range_block_words, frame_hint)?;
                 }
                 SsaOp::GetField { .. } | SsaOp::GetStatic { .. } | SsaOp::PutField { .. } | SsaOp::PutStatic { .. } => {
                     emit_field(f, &mut insns, alloc, v, &mut pool_fixups, &mut positions, line_numbers, spill_base, frame_hint)?;
@@ -3738,37 +3738,50 @@ pub(crate) fn build_dex(
         .max(range_block_words)
         .max(phi_scratch_words);
     let registers_size = (alloc.registers_used + scratch).max(f.num_arg_registers);
-    // Scratch-aware iget/iput spill retry. Scratch (range-invoke / switch / φ) inflates
+    // Scratch-aware spill/range retry. Scratch (range-invoke / switch / φ) inflates
     // `registers_size` beyond `alloc.registers_used`, pushing ARGUMENTS to the top of the larger
-    // frame. The pre-emit spill decision in `dex_method_ssa` uses `registers_used` and so misses
-    // an argument-based iget/iput whose REAL register only reaches ≥16 once scratch is added
-    // (e.g. `this.field` in a method that also makes a wide / many-arg range invoke). Now that
-    // the true `registers_size` is known, re-check the field ops against it; if one is high and we
-    // have not already reserved scratch, reserve and re-emit with the true frame as the
-    // high-operand test. This ONLY fires for methods that would otherwise bail at `remap_insns`
-    // below — it never turns a passing method into a bailing one. `reserve_scratch` bumps
-    // `registers_used` by 2 and leaves the scratch counts unchanged, so the re-emit's frame is
-    // exactly `registers_size + 2`; pass that as the hint. `num_arg <= 14` keeps the 2 low scratch
-    // slots remap-clean. A LOCAL field operand can't be high here (it would have bailed in
-    // `emit_field`'s `nib()` before reaching this point), so this targets argument operands.
-    if spill_base.is_none() && frame_hint.is_none() && f.num_arg_registers <= 14 && registers_size > 16 {
+    // frame. The pre-emit decisions (the iget/iput spill in `dex_method_ssa`, and `emit_invoke`'s
+    // 35c-vs-range choice) both use `registers_used` and so miss an argument whose REAL register
+    // only reaches ≥16 once scratch is added — e.g. `this.field`, or an invoke arg, in a method
+    // that ALSO makes a wide / many-arg range invoke (whose block is the scratch doing the
+    // pushing). Now that the true `registers_size` is known, re-check and re-emit with it as the
+    // frame hint. This ONLY fires for methods that would otherwise bail at `remap_insns` below —
+    // it never turns a passing method into a bailing one. Two remedies:
+    //   • a high FIELD operand needs 2 reserved LOW scratch (22c has no range form) — reserve and
+    //     re-emit with `spill_base`; the reserve bumps `registers_used` by 2 (scratch unchanged),
+    //     so the re-emit frame is exactly `registers_size + 2`. `num_arg <= 14` keeps the 2 slots
+    //     remap-clean. (A high LOCAL field operand would have bailed earlier in `emit_field`'s
+    //     `nib()`, so this targets argument operands.)
+    //   • a high INVOKE arg needs only the true frame: `emit_invoke` already marshals args into a
+    //     consecutive range block and emits `invoke/range`, but only when it SEES an arg as high —
+    //     so just re-emit with the frame hint (no reserve; the gather reuses the existing block).
+    if frame_hint.is_none() && registers_size > 16 {
         let na = f.num_arg_registers;
         let high = |r: u16| r != NO_REG && crate::regalloc::remap_register(r, na, registers_size) >= 16;
-        let field_op_high = f.values.iter().enumerate().any(|(i, val)| match &val.op {
-            SsaOp::GetField { dex_op, obj, .. } if *dex_op != 0x53 => {
-                high(alloc.reg[i]) || high(alloc.reg[*obj as usize])
-            }
-            SsaOp::PutField { dex_op, obj, value, .. }
-                if *dex_op != 0x5a && !f.values[*value as usize].wide =>
-            {
-                high(alloc.reg[*value as usize]) || high(alloc.reg[*obj as usize])
-            }
+        let field_op_high = spill_base.is_none()
+            && na <= 14
+            && f.values.iter().enumerate().any(|(i, val)| match &val.op {
+                SsaOp::GetField { dex_op, obj, .. } if *dex_op != 0x53 => {
+                    high(alloc.reg[i]) || high(alloc.reg[*obj as usize])
+                }
+                SsaOp::PutField { dex_op, obj, value, .. }
+                    if *dex_op != 0x5a && !f.values[*value as usize].wide =>
+                {
+                    high(alloc.reg[*value as usize]) || high(alloc.reg[*obj as usize])
+                }
+                _ => false,
+            });
+        let invoke_arg_high = f.values.iter().any(|val| match &val.op {
+            SsaOp::Invoke { args, .. } => args.iter().any(|&a| high(alloc.reg[a as usize])),
             _ => false,
         });
         if field_op_high {
             let mut alloc2 = alloc.clone();
             reserve_scratch(&mut alloc2, na, 2);
+            // frame_hint covers the +2; emit_invoke picks up any high invoke args via it too.
             return build_dex(f, num, &alloc2, line_numbers, params, Some(na), Some(registers_size + 2));
+        } else if invoke_arg_high {
+            return build_dex(f, num, alloc, line_numbers, params, spill_base, Some(registers_size));
         }
     }
     // Safety net: every register operand must be in allocated space [0, registers_size).
@@ -3806,6 +3819,7 @@ fn emit_invoke(
     positions: &mut Vec<(u32, u32)>,
     line_numbers: &[(u16, u16)],
     range_block_words: &mut u16,
+    frame_hint: Option<u16>,
 ) -> Result<()> {
     let reg = |x: ValId| alloc.reg[x as usize];
     let (dex_op, method, args, ret, jvm_pc) = match &f.values[v as usize].op {
@@ -3830,7 +3844,10 @@ fn emit_invoke(
     // miscompile). For ≤16-register methods every final is ≤15, so this never newly forces range —
     // those methods stay byte-identical; only >16-register methods are affected.
     let num_arg = f.num_arg_registers;
-    let regs_size_est = alloc.registers_used.max(num_arg);
+    // Use the true frame (registers_size) when re-emitting after a scratch-aware retry so an arg
+    // pushed ≥16 by another op's scratch is seen as high and forces the range form; else the
+    // scratch-free estimate (only ever UNDER-counts, so a missed case bails safely in remap).
+    let regs_size_est = frame_hint.unwrap_or(alloc.registers_used.max(num_arg));
     let final_of = |r: u16| -> u16 {
         if num_arg == 0 || regs_size_est == num_arg {
             r

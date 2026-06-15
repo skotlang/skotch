@@ -400,6 +400,27 @@ fn over_16_registers_invoke_args_use_range_via_final_check() {
     skotch_dex::validator::validate(&dex).expect("ArtWideCall dex must validate");
 }
 
+/// An invoke whose argument is pushed to a real register ≥16 by ANOTHER op's scratch (e.g. a
+/// many-arg range invoke's marshalling block) now dexes via the range form. `emit_invoke`'s
+/// 35c-vs-range choice used `registers_used` and so missed an argument only made high by scratch;
+/// the `build_dex` retry re-emits with the true `registers_size` as a frame hint, so `emit_invoke`
+/// sees the high arg and gathers into the consecutive block. ArtRangeGather (107/55/1008, runtime-
+/// proven on a device) calls a 14-arg method (forces range, inflates the frame) then a 3-arg
+/// `combine(int, long, String)` whose args are all high — the gather emits all three move kinds:
+/// move/from16 (int), move-wide/from16 (long pair), move-object/from16 (String). Here: dexes +
+/// self-validates.
+#[test]
+fn invoke_arg_pushed_high_by_scratch_uses_range_via_frame_hint() {
+    let cf = skotch_classfile::parse_class_file(
+        &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtRangeGather.class"),
+    )
+    .unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let dex = dex_classes(&[cf], &opts)
+        .expect("ArtRangeGather (scratch-pushed invoke arg) should dex via range gather");
+    skotch_dex::validator::validate(&dex).expect("ArtRangeGather dex must validate");
+}
+
 /// >16-register `iget`/`iput` (22c, nibble-only register fields) now DEX rather than bail: the
 /// dexbuilder reserves 2 low scratch registers and routes any operand whose FINAL register is ≥16
 /// through them via `move(-object)/from16`. The object operand always moves with
