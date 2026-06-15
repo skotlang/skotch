@@ -907,21 +907,10 @@ pub(crate) fn build_ssa(
         // own handler; a try-nested-in-a-handler has a DIFFERENT handler block, so it isn't dropped.
         exc_regions
             .retain(|r| !(r.catch_type.is_none() && r.start_pc == cfg.blocks[r.handler_block].start));
-        // No partially-overlapping or nested try regions (identical ranges that share
-        // a handler are fine — that's one logical region).
-        for i in 0..exc_regions.len() {
-            for j in 0..exc_regions.len() {
-                if i == j {
-                    continue;
-                }
-                let (a, c) = (&exc_regions[i], &exc_regions[j]);
-                let overlap = a.start_pc < c.end_pc && c.start_pc < a.end_pc;
-                let identical = a.start_pc == c.start_pc && a.end_pc == c.end_pc;
-                if overlap && !identical {
-                    bail!("ssa: overlapping / nested try regions not yet supported");
-                }
-            }
-        }
+        // Overlapping / nested try regions ARE supported now: the try_item emission computes the
+        // handler set per guarded instruction (innermost-first, catch-all last) and splits the DEX
+        // ranges so they don't overlap. (The handler-φ snapshot + the post-alloc coalesce net still
+        // guard correctness; an unrepresentable shape bails there, never miscompiles.)
         let handler_blocks: BTreeSet<usize> = exc_regions.iter().map(|r| r.handler_block).collect();
         // Handlers whose guarded region has NO throwing instruction (a try/finally — or
         // synchronized — over a non-throwing body): the exceptional handler copy is unreachable.
@@ -947,11 +936,10 @@ pub(crate) fn build_ssa(
             if !block_phi_slots[hb].is_empty() || !block_stack_phis[hb].is_empty() {
                 bail!("ssa: handler block needs normal/stack φs — unsupported");
             }
-            // A handler nested inside another try region (try-in-catch / rethrow paths).
-            let h_pc = cfg.blocks[hb].start;
-            if exc_regions.iter().any(|r| r.start_pc <= h_pc && h_pc < r.end_pc) {
-                bail!("ssa: handler nested inside a try region — unsupported");
-            }
+            // A handler nested inside another try region (try-in-catch / try-catch-finally, where
+            // the inner handler is itself guarded by the outer region) IS supported now: the outer
+            // region's exceptional edges from the inner handler's throwing ops are already in the
+            // CFG, and the per-instruction try_item emission guards the inner handler correctly.
             // The caught exception value (created unconditionally; emitted as
             // move-exception only when read).
             caught[hb] = Some(b.new(SsaOp::CaughtException, false, hb));
@@ -3859,36 +3847,55 @@ pub(crate) fn build_dex(
         }
     }
 
-    // try_items: each region narrows to the DEX span of its guarded throwing
-    // instructions ([first_start, last_end)); the handler points at the catch block.
+    // try_items: DEX requires NON-OVERLAPPING, sorted try ranges, each with an ordered typed-
+    // handler list (+ one optional catch-all tried last). JVM exception tables instead allow
+    // nested/overlapping regions, so we compute the handler set PER guarded throwing instruction —
+    // the regions covering its pc, innermost-first (f.exc_regions is in exception-table order),
+    // stopping at the first catch-all (it catches everything, so outer handlers can only fire via
+    // the rethrow from that catch-all, which is a separate guarded instruction) — then merge
+    // CONSECUTIVE instructions sharing the same set into one try_item. A method with a single
+    // region yields one try_item [first,last] — byte-identical to the previous per-region emit.
+    // (Regions with no guarded throwing instruction were already dropped in dex_method_ssa.)
+    let mut sorted_spans = throw_spans.clone();
+    sorted_spans.sort_by_key(|&(_, ds, _)| ds);
     let mut tries: Vec<TryItem> = Vec::new();
-    for r in &f.exc_regions {
-        let mut lo = usize::MAX;
-        let mut hi = 0usize;
-        for &(jpc, ds, de) in &throw_spans {
-            if (r.start_pc..r.end_pc).contains(&(jpc as usize)) {
-                lo = lo.min(ds);
-                hi = hi.max(de);
+    let same = |a: &[CatchHandler], ca: Option<u32>, b: &[CatchHandler], cb: Option<u32>| {
+        ca == cb
+            && a.len() == b.len()
+            && a.iter().zip(b).all(|(x, y)| x.exception_type == y.exception_type && x.addr == y.addr)
+    };
+    for &(jpc, ds, de) in &sorted_spans {
+        let mut handlers: Vec<CatchHandler> = Vec::new();
+        let mut catch_all_addr: Option<u32> = None;
+        for r in &f.exc_regions {
+            if !(r.start_pc <= jpc as usize && (jpc as usize) < r.end_pc) {
+                continue;
+            }
+            let addr = block_unit[r.handler_block] as u32;
+            match &r.catch_type {
+                Some(ct) => handlers.push(CatchHandler { exception_type: ct.clone(), addr }),
+                None => {
+                    catch_all_addr = Some(addr);
+                    break; // a catch-all catches everything — later handlers are unreachable here
+                }
             }
         }
-        if lo == usize::MAX {
-            bail!("ssa: try region has no guarded throwing instruction");
+        if handlers.is_empty() && catch_all_addr.is_none() {
+            continue; // this throwing instruction is not guarded by any try region
         }
-        // A catch-all (catch_type None — finally / synchronized) goes in catch_all_addr
-        // with no typed handler; a typed catch goes in the handlers list.
-        let handler_addr = block_unit[r.handler_block] as u32;
-        let (handlers, catch_all_addr) = match &r.catch_type {
-            Some(ct) => (vec![CatchHandler { exception_type: ct.clone(), addr: handler_addr }], None),
-            None => (vec![], Some(handler_addr)),
-        };
+        if let Some(last) = tries.last_mut() {
+            if same(&last.handlers, last.catch_all_addr, &handlers, catch_all_addr) {
+                last.insn_count = (de as u32 - last.start_addr) as u16;
+                continue;
+            }
+        }
         tries.push(TryItem {
-            start_addr: lo as u32,
-            insn_count: (hi - lo) as u16,
+            start_addr: ds as u32,
+            insn_count: (de - ds) as u16,
             handlers,
             catch_all_addr,
         });
     }
-    tries.sort_by_key(|t| t.start_addr);
 
     // Reserve scratch above the allocated set: +1 for a switch's if-eq-chain temp, and
     // the range-invoke marshalling block (both based at `registers_used`, temporally

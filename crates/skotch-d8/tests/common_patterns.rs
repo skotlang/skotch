@@ -569,6 +569,25 @@ fn multi_throw_handler_phi_no_longer_needs_block_phis() {
     skotch_dex::validator::validate(&dex).expect("ArtMultiThrow dex must validate");
 }
 
+/// Nested / overlapping try regions now dex: DEX requires non-overlapping try_items, so the
+/// emission computes the handler set PER guarded instruction (covering regions innermost-first,
+/// stopping at the first catch-all) and splits the ranges, merging consecutive same-set spans.
+/// Runtime-proven on a real device: ArtNestedTry 3/3/202 (inner+outer typed, superset nesting),
+/// ArtNestedThrow 3/99/3 (the INNER handler throws and the OUTER catches it — the deepest shape),
+/// ArtTwoCatch 0/11/22 (two ordered typed catches on one try). Catch-all nesting stays covered by
+/// ArtFinally / ArtSync. Here: each dexes + self-validates.
+#[test]
+fn nested_overlapping_try_regions_now_dex() {
+    let art = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art");
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    for name in ["ArtNestedTry", "ArtNestedThrow", "ArtTwoCatch"] {
+        let cf = skotch_classfile::parse_class_file(&art.join(format!("{name}.class"))).unwrap();
+        let dex = dex_classes(&[cf], &opts)
+            .unwrap_or_else(|e| panic!("{name} (nested try) should dex: {e:#}"));
+        skotch_dex::validator::validate(&dex).unwrap_or_else(|e| panic!("{name} dex must validate: {e:#}"));
+    }
+}
+
 /// >16-register `iget`/`iput` (22c, nibble-only register fields) now DEX rather than bail: the
 /// dexbuilder reserves 2 low scratch registers and routes any operand whose FINAL register is ≥16
 /// through them via `move(-object)/from16`. The object operand always moves with
