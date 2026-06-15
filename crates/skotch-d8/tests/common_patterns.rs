@@ -460,6 +460,25 @@ fn over_16_if_test_args_spill_through_scratch() {
     skotch_dex::validator::validate(&dex).expect("ArtIfWide dex must validate");
 }
 
+/// A two-register if-test (22t, no wider form) whose operand is a high *LOCAL* — allocated ≥16,
+/// not an argument pushed high by scratch — bailed in `nib()` during the first/only emit, *before*
+/// the post-emit retry (which only ever reserves for high arguments) could run. The pre-emit
+/// decision now detects an allocated-≥16 if-test operand up-front (allocated-aware `high_alloc`)
+/// and reserves the 2 low scratch so the first emit spills it via the If terminator's existing
+/// spill. ArtHiLocalIf 256/1526/2966 (runtime-proven, both branches) forces 18 live int locals so
+/// the compared local lands at v17; without the fix it bails `register v17 does not fit a 4-bit
+/// nibble form`. Here: dexes + validates.
+#[test]
+fn over_16_if_test_high_local_spills_via_pre_emit_reserve() {
+    let cf = skotch_classfile::parse_class_file(
+        &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtHiLocalIf.class"),
+    )
+    .unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let dex = dex_classes(&[cf], &opts).expect("ArtHiLocalIf (>16 if-test high LOCAL) should dex");
+    skotch_dex::validator::validate(&dex).expect("ArtHiLocalIf dex must validate");
+}
+
 /// array-length (0x21, 12x) and instance-of (0x20, 22c) — nibble forms with no wider encoding —
 /// now spill a high object operand through the reserved low scratch (move-object/from16 then the
 /// op on scratch, dest reloaded if high), via the shared `spill_dest_obj`. ArtArrInst 31/0/51

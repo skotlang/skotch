@@ -2781,6 +2781,14 @@ pub(crate) fn dex_method_ssa(
         && f.blocks.iter().any(|b| matches!(b.term, Terminator::Switch { .. }));
     if (est > 16 || switch_needs_low_tmp) && num_arg <= 14 {
         let high = |r: u16| r != NO_REG && crate::regalloc::remap_register(r, num_arg, est) >= 16;
+        // `nib()` (during the first/only build_dex emit) rejects any operand whose ALLOCATED
+        // register is ≥16, so a high LOCAL operand of a two-register if-test (22t, no wider form)
+        // bails *before* the post-emit retry — whose own note records that it only ever sees
+        // argument operands (locals "would have bailed earlier in nib()"). This allocated-aware
+        // check catches those locals up-front so the first emit reserves the 2 scratch and spills
+        // them through the If terminator's spill (the same emit the retry uses for high args).
+        let high_alloc =
+            |r: u16| r != NO_REG && (r >= 16 || crate::regalloc::remap_register(r, num_arg, est) >= 16);
         let needs_spill = switch_needs_low_tmp
             || f.values.iter().enumerate().any(|(i, val)| match &val.op {
                 SsaOp::GetField { dex_op, obj, .. } if *dex_op != 0x53 => {
@@ -2790,6 +2798,13 @@ pub(crate) fn dex_method_ssa(
                     if *dex_op != 0x5a && !f.values[*value as usize].wide =>
                 {
                     high(alloc.reg[*value as usize]) || high(alloc.reg[*obj as usize])
+                }
+                _ => false,
+            })
+            || f.blocks.iter().any(|blk| match &blk.term {
+                Terminator::If { jvm_op, operands, .. } => {
+                    matches!(crate::bootstrap::cond_branch_dex_op(*jvm_op), Some((_, true)))
+                        && operands.iter().any(|&o| high_alloc(alloc.reg[o as usize]))
                 }
                 _ => false,
             });
