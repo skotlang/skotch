@@ -2227,6 +2227,29 @@ pub(crate) struct Allocation {
 
 pub(crate) const NO_REG: u16 = u16::MAX;
 
+/// Reserve `k` low scratch registers for the >16-register spill pass. The args-high remap
+/// (`regalloc::remap_register`) maps a LOCAL allocated register `r` (`r >= num_arg`) to the FINAL
+/// register `r - num_arg` and an ARGUMENT (`r < num_arg`) to a high one; so shifting every local's
+/// allocated register up by `k` leaves the allocated slots `[num_arg, num_arg + k)` unused — and
+/// those map to the LOWEST final registers `0..k`, the ≤15 scratch a spill needs to move an
+/// unwidenable nibble operand (iget/iput/…) whose own final register is ≥16. Arguments keep their
+/// allocated slots (and stay high after remap); `registers_used` grows by `k` so the frame covers
+/// the shift. This is a pure renumbering — it preserves the allocation's correctness (no two live
+/// values collide, since every local moved by the same `k`) and is the identity when `k == 0`.
+/// (Foundational helper for the spill pass; not yet wired into `build_dex`.)
+#[allow(dead_code)]
+pub(crate) fn reserve_scratch(alloc: &mut Allocation, num_arg: u16, k: u16) {
+    if k == 0 {
+        return;
+    }
+    for r in alloc.reg.iter_mut() {
+        if *r != NO_REG && *r >= num_arg {
+            *r += k;
+        }
+    }
+    alloc.registers_used += k;
+}
+
 /// Whether a constant value is *rematerialized* (folded as a literal) rather
 /// than allocated: a small int constant used only by lit-foldable ops, mirroring
 /// d8's const handling (`iinc`'s constant becomes `add-int/lit8`, no register).
@@ -4463,6 +4486,24 @@ fn emit_const_long(insns: &mut Vec<u16>, reg: u16, c: i64) {
 mod tests {
     use super::*;
     use std::path::Path;
+
+    #[test]
+    fn reserve_scratch_shifts_locals_keeps_args() {
+        // num_arg = 2 (allocated 0,1 are args). Locals at allocated 2,3,4; a rematerialized
+        // const at NO_REG. Reserve k=2: args unchanged, locals += 2, NO_REG untouched, frame +2.
+        let mut a = Allocation { reg: vec![0, 1, 2, 3, 4, NO_REG], registers_used: 5 };
+        reserve_scratch(&mut a, 2, 2);
+        assert_eq!(a.reg, vec![0, 1, 4, 5, 6, NO_REG]);
+        assert_eq!(a.registers_used, 7);
+        // The freed allocated slots [num_arg, num_arg+k) = [2,4) now hold no value → after the
+        // args-high remap they become the lowest final registers, the ≤15 scratch a spill uses.
+        assert_eq!(crate::regalloc::remap_register(2, 2, 7), 0);
+        assert_eq!(crate::regalloc::remap_register(3, 2, 7), 1);
+        // k=0 is the identity.
+        let mut b = Allocation { reg: vec![0, 1, 2], registers_used: 3 };
+        reserve_scratch(&mut b, 1, 0);
+        assert_eq!((b.reg, b.registers_used), (vec![0, 1, 2], 3));
+    }
 
     #[test]
     fn count_loop_phi() {
