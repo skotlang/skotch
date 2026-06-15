@@ -550,6 +550,25 @@ fn acyclic_used_catch_with_unrelated_loop_now_dexes() {
         .expect_err("ArtLoopCatchUsed (used catch INSIDE a loop) must still bail, not miscompile");
 }
 
+/// A handler with MULTIPLE exceptional predecessors (a try with several throwing ops) no longer
+/// bails "handler needs normal/stack φs": the dominance-frontier φ placement runs over preds that
+/// include the exceptional try→handler edges, which used to put a redundant block-φ at the handler.
+/// Handler blocks are now skipped there — the handler-φ SNAPSHOT (the version live at each throw
+/// point) is the sole merge, and the existing coalesce net still bails when the throw-point
+/// versions don't share a register. ArtMultiThrow 999/51/52 (runtime-proven, no-throw + both throw
+/// points): a local assigned once in the try, read in the catch, with two throwing calls — the
+/// snapshot coalesces (same version at both points). Here: dexes + validates.
+#[test]
+fn multi_throw_handler_phi_no_longer_needs_block_phis() {
+    let cf = skotch_classfile::parse_class_file(
+        &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtMultiThrow.class"),
+    )
+    .unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let dex = dex_classes(&[cf], &opts).expect("ArtMultiThrow (multi-throw handler-φ) should dex");
+    skotch_dex::validator::validate(&dex).expect("ArtMultiThrow dex must validate");
+}
+
 /// >16-register `iget`/`iput` (22c, nibble-only register fields) now DEX rather than bail: the
 /// dexbuilder reserves 2 low scratch registers and routes any operand whose FINAL register is ≥16
 /// through them via `move(-object)/from16`. The object operand always moves with

@@ -747,6 +747,19 @@ pub(crate) fn build_ssa(
         cfg = insert_entry_preheader(cfg);
     }
     let n = cfg.len();
+    // Handler blocks are renamed via the exception machinery (a CaughtException for the exception
+    // on entry + a handler-φ SNAPSHOT of each guarded local at every throw point). The standard
+    // dominance-frontier φ placement below runs over `cfg.preds`, which INCLUDE the exceptional
+    // try→handler edges — so it would also place a normal block-φ for each slot at a multi-throw
+    // handler (redundant with the handler-φ → previously bailed "handler needs normal/stack φs")
+    // and a stack-φ for the handler's entry stack (which is just the exception, owned by
+    // CaughtException — a normal stack-φ there is wrong). Skip handler blocks in both, so the
+    // handler-φ snapshot is the SOLE merge mechanism (it's also more correct: it captures the slot
+    // version live AT each throw point, not merged at block boundaries).
+    let handler_block_set: BTreeSet<usize> = exceptions
+        .iter()
+        .filter_map(|e| cfg.blocks.iter().position(|x| x.start == e.handler_pc as usize))
+        .collect();
     let idom = dominators(&cfg);
     // (Nested loops were bailed only to stay byte-identical with d8, which leaves an
     // un-DCE'd dead `const` for the undefined-φ-entry; our DCE drops it. That's a
@@ -818,6 +831,9 @@ pub(crate) fn build_ssa(
     let mut block_phi_slots: Vec<Vec<u16>> = vec![Vec::new(); n];
     for (&slot, bset) in &phis {
         for &blk in bset {
+            if handler_block_set.contains(&blk) {
+                continue; // handler-φ snapshots own this slot (see handler_block_set)
+            }
             let id = b.new(SsaOp::Phi { slot, operands: Vec::new() }, false, blk);
             blocks[blk].phis.push(id);
             block_phi_slots[blk].push(slot);
@@ -832,6 +848,9 @@ pub(crate) fn build_ssa(
     let estacks = entry_stacks(&cfg, bc, cf)?;
     let mut block_stack_phis: Vec<Vec<ValId>> = vec![Vec::new(); n];
     for blk in 0..n {
+        if handler_block_set.contains(&blk) {
+            continue; // handler entry stack is just the exception (CaughtException), not a stack-φ
+        }
         if cfg.preds[blk].len() >= 2 && !estacks[blk].is_empty() {
             for &wide in &estacks[blk] {
                 let id = b.new(SsaOp::Phi { slot: u16::MAX, operands: Vec::new() }, wide, blk);
