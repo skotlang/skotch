@@ -2236,6 +2236,23 @@ fn over_coalesced_ternary_still_bails() {
     }
 }
 
+/// dup_x2 (0x5b) and dup2_x1 (0x5d) operand-stack ops — the SSA stack simulator (`sim_block`)
+/// and IR builder (`build_ssa`) now model both (per the JVM spec's category-1 and category-2
+/// forms) as pure value-stack reorders. `ArtDupX` exercises `ia[i] += v` (dup_x2 form 1) and
+/// `this.longField/doubleField += v` returning the result (dup2_x1 form 2). These were the
+/// largest ssa-sim opcode bucket after monitorenter; ~11 guava methods now dex. Runtime
+/// correctness (the shuffle is right) is proven on ART by `tests/art/ArtDupX`.
+#[test]
+fn dup_x2_and_dup2_x1_now_dex() {
+    let cf = skotch_classfile::parse_class_file(
+        &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtDupX.class"),
+    )
+    .unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let dex = dex_classes(&[cf], &opts).expect("ArtDupX (dup_x2 + dup2_x1) should dex");
+    skotch_dex::validator::validate(&dex).expect("ArtDupX dex must validate");
+}
+
 /// 11th semantic stress round, byte-identical — fresh idioms + over-coalesce-net probes
 /// that DON'T over-coalesce:
 ///  - `S11Max3` (`m=a; if(b>m)m=b; if(c>m)m=c` — chained max via plain ifs, no ternary φ).

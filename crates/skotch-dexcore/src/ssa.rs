@@ -591,6 +591,32 @@ fn sim_block(bc: &[u8], start: usize, end: usize, cf: &ClassFile, entry: &[bool]
                 let v1 = st.pop().unwrap(); let v2 = st.pop().unwrap();
                 st.push(v1); st.push(v2); st.push(v1); pc += 1;
             }
+            // dup_x2: insert a copy of the cat-1 top below the next one OR two values.
+            // Form 2 (the value below is category-2/wide): `w, v1 → v1, w, v1`.
+            // Form 1 (two category-1 below): `v3, v2, v1 → v1, v3, v2, v1`.
+            0x5b => {
+                let v1 = st.pop().unwrap();
+                if *st.last().unwrap_or(&false) {
+                    let w = st.pop().unwrap();
+                    st.push(v1); st.push(w); st.push(v1);
+                } else {
+                    let v2 = st.pop().unwrap(); let v3 = st.pop().unwrap();
+                    st.push(v1); st.push(v3); st.push(v2); st.push(v1);
+                }
+                pc += 1;
+            }
+            // dup2_x1: Form 2 (category-2/wide top): `v2, w → w, v2, w`.
+            // Form 1 (two category-1 on top): `v3, v2, v1 → v2, v1, v3, v2, v1`.
+            0x5d => {
+                if *st.last().unwrap_or(&false) {
+                    let w = st.pop().unwrap(); let v2 = st.pop().unwrap();
+                    st.push(w); st.push(v2); st.push(w);
+                } else {
+                    let v1 = st.pop().unwrap(); let v2 = st.pop().unwrap(); let v3 = st.pop().unwrap();
+                    st.push(v2); st.push(v1); st.push(v3); st.push(v2); st.push(v1);
+                }
+                pc += 1;
+            }
             // dup2: a category-2 (wide) top duplicates it; else duplicates the top two
             // category-1 values (`a[i]++` / `a[i]+=x` duplicate the array+index).
             0x5c => {
@@ -1614,6 +1640,50 @@ fn rename(
                 stack.push(v1);
                 stack.push(v2);
                 stack.push(v1);
+                pc += 1;
+            }
+            // dup_x2: insert a copy of the cat-1 top below the next one OR two values.
+            // Form 2 (value below is category-2/wide): `w, v1 → v1, w, v1`.
+            // Form 1 (two category-1 below): `v3, v2, v1 → v1, v3, v2, v1`.
+            // Pure value-stack reorder (no instruction) — the duplicated value-id is reused.
+            0x5b => {
+                let v1 = pop_stack!(stack);
+                let below = *stack.last().ok_or_else(|| anyhow::anyhow!("ssa: dup_x2 underflow"))?;
+                if b.values[below as usize].wide {
+                    let w = pop_stack!(stack);
+                    stack.push(v1);
+                    stack.push(w);
+                    stack.push(v1);
+                } else {
+                    let v2 = pop_stack!(stack);
+                    let v3 = pop_stack!(stack);
+                    stack.push(v1);
+                    stack.push(v3);
+                    stack.push(v2);
+                    stack.push(v1);
+                }
+                pc += 1;
+            }
+            // dup2_x1: Form 2 (category-2/wide top): `v2, w → w, v2, w`.
+            // Form 1 (two category-1 on top): `v3, v2, v1 → v2, v1, v3, v2, v1`.
+            0x5d => {
+                let top = *stack.last().ok_or_else(|| anyhow::anyhow!("ssa: dup2_x1 underflow"))?;
+                if b.values[top as usize].wide {
+                    let w = pop_stack!(stack);
+                    let v2 = pop_stack!(stack);
+                    stack.push(w);
+                    stack.push(v2);
+                    stack.push(w);
+                } else {
+                    let v1 = pop_stack!(stack);
+                    let v2 = pop_stack!(stack);
+                    let v3 = pop_stack!(stack);
+                    stack.push(v2);
+                    stack.push(v1);
+                    stack.push(v3);
+                    stack.push(v2);
+                    stack.push(v1);
+                }
                 pc += 1;
             }
             // dup2: a wide (category-2) top duplicates that one value; else duplicates the
