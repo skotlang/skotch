@@ -4329,6 +4329,90 @@ fn lower_loop_body(
                 }
             }
         }
+        // Array element assignment: `arr[idx] = value`. Lowers to
+        // Rvalue::ArrayStore. The lhs is a KtExpr::ArrayAccess; the
+        // var-reassign Binary handler below only matches when lhs is
+        // a Reference, so this dedicated arm runs first.
+        if let KtExpr::Binary(b) = be {
+            let op_text = b.operation().map(|o| o.text()).unwrap_or_default();
+            if op_text == "=" {
+                if let (Some(lhs), Some(rhs)) =
+                    (b.lhs().map(unwrap_parens), b.rhs().map(unwrap_parens))
+                {
+                    if let KtExpr::ArrayAccess(aa) = lhs {
+                        let arr_children: Vec<&skotch_sil::SilNode> =
+                            skotch_ast::children(aa.syntax()).iter().collect();
+                        let array_expr_opt = arr_children
+                            .iter()
+                            .find_map(|c| KtExpr::cast(*c))
+                            .map(unwrap_parens);
+                        let index_expr_opt =
+                            arr_children.iter().find_map(|c| {
+                                if c.kind
+                                    == skotch_syntax::SyntaxKind::INDICES
+                                {
+                                    skotch_ast::children(c)
+                                        .iter()
+                                        .find_map(KtExpr::cast)
+                                        .map(unwrap_parens)
+                                } else {
+                                    None
+                                }
+                            });
+                        if let (Some(array_expr), Some(index_expr)) =
+                            (array_expr_opt, index_expr_opt)
+                        {
+                            let snap = name_to_local.clone();
+                            let lookup = |n: &str| -> Option<LocalId> {
+                                snap.iter()
+                                    .rev()
+                                    .find(|(name, _)| name == n)
+                                    .map(|(_, l)| *l)
+                            };
+                            let array_slot = lower_rich_expr_to_slot(
+                                array_expr,
+                                &lookup,
+                                fn_lookup_ref,
+                                next_slot,
+                                &mut body_mstmts,
+                                local_tys,
+                                strings,
+                            )?;
+                            let index_slot = lower_rich_expr_to_slot(
+                                index_expr,
+                                &lookup,
+                                fn_lookup_ref,
+                                next_slot,
+                                &mut body_mstmts,
+                                local_tys,
+                                strings,
+                            )?;
+                            let value_slot = lower_rich_expr_to_slot(
+                                rhs,
+                                &lookup,
+                                fn_lookup_ref,
+                                next_slot,
+                                &mut body_mstmts,
+                                local_tys,
+                                strings,
+                            )?;
+                            let unused = LocalId(*next_slot);
+                            *next_slot += 1;
+                            local_tys.push(Ty::Unit);
+                            body_mstmts.push(MStmt::Assign {
+                                dest: unused,
+                                value: skotch_mir::Rvalue::ArrayStore {
+                                    array: array_slot,
+                                    index: index_slot,
+                                    value: value_slot,
+                                },
+                            });
+                            continue;
+                        }
+                    }
+                }
+            }
+        }
         // var-reassign: `x = expr` or `x += expr` style.
         if let KtExpr::Binary(b) = be {
             let op_text = b.operation().map(|o| o.text()).unwrap_or_default();
