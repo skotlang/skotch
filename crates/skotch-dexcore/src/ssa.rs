@@ -2236,8 +2236,7 @@ pub(crate) const NO_REG: u16 = u16::MAX;
 /// allocated slots (and stay high after remap); `registers_used` grows by `k` so the frame covers
 /// the shift. This is a pure renumbering — it preserves the allocation's correctness (no two live
 /// values collide, since every local moved by the same `k`) and is the identity when `k == 0`.
-/// (Foundational helper for the spill pass; not yet wired into `build_dex`.)
-#[allow(dead_code)]
+/// (Used by the >16-register iget/iput spill in `dex_method_ssa`.)
 pub(crate) fn reserve_scratch(alloc: &mut Allocation, num_arg: u16, k: u16) {
     if k == 0 {
         return;
@@ -2624,7 +2623,7 @@ pub(crate) fn dex_method_ssa(
     reorder_entry_inits(&mut f, &ranks);
     let num = number(&f);
     let ivs = live_intervals(&f, &num);
-    let alloc = allocate(&f, &num, &ivs);
+    let mut alloc = allocate(&f, &num, &ivs);
     // Safety net against OVER-COALESCING (never miscompile): if ANY instruction reads two
     // DISTINCT value-operands that landed in the SAME register, the coalescer merged two
     // simultaneously-live values (e.g. `m = x>m ? x : m` coalescing x with m → the compare
@@ -2670,7 +2669,32 @@ pub(crate) fn dex_method_ssa(
             }
         }
     }
-    build_dex(&f, &num, &alloc, line_numbers, params)
+    // >16-register iget/iput SPILL: iget/iput (22c) has only nibble register fields, so an
+    // operand whose FINAL register is ≥16 can't be encoded directly. Reserve 2 low scratch
+    // registers and route the high operand(s) through them via move(-object)/from16 in emit_field.
+    // Object operands move via move-object/from16 (0x08); only non-wide field accesses qualify.
+    let num_arg = f.num_arg_registers;
+    let mut spill_base: Option<u16> = None;
+    let est = alloc.registers_used.max(num_arg);
+    if est > 16 && num_arg <= 14 {
+        let high = |r: u16| r != NO_REG && crate::regalloc::remap_register(r, num_arg, est) >= 16;
+        let needs_spill = f.values.iter().enumerate().any(|(i, val)| match &val.op {
+            SsaOp::GetField { dex_op, obj, .. } if *dex_op != 0x53 => {
+                high(alloc.reg[i]) || high(alloc.reg[*obj as usize])
+            }
+            SsaOp::PutField { dex_op, obj, value, .. }
+                if *dex_op != 0x5a && !f.values[*value as usize].wide =>
+            {
+                high(alloc.reg[*value as usize]) || high(alloc.reg[*obj as usize])
+            }
+            _ => false,
+        });
+        if needs_spill {
+            reserve_scratch(&mut alloc, num_arg, 2);
+            spill_base = Some(num_arg);
+        }
+    }
+    build_dex(&f, &num, &alloc, line_numbers, params, spill_base)
 }
 
 /// Rewrites every operand ValId of `op` through `g` (for value substitution).
@@ -3239,6 +3263,7 @@ pub(crate) fn build_dex(
     alloc: &Allocation,
     line_numbers: &[(u16, u16)],
     params: &[String],
+    spill_base: Option<u16>,
 ) -> Result<CodeItem> {
     let mut insns: Vec<u16> = Vec::new();
     let mut block_unit = vec![0usize; f.blocks.len()];
@@ -3393,7 +3418,7 @@ pub(crate) fn build_dex(
                     emit_invoke(f, &mut insns, alloc, v, &mut pool_fixups, &mut outs, &mut positions, line_numbers, &mut range_block_words)?;
                 }
                 SsaOp::GetField { .. } | SsaOp::GetStatic { .. } | SsaOp::PutField { .. } | SsaOp::PutStatic { .. } => {
-                    emit_field(f, &mut insns, alloc, v, &mut pool_fixups, &mut positions, line_numbers)?;
+                    emit_field(f, &mut insns, alloc, v, &mut pool_fixups, &mut positions, line_numbers, spill_base)?;
                 }
                 SsaOp::ArrayGet { .. } | SsaOp::ArrayPut { .. } | SsaOp::ArrayLength { .. } => {
                     emit_array(f, &mut insns, alloc, v, &mut positions, line_numbers)?;
@@ -3856,6 +3881,7 @@ fn emit_field(
     pool_fixups: &mut Vec<Fixup>,
     positions: &mut Vec<(u32, u32)>,
     line_numbers: &[(u16, u16)],
+    spill_base: Option<u16>,
 ) -> Result<()> {
     let reg = |x: ValId| alloc.reg[x as usize];
     let (dex_op, field, jvm_pc) = match &f.values[v as usize].op {
@@ -3867,6 +3893,70 @@ fn emit_field(
     };
     if let Some(line) = crate::bootstrap::line_for(line_numbers, jvm_pc) {
         positions.push((insns.len() as u32, line));
+    }
+    // >16-register iget/iput spill: move a high operand through reserved scratch (sb, sb+1).
+    if let Some(sb) = spill_base {
+        let na = f.num_arg_registers;
+        let est = alloc.registers_used.max(na);
+        let high = |r: u16| r >= 16 || crate::regalloc::remap_register(r, na, est) >= 16;
+        match &f.values[v as usize].op {
+            SsaOp::GetField { obj, .. } if dex_op != 0x53 && (high(reg(v)) || high(reg(*obj))) => {
+                // The object operand is ALWAYS a reference, so it must move via
+                // move-object/from16 (0x08) — never move/from16 (0x02, primitives only), which
+                // ART's verifier rejects ("copy1 … type=Reference"). The field VALUE (dest of
+                // iget) is a reference only for iget-object (0x54); else it's a 32-bit primitive.
+                let or = reg(*obj);
+                let or_use = if high(or) {
+                    insns.push(0x08 | ((sb + 1) << 8));
+                    insns.push(or);
+                    sb + 1
+                } else {
+                    or
+                };
+                let dr = reg(v);
+                let dr_use = if high(dr) { sb } else { dr };
+                insns.push(dex_op | (nib(dr_use)? << 8) | (nib(or_use)? << 12));
+                let unit = insns.len();
+                insns.push(0);
+                pool_fixups.push(Fixup { unit, item: ItemRef::Field(field.clone()), wide: false });
+                if high(dr) {
+                    let mv = if dex_op == 0x54 { 0x08 } else { 0x02 };
+                    insns.push(mv | (dr << 8));
+                    insns.push(dr_use);
+                }
+                return Ok(());
+            }
+            SsaOp::PutField { obj, value, .. }
+                if dex_op != 0x5a
+                    && !f.values[*value as usize].wide
+                    && (high(reg(*value)) || high(reg(*obj))) =>
+            {
+                // value is a reference only for iput-object (0x5c); object is always a reference.
+                let vr = reg(*value);
+                let vr_use = if high(vr) {
+                    let mv = if dex_op == 0x5c { 0x08 } else { 0x02 };
+                    insns.push(mv | (sb << 8));
+                    insns.push(vr);
+                    sb
+                } else {
+                    vr
+                };
+                let or = reg(*obj);
+                let or_use = if high(or) {
+                    insns.push(0x08 | ((sb + 1) << 8));
+                    insns.push(or);
+                    sb + 1
+                } else {
+                    or
+                };
+                insns.push(dex_op | (nib(vr_use)? << 8) | (nib(or_use)? << 12));
+                let unit = insns.len();
+                insns.push(0);
+                pool_fixups.push(Fixup { unit, item: ItemRef::Field(field.clone()), wide: false });
+                return Ok(());
+            }
+            _ => {}
+        }
     }
     match &f.values[v as usize].op {
         // 21c: sget/sput AA = dest/value.

@@ -400,6 +400,27 @@ fn over_16_registers_invoke_args_use_range_via_final_check() {
     skotch_dex::validator::validate(&dex).expect("ArtWideCall dex must validate");
 }
 
+/// >16-register `iget`/`iput` (22c, nibble-only register fields) now DEX rather than bail: the
+/// dexbuilder reserves 2 low scratch registers and routes any operand whose FINAL register is ≥16
+/// through them via `move(-object)/from16`. The object operand always moves with
+/// move-object/from16 (0x08) — never move/from16 (0x02), which ART rejects as `copy1 …
+/// type=Reference`. Runtime correctness on a REAL device is proven by `tests/art/ArtSpill*`
+/// (ArtSpillThis 2153/338/105 int iget+dest reload; ArtSpillObj 158/240/126 iget-object dest
+/// reload via 0x08; ArtSpillPut 153/238/119 iput obj-high; ArtSpillLoop 3153/388/98 iget in a
+/// loop, spill inserted across the back-edge with offsets intact). Here: each dexes + self-validates.
+#[test]
+fn over_16_registers_iget_iput_now_spill_through_scratch() {
+    let art = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art");
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    for name in ["ArtSpillThis", "ArtSpillObj", "ArtSpillPut", "ArtSpillLoop"] {
+        let cf = skotch_classfile::parse_class_file(&art.join(format!("{name}.class"))).unwrap();
+        let dex = dex_classes(&[cf], &opts)
+            .unwrap_or_else(|e| panic!("{name} (>16-reg iget/iput) should dex via scratch spill: {e:#}"));
+        skotch_dex::validator::validate(&dex)
+            .unwrap_or_else(|e| panic!("{name} spill dex must validate: {e:#}"));
+    }
+}
+
 /// A NON-CAPTURING lambda (`invokedynamic` → `LambdaMetafactory.metafactory`, no captured args,
 /// static impl, non-generic SAM) is desugared d8-style: a SYNTHETIC class implementing the
 /// functional interface is generated (singleton INSTANCE + a SAM method forwarding to the impl),
