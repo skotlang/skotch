@@ -473,6 +473,13 @@ fn dex_method(cf: &ClassFile, m: &Member, min_api: u32, emit_annotations: bool) 
     if m.name == "<init>" || m.name == "<clinit>" {
         access |= ACC_CONSTRUCTOR;
     }
+    // A lambda implementation method (`lambda$...`, private static synthetic) is invoked from
+    // its desugared synthetic class in a DIFFERENT class — so d8 relaxes it to package-private
+    // (drops ACC_PRIVATE) to avoid an IllegalAccessError. These are compiler-synthesized, so no
+    // user code depends on their privacy.
+    if m.name.starts_with("lambda$") && access & 0x2 != 0 {
+        access &= !0x2;
+    }
     let method = MethodRef {
         class: cf.descriptor(),
         proto: ProtoRef { return_type: ret.clone(), params: params.clone() },

@@ -13,7 +13,9 @@
 //! (Phase 1) replaces it.
 
 pub mod bootstrap;
+pub mod lambda;
 pub mod regalloc;
 pub mod ssa;
 
 pub use bootstrap::dex_class;
+pub use lambda::take_pending_synthetic_classes;

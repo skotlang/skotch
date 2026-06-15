@@ -72,12 +72,19 @@ pub fn dex_classes(classes: &[ClassFile], opts: &D8Options) -> Result<Vec<u8>> {
     // bootstrap (independent classes) sort by type descriptor.
     let mut sorted: Vec<&ClassFile> = classes.iter().collect();
     sorted.sort_by(|a, b| a.descriptor().cmp(&b.descriptor()));
+    // Discard any synthetic lambda classes left pending by a prior bailed dexing.
+    let _ = skotch_dexcore::take_pending_synthetic_classes();
     for cf in sorted {
         model.classes.push(
             skotch_dexcore::dex_class(cf, opts.min_api)
                 .with_context(|| format!("dexing {}", cf.this_class))?,
         );
+        // Lambda desugaring (invokedynamic → LambdaMetafactory) emits synthetic classes
+        // implementing the functional interface; collect them into the output.
+        model.classes.extend(skotch_dexcore::take_pending_synthetic_classes());
     }
+    // Keep class_defs ordered by descriptor (synthetics interleave with the user classes).
+    model.classes.sort_by(|a, b| a.class_type.cmp(&b.class_type));
     Ok(skotch_dex::write(&model))
 }
 

@@ -1343,6 +1343,15 @@ fn rename(
                 };
                 let (name, desc) = cf.constant_pool.name_and_type(nt_idx)?;
                 let (name, desc) = (name.to_string(), desc.to_string());
+                // LAMBDA metafactory: desugar to a synthetic class; the indy result is its
+                // singleton INSTANCE (non-capturing). Returns None for other bootstraps.
+                if let Some(instance) = crate::lambda::try_lambda_metafactory(cf, idx)? {
+                    let v = b.new(SsaOp::GetStatic { dex_op: 0x62, field: instance, jvm_pc: pc as u32 }, false, blk);
+                    blocks[blk].body.push(v);
+                    stack.push(v);
+                    pc += 5;
+                    continue;
+                }
                 if name != "makeConcatWithConstants" && name != "makeConcat" {
                     bail!("ssa: unsupported invokedynamic '{name}' (only string-concat)");
                 }

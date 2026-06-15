@@ -355,6 +355,22 @@ fn loop_header_is_entry_now_dexes_via_preheader() {
     }
 }
 
+/// A NON-CAPTURING lambda (`invokedynamic` → `LambdaMetafactory.metafactory`, no captured args,
+/// static impl, non-generic SAM) is desugared d8-style: a SYNTHETIC class implementing the
+/// functional interface is generated (singleton INSTANCE + a SAM method forwarding to the impl),
+/// and the call site becomes `sget-object INSTANCE`. ArtLambda exercises Runnable (void SAM),
+/// IntUnaryOperator (int→int), and IntBinaryOperator (two int args); dexing it produces the user
+/// class PLUS three synthetic lambda classes. Correctness on a REAL device is proven by
+/// `tests/art/ArtLambda`; here: dexes (incl. the synthetics) + self-validates. Capturing lambdas,
+/// non-static impls, and generic/bridge SAMs still bail (never miscompile).
+#[test]
+fn lambda_metafactory_non_capturing_now_dexes() {
+    let cf = skotch_classfile::parse_class_file(&PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtLambda.class")).unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let dex = dex_classes(&[cf], &opts).unwrap_or_else(|e| panic!("ArtLambda: non-capturing lambda should dex now: {e:#}"));
+    skotch_dex::validator::validate(&dex).unwrap_or_else(|e| panic!("ArtLambda: invalid dex: {e:#}"));
+}
+
 /// A φ whose operand is a SIBLING φ in the same loop header is a parallel copy on the
 /// back-edge — a swap (`a=b; b=a`, a 2-cycle), a 3-way rotation, or a chain (`a=b; b=t`,
 /// Fibonacci). This used to bail (a naive in-place update read a sibling AFTER it was
