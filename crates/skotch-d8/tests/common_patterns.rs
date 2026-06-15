@@ -405,6 +405,23 @@ fn lambda_metafactory_generic_sam_now_dexes() {
     skotch_dex::validator::validate(&dex).unwrap_or_else(|e| panic!("ArtLambdaGeneric: invalid dex: {e:#}"));
 }
 
+/// METHOD REFERENCES (`Type::method`) are invokedynamic+LambdaMetafactory like lambdas, but the
+/// impl method-handle kind selects the forwarding invoke: 6=static, 5=invokevirtual,
+/// 9=invokeinterface, 7=invokespecial. For an UNBOUND instance reference (`String::isEmpty` as
+/// `Predicate<String>`) the first instantiated SAM parameter is the receiver, so the synthetic SAM
+/// forwards all (cast) params via the right invoke (the impl descriptor omits the receiver).
+/// ArtMethodRef covers kind-5 (String::toUpperCase/isEmpty/trim), kind-6 (static
+/// ArtMethodRef::square), and kind-9 (List::isEmpty), all boxing-free. Correctness on a REAL device
+/// is proven by `tests/art/ArtMethodRef`; here: dexes (incl. synthetics) + self-validates. Boxing
+/// adaptations, bound/instance-capturing refs, and constructor refs (kind 8) still bail.
+#[test]
+fn lambda_method_references_now_dex() {
+    let cf = skotch_classfile::parse_class_file(&PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtMethodRef.class")).unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let dex = dex_classes(&[cf], &opts).unwrap_or_else(|e| panic!("ArtMethodRef: method references should dex now: {e:#}"));
+    skotch_dex::validator::validate(&dex).unwrap_or_else(|e| panic!("ArtMethodRef: invalid dex: {e:#}"));
+}
+
 /// A φ whose operand is a SIBLING φ in the same loop header is a parallel copy on the
 /// back-edge — a swap (`a=b; b=a`, a 2-cycle), a 3-way rotation, or a chain (`a=b; b=t`,
 /// Fibonacci). This used to bail (a naive in-place update read a sibling AFTER it was

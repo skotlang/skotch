@@ -92,21 +92,44 @@ pub fn try_lambda_metafactory(cf: &ClassFile, indy_idx: u16) -> Result<Option<La
     let sam_desc = method_type(cf, bsm.arguments[0])?;
     let inst_desc = method_type(cf, bsm.arguments[2])?;
     let (impl_kind, impl_class_internal, impl_name, impl_desc) = resolve_handle(cf, bsm.arguments[1])?;
-    // reference_kind 6 = REF_invokeStatic. Only static impls for now (javac emits a static impl
-    // for both non-capturing and value-capturing lambdas; instance-capturing/method-refs differ).
-    if impl_kind != 6 {
-        bail!("lambda: impl method-handle kind {impl_kind} (only invokestatic/6) not yet supported");
-    }
-    // The static impl takes the captured values FOLLOWED BY the INSTANTIATED SAM parameters.
+    // Map the impl method-handle kind to the DEX invoke opcode the synthetic SAM forwards with.
+    // 6 = invokestatic (a real lambda's static impl, OR a static method reference). 5/9/7 are
+    // UNBOUND instance/interface/special method references (`String::isEmpty`): the impl is an
+    // instance method, so the first instantiated SAM parameter is the receiver. 8
+    // (newInvokeSpecial / constructor reference) and bound (instance-capturing) references aren't
+    // modeled yet.
+    let (invoke_op, instance_ref): (u16, bool) = match impl_kind {
+        6 => (0x71, false), // invoke-static
+        5 => (0x6e, true),  // invoke-virtual
+        9 => (0x72, true),  // invoke-interface
+        7 => (0x70, true),  // invoke-direct (private/super instance)
+        _ => bail!("lambda: impl method-handle kind {impl_kind} not yet supported"),
+    };
     let (sam_params, sam_ret) = parse_descriptor(&sam_desc)?;
     let (inst_params, inst_ret) = parse_descriptor(&inst_desc)?;
     let (impl_params, impl_ret) = parse_descriptor(&impl_desc)?;
     if sam_params.len() != inst_params.len() {
         bail!("lambda: SAM/instantiated arity mismatch ({sam_desc} vs {inst_desc})");
     }
-    let expected: Vec<String> = captures.iter().cloned().chain(inst_params.iter().cloned()).collect();
+    // A static impl takes captures ++ the instantiated SAM params. An unbound instance method
+    // reference instead consumes the FIRST instantiated SAM param as the receiver (which the
+    // invoke-virtual/interface/direct register list includes but the impl descriptor omits), so
+    // the impl's declared params are the REMAINING instantiated SAM params and there are no
+    // captures. (impl_ret must equal inst_ret exactly — a primitive/boxed mismatch would need
+    // (un)boxing, which we don't synthesize → bail.)
+    let expected: Vec<String> = if instance_ref {
+        if !captures.is_empty() {
+            bail!("lambda: bound / instance-capturing method reference not yet supported");
+        }
+        if inst_params.is_empty() {
+            bail!("lambda: instance method reference with no receiver parameter");
+        }
+        inst_params[1..].to_vec()
+    } else {
+        captures.iter().cloned().chain(inst_params.iter().cloned()).collect()
+    };
     if impl_params != expected || impl_ret != inst_ret {
-        bail!("lambda: impl shape {impl_desc} != captures++instantiated-SAM (instance-capture/odd impl) not supported");
+        bail!("lambda: impl shape {impl_desc} != expected (boxing/instance-capture/odd impl) not supported");
     }
     if captures.iter().any(|c| c == "J" || c == "D") {
         bail!("lambda: wide capture not yet supported");
@@ -135,7 +158,7 @@ pub fn try_lambda_metafactory(cf: &ClassFile, indy_idx: u16) -> Result<Option<La
         let instance = FieldRef { class: syn.clone(), type_: fi_type.clone(), name: "INSTANCE".into() };
         PENDING.with(|p| -> Result<()> {
             if !p.borrow().contains_key(&syn) {
-                let cd = build_lambda_class(&syn, &fi_type, &sam_name, &sam_desc, &inst_params, &impl_class, &impl_name, &impl_desc, &instance)?;
+                let cd = build_lambda_class(&syn, &fi_type, &sam_name, &sam_desc, &inst_params, invoke_op, &impl_class, &impl_name, &impl_desc, &instance)?;
                 p.borrow_mut().insert(syn.clone(), cd);
             }
             Ok(())
@@ -147,7 +170,7 @@ pub fn try_lambda_metafactory(cf: &ClassFile, indy_idx: u16) -> Result<Option<La
         let ctor = MethodRef { class: syn.clone(), proto: ProtoRef { return_type: "V".into(), params: captures.clone() }, name: "<init>".into() };
         PENDING.with(|p| -> Result<()> {
             if !p.borrow().contains_key(&syn) {
-                let cd = build_capturing_class(&syn, &fi_type, &sam_name, &sam_desc, &inst_params, &impl_class, &impl_name, &impl_desc, &captures)?;
+                let cd = build_capturing_class(&syn, &fi_type, &sam_name, &sam_desc, &inst_params, invoke_op, &impl_class, &impl_name, &impl_desc, &captures)?;
                 p.borrow_mut().insert(syn.clone(), cd);
             }
             Ok(())
@@ -220,7 +243,7 @@ fn build_clinit(syn: &str, instance: &FieldRef) -> EncodedMethod {
 /// layout: `this` is v0, the SAM parameters follow at v1.. (no captures). The impl takes exactly
 /// the SAM parameters (verified by the caller), so we `invoke-static {param regs}, impl`.
 #[allow(clippy::too_many_arguments)]
-fn build_sam(syn: &str, sam_name: &str, sam_desc: &str, inst_params: &[String], impl_class: &str, impl_name: &str, impl_desc: &str) -> Result<EncodedMethod> {
+fn build_sam(syn: &str, sam_name: &str, sam_desc: &str, inst_params: &[String], invoke_op: u16, impl_class: &str, impl_name: &str, impl_desc: &str) -> Result<EncodedMethod> {
     let (params, ret) = parse_descriptor(sam_desc)?;
     let mut ins: u16 = 1; // this
     let mut param_regs: Vec<u16> = Vec::new();
@@ -247,10 +270,11 @@ fn build_sam(syn: &str, sam_name: &str, sam_desc: &str, inst_params: &[String], 
             fixups.push(Fixup { unit, item: ItemRef::Type(i.clone()), wide: false });
         }
     }
-    // invoke-static {param regs}, impl (which takes the INSTANTIATED parameter types).
+    // invoke {param regs}, impl — invoke-static for a static impl/method-ref, or
+    // invoke-virtual/interface/direct for an unbound instance method reference (arg0 = receiver).
     let argn = param_regs.len() as u16;
     let g = if param_regs.len() == 5 { param_regs[4] } else { 0 };
-    insns.push(0x71 | (((argn << 4) | g) << 8));
+    insns.push(invoke_op | (((argn << 4) | g) << 8));
     let munit = insns.len();
     insns.push(0); // method-ref placeholder (fixup)
     let mut nib: u16 = 0;
@@ -287,6 +311,7 @@ fn build_lambda_class(
     sam_name: &str,
     sam_desc: &str,
     inst_params: &[String],
+    invoke_op: u16,
     impl_class: &str,
     impl_name: &str,
     impl_desc: &str,
@@ -300,7 +325,7 @@ fn build_lambda_class(
     // Direct methods must be encoded ascending by method index (name then proto); "<clinit>" <
     // "<init>" lexicographically, so this order is always correct.
     let direct = vec![build_clinit(syn, instance), build_init(syn)];
-    let virtual_ = vec![build_sam(syn, sam_name, sam_desc, inst_params, impl_class, impl_name, impl_desc)?];
+    let virtual_ = vec![build_sam(syn, sam_name, sam_desc, inst_params, invoke_op, impl_class, impl_name, impl_desc)?];
     Ok(ClassDef {
         class_type: syn.into(),
         access_flags: ACC_PUBLIC | ACC_FINAL | ACC_SYNTHETIC,
@@ -352,7 +377,7 @@ fn build_capturing_init(syn: &str, captures: &[String]) -> Result<EncodedMethod>
 /// The SAM method for a capturing lambda: load each `this.f$N` capture, then `invoke-static` the
 /// impl with `[captures.., sam params]` and return. Register layout: captures load into v0..v(c-1);
 /// `this` is at vc; the SAM parameters are the ins at v(c+1)... .
-fn build_capturing_sam(syn: &str, sam_name: &str, sam_desc: &str, inst_params: &[String], impl_class: &str, impl_name: &str, impl_desc: &str, captures: &[String]) -> Result<EncodedMethod> {
+fn build_capturing_sam(syn: &str, sam_name: &str, sam_desc: &str, inst_params: &[String], invoke_op: u16, impl_class: &str, impl_name: &str, impl_desc: &str, captures: &[String]) -> Result<EncodedMethod> {
     let c = captures.len();
     let (sam_params, ret) = parse_descriptor(sam_desc)?;
     if sam_params.iter().any(|p| p == "J" || p == "D") {
@@ -393,7 +418,7 @@ fn build_capturing_sam(syn: &str, sam_name: &str, sam_desc: &str, inst_params: &
         arg_regs.push(this_reg + 1 + k);
     }
     let g = if arg_regs.len() == 5 { arg_regs[4] } else { 0 };
-    insns.push(0x71 | (((argn << 4) | g) << 8));
+    insns.push(invoke_op | (((argn << 4) | g) << 8));
     let munit = insns.len();
     insns.push(0);
     let mut nib: u16 = 0;
@@ -426,7 +451,7 @@ fn build_capturing_sam(syn: &str, sam_name: &str, sam_desc: &str, inst_params: &
 }
 
 #[allow(clippy::too_many_arguments)]
-fn build_capturing_class(syn: &str, fi_type: &str, sam_name: &str, sam_desc: &str, inst_params: &[String], impl_class: &str, impl_name: &str, impl_desc: &str, captures: &[String]) -> Result<ClassDef> {
+fn build_capturing_class(syn: &str, fi_type: &str, sam_name: &str, sam_desc: &str, inst_params: &[String], invoke_op: u16, impl_class: &str, impl_name: &str, impl_desc: &str, captures: &[String]) -> Result<ClassDef> {
     // One private-final field per capture. Encoded order must ascend by field name; sort to be
     // safe (f$0..f$9 already ascend lexicographically, but f$10+ would not).
     let mut fields: Vec<EncodedField> = captures
@@ -440,7 +465,7 @@ fn build_capturing_class(syn: &str, fi_type: &str, sam_name: &str, sam_desc: &st
         .collect();
     fields.sort_by(|a, b| a.field.name.cmp(&b.field.name));
     let ctor = build_capturing_init(syn, captures)?;
-    let sam = build_capturing_sam(syn, sam_name, sam_desc, inst_params, impl_class, impl_name, impl_desc, captures)?;
+    let sam = build_capturing_sam(syn, sam_name, sam_desc, inst_params, invoke_op, impl_class, impl_name, impl_desc, captures)?;
     Ok(ClassDef {
         class_type: syn.into(),
         access_flags: ACC_PUBLIC | ACC_FINAL | ACC_SYNTHETIC,

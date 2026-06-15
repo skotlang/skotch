@@ -1,0 +1,5 @@
+up=HI
+empty()=true empty(x)=false
+tr=[pad]
+sq(7)=49
+le(empty)=true le(x)=false
