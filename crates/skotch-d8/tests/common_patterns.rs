@@ -510,6 +510,24 @@ fn over_16_switch_chain_spills_through_scratch() {
     skotch_dex::validator::validate(&dex).expect("ArtSwitchWide dex must validate");
 }
 
+/// A try/finally (or synchronized) over a body with NO throwing instruction now dexes instead of
+/// bailing: javac emits a catch-all over the body, but the exceptional handler copy is unreachable
+/// (the body can't throw), so the region is dropped (no try_item) and `number()` excludes the dead
+/// handler block from the layout (emitting its `move-exception` outside any catch would be an ART
+/// VerifyError). The finally still runs inline on the normal path. ArtTryNoThrow (fin/11/fin/-2,
+/// runtime-proven) is `try { r=x+1; } finally { print }`. Real handlers (a body that DOES throw)
+/// keep their try_item — proven by the unchanged ArtFinally/ArtThrow/ArtMultiCatch fixtures.
+#[test]
+fn dead_catch_all_handler_over_nonthrowing_body_is_elided() {
+    let cf = skotch_classfile::parse_class_file(
+        &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtTryNoThrow.class"),
+    )
+    .unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let dex = dex_classes(&[cf], &opts).expect("ArtTryNoThrow (dead catch-all) should now dex");
+    skotch_dex::validator::validate(&dex).expect("ArtTryNoThrow dex must validate");
+}
+
 /// >16-register `iget`/`iput` (22c, nibble-only register fields) now DEX rather than bail: the
 /// dexbuilder reserves 2 low scratch registers and routes any operand whose FINAL register is ≥16
 /// through them via `move(-object)/from16`. The object operand always moves with

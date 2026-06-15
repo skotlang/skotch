@@ -904,6 +904,11 @@ pub(crate) fn build_ssa(
             }
         }
         let handler_blocks: BTreeSet<usize> = exc_regions.iter().map(|r| r.handler_block).collect();
+        // Handlers whose guarded region has NO throwing instruction (a try/finally — or
+        // synchronized — over a non-throwing body): the exceptional handler copy is unreachable.
+        // Drop the region (no try_item) and skip its setup; the dead handler block is later
+        // excluded from the emit layout (it has no normal pred and now no exceptional edge).
+        let mut dead_handlers: BTreeSet<usize> = BTreeSet::new();
         for &hb in &handler_blocks {
             // A handler entered by normal control flow (loop/fallthrough into it), or
             // by more than one try block, would need pred-indexed φ wiring we don't do.
@@ -917,7 +922,8 @@ pub(crate) fn build_ssa(
             // carry φ-moves, so they must already agree (or we bail, never miscompile).
             let exc_preds = cfg.exc_edges.iter().filter(|&&(_, h)| h == hb).count();
             if exc_preds == 0 {
-                bail!("ssa: handler with no exceptional predecessor — unsupported");
+                dead_handlers.insert(hb);
+                continue;
             }
             if !block_phi_slots[hb].is_empty() || !block_stack_phis[hb].is_empty() {
                 bail!("ssa: handler block needs normal/stack φs — unsupported");
@@ -944,6 +950,8 @@ pub(crate) fn build_ssa(
                 handler_phis[hb].push((slot, id));
             }
         }
+        // Drop the dead (unreachable-handler) regions so no try_item is emitted for them.
+        exc_regions.retain(|r| !dead_handlers.contains(&r.handler_block));
     }
 
     // Dominator-tree children.
@@ -1841,7 +1849,28 @@ pub(crate) const NUMBER_DELTA: u32 = 2;
 /// Numbers φ-nodes at each block header (all share the block's entry number, as
 /// in d8) and the body instructions sequentially.
 pub(crate) fn number(f: &SsaFn) -> Numbering {
-    let layout: Vec<usize> = (0..f.blocks.len()).collect();
+    // Layout = blocks reachable from the entry (via normal successor edges) PLUS each live
+    // try region's handler (reached via exception, not a succ edge), in block-index order. This
+    // EXCLUDES a dead handler block whose region was dropped (a try/finally over a non-throwing
+    // body) — emitting it would place a `move-exception` outside any catch (an ART VerifyError).
+    // For methods with no unreachable blocks the filter keeps all blocks → byte-identical.
+    let n = f.blocks.len();
+    let mut reachable = vec![false; n];
+    let mut stack: Vec<usize> = vec![0];
+    for r in &f.exc_regions {
+        stack.push(r.handler_block);
+    }
+    while let Some(b) = stack.pop() {
+        if std::mem::replace(&mut reachable[b], true) {
+            continue;
+        }
+        for &s in &f.blocks[b].succ {
+            if !reachable[s] {
+                stack.push(s);
+            }
+        }
+    }
+    let layout: Vec<usize> = (0..n).filter(|&b| reachable[b]).collect();
     let mut def = vec![0u32; f.values.len()];
     let mut block_span = vec![(0u32, 0u32); f.blocks.len()];
     let mut next = 0u32;
@@ -2600,6 +2629,33 @@ pub(crate) fn dex_method_ssa(
     // with no remaining users is removed — e.g. an `int s = 0` init that every path
     // overwrites before reading, and any φ that only fed it.
     dce(&mut f);
+    // Drop a try region that guards NO throwing SSA instruction. The CFG creates an exceptional
+    // edge for every raw `is_throwing_op` byte (which counts ALL `ldc`, incl. non-string/-class
+    // constants that lower to a non-throwing `const*`), so a try/finally — or synchronized — whose
+    // body only loads such a constant has a region but no real throwing op. Its exceptional handler
+    // can never fire, so we drop the region (no try_item); `number()` then excludes the
+    // now-unreachable handler block from the layout (build_ssa already dropped the no-exceptional-
+    // predecessor regions; this also covers the spurious-edge case). Without this the emit's
+    // "no guarded throwing instruction" net would bail.
+    if !f.exc_regions.is_empty() {
+        let keep: Vec<bool> = f
+            .exc_regions
+            .iter()
+            .map(|r| {
+                f.values.iter().any(|v| {
+                    ssa_op_can_throw(&v.op)
+                        && op_jvm_pc(&v.op)
+                            .map_or(false, |pc| (r.start_pc..r.end_pc).contains(&(pc as usize)))
+                })
+            })
+            .collect();
+        let mut i = 0usize;
+        f.exc_regions.retain(|_| {
+            let k = keep[i];
+            i += 1;
+            k
+        });
+    }
     // d8 SINKS a partially-dead initializer (`int r = 0; if (c) r = …; return r;`) into
     // the branch where it survives. We DON'T sink — we materialize the const before the
     // `if` and let it flow via its register / a φ-move on the merge edge (now that
