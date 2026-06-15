@@ -3571,7 +3571,7 @@ pub(crate) fn build_dex(
                             }
                         }
                     }
-                    emit_value(f, &mut insns, alloc, v, frame_hint)?;
+                    emit_value(f, &mut insns, alloc, v, frame_hint, spill_base)?;
                 }
             }
             // Record the DEX span of a guarded throwing instruction. A call's
@@ -3964,6 +3964,16 @@ pub(crate) fn build_dex(
             }
             _ => false,
         });
+        // A unop/conversion (12x, no wider form) with a high operand needs scratch; a both-high
+        // i2l (high int src AND high long dest pair) needs THREE scratch regs (src + dest pair).
+        let unop_high = f.values.iter().enumerate().any(|(i, val)| match &val.op {
+            SsaOp::Unop { a, .. } => {
+                let hiw = |r: u16, w: bool| r != NO_REG && (high(r) || (w && high(r + 1)));
+                hiw(alloc.reg[i], f.values[i].wide)
+                    || hiw(alloc.reg[*a as usize], f.values[*a as usize].wide)
+            }
+            _ => false,
+        });
         // Invoke args (→ range form), φ-move operands and check-cast objects (→ …/from16 copy)
         // self-widen given the true frame — no reserve needed, just re-emit with the hint.
         let move_or_invoke_high = f.values.iter().enumerate().any(|(i, val)| match &val.op {
@@ -3974,11 +3984,18 @@ pub(crate) fn build_dex(
             SsaOp::CheckCast { obj, .. } => high(alloc.reg[i]) || high(alloc.reg[*obj as usize]),
             _ => false,
         });
-        if spill_base.is_none() && na <= 14 && (field_op_high || if_test_high || switch_high) {
+        // 3 scratch when a high unop is present (its both-high i2l needs src + dest pair); else 2.
+        // The top scratch's allocated reg is na+k-1, which must fit a nibble (≤15) for the spill
+        // emits → na ≤ 16-k. (Keeping na ≤ 14 for the k=2 cases avoids regressing them.)
+        let k = if unop_high { 3 } else { 2 };
+        if spill_base.is_none()
+            && na <= 16 - k
+            && (field_op_high || if_test_high || switch_high || unop_high)
+        {
             let mut alloc2 = alloc.clone();
-            reserve_scratch(&mut alloc2, na, 2);
-            // frame_hint covers the +2; emit_invoke / emit_copy / if-test / switch spill use it too.
-            return build_dex(f, num, &alloc2, line_numbers, params, Some(na), Some(registers_size + 2));
+            reserve_scratch(&mut alloc2, na, k);
+            // frame_hint covers the +k; all the spill emitters use it for the high test.
+            return build_dex(f, num, &alloc2, line_numbers, params, Some(na), Some(registers_size + k));
         } else if move_or_invoke_high {
             return build_dex(f, num, alloc, line_numbers, params, spill_base, Some(registers_size));
         }
@@ -4737,7 +4754,7 @@ fn nib(r: u16) -> Result<u16> {
 }
 
 /// Emits the instruction defining `v` (the result lands in `reg(v)`).
-fn emit_value(f: &SsaFn, insns: &mut Vec<u16>, alloc: &Allocation, v: ValId, frame_hint: Option<u16>) -> Result<()> {
+fn emit_value(f: &SsaFn, insns: &mut Vec<u16>, alloc: &Allocation, v: ValId, frame_hint: Option<u16>, spill_base: Option<u16>) -> Result<()> {
     let reg = |x: ValId| alloc.reg[x as usize];
     let dest = reg(v);
     let num_arg = f.num_arg_registers;
@@ -4755,7 +4772,38 @@ fn emit_value(f: &SsaFn, insns: &mut Vec<u16>, alloc: &Allocation, v: ValId, fra
                 0x8f => 0x8b, 0x90 => 0x8c, 0x91 => 0x8d, 0x92 => 0x8e, 0x93 => 0x8f,
                 other => bail!("ssa dexbuilder: unop {other:#x} unsupported"),
             };
-            insns.push(dop | (nib(dest)? << 8) | (nib(reg(*a))? << 12));
+            // A unop/conversion (neg-*, i2l..i2s) is 12x (nibble dest+src) with NO wider form, so a
+            // high operand spills through the reserved low scratch — a WIDE operand (long/double)
+            // uses a consecutive PAIR. The build_dex retry reserves 3 scratch (sb,sb+1,sb+2) when a
+            // unop has a high operand, so the both-high case (i2l with a high int src AND a high
+            // long dest) fits: src→sb, dest pair→sb+1,sb+2.
+            let src = reg(*a);
+            let dw = f.values[v as usize].wide;
+            let sw = f.values[*a as usize].wide;
+            let hi = |r: u16, w: bool| {
+                let top = if w { r + 1 } else { r };
+                r >= 16 || top >= 16 || crate::regalloc::remap_register(r, num_arg, est) >= 16
+                    || crate::regalloc::remap_register(top, num_arg, est) >= 16
+            };
+            match spill_base {
+                Some(sb) if hi(dest, dw) || hi(src, sw) => {
+                    let su = if hi(src, sw) {
+                        emit_copy(insns, sb, src, sw, false, num_arg, est)?; // src→sb (pair if wide)
+                        sb
+                    } else {
+                        src
+                    };
+                    if hi(dest, dw) {
+                        // op into the dest scratch (sb+1, pair if wide dest), then copy back up.
+                        let ds = sb + 1;
+                        insns.push(dop | (nib(ds)? << 8) | (nib(su)? << 12));
+                        emit_copy(insns, dest, ds, dw, false, num_arg, est)?;
+                    } else {
+                        insns.push(dop | (nib(dest)? << 8) | (nib(su)? << 12));
+                    }
+                }
+                _ => insns.push(dop | (nib(dest)? << 8) | (nib(src)? << 12)),
+            }
         }
         SsaOp::Cmp { jvm_op, a, b } => {
             let (dop, _) = crate::bootstrap::cmp_op(*jvm_op);

@@ -588,6 +588,23 @@ fn nested_overlapping_try_regions_now_dex() {
     }
 }
 
+/// A unop/conversion (12x, no wider form) with a high operand now spills through reserved low
+/// scratch — and the build_dex retry reserves THREE scratch when a unop is high so the worst case,
+/// an i2l whose int src AND long dest are BOTH ≥16, fits (src→sb, dest pair→sb+1,sb+2, reloaded via
+/// move-wide/from16). ArtI2lDest 78/83 (runtime-proven): 7 live longs fill the low registers, so
+/// `long r = (long)(n+50)` has a high int src and a high long dest — disasm shows move/from16,
+/// int-to-long into scratch, move-wide/from16 back. Here: dexes + self-validates.
+#[test]
+fn over_16_unop_conversion_spills_through_scratch() {
+    let cf = skotch_classfile::parse_class_file(
+        &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtI2lDest.class"),
+    )
+    .unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let dex = dex_classes(&[cf], &opts).expect("ArtI2lDest (>16 i2l spill) should dex");
+    skotch_dex::validator::validate(&dex).expect("ArtI2lDest dex must validate");
+}
+
 /// >16-register `iget`/`iput` (22c, nibble-only register fields) now DEX rather than bail: the
 /// dexbuilder reserves 2 low scratch registers and routes any operand whose FINAL register is ≥16
 /// through them via `move(-object)/from16`. The object operand always moves with
