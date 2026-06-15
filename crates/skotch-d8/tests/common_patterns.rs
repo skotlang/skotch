@@ -2217,16 +2217,17 @@ fn const_with_register_use_not_rematerialized() {
     skotch_dex::validator::validate(&p).expect("RematK self-validates (no NO_REG operand)");
 }
 
-/// Ternary running-min/max with a temp (`int x=a[i]; m = x<m ? x : m`) used to SILENTLY
-/// MISCOMPILE: the load `x` coalesced with the ternary φ, which separately coalesced with
-/// the loop-φ `m` — a TRANSITIVE over-coalesce putting two values that interfere at the
-/// compare into one register (`if-le v0,v0`, m clobbered). The post-allocation
-/// over-coalesce safety net now BAILS (a binop/cmp/branch reading two DISTINCT operands
-/// in the same register is a definite conflation). A proper fix needs precise
-/// interference; bail beats miscompile.
-///  - `XbTmp` (`m = x>m ? x : m`), `S11Min` (`m = x<m ? x : m`).
+/// Ternary running-min/max with a temp (`int x=a[i]; m = x<m ? x : m`) over-coalesces via a
+/// TRANSITIVE merge where the loop-φ `m` inherits the ternary φ's group (already holding the
+/// load `x`), putting `x` and `m` — both live at `x<m` — into one register (`if-le v0,v0`).
+/// The φ-coalescer's operand-group interference check fixes the SIBLING shape (two φs sharing
+/// an operand) but NOT this one (the conflict is with v.id's INHERITED group, which can't be
+/// over-blocked without breaking legitimate handler/loop-φ coalescing — that needs value-aware
+/// / Sreedhar-style interference). So these still BAIL (never miscompile, caught by the
+/// complete post-alloc guard). bail beats miscompile.
+///  - `XbTmp` (`m = x>m ? x : m`), `S11Min` (`m = x<m ? x : m`), `S20MinT`.
 #[test]
-fn over_coalesced_ternary_now_bails() {
+fn over_coalesced_ternary_still_bails() {
     for name in ["XbTmp", "S11Min", "S20MinT"] {
         let cf = skotch_classfile::parse_class_file(&fixtures().join(format!("{name}.class"))).unwrap();
         let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };

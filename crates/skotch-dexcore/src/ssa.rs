@@ -2280,7 +2280,24 @@ pub(crate) fn allocate(f: &SsaFn, num: &Numbering, intervals: &[Interval]) -> Al
                 if ranges_interfere(&ranges, v.id, o) {
                     continue;
                 }
-                if group.iter().any(|&g| ranges_interfere(&ranges, g, o)) {
+                // (c) operand-GROUP interference: `o` may already belong to a coalesce group
+                //     pulled together by a DIFFERENT φ. Unioning v.id with o merges that whole
+                //     group in, so NO member of o's group may interfere with v.id or with an
+                //     operand already coalesced into THIS φ. The earlier check compared only
+                //     `o` itself against this φ's operands-so-far; it missed a value pulled in
+                //     TRANSITIVELY via o — e.g. running-min `m = x<m ? x : m`, where the loop-φ
+                //     `m` coalesces with the ternary φ whose group already holds the load `x`;
+                //     x and m are both live at `x<m`, so merging puts two live values in one
+                //     register (`if-le v0,v0`, m clobbered). Checking o's group against v.id +
+                //     this φ's operands catches that without over-blocking v.id's INHERITED
+                //     group members (which would needlessly break legitimate handler/loop-φ
+                //     coalescing); the complete post-alloc guard still bails on any residual.
+                let lo = co.find(o);
+                let bad = (0..nv as u32).filter(|&x| co.find(x) == lo).any(|q| {
+                    ranges_interfere(&ranges, v.id, q)
+                        || group.iter().any(|&g| ranges_interfere(&ranges, g, q))
+                });
+                if bad {
                     continue;
                 }
                 co.union(v.id, o);
