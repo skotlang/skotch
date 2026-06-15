@@ -2486,25 +2486,30 @@ pub(crate) fn dex_method_ssa(
     let num = number(&f);
     let ivs = live_intervals(&f, &num);
     let alloc = allocate(&f, &num, &ivs);
-    // Safety net against OVER-COALESCING (never miscompile): if a binop/cmp/branch reads
-    // two DISTINCT value-operands that landed in the SAME register, the coalescer merged
-    // two simultaneously-live values (e.g. `m = x>m ? x : m` coalescing x with m → the
-    // compare becomes `if-le v0,v0`). That conflates the operands — bail rather than emit
-    // wrong code. Precise (no false positives): legitimately-coalesced values are never
-    // both distinct operands of one instruction; a proper fix needs precise interference.
+    // Safety net against OVER-COALESCING (never miscompile): if ANY instruction reads two
+    // DISTINCT value-operands that landed in the SAME register, the coalescer merged two
+    // simultaneously-live values (e.g. `m = x>m ? x : m` coalescing x with m → the compare
+    // becomes `if-le v0,v0`; or `f(a,b)` becoming `invoke {v0,v0}`). That conflates the
+    // operands — bail rather than emit wrong code. This checks EVERY operand-bearing op
+    // (binops/cmps AND invokes/array/field/... via `operands`, plus branch terminators via
+    // `term_operands`); the earlier guard only covered binop/cmp/branch, so an over-coalesced
+    // invoke/array/field operand pair would have miscompiled SILENTLY. Precise (no false
+    // positives): `a op a` is one value used twice (a==b, never flagged), and two DISTINCT
+    // values both live at one instruction always interfere, so a correct allocation never
+    // shares their register. (A proper fix would make the coalescer's interference precise so
+    // these methods dex instead of bail; until then this is a complete never-miscompile net.)
     let conflated = |a: ValId, b: ValId| a != b && alloc.reg[a as usize] == alloc.reg[b as usize];
+    let any_conflated = |ops: &[ValId]| -> bool {
+        ops.iter().enumerate().any(|(i, &a)| ops[i + 1..].iter().any(|&b| conflated(a, b)))
+    };
     for v in &f.values {
-        if let SsaOp::Binop { a, b, .. } | SsaOp::Cmp { a, b, .. } = v.op {
-            if conflated(a, b) {
-                bail!("ssa: over-coalesce conflated two live operands into one register");
-            }
+        if any_conflated(&operands(&v.op)) {
+            bail!("ssa: over-coalesce conflated two live operands into one register");
         }
     }
     for blk in &f.blocks {
-        if let Terminator::If { operands, .. } = &blk.term {
-            if operands.len() == 2 && conflated(operands[0], operands[1]) {
-                bail!("ssa: over-coalesce conflated two live branch operands into one register");
-            }
+        if any_conflated(&term_operands(&blk.term)) {
+            bail!("ssa: over-coalesce conflated two live branch operands into one register");
         }
     }
     // Multi-predecessor handler safety (never miscompile): a handler-φ snapshots a slot's
