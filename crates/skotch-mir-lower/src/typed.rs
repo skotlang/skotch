@@ -441,10 +441,19 @@ pub fn lower_file(
     // Pre-pass: collect top-level fn name → (FuncId, ret Ty). Built
     // before classes/funs are processed so class method bodies can
     // resolve sibling top-level fn calls via fn_lookup.
+    //
+    // The FuncId for each local fn is its FUTURE position in
+    // `module.functions`. Cross-file stubs are pushed below before
+    // local fns, so local fn N actually lands at
+    // `cross_file_stubs_count + N`. We don't know that count yet, so
+    // we record the per-file positional index here and re-base after
+    // stub registration.
     let mut fn_lookup: rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)> =
         rustc_hash::FxHashMap::default();
     let mut local_fn_names: rustc_hash::FxHashSet<String> =
         rustc_hash::FxHashSet::default();
+    // Records insertion order so we can re-base after stub registration.
+    let mut local_fn_order: Vec<(String, u32)> = Vec::new();
     {
         let mut idx = 0u32;
         for decl in file.decls() {
@@ -454,6 +463,7 @@ pub fn lower_file(
                     let ret = typed_fn.map(|tf| tf.return_ty.clone()).unwrap_or(Ty::Unit);
                     fn_lookup.insert(name.to_string(), (FuncId(idx), ret));
                     local_fn_names.insert(name.to_string());
+                    local_fn_order.push((name.to_string(), idx));
                 }
                 idx += 1;
             }
@@ -540,6 +550,17 @@ pub fn lower_file(
                     decl.descriptor.clone(),
                 ),
             );
+        }
+    }
+
+    // Re-base local fn_lookup entries now that we know how many
+    // cross-file stubs were pushed. The actual local FuncId is
+    // `module.functions.len() + per_file_idx` at the moment we get
+    // here (stubs are already in `module.functions`).
+    let local_fn_id_base = module.functions.len() as u32;
+    for (name, per_file_idx) in &local_fn_order {
+        if let Some(slot) = fn_lookup.get_mut(name) {
+            slot.0 = FuncId(local_fn_id_base + per_file_idx);
         }
     }
 
@@ -1126,7 +1147,11 @@ pub fn lower_file(
                 }
             }
             module.functions.push(MirFunction {
-                id: FuncId(fn_id),
+                // Re-base local fn_id by the number of cross-file
+                // stubs already in `module.functions` so the FuncId
+                // matches the function's actual Vec index (the JVM
+                // backend uses `module.functions[fid.0]`).
+                id: FuncId(local_fn_id_base + fn_id),
                 name,
                 params,
                 locals,
@@ -4994,9 +5019,9 @@ fn lower_loop_body(
                             .find(|(n, _)| n == recv_n)
                             .map(|(_, l)| *l)
                         {
-                            if let Some(Ty::Class(cname)) =
-                                local_tys.get(recv_slot.0 as usize).cloned()
-                            {
+                            let recv_ty =
+                                slot_ty_with_param_fallback(recv_slot.0, local_tys);
+                            if let Ty::Class(cname) = recv_ty {
                                 let mut arg_slots: Vec<LocalId> = vec![recv_slot];
                                 let mut ok = true;
                                 if let Some(arg_list) = call.value_argument_list() {
@@ -5005,6 +5030,14 @@ fn lower_loop_body(
                                             ok = false;
                                             break;
                                         };
+                                        let inner_lookup =
+                                            |n: &str| -> Option<LocalId> {
+                                                name_to_local
+                                                    .iter()
+                                                    .rev()
+                                                    .find(|(name, _)| name == n)
+                                                    .map(|(_, l)| *l)
+                                            };
                                         match unwrap_parens(arg_e) {
                                             KtExpr::Reference(rr) => {
                                                 let Some(an) = rr.name() else {
@@ -5024,20 +5057,40 @@ fn lower_loop_body(
                                                 }
                                             }
                                             other => {
-                                                let Some((k, ty)) =
+                                                // Try literal first (fast
+                                                // path for `sb.append(' ')`);
+                                                // otherwise fall back to the
+                                                // rich-expr lowerer so we
+                                                // accept Call (e.g.
+                                                // `sb.append(symbolAt(i))`),
+                                                // Field, ArrayAccess, etc.
+                                                if let Some((k, ty)) =
                                                     literal_to_const(&other, strings)
-                                                else {
+                                                {
+                                                    let s = LocalId(*next_slot);
+                                                    *next_slot += 1;
+                                                    local_tys.push(ty);
+                                                    body_mstmts.push(MStmt::Assign {
+                                                        dest: s,
+                                                        value: skotch_mir::Rvalue::Const(k),
+                                                    });
+                                                    arg_slots.push(s);
+                                                } else if let Some(s) =
+                                                    lower_rich_expr_to_slot(
+                                                        other,
+                                                        &inner_lookup,
+                                                        fn_lookup_ref,
+                                                        next_slot,
+                                                        &mut body_mstmts,
+                                                        local_tys,
+                                                        strings,
+                                                    )
+                                                {
+                                                    arg_slots.push(s);
+                                                } else {
                                                     ok = false;
                                                     break;
-                                                };
-                                                let s = LocalId(*next_slot);
-                                                *next_slot += 1;
-                                                local_tys.push(ty);
-                                                body_mstmts.push(MStmt::Assign {
-                                                    dest: s,
-                                                    value: skotch_mir::Rvalue::Const(k),
-                                                });
-                                                arg_slots.push(s);
+                                                }
                                             }
                                         }
                                     }
@@ -12088,10 +12141,23 @@ fn try_lower_multi_stmt_block_with_offset(
                     };
                     // First try string-template lowering with
                     // local-aware identifier resolution.
+                    //
+                    // Important: seed `probe_extra` with a clone of
+                    // `local_tys` so that lookups inside the rich
+                    // lowerer for slots allocated in the outer scope
+                    // (e.g. `arr` from `val arr = intArrayOf(...)`)
+                    // return their correct Ty. Without the seed,
+                    // `slot_ty_with_param_fallback` would index into
+                    // an empty probe vector and return Ty::Any for
+                    // outer slots — propagating Object descriptors
+                    // into makeConcatWithConstants and producing a
+                    // VerifyError when the actual stack value is a
+                    // primitive (iaload on IntArray).
                     {
                         let snapshot = name_to_local.clone();
                         let mut probe_next = next_slot;
-                        let mut probe_extra: Vec<Ty> = Vec::new();
+                        let probe_seed_len = local_tys.len();
+                        let mut probe_extra: Vec<Ty> = local_tys.clone();
                         let mut probe_stmts: Vec<MStmt> = Vec::new();
                         let lookup = |n: &str| -> Option<LocalId> {
                             snapshot
@@ -12112,7 +12178,9 @@ fn try_lower_multi_stmt_block_with_offset(
                             )
                         {
                             next_slot = probe_next;
-                            local_tys.extend(probe_extra);
+                            // Only extend with the Tys allocated by
+                            // the probe — drop the seeded prefix.
+                            local_tys.extend(probe_extra.drain(probe_seed_len..));
                             stmts.extend(probe_stmts);
                             let result_slot = LocalId(next_slot);
                             next_slot += 1;
@@ -13798,10 +13866,20 @@ fn lower_rich_expr_to_slot(
                     }
                     let new_slot = LocalId(*next_slot);
                     *next_slot += 1;
-                    extra_locals.push(Ty::Class(name.to_string()));
+                    // Map well-known kotlin/* class simple names
+                    // (StringBuilder, Throwable, etc.) to their JVM
+                    // FQ form so NewInstance + Constructor use the
+                    // correct ConstantPool class index. Without this
+                    // mapping the backend emits `new StringBuilder`
+                    // (bare), which fails ClassLoader.loadClass at
+                    // runtime.
+                    let jvm_class = skotch_types::intrinsics::kotlin_to_jvm_class(name)
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| name.to_string());
+                    extra_locals.push(Ty::Class(jvm_class.clone()));
                     pre_stmts.push(MStmt::Assign {
                         dest: new_slot,
-                        value: skotch_mir::Rvalue::NewInstance(name.to_string()),
+                        value: skotch_mir::Rvalue::NewInstance(jvm_class.clone()),
                     });
                     // Backend convention: Constructor args do NOT include
                     // the receiver. Constructor Assign's dest receives
@@ -13809,7 +13887,7 @@ fn lower_rich_expr_to_slot(
                     pre_stmts.push(MStmt::Assign {
                         dest: new_slot,
                         value: skotch_mir::Rvalue::Call {
-                            kind: skotch_mir::CallKind::Constructor(name.to_string()),
+                            kind: skotch_mir::CallKind::Constructor(jvm_class),
                             args: arg_slots,
                         },
                     });
@@ -13923,10 +14001,11 @@ fn lower_rich_expr_to_slot(
                     );
                     if let Some(recv_slot) = recv_slot_opt {
                         // Class instance field fallback: emit GetField.
-                        let recv_ty_pre = extra_locals
-                            .get(recv_slot.0 as usize)
-                            .cloned()
-                            .unwrap_or(Ty::Any);
+                        // Use the param-aware fallback so slot numbers
+                        // that index into params see the right Ty
+                        // (extra_locals only holds body locals).
+                        let recv_ty_pre =
+                            slot_ty_with_param_fallback(recv_slot.0, extra_locals);
                         if let Ty::Class(cname) = &recv_ty_pre {
                             // Allow known builtin Pair / String special
                             // handling below to fire FIRST; only emit
@@ -14482,8 +14561,12 @@ fn lower_rich_expr_to_slot(
                     if let KtExpr::Reference(rr) = &dq_exprs[0] {
                         if let Some(name) = rr.name() {
                             if let Some(slot) = lookup_name(name) {
-                                if let Some(Ty::Class(cname)) =
-                                    extra_locals.get(slot.0 as usize).cloned()
+                                // Use the param-aware fallback so slot
+                                // numbers that index into params don't
+                                // get a mismatched body-local Ty (which
+                                // would skip the Class branch).
+                                if let Ty::Class(cname) =
+                                    slot_ty_with_param_fallback(slot.0, extra_locals)
                                 {
                                     let result_slot = LocalId(*next_slot);
                                     *next_slot += 1;
@@ -14522,7 +14605,7 @@ fn lower_rich_expr_to_slot(
                             );
                             let is_class_instance = n
                                 .and_then(lookup_name)
-                                .and_then(|s| extra_locals.get(s.0 as usize).cloned())
+                                .map(|s| slot_ty_with_param_fallback(s.0, extra_locals))
                                 .map(|ty| matches!(ty, Ty::Class(_) | Ty::String))
                                 .unwrap_or(false);
                             !is_class_namespace && !is_class_instance
@@ -14971,6 +15054,33 @@ fn literal_to_const(
                             if cc.kind == S::STRING_CHUNK {
                                 if let skotch_sil::SilData::Token { text } = &cc.data {
                                     buf.push_str(text);
+                                }
+                            }
+                        }
+                    }
+                    // `\n`, `\t`, `\\`, `\"`, etc. Resolve the escape
+                    // and append the decoded character — the string
+                    // is still a pure literal (no interpolation).
+                    S::ESCAPE_STRING_TEMPLATE_ENTRY => {
+                        for cc in skotch_ast::children(child) {
+                            if let skotch_sil::SilData::Token { text } = &cc.data {
+                                let raw = text.as_str();
+                                if let Some(stripped) = raw.strip_prefix('\\') {
+                                    match stripped.chars().next() {
+                                        Some('n') => buf.push('\n'),
+                                        Some('t') => buf.push('\t'),
+                                        Some('r') => buf.push('\r'),
+                                        Some('\\') => buf.push('\\'),
+                                        Some('"') => buf.push('"'),
+                                        Some('\'') => buf.push('\''),
+                                        Some('$') => buf.push('$'),
+                                        Some('b') => buf.push('\u{0008}'),
+                                        Some('0') => buf.push('\0'),
+                                        Some(other) => buf.push(other),
+                                        None => {}
+                                    }
+                                } else {
+                                    buf.push_str(raw);
                                 }
                             }
                         }

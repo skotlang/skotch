@@ -16783,12 +16783,28 @@ fn walk_block(
                             None
                         } else {
                             let user_arity = args.len().saturating_sub(1);
-                            skotch_classinfo::lookup_method_descriptor(
-                                class_name,
-                                method_name,
-                                user_arity,
-                            )
-                            .and_then(|d| d.rsplit_once(')').map(|(_, ret)| ret.to_string()))
+                            // StringBuilder.append is fluent — every
+                            // overload returns the same `StringBuilder`
+                            // receiver. classinfo's "prefer Object
+                            // params" overload pick can land us on the
+                            // CharSequence overload whose return type is
+                            // `Appendable`, producing a methodref the
+                            // JVM resolver can't find. Hardcode the
+                            // self-typed return for known fluent methods
+                            // so we get the right `Ljava/lang/...;`.
+                            let fluent_self_ret =
+                                matches!(class_name.as_str(), "java/lang/StringBuilder" | "java/lang/StringBuffer")
+                                    && method_name == "append";
+                            if fluent_self_ret {
+                                Some(format!("L{};", class_name))
+                            } else {
+                                skotch_classinfo::lookup_method_descriptor(
+                                    class_name,
+                                    method_name,
+                                    user_arity,
+                                )
+                                .and_then(|d| d.rsplit_once(')').map(|(_, ret)| ret.to_string()))
+                            }
                         };
                         descriptor.push_str(classinfo_ret.as_deref().unwrap_or(&ret_desc));
                     }
