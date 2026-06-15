@@ -19173,13 +19173,20 @@ fn method_from_fun_with_class(
     wrapper_class: &str,
 ) -> MirFunction {
     let name = f.name().unwrap_or("<anon>").to_string();
-    let param_count = f
+    let user_param_count = f
         .value_parameter_list()
         .map(|pl| pl.parameters().count())
         .unwrap_or(0);
-    let params: Vec<skotch_mir::LocalId> = (0..param_count)
-        .map(|i| skotch_mir::LocalId(i as u32))
-        .collect();
+    // For instance methods, params[0] is `this` (slot 0); user
+    // params are slots 1..=N. The JVM backend's emit_user_method
+    // skips params[0] when building the descriptor, matching this
+    // convention.
+    let mut params: Vec<skotch_mir::LocalId> = Vec::with_capacity(1 + user_param_count);
+    params.push(skotch_mir::LocalId(0)); // this
+    for i in 1..=user_param_count {
+        params.push(skotch_mir::LocalId(i as u32));
+    }
+    let param_count = user_param_count;
     let param_names: Vec<String> = f
         .value_parameter_list()
         .map(|pl| {
