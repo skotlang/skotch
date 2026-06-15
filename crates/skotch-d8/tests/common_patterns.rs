@@ -453,6 +453,23 @@ fn lambda_return_boxing_now_dexes() {
     skotch_dex::validator::validate(&dex).unwrap_or_else(|e| panic!("ArtLambdaBox: invalid dex: {e:#}"));
 }
 
+/// A capturing lambda whose impl is an INSTANCE method — it closes over `this` (plus locals), so
+/// javac emits a non-static `lambda$` impl (handle kind 5/9) and the indy captures `this` as the
+/// first dynamic argument followed by the other captured values. The synthetic class stores all
+/// captures in fields and the SAM `iget`s them then forwards via the instance invoke
+/// (`invoke-virtual {f$0(this), f$1.., args}`) — generalizing the bound-method-reference path to
+/// >1 capture. This also exercises the fix that classifies a `lambda$` instance method (relaxed
+/// from private to package-private so the synthetic class can call it) as VIRTUAL, not direct.
+/// ArtCaptureThis covers a this+local capture returning int and a this+String capture returning
+/// String. Proven on a REAL device by `tests/art/ArtCaptureThis`; here: dexes + self-validates.
+#[test]
+fn lambda_instance_impl_capturing_this_now_dexes() {
+    let cf = skotch_classfile::parse_class_file(&PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtCaptureThis.class")).unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let dex = dex_classes(&[cf], &opts).unwrap_or_else(|e| panic!("ArtCaptureThis: this-capturing lambda should dex now: {e:#}"));
+    skotch_dex::validator::validate(&dex).unwrap_or_else(|e| panic!("ArtCaptureThis: invalid dex: {e:#}"));
+}
+
 /// A φ whose operand is a SIBLING φ in the same loop header is a parallel copy on the
 /// back-edge — a swap (`a=b; b=a`, a 2-cycle), a 3-way rotation, or a chain (`a=b; b=t`,
 /// Fibonacci). This used to bail (a naive in-place update read a sibling AFTER it was

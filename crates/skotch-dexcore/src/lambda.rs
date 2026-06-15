@@ -172,15 +172,15 @@ pub fn try_lambda_metafactory(cf: &ClassFile, indy_idx: u16) -> Result<Option<La
                 bail!("lambda: instance method reference with no receiver parameter");
             }
             inst_params[1..].to_vec()
-        } else if captures.len() == 1 {
-            // BOUND instance ref (e.g. `sb::toString`): the receiver is the single captured value
-            // and ALL instantiated SAM params are the method's arguments. The capturing path
-            // synthesizes a receiver field + ctor, and the SAM igets it then forwards via the
-            // instance invoke_op — `invoke-virtual {f$0(receiver), args}` — so the impl's declared
-            // params (which omit the receiver) equal the instantiated SAM params.
-            inst_params.clone()
         } else {
-            bail!("lambda: instance method reference with {} captures (expected 0 or 1) not yet supported", captures.len());
+            // The FIRST capture is the receiver (implicit in the invoke); the impl's declared
+            // params are the remaining captures followed by the instantiated SAM params. This
+            // covers a BOUND method reference (`sb::toString`, one capture = receiver) AND a
+            // capturing lambda whose impl is an INSTANCE method (captures `this` plus locals →
+            // javac emits a non-static `lambda$` impl, handle kind 5/7). The capturing path
+            // synthesizes a field per capture and the SAM igets them then forwards via the
+            // instance invoke_op — `invoke-virtual {f$0(receiver), f$1.., args}`.
+            captures[1..].iter().cloned().chain(inst_params.iter().cloned()).collect()
         }
     } else {
         captures.iter().cloned().chain(inst_params.iter().cloned()).collect()

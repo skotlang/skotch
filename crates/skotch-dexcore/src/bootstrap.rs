@@ -463,7 +463,14 @@ fn field(class_type: &str, f: &Member, emit_annotations: bool) -> EncodedField {
 }
 
 fn is_direct(m: &Member) -> bool {
-    // direct = static, private, or constructor
+    // direct = static, private, or constructor. NOTE: dex_method relaxes a private instance
+    // `lambda$` impl method to package-private (so a desugared lambda's synthetic class can call
+    // it cross-class); such a method is then VIRTUAL, so classify it accordingly here too — else
+    // it lands in the wrong encoded list ("not in expected list"). Static lambda$ stay direct.
+    let relaxed_to_virtual = m.name.starts_with("lambda$") && !m.is_static() && m.access_flags & 0x0002 != 0;
+    if relaxed_to_virtual {
+        return false;
+    }
     m.is_static() || m.access_flags & 0x0002 != 0 || m.name == "<init>" || m.name == "<clinit>"
 }
 
