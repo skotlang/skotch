@@ -609,6 +609,24 @@ fn lambda_capturing_wide_primitive_param_unbox() {
     skotch_dex::validator::validate(&dex).expect("ArtCapWide dex must validate");
 }
 
+/// `bastore`/`baload` are shared by byte[] AND boolean[]; the variant is picked by tracing the
+/// array's component type. When the array is a LOOP-CARRIED variable reassigned in the loop, its
+/// def is a φ-CYCLE — array_desc reaches a back-edge operand (a nested φ) that cycles and resolves
+/// to None. It now SKIPS unresolvable operands (a verified array φ merges versions of ONE array),
+/// so a resolvable operand still names the byte[]/boolean[] type. ArtBoolArrPhi 001/11 (boolean[]
+/// reassigned in a loop → aget-boolean/aput-boolean) bails `undetermined byte-vs-boolean` without
+/// the fix.
+#[test]
+fn byte_boolean_array_phi_cycle_resolves_via_skip() {
+    let cf = skotch_classfile::parse_class_file(
+        &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtBoolArrPhi.class"),
+    )
+    .unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let dex = dex_classes(&[cf], &opts).expect("ArtBoolArrPhi (byte/bool array φ-cycle) should dex");
+    skotch_dex::validator::validate(&dex).expect("ArtBoolArrPhi dex must validate");
+}
+
 /// array-length (0x21, 12x) and instance-of (0x20, 22c) — nibble forms with no wider encoding —
 /// now spill a high object operand through the reserved low scratch (move-object/from16 then the
 /// op on scratch, dest reloaded if high), via the shared `spill_dest_obj`. ArtArrInst 31/0/51

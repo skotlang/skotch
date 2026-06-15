@@ -3100,15 +3100,20 @@ fn fix_byte_boolean_array_ops(f: &mut SsaFn, params: &[String], instance: bool) 
             SsaOp::ArrayGet { array, .. } => {
                 array_desc(f, params, instance, *array, depth + 1)?.strip_prefix('[').map(str::to_string)
             }
-            // all φ operands must agree on a descriptor.
+            // All RESOLVABLE φ operands must agree on a descriptor. A cyclic/untraceable operand —
+            // e.g. a loop back-edge through nested φs (a loop-carried array variable) — yields None
+            // and is SKIPPED: a bastore/baload array φ merges versions of ONE array (the verifier
+            // requires a single byte[]/boolean[] type at the access), so any resolvable operand names
+            // it; a genuine conflict still surfaces as two distinct descriptors → None.
             SsaOp::Phi { operands, .. } => {
                 let mut desc: Option<String> = None;
                 for &o in operands.iter().filter(|&&o| o != v) {
-                    let d = array_desc(f, params, instance, o, depth + 1)?;
-                    match &desc {
-                        None => desc = Some(d),
-                        Some(prev) if *prev == d => {}
-                        Some(_) => return None,
+                    if let Some(d) = array_desc(f, params, instance, o, depth + 1) {
+                        match &desc {
+                            None => desc = Some(d),
+                            Some(prev) if *prev == d => {}
+                            Some(_) => return None,
+                        }
                     }
                 }
                 desc
