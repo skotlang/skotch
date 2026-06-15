@@ -14756,6 +14756,33 @@ fn lower_rich_expr_to_slot(
             }
         }
     }
+    // Bare Reference: resolve via `lookup_name` and return the local
+    // slot directly. Required so `lower_rich_expr_to_slot(arg_e, ...)`
+    // in caller branches (top-level fn handler, constructor heuristic,
+    // etc.) accepts a Reference argument like `fn(src, start)`.
+    // Without this fallback, those nested calls returned None and
+    // every `var lr = parsePost(src, start)`-shaped property bailed.
+    if let KtExpr::Reference(r) = &e {
+        if let Some(name) = r.name() {
+            if let Some(slot) = lookup_name(name) {
+                return Some(slot);
+            }
+        }
+    }
+    // Bare literal: materialize via `literal_to_const`. Same
+    // motivation as the Reference fallback — nested calls that take
+    // a literal arg (e.g. `parsePost(src, 0)`) need lower_rich to
+    // accept it directly.
+    if let Some((k, ty)) = literal_to_const(&e, strings) {
+        let slot = LocalId(*next_slot);
+        *next_slot += 1;
+        extra_locals.push(ty);
+        pre_stmts.push(MStmt::Assign {
+            dest: slot,
+            value: skotch_mir::Rvalue::Const(k),
+        });
+        return Some(slot);
+    }
     // Binary may have come back as None because operands were Calls.
     if let KtExpr::Binary(b) = e {
         let op_text = b.operation().map(|o| o.text()).unwrap_or_default();
