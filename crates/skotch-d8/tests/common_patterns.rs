@@ -476,6 +476,23 @@ fn over_16_array_length_and_instance_of_spill() {
     skotch_dex::validator::validate(&dex).expect("ArtArrInst dex must validate");
 }
 
+/// iget-wide (0x53) / iput-wide (0x5a) with a high OBJECT operand but a low wide value pair now
+/// spill just the object reference through scratch (move-object/from16) — the wide pair stays low.
+/// (A high wide pair would need a 2-register scratch pair; that still bails.) ArtWideField
+/// 1000/50/-7 (runtime-proven) reads/writes a `long` field via a `this` pushed ≥16 by a 13-arg
+/// range invoke; both the iget-wide and iput-wide spill `this` (disasm-confirmed). Here: dexes +
+/// validates.
+#[test]
+fn over_16_iget_iput_wide_obj_spills() {
+    let cf = skotch_classfile::parse_class_file(
+        &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtWideField.class"),
+    )
+    .unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let dex = dex_classes(&[cf], &opts).expect("ArtWideField (>16 iget/iput-wide obj spill) should dex");
+    skotch_dex::validator::validate(&dex).expect("ArtWideField dex must validate");
+}
+
 /// >16-register `iget`/`iput` (22c, nibble-only register fields) now DEX rather than bail: the
 /// dexbuilder reserves 2 low scratch registers and routes any operand whose FINAL register is ≥16
 /// through them via `move(-object)/from16`. The object operand always moves with

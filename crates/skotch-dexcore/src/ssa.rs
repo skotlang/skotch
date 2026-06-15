@@ -3796,6 +3796,15 @@ pub(crate) fn build_dex(
             // array-length (0x21) / instance-of (0x20): same nibble-form spill (dest + ref operand)
             SsaOp::ArrayLength { array, .. } => high(alloc.reg[i]) || high(alloc.reg[*array as usize]),
             SsaOp::InstanceOf { obj, .. } => high(alloc.reg[i]) || high(alloc.reg[*obj as usize]),
+            // iget-wide (0x53) / iput-wide (0x5a): only the obj-high / wide-dest-low case is
+            // spillable (the wide pair stays low; a high wide pair would need a 2-reg scratch pair).
+            SsaOp::GetField { dex_op, obj, .. } if *dex_op == 0x53 => {
+                high(alloc.reg[*obj as usize]) && !high(alloc.reg[i]) && !high(alloc.reg[i] + 1)
+            }
+            SsaOp::PutField { dex_op, obj, value, .. } if *dex_op == 0x5a => {
+                let vr = alloc.reg[*value as usize];
+                high(alloc.reg[*obj as usize]) && !high(vr) && !high(vr + 1)
+            }
             _ => false,
         });
         let if_test_high = f.blocks.iter().any(|blk| match &blk.term {
@@ -4049,6 +4058,36 @@ fn emit_field(
                     or
                 };
                 insns.push(dex_op | (nib(vr_use)? << 8) | (nib(or_use)? << 12));
+                let unit = insns.len();
+                insns.push(0);
+                pool_fixups.push(Fixup { unit, item: ItemRef::Field(field.clone()), wide: false });
+                return Ok(());
+            }
+            // iget-wide (0x53): the dest is a WIDE pair. Only the obj-high / dest-low case spills
+            // here — move the object reference down and read the wide value into its (low) pair. A
+            // high wide dest needs a 2-register scratch PAIR (not yet handled): the guard excludes
+            // it so it falls through to the normal emit and bails via `nib()` (never miscompiles).
+            SsaOp::GetField { obj, .. }
+                if dex_op == 0x53 && high(reg(*obj)) && !high(reg(v)) && !high(reg(v) + 1) =>
+            {
+                insns.push(0x08 | ((sb + 1) << 8)); // move-object/from16 obj → sb+1
+                insns.push(reg(*obj));
+                insns.push(0x53 | (nib(reg(v))? << 8) | (nib(sb + 1)? << 12));
+                let unit = insns.len();
+                insns.push(0);
+                pool_fixups.push(Fixup { unit, item: ItemRef::Field(field.clone()), wide: false });
+                return Ok(());
+            }
+            // iput-wide (0x5a): the value is a WIDE pair; same obj-high / value-low spill.
+            SsaOp::PutField { obj, value, .. }
+                if dex_op == 0x5a
+                    && high(reg(*obj))
+                    && !high(reg(*value))
+                    && !high(reg(*value) + 1) =>
+            {
+                insns.push(0x08 | ((sb + 1) << 8)); // move-object/from16 obj → sb+1
+                insns.push(reg(*obj));
+                insns.push(0x5a | (nib(reg(*value))? << 8) | (nib(sb + 1)? << 12));
                 let unit = insns.len();
                 insns.push(0);
                 pool_fixups.push(Fixup { unit, item: ItemRef::Field(field.clone()), wide: false });
