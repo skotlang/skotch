@@ -139,6 +139,49 @@ pub fn try_lambda_metafactory(cf: &ClassFile, indy_idx: u16) -> Result<Option<La
     let sam_desc = method_type(cf, bsm.arguments[0])?;
     let inst_desc = method_type(cf, bsm.arguments[2])?;
     let (impl_kind, impl_class_internal, impl_name, impl_desc) = resolve_handle(cf, bsm.arguments[1])?;
+    // Deterministic synthetic class descriptor derived from the enclosing class + bsm slot.
+    let enclosing = internal_to_descriptor(&cf.this_class); // "Lfoo/Bar;"
+    let syn = format!("{}$$SkLambda${};", &enclosing[..enclosing.len() - 1], bsm_idx);
+
+    // CONSTRUCTOR REFERENCE (kind 8 REF_newInvokeSpecial, e.g. `ArrayList::new`): the synthetic
+    // SAM `new`s the class and returns it — a distinct shape from the forwarding kinds below.
+    if impl_kind == 8 {
+        if !captures.is_empty() {
+            bail!("lambda: capturing constructor reference not yet supported");
+        }
+        if impl_name != "<init>" {
+            bail!("lambda: newInvokeSpecial handle is not a constructor (<init>)");
+        }
+        let ctor_class = internal_to_descriptor(&impl_class_internal);
+        let (impl_params, impl_ret) = parse_descriptor(&impl_desc)?;
+        let (inst_params, inst_ret) = parse_descriptor(&inst_desc)?;
+        let (sam_params, _sam_ret) = parse_descriptor(&sam_desc)?;
+        if impl_ret != "V" {
+            bail!("lambda: constructor handle return is not void");
+        }
+        if inst_ret != ctor_class {
+            bail!("lambda: ctor-ref return {inst_ret} != constructed class {ctor_class}");
+        }
+        if impl_params != inst_params {
+            bail!("lambda: ctor-ref params {impl_desc} != instantiated SAM params");
+        }
+        let is_ref = |d: &str| d.starts_with('L') || d.starts_with('[');
+        for (s, i) in sam_params.iter().zip(inst_params.iter()) {
+            if s != i && !(is_ref(s) && is_ref(i)) {
+                bail!("lambda: non-reference ctor-ref parameter adaptation ({s} vs {i}) not supported");
+            }
+        }
+        let instance = FieldRef { class: syn.clone(), type_: fi_type.clone(), name: "INSTANCE".into() };
+        PENDING.with(|p| -> Result<()> {
+            if !p.borrow().contains_key(&syn) {
+                let cd = build_ctor_class(&syn, &fi_type, &sam_name, &sam_desc, &inst_params, &ctor_class, &impl_desc, &instance)?;
+                p.borrow_mut().insert(syn.clone(), cd);
+            }
+            Ok(())
+        })?;
+        return Ok(Some(LambdaSite::Singleton(instance)));
+    }
+
     // Map the impl method-handle kind to the DEX invoke opcode the synthetic SAM forwards with.
     // 6 = invokestatic (a real lambda's static impl, OR a static method reference). 5/9/7 are
     // UNBOUND instance/interface/special method references (`String::isEmpty`): the impl is an
@@ -214,10 +257,6 @@ pub fn try_lambda_metafactory(cf: &ClassFile, indy_idx: u16) -> Result<Option<La
         bail!("lambda: non-reference SAM return adaptation ({sam_ret} vs {inst_ret}) not supported");
     }
     let impl_class = internal_to_descriptor(&impl_class_internal);
-
-    // Deterministic synthetic class descriptor derived from the enclosing class + bsm slot.
-    let enclosing = internal_to_descriptor(&cf.this_class); // "Lfoo/Bar;"
-    let syn = format!("{}$$SkLambda${};", &enclosing[..enclosing.len() - 1], bsm_idx);
 
     if captures.is_empty() {
         // Non-capturing: a singleton INSTANCE; the call site loads it with sget-object.
@@ -385,6 +424,93 @@ fn build_lambda_class(
     // "<init>" lexicographically, so this order is always correct.
     let direct = vec![build_clinit(syn, instance), build_init(syn)];
     let virtual_ = vec![build_sam(syn, sam_name, sam_desc, inst_params, invoke_op, box_return, impl_class, impl_name, impl_desc)?];
+    Ok(ClassDef {
+        class_type: syn.into(),
+        access_flags: ACC_PUBLIC | ACC_FINAL | ACC_SYNTHETIC,
+        superclass: Some("Ljava/lang/Object;".into()),
+        interfaces: vec![fi_type.into()],
+        source_file: None,
+        static_fields: vec![instance_field],
+        instance_fields: vec![],
+        direct_methods: direct,
+        virtual_methods: virtual_,
+        static_values: vec![],
+        annotations: vec![],
+    })
+}
+
+// ──────────────────────────── constructor references ───────────────────────
+
+/// The SAM method for a constructor reference (`Foo::new`): `new-instance v0, Foo` ;
+/// `invoke-direct {v0, args}, Foo.<init>(args)V` ; `return-object v0`. The result IS the new
+/// object (no impl move-result). v0 is `this` (the singleton, dead) reused for the new instance;
+/// the SAM parameters (cast to the constructor's parameter types) follow at v1.. .
+fn build_ctor_sam(syn: &str, sam_name: &str, sam_desc: &str, inst_params: &[String], ctor_class: &str, ctor_desc: &str) -> Result<EncodedMethod> {
+    let (params, _ret) = parse_descriptor(sam_desc)?;
+    let mut ins: u16 = 1; // this
+    let mut param_regs: Vec<u16> = Vec::new();
+    let mut r = 1u16;
+    for p in &params {
+        if p == "J" || p == "D" {
+            bail!("lambda: wide constructor-ref parameter not yet supported");
+        }
+        param_regs.push(r);
+        r += 1;
+        ins += 1;
+    }
+    // invoke-direct passes the new object (v0) plus the params: argn = 1 + params.
+    if param_regs.len() + 1 > 5 || param_regs.iter().any(|&x| x > 15) {
+        bail!("lambda: constructor reference with too many parameters not yet supported");
+    }
+    let mut insns: Vec<u16> = Vec::new();
+    let mut fixups: Vec<Fixup> = Vec::new();
+    // Adapt each erased reference parameter to the constructor's parameter type (check-cast).
+    for (k, (s, i)) in params.iter().zip(inst_params.iter()).enumerate() {
+        if s != i {
+            insns.push(0x1f | (param_regs[k] << 8));
+            let unit = insns.len();
+            insns.push(0);
+            fixups.push(Fixup { unit, item: ItemRef::Type(i.clone()), wide: false });
+        }
+    }
+    // new-instance v0, ctor_class (21c: op 0x22 low byte, AA=v0=0).
+    insns.push(0x0022);
+    let nu = insns.len();
+    insns.push(0);
+    fixups.push(Fixup { unit: nu, item: ItemRef::Type(ctor_class.into()), wide: false });
+    // invoke-direct {v0(new), params..}, ctor_class.<init>(params)V.
+    let invoke_regs: Vec<u16> = std::iter::once(0u16).chain(param_regs.iter().copied()).collect();
+    let argn = invoke_regs.len() as u16;
+    let g = if invoke_regs.len() == 5 { invoke_regs[4] } else { 0 };
+    insns.push(0x70 | (((argn << 4) | g) << 8));
+    let mu = insns.len();
+    insns.push(0);
+    let mut nib: u16 = 0;
+    for (k, &rr) in invoke_regs.iter().take(4).enumerate() {
+        nib |= rr << (4 * k);
+    }
+    insns.push(nib);
+    fixups.push(Fixup { unit: mu, item: ItemRef::Method(MethodRef { class: ctor_class.into(), proto: proto(ctor_desc)?, name: "<init>".into() }), wide: false });
+    insns.push(0x0011); // return-object v0
+    Ok(EncodedMethod {
+        method: MethodRef { class: syn.into(), proto: proto(sam_desc)?, name: sam_name.into() },
+        access_flags: ACC_PUBLIC,
+        code: Some(CodeItem { registers_size: ins, ins_size: ins, outs_size: argn, insns, fixups, tries: vec![], debug_info: None }),
+        annotations: vec![],
+    })
+}
+
+/// A non-capturing constructor reference's synthetic class: a singleton (like build_lambda_class)
+/// whose SAM is build_ctor_sam.
+#[allow(clippy::too_many_arguments)]
+fn build_ctor_class(syn: &str, fi_type: &str, sam_name: &str, sam_desc: &str, inst_params: &[String], ctor_class: &str, ctor_desc: &str, instance: &FieldRef) -> Result<ClassDef> {
+    let instance_field = EncodedField {
+        field: instance.clone(),
+        access_flags: ACC_PUBLIC | ACC_STATIC | ACC_FINAL | ACC_SYNTHETIC,
+        annotations: vec![],
+    };
+    let direct = vec![build_clinit(syn, instance), build_init(syn)];
+    let virtual_ = vec![build_ctor_sam(syn, sam_name, sam_desc, inst_params, ctor_class, ctor_desc)?];
     Ok(ClassDef {
         class_type: syn.into(),
         access_flags: ACC_PUBLIC | ACC_FINAL | ACC_SYNTHETIC,

@@ -470,6 +470,22 @@ fn lambda_instance_impl_capturing_this_now_dexes() {
     skotch_dex::validator::validate(&dex).unwrap_or_else(|e| panic!("ArtCaptureThis: invalid dex: {e:#}"));
 }
 
+/// CONSTRUCTOR REFERENCES (`ArrayList::new`, `StringBuilder::new`) use method-handle kind 8
+/// (newInvokeSpecial). The synthetic SAM has a distinct shape — `new-instance v0, C` ;
+/// `invoke-direct {v0, args}, C.<init>(args)V` ; `return-object v0` — so the result IS the freshly
+/// constructed object (no impl move-result; the SAM's instantiated return is the constructed
+/// class, the handle return is void). ArtCtorRef covers a no-arg `Supplier<ArrayList>`, a 1-arg
+/// `Function<String,StringBuilder>`, and a no-arg `Supplier<StringBuilder>`. Proven on a REAL
+/// device by `tests/art/ArtCtorRef`; here: dexes + self-validates. Capturing (inner-class) ctor
+/// refs still bail.
+#[test]
+fn lambda_constructor_references_now_dex() {
+    let cf = skotch_classfile::parse_class_file(&PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtCtorRef.class")).unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let dex = dex_classes(&[cf], &opts).unwrap_or_else(|e| panic!("ArtCtorRef: constructor references should dex now: {e:#}"));
+    skotch_dex::validator::validate(&dex).unwrap_or_else(|e| panic!("ArtCtorRef: invalid dex: {e:#}"));
+}
+
 /// A φ whose operand is a SIBLING φ in the same loop header is a parallel copy on the
 /// back-edge — a swap (`a=b; b=a`, a 2-cycle), a 3-way rotation, or a chain (`a=b; b=t`,
 /// Fibonacci). This used to bail (a naive in-place update read a sibling AFTER it was
