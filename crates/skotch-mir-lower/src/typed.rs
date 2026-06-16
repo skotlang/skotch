@@ -17913,18 +17913,28 @@ fn constructor_from_primary_impl(
 
     let mut stmts: Vec<skotch_mir::Stmt> = Vec::new();
     // 1. Super call.
+    //
+    // Only `SUPER_TYPE_CALL_ENTRY` (`: Foo(...)`) counts as the
+    // super-class constructor. Bare `SUPER_TYPE_ENTRY` (`: Bar`) is
+    // an implemented interface — interfaces don't have `<init>` so
+    // calling `Bar.<init>()` would emit `invokespecial` against a
+    // non-existent method and the JVM rejects the class. Default
+    // to `java/lang/Object` when there's no explicit super-class
+    // ctor entry.
     let super_class = c
         .super_type_list()
         .and_then(|stl| {
-            stl.entries().find_map(|e| {
-                e.type_reference()
+            stl.entries().find_map(|e| match e {
+                skotch_ast::SuperTypeEntry::Call(_) => e
+                    .type_reference()
                     .and_then(|tr| tr.user_type())
                     .and_then(|u| u.name())
                     .map(|n| {
                         skotch_types::intrinsics::kotlin_to_jvm_class(n)
                             .map(|s| s.to_string())
                             .unwrap_or_else(|| n.to_string())
-                    })
+                    }),
+                _ => None,
             })
         })
         .unwrap_or_else(|| "java/lang/Object".to_string());
