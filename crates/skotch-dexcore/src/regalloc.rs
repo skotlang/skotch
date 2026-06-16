@@ -163,6 +163,26 @@ fn field_max(f: Field) -> u16 {
 /// blanket >16 bail, we check each field as we remap and FAIL (never truncate) when a register
 /// doesn't fit — that operand genuinely needs spilling, which this allocator doesn't do.
 pub fn remap_insns(insns: &mut [u16], num_arg: u16, registers_used: u16) -> anyhow::Result<()> {
+    remap_insns_skip(insns, num_arg, registers_used, &std::collections::HashSet::new())
+}
+
+/// A nibble field at `insns[word]` bits `[shift, shift+4)` whose register was emitted PRE-REMAPPED
+/// (already its final args-high value) by `nibw` for a high-allocated local — `remap_insns` must
+/// leave it alone. NibbleA = bits 8..12, NibbleB = bits 12..16; other field kinds are never spilled.
+fn field_skip_key(base: usize, f: Field) -> Option<(usize, u16)> {
+    match f {
+        Field::NibbleA { w } => Some((base + w, 8)),
+        Field::NibbleB { w } => Some((base + w, 12)),
+        _ => None,
+    }
+}
+
+pub fn remap_insns_skip(
+    insns: &mut [u16],
+    num_arg: u16,
+    registers_used: u16,
+    skip: &std::collections::HashSet<(usize, u16)>,
+) -> anyhow::Result<()> {
     // Identity remap — nothing to do (and avoids touching anything).
     let identity = num_arg == 0 || registers_used == num_arg;
     let map = |r: u16| if identity { r } else { remap_register(r, num_arg, registers_used) };
@@ -173,6 +193,10 @@ pub fn remap_insns(insns: &mut [u16], num_arg: u16, registers_used: u16) -> anyh
         let len = dex_insn_len(op);
         // Fixed register fields.
         for &f in reg_fields(op) {
+            // A pre-remapped high-local nibble (emitted as its final value by `nibw`) is left as-is.
+            if field_skip_key(base, f).is_some_and(|k| skip.contains(&k)) {
+                continue;
+            }
             let r = map(get_field(insns, base, f));
             if r > field_max(f) {
                 anyhow::bail!(

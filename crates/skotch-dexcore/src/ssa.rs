@@ -3532,6 +3532,8 @@ pub(crate) fn build_dex(
     // remap is frame-independent for locals, so this only matters for argument operands.
     frame_hint: Option<u16>,
 ) -> Result<CodeItem> {
+    // Reset the high-LOCAL nibble-spill skip-set for this (re-)emit; `nibw` populates it.
+    NIB_SPILL.with(|s| *s.borrow_mut() = (f.num_arg_registers, Vec::new()));
     let mut insns: Vec<u16> = Vec::new();
     let mut block_unit = vec![0usize; f.blocks.len()];
     // (offset_word_index, target_block, is_goto)
@@ -3839,7 +3841,8 @@ pub(crate) fn build_dex(
                     } else {
                         (a, b2)
                     };
-                    insns.push(dexop | (nib(a_use)? << 8) | (nib(b_use)? << 12));
+                    let w = insns.len();
+                    insns.push(dexop | nibw(a_use, w, 8)? | nibw(b_use, w, 12)?);
                 } else {
                     insns.push(dexop | (reg(operands[0]) << 8));
                 }
@@ -3901,7 +3904,8 @@ pub(crate) fn build_dex(
                 };
                 for &(k, target) in cases {
                     emit_const_int(&mut insns, tmp, k, na, est);
-                    insns.push(0x32 | (nib(key_use)? << 8) | (nib(tmp)? << 12)); // if-eq key, tmp
+                    let w = insns.len();
+                    insns.push(0x32 | nibw(key_use, w, 8)? | nibw(tmp, w, 12)?); // if-eq key, tmp
                     let off = insns.len();
                     insns.push(0);
                     fixups.push((off, target, false));
@@ -4171,7 +4175,9 @@ pub(crate) fn build_dex(
             bail!("ssa: register operand v{max_reg} out of range (>= {registers_size}) — a value got no register (NO_REG)");
         }
     }
-    crate::regalloc::remap_insns(&mut insns, f.num_arg_registers, registers_size)?;
+    let nib_skip: std::collections::HashSet<(usize, u16)> =
+        NIB_SPILL.with(|s| s.borrow().1.iter().copied().collect());
+    crate::regalloc::remap_insns_skip(&mut insns, f.num_arg_registers, registers_size, &nib_skip)?;
     let debug_info = crate::bootstrap::build_debug_info(&positions, params);
     Ok(CodeItem {
         registers_size,
@@ -4353,7 +4359,8 @@ fn emit_field(
                 };
                 let dr = reg(v);
                 let dr_use = if high(dr) { sb } else { dr };
-                insns.push(dex_op | (nib(dr_use)? << 8) | (nib(or_use)? << 12));
+                let w = insns.len();
+                insns.push(dex_op | nibw(dr_use, w, 8)? | nibw(or_use, w, 12)?);
                 let unit = insns.len();
                 insns.push(0);
                 pool_fixups.push(Fixup { unit, item: ItemRef::Field(field.clone()), wide: false });
@@ -4387,7 +4394,8 @@ fn emit_field(
                 } else {
                     or
                 };
-                insns.push(dex_op | (nib(vr_use)? << 8) | (nib(or_use)? << 12));
+                let w = insns.len();
+                insns.push(dex_op | nibw(vr_use, w, 8)? | nibw(or_use, w, 12)?);
                 let unit = insns.len();
                 insns.push(0);
                 pool_fixups.push(Fixup { unit, item: ItemRef::Field(field.clone()), wide: false });
@@ -4402,7 +4410,8 @@ fn emit_field(
             {
                 insns.push(0x08 | ((sb + 1) << 8)); // move-object/from16 obj → sb+1
                 insns.push(reg(*obj));
-                insns.push(0x53 | (nib(reg(v))? << 8) | (nib(sb + 1)? << 12));
+                let w = insns.len();
+                insns.push(0x53 | nibw(reg(v), w, 8)? | nibw(sb + 1, w, 12)?);
                 let unit = insns.len();
                 insns.push(0);
                 pool_fixups.push(Fixup { unit, item: ItemRef::Field(field.clone()), wide: false });
@@ -4417,7 +4426,8 @@ fn emit_field(
             {
                 insns.push(0x08 | ((sb + 1) << 8)); // move-object/from16 obj → sb+1
                 insns.push(reg(*obj));
-                insns.push(0x5a | (nib(reg(*value))? << 8) | (nib(sb + 1)? << 12));
+                let w = insns.len();
+                insns.push(0x5a | nibw(reg(*value), w, 8)? | nibw(sb + 1, w, 12)?);
                 let unit = insns.len();
                 insns.push(0);
                 pool_fixups.push(Fixup { unit, item: ItemRef::Field(field.clone()), wide: false });
@@ -4433,10 +4443,12 @@ fn emit_field(
         // 22c: iget/iput A = dest/value (low nibble), B = object (high nibble). No wider
         // form exists, so a register ≥16 must spill — bail loudly (never truncate).
         SsaOp::GetField { obj, .. } => {
-            insns.push(dex_op | (nib(reg(v))? << 8) | (nib(reg(*obj))? << 12));
+            let w = insns.len();
+            insns.push(dex_op | nibw(reg(v), w, 8)? | nibw(reg(*obj), w, 12)?);
         }
         SsaOp::PutField { obj, value, .. } => {
-            insns.push(dex_op | (nib(reg(*value))? << 8) | (nib(reg(*obj))? << 12));
+            let w = insns.len();
+            insns.push(dex_op | nibw(reg(*value), w, 8)? | nibw(reg(*obj), w, 12)?);
         }
         _ => unreachable!(),
     }
@@ -4483,12 +4495,14 @@ fn emit_array(
                 let na = f.num_arg_registers;
                 let est = frame_hint.unwrap_or(alloc.registers_used.max(na));
                 let (dest_use, arr_use, reload) = spill_dest_obj(insns, sb, na, est, dest, arr)?;
-                insns.push(0x21 | (nib(dest_use)? << 8) | (nib(arr_use)? << 12));
+                let w = insns.len();
+                insns.push(0x21 | nibw(dest_use, w, 8)? | nibw(arr_use, w, 12)?);
                 if reload {
                     emit_copy(insns, dest, dest_use, false, false, na, est)?;
                 }
             } else {
-                insns.push(0x21 | (nib(dest)? << 8) | (nib(arr)? << 12));
+                let w = insns.len();
+                insns.push(0x21 | nibw(dest, w, 8)? | nibw(arr, w, 12)?);
             }
         }
         _ => unreachable!(),
@@ -4523,7 +4537,8 @@ fn emit_alloc(
         // 22c: new-array dest (low nibble) + size (high nibble). No wider form, so a register
         // ≥16 must spill — bail loudly (never truncate).
         SsaOp::NewArray { size, .. } => {
-            insns.push(0x23 | (nib(reg(v))? << 8) | (nib(reg(*size))? << 12));
+            let w = insns.len();
+            insns.push(0x23 | nibw(reg(v), w, 8)? | nibw(reg(*size), w, 12)?);
         }
         _ => unreachable!(),
     }
@@ -4599,7 +4614,8 @@ fn emit_instance_of(
     } else {
         (dest, src, false)
     };
-    insns.push(0x20 | (nib(dest_use)? << 8) | (nib(src_use)? << 12));
+    let w = insns.len();
+    insns.push(0x20 | nibw(dest_use, w, 8)? | nibw(src_use, w, 12)?);
     let unit = insns.len();
     insns.push(0); // type-ref placeholder, patched via the fixup
     pool_fixups.push(Fixup { unit, item: ItemRef::Type(type_desc), wide: false });
@@ -4916,6 +4932,32 @@ fn nib(r: u16) -> Result<u16> {
     Ok(r)
 }
 
+thread_local! {
+    /// (num_arg, skip-set) for the high-LOCAL nibble spill. Set at `build_dex` entry; `nibw`
+    /// appends `(word_index, shift)` for each nibble it emits PRE-REMAPPED (a high-allocated LOCAL
+    /// whose FINAL args-high register fits a nibble), and `remap_insns` leaves those fields alone.
+    static NIB_SPILL: std::cell::RefCell<(u16, Vec<(usize, u16)>)> = const { std::cell::RefCell::new((0, Vec::new())) };
+}
+
+/// Nibble emit for a register at `insns[word]`, bits `[shift, shift+4)`. A value the args-high
+/// remap will leave ≤15 packs directly and `remap_insns` remaps it as usual. A high-allocated LOCAL
+/// (`r >= num_arg`) whose FINAL register (`r - num_arg`) still fits a nibble can't survive emit-time
+/// truncation (the nibble loses the high bits before remap sees them) — so emit its FINAL value NOW
+/// and record `(word, shift)` so `remap_insns` skips it. A high ARG (or a local whose final is also
+/// ≥16) genuinely needs spilling we don't do → bail (never truncate). Identical to `nib` for
+/// ≤16-register methods (no register ≥16), so they stay byte-identical.
+fn nibw(r: u16, word: usize, shift: u16) -> Result<u16> {
+    if r <= 15 {
+        return Ok(r << shift);
+    }
+    let na = NIB_SPILL.with(|s| s.borrow().0);
+    if r >= na && r - na <= 15 {
+        NIB_SPILL.with(|s| s.borrow_mut().1.push((word, shift)));
+        return Ok((r - na) << shift);
+    }
+    bail!("ssa dexbuilder: register v{r} does not fit a 4-bit nibble form (no wider form exists) — needs spilling");
+}
+
 /// Emits the instruction defining `v` (the result lands in `reg(v)`).
 fn emit_value(f: &SsaFn, insns: &mut Vec<u16>, alloc: &Allocation, v: ValId, frame_hint: Option<u16>, spill_base: Option<u16>) -> Result<()> {
     let reg = |x: ValId| alloc.reg[x as usize];
@@ -4959,13 +5001,18 @@ fn emit_value(f: &SsaFn, insns: &mut Vec<u16>, alloc: &Allocation, v: ValId, fra
                     if hi(dest, dw) {
                         // op into the dest scratch (sb+1, pair if wide dest), then copy back up.
                         let ds = sb + 1;
-                        insns.push(dop | (nib(ds)? << 8) | (nib(su)? << 12));
+                        let w = insns.len();
+                        insns.push(dop | nibw(ds, w, 8)? | nibw(su, w, 12)?);
                         emit_copy(insns, dest, ds, dw, false, num_arg, est)?;
                     } else {
-                        insns.push(dop | (nib(dest)? << 8) | (nib(su)? << 12));
+                        let w = insns.len();
+                        insns.push(dop | nibw(dest, w, 8)? | nibw(su, w, 12)?);
                     }
                 }
-                _ => insns.push(dop | (nib(dest)? << 8) | (nib(src)? << 12)),
+                _ => {
+                    let w = insns.len();
+                    insns.push(dop | nibw(dest, w, 8)? | nibw(src, w, 12)?);
+                }
             }
         }
         SsaOp::Cmp { jvm_op, a, b } => {
@@ -5041,7 +5088,8 @@ fn emit_binop(f: &SsaFn, insns: &mut Vec<u16>, alloc: &Allocation, dest: u16, jv
                     insns.push((reg(a) & 0xff) | (((fold_c as u16) & 0xff) << 8));
                     return Ok(());
                 } else {
-                    insns.push(op16 | (nib(dest)? << 8) | (nib(reg(a))? << 12));
+                    let w = insns.len();
+                    insns.push(op16 | nibw(dest, w, 8)? | nibw(reg(a), w, 12)?);
                     insns.push(fold_c as u16);
                     return Ok(());
                 }
@@ -5068,7 +5116,8 @@ fn emit_binop(f: &SsaFn, insns: &mut Vec<u16>, alloc: &Allocation, dest: u16, jv
                     insns.push((reg(b) & 0xff) | (((c as u16) & 0xff) << 8));
                     return Ok(());
                 } else {
-                    insns.push(op16 | (nib(dest)? << 8) | (nib(reg(b))? << 12));
+                    let w = insns.len();
+                    insns.push(op16 | nibw(dest, w, 8)? | nibw(reg(b), w, 12)?);
                     insns.push(c as u16);
                     return Ok(());
                 }
@@ -5085,7 +5134,8 @@ fn emit_binop(f: &SsaFn, insns: &mut Vec<u16>, alloc: &Allocation, dest: u16, jv
                 insns.push((reg(b) & 0xff) | (((c as u16) & 0xff) << 8));
                 return Ok(());
             } else {
-                insns.push(0xd1 | (nib(dest)? << 8) | (nib(reg(b))? << 12));
+                let w = insns.len();
+                insns.push(0xd1 | nibw(dest, w, 8)? | nibw(reg(b), w, 12)?);
                 insns.push(c as u16);
                 return Ok(());
             }

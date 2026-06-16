@@ -709,6 +709,23 @@ fn multi_pred_handler_phi_force_coalesces() {
     skotch_dex::validator::validate(&dex).expect("ArtHandlerPhi dex must validate");
 }
 
+/// A high-arity method (many args, all live) forces a LOCAL to allocate ≥v16; since args remap to
+/// the top of the frame, that local's FINAL register is actually low (`alloc - num_arg`). A nibble
+/// op (iget/iput/if-test/new-array/array-length, no wider form) truncates the high ALLOCATED
+/// register at emit, before `remap_insns` can shift it down. `nibw` instead emits the FINAL value
+/// directly for such a local and records the field so `remap_insns` skips it. ArtHighArity (this +
+/// 16 int params; s/t/r/u live across the use of all args → allocated ≥v16, final low) bails
+/// `register v19 does not fit a 4-bit nibble form` without the fix; ART stdout == JVM. Cleared the
+/// high-arity-LOCAL nib bucket (ImmutableMap.of / FunctionImpl / channels / …).
+#[test]
+fn high_arity_local_nibble_emits_final_register() {
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art");
+    let cf = skotch_classfile::parse_class_file(&dir.join("ArtHighArity.class")).unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let dex = dex_classes(&[cf], &opts).expect("ArtHighArity (high-arity local nibble) should dex");
+    skotch_dex::validator::validate(&dex).expect("ArtHighArity dex must validate");
+}
+
 /// array-length (0x21, 12x) and instance-of (0x20, 22c) — nibble forms with no wider encoding —
 /// now spill a high object operand through the reserved low scratch (move-object/from16 then the
 /// op on scratch, dest reloaded if high), via the shared `spill_dest_obj`. ArtArrInst 31/0/51
