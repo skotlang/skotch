@@ -1056,6 +1056,14 @@ fn user_type_to_ty(
             Ty::Class(jvm.to_string())
         } else if let Some(fq) = imports.get(name) {
             Ty::Class(fq.clone())
+        } else if name.starts_with(char::is_uppercase) {
+            // Capitalized name without explicit import → assume
+            // same-package class. Without this, fn params of
+            // user-class type (`fun statsOf(e: Expr): String`)
+            // collapsed to `Ty::Any`, and the JVM call site emitted
+            // `(LObject;)String` instead of `(LExpr;)String` —
+            // NoSuchMethodError at runtime.
+            Ty::Class(name.to_string())
         } else {
             Ty::Any
         }
