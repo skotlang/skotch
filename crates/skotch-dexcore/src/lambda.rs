@@ -795,16 +795,26 @@ fn build_capturing_sam(syn: &str, sam_name: &str, sam_desc: &str, inst_params: &
             scratch_words += 2;
         }
     }
-    let regs = total_cap + scratch_words + 1 + param_words; // captures + scratch + this + sam params
-    if regs > 16 {
-        bail!("lambda: capturing SAM needs {regs} registers (>16) not supported");
-    }
-    let this_reg = total_cap + scratch_words;
     // reg-WORDS passed to the impl: captures (each its width) + each impl param's width (a wide-unbox
     // param contributes the 2-word primitive, not the 1-word boxed ref).
     let argn = total_cap + (0..inst_params.len()).map(|k| cap_width(&impl_p[off + k])).sum::<u16>();
-    if argn > 5 {
-        bail!("lambda: capturing SAM impl has {argn} arg words (>5, needs range form) not supported");
+    // >5 arg-words can't use the 35c nibble invoke. The impl args (captures, then sam params) aren't
+    // consecutive — the `this` register splits the LOW captures from the HIGH sam params — so for the
+    // range form we marshal them into a fresh CONSECUTIVE `argn`-word block placed just above the
+    // captures+wide-unbox scratch; `this` and the sam params shift UP by `argn` so the ins stay at the
+    // top of the frame. (≤5 words → no marshalling, layout unchanged → byte-identity preserved.)
+    let use_range = argn > 5;
+    let marshal_start = total_cap + scratch_words;
+    let this_reg = marshal_start + if use_range { argn } else { 0 };
+    let regs = this_reg + 1 + param_words; // captures + scratch [+ marshal block] + this + sam params
+    if !use_range && regs > 16 {
+        bail!("lambda: capturing SAM needs {regs} registers (>16) not supported");
+    }
+    // Range form: the iget loading each capture (22c) and any in-place unbox (35c) cap their object
+    // register at the v15 nibble; the marshalling moves themselves use …/from16 (8-bit dest, fine).
+    // Bail if the shifted `this`/param registers exceed the nibble (a deeper case stays unsupported).
+    if use_range && this_reg + param_words > 15 {
+        bail!("lambda: capturing SAM range form needs register v{} (>15) not supported", this_reg + param_words);
     }
     let mut insns: Vec<u16> = Vec::new();
     let mut fixups: Vec<Fixup> = Vec::new();
@@ -852,35 +862,59 @@ fn build_capturing_sam(syn: &str, sam_name: &str, sam_desc: &str, inst_params: &
         }
         did_unbox = true;
     }
-    // invoke {captures.. (both halves of a wide), sam params}, impl.
-    let mut arg_regs: Vec<u16> = Vec::new();
+    // The impl args in order: captures (each its width), then sam params (a wide-unbox param
+    // contributes its 2-word scratch pair). Each entry carries the …/from16 move opcode used to
+    // gather it into the range block; the kind follows the value the register actually holds — for an
+    // in-place narrow unbox that's the primitive (`impl_p`), not the boxed ref.
+    let move_op = |d: &str| -> u16 {
+        if d == "J" || d == "D" { 0x05 } else if d.starts_with('L') || d.starts_with('[') { 0x08 } else { 0x02 }
+    };
+    let mut marshal: Vec<(u16, u16, u16)> = Vec::new(); // (src reg, move-op, width in words)
     for (i, ty) in captures.iter().enumerate() {
-        arg_regs.push(cap_start[i]);
-        if cap_width(ty) == 2 {
-            arg_regs.push(cap_start[i] + 1);
+        marshal.push((cap_start[i], move_op(ty), cap_width(ty)));
+    }
+    for (k, _ty) in sam_params.iter().enumerate() {
+        let ip = &impl_p[off + k];
+        if let Some(sc) = unbox_scratch[k] {
+            marshal.push((sc, 0x05, 2)); // unboxed long/double scratch pair → move-wide
+        } else {
+            marshal.push((this_reg + 1 + param_start[k], move_op(ip), cap_width(ip)));
         }
     }
-    for (k, ty) in sam_params.iter().enumerate() {
-        if let Some(sc) = unbox_scratch[k] {
-            arg_regs.push(sc); // the unboxed primitive's scratch pair (low registers)
-            arg_regs.push(sc + 1);
-        } else {
-            let reg = this_reg + 1 + param_start[k];
-            arg_regs.push(reg);
-            if cap_width(ty) == 2 {
-                arg_regs.push(reg + 1);
+    let munit;
+    if use_range {
+        // Gather every arg into the consecutive block at `marshal_start`, then invoke-*/range. The
+        // block sits below `this`/params, disjoint from every source, so no move clobbers a live arg.
+        let mut dest = marshal_start;
+        for &(src, mv, w) in &marshal {
+            insns.push(mv | (dest << 8)); // 22x: AA dest in word0 high byte
+            insns.push(src); // BBBB src in word1
+            dest += w;
+        }
+        let range_op = 0x74 + (invoke_op - 0x6e); // 0x6e→0x74 … 0x72→0x78 (virtual/super/direct/static/iface)
+        insns.push(range_op | (argn << 8)); // AA = arg-register count
+        munit = insns.len();
+        insns.push(0); // method-ref placeholder
+        insns.push(marshal_start); // CCCC = first register of the block
+    } else {
+        // 35c nibble form (≤5 reg-words): pass the registers directly.
+        let mut arg_regs: Vec<u16> = Vec::new();
+        for &(src, _mv, w) in &marshal {
+            arg_regs.push(src);
+            if w == 2 {
+                arg_regs.push(src + 1);
             }
         }
+        let g = if arg_regs.len() == 5 { arg_regs[4] } else { 0 };
+        insns.push(invoke_op | (((argn << 4) | g) << 8));
+        munit = insns.len();
+        insns.push(0);
+        let mut nib: u16 = 0;
+        for (k, &rr) in arg_regs.iter().take(4).enumerate() {
+            nib |= rr << (4 * k);
+        }
+        insns.push(nib);
     }
-    let g = if arg_regs.len() == 5 { arg_regs[4] } else { 0 };
-    insns.push(invoke_op | (((argn << 4) | g) << 8));
-    let munit = insns.len();
-    insns.push(0);
-    let mut nib: u16 = 0;
-    for (k, &rr) in arg_regs.iter().take(4).enumerate() {
-        nib |= rr << (4 * k);
-    }
-    insns.push(nib);
     fixups.push(Fixup {
         unit: munit,
         item: ItemRef::Method(MethodRef { class: impl_class.into(), proto: proto(impl_desc)?, name: impl_name.into() }),

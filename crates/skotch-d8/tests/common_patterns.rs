@@ -643,6 +643,23 @@ fn lambda_ctor_reference_invoke_range_form() {
     skotch_dex::validator::validate(&dex).expect("ArtCtorRange dex must validate");
 }
 
+/// A CAPTURING lambda whose impl takes >5 register-words (here 4 captured refs + 2 SAM-param refs =
+/// 6 words) can't use the 35c nibble invoke. Unlike a ctor-ref, its args are NOT consecutive — the
+/// `this` register splits the LOW captures from the HIGH sam params — so the synthetic SAM marshals
+/// every arg into a fresh consecutive block (move-object/from16) and emits invoke-static/RANGE.
+/// ArtCapRange (matching guava TableCollectors' shape) bails `capturing SAM impl has 6 arg words`
+/// without the fix; disasm: `iget-object v0..v3; move-object/from16 v4..v9; invoke-static/range
+/// {v4..v9}, lambda$make$0(String×6)String`. ART stdout == JVM (`ABCDxy` / `123456`).
+#[test]
+fn lambda_capturing_sam_invoke_range_form() {
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art");
+    let main = skotch_classfile::parse_class_file(&dir.join("ArtCapRange.class")).unwrap();
+    let iface = skotch_classfile::parse_class_file(&dir.join("ArtCapRange$Sink.class")).unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let dex = dex_classes(&[main, iface], &opts).expect("ArtCapRange (capturing-SAM range) should dex");
+    skotch_dex::validator::validate(&dex).expect("ArtCapRange dex must validate");
+}
+
 /// array-length (0x21, 12x) and instance-of (0x20, 22c) — nibble forms with no wider encoding —
 /// now spill a high object operand through the reserved low scratch (move-object/from16 then the
 /// op on scratch, dest reloaded if high), via the shared `spill_dest_obj`. ArtArrInst 31/0/51
