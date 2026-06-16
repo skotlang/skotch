@@ -8562,6 +8562,15 @@ fn try_lower_multi_stmt_block_with_offset(
                                                 ok = false;
                                                 break;
                                             };
+                                            let inner_snap = name_to_local.clone();
+                                            let inner_lookup =
+                                                |n: &str| -> Option<LocalId> {
+                                                    inner_snap
+                                                        .iter()
+                                                        .rev()
+                                                        .find(|(name, _)| name == n)
+                                                        .map(|(_, l)| *l)
+                                                };
                                             match unwrap_parens(arg_e) {
                                                 KtExpr::Reference(rr) => {
                                                     let Some(an) = rr.name() else {
@@ -8581,20 +8590,36 @@ fn try_lower_multi_stmt_block_with_offset(
                                                     }
                                                 }
                                                 other => {
-                                                    let Some((k, ty)) =
+                                                    // Try literal fast-path,
+                                                    // then fall back to rich-
+                                                    // expr (Call, ctor, etc).
+                                                    if let Some((k, ty)) =
                                                         literal_to_const(&other, strings)
-                                                    else {
+                                                    {
+                                                        let slot = LocalId(next_slot);
+                                                        next_slot += 1;
+                                                        local_tys.push(ty);
+                                                        stmts.push(MStmt::Assign {
+                                                            dest: slot,
+                                                            value: skotch_mir::Rvalue::Const(k),
+                                                        });
+                                                        arg_slots.push(slot);
+                                                    } else if let Some(s) =
+                                                        lower_rich_expr_to_slot(
+                                                            other,
+                                                            &inner_lookup,
+                                                            fn_lookup,
+                                                            &mut next_slot,
+                                                            &mut stmts,
+                                                            &mut local_tys,
+                                                            strings,
+                                                        )
+                                                    {
+                                                        arg_slots.push(s);
+                                                    } else {
                                                         ok = false;
                                                         break;
-                                                    };
-                                                    let slot = LocalId(next_slot);
-                                                    next_slot += 1;
-                                                    local_tys.push(ty);
-                                                    stmts.push(MStmt::Assign {
-                                                        dest: slot,
-                                                        value: skotch_mir::Rvalue::Const(k),
-                                                    });
-                                                    arg_slots.push(slot);
+                                                    }
                                                 }
                                             }
                                         }
