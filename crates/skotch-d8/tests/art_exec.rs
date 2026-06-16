@@ -61,11 +61,30 @@ fn art_execution() {
             continue;
         }
         let name = path.file_stem().unwrap().to_str().unwrap().to_string();
+        // A nested/helper class (`Main$Inner.class`) is dexed alongside its top-level class, not on
+        // its own — skip it here.
+        if name.contains('$') {
+            continue;
+        }
         let expected = std::fs::read_to_string(dir.join(format!("{name}.expected"))).unwrap();
 
-        // Dex the class with skotch.
-        let cf = skotch_classfile::parse_class_file(&path).unwrap();
-        let dex = dex_classes(&[cf], &D8Options { min_api: 1, mode: Mode::Release, ..Default::default() })
+        // Dex the top-level class + any `<name>$*.class` helpers (e.g. a fixture's own functional
+        // interface for a ctor reference) together into one dex.
+        let mut cfs = vec![skotch_classfile::parse_class_file(&path).unwrap()];
+        let prefix = format!("{name}$");
+        let mut helpers: Vec<PathBuf> = std::fs::read_dir(&dir)
+            .unwrap()
+            .filter_map(|e| e.ok().map(|e| e.path()))
+            .filter(|p| {
+                p.extension().and_then(|e| e.to_str()) == Some("class")
+                    && p.file_stem().and_then(|s| s.to_str()).is_some_and(|s| s.starts_with(&prefix))
+            })
+            .collect();
+        helpers.sort();
+        for h in &helpers {
+            cfs.push(skotch_classfile::parse_class_file(h).unwrap());
+        }
+        let dex = dex_classes(&cfs, &D8Options { min_api: 1, mode: Mode::Release, ..Default::default() })
             .unwrap_or_else(|e| panic!("{name}: skotch dex failed: {e:#}"));
         skotch_dex::validator::validate(&dex).unwrap_or_else(|e| panic!("{name}: invalid dex: {e:#}"));
 

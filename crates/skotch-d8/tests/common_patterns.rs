@@ -627,6 +627,22 @@ fn byte_boolean_array_phi_cycle_resolves_via_skip() {
     skotch_dex::validator::validate(&dex).expect("ArtBoolArrPhi dex must validate");
 }
 
+/// A constructor reference whose `<init>` takes >5 register-words can't use the 35c nibble invoke;
+/// the synthetic SAM now emits invoke-direct/RANGE (3rc). Its args (the new object at v0, then the
+/// ctor params) are already a CONSECUTIVE block from v0, exactly what range needs. ArtCtorRange
+/// 91/910 (a 6-int-arg ctor ref, the SAM Mk is bundled as a helper class) bails `constructor
+/// reference with too many parameters` without the fix; disasm: `new-instance v0; invoke-direct/range
+/// {v0, v1, v2, v3, v4, v5, v6}, <init>(IIIIII)V`.
+#[test]
+fn lambda_ctor_reference_invoke_range_form() {
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art");
+    let main = skotch_classfile::parse_class_file(&dir.join("ArtCtorRange.class")).unwrap();
+    let iface = skotch_classfile::parse_class_file(&dir.join("ArtCtorRange$Mk.class")).unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let dex = dex_classes(&[main, iface], &opts).expect("ArtCtorRange (ctor-ref range) should dex");
+    skotch_dex::validator::validate(&dex).expect("ArtCtorRange dex must validate");
+}
+
 /// array-length (0x21, 12x) and instance-of (0x20, 22c) — nibble forms with no wider encoding —
 /// now spill a high object operand through the reserved low scratch (move-object/from16 then the
 /// op on scratch, dest reloaded if high), via the shared `spill_dest_obj`. ArtArrInst 31/0/51

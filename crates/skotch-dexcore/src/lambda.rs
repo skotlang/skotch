@@ -637,8 +637,12 @@ fn build_ctor_sam(syn: &str, sam_name: &str, sam_desc: &str, inst_params: &[Stri
             invoke_regs.push(st + 1);
         }
     }
-    if invoke_regs.len() > 5 || invoke_regs.iter().any(|&x| x > 15) {
-        bail!("lambda: constructor reference with too many parameters not yet supported");
+    // >5 arg-words (or any register >15) can't use the 35c nibble form — switch to invoke/range
+    // (3rc). The args (the new object at v0, then the params) are already a CONSECUTIVE block from
+    // v0, exactly what range needs; verify that and bail if some compiler laid them out otherwise.
+    let use_range = invoke_regs.len() > 5 || invoke_regs.iter().any(|&x| x > 15);
+    if use_range && invoke_regs.iter().enumerate().any(|(i, &r)| r != invoke_regs[0] + i as u16) {
+        bail!("lambda: constructor reference args not a consecutive register range");
     }
     let mut insns: Vec<u16> = Vec::new();
     let mut fixups: Vec<Fixup> = Vec::new();
@@ -659,15 +663,24 @@ fn build_ctor_sam(syn: &str, sam_name: &str, sam_desc: &str, inst_params: &[Stri
     fixups.push(Fixup { unit: nu, item: ItemRef::Type(ctor_class.into()), wide: false });
     // invoke-direct {v0(new), params..}, ctor_class.<init>(params)V.
     let argn = invoke_regs.len() as u16;
-    let g = if invoke_regs.len() == 5 { invoke_regs[4] } else { 0 };
-    insns.push(0x70 | (((argn << 4) | g) << 8));
-    let mu = insns.len();
-    insns.push(0);
-    let mut nib: u16 = 0;
-    for (k, &rr) in invoke_regs.iter().take(4).enumerate() {
-        nib |= rr << (4 * k);
+    let mu;
+    if use_range {
+        // invoke-direct/range (3rc): [AA|0x76] [meth] [first reg]
+        insns.push(0x76 | (argn << 8));
+        mu = insns.len();
+        insns.push(0);
+        insns.push(invoke_regs[0]);
+    } else {
+        let g = if invoke_regs.len() == 5 { invoke_regs[4] } else { 0 };
+        insns.push(0x70 | (((argn << 4) | g) << 8));
+        mu = insns.len();
+        insns.push(0);
+        let mut nib: u16 = 0;
+        for (k, &rr) in invoke_regs.iter().take(4).enumerate() {
+            nib |= rr << (4 * k);
+        }
+        insns.push(nib);
     }
-    insns.push(nib);
     fixups.push(Fixup { unit: mu, item: ItemRef::Method(MethodRef { class: ctor_class.into(), proto: proto(ctor_desc)?, name: "<init>".into() }), wide: false });
     insns.push(0x0011); // return-object v0
     Ok(EncodedMethod {
