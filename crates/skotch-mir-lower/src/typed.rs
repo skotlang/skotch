@@ -2544,6 +2544,40 @@ fn try_lower_when_expression(
         })
         .unwrap_or_default();
 
+    // Install the param Ty fallback so `slot_ty_with_param_fallback`
+    // recovers the source Ty for slots that index into params. Without
+    // this, the arm body lowerer's `slot_ty_with_param_fallback(...)`
+    // calls return Ty::Any for everything (PARAM_TY_FALLBACK is empty
+    // in expression-bodied functions) — sealed-class smart-cast then
+    // sees the receiver as Ty::Any instead of Ty::Class(narrowed) and
+    // bails on `s.radius`-shaped DotQualified arm bodies.
+    let param_fallback_tys: Vec<Ty> = f
+        .value_parameter_list()
+        .map(|pl| {
+            pl.parameters()
+                .map(|p| {
+                    let type_name: Option<String> = p
+                        .type_reference()
+                        .and_then(|tr| tr.user_type())
+                        .and_then(|u| u.name())
+                        .map(String::from);
+                    match type_name.as_deref() {
+                        Some(n) => {
+                            skotch_types::ty_from_name(n).unwrap_or_else(|| {
+                                let fq = skotch_types::intrinsics::kotlin_to_jvm_class(n)
+                                    .map(|s| s.to_string())
+                                    .unwrap_or_else(|| n.to_string());
+                                Ty::Class(fq)
+                            })
+                        }
+                        None => Ty::Any,
+                    }
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let _param_scope = ParamTyScope::new(param_fallback_tys);
+
     // Subject-less when: route to dedicated handler. When { cond -> body ; ... }
     // is essentially an if-else chain.
     let subject = match w.subject().map(unwrap_parens) {
@@ -2561,11 +2595,12 @@ fn try_lower_when_expression(
     };
 
     // Subject must be a Reference to a parameter.
-    let subject_param_slot = match &subject {
-        KtExpr::Reference(r) => r
-            .name()
-            .and_then(|n| outer_param_names.iter().position(|p| p == n))
-            .map(|i| LocalId(i as u32))?,
+    let (subject_param_slot, subject_source_name) = match &subject {
+        KtExpr::Reference(r) => {
+            let n = r.name()?;
+            let idx = outer_param_names.iter().position(|p| p == n)?;
+            (LocalId(idx as u32), n.to_string())
+        }
         _ => return None,
     };
 
@@ -2899,9 +2934,34 @@ fn try_lower_when_expression(
             }
         }
 
-        // then_block: result_slot = (literal | param ref | Binary | Call);
-        // Goto join.
+        // then_block: result_slot = arm body lowered.
+        //
+        // For IsClass arms, prepend a CheckCast so the subject is
+        // narrowed to the matched class type for the duration of the
+        // arm body. The body's lookup closure routes the subject's
+        // source name to the cast slot, so `s.radius` (where `s` was
+        // declared `Shape` but matched `is Circle`) lowers as
+        // `cast = (Circle) s; result = cast.getRadius()` — the rich-
+        // expr DotQualified handler picks up `cast`'s Class("Circle")
+        // and emits a Virtual call to `getRadius` instead of trying
+        // to call it on Shape.
         let mut then_stmts: Vec<MStmt> = Vec::new();
+        let narrowed_subject_slot: Option<LocalId> = match cond {
+            ArmCond::IsClass(class_name) => {
+                let cast_slot = LocalId(next_slot);
+                next_slot += 1;
+                extra_locals.push(Ty::Class(class_name.clone()));
+                then_stmts.push(MStmt::Assign {
+                    dest: cast_slot,
+                    value: Rvalue::CheckCast {
+                        obj: subject_slot,
+                        target_class: class_name.clone(),
+                    },
+                });
+                Some(cast_slot)
+            }
+            _ => None,
+        };
         let body_slot: LocalId = if let Some((bk, bty)) = literal_to_const(body, strings) {
             let s = LocalId(next_slot);
             next_slot += 1;
@@ -2913,7 +2973,12 @@ fn try_lower_when_expression(
             s
         } else if let KtExpr::Reference(rr) = body {
             let n = rr.name()?;
-            if let Some(idx) = outer_param_names.iter().position(|p| p == n) {
+            if n == subject_source_name {
+                // Bare `s` in the arm body — for IsClass arms this
+                // refers to the narrowed receiver, otherwise to the
+                // subject param itself.
+                narrowed_subject_slot.unwrap_or(subject_param_slot)
+            } else if let Some(idx) = outer_param_names.iter().position(|p| p == n) {
                 LocalId(idx as u32)
             } else if let Some(val_ty) = val_lookup.get(n) {
                 let s = LocalId(next_slot);
@@ -2932,18 +2997,30 @@ fn try_lower_when_expression(
                 return None;
             }
         } else {
-            // Fall back to lower_inline_expr_to_slot — covers Binary,
-            // Prefix, nested arithmetic on outer params.
+            // General fallback: route through `lower_rich_expr_to_slot`
+            // which handles DotQualified field/method access, String
+            // templates, nested calls, etc. The lookup closure
+            // overrides the subject name to point at the narrowed
+            // cast slot for IsClass arms.
             let outer_param_names_owned: Vec<String> = outer_param_names.clone();
-            let lookup = |n: &str| -> Option<LocalId> {
+            let subject_name_owned = subject_source_name.clone();
+            let narrowed = narrowed_subject_slot;
+            let lookup = move |n: &str| -> Option<LocalId> {
+                if n == subject_name_owned {
+                    return Some(narrowed.unwrap_or(subject_param_slot));
+                }
                 outer_param_names_owned
                     .iter()
                     .position(|p| p == n)
                     .map(|i| LocalId(i as u32))
             };
-            lower_inline_expr_to_slot(
+            let empty_fn_lookup:
+                rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)> =
+                rustc_hash::FxHashMap::default();
+            lower_rich_expr_to_slot(
                 *body,
                 &lookup,
+                &empty_fn_lookup,
                 &mut next_slot,
                 &mut then_stmts,
                 &mut extra_locals,
@@ -20431,7 +20508,6 @@ fn collect_class_methods(
     wrapper_class: &str,
 ) -> Vec<MirFunction> {
     let mut methods = Vec::new();
-    let Some(body) = c.body() else { return methods };
     // Collect (name, Ty) for primary-ctor val/var params — methods
     // can reference them as `this.x` (implicit) or bare `x`.
     let mut field_names: Vec<(String, Ty)> = Vec::new();
@@ -20452,39 +20528,121 @@ fn collect_class_methods(
             }
         }
     }
-    // Also include body properties.
-    for d in body.declarations() {
-        if let KtDecl::Property(p) = d {
-            if let Some(n) = p.name() {
-                let ty = p
+    // Also include body properties + body methods (only when the
+    // class declaration has a body block).
+    if let Some(body) = c.body() {
+        for d in body.declarations() {
+            if let KtDecl::Property(p) = d {
+                if let Some(n) = p.name() {
+                    let ty = p
+                        .type_reference()
+                        .and_then(|tr| tr.user_type())
+                        .and_then(|u| u.name())
+                        .and_then(skotch_types::ty_from_name)
+                        .unwrap_or(Ty::Any);
+                    field_names.push((n.to_string(), ty));
+                }
+            }
+        }
+        for (method_idx, f) in body
+            .declarations()
+            .filter_map(|d| match d {
+                KtDecl::Fun(fun) => Some(fun),
+                _ => None,
+            })
+            .enumerate()
+        {
+            methods.push(method_from_fun_with_class(
+                f,
+                method_idx as u32,
+                false,
+                strings,
+                Some(class_name),
+                &field_names,
+                fn_lookup,
+                val_lookup,
+                wrapper_class,
+            ));
+        }
+    }
+    // Synthesize MirFunctions for primary-ctor val/var property
+    // getters. Without these stubs in `MirClass.methods`, the JVM
+    // backend's Virtual-call descriptor inference at
+    // `counter.count` / `circle.radius` call sites falls back to the
+    // erased `()Object` shape — the real `getRadius()D` (or
+    // `getCount()I`) accessor exists on the class file but the
+    // methodref says `()Object` and `invokevirtual` rejects it as
+    // NoSuchMethodError. The backend emits the actual getter body
+    // (load field, return) from `MirField`, so these stubs only
+    // need correct signatures, not real bodies.
+    if let Some(pc) = c.primary_constructor() {
+        if let Some(plist) = pc.value_parameter_list() {
+            for p in plist.parameters() {
+                if !p.is_val() && !p.is_var() {
+                    continue;
+                }
+                let Some(pname) = p.name() else { continue };
+                let mut chars = pname.chars();
+                let Some(first_ch) = chars.next() else {
+                    continue;
+                };
+                let getter_name = format!(
+                    "get{}{}",
+                    first_ch.to_uppercase().collect::<String>(),
+                    chars.as_str()
+                );
+                // Skip if the user already declared this getter.
+                if methods.iter().any(|m| m.name == getter_name) {
+                    continue;
+                }
+                let ret_ty_name: Option<String> = p
                     .type_reference()
                     .and_then(|tr| tr.user_type())
                     .and_then(|u| u.name())
-                    .and_then(skotch_types::ty_from_name)
-                    .unwrap_or(Ty::Any);
-                field_names.push((n.to_string(), ty));
+                    .map(String::from);
+                let ret_ty = match ret_ty_name.as_deref() {
+                    Some(n) => {
+                        skotch_types::ty_from_name(n).unwrap_or_else(|| {
+                            let fq = skotch_types::intrinsics::kotlin_to_jvm_class(n)
+                                .map(|s| s.to_string())
+                                .unwrap_or_else(|| n.to_string());
+                            Ty::Class(fq)
+                        })
+                    }
+                    None => Ty::Any,
+                };
+                methods.push(MirFunction {
+                    id: FuncId(0),
+                    name: getter_name,
+                    params: vec![skotch_mir::LocalId(0)],
+                    locals: vec![Ty::Class(class_name.to_string())],
+                    blocks: vec![BasicBlock {
+                        stmts: Vec::new(),
+                        terminator: Terminator::Return,
+                    }],
+                    return_ty: ret_ty,
+                    required_params: 0,
+                    param_names: Vec::new(),
+                    param_receiver_types: Vec::new(),
+                    param_defaults: Vec::new(),
+                    is_abstract: false,
+                    vararg_index: None,
+                    exception_handlers: Vec::new(),
+                    is_suspend: false,
+                    is_inline: false,
+                    has_type_params: false,
+                    suspend_original_return_ty: None,
+                    suspend_state_machine: None,
+                    annotations: Vec::new(),
+                    named_locals: Vec::new(),
+                    is_private: false,
+                    is_static: false,
+                    default_call_masks: Vec::new(),
+                    needs_leading_nop: false,
+                    local_generic_args: rustc_hash::FxHashMap::default(),
+                });
             }
         }
-    }
-    for (method_idx, f) in body
-        .declarations()
-        .filter_map(|d| match d {
-            KtDecl::Fun(fun) => Some(fun),
-            _ => None,
-        })
-        .enumerate()
-    {
-        methods.push(method_from_fun_with_class(
-            f,
-            method_idx as u32,
-            false,
-            strings,
-            Some(class_name),
-            &field_names,
-            fn_lookup,
-            val_lookup,
-            wrapper_class,
-        ));
     }
     methods
 }
