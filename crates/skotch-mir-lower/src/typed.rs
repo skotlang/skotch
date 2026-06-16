@@ -895,6 +895,20 @@ pub fn lower_file(
     // name)>. Used by body lowerers to resolve `obj.field` chains.
     let mut class_fields: rustc_hash::FxHashMap<String, Vec<(String, String)>> =
         rustc_hash::FxHashMap::default();
+    // Pre-seed class_lookup with cross-file classes from the package
+    // symbol table so the body lowerers' `val a = Vec2(1, 2)` →
+    // NewInstance + Constructor path fires for classes declared in
+    // sibling files. Local classes (handled below) overwrite these
+    // with the same name. Without this, `Property(Call(Reference,
+    // Integer, Integer))`-shaped val inits where the callee was a
+    // cross-file user class silently fell through to the bail path.
+    if let Some(table) = package_symbols {
+        for (simple_name, decl) in table.classes.iter() {
+            let param_tys: Vec<Ty> =
+                decl.ctor_params.iter().map(|p| p.ty.clone()).collect();
+            class_lookup.insert(simple_name.clone(), param_tys);
+        }
+    }
     for decl in file.decls() {
         if let KtDecl::Class(c) = decl {
             let Some(name) = c.name() else { continue };
@@ -2412,6 +2426,10 @@ fn try_lower_when_expression(
             lo: KtExpr<'a>,
             hi: KtExpr<'a>,
         },
+        // `is Class`: emits Rvalue::InstanceOf against the subject.
+        // Used for sealed-class dispatch where subject narrows to
+        // the matched class inside the arm body.
+        IsClass(String),
     }
     let mut arms: Vec<(ArmCond<'_>, KtExpr<'_>)> = Vec::new();
     let mut else_arm: Option<KtExpr<'_>> = None;
@@ -2427,6 +2445,22 @@ fn try_lower_when_expression(
         let body = entry.body().map(unwrap_parens)?;
         for c in conds {
             match c.kind {
+                skotch_syntax::SyntaxKind::WHEN_CONDITION_IS_PATTERN => {
+                    // `is Foo` — extract the class name from the
+                    // child TYPE_REFERENCE node.
+                    let type_name = skotch_ast::children(c).iter().find_map(|cc| {
+                        if cc.kind == skotch_syntax::SyntaxKind::TYPE_REFERENCE {
+                            if let Some(tr) = skotch_ast::KtTypeReference::cast(cc) {
+                                return tr.user_type().and_then(|u| u.name()).map(String::from);
+                            }
+                        }
+                        None
+                    });
+                    let Some(tname) = type_name else {
+                        return None;
+                    };
+                    arms.push((ArmCond::IsClass(tname), body));
+                }
                 skotch_syntax::SyntaxKind::WHEN_CONDITION_WITH_EXPRESSION => {
                     let ce = skotch_ast::children(c)
                         .iter()
@@ -2457,7 +2491,11 @@ fn try_lower_when_expression(
             }
         }
     }
-    let else_body = else_arm.map(unwrap_parens)?; // require else
+    // For sealed-class `when (s) { is A -> ...; is B -> ... }` (no
+    // else), the `else` branch is unreachable per Kotlin semantics.
+    // We synthesize a placeholder else that emits null/zero of the
+    // result Ty so downstream block layout has a valid join target.
+    let else_body_opt: Option<KtExpr<'_>> = else_arm.map(unwrap_parens);
 
     // kotlinc only captures the subject into its own local when the
     // subject type is a REFERENCE type (String, class). For primitive
@@ -2490,11 +2528,15 @@ fn try_lower_when_expression(
     };
     let result_slot = LocalId(next_slot);
     next_slot += 1;
-    // Result type from else_body shape (best-effort).
-    let result_ty = match &else_body {
-        KtExpr::String(_) => Ty::String,
-        KtExpr::Integer(_) => Ty::Int,
-        KtExpr::Boolean(_) => Ty::Bool,
+    // Result type from else_body shape (best-effort) or first arm
+    // body when there's no explicit else (sealed when).
+    let ty_probe = else_body_opt
+        .as_ref()
+        .or_else(|| arms.first().map(|(_, b)| b));
+    let result_ty = match ty_probe {
+        Some(KtExpr::String(_)) => Ty::String,
+        Some(KtExpr::Integer(_)) => Ty::Int,
+        Some(KtExpr::Boolean(_)) => Ty::Bool,
         _ => Ty::Any,
     };
     extra_locals.push(result_ty);
@@ -2531,6 +2573,7 @@ fn try_lower_when_expression(
         let cmp_count: u32 = match cond {
             ArmCond::Eq(_) => 1,
             ArmCond::InRange { .. } => 2,
+            ArmCond::IsClass(_) => 1,
         };
         next_block += cmp_count + 1; // +1 for the then-block
     }
@@ -2547,18 +2590,50 @@ fn try_lower_when_expression(
         let then_block_idx = match cond {
             ArmCond::Eq(_) => arm_start + 1,
             ArmCond::InRange { .. } => arm_start + 2,
+            ArmCond::IsClass(_) => arm_start + 1,
         };
         match cond {
             ArmCond::Eq(cond_expr) => {
                 let mut cmp_stmts: Vec<MStmt> = Vec::new();
-                let (k, ty) = literal_to_const(cond_expr, strings)?;
-                let lit_slot = LocalId(next_slot);
-                next_slot += 1;
-                extra_locals.push(ty);
-                cmp_stmts.push(MStmt::Assign {
-                    dest: lit_slot,
-                    value: Rvalue::Const(k),
-                });
+                // Literal cond (fast path).
+                let lit_slot = if let Some((k, ty)) = literal_to_const(cond_expr, strings) {
+                    let s = LocalId(next_slot);
+                    next_slot += 1;
+                    extra_locals.push(ty);
+                    cmp_stmts.push(MStmt::Assign {
+                        dest: s,
+                        value: Rvalue::Const(k),
+                    });
+                    s
+                } else {
+                    // Non-literal cond: enum entry (`Op.PLUS`), top-
+                    // level val, computed expression, etc. Route
+                    // through the rich-expr lowerer so we get a
+                    // proper slot, then compare via CmpEq. For ref
+                    // operands the backend's CmpEq emit lowers to
+                    // `if_acmpeq` automatically when both sides are
+                    // reference Tys.
+                    let outer_param_names_owned: Vec<String> =
+                        outer_param_names.clone();
+                    let lookup = |n: &str| -> Option<LocalId> {
+                        outer_param_names_owned
+                            .iter()
+                            .position(|p| p == n)
+                            .map(|i| LocalId(i as u32))
+                    };
+                    let empty_fn_lookup:
+                        rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)> =
+                        rustc_hash::FxHashMap::default();
+                    lower_rich_expr_to_slot(
+                        *cond_expr,
+                        &lookup,
+                        &empty_fn_lookup,
+                        &mut next_slot,
+                        &mut cmp_stmts,
+                        &mut extra_locals,
+                        strings,
+                    )?
+                };
                 let cmp_slot = LocalId(next_slot);
                 next_slot += 1;
                 extra_locals.push(Ty::Bool);
@@ -2643,6 +2718,29 @@ fn try_lower_when_expression(
                     },
                 });
             }
+            ArmCond::IsClass(class_name) => {
+                // Sealed-class dispatch: `is Circle` →
+                // `cmp = subject instanceof Circle`; branch.
+                let mut cmp_stmts: Vec<MStmt> = Vec::new();
+                let cmp_slot = LocalId(next_slot);
+                next_slot += 1;
+                extra_locals.push(Ty::Bool);
+                cmp_stmts.push(MStmt::Assign {
+                    dest: cmp_slot,
+                    value: Rvalue::InstanceOf {
+                        obj: subject_slot,
+                        type_descriptor: class_name.clone(),
+                    },
+                });
+                blocks.push(BasicBlock {
+                    stmts: cmp_stmts,
+                    terminator: Terminator::Branch {
+                        cond: cmp_slot,
+                        then_block: then_block_idx,
+                        else_block: next_arm_start,
+                    },
+                });
+            }
         }
 
         // then_block: result_slot = (literal | param ref | Binary | Call);
@@ -2706,61 +2804,85 @@ fn try_lower_when_expression(
         });
     }
 
-    // else_block — same literal-or-param resolution.
-    let else_stmts = if let Some((ek, ety)) = literal_to_const(&else_body, strings) {
+    // else_block — same literal-or-param resolution. When the source
+    // had no explicit else (sealed-class exhaustive), emit a Null
+    // placeholder — this branch is unreachable at runtime under
+    // Kotlin's sealed-class exhaustiveness guarantee.
+    let else_stmts = if let Some(else_body) = else_body_opt {
+        if let Some((ek, ety)) = literal_to_const(&else_body, strings) {
+            let else_slot = LocalId(next_slot);
+            extra_locals.push(ety);
+            vec![
+                MStmt::Assign {
+                    dest: else_slot,
+                    value: Rvalue::Const(ek),
+                },
+                MStmt::Assign {
+                    dest: result_slot,
+                    value: Rvalue::Local(else_slot),
+                },
+            ]
+        } else if let KtExpr::Reference(rr) = &else_body {
+            let n = rr.name()?;
+            if let Some(val_ty) = val_lookup.get(n) {
+                let slot = LocalId(next_slot);
+                extra_locals.push(val_ty.clone());
+                return Some((
+                    {
+                        blocks.push(BasicBlock {
+                            stmts: vec![
+                                MStmt::Assign {
+                                    dest: slot,
+                                    value: Rvalue::GetStaticField {
+                                        class_name: wrapper_class.to_string(),
+                                        field_name: n.to_string(),
+                                        descriptor: ty_to_descriptor(val_ty),
+                                    },
+                                },
+                                MStmt::Assign {
+                                    dest: result_slot,
+                                    value: Rvalue::Local(slot),
+                                },
+                            ],
+                            terminator: Terminator::Goto(join_block_idx),
+                        });
+                        blocks.push(BasicBlock {
+                            stmts: Vec::new(),
+                            terminator: Terminator::ReturnValue(result_slot),
+                        });
+                        blocks
+                    },
+                    extra_locals,
+                ));
+            }
+            let idx = outer_param_names.iter().position(|p| p == n)?;
+            let param_slot = LocalId(idx as u32);
+            vec![MStmt::Assign {
+                dest: result_slot,
+                value: Rvalue::Local(param_slot),
+            }]
+        } else {
+            return None;
+        }
+    } else {
+        // Sealed `when` with no else: synthesize an unreachable
+        // Null default. Slot type stays as `result_ty`; backend
+        // emits `aconst_null` (or `iconst_0`/`lconst_0` etc. for
+        // primitives) into result_slot. Code is dead under sealed
+        // exhaustiveness but the join block still needs a value.
         let else_slot = LocalId(next_slot);
-        extra_locals.push(ety);
+        next_slot += 1;
+        extra_locals.push(Ty::Any);
         vec![
             MStmt::Assign {
                 dest: else_slot,
-                value: Rvalue::Const(ek),
+                value: Rvalue::Const(skotch_mir::MirConst::Null),
             },
             MStmt::Assign {
                 dest: result_slot,
                 value: Rvalue::Local(else_slot),
             },
         ]
-    } else if let KtExpr::Reference(rr) = &else_body {
-        let n = rr.name()?;
-        if let Some(val_ty) = val_lookup.get(n) {
-            let slot = LocalId(next_slot);
-            extra_locals.push(val_ty.clone());
-            return Some((
-                {
-                    blocks.push(BasicBlock {
-                        stmts: vec![
-                            MStmt::Assign {
-                                dest: slot,
-                                value: Rvalue::GetStaticField {
-                                    class_name: wrapper_class.to_string(),
-                                    field_name: n.to_string(),
-                                    descriptor: ty_to_descriptor(val_ty),
-                                },
-                            },
-                            MStmt::Assign {
-                                dest: result_slot,
-                                value: Rvalue::Local(slot),
-                            },
-                        ],
-                        terminator: Terminator::Goto(join_block_idx),
-                    });
-                    blocks.push(BasicBlock {
-                        stmts: Vec::new(),
-                        terminator: Terminator::ReturnValue(result_slot),
-                    });
-                    blocks
-                },
-                extra_locals,
-            ));
-        }
-        let idx = outer_param_names.iter().position(|p| p == n)?;
-        let param_slot = LocalId(idx as u32);
-        vec![MStmt::Assign {
-            dest: result_slot,
-            value: Rvalue::Local(param_slot),
-        }]
-    } else {
-        return None;
     };
     blocks.push(BasicBlock {
         stmts: else_stmts,
@@ -14082,6 +14204,29 @@ fn lower_rich_expr_to_slot(
                         pre_stmts.push(MStmt::Assign {
                             dest: slot,
                             value: skotch_mir::Rvalue::Const(k),
+                        });
+                        return Some(slot);
+                    }
+                    // `ClassName.FIELD` where lhs Reference is NOT a
+                    // local and the name starts with uppercase →
+                    // treat as a static-field load. Covers enum
+                    // entries (`Op.PLUS`) and object-singleton
+                    // members. Field's JVM descriptor defaults to
+                    // `L<ClassName>;` (enum entry shape) — backend
+                    // re-resolves via classinfo when available.
+                    let is_class_namespace =
+                        cls.starts_with(char::is_uppercase) && lookup_name(cls).is_none();
+                    if is_class_namespace {
+                        let slot = LocalId(*next_slot);
+                        *next_slot += 1;
+                        extra_locals.push(Ty::Class(cls.to_string()));
+                        pre_stmts.push(MStmt::Assign {
+                            dest: slot,
+                            value: skotch_mir::Rvalue::GetStaticField {
+                                class_name: cls.to_string(),
+                                field_name: prop.to_string(),
+                                descriptor: format!("L{};", cls),
+                            },
                         });
                         return Some(slot);
                     }
