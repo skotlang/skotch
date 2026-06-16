@@ -14760,16 +14760,28 @@ fn lower_rich_expr_to_slot(
                         strings,
                     );
                     if let Some(recv_slot) = recv_slot_opt {
-                        // Class instance field fallback: emit GetField.
-                        // Use the param-aware fallback so slot numbers
-                        // that index into params see the right Ty
-                        // (extra_locals only holds body locals).
+                        // Class instance field/property access.
+                        //
+                        // Kotlin always synthesizes a `getX()` accessor
+                        // for properties (even simple `val x: T`).
+                        // The JVM emits `invokevirtual getX()` at call
+                        // sites — NOT a direct `getfield`. Emit a
+                        // Virtual call to `get<PropName>` so the
+                        // descriptor inference at the backend can find
+                        // the actual method on the class (which our
+                        // cross-file stub registration now provides via
+                        // `module.find_class`). Without this, the
+                        // emitted `getfield count:Object;` failed at
+                        // runtime: NoSuchFieldError when the class has
+                        // no backing field (custom getter case), and
+                        // wrong type when it does (synthesized field
+                        // would have the property's Ty).
+                        //
+                        // Special builtins (Pair/Triple/IntRange) are
+                        // handled by the per-prop dispatch below.
                         let recv_ty_pre =
                             slot_ty_with_param_fallback(recv_slot.0, extra_locals);
                         if let Ty::Class(cname) = &recv_ty_pre {
-                            // Allow known builtin Pair / String special
-                            // handling below to fire FIRST; only emit
-                            // GetField as a fallback for user classes.
                             if !matches!(
                                 cname.as_str(),
                                 "java/lang/String"
@@ -14777,15 +14789,28 @@ fn lower_rich_expr_to_slot(
                                     | "kotlin/Triple"
                                     | "kotlin/ranges/IntRange"
                             ) {
+                                // Capitalize the first char of the
+                                // property name: `count` → `getCount`.
+                                let mut chars = prop_name.chars();
+                                let getter_name = match chars.next() {
+                                    Some(c) => format!(
+                                        "get{}{}",
+                                        c.to_uppercase().collect::<String>(),
+                                        chars.as_str()
+                                    ),
+                                    None => "get".to_string(),
+                                };
                                 let result_slot = LocalId(*next_slot);
                                 *next_slot += 1;
                                 extra_locals.push(Ty::Any);
                                 pre_stmts.push(MStmt::Assign {
                                     dest: result_slot,
-                                    value: skotch_mir::Rvalue::GetField {
-                                        receiver: recv_slot,
-                                        class_name: cname.clone(),
-                                        field_name: prop_name.to_string(),
+                                    value: skotch_mir::Rvalue::Call {
+                                        kind: skotch_mir::CallKind::Virtual {
+                                            class_name: cname.clone(),
+                                            method_name: getter_name,
+                                        },
+                                        args: vec![recv_slot],
                                     },
                                 });
                                 return Some(result_slot);
