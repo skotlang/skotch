@@ -16052,76 +16052,33 @@ fn lower_simple_body(
                                 let idx = param_names.iter().position(|p| p == n)?;
                                 Some(skotch_mir::LocalId(idx as u32))
                             }
-                            KtExpr::Binary(b) => {
-                                let op_text = b.operation().map(|o| o.text()).unwrap_or_default();
-                                let mir_op = match op_text.as_str() {
-                                    "+" => Some(skotch_mir::BinOp::AddI),
-                                    "-" => Some(skotch_mir::BinOp::SubI),
-                                    "*" => Some(skotch_mir::BinOp::MulI),
-                                    "/" => Some(skotch_mir::BinOp::DivI),
-                                    "%" => Some(skotch_mir::BinOp::ModI),
-                                    _ => None,
-                                }?;
-                                // Recurse: lhs / rhs each resolve via
-                                // the same resolver shape. Just inline
-                                // a small Reference/literal check here.
-                                let resolve_inner =
-                                    |inner: KtExpr<'_>,
-                                     next_slot: &mut u32,
-                                     pre_stmts: &mut Vec<skotch_mir::Stmt>,
-                                     extra_locals: &mut Vec<Ty>,
-                                     strings: &mut Vec<String>|
-                                     -> Option<skotch_mir::LocalId> {
-                                        let inner = unwrap_parens(inner);
-                                        if let Some((k, ty)) =
-                                            literal_to_const(&inner, strings)
-                                        {
-                                            let slot = skotch_mir::LocalId(*next_slot);
-                                            *next_slot += 1;
-                                            extra_locals.push(ty);
-                                            pre_stmts.push(skotch_mir::Stmt::Assign {
-                                                dest: slot,
-                                                value: skotch_mir::Rvalue::Const(k),
-                                            });
-                                            return Some(slot);
-                                        }
-                                        if let KtExpr::Reference(rr) = inner {
-                                            let n = rr.name()?;
-                                            let idx = param_names
-                                                .iter()
-                                                .position(|p| p == n)?;
-                                            return Some(skotch_mir::LocalId(idx as u32));
-                                        }
-                                        None
-                                    };
-                                let lhs = resolve_inner(
-                                    b.lhs()?,
+                            other => {
+                                // Compound index expression (`row * 9
+                                // + col`, `helper(i)`, etc.) — route
+                                // through `lower_inline_expr_to_slot`
+                                // which recursively handles nested
+                                // Binary, Call, and member access.
+                                // Without this fallback, expression-
+                                // bodied `fun cellAt(b: IntArray, r:
+                                // Int, c: Int): Int = b[r * 9 + c]`
+                                // (sudoku's accessor) bailed and
+                                // returned 0 always, breaking every
+                                // constraint check downstream.
+                                let pn = param_names.clone();
+                                let lookup = move |n: &str| -> Option<skotch_mir::LocalId> {
+                                    pn.iter()
+                                        .position(|p| p == n)
+                                        .map(|i| skotch_mir::LocalId(i as u32))
+                                };
+                                lower_inline_expr_to_slot(
+                                    other,
+                                    &lookup,
                                     next_slot,
                                     pre_stmts,
                                     extra_locals,
                                     strings,
-                                )?;
-                                let rhs = resolve_inner(
-                                    b.rhs()?,
-                                    next_slot,
-                                    pre_stmts,
-                                    extra_locals,
-                                    strings,
-                                )?;
-                                let slot = skotch_mir::LocalId(*next_slot);
-                                *next_slot += 1;
-                                extra_locals.push(Ty::Int);
-                                pre_stmts.push(skotch_mir::Stmt::Assign {
-                                    dest: slot,
-                                    value: skotch_mir::Rvalue::BinOp {
-                                        op: mir_op,
-                                        lhs,
-                                        rhs,
-                                    },
-                                });
-                                Some(slot)
+                                )
                             }
-                            _ => None,
                         }
                     };
                     let Some(index_slot) = resolve_idx(
