@@ -4045,7 +4045,12 @@ pub(crate) fn build_dex(
         // Invoke args (→ range form), φ-move operands and check-cast objects (→ …/from16 copy)
         // self-widen given the true frame — no reserve needed, just re-emit with the hint.
         let move_or_invoke_high = f.values.iter().enumerate().any(|(i, val)| match &val.op {
-            SsaOp::Invoke { args, .. } => args.iter().any(|&a| high(alloc.reg[a as usize])),
+            // A WIDE arg occupies a register PAIR (r, r+1); its high half can remap ≥16 while the low
+            // half stays ≤15, so check both — else the 35c emit keeps it and remap_insns bails.
+            SsaOp::Invoke { args, .. } => args.iter().any(|&a| {
+                let r = alloc.reg[a as usize];
+                high(r) || (f.values[a as usize].wide && high(r + 1))
+            }),
             SsaOp::Phi { operands, .. } => {
                 high(alloc.reg[i]) || operands.iter().any(|&o| high(alloc.reg[o as usize]))
             }

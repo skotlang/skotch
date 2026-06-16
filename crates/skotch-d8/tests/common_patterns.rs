@@ -660,6 +660,23 @@ fn lambda_capturing_sam_invoke_range_form() {
     skotch_dex::validator::validate(&dex).expect("ArtCapRange dex must validate");
 }
 
+/// A WIDE invoke argument occupies a register PAIR (r, r+1); the scratch-aware re-emit's high-reg
+/// test checked only the low half `alloc.reg[a]`, so when scratch inflation pushed the HIGH half to
+/// v16 while the low half stayed v15, the invoke kept its 35c form and `remap_insns` bailed
+/// `invoke arg register v16 > 15`. Now the test also checks `r+1` for a wide arg, forcing the range
+/// re-emit. ArtWideArgRange.run (a long last-param passed to `use(J)`, registers_size 17, the long's
+/// halves straddling v15/v16) bails without the fix; with it `use(w)` becomes
+/// `move-wide/from16 v5,v15; invoke-static/range {v5,v6}`. ART stdout == JVM (`670` / `2355`). This
+/// is exactly the okio Buffer / HashingSink / internal/-Buffer shape.
+#[test]
+fn wide_invoke_arg_high_half_forces_range() {
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art");
+    let cf = skotch_classfile::parse_class_file(&dir.join("ArtWideArgRange.class")).unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let dex = dex_classes(&[cf], &opts).expect("ArtWideArgRange (wide-arg high-half range) should dex");
+    skotch_dex::validator::validate(&dex).expect("ArtWideArgRange dex must validate");
+}
+
 /// array-length (0x21, 12x) and instance-of (0x20, 22c) — nibble forms with no wider encoding —
 /// now spill a high object operand through the reserved low scratch (move-object/from16 then the
 /// op on scratch, dest reloaded if high), via the shared `spill_dest_obj`. ArtArrInst 31/0/51
