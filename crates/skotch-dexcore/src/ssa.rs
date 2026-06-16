@@ -2568,6 +2568,23 @@ pub(crate) fn allocate(f: &SsaFn, num: &Numbering, intervals: &[Interval]) -> Al
     for v in &f.values {
         if let SsaOp::Phi { operands, .. } = &v.op {
             let b = v.block;
+            // A HANDLER-φ (in a caught block) merges the versions of one local slot that reach the
+            // handler from the different throw points of the guarded region. Those versions are
+            // sequential / branch-exclusive writes to the SAME slot — never simultaneously live on a
+            // normal path — and an exceptional edge can't carry a φ-move, so they MUST all share one
+            // register (d8 keeps the slot in a single register for exactly this reason). The
+            // conservative exception liveness (every try-local treated as live across the WHOLE
+            // guarded region, since a throw can fire anywhere) makes the operands falsely interfere,
+            // so the precise checks below would skip some and the post-alloc handler-φ net would bail.
+            // Force-union them. Register ASSIGNMENT still uses the group's full (conservative) range,
+            // correctly reserving the register across the try; and the over-coalesce net + ART catch
+            // any genuine shared-use conflict (impossible for one-slot versions, but guarded anyway).
+            if f.caught[b].is_some() {
+                for &o in operands {
+                    co.union(v.id, o);
+                }
+                continue;
+            }
             let mut group: Vec<ValId> = Vec::new();
             for &o in operands {
                 if live_in[b].contains(&o) || live_out[b].contains(&o) {

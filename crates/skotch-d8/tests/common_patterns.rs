@@ -692,6 +692,23 @@ fn multianewarray_lowers_to_array_newinstance() {
     skotch_dex::validator::validate(&dex).expect("ArtMultiArray dex must validate");
 }
 
+/// A multi-predecessor handler-φ merges the versions of ONE local slot that reach a catch handler
+/// from different throw points. Those versions are sequential / branch-exclusive writes to the same
+/// slot — never simultaneously live on a normal path — and an exceptional edge can't carry a φ-move,
+/// so they MUST share one register (d8 keeps the slot in one register). The conservative exception
+/// liveness made them falsely interfere, so the coalescer skipped them and bailed; now handler-φ
+/// operands are force-coalesced. ArtHandlerPhi exercises sequential/branch-exclusive/used-catch-var/
+/// long-slot/reference-slot/multi-catch handler-φ shapes; ART stdout == JVM. Cleared ~23 corpus
+/// classes (the single largest remaining bail bucket).
+#[test]
+fn multi_pred_handler_phi_force_coalesces() {
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art");
+    let cf = skotch_classfile::parse_class_file(&dir.join("ArtHandlerPhi.class")).unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let dex = dex_classes(&[cf], &opts).expect("ArtHandlerPhi (multi-pred handler-φ) should dex");
+    skotch_dex::validator::validate(&dex).expect("ArtHandlerPhi dex must validate");
+}
+
 /// array-length (0x21, 12x) and instance-of (0x20, 22c) — nibble forms with no wider encoding —
 /// now spill a high object operand through the reserved low scratch (move-object/from16 then the
 /// op on scratch, dest reloaded if high), via the shared `spill_dest_obj`. ArtArrInst 31/0/51
