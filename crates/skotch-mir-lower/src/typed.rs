@@ -15657,6 +15657,138 @@ fn lower_rich_expr_to_slot(
             }
         }
     }
+    // String template with interpolation (`"a${X}b$y"`). The
+    // earlier `literal_to_const` path only handled pure-literal
+    // strings; templates with `$ref` or `${expr}` interpolations
+    // need MakeConcatWithConstants. Without this, sealed-class
+    // smart-cast `is X -> "${s.field}"`-shaped arm bodies bailed
+    // (literal_to_const failed, Reference didn't match, lower_rich
+    // fallthrough returned None).
+    if let KtExpr::String(_) = &e {
+        use skotch_syntax::SyntaxKind as S;
+        let mut recipe = String::new();
+        let mut dyn_args: Vec<LocalId> = Vec::new();
+        let mut dyn_arg_descs: Vec<String> = Vec::new();
+        let mut ok = true;
+        let mut had_interp = false;
+        for child in skotch_ast::children(e.syntax()) {
+            match child.kind {
+                S::LITERAL_STRING_TEMPLATE_ENTRY => {
+                    for cc in skotch_ast::children(child) {
+                        if cc.kind == S::STRING_CHUNK {
+                            if let skotch_sil::SilData::Token { text } = &cc.data {
+                                recipe.push_str(text);
+                            }
+                        }
+                    }
+                }
+                S::ESCAPE_STRING_TEMPLATE_ENTRY => {
+                    for cc in skotch_ast::children(child) {
+                        if let skotch_sil::SilData::Token { text } = &cc.data {
+                            let raw = text.as_str();
+                            if let Some(stripped) = raw.strip_prefix('\\') {
+                                match stripped.chars().next() {
+                                    Some('n') => recipe.push('\n'),
+                                    Some('t') => recipe.push('\t'),
+                                    Some('r') => recipe.push('\r'),
+                                    Some('\\') => recipe.push('\\'),
+                                    Some('"') => recipe.push('"'),
+                                    Some('\'') => recipe.push('\''),
+                                    Some('$') => recipe.push('$'),
+                                    Some('b') => recipe.push('\u{0008}'),
+                                    Some('0') => recipe.push('\0'),
+                                    Some(other) => recipe.push(other),
+                                    None => {}
+                                }
+                            } else {
+                                recipe.push_str(raw);
+                            }
+                        }
+                    }
+                }
+                S::SHORT_STRING_TEMPLATE_ENTRY => {
+                    had_interp = true;
+                    let id_name = skotch_ast::children(child).iter().find_map(|c| {
+                        if c.kind == S::REFERENCE_EXPRESSION {
+                            for cc in skotch_ast::children(c) {
+                                if cc.kind == S::IDENTIFIER {
+                                    if let skotch_sil::SilData::Token { text } = &cc.data {
+                                        return Some(text.as_str().to_string());
+                                    }
+                                }
+                            }
+                        }
+                        None
+                    });
+                    let Some(name) = id_name else {
+                        ok = false;
+                        break;
+                    };
+                    let Some(slot) = lookup_name(&name) else {
+                        ok = false;
+                        break;
+                    };
+                    let ty = slot_ty_with_param_fallback(slot.0, extra_locals);
+                    dyn_args.push(slot);
+                    dyn_arg_descs.push(ty_to_descriptor(&ty));
+                    recipe.push('\u{1}');
+                }
+                S::LONG_STRING_TEMPLATE_ENTRY => {
+                    had_interp = true;
+                    let inner = skotch_ast::children(child)
+                        .iter()
+                        .find_map(KtExpr::cast)
+                        .map(unwrap_parens);
+                    let Some(inner_e) = inner else {
+                        ok = false;
+                        break;
+                    };
+                    let Some(slot) = lower_rich_expr_to_slot(
+                        inner_e,
+                        lookup_name,
+                        fn_lookup,
+                        next_slot,
+                        pre_stmts,
+                        extra_locals,
+                        strings,
+                    ) else {
+                        ok = false;
+                        break;
+                    };
+                    let ty = slot_ty_with_param_fallback(slot.0, extra_locals);
+                    dyn_args.push(slot);
+                    dyn_arg_descs.push(ty_to_descriptor(&ty));
+                    recipe.push('\u{1}');
+                }
+                S::STRING_START | S::STRING_END | S::WHITE_SPACE => {}
+                _ => {
+                    ok = false;
+                    break;
+                }
+            }
+        }
+        if ok && had_interp {
+            let mut descriptor = String::from("(");
+            for d in &dyn_arg_descs {
+                descriptor.push_str(d);
+            }
+            descriptor.push_str(")Ljava/lang/String;");
+            let result_slot = LocalId(*next_slot);
+            *next_slot += 1;
+            extra_locals.push(Ty::String);
+            pre_stmts.push(MStmt::Assign {
+                dest: result_slot,
+                value: skotch_mir::Rvalue::Call {
+                    kind: skotch_mir::CallKind::MakeConcatWithConstants {
+                        recipe,
+                        descriptor,
+                    },
+                    args: dyn_args,
+                },
+            });
+            return Some(result_slot);
+        }
+    }
     // Bare Reference: resolve via `lookup_name` and return the local
     // slot directly. Required so `lower_rich_expr_to_slot(arg_e, ...)`
     // in caller branches (top-level fn handler, constructor heuristic,
