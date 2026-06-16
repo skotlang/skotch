@@ -677,6 +677,21 @@ fn wide_invoke_arg_high_half_forces_range() {
     skotch_dex::validator::validate(&dex).expect("ArtWideArgRange dex must validate");
 }
 
+/// `multianewarray` (JVM 0xc5) has no native DEX opcode, so it lowers the d8 way: build an `int[]` of
+/// the dimension sizes and call `java.lang.reflect.Array.newInstance(componentClass, int[])`, then
+/// check-cast the Object result to the array type (component Class = `const-class` for a ref base,
+/// `getstatic <Wrapper>.TYPE` for a primitive). ArtMultiArray exercises int[][]/String[][]/char[0][0]/
+/// double[][]; without the lowering the SSA stack-sim bails on opcode 0xc5. ART stdout == JVM.
+/// Cleared guava ArrayTable / DenseImmutableTable / escape.ArrayBasedEscaperMap (+3 corpus).
+#[test]
+fn multianewarray_lowers_to_array_newinstance() {
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art");
+    let cf = skotch_classfile::parse_class_file(&dir.join("ArtMultiArray.class")).unwrap();
+    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let dex = dex_classes(&[cf], &opts).expect("ArtMultiArray (multianewarray) should dex");
+    skotch_dex::validator::validate(&dex).expect("ArtMultiArray dex must validate");
+}
+
 /// array-length (0x21, 12x) and instance-of (0x20, 22c) — nibble forms with no wider encoding —
 /// now spill a high object operand through the reserved low scratch (move-object/from16 then the
 /// op on scratch, dest reloaded if high), via the shared `spill_dest_obj`. ArtArrInst 31/0/51

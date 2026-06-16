@@ -102,6 +102,7 @@ fn is_throwing_op(op: u8) -> bool {
         | 0xbe                 // arraylength
         | 0x6c | 0x6d | 0x70 | 0x71  // i/l div/rem
         | 0xbb..=0xbd          // new / newarray / anewarray
+        | 0xc5                 // multianewarray (NegativeArraySizeException)
         | 0xbf | 0xc0          // athrow / checkcast
         | 0xc2 | 0xc3          // monitorenter / monitorexit
         | 0x12 | 0x13          // ldc / ldc_w (const-string)
@@ -587,6 +588,7 @@ fn sim_block(bc: &[u8], start: usize, end: usize, cf: &ClassFile, entry: &[bool]
             0xbb => { st.push(false); pc += 3; }                                       // new
             0xbc => { pop(&mut st); st.push(false); pc += 2; }                         // newarray
             0xbd => { pop(&mut st); st.push(false); pc += 3; }                         // anewarray
+            0xc5 => { for _ in 0..bc[pc + 3] { pop(&mut st); } st.push(false); pc += 4; } // multianewarray: pop N dims, push array ref
             0x59 => { let w = *st.last().unwrap_or(&false); st.push(w); pc += 1; }      // dup
             // swap: `..., v2, v1 → ..., v1, v2` (both category-1).
             0x5f => { let n = st.len(); st.swap(n - 2, n - 1); pc += 1; }
@@ -1703,6 +1705,77 @@ fn rename(
                 blocks[blk].body.push(v);
                 stack.push(v);
                 pc += if op == 0xbc { 2 } else { 3 };
+            }
+            // multianewarray: DEX has no native opcode, so lower it the d8 way — build an int[] of the
+            // dimension sizes and call `java.lang.reflect.Array.newInstance(componentClass, int[])`, then
+            // check-cast the Object result back to the array type. Linear (no loop / CFG surgery).
+            0xc5 => {
+                let idx = u16::from_be_bytes([bc[pc + 1], bc[pc + 2]]);
+                let ndims = bc[pc + 3] as usize;
+                let array_desc = crate::bootstrap::class_ref_desc(cf, idx)?; // e.g. "[[C" / "[[Ljava/lang/Object;"
+                let base = array_desc.trim_start_matches('[').to_string(); // base element ("C" / "Ljava/lang/Object;")
+                // Pop `ndims` sizes — JVM pushes dim0..dimN-1, so dimN-1 is on top.
+                let mut sizes = Vec::with_capacity(ndims);
+                for _ in 0..ndims {
+                    sizes.push(pop_stack!(stack));
+                }
+                sizes.reverse();
+                // dims = new int[ndims]; dims[i] = sizes[i].
+                let len = b.new(SsaOp::ConstInt(ndims as i32), false, blk);
+                blocks[blk].body.push(len);
+                let dims = b.new(SsaOp::NewArray { type_desc: "[I".into(), size: len, jvm_pc: pc as u32 }, false, blk);
+                blocks[blk].body.push(dims);
+                for (i, &sz) in sizes.iter().enumerate() {
+                    let idxc = b.new(SsaOp::ConstInt(i as i32), false, blk);
+                    blocks[blk].body.push(idxc);
+                    let put = b.new(
+                        SsaOp::ArrayPut { dex_op: crate::bootstrap::aput_op(0x4f), array: dims, index: idxc, value: sz, jvm_pc: pc as u32 },
+                        false,
+                        blk,
+                    );
+                    blocks[blk].body.push(put);
+                }
+                // Component Class: const-class for a reference base, `getstatic <Wrapper>.TYPE` for a primitive.
+                let comp = if base.starts_with('L') || base.starts_with('[') {
+                    b.new(SsaOp::ConstClass { type_desc: base.clone(), jvm_pc: pc as u32 }, false, blk)
+                } else {
+                    let wrapper = match base.as_str() {
+                        "Z" => "Ljava/lang/Boolean;", "B" => "Ljava/lang/Byte;", "C" => "Ljava/lang/Character;",
+                        "S" => "Ljava/lang/Short;", "I" => "Ljava/lang/Integer;", "J" => "Ljava/lang/Long;",
+                        "F" => "Ljava/lang/Float;", "D" => "Ljava/lang/Double;",
+                        _ => bail!("ssa: multianewarray unexpected base element {base}"),
+                    };
+                    b.new(
+                        SsaOp::GetStatic {
+                            dex_op: 0x62, // sget-object
+                            field: FieldRef { class: wrapper.into(), type_: "Ljava/lang/Class;".into(), name: "TYPE".into() },
+                            jvm_pc: pc as u32,
+                        },
+                        false,
+                        blk,
+                    )
+                };
+                blocks[blk].body.push(comp);
+                let inv = b.new(
+                    SsaOp::Invoke {
+                        dex_op: 0x71, // invoke-static
+                        method: MethodRef {
+                            class: "Ljava/lang/reflect/Array;".into(),
+                            proto: ProtoRef { return_type: "Ljava/lang/Object;".into(), params: vec!["Ljava/lang/Class;".into(), "[I".into()] },
+                            name: "newInstance".into(),
+                        },
+                        args: vec![comp, dims],
+                        ret: Some(RetKind { wide: false, is_ref: true }),
+                        jvm_pc: pc as u32,
+                    },
+                    false,
+                    blk,
+                );
+                blocks[blk].body.push(inv);
+                let cast = b.new(SsaOp::CheckCast { obj: inv, type_desc: array_desc, jvm_pc: pc as u32 }, false, blk);
+                blocks[blk].body.push(cast);
+                stack.push(cast);
+                pc += 4;
             }
             // dup: duplicate the top stack value (the `new X; dup; <init>` idiom).
             0x59 => {
