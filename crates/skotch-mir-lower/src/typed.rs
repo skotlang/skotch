@@ -7092,28 +7092,25 @@ fn try_lower_function_body_via_blocks(
     }
     if let Some(pl) = f.value_parameter_list() {
         for p in pl.parameters() {
-            let ty = p
+            let type_name: Option<String> = p
                 .type_reference()
                 .and_then(|tr| tr.user_type())
                 .and_then(|u| u.name())
-                .and_then(skotch_types::ty_from_name)
-                .filter(|t| {
-                    matches!(
-                        t,
-                        Ty::Int
-                            | Ty::Long
-                            | Ty::Float
-                            | Ty::Double
-                            | Ty::Bool
-                            | Ty::Char
-                            | Ty::String
-                            | Ty::IntArray
-                            | Ty::LongArray
-                            | Ty::DoubleArray
-                            | Ty::ByteArray
-                    )
-                })
-                .unwrap_or(Ty::Any);
+                .map(String::from);
+            let ty = match type_name.as_deref() {
+                Some(n) => {
+                    skotch_types::ty_from_name(n).unwrap_or_else(|| {
+                        // Non-primitive class name → Ty::Class with
+                        // JVM FQ form when known (StringBuilder →
+                        // java/lang/StringBuilder), else bare name.
+                        let fq = skotch_types::intrinsics::kotlin_to_jvm_class(n)
+                            .map(|s| s.to_string())
+                            .unwrap_or_else(|| n.to_string());
+                        Ty::Class(fq)
+                    })
+                }
+                None => Ty::Any,
+            };
             param_fallback_tys.push(ty);
         }
     }
@@ -7251,28 +7248,25 @@ fn try_lower_multi_stmt_block_with_offset(
     }
     if let Some(pl) = f.value_parameter_list() {
         for p in pl.parameters() {
-            let ty = p
+            let type_name: Option<String> = p
                 .type_reference()
                 .and_then(|tr| tr.user_type())
                 .and_then(|u| u.name())
-                .and_then(skotch_types::ty_from_name)
-                .filter(|t| {
-                    matches!(
-                        t,
-                        Ty::Int
-                            | Ty::Long
-                            | Ty::Float
-                            | Ty::Double
-                            | Ty::Bool
-                            | Ty::Char
-                            | Ty::String
-                            | Ty::IntArray
-                            | Ty::LongArray
-                            | Ty::DoubleArray
-                            | Ty::ByteArray
-                    )
-                })
-                .unwrap_or(Ty::Any);
+                .map(String::from);
+            let ty = match type_name.as_deref() {
+                Some(n) => {
+                    skotch_types::ty_from_name(n).unwrap_or_else(|| {
+                        // Non-primitive class name → Ty::Class with
+                        // JVM FQ form when known (StringBuilder →
+                        // java/lang/StringBuilder), else bare name.
+                        let fq = skotch_types::intrinsics::kotlin_to_jvm_class(n)
+                            .map(|s| s.to_string())
+                            .unwrap_or_else(|| n.to_string());
+                        Ty::Class(fq)
+                    })
+                }
+                None => Ty::Any,
+            };
             param_fallback_tys.push(ty);
         }
     }
@@ -14390,7 +14384,7 @@ fn lower_rich_expr_to_slot(
                         KtExpr::Reference(rr) => rr
                             .name()
                             .and_then(lookup_name)
-                            .and_then(|s| extra_locals.get(s.0 as usize).cloned()),
+                            .map(|s| slot_ty_with_param_fallback(s.0, extra_locals)),
                         KtExpr::String(_) => Some(Ty::String),
                         KtExpr::DotQualified(_) => {
                             // For chained method calls, recursively
@@ -14399,6 +14393,34 @@ fn lower_rich_expr_to_slot(
                             // Default to String to allow chains like
                             // `s.trim().uppercase()`.
                             Some(Ty::String)
+                        }
+                        KtExpr::ArrayAccess(aa) => {
+                            // `arr[i].method()` — peek the array's
+                            // Ty to determine the element Ty. For
+                            // IntArray/LongArray/DoubleArray/ByteArray
+                            // we return the corresponding primitive
+                            // Ty so the prim_conv table downstream
+                            // matches (`tape[ptr].toChar()` etc.).
+                            let arr_children: Vec<&skotch_sil::SilNode> =
+                                skotch_ast::children(aa.syntax()).iter().collect();
+                            let arr_ref = arr_children
+                                .iter()
+                                .find_map(|c| KtExpr::cast(*c))
+                                .map(unwrap_parens);
+                            match arr_ref {
+                                Some(KtExpr::Reference(r)) => r
+                                    .name()
+                                    .and_then(lookup_name)
+                                    .map(|s| slot_ty_with_param_fallback(s.0, extra_locals))
+                                    .and_then(|t| match t {
+                                        Ty::IntArray => Some(Ty::Int),
+                                        Ty::LongArray => Some(Ty::Long),
+                                        Ty::DoubleArray => Some(Ty::Double),
+                                        Ty::ByteArray => Some(Ty::Byte),
+                                        _ => None,
+                                    }),
+                                _ => None,
+                            }
                         }
                         _ => None,
                     };
@@ -14437,6 +14459,16 @@ fn lower_rich_expr_to_slot(
                                 "d",
                                 Ty::Double,
                             )),
+                            // Int.toChar() → i2c. JVM has no l2c/f2c/
+                            // d2c direct; those need l2i/f2i/d2i + i2c,
+                            // but kotlinc routes them through static
+                            // Character.valueOf — leave non-int recv
+                            // for the StaticJava fallback below.
+                            (Some("i"), "toChar") => Some((
+                                "i2c",
+                                "c",
+                                Ty::Char,
+                            )),
                             _ => None,
                         }
                     };
@@ -14462,6 +14494,7 @@ fn lower_rich_expr_to_slot(
                             "l" => "J",
                             "f" => "F",
                             "d" => "D",
+                            "c" => "C",
                             _ => "I",
                         };
                         let descriptor = format!("({}){}", src_desc, dst_desc);
