@@ -7707,7 +7707,25 @@ fn try_lower_multi_stmt_block_with_offset(
                         .find(|(nm, _)| nm == n)
                         .map(|(_, l)| *l)
                     {
-                        // Alias: just bind the new name to the same slot.
+                        if prop.is_var() {
+                            // var x = y — allocate a fresh mutable
+                            // slot and copy. Aliasing to y's slot
+                            // would route later `x = ...` writes
+                            // through to y (often a param), making
+                            // the var mutation invisible to a
+                            // trailing `return x`.
+                            let rhs_ty = slot_ty_with_param_fallback(slot.0, &local_tys);
+                            let new_slot = LocalId(next_slot);
+                            next_slot += 1;
+                            local_tys.push(rhs_ty);
+                            stmts.push(MStmt::Assign {
+                                dest: new_slot,
+                                value: skotch_mir::Rvalue::Local(slot),
+                            });
+                            name_to_local.push((name.to_string(), new_slot));
+                            continue;
+                        }
+                        // val: alias is safe.
                         name_to_local.push((name.to_string(), slot));
                         continue;
                     }
@@ -8260,7 +8278,28 @@ fn try_lower_multi_stmt_block_with_offset(
                     local_tys.extend(probe_locals);
                     stmts.extend(probe_stmts);
                     name_to_local = snap_locals;
-                    name_to_local.push((name.to_string(), slot));
+                    // For `var`, allocate a fresh mutable slot and
+                    // copy `rhs_slot` into it. Without this, later
+                    // reassignments (`x = ...`) write through to
+                    // whatever slot the rhs landed in — typically a
+                    // param slot, which clobbers the param value and
+                    // makes the reassignment invisible to the
+                    // trailing `return x`. The `val` case is fine
+                    // with the alias because there are no
+                    // reassignments.
+                    if prop.is_var() {
+                        let rhs_ty = slot_ty_with_param_fallback(slot.0, &local_tys);
+                        let new_slot = LocalId(next_slot);
+                        next_slot += 1;
+                        local_tys.push(rhs_ty);
+                        stmts.push(MStmt::Assign {
+                            dest: new_slot,
+                            value: skotch_mir::Rvalue::Local(slot),
+                        });
+                        name_to_local.push((name.to_string(), new_slot));
+                    } else {
+                        name_to_local.push((name.to_string(), slot));
+                    }
                     continue;
                 }
             }
@@ -8766,7 +8805,7 @@ fn try_lower_multi_stmt_block_with_offset(
                 };
                 let before_ret_has_control = before_ret.iter().any(|c| {
                     if let Some(e) = KtExpr::cast(c) {
-                        matches!(e, KtExpr::While(_) | KtExpr::For(_) | KtExpr::Return(_))
+                        matches!(e, KtExpr::While(_) | KtExpr::For(_) | KtExpr::Return(_) | KtExpr::If(_))
                     } else {
                         false
                     }
@@ -9240,7 +9279,7 @@ fn try_lower_multi_stmt_block_with_offset(
                 };
                 let before_ret_has_control = before_ret.iter().any(|c| {
                     if let Some(e) = KtExpr::cast(c) {
-                        matches!(e, KtExpr::While(_) | KtExpr::For(_) | KtExpr::Return(_))
+                        matches!(e, KtExpr::While(_) | KtExpr::For(_) | KtExpr::Return(_) | KtExpr::If(_))
                     } else {
                         false
                     }
@@ -10349,7 +10388,7 @@ fn try_lower_multi_stmt_block_with_offset(
                 // Detect control flow in trailing before_ret.
                 let before_ret_has_control = before_ret.iter().any(|c| {
                     if let Some(e) = KtExpr::cast(c) {
-                        matches!(e, KtExpr::While(_) | KtExpr::For(_) | KtExpr::Return(_))
+                        matches!(e, KtExpr::While(_) | KtExpr::For(_) | KtExpr::Return(_) | KtExpr::If(_))
                     } else {
                         false
                     }
@@ -11130,7 +11169,7 @@ fn try_lower_multi_stmt_block_with_offset(
                 // lower_loop_body.
                 let before_ret_has_control = before_ret.iter().any(|c| {
                     if let Some(e) = KtExpr::cast(c) {
-                        matches!(e, KtExpr::While(_) | KtExpr::For(_) | KtExpr::Return(_))
+                        matches!(e, KtExpr::While(_) | KtExpr::For(_) | KtExpr::Return(_) | KtExpr::If(_))
                     } else {
                         false
                     }
