@@ -7037,18 +7037,67 @@ fn lower_loop_body_blocks(
                         false
                     }
                 };
-                let then_stmts = lower_loop_body(
-                    &then_children,
-                    name_to_local,
-                    next_slot,
-                    local_tys,
-                    strings,
-                    fn_lookup_ref,
-                    function_param_names,
-                )?;
+                // Detect whether then_children contains control flow
+                // (nested If, While, For, Return). When yes, route
+                // through `lower_loop_body_blocks` for the arm so
+                // `if (cond) return X`-shaped inner statements become
+                // proper Branch + ReturnValue terminators instead of
+                // being silently skipped by the flat `lower_loop_body`.
+                let then_has_control = then_children.iter().any(|c| {
+                    if let Some(e) = KtExpr::cast(c) {
+                        matches!(
+                            e,
+                            KtExpr::While(_)
+                                | KtExpr::For(_)
+                                | KtExpr::Return(_)
+                                | KtExpr::If(_)
+                        )
+                    } else {
+                        false
+                    }
+                });
                 let cond_block_id = block_offset + blocks.len() as u32;
                 let n_operands = cond_operands.len() as u32;
                 let then_block_id = cond_block_id + n_operands;
+                let then_multi_blocks: Option<Vec<BasicBlock>> = if then_has_control {
+                    const SENT_BACK: u32 = 0xfffffffe;
+                    const SENT_BREAK: u32 = 0xfffffffd;
+                    let arm_blocks_v = lower_loop_body_blocks(
+                        &then_children,
+                        name_to_local,
+                        next_slot,
+                        local_tys,
+                        strings,
+                        fn_lookup_ref,
+                        function_param_names,
+                        then_block_id,
+                        SENT_BACK,
+                        SENT_BREAK,
+                    )?;
+                    Some(arm_blocks_v)
+                } else {
+                    None
+                };
+                let then_stmts: Vec<MStmt> = if then_multi_blocks.is_none() {
+                    lower_loop_body(
+                        &then_children,
+                        name_to_local,
+                        next_slot,
+                        local_tys,
+                        strings,
+                        fn_lookup_ref,
+                        function_param_names,
+                    )?
+                } else {
+                    Vec::new()
+                };
+                // The arm spans `then_block_count` blocks. Default is
+                // 1 (single block from lower_loop_body); for multi-
+                // block arms it's the length of `then_multi_blocks`.
+                let then_block_count: u32 = then_multi_blocks
+                    .as_ref()
+                    .map(|v| v.len() as u32)
+                    .unwrap_or(1);
                 let (else_stmts_opt, else_block_id_opt, else_tail_jump): (
                     Option<Vec<MStmt>>,
                     Option<u32>,
@@ -7092,13 +7141,13 @@ fn lower_loop_body_blocks(
                         fn_lookup_ref,
                         function_param_names,
                     )?;
-                    (Some(else_stmts), Some(then_block_id + 1), etj)
+                    (Some(else_stmts), Some(then_block_id + then_block_count), etj)
                 } else {
                     (None, None, None)
                 };
                 let join_block_id = match else_block_id_opt {
                     Some(eid) => eid + 1,
-                    None => then_block_id + 1,
+                    None => then_block_id + then_block_count,
                 };
                 let false_target = else_block_id_opt.unwrap_or(join_block_id);
                 // Emit one cmp block per operand. Branch wiring:
@@ -7144,17 +7193,71 @@ fn lower_loop_body_blocks(
                         },
                     });
                 }
-                let then_terminator = if then_tail_return {
-                    Terminator::Return
+                if let Some(mut multi) = then_multi_blocks {
+                    // Multi-block arm path: remap loop sentinels +
+                    // splice into `blocks`. Last block's terminator
+                    // becomes `Goto(join)` unless it's already a
+                    // ReturnValue/Return/Branch with explicit
+                    // targets — preserve those.
+                    const SENT_BACK: u32 = 0xfffffffe;
+                    const SENT_BREAK: u32 = 0xfffffffd;
+                    let last = multi.len().saturating_sub(1);
+                    for (idx, blk) in multi.iter_mut().enumerate() {
+                        let remap = |t: u32| -> u32 {
+                            if t == SENT_BACK {
+                                back_edge_target
+                            } else if t == SENT_BREAK {
+                                break_target
+                            } else {
+                                t
+                            }
+                        };
+                        match &mut blk.terminator {
+                            Terminator::Goto(t) => {
+                                let r = remap(*t);
+                                // The lower_loop_body_blocks default
+                                // for "no special found" is `Goto(
+                                // back_edge_target)`. For an
+                                // arm-without-return that means a
+                                // bogus back-edge — replace with
+                                // Goto(join_block_id) when the last
+                                // block has nothing else to fall
+                                // through to.
+                                if r == back_edge_target
+                                    && back_edge_target == 0xfffffffe
+                                {
+                                    *t = join_block_id;
+                                } else if idx == last && r == back_edge_target {
+                                    *t = join_block_id;
+                                } else {
+                                    *t = r;
+                                }
+                            }
+                            Terminator::Branch {
+                                then_block,
+                                else_block,
+                                ..
+                            } => {
+                                *then_block = remap(*then_block);
+                                *else_block = remap(*else_block);
+                            }
+                            _ => {}
+                        }
+                    }
+                    blocks.extend(multi);
                 } else {
-                    Terminator::Goto(
-                        then_tail_jump.unwrap_or(join_block_id),
-                    )
-                };
-                blocks.push(BasicBlock {
-                    stmts: then_stmts,
-                    terminator: then_terminator,
-                });
+                    let then_terminator = if then_tail_return {
+                        Terminator::Return
+                    } else {
+                        Terminator::Goto(
+                            then_tail_jump.unwrap_or(join_block_id),
+                        )
+                    };
+                    blocks.push(BasicBlock {
+                        stmts: then_stmts,
+                        terminator: then_terminator,
+                    });
+                }
                 if let Some(else_stmts) = else_stmts_opt {
                     blocks.push(BasicBlock {
                         stmts: else_stmts,
