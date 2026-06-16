@@ -564,6 +564,162 @@ pub fn lower_file(
         }
     }
 
+    // Cross-file class stubs. The JVM backend's Virtual-call
+    // descriptor inference needs the actual method's declared
+    // param/return types to emit a correctly-shaped methodref —
+    // without it, call sites like `counter.addObserver(Logger("p"))`
+    // emit `(LLogger;)Ljava/lang/Object;` (using the runtime arg Ty
+    // and a default Object return) when the real method is
+    // `(LObserver;)V`. Push stub MirClass entries that carry the
+    // method signatures so `module.find_class("ObservedCounter")`
+    // returns a class with the right method shapes.
+    if let Some(table) = package_symbols {
+        use std::collections::HashSet;
+        let mut local_class_names: HashSet<String> = HashSet::new();
+        for decl in file.decls() {
+            if let KtDecl::Class(c) = decl {
+                if let Some(n) = c.name() {
+                    local_class_names.insert(n.to_string());
+                }
+            }
+        }
+        for (simple_name, ext) in table.classes.iter() {
+            if local_class_names.contains(simple_name) {
+                continue;
+            }
+            if ext.jvm_name == module.wrapper_class {
+                continue;
+            }
+            // Build stub methods: each carries name + param/return
+            // Tys so the backend's `target_method_sig` lookup finds
+            // them. Bodies are empty — the backend skips emitting
+            // them via `is_cross_file_stub`.
+            let stub_methods: Vec<MirFunction> = ext
+                .methods
+                .iter()
+                .map(|m| {
+                    let mut locals: Vec<Ty> = Vec::with_capacity(1 + m.params.len());
+                    // params[0] = `this`
+                    locals.push(Ty::Class(ext.jvm_name.clone()));
+                    for p in &m.params {
+                        locals.push(p.ty.clone());
+                    }
+                    let params: Vec<skotch_mir::LocalId> = (0..=m.params.len())
+                        .map(|i| skotch_mir::LocalId(i as u32))
+                        .collect();
+                    let n_params = m.params.len();
+                    MirFunction {
+                        id: FuncId(0),
+                        name: m.name.clone(),
+                        params,
+                        locals,
+                        blocks: vec![BasicBlock {
+                            stmts: Vec::new(),
+                            terminator: Terminator::Return,
+                        }],
+                        return_ty: m.return_ty.clone(),
+                        required_params: n_params,
+                        param_names: m
+                            .params
+                            .iter()
+                            .map(|p| p.name.clone())
+                            .collect(),
+                        param_receiver_types: Vec::new(),
+                        param_defaults: Vec::new(),
+                        is_abstract: m.is_abstract,
+                        vararg_index: None,
+                        exception_handlers: Vec::new(),
+                        is_suspend: m.is_suspend,
+                        is_inline: m.is_inline,
+                        has_type_params: false,
+                        suspend_original_return_ty: None,
+                        suspend_state_machine: None,
+                        annotations: Vec::new(),
+                        named_locals: Vec::new(),
+                        is_private: false,
+                        is_static: false,
+                        default_call_masks: Vec::new(),
+                        needs_leading_nop: false,
+                        local_generic_args: rustc_hash::FxHashMap::default(),
+                    }
+                })
+                .collect();
+            // Constructor stub: ctor_params + `this` slot.
+            let ctor_locals: Vec<Ty> = std::iter::once(Ty::Class(ext.jvm_name.clone()))
+                .chain(ext.ctor_params.iter().map(|p| p.ty.clone()))
+                .collect();
+            let ctor_params_ids: Vec<skotch_mir::LocalId> =
+                (0..=ext.ctor_params.len())
+                    .map(|i| skotch_mir::LocalId(i as u32))
+                    .collect();
+            let ctor_param_count = ext.ctor_params.len();
+            let ctor = MirFunction {
+                id: FuncId(0),
+                name: "<init>".to_string(),
+                params: ctor_params_ids,
+                locals: ctor_locals,
+                blocks: vec![BasicBlock {
+                    stmts: Vec::new(),
+                    terminator: Terminator::Return,
+                }],
+                return_ty: Ty::Unit,
+                required_params: ctor_param_count,
+                param_names: ext.ctor_params.iter().map(|p| p.name.clone()).collect(),
+                param_receiver_types: Vec::new(),
+                param_defaults: Vec::new(),
+                is_abstract: false,
+                vararg_index: None,
+                exception_handlers: Vec::new(),
+                is_suspend: false,
+                is_inline: false,
+                has_type_params: false,
+                suspend_original_return_ty: None,
+                suspend_state_machine: None,
+                annotations: Vec::new(),
+                named_locals: Vec::new(),
+                is_private: false,
+                is_static: false,
+                default_call_masks: Vec::new(),
+                needs_leading_nop: false,
+                local_generic_args: rustc_hash::FxHashMap::default(),
+            };
+            let stub_fields: Vec<skotch_mir::MirField> = ext
+                .fields
+                .iter()
+                .map(|(fname, fty)| skotch_mir::MirField {
+                    name: fname.clone(),
+                    ty: fty.clone(),
+                    is_jvm_field: false,
+                })
+                .collect();
+            let is_interface = matches!(
+                ext.kind,
+                skotch_resolve::ExternalClassKind::Interface
+            );
+            module.push_class(skotch_mir::MirClass {
+                name: simple_name.clone(),
+                super_class: None,
+                is_open: ext.is_open,
+                is_abstract: ext.is_abstract,
+                is_interface,
+                interfaces: ext.interfaces.clone(),
+                fields: stub_fields,
+                methods: stub_methods,
+                constructor: ctor,
+                secondary_constructors: Vec::new(),
+                is_suspend_lambda: false,
+                is_lambda: false,
+                is_cross_file_stub: true,
+                annotations: Vec::new(),
+                has_type_params: false,
+                is_object_singleton: false,
+                companion_class_name: None,
+                static_fields: Vec::new(),
+                clinit: None,
+            });
+        }
+    }
+
     // Pre-pass: top-level val lookup so class method bodies can resolve
     // sibling top-level val refs to GetStaticField on the wrapper class.
     let mut val_lookup: rustc_hash::FxHashMap<String, Ty> = rustc_hash::FxHashMap::default();
@@ -19795,12 +19951,41 @@ fn method_from_fun_with_class(
             Vec::new(),
         )
     };
-    // Local layout: this (Ty::Any placeholder), each user param (Ty::Any),
-    // then any extra_locals from the body lowering.
+    // Local layout: this (Ty::Class of owning class when known),
+    // each user param using its source-declared Ty, then any
+    // extra_locals from the body lowering. Without param Tys, the
+    // JVM backend's Virtual-call descriptor inference at the call
+    // site emitted erased `Object` for every param — call sites
+    // built `(Object)V` methodrefs and the runtime resolver failed
+    // with NoSuchMethodError against the real `(LType;)V` method.
     let mut locals: Vec<Ty> = Vec::with_capacity(1 + param_count + extra_locals.len());
-    locals.push(Ty::Any); // this
-    for _ in 0..param_count {
-        locals.push(Ty::Any);
+    locals.push(
+        class_name
+            .map(|c| Ty::Class(c.to_string()))
+            .unwrap_or(Ty::Any),
+    );
+    if let Some(pl) = f.value_parameter_list() {
+        for p in pl.parameters() {
+            let type_name: Option<String> = p
+                .type_reference()
+                .and_then(|tr| tr.user_type())
+                .and_then(|u| u.name())
+                .map(String::from);
+            let ty = match type_name.as_deref() {
+                Some(n) => skotch_types::ty_from_name(n).unwrap_or_else(|| {
+                    let fq = skotch_types::intrinsics::kotlin_to_jvm_class(n)
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| n.to_string());
+                    Ty::Class(fq)
+                }),
+                None => Ty::Any,
+            };
+            locals.push(ty);
+        }
+    } else {
+        for _ in 0..param_count {
+            locals.push(Ty::Any);
+        }
     }
     locals.extend(extra_locals);
     // Suspend trampoline: same fix as in top-level fns — replace
