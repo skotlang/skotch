@@ -18346,11 +18346,25 @@ fn constructor_from_primary_impl(
     let user_param_tys: Vec<Ty> = params_iter
         .iter()
         .map(|p| {
-            p.type_reference()
+            // Preserve user-class param Tys (not just primitives).
+            // Without this, `class Mul(val l: Expr, val r: Expr)` got
+            // `(Object, Object)V` as its <init> descriptor, but the
+            // caller's site emitted `(LExpr;,LExpr;)V` from the
+            // typed locals → NoSuchMethodError at runtime.
+            let type_name: Option<String> = p
+                .type_reference()
                 .and_then(|tr| tr.user_type())
                 .and_then(|u| u.name())
-                .and_then(skotch_types::ty_from_name)
-                .unwrap_or(Ty::Any)
+                .map(String::from);
+            match type_name.as_deref() {
+                Some(n) => skotch_types::ty_from_name(n).unwrap_or_else(|| {
+                    let fq = skotch_types::intrinsics::kotlin_to_jvm_class(n)
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| n.to_string());
+                    Ty::Class(fq)
+                }),
+                None => Ty::Any,
+            }
         })
         .collect();
     // local 0 = `this`; locals 1..=N hold user params.
