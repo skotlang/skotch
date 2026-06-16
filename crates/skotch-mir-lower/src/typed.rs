@@ -9137,9 +9137,72 @@ fn try_lower_multi_stmt_block_with_offset(
                             terminator: Terminator::Goto(2),
                         },
                     };
+                    // Process the trailing return after the while
+                    // loop. The body_has_jumps path previously
+                    // emitted a hardcoded `Terminator::Return` (void)
+                    // exit block, which collapsed
+                    // `return sb.toString()`-shaped trailing returns
+                    // to `aconst_null; areturn` at runtime. Now we
+                    // extract the trailing Return expression and
+                    // lower it via the rich-expr lowerer into the
+                    // exit block's stmts + ReturnValue terminator.
+                    let mut exit_stmts_jumps: Vec<MStmt> = Vec::new();
+                    let mut trailing_return_slot_jumps: Option<LocalId> = None;
+                    let mut had_empty_return_jumps = false;
+                    {
+                        let mut ret_expr_inner: Option<KtExpr<'_>> = None;
+                        for c in trailing_children.iter().rev() {
+                            if let Some(KtExpr::Return(r)) = KtExpr::cast(c) {
+                                ret_expr_inner = skotch_ast::children(r.syntax())
+                                    .iter()
+                                    .find_map(KtExpr::cast)
+                                    .map(unwrap_parens);
+                                if ret_expr_inner.is_none() {
+                                    had_empty_return_jumps = true;
+                                }
+                                break;
+                            }
+                            if KtExpr::cast(c).is_some() {
+                                break;
+                            }
+                        }
+                        if let Some(re) = ret_expr_inner {
+                            prebind_top_level_vals(
+                                re,
+                                &mut name_to_local,
+                                &mut next_slot,
+                                &mut exit_stmts_jumps,
+                                &mut local_tys,
+                                val_lookup,
+                                wrapper_class,
+                            );
+                            let snap = name_to_local.clone();
+                            let lookup = |n: &str| -> Option<LocalId> {
+                                snap.iter()
+                                    .rev()
+                                    .find(|(name, _)| name == n)
+                                    .map(|(_, l)| *l)
+                            };
+                            if let Some(slot) = lower_rich_expr_to_slot(
+                                re,
+                                &lookup,
+                                fn_lookup,
+                                &mut next_slot,
+                                &mut exit_stmts_jumps,
+                                &mut local_tys,
+                                strings,
+                            ) {
+                                trailing_return_slot_jumps = Some(slot);
+                            }
+                        }
+                    }
+                    let _ = had_empty_return_jumps;
                     let exit_block = BasicBlock {
-                        stmts: Vec::new(),
-                        terminator: Terminator::Return,
+                        stmts: exit_stmts_jumps,
+                        terminator: match trailing_return_slot_jumps {
+                            Some(slot) => Terminator::ReturnValue(slot),
+                            None => Terminator::Return,
+                        },
                     };
                     let mut all = vec![pre_block, cond_block];
                     all.extend(body_blocks);
