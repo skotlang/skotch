@@ -16547,6 +16547,24 @@ fn lower_rich_expr_to_slot(
             if let Some(slot) = lookup_name(name) {
                 return Some(slot);
             }
+            // Capitalized name with no local match → likely an
+            // object-singleton reference (`val current = Idle`).
+            // Emit `getstatic Idle.INSTANCE LIdle;` to materialize
+            // the singleton into a fresh slot.
+            if name.starts_with(char::is_uppercase) {
+                let slot = LocalId(*next_slot);
+                *next_slot += 1;
+                extra_locals.push(Ty::Class(name.to_string()));
+                pre_stmts.push(MStmt::Assign {
+                    dest: slot,
+                    value: skotch_mir::Rvalue::GetStaticField {
+                        class_name: name.to_string(),
+                        field_name: "INSTANCE".to_string(),
+                        descriptor: format!("L{};", name),
+                    },
+                });
+                return Some(slot);
+            }
         }
     }
     // Bare literal: materialize via `literal_to_const`. Same
