@@ -15004,21 +15004,49 @@ fn lower_rich_expr_to_slot(
     }
     // Kotlin stdlib top-level functions that route to Java statics:
     // maxOf/minOf (Int) → Math.max/min.
+    //
+    // CRITICAL: only fire when the name doesn't shadow a user-declared
+    // top-level fn. Parity test 32-newton-sqrt declares its own
+    // `fun sqrt(x: Double): Double` that implements Newton's method;
+    // unconditionally mapping `sqrt(x)` to `java.lang.Math.sqrt`
+    // bypassed the user's implementation. We check fn_lookup first.
     if let KtExpr::Call(call) = e {
         if let Some(KtExpr::Reference(rc)) = call.callee() {
             if let Some(name) = rc.name() {
-                let mapped: Option<(&str, &str, &str, Ty)> = match name {
-                    "maxOf" => Some(("java/lang/Math", "max", "(II)I", Ty::Int)),
-                    "minOf" => Some(("java/lang/Math", "min", "(II)I", Ty::Int)),
+                if fn_lookup.contains_key(name) {
+                    // User-declared fn shadows the intrinsic. Let the
+                    // later top-level fn arm handle it.
+                } else {
+                // (jvm-class, jvm-method, jvm-descriptor, return-ty, expected-arg-count)
+                let mapped: Option<(&str, &str, &str, Ty, usize)> = match name {
+                    "maxOf" => Some(("java/lang/Math", "max", "(II)I", Ty::Int, 2)),
+                    "minOf" => Some(("java/lang/Math", "min", "(II)I", Ty::Int, 2)),
                     "emptyList" => Some((
                         "kotlin/collections/CollectionsKt",
                         "emptyList",
                         "()Ljava/util/List;",
                         Ty::Class("java/util/List".to_string()),
+                        0,
                     )),
+                    // `kotlin.math.*` top-level functions route to
+                    // `java.lang.Math` statics with the same shape.
+                    "sqrt" => Some(("java/lang/Math", "sqrt", "(D)D", Ty::Double, 1)),
+                    "abs" => Some(("java/lang/Math", "abs", "(D)D", Ty::Double, 1)),
+                    "floor" => Some(("java/lang/Math", "floor", "(D)D", Ty::Double, 1)),
+                    "ceil" => Some(("java/lang/Math", "ceil", "(D)D", Ty::Double, 1)),
+                    "round" => Some(("java/lang/Math", "round", "(D)J", Ty::Long, 1)),
+                    "sin" => Some(("java/lang/Math", "sin", "(D)D", Ty::Double, 1)),
+                    "cos" => Some(("java/lang/Math", "cos", "(D)D", Ty::Double, 1)),
+                    "tan" => Some(("java/lang/Math", "tan", "(D)D", Ty::Double, 1)),
+                    "exp" => Some(("java/lang/Math", "exp", "(D)D", Ty::Double, 1)),
+                    "ln" => Some(("java/lang/Math", "log", "(D)D", Ty::Double, 1)),
+                    "log10" => Some(("java/lang/Math", "log10", "(D)D", Ty::Double, 1)),
+                    "pow" => Some(("java/lang/Math", "pow", "(DD)D", Ty::Double, 2)),
+                    "min" => Some(("java/lang/Math", "min", "(DD)D", Ty::Double, 2)),
+                    "max" => Some(("java/lang/Math", "max", "(DD)D", Ty::Double, 2)),
                     _ => None,
                 };
-                if let Some((cls, method, desc, ret_ty)) = mapped {
+                if let Some((cls, method, desc, ret_ty, expected_args)) = mapped {
                     let mut arg_slots: Vec<LocalId> = Vec::new();
                     if let Some(arg_list) = call.value_argument_list() {
                         for arg in arg_list.arguments() {
@@ -15035,11 +15063,6 @@ fn lower_rich_expr_to_slot(
                             arg_slots.push(slot);
                         }
                     }
-                    let expected_args = match name {
-                        "maxOf" | "minOf" => 2,
-                        "emptyList" => 0,
-                        _ => 0,
-                    };
                     if arg_slots.len() == expected_args {
                         let result_slot = LocalId(*next_slot);
                         *next_slot += 1;
@@ -15057,6 +15080,7 @@ fn lower_rich_expr_to_slot(
                         });
                         return Some(result_slot);
                     }
+                }
                 }
             }
         }
