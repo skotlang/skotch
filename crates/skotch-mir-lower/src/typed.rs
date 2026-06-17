@@ -73,6 +73,50 @@ fn class_field_lookup(name: &str) -> Option<(String, String, Ty)> {
 }
 
 thread_local! {
+    /// Module-scoped class-methods table: `(class_name, method_name)
+    /// → return Ty`. When set, lowerers that emit `Virtual` calls can
+    /// promote the result slot's Ty from `Ty::Any` to the actual
+    /// return type, which is essential for **chained** method calls
+    /// like `origin.translate(3, 4).copy(...)` — without the promotion
+    /// the intermediate slot stays `Ty::Any`, so the outer
+    /// `.copy(...)` bails because the receiver Ty doesn't match the
+    /// `Ty::Class(_)` guard in the Virtual fallback.
+    ///
+    /// Cleared at module-end. Populated by the top-level
+    /// `compile_module` (or similar) BEFORE function bodies are
+    /// lowered.
+    static CLASS_METHODS: std::cell::RefCell<rustc_hash::FxHashMap<String, rustc_hash::FxHashMap<String, Ty>>> =
+        std::cell::RefCell::new(rustc_hash::FxHashMap::default());
+}
+
+fn class_method_return_ty(class_name: &str, method_name: &str) -> Option<Ty> {
+    CLASS_METHODS.with(|c| {
+        c.borrow()
+            .get(class_name)
+            .and_then(|m| m.get(method_name))
+            .cloned()
+    })
+}
+
+struct ClassMethodsScope {
+    prev: rustc_hash::FxHashMap<String, rustc_hash::FxHashMap<String, Ty>>,
+}
+
+impl ClassMethodsScope {
+    fn new(table: rustc_hash::FxHashMap<String, rustc_hash::FxHashMap<String, Ty>>) -> Self {
+        let prev = CLASS_METHODS.with(|c| std::mem::take(&mut *c.borrow_mut()));
+        CLASS_METHODS.with(|c| *c.borrow_mut() = table);
+        ClassMethodsScope { prev }
+    }
+}
+
+impl Drop for ClassMethodsScope {
+    fn drop(&mut self) {
+        CLASS_METHODS.with(|c| *c.borrow_mut() = std::mem::take(&mut self.prev));
+    }
+}
+
+thread_local! {
     /// Function-scoped param-Ty fallback. Set by `lower_simple_body`
     /// (and similar entry points) before recursing into the body
     /// walker; cleared on the way out. Lookup sites that read
@@ -111,6 +155,22 @@ impl Drop for ParamTyScope {
     fn drop(&mut self) {
         PARAM_TY_FALLBACK.with(|cell| *cell.borrow_mut() = std::mem::take(&mut self.prev));
     }
+}
+
+/// Resolve a Kotlin user-type name to a `Ty`. Primitives and stdlib
+/// shorthand go through `ty_from_name`; everything else (user
+/// classes, cross-file references) falls back to `Ty::Class(<JVM
+/// FQN>)`. Used for return-type, field-type, and param-type lookups
+/// so user-defined classes don't silently collapse to `Ty::Any` (which
+/// makes the backend emit `java.lang.Object` descriptors and breaks
+/// `invokevirtual` lookups at link time).
+fn resolve_user_ty(name: &str) -> Ty {
+    skotch_types::ty_from_name(name).unwrap_or_else(|| {
+        let fq = skotch_types::intrinsics::kotlin_to_jvm_class(name)
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| name.to_string());
+        Ty::Class(fq)
+    })
 }
 
 /// Look up the Ty for a slot, consulting either `extra_locals` or
@@ -1122,6 +1182,82 @@ pub fn lower_file(
             class_fields.insert(name.to_string(), fields);
         }
     }
+
+    // Build the module-scoped CLASS_METHODS table: `(class, method)
+    // → return Ty`. Populated BEFORE body lowering so the Virtual
+    // call fallback in `lower_rich_expr_to_slot` can promote its
+    // result slot's Ty from `Ty::Any` to the actual return type.
+    // Without this, chained calls (`a.f().g()`) lose typing after the
+    // first hop and the receiver-Ty guard on subsequent virtuals
+    // fails to fire.
+    //
+    // The resolver maps user-class names (e.g. `Point`) to
+    // `Ty::Class("Point")` when `ty_from_name` returns None
+    // (`ty_from_name` only knows built-in primitives + stdlib
+    // shorthand).
+    let class_method_returns: rustc_hash::FxHashMap<String, rustc_hash::FxHashMap<String, Ty>> = {
+        let resolve_ret_ty = |f: &skotch_ast::KtFun<'_>| -> Ty {
+            let name_opt: Option<&str> = f
+                .return_type()
+                .and_then(|tr| tr.user_type())
+                .and_then(|u| u.name());
+            match name_opt {
+                Some(n) => skotch_types::ty_from_name(n).unwrap_or_else(|| {
+                    let fq = skotch_types::intrinsics::kotlin_to_jvm_class(n)
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| n.to_string());
+                    Ty::Class(fq)
+                }),
+                None => {
+                    if f.body_block().is_some() || f.body_expression().is_some() {
+                        Ty::Unit
+                    } else {
+                        Ty::Any
+                    }
+                }
+            }
+        };
+        let mut table: rustc_hash::FxHashMap<String, rustc_hash::FxHashMap<String, Ty>> =
+            rustc_hash::FxHashMap::default();
+        // Local classes.
+        for decl in file.decls() {
+            if let KtDecl::Class(c) = decl {
+                let Some(cname) = c.name() else { continue };
+                let mut methods: rustc_hash::FxHashMap<String, Ty> =
+                    rustc_hash::FxHashMap::default();
+                if let Some(body) = c.body() {
+                    for d in body.declarations() {
+                        if let KtDecl::Fun(f) = d {
+                            if let Some(mname) = f.name() {
+                                methods.insert(mname.to_string(), resolve_ret_ty(&f));
+                            }
+                        }
+                    }
+                }
+                table.insert(cname.to_string(), methods);
+            }
+        }
+        // Cross-file classes from package symbols.
+        if let Some(tbl) = package_symbols {
+            for (simple_name, decl) in tbl.classes.iter() {
+                let mut methods: rustc_hash::FxHashMap<String, Ty> =
+                    rustc_hash::FxHashMap::default();
+                for m in decl.methods.iter() {
+                    methods.insert(m.name.clone(), m.return_ty.clone());
+                }
+                table
+                    .entry(simple_name.clone())
+                    .and_modify(|m| {
+                        for (k, v) in &methods {
+                            m.entry(k.clone()).or_insert_with(|| v.clone());
+                        }
+                    })
+                    .or_insert(methods);
+            }
+        }
+        table
+    };
+    let _class_methods_scope = ClassMethodsScope::new(class_method_returns);
 
     // Top-level functions — one MirFunction per KtFun decl.
     let mut fn_id = 0u32;
@@ -15613,12 +15749,21 @@ fn lower_rich_expr_to_slot(
                     // Fallback: receiver is a class instance, method
                     // not in fn_lookup — emit a Virtual call with
                     // best-guess receiver class.
+                    //
+                    // The receiver's Ty is read via the param-fallback
+                    // helper so a param-slot receiver (Ty stored in
+                    // PARAM_TY_FALLBACK, NOT extra_locals) still
+                    // resolves. The result slot's Ty is then looked up
+                    // from the module-scoped CLASS_METHODS table so
+                    // chained calls like `origin.translate(...).copy(...)`
+                    // keep the receiver typed instead of cascading to
+                    // Ty::Any (which would defeat this very fallback).
                     if let KtExpr::Reference(rcv_ref) = &dq_exprs[0] {
                         if let Some(rn) = rcv_ref.name() {
                             if let Some(slot) = lookup_name(rn) {
-                                if let Some(Ty::Class(cname)) =
-                                    extra_locals.get(slot.0 as usize).cloned()
-                                {
+                                let recv_ty =
+                                    slot_ty_with_param_fallback(slot.0, extra_locals);
+                                if let Ty::Class(cname) = recv_ty {
                                     let mut arg_slots: Vec<LocalId> = vec![slot];
                                     if let Some(arg_list) = call.value_argument_list() {
                                         for arg in arg_list.arguments() {
@@ -15637,7 +15782,9 @@ fn lower_rich_expr_to_slot(
                                     }
                                     let result_slot = LocalId(*next_slot);
                                     *next_slot += 1;
-                                    extra_locals.push(Ty::Any);
+                                    let result_ty = class_method_return_ty(&cname, method_n)
+                                        .unwrap_or(Ty::Any);
+                                    extra_locals.push(result_ty);
                                     pre_stmts.push(MStmt::Assign {
                                         dest: result_slot,
                                         value: skotch_mir::Rvalue::Call {
@@ -18794,7 +18941,7 @@ fn collect_class_fields(c: skotch_ast::KtClass<'_>) -> Vec<skotch_mir::MirField>
                             .and_then(|tr| tr.user_type())
                             .and_then(|u| u.name())
                         {
-                            Some(name) => skotch_types::ty_from_name(name).unwrap_or(Ty::Any),
+                            Some(name) => resolve_user_ty(name),
                             None => Ty::Any,
                         };
                         fields.push(skotch_mir::MirField {
@@ -18816,9 +18963,7 @@ fn collect_class_fields(c: skotch_ast::KtClass<'_>) -> Vec<skotch_mir::MirField>
                         .and_then(|tr| tr.user_type())
                         .and_then(|u| u.name())
                     {
-                        Some(name) => {
-                            skotch_types::ty_from_name(name).unwrap_or(Ty::Any)
-                        }
+                        Some(name) => resolve_user_ty(name),
                         // No explicit type annotation: peek at the
                         // initializer literal to infer Int/Long/
                         // Double/Bool/String. Falls back to Ty::Any
@@ -20470,7 +20615,7 @@ fn method_from_fun_with_class(
         .and_then(|tr| tr.user_type())
         .and_then(|u| u.name())
     {
-        Some(name) => skotch_types::ty_from_name(name).unwrap_or(Ty::Any),
+        Some(name) => resolve_user_ty(name),
         None => Ty::Unit,
     };
     let has_body = f.body_block().is_some() || f.body_expression().is_some();
