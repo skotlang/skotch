@@ -5789,6 +5789,7 @@ fn lower_loop_body_blocks(
         NestedWhile,
         NestedForIn,
         WhenStmt,
+        ThrowStmt,
     }
     let mut i: usize = 0;
     while i < body_children.len() {
@@ -5823,6 +5824,10 @@ fn lower_loop_body_blocks(
             }
             if matches!(expr, KtExpr::Return(_)) {
                 special_at = Some((j, Special::ReturnStmt));
+                break;
+            }
+            if matches!(expr, KtExpr::Throw(_)) {
+                special_at = Some((j, Special::ThrowStmt));
                 break;
             }
             if matches!(expr, KtExpr::While(_)) {
@@ -5970,6 +5975,41 @@ fn lower_loop_body_blocks(
                 blocks.push(BasicBlock {
                     stmts: std::mem::take(&mut cur_stmts),
                     terminator,
+                });
+                return Some(blocks);
+            }
+            Some((j, Special::ThrowStmt)) => {
+                // `throw expr` — lower the expression to a slot
+                // (typically a Constructor call producing the
+                // exception instance), then close the current block
+                // with Terminator::Throw(slot). No continuation.
+                let throw_node = body_children[j];
+                let KtExpr::Throw(t) = KtExpr::cast(throw_node)? else {
+                    return None;
+                };
+                let inner = skotch_ast::children(t.syntax())
+                    .iter()
+                    .find_map(KtExpr::cast)
+                    .map(unwrap_parens)?;
+                let snap = name_to_local.clone();
+                let lookup = |n: &str| -> Option<LocalId> {
+                    snap.iter()
+                        .rev()
+                        .find(|(name, _)| name == n)
+                        .map(|(_, l)| *l)
+                };
+                let slot = lower_rich_expr_to_slot(
+                    inner,
+                    &lookup,
+                    fn_lookup_ref,
+                    next_slot,
+                    &mut cur_stmts,
+                    local_tys,
+                    strings,
+                )?;
+                blocks.push(BasicBlock {
+                    stmts: std::mem::take(&mut cur_stmts),
+                    terminator: Terminator::Throw(slot),
                 });
                 return Some(blocks);
             }
