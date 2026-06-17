@@ -5653,6 +5653,33 @@ fn lower_loop_body(
                 }
             }
         }
+        // Generic fallback: route the stmt expression through
+        // lower_rich_expr_to_slot. The result slot is discarded (stmt
+        // context, value unused). Catches shapes the specialized arms
+        // above don't recognize: chained ctor-then-method
+        // (`Vm(prog).run()`), method on the result of a Call, etc.
+        if let Some(stmt_expr) = skotch_ast::KtExpr::cast(bn) {
+            let snap = name_to_local.clone();
+            let lookup = |n: &str| -> Option<LocalId> {
+                snap.iter()
+                    .rev()
+                    .find(|(name, _)| name == n)
+                    .map(|(_, l)| *l)
+            };
+            if lower_rich_expr_to_slot(
+                stmt_expr,
+                &lookup,
+                fn_lookup_ref,
+                next_slot,
+                &mut body_mstmts,
+                local_tys,
+                strings,
+            )
+            .is_some()
+            {
+                continue;
+            }
+        }
         // Fallthrough: no handler recognized this stmt. Previously we
         // bailed the entire function body to None here. That made the
         // typed pipeline silently empty out whole functions whenever a
