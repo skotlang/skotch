@@ -15910,6 +15910,10 @@ fn lower_rich_expr_to_slot(
         });
         return Some(slot);
     }
+    trace_bail!(
+        "lower_rich_expr_to_slot fell through all arms: kind={}",
+        kt_expr_kind(&e)
+    );
     None
 }
 
