@@ -15465,6 +15465,51 @@ fn lower_rich_expr_to_slot(
                                 Ty::String,
                                 "@StringsKt.repeat",
                             )),
+                            ("trimIndent", 0) => Some((
+                                "(Ljava/lang/String;)Ljava/lang/String;",
+                                Ty::String,
+                                "@StringsKt.trimIndent",
+                            )),
+                            ("trimMargin", 0) => Some((
+                                "(Ljava/lang/String;)Ljava/lang/String;",
+                                Ty::String,
+                                "@StringsKt.trimMargin",
+                            )),
+                            ("trim", 0) => Some((
+                                "()Ljava/lang/String;",
+                                Ty::String,
+                                "trim",
+                            )),
+                            ("uppercase", 0) => Some((
+                                "()Ljava/lang/String;",
+                                Ty::String,
+                                "toUpperCase",
+                            )),
+                            ("lowercase", 0) => Some((
+                                "()Ljava/lang/String;",
+                                Ty::String,
+                                "toLowerCase",
+                            )),
+                            ("isEmpty", 0) => Some((
+                                "()Z",
+                                Ty::Bool,
+                                "isEmpty",
+                            )),
+                            ("isNotEmpty", 0) => Some((
+                                "(Ljava/lang/CharSequence;)Z",
+                                Ty::Bool,
+                                "@StringsKt.isNotEmpty",
+                            )),
+                            ("isBlank", 0) => Some((
+                                "(Ljava/lang/CharSequence;)Z",
+                                Ty::Bool,
+                                "@StringsKt.isBlank",
+                            )),
+                            ("isNotBlank", 0) => Some((
+                                "(Ljava/lang/CharSequence;)Z",
+                                Ty::Bool,
+                                "@StringsKt.isNotBlank",
+                            )),
                             ("toInt", 0) => Some((
                                 "(Ljava/lang/String;)I",
                                 Ty::Int,
