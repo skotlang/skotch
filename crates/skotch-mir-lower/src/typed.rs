@@ -19268,24 +19268,93 @@ fn lower_simple_body(
             }
         }
     }
-    let Some((c, ty)) = literal_to_const(&body_expr, strings) else {
-        return make_placeholder();
-    };
+    if let Some((c, ty)) = literal_to_const(&body_expr, strings) {
+        // Decide the result local slot. With no params, the result lives
+        // in local 0; otherwise it's the next slot after the params.
+        let param_count = f
+            .value_parameter_list()
+            .map(|pl| pl.parameters().count())
+            .unwrap_or(0);
+        let result_slot = LocalId(param_count as u32);
+        let extra_locals = vec![ty];
+        let blocks = vec![BasicBlock {
+            stmts: vec![skotch_mir::Stmt::Assign {
+                dest: result_slot,
+                value: skotch_mir::Rvalue::Const(c),
+            }],
+            terminator: Terminator::ReturnValue(result_slot),
+        }];
+        return (blocks, extra_locals);
+    }
     let _ = MirConst::Unit; // keep MirConst import in scope
 
-    // Decide the result local slot. With no params, the result lives
-    // in local 0; otherwise it's the next slot after the params.
+    // Generic fallback for top-level expression bodies the specialized
+    // arms above didn't intercept: route the body through
+    // lower_rich_expr_to_slot. Catches Call (top-level fn / intrinsic),
+    // DotQualified-on-String chains (`"...""".trimIndent()`), Prefix,
+    // etc. The lookup closure resolves params by name; top-level fns
+    // have no `this`, so slot 0 is the first param.
     let param_count = f
         .value_parameter_list()
         .map(|pl| pl.parameters().count())
         .unwrap_or(0);
-    let result_slot = LocalId(param_count as u32);
-    let extra_locals = vec![ty];
+    let outer_param_names: Vec<String> = f
+        .value_parameter_list()
+        .map(|pl| {
+            pl.parameters()
+                .map(|p| p.name().unwrap_or("").to_string())
+                .collect()
+        })
+        .unwrap_or_default();
+    let outer_param_tys: Vec<Ty> = f
+        .value_parameter_list()
+        .map(|pl| {
+            pl.parameters()
+                .map(|p| {
+                    let type_name: Option<String> = p
+                        .type_reference()
+                        .and_then(|tr| tr.user_type())
+                        .and_then(|u| u.name())
+                        .map(String::from);
+                    match type_name.as_deref() {
+                        Some(n) => resolve_user_ty(n),
+                        None => Ty::Any,
+                    }
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let _param_scope = ParamTyScope::new(outer_param_tys);
+    let snap_locals: Vec<(String, LocalId)> = outer_param_names
+        .iter()
+        .enumerate()
+        .map(|(i, n)| (n.clone(), LocalId(i as u32)))
+        .collect();
+    let snap = snap_locals.clone();
+    let lookup = |n: &str| -> Option<LocalId> {
+        snap.iter().rev().find(|(nm, _)| nm == n).map(|(_, l)| *l)
+    };
+    let mut next_slot = param_count as u32;
+    let mut pre_stmts: Vec<skotch_mir::Stmt> = Vec::new();
+    let mut extra_locals: Vec<Ty> = Vec::new();
+    let Some(result_slot) = lower_rich_expr_to_slot(
+        body_expr,
+        &lookup,
+        fn_lookup,
+        &mut next_slot,
+        &mut pre_stmts,
+        &mut extra_locals,
+        strings,
+    ) else {
+        let _ = val_lookup;
+        let _ = class_lookup;
+        let _ = class_fields;
+        let _ = wrapper_class;
+        let _ = exception_handlers;
+        return make_placeholder();
+    };
     let blocks = vec![BasicBlock {
-        stmts: vec![skotch_mir::Stmt::Assign {
-            dest: result_slot,
-            value: skotch_mir::Rvalue::Const(c),
-        }],
+        stmts: pre_stmts,
         terminator: Terminator::ReturnValue(result_slot),
     }];
     (blocks, extra_locals)
