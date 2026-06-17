@@ -20014,6 +20014,273 @@ fn method_simple_body_full(
             ) {
                 return (blocks, locals);
             }
+            // Mini-walker fallback for the common shape
+            //   val x1 = expr1
+            //   val x2 = expr2
+            //   ...
+            //   return exprN
+            // that the legacy walker rejected. Lower each val via
+            // lower_rich_expr_to_slot (with snap_locals containing
+            // params + previously-bound vals + on-demand field
+            // GetField preloads), then lower the final return through
+            // lower_rich. Handles Triangle.perimeter-style bodies in
+            // parity 34-shape-hierarchy.
+            let param_count_inner = f
+                .value_parameter_list()
+                .map(|pl| pl.parameters().count())
+                .unwrap_or(0);
+            let param_names_inner: Vec<String> = f
+                .value_parameter_list()
+                .map(|pl| {
+                    pl.parameters()
+                        .map(|p| p.name().unwrap_or("").to_string())
+                        .collect()
+                })
+                .unwrap_or_default();
+            let mut snap_locals: Vec<(String, skotch_mir::LocalId)> = param_names_inner
+                .iter()
+                .enumerate()
+                .map(|(i, n)| (n.clone(), skotch_mir::LocalId((1 + i) as u32)))
+                .collect();
+            let mut next_slot_inner = (1 + param_count_inner) as u32;
+            let mut pre_stmts_inner: Vec<skotch_mir::Stmt> = Vec::new();
+            let mut extra_locals_inner: Vec<Ty> = Vec::new();
+            let mut return_slot: Option<skotch_mir::LocalId> = None;
+            let mut mini_ok = true;
+            // Walk raw SIL children so we see both KtProperty (val
+            // decl) and KtExpr (regular stmts) — block.statements()
+            // only surfaces expressions.
+            let body_children_inner: Vec<&skotch_sil::SilNode> =
+                skotch_ast::children(block.syntax()).into_iter().collect();
+            for child in &body_children_inner {
+                if let Some(prop) = skotch_ast::KtProperty::cast(child) {
+                        let Some(pname) = prop.name() else {
+                            mini_ok = false;
+                            break;
+                        };
+                        let Some(init) = prop.initializer() else {
+                            mini_ok = false;
+                            break;
+                        };
+                        // Preload field refs in init.
+                        if let Some(cname) = class_name {
+                            fn collect_refs<'a>(
+                                e: skotch_ast::KtExpr<'a>,
+                                out: &mut Vec<String>,
+                            ) {
+                                use skotch_ast::KtExpr;
+                                let e = unwrap_parens(e);
+                                match e {
+                                    KtExpr::Reference(r) => {
+                                        if let Some(n) = r.name() {
+                                            out.push(n.to_string());
+                                        }
+                                    }
+                                    KtExpr::Binary(b) => {
+                                        if let Some(l) = b.lhs() {
+                                            collect_refs(l, out);
+                                        }
+                                        if let Some(r) = b.rhs() {
+                                            collect_refs(r, out);
+                                        }
+                                    }
+                                    KtExpr::Prefix(p) => {
+                                        for child in skotch_ast::children(p.syntax()) {
+                                            if let Some(ce) = KtExpr::cast(child) {
+                                                collect_refs(ce, out);
+                                            }
+                                        }
+                                    }
+                                    KtExpr::DotQualified(dq) => {
+                                        for child in skotch_ast::children(dq.syntax()) {
+                                            if let Some(ce) = KtExpr::cast(child) {
+                                                collect_refs(ce, out);
+                                            }
+                                        }
+                                    }
+                                    KtExpr::Call(call) => {
+                                        if let Some(arg_list) = call.value_argument_list()
+                                        {
+                                            for arg in arg_list.arguments() {
+                                                if let Some(ae) = arg.expression() {
+                                                    collect_refs(ae, out);
+                                                }
+                                            }
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                            }
+                            let mut refs: Vec<String> = Vec::new();
+                            collect_refs(unwrap_parens(init), &mut refs);
+                            for n in refs {
+                                if snap_locals.iter().any(|(nm, _)| nm == &n) {
+                                    continue;
+                                }
+                                if let Some((fname, fty)) =
+                                    field_names.iter().find(|(nm, _)| nm == &n)
+                                {
+                                    let slot =
+                                        skotch_mir::LocalId(next_slot_inner);
+                                    next_slot_inner += 1;
+                                    extra_locals_inner.push(fty.clone());
+                                    pre_stmts_inner.push(skotch_mir::Stmt::Assign {
+                                        dest: slot,
+                                        value: skotch_mir::Rvalue::GetField {
+                                            receiver: skotch_mir::LocalId(0),
+                                            class_name: cname.to_string(),
+                                            field_name: fname.clone(),
+                                        },
+                                    });
+                                    snap_locals.push((n.clone(), slot));
+                                }
+                            }
+                        }
+                        let snap = snap_locals.clone();
+                        let lookup = |n: &str| -> Option<skotch_mir::LocalId> {
+                            snap.iter()
+                                .rev()
+                                .find(|(nm, _)| nm == n)
+                                .map(|(_, l)| *l)
+                        };
+                        let init_e = unwrap_parens(init);
+                        let Some(init_slot) = lower_rich_expr_to_slot(
+                            init_e,
+                            &lookup,
+                            fn_lookup,
+                            &mut next_slot_inner,
+                            &mut pre_stmts_inner,
+                            &mut extra_locals_inner,
+                            strings,
+                        ) else {
+                            mini_ok = false;
+                            break;
+                        };
+                        snap_locals.push((pname.to_string(), init_slot));
+                    continue;
+                }
+                let Some(stmt_e) = skotch_ast::KtExpr::cast(child) else {
+                    continue;
+                };
+                match stmt_e {
+                    KtExpr::Return(r) => {
+                        let inner = skotch_ast::children(r.syntax())
+                            .iter()
+                            .find_map(KtExpr::cast)
+                            .map(unwrap_parens);
+                        let Some(re) = inner else {
+                            return_slot = Some(skotch_mir::LocalId(0));
+                            break;
+                        };
+                        // Same preload pass as for val init.
+                        if let Some(cname) = class_name {
+                            fn collect_refs<'a>(
+                                e: skotch_ast::KtExpr<'a>,
+                                out: &mut Vec<String>,
+                            ) {
+                                use skotch_ast::KtExpr;
+                                let e = unwrap_parens(e);
+                                match e {
+                                    KtExpr::Reference(r) => {
+                                        if let Some(n) = r.name() {
+                                            out.push(n.to_string());
+                                        }
+                                    }
+                                    KtExpr::Binary(b) => {
+                                        if let Some(l) = b.lhs() {
+                                            collect_refs(l, out);
+                                        }
+                                        if let Some(r) = b.rhs() {
+                                            collect_refs(r, out);
+                                        }
+                                    }
+                                    KtExpr::Prefix(p) => {
+                                        for child in skotch_ast::children(p.syntax()) {
+                                            if let Some(ce) = KtExpr::cast(child) {
+                                                collect_refs(ce, out);
+                                            }
+                                        }
+                                    }
+                                    KtExpr::DotQualified(dq) => {
+                                        for child in skotch_ast::children(dq.syntax()) {
+                                            if let Some(ce) = KtExpr::cast(child) {
+                                                collect_refs(ce, out);
+                                            }
+                                        }
+                                    }
+                                    KtExpr::Call(call) => {
+                                        if let Some(arg_list) =
+                                            call.value_argument_list()
+                                        {
+                                            for arg in arg_list.arguments() {
+                                                if let Some(ae) = arg.expression() {
+                                                    collect_refs(ae, out);
+                                                }
+                                            }
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                            }
+                            let mut refs: Vec<String> = Vec::new();
+                            collect_refs(re, &mut refs);
+                            for n in refs {
+                                if snap_locals.iter().any(|(nm, _)| nm == &n) {
+                                    continue;
+                                }
+                                if let Some((fname, fty)) =
+                                    field_names.iter().find(|(nm, _)| nm == &n)
+                                {
+                                    let slot =
+                                        skotch_mir::LocalId(next_slot_inner);
+                                    next_slot_inner += 1;
+                                    extra_locals_inner.push(fty.clone());
+                                    pre_stmts_inner.push(skotch_mir::Stmt::Assign {
+                                        dest: slot,
+                                        value: skotch_mir::Rvalue::GetField {
+                                            receiver: skotch_mir::LocalId(0),
+                                            class_name: cname.to_string(),
+                                            field_name: fname.clone(),
+                                        },
+                                    });
+                                    snap_locals.push((n.clone(), slot));
+                                }
+                            }
+                        }
+                        let snap = snap_locals.clone();
+                        let lookup = |n: &str| -> Option<skotch_mir::LocalId> {
+                            snap.iter()
+                                .rev()
+                                .find(|(nm, _)| nm == n)
+                                .map(|(_, l)| *l)
+                        };
+                        let Some(rs) = lower_rich_expr_to_slot(
+                            re,
+                            &lookup,
+                            fn_lookup,
+                            &mut next_slot_inner,
+                            &mut pre_stmts_inner,
+                            &mut extra_locals_inner,
+                            strings,
+                        ) else {
+                            mini_ok = false;
+                            break;
+                        };
+                        return_slot = Some(rs);
+                        break;
+                    }
+                    _ => {}
+                }
+            }
+            if mini_ok {
+                if let Some(rs) = return_slot {
+                    let blocks = vec![BasicBlock {
+                        stmts: pre_stmts_inner,
+                        terminator: Terminator::ReturnValue(rs),
+                    }];
+                    return (blocks, extra_locals_inner);
+                }
+            }
             let mut returned: Option<KtExpr<'_>> = None;
             for stmt in block.statements() {
                 if let KtExpr::Return(r) = stmt {
