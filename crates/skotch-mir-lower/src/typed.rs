@@ -8528,21 +8528,38 @@ fn try_lower_multi_stmt_block_with_offset(
                 }
             }
             // Try class instantiation: `val p = P(args)`.
+            //
+            // CRITICAL: lower args BEFORE emitting NewInstance — the
+            // backend emits `NewInstance` as `new Class; dup`, which
+            // pushes 2 ref slots onto the JVM stack that the eventual
+            // `invokespecial` consumes. If any arg's recursive
+            // lowering ALSO emits `NewInstance` (nested ctor), the
+            // inner pair must sit ON TOP of the outer's pair —
+            // OK only if the outer's pair has been emitted first
+            // *and* the inner ctor leaves a usable result for the
+            // outer's invokespecial.
+            //
+            // BUT: if we emit the outer's NewInstance speculatively
+            // and any arg lowering then fails (this handler bails),
+            // the orphan `new Class; dup` is left on the stack —
+            // and the val handler falls through to lower_rich which
+            // emits ITS OWN `new Class; dup` + invokespecial,
+            // leaving the orphan pair stranded on stack across the
+            // function body. The JVM verifier rejects (uninit on
+            // stack at backbranches) and method dispatch fails at
+            // runtime with NPE on `aload_N` of the slot.
+            //
+            // Fix: collect arg slots in a scratch staging buffer and
+            // commit them only after every arg succeeds. NewInstance
+            // is emitted AFTER args are committed, matching the
+            // shape `lower_rich_expr_to_slot` uses for the same case.
             if let KtExpr::Call(call) = &init {
                 if let Some(KtExpr::Reference(rc)) = call.callee() {
                     if let Some(cname) = rc.name() {
                         if class_lookup.contains_key(cname) {
-                            let new_slot = LocalId(next_slot);
-                            next_slot += 1;
-                            local_tys.push(Ty::Class(cname.to_string()));
-                            stmts.push(MStmt::Assign {
-                                dest: new_slot,
-                                value: skotch_mir::Rvalue::NewInstance(cname.to_string()),
-                            });
-                            // Backend convention: Constructor args do NOT include
-                            // the receiver — the dup'd ref from NewInstance is
-                            // consumed by invokespecial, and the Constructor
-                            // Assign's dest receives the remaining copy.
+                            let mut staged_stmts: Vec<MStmt> = Vec::new();
+                            let mut staged_next_slot = next_slot;
+                            let mut staged_local_tys: Vec<Ty> = Vec::new();
                             let mut arg_slots: Vec<LocalId> = Vec::new();
                             let mut ok = true;
                             if let Some(arg_list) = call.value_argument_list() {
@@ -8575,10 +8592,10 @@ fn try_lower_multi_stmt_block_with_offset(
                                                 ok = false;
                                                 break;
                                             };
-                                            let slot = LocalId(next_slot);
-                                            next_slot += 1;
-                                            local_tys.push(ty);
-                                            stmts.push(MStmt::Assign {
+                                            let slot = LocalId(staged_next_slot);
+                                            staged_next_slot += 1;
+                                            staged_local_tys.push(ty);
+                                            staged_stmts.push(MStmt::Assign {
                                                 dest: slot,
                                                 value: skotch_mir::Rvalue::Const(k),
                                             });
@@ -8588,6 +8605,18 @@ fn try_lower_multi_stmt_block_with_offset(
                                 }
                             }
                             if ok {
+                                // Commit staged arg work, then emit
+                                // NewInstance + Constructor.
+                                next_slot = staged_next_slot;
+                                local_tys.extend(staged_local_tys);
+                                stmts.extend(staged_stmts);
+                                let new_slot = LocalId(next_slot);
+                                next_slot += 1;
+                                local_tys.push(Ty::Class(cname.to_string()));
+                                stmts.push(MStmt::Assign {
+                                    dest: new_slot,
+                                    value: skotch_mir::Rvalue::NewInstance(cname.to_string()),
+                                });
                                 stmts.push(MStmt::Assign {
                                     dest: new_slot,
                                     value: skotch_mir::Rvalue::Call {
@@ -21329,14 +21358,31 @@ fn collect_class_methods(
                     }
                     None => Ty::Any,
                 };
+                // Body: `aload_0; getfield <field>; areturn` —
+                // earlier this was an empty body (Return void), which
+                // the backend emitted as `aconst_null; areturn` and
+                // collapsed every reflective `obj.field` call to null
+                // at runtime (parity 11 collectStats hit
+                // `Add.getL() = null` even though Add.l field was
+                // correctly putfield'd in `<init>`).
+                let this_slot = skotch_mir::LocalId(0);
+                let field_slot = skotch_mir::LocalId(1);
+                let body_stmts = vec![skotch_mir::Stmt::Assign {
+                    dest: field_slot,
+                    value: skotch_mir::Rvalue::GetField {
+                        receiver: this_slot,
+                        class_name: class_name.to_string(),
+                        field_name: pname.to_string(),
+                    },
+                }];
                 methods.push(MirFunction {
                     id: FuncId(0),
                     name: getter_name,
-                    params: vec![skotch_mir::LocalId(0)],
-                    locals: vec![Ty::Class(class_name.to_string())],
+                    params: vec![this_slot],
+                    locals: vec![Ty::Class(class_name.to_string()), ret_ty.clone()],
                     blocks: vec![BasicBlock {
-                        stmts: Vec::new(),
-                        terminator: Terminator::Return,
+                        stmts: body_stmts,
+                        terminator: Terminator::ReturnValue(field_slot),
                     }],
                     return_ty: ret_ty,
                     required_params: 0,

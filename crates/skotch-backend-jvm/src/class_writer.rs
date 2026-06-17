@@ -1224,7 +1224,21 @@ fn emit_checknotnull_prologue(
         if matches!(kind, MethodKind::Instance) && idx == 0 {
             continue;
         }
-        let Some(name) = func.param_names.get(idx) else {
+        // `func.param_names` is 0-indexed by USER param (no entry
+        // for the implicit `this`), so for Instance methods we need
+        // to subtract 1 from the loop index to land on the right
+        // name. Without this, an instance ctor like
+        //   class Add(val l: Expr, val r: Expr)
+        // emits a single `checkNotNullParameter(l_slot, "r")` —
+        // wrong name AND missing the second check entirely — so
+        // calling `Add(l, r)` with non-null args still threw NPE
+        // referencing the wrong field.
+        let name_idx = if matches!(kind, MethodKind::Instance) {
+            idx.saturating_sub(1)
+        } else {
+            idx
+        };
+        let Some(name) = func.param_names.get(name_idx) else {
             continue;
         };
         // Skip synthetic compiler-injected parameters. kotlinc does not
