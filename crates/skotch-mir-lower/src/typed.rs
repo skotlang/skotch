@@ -16445,6 +16445,71 @@ fn lower_rich_expr_to_slot(
                             }
                         }
                     }
+                    // Non-Reference receiver fallback: lower the
+                    // receiver expression recursively via lower_rich
+                    // (catches `Vm(prog).run()` ctor-then-method,
+                    // `obj.field.method()` chains, etc.), then emit
+                    // Virtual call on the resulting slot. Receiver Ty
+                    // must resolve to Ty::Class for the dispatch to
+                    // pick a class name.
+                    if !matches!(&dq_exprs[0], KtExpr::Reference(_)) {
+                        if let Some(recv_slot) = lower_rich_expr_to_slot(
+                            dq_exprs[0],
+                            lookup_name,
+                            fn_lookup,
+                            next_slot,
+                            pre_stmts,
+                            extra_locals,
+                            strings,
+                        ) {
+                            let recv_ty =
+                                slot_ty_with_param_fallback(recv_slot.0, extra_locals);
+                            if let Ty::Class(cname) = recv_ty {
+                                let mut arg_slots: Vec<LocalId> = vec![recv_slot];
+                                let mut all_args_ok = true;
+                                if let Some(arg_list) = call.value_argument_list() {
+                                    for arg in arg_list.arguments() {
+                                        let Some(arg_e) = arg.expression() else {
+                                            all_args_ok = false;
+                                            break;
+                                        };
+                                        let Some(s) = lower_rich_expr_to_slot(
+                                            arg_e,
+                                            lookup_name,
+                                            fn_lookup,
+                                            next_slot,
+                                            pre_stmts,
+                                            extra_locals,
+                                            strings,
+                                        ) else {
+                                            all_args_ok = false;
+                                            break;
+                                        };
+                                        arg_slots.push(s);
+                                    }
+                                }
+                                if all_args_ok {
+                                    let result_slot = LocalId(*next_slot);
+                                    *next_slot += 1;
+                                    let result_ty =
+                                        class_method_return_ty(&cname, method_n)
+                                            .unwrap_or(Ty::Any);
+                                    extra_locals.push(result_ty);
+                                    pre_stmts.push(MStmt::Assign {
+                                        dest: result_slot,
+                                        value: skotch_mir::Rvalue::Call {
+                                            kind: skotch_mir::CallKind::Virtual {
+                                                class_name: cname,
+                                                method_name: method_n.to_string(),
+                                            },
+                                            args: arg_slots,
+                                        },
+                                    });
+                                    return Some(result_slot);
+                                }
+                            }
+                        }
+                    }
                     // Object-singleton method dispatch:
                     //   `Calculator.evaluate(3, ...)` →
                     //     getstatic Calculator.INSTANCE LCalculator;
