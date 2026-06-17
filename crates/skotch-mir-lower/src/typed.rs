@@ -14543,6 +14543,151 @@ fn lower_rich_expr_to_slot(
             return Some(result_slot);
         }
     }
+    // `listOf(a, b, c)` intrinsic. kotlinc lowers this to:
+    //   iconst N            // size
+    //   anewarray Object    // []Object
+    //   dup; iconst 0; <val>; aastore   ; ... per arg
+    //   invokestatic CollectionsKt.listOf([Ljava/lang/Object;)Ljava/util/List;
+    //
+    // Primitive args get boxed via Integer.valueOf etc. before
+    // aastore (which only accepts ref values).
+    if let KtExpr::Call(call) = e {
+        if let Some(KtExpr::Reference(rc)) = call.callee() {
+            if let Some(name) = rc.name() {
+                if matches!(name, "listOf" | "mutableListOf") {
+                    let arg_exprs: Vec<KtExpr<'_>> = call
+                        .value_argument_list()
+                        .map(|al| {
+                            al.arguments()
+                                .filter_map(|a| a.expression())
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    // Lower every arg before allocating the array, so a
+                    // bail on any arg cleanly returns None without
+                    // partially mutating pre_stmts.
+                    let mut arg_slots: Vec<LocalId> = Vec::with_capacity(arg_exprs.len());
+                    let mut all_args_ok = true;
+                    for ae in arg_exprs {
+                        let Some(s) = lower_rich_expr_to_slot(
+                            ae,
+                            lookup_name,
+                            fn_lookup,
+                            next_slot,
+                            pre_stmts,
+                            extra_locals,
+                            strings,
+                        ) else {
+                            all_args_ok = false;
+                            break;
+                        };
+                        arg_slots.push(s);
+                    }
+                    if all_args_ok {
+                        let n = arg_slots.len() as i32;
+                        let size_slot = LocalId(*next_slot);
+                        *next_slot += 1;
+                        extra_locals.push(Ty::Int);
+                        pre_stmts.push(MStmt::Assign {
+                            dest: size_slot,
+                            value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(n)),
+                        });
+                        let arr_slot = LocalId(*next_slot);
+                        *next_slot += 1;
+                        extra_locals.push(Ty::Any);
+                        pre_stmts.push(MStmt::Assign {
+                            dest: arr_slot,
+                            value: skotch_mir::Rvalue::NewObjectArray(size_slot),
+                        });
+                        for (i, val_slot) in arg_slots.iter().enumerate() {
+                            // Box primitive values so aastore sees a ref.
+                            let val_ty = slot_ty_with_param_fallback(
+                                val_slot.0,
+                                extra_locals,
+                            );
+                            let store_slot = match &val_ty {
+                                Ty::Int | Ty::Long | Ty::Float | Ty::Double
+                                | Ty::Bool | Ty::Byte | Ty::Short | Ty::Char => {
+                                    let (cls, prim, boxed) = match &val_ty {
+                                        Ty::Int => ("java/lang/Integer", "I", "java/lang/Integer"),
+                                        Ty::Long => ("java/lang/Long", "J", "java/lang/Long"),
+                                        Ty::Float => ("java/lang/Float", "F", "java/lang/Float"),
+                                        Ty::Double => ("java/lang/Double", "D", "java/lang/Double"),
+                                        Ty::Bool => ("java/lang/Boolean", "Z", "java/lang/Boolean"),
+                                        Ty::Byte => ("java/lang/Byte", "B", "java/lang/Byte"),
+                                        Ty::Short => ("java/lang/Short", "S", "java/lang/Short"),
+                                        Ty::Char => ("java/lang/Character", "C", "java/lang/Character"),
+                                        _ => unreachable!(),
+                                    };
+                                    let boxed_slot = LocalId(*next_slot);
+                                    *next_slot += 1;
+                                    extra_locals.push(Ty::Class(boxed.to_string()));
+                                    pre_stmts.push(MStmt::Assign {
+                                        dest: boxed_slot,
+                                        value: skotch_mir::Rvalue::Call {
+                                            kind: skotch_mir::CallKind::StaticJava {
+                                                class_name: cls.to_string(),
+                                                method_name: "valueOf".to_string(),
+                                                descriptor: format!("({})L{};", prim, boxed),
+                                            },
+                                            args: vec![*val_slot],
+                                        },
+                                    });
+                                    boxed_slot
+                                }
+                                _ => *val_slot,
+                            };
+                            let idx_slot = LocalId(*next_slot);
+                            *next_slot += 1;
+                            extra_locals.push(Ty::Int);
+                            pre_stmts.push(MStmt::Assign {
+                                dest: idx_slot,
+                                value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(
+                                    i as i32,
+                                )),
+                            });
+                            let store_dest = LocalId(*next_slot);
+                            *next_slot += 1;
+                            extra_locals.push(Ty::Unit);
+                            pre_stmts.push(MStmt::Assign {
+                                dest: store_dest,
+                                value: skotch_mir::Rvalue::ObjectArrayStore {
+                                    array: arr_slot,
+                                    index: idx_slot,
+                                    value: store_slot,
+                                },
+                            });
+                        }
+                        // Final static call. mutableListOf returns a
+                        // mutable list; the CollectionsKt entry for it
+                        // is `mutableListOf([Ljava/lang/Object;)Ljava/util/List;`.
+                        let (method, ret_class) = match name {
+                            "listOf" => ("listOf", "java/util/List"),
+                            "mutableListOf" => ("mutableListOf", "java/util/List"),
+                            _ => unreachable!(),
+                        };
+                        let result_slot = LocalId(*next_slot);
+                        *next_slot += 1;
+                        extra_locals.push(Ty::Class(ret_class.to_string()));
+                        pre_stmts.push(MStmt::Assign {
+                            dest: result_slot,
+                            value: skotch_mir::Rvalue::Call {
+                                kind: skotch_mir::CallKind::StaticJava {
+                                    class_name: "kotlin/collections/CollectionsKt"
+                                        .to_string(),
+                                    method_name: method.to_string(),
+                                    descriptor:
+                                        "([Ljava/lang/Object;)Ljava/util/List;".to_string(),
+                                },
+                                args: vec![arr_slot],
+                            },
+                        });
+                        return Some(result_slot);
+                    }
+                }
+            }
+        }
+    }
     // Kotlin stdlib top-level functions that route to Java statics:
     // maxOf/minOf (Int) → Math.max/min.
     if let KtExpr::Call(call) = e {
