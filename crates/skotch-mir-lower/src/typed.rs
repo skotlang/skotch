@@ -117,6 +117,38 @@ impl Drop for ClassMethodsScope {
 }
 
 thread_local! {
+    /// File-scoped registry for synthesized lambda classes. A
+    /// `KtExpr::Lambda` arm in lower_rich produces a MirClass (one
+    /// per lambda expression) and pushes it here; `lower_file` drains
+    /// at the end and appends to the module. Also tracks a per-file
+    /// counter so each lambda gets a unique `<wrapper>$<idx>$<n>`
+    /// name (kotlinc shape).
+    static LAMBDA_REGISTRY: std::cell::RefCell<Vec<skotch_mir::MirClass>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+    static LAMBDA_COUNTER: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+}
+
+fn next_lambda_idx() -> u32 {
+    LAMBDA_COUNTER.with(|c| {
+        let n = c.get();
+        c.set(n + 1);
+        n
+    })
+}
+
+fn register_lambda_class(cls: skotch_mir::MirClass) {
+    LAMBDA_REGISTRY.with(|r| r.borrow_mut().push(cls));
+}
+
+fn take_lambda_classes() -> Vec<skotch_mir::MirClass> {
+    LAMBDA_REGISTRY.with(|r| std::mem::take(&mut *r.borrow_mut()))
+}
+
+fn reset_lambda_counter() {
+    LAMBDA_COUNTER.with(|c| c.set(0));
+}
+
+thread_local! {
     /// Function-scoped param-Ty fallback. Set by `lower_simple_body`
     /// (and similar entry points) before recursing into the body
     /// walker; cleared on the way out. Lookup sites that read
@@ -497,6 +529,13 @@ pub fn lower_file(
         wrapper_class: wrapper_class.to_string(),
         ..MirModule::default()
     };
+
+    // Reset the lambda counter at the start of each file so two
+    // separately-compiled files don't clash on `<wrapper>$lambda$0`.
+    reset_lambda_counter();
+    // Also drain any straggling lambda classes from a prior file
+    // that didn't get drained — defensive.
+    let _ = take_lambda_classes();
 
     // Pre-pass: collect top-level fn name → (FuncId, ret Ty). Built
     // before classes/funs are processed so class method bodies can
@@ -1612,6 +1651,17 @@ pub fn lower_file(
             fixup_call_return_locals(m, &class_methods, &fn_returns);
         }
         fixup_call_return_locals(&mut c.constructor, &class_methods, &fn_returns);
+    }
+
+    // Drain accumulated lambda classes from the file-scoped registry
+    // and append to the module. Each KtExpr::Lambda arm in
+    // lower_rich_expr_to_slot pushes one MirClass with `is_lambda:
+    // true`; the JVM backend renders them as Function<arity>
+    // subclasses with a direct invoke method (no LambdaMetafactory
+    // bootstrap — kotlinc emits both shapes; the direct-class shape
+    // is byte-stable per project_lambda_typed_invoke_bridge).
+    for cls in take_lambda_classes() {
+        module.push_class(cls);
     }
 
     module
@@ -14561,6 +14611,229 @@ fn lower_rich_expr_to_slot(
     use skotch_ast::KtExpr;
     use skotch_mir::{LocalId, Stmt as MStmt};
     let e = unwrap_parens(e);
+    // Lambda expression: synthesize a `<wrapper>$lambda$N` MirClass
+    // (Function<arity> subclass with an invoke method holding the
+    // lambda body) and emit `new + <init>` at the allocation site.
+    //
+    // MVP scope: zero captures, single-param (`it`) or explicit
+    // value-param lambdas with expression-body shapes that
+    // method_simple_body_full can lower. References from the body to
+    // names outside the lambda's own params bail the lambda
+    // synthesis — full capture support comes later.
+    if let KtExpr::Lambda(lambda) = &e {
+        let Some(func_lit) = lambda.function_literal() else {
+            return None;
+        };
+        let body_block = func_lit.body()?;
+        // Param names: explicit value_parameter_list OR implicit `it`
+        // if the body uses `it` as a Reference.
+        let explicit_params: Vec<String> = func_lit
+            .value_parameter_list()
+            .map(|pl| {
+                pl.parameters()
+                    .map(|p| p.name().unwrap_or("").to_string())
+                    .collect()
+            })
+            .unwrap_or_default();
+        let param_names: Vec<String> = if explicit_params.is_empty() {
+            // Look for bare `it` in body — if present, implicit it
+            // param.
+            fn body_uses_it(block: skotch_ast::KtBlock<'_>) -> bool {
+                fn check(e: skotch_ast::KtExpr<'_>) -> bool {
+                    use skotch_ast::KtExpr;
+                    let e = unwrap_parens(e);
+                    match e {
+                        KtExpr::Reference(r) => r.name() == Some("it"),
+                        KtExpr::Binary(b) => {
+                            b.lhs().is_some_and(check) || b.rhs().is_some_and(check)
+                        }
+                        KtExpr::Prefix(p) => skotch_ast::children(p.syntax())
+                            .iter()
+                            .filter_map(|c| KtExpr::cast(c))
+                            .any(check),
+                        KtExpr::DotQualified(dq) => skotch_ast::children(dq.syntax())
+                            .iter()
+                            .filter_map(|c| KtExpr::cast(c))
+                            .any(check),
+                        KtExpr::Call(call) => call
+                            .value_argument_list()
+                            .map(|al| {
+                                al.arguments()
+                                    .filter_map(|a| a.expression())
+                                    .any(check)
+                            })
+                            .unwrap_or(false),
+                        _ => false,
+                    }
+                }
+                block.statements().any(check)
+            }
+            if body_uses_it(body_block) {
+                vec!["it".to_string()]
+            } else {
+                Vec::new()
+            }
+        } else {
+            explicit_params
+        };
+        let arity = param_names.len();
+        // Synthesize invoke method.
+        // Layout: local 0 = this, locals 1..arity+1 = params
+        //         (each Ty::Any since Function.invoke uses Object).
+        let mut next_slot_inv: u32 = (1 + arity) as u32;
+        let mut pre_stmts_inv: Vec<MStmt> = Vec::new();
+        let mut extra_locals_inv: Vec<Ty> = Vec::new();
+        let snap_locals: Vec<(String, LocalId)> = param_names
+            .iter()
+            .enumerate()
+            .map(|(i, n)| (n.clone(), LocalId((1 + i) as u32)))
+            .collect();
+        let snap = snap_locals.clone();
+        let lookup = |n: &str| -> Option<LocalId> {
+            snap.iter().rev().find(|(nm, _)| nm == n).map(|(_, l)| *l)
+        };
+        // The body block: single-statement expression body is the
+        // common case (`{ it % 2 == 0 }`).
+        let body_stmts: Vec<skotch_ast::KtExpr<'_>> =
+            body_block.statements().collect();
+        let result_slot = if body_stmts.len() == 1 {
+            lower_rich_expr_to_slot(
+                body_stmts[0],
+                &lookup,
+                fn_lookup,
+                &mut next_slot_inv,
+                &mut pre_stmts_inv,
+                &mut extra_locals_inv,
+                strings,
+            )?
+        } else {
+            return None;
+        };
+        // Lambda name uses CLASS_METHODS thread-local'd wrapper class
+        // via context; here we just use a generic prefix + counter.
+        // The actual wrapper is stamped in at the backend via the
+        // file's main wrapper class name.
+        let lambda_idx = next_lambda_idx();
+        let lambda_name = format!("Lambda${}", lambda_idx);
+        let func_class = format!("kotlin/jvm/functions/Function{}", arity);
+        // invoke locals: [Class(lambda), Any, Any, ...] + body extras.
+        let mut invoke_locals: Vec<Ty> =
+            Vec::with_capacity(1 + arity + extra_locals_inv.len());
+        invoke_locals.push(Ty::Class(lambda_name.clone()));
+        for _ in 0..arity {
+            invoke_locals.push(Ty::Any);
+        }
+        invoke_locals.extend(extra_locals_inv);
+        let invoke_params: Vec<LocalId> = (0..=arity).map(|i| LocalId(i as u32)).collect();
+        let invoke_method = MirFunction {
+            id: FuncId(0),
+            name: "invoke".to_string(),
+            params: invoke_params,
+            locals: invoke_locals,
+            blocks: vec![BasicBlock {
+                stmts: pre_stmts_inv,
+                terminator: Terminator::ReturnValue(result_slot),
+            }],
+            return_ty: Ty::Any,
+            required_params: arity,
+            param_names: param_names.clone(),
+            param_receiver_types: Vec::new(),
+            param_defaults: Vec::new(),
+            is_abstract: false,
+            vararg_index: None,
+            exception_handlers: Vec::new(),
+            is_suspend: false,
+            is_inline: false,
+            has_type_params: false,
+            suspend_original_return_ty: None,
+            suspend_state_machine: None,
+            annotations: Vec::new(),
+            named_locals: Vec::new(),
+            is_private: false,
+            is_static: false,
+            default_call_masks: Vec::new(),
+            needs_leading_nop: false,
+            local_generic_args: rustc_hash::FxHashMap::default(),
+        };
+        // Empty constructor that chains to Function<N>.<init>().
+        let ctor_this = LocalId(0);
+        let constructor = MirFunction {
+            id: FuncId(0),
+            name: "<init>".to_string(),
+            params: vec![ctor_this],
+            locals: vec![Ty::Class(lambda_name.clone())],
+            blocks: vec![BasicBlock {
+                stmts: vec![MStmt::Assign {
+                    dest: ctor_this,
+                    value: skotch_mir::Rvalue::Call {
+                        kind: skotch_mir::CallKind::Constructor(
+                            "kotlin/jvm/internal/Lambda".to_string(),
+                        ),
+                        args: vec![ctor_this],
+                    },
+                }],
+                terminator: Terminator::Return,
+            }],
+            return_ty: Ty::Unit,
+            required_params: 0,
+            param_names: Vec::new(),
+            param_receiver_types: Vec::new(),
+            param_defaults: Vec::new(),
+            is_abstract: false,
+            vararg_index: None,
+            exception_handlers: Vec::new(),
+            is_suspend: false,
+            is_inline: false,
+            has_type_params: false,
+            suspend_original_return_ty: None,
+            suspend_state_machine: None,
+            annotations: Vec::new(),
+            named_locals: Vec::new(),
+            is_private: false,
+            is_static: false,
+            default_call_masks: Vec::new(),
+            needs_leading_nop: false,
+            local_generic_args: rustc_hash::FxHashMap::default(),
+        };
+        let lambda_class = skotch_mir::MirClass {
+            name: lambda_name.clone(),
+            super_class: Some("kotlin/jvm/internal/Lambda".to_string()),
+            is_open: false,
+            is_abstract: false,
+            is_interface: false,
+            interfaces: vec![func_class.clone()],
+            fields: Vec::new(),
+            methods: vec![invoke_method],
+            constructor,
+            secondary_constructors: Vec::new(),
+            is_suspend_lambda: false,
+            is_lambda: true,
+            is_cross_file_stub: false,
+            annotations: Vec::new(),
+            has_type_params: false,
+            is_object_singleton: false,
+            companion_class_name: None,
+            static_fields: Vec::new(),
+            clinit: None,
+        };
+        register_lambda_class(lambda_class);
+        // Allocation site: emit NewInstance + Constructor.
+        let result = LocalId(*next_slot);
+        *next_slot += 1;
+        extra_locals.push(Ty::Class(lambda_name.clone()));
+        pre_stmts.push(MStmt::Assign {
+            dest: result,
+            value: skotch_mir::Rvalue::NewInstance(lambda_name.clone()),
+        });
+        pre_stmts.push(MStmt::Assign {
+            dest: result,
+            value: skotch_mir::Rvalue::Call {
+                kind: skotch_mir::CallKind::Constructor(lambda_name),
+                args: Vec::new(),
+            },
+        });
+        return Some(result);
+    }
     // Unary prefix at the top of lower_rich. The simpler
     // `lower_inline_expr_to_slot` already has a Prefix arm but it
     // recurses through `lower_inline` for the inner operand —
