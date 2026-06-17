@@ -15800,6 +15800,78 @@ fn lower_rich_expr_to_slot(
                             }
                         }
                     }
+                    // Object-singleton method dispatch:
+                    //   `Calculator.evaluate(3, ...)` →
+                    //     getstatic Calculator.INSTANCE LCalculator;
+                    //     invokevirtual Calculator.evaluate(...)
+                    //
+                    // Fires when the receiver is a capitalized Reference
+                    // with no in-scope local — i.e., looks like a
+                    // class-namespace OR object-singleton qualifier.
+                    // For pure-static-class shapes (`Math.abs(...)`) the
+                    // earlier prim-conv / StaticJava arms already
+                    // intercepted; this fallback covers the user-defined
+                    // object-singleton shape that those didn't.
+                    if let KtExpr::Reference(rcv_ref) = &dq_exprs[0] {
+                        if let Some(rn) = rcv_ref.name() {
+                            let is_class_namespace =
+                                rn.starts_with(char::is_uppercase) && lookup_name(rn).is_none();
+                            if is_class_namespace {
+                                let recv_slot = LocalId(*next_slot);
+                                *next_slot += 1;
+                                extra_locals.push(Ty::Class(rn.to_string()));
+                                pre_stmts.push(MStmt::Assign {
+                                    dest: recv_slot,
+                                    value: skotch_mir::Rvalue::GetStaticField {
+                                        class_name: rn.to_string(),
+                                        field_name: "INSTANCE".to_string(),
+                                        descriptor: format!("L{};", rn),
+                                    },
+                                });
+                                let mut arg_slots: Vec<LocalId> = vec![recv_slot];
+                                let mut all_args_ok = true;
+                                if let Some(arg_list) = call.value_argument_list() {
+                                    for arg in arg_list.arguments() {
+                                        let Some(arg_e) = arg.expression() else {
+                                            all_args_ok = false;
+                                            break;
+                                        };
+                                        let Some(s) = lower_rich_expr_to_slot(
+                                            arg_e,
+                                            lookup_name,
+                                            fn_lookup,
+                                            next_slot,
+                                            pre_stmts,
+                                            extra_locals,
+                                            strings,
+                                        ) else {
+                                            all_args_ok = false;
+                                            break;
+                                        };
+                                        arg_slots.push(s);
+                                    }
+                                }
+                                if all_args_ok {
+                                    let result_slot = LocalId(*next_slot);
+                                    *next_slot += 1;
+                                    let ret_ty = class_method_return_ty(rn, method_n)
+                                        .unwrap_or(Ty::Any);
+                                    extra_locals.push(ret_ty);
+                                    pre_stmts.push(MStmt::Assign {
+                                        dest: result_slot,
+                                        value: skotch_mir::Rvalue::Call {
+                                            kind: skotch_mir::CallKind::Virtual {
+                                                class_name: rn.to_string(),
+                                                method_name: method_n.to_string(),
+                                            },
+                                            args: arg_slots,
+                                        },
+                                    });
+                                    return Some(result_slot);
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
