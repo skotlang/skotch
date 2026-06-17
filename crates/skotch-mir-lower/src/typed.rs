@@ -21407,7 +21407,7 @@ fn collect_class_methods(
                             .type_reference()
                             .and_then(|tr| tr.user_type())
                             .and_then(|u| u.name())
-                            .and_then(skotch_types::ty_from_name)
+                            .map(resolve_user_ty)
                             .unwrap_or(Ty::Any);
                         field_names.push((n.to_string(), ty));
                     }
@@ -21425,7 +21425,7 @@ fn collect_class_methods(
                         .type_reference()
                         .and_then(|tr| tr.user_type())
                         .and_then(|u| u.name())
-                        .and_then(skotch_types::ty_from_name)
+                        .map(resolve_user_ty)
                         .unwrap_or(Ty::Any);
                     field_names.push((n.to_string(), ty));
                 }
