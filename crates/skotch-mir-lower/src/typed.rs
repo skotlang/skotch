@@ -16664,6 +16664,147 @@ fn lower_rich_expr_to_slot(
                         });
                         return Some(result_slot);
                     }
+                    // Kotlin stdlib collection method dispatch:
+                    //   `nums.filter { it > 5 }` →
+                    //     `CollectionsKt.filter(Iterable, Function1)List`
+                    //   `nums.map { it * it }` →
+                    //     `CollectionsKt.map(Iterable, Function1)List`
+                    //   `nums.fold(0) { acc, n -> acc + n }` →
+                    //     `CollectionsKt.fold(Iterable, Object, Function2)Object`
+                    //
+                    // Fires when the receiver is a List / Set / Map /
+                    // Iterable and the method is a known Kotlin
+                    // collection extension.
+                    if let KtExpr::Reference(rcv_ref) = &dq_exprs[0] {
+                        if let Some(rn) = rcv_ref.name() {
+                            if let Some(slot) = lookup_name(rn) {
+                                let recv_ty =
+                                    slot_ty_with_param_fallback(slot.0, extra_locals);
+                                let is_collection = matches!(
+                                    &recv_ty,
+                                    Ty::Class(c) if matches!(
+                                        c.as_str(),
+                                        "java/util/List"
+                                            | "java/util/Set"
+                                            | "java/util/Collection"
+                                            | "java/lang/Iterable"
+                                    )
+                                );
+                                if is_collection {
+                                    // (jvm-class, jvm-method, descriptor, ret_ty)
+                                    let mapped: Option<(&str, &str, &str, Ty)> = match method_n {
+                                        "filter" => Some((
+                                            "kotlin/collections/CollectionsKt",
+                                            "filter",
+                                            "(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Ljava/util/List;",
+                                            Ty::Class("java/util/List".to_string()),
+                                        )),
+                                        "map" => Some((
+                                            "kotlin/collections/CollectionsKt",
+                                            "map",
+                                            "(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Ljava/util/List;",
+                                            Ty::Class("java/util/List".to_string()),
+                                        )),
+                                        "fold" => Some((
+                                            "kotlin/collections/CollectionsKt",
+                                            "fold",
+                                            "(Ljava/lang/Iterable;Ljava/lang/Object;Lkotlin/jvm/functions/Function2;)Ljava/lang/Object;",
+                                            Ty::Any,
+                                        )),
+                                        "forEach" => Some((
+                                            "kotlin/collections/CollectionsKt",
+                                            "forEach",
+                                            "(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)V",
+                                            Ty::Unit,
+                                        )),
+                                        "any" => Some((
+                                            "kotlin/collections/CollectionsKt",
+                                            "any",
+                                            "(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Z",
+                                            Ty::Bool,
+                                        )),
+                                        "all" => Some((
+                                            "kotlin/collections/CollectionsKt",
+                                            "all",
+                                            "(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Z",
+                                            Ty::Bool,
+                                        )),
+                                        "count" => Some((
+                                            "kotlin/collections/CollectionsKt",
+                                            "count",
+                                            "(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)I",
+                                            Ty::Int,
+                                        )),
+                                        _ => None,
+                                    };
+                                    if let Some((cls, method, desc, ret_ty)) = mapped {
+                                        let mut arg_slots: Vec<LocalId> = vec![slot];
+                                        let mut all_ok = true;
+                                        if let Some(arg_list) = call.value_argument_list() {
+                                            for arg in arg_list.arguments() {
+                                                let Some(arg_e) = arg.expression() else {
+                                                    all_ok = false;
+                                                    break;
+                                                };
+                                                let Some(s) = lower_rich_expr_to_slot(
+                                                    arg_e,
+                                                    lookup_name,
+                                                    fn_lookup,
+                                                    next_slot,
+                                                    pre_stmts,
+                                                    extra_locals,
+                                                    strings,
+                                                ) else {
+                                                    all_ok = false;
+                                                    break;
+                                                };
+                                                arg_slots.push(s);
+                                            }
+                                        }
+                                        if all_ok {
+                                            if let Some(la) = call.lambda_argument() {
+                                                if let Some(le) = skotch_ast::children(la.syntax())
+                                                    .iter()
+                                                    .find_map(|c| KtExpr::cast(c))
+                                                {
+                                                    if let Some(s) = lower_rich_expr_to_slot(
+                                                        le,
+                                                        lookup_name,
+                                                        fn_lookup,
+                                                        next_slot,
+                                                        pre_stmts,
+                                                        extra_locals,
+                                                        strings,
+                                                    ) {
+                                                        arg_slots.push(s);
+                                                    } else {
+                                                        all_ok = false;
+                                                    }
+                                                }
+                                            }
+                                            if all_ok {
+                                                let result_slot = LocalId(*next_slot);
+                                                *next_slot += 1;
+                                                extra_locals.push(ret_ty);
+                                                pre_stmts.push(MStmt::Assign {
+                                                    dest: result_slot,
+                                                    value: skotch_mir::Rvalue::Call {
+                                                        kind: skotch_mir::CallKind::StaticJava {
+                                                            class_name: cls.to_string(),
+                                                            method_name: method.to_string(),
+                                                            descriptor: desc.to_string(),
+                                                        },
+                                                        args: arg_slots,
+                                                    },
+                                                });
+                                                return Some(result_slot);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                     // Fallback: receiver is a class instance, method
                     // not in fn_lookup — emit a Virtual call with
                     // best-guess receiver class.
