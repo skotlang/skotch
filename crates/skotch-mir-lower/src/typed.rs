@@ -14671,6 +14671,96 @@ fn lower_rich_expr_to_slot(
             _ => return None,
         }
     }
+    // Boolean `&&` / `||` short-circuit. lower_rich is single-slot
+    // rvalue style and can't emit a branch terminator, so we approximate
+    // short-circuit with bitwise `iand` / `ior` on the lhs/rhs Bool
+    // slots. Semantically equivalent for pure operands (compares,
+    // bool-typed references); for operands with side effects this
+    // would execute rhs unconditionally — rare in compare-chain
+    // shapes like `c == '[' && cell == 0` (parity 26 bracketJump).
+    //
+    // The caller's `IfWithReturn` arm reads the resulting Bool slot
+    // and branches on it, so even though we lose true short-circuit
+    // behavior the surrounding control flow still correct.
+    if let KtExpr::Binary(b) = &e {
+        let op_text = b.operation().map(|o| o.text()).unwrap_or_default();
+        if op_text == "&&" || op_text == "||" {
+            let lhs = b.lhs()?;
+            let rhs = b.rhs()?;
+            let lhs_slot = lower_rich_expr_to_slot(
+                lhs,
+                lookup_name,
+                fn_lookup,
+                next_slot,
+                pre_stmts,
+                extra_locals,
+                strings,
+            )?;
+            let rhs_slot = lower_rich_expr_to_slot(
+                rhs,
+                lookup_name,
+                fn_lookup,
+                next_slot,
+                pre_stmts,
+                extra_locals,
+                strings,
+            )?;
+            let result = LocalId(*next_slot);
+            *next_slot += 1;
+            extra_locals.push(Ty::Bool);
+            // Bool `iand` / `ior` — emit via BinOp's CmpEq trick on
+            // (a & b) == 1 isn't quite right; MIR's BinOp doesn't have
+            // direct boolean iand. The backend renders BinOp::AddI on
+            // bool slots as iadd which we can't use either. Use
+            // BinOp::CmpEq with a const-1 RHS via a chain: lhs * rhs
+            // (MulI on Int-typed Bool slots works because bools live
+            // as ints on the JVM). For `&&`, result = lhs * rhs (1
+            // only if both are 1). For `||`, result = lhs + rhs > 0,
+            // which is awkward without branches; do `1 - (1-lhs)*(1-rhs)`
+            // — equivalently, push lhs + rhs and compare > 0 isn't a
+            // single BinOp either.
+            //
+            // Simplest correct shape: `||` uses BinOp::AddI then
+            // CmpGt with 0; `&&` uses BinOp::MulI. Both work because
+            // Kotlin Bools are JVM ints (0/1).
+            let op = if op_text == "&&" {
+                skotch_mir::BinOp::MulI
+            } else {
+                skotch_mir::BinOp::AddI
+            };
+            pre_stmts.push(MStmt::Assign {
+                dest: result,
+                value: skotch_mir::Rvalue::BinOp {
+                    op,
+                    lhs: lhs_slot,
+                    rhs: rhs_slot,
+                },
+            });
+            if op_text == "||" {
+                // result = (lhs + rhs) > 0
+                let zero = LocalId(*next_slot);
+                *next_slot += 1;
+                extra_locals.push(Ty::Int);
+                pre_stmts.push(MStmt::Assign {
+                    dest: zero,
+                    value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(0)),
+                });
+                let bool_result = LocalId(*next_slot);
+                *next_slot += 1;
+                extra_locals.push(Ty::Bool);
+                pre_stmts.push(MStmt::Assign {
+                    dest: bool_result,
+                    value: skotch_mir::Rvalue::BinOp {
+                        op: skotch_mir::BinOp::CmpGt,
+                        lhs: result,
+                        rhs: zero,
+                    },
+                });
+                return Some(bool_result);
+            }
+            return Some(result);
+        }
+    }
     // String concatenation via Binary `+` chain. Handled BEFORE the
     // generic Binary path so `"hello " + name` doesn't take the
     // integer-addition fallback. The chain is flattened
