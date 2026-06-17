@@ -35,10 +35,12 @@ source "$SHARED_DIR/common.sh"
 classify_one() {
     local dir="$1"
     local kc_out kc_rc sk_out sk_rc sk_err
+    # Per-test timeout to skip known infinite-compile tests (24-mandelbrot).
+    local tout="${MATRIX_TIMEOUT:-30}"
     set +e
-    SKOTCH_DEBUG_BAILS=1 run_with_kotlinc "$dir" >/tmp/_kc.out 2>/tmp/_kc.err
+    SKOTCH_DEBUG_BAILS=1 timeout "$tout" bash -c "source '$SHARED_DIR/common.sh'; run_with_kotlinc '$dir'" >/tmp/_kc.out 2>/tmp/_kc.err
     kc_rc=$?
-    SKOTCH_DEBUG_BAILS=1 run_with_skotch  "$dir" >/tmp/_sk.out 2>/tmp/_sk.err
+    SKOTCH_DEBUG_BAILS=1 timeout "$tout" bash -c "source '$SHARED_DIR/common.sh'; run_with_skotch  '$dir'" >/tmp/_sk.out 2>/tmp/_sk.err
     sk_rc=$?
     set -e
 
