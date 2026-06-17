@@ -984,6 +984,51 @@ pub fn lower_file(
             };
             let (super_class, interfaces) = collect_class_super_iface(o.super_type_list());
             let methods = collect_object_methods(o, &mut module.strings);
+            // Object singletons need a real `<init>` body that chains
+            // to `Object.<init>` — the JVM verifier rejects a `<init>`
+            // that returns without invoking a super constructor.
+            // Without this, the singleton's `Class.forName` load at
+            // first reference (e.g. via `getstatic Foo.INSTANCE`) fails.
+            let ctor_super_class = super_class
+                .clone()
+                .unwrap_or_else(|| "java/lang/Object".to_string());
+            let this_slot_ctor = skotch_mir::LocalId(0);
+            let constructor = MirFunction {
+                id: FuncId(0),
+                name: "<init>".to_string(),
+                params: vec![this_slot_ctor],
+                locals: vec![Ty::Class(name.clone())],
+                blocks: vec![BasicBlock {
+                    stmts: vec![skotch_mir::Stmt::Assign {
+                        dest: this_slot_ctor,
+                        value: skotch_mir::Rvalue::Call {
+                            kind: skotch_mir::CallKind::Constructor(ctor_super_class),
+                            args: vec![this_slot_ctor],
+                        },
+                    }],
+                    terminator: Terminator::Return,
+                }],
+                return_ty: Ty::Unit,
+                required_params: 0,
+                param_names: Vec::new(),
+                param_receiver_types: Vec::new(),
+                param_defaults: Vec::new(),
+                is_abstract: false,
+                vararg_index: None,
+                exception_handlers: Vec::new(),
+                is_suspend: false,
+                is_inline: false,
+                has_type_params: false,
+                suspend_original_return_ty: None,
+                suspend_state_machine: None,
+                annotations: Vec::new(),
+                named_locals: Vec::new(),
+                is_private: false,
+                is_static: false,
+                default_call_masks: Vec::new(),
+                needs_leading_nop: false,
+                local_generic_args: rustc_hash::FxHashMap::default(),
+            };
             let mir_class = skotch_mir::MirClass {
                 name: name.clone(),
                 super_class,
@@ -993,7 +1038,7 @@ pub fn lower_file(
                 interfaces,
                 fields: Vec::new(),
                 methods,
-                constructor: empty_constructor(&name),
+                constructor,
                 secondary_constructors: Vec::new(),
                 is_suspend_lambda: false,
                 is_lambda: false,
