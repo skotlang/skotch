@@ -14534,6 +14534,116 @@ fn lower_rich_expr_to_slot(
     use skotch_ast::KtExpr;
     use skotch_mir::{LocalId, Stmt as MStmt};
     let e = unwrap_parens(e);
+    // Unary prefix at the top of lower_rich. The simpler
+    // `lower_inline_expr_to_slot` already has a Prefix arm but it
+    // recurses through `lower_inline` for the inner operand —
+    // `lower_inline` doesn't handle DotQualified / Call, so
+    // `-x.eval()`-shaped class-method bodies bailed. Reproducing the
+    // same `0 - x` / `!x → x ^ 1` shape here lets the recursive
+    // `lower_rich` call back into itself for the inner expr.
+    if let KtExpr::Prefix(p) = &e {
+        let op_text = skotch_ast::children(p.syntax())
+            .iter()
+            .find_map(|c| {
+                if c.kind == skotch_syntax::SyntaxKind::OPERATION_REFERENCE {
+                    skotch_ast::KtOperationReference::cast(c).map(|o| o.text())
+                } else {
+                    None
+                }
+            })
+            .unwrap_or_default();
+        let inner = skotch_ast::children(p.syntax())
+            .iter()
+            .find_map(KtExpr::cast)
+            .map(unwrap_parens)?;
+        let inner_slot = lower_rich_expr_to_slot(
+            inner,
+            lookup_name,
+            fn_lookup,
+            next_slot,
+            pre_stmts,
+            extra_locals,
+            strings,
+        )?;
+        match op_text.as_str() {
+            "-" => {
+                let inner_ty =
+                    slot_ty_with_param_fallback(inner_slot.0, extra_locals);
+                let (zero_const, zero_ty, sub_op, ret_ty) = match inner_ty {
+                    Ty::Long => (
+                        skotch_mir::MirConst::Long(0),
+                        Ty::Long,
+                        skotch_mir::BinOp::SubL,
+                        Ty::Long,
+                    ),
+                    Ty::Double => (
+                        skotch_mir::MirConst::Double(0.0),
+                        Ty::Double,
+                        skotch_mir::BinOp::SubD,
+                        Ty::Double,
+                    ),
+                    Ty::Float => (
+                        skotch_mir::MirConst::Float(0.0),
+                        Ty::Float,
+                        skotch_mir::BinOp::SubF,
+                        Ty::Float,
+                    ),
+                    _ => (
+                        skotch_mir::MirConst::Int(0),
+                        Ty::Int,
+                        skotch_mir::BinOp::SubI,
+                        Ty::Int,
+                    ),
+                };
+                let zero_slot = LocalId(*next_slot);
+                *next_slot += 1;
+                extra_locals.push(zero_ty);
+                pre_stmts.push(MStmt::Assign {
+                    dest: zero_slot,
+                    value: skotch_mir::Rvalue::Const(zero_const),
+                });
+                let result = LocalId(*next_slot);
+                *next_slot += 1;
+                extra_locals.push(ret_ty);
+                pre_stmts.push(MStmt::Assign {
+                    dest: result,
+                    value: skotch_mir::Rvalue::BinOp {
+                        op: sub_op,
+                        lhs: zero_slot,
+                        rhs: inner_slot,
+                    },
+                });
+                return Some(result);
+            }
+            "+" => {
+                // unary `+` is identity.
+                return Some(inner_slot);
+            }
+            "!" => {
+                // boolean negation: `b ^ true` via XOR with 1.
+                let one_slot = LocalId(*next_slot);
+                *next_slot += 1;
+                extra_locals.push(Ty::Bool);
+                pre_stmts.push(MStmt::Assign {
+                    dest: one_slot,
+                    value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Bool(true)),
+                });
+                let result = LocalId(*next_slot);
+                *next_slot += 1;
+                extra_locals.push(Ty::Bool);
+                pre_stmts.push(MStmt::Assign {
+                    dest: result,
+                    value: skotch_mir::Rvalue::BinOp {
+                        op: skotch_mir::BinOp::CmpNe,
+                        lhs: inner_slot,
+                        rhs: one_slot,
+                    },
+                });
+                return Some(result);
+            }
+            _ => return None,
+        }
+    }
     // String concatenation via Binary `+` chain. Handled BEFORE the
     // generic Binary path so `"hello " + name` doesn't take the
     // integer-addition fallback. The chain is flattened
@@ -19760,6 +19870,143 @@ fn method_simple_body_full(
                     ok = false;
                     break;
                 }
+                S::LONG_STRING_TEMPLATE_ENTRY => {
+                    // `${expr}` — lower the inner expression through
+                    // lower_rich_expr_to_slot. Preload implicit-this
+                    // field references via snap_locals so
+                    // `${l.show()}` and `${this.x}` resolve.
+                    had_interp = true;
+                    let inner_expr = skotch_ast::children(child)
+                        .iter()
+                        .find_map(|cc| skotch_ast::KtExpr::cast(cc))
+                        .map(unwrap_parens);
+                    let Some(inner) = inner_expr else {
+                        ok = false;
+                        break;
+                    };
+                    // Build snap_locals with params + bare-Reference
+                    // field preloads, same shape as the Binary-resolve
+                    // closure.
+                    let mut snap_locals: Vec<(String, skotch_mir::LocalId)> = param_names
+                        .iter()
+                        .enumerate()
+                        .map(|(i, n)| (n.clone(), skotch_mir::LocalId((1 + i) as u32)))
+                        .collect();
+                    if let Some(cname) = class_name {
+                        fn collect_refs<'a>(
+                            e: skotch_ast::KtExpr<'a>,
+                            out: &mut Vec<String>,
+                        ) {
+                            use skotch_ast::KtExpr;
+                            let e = unwrap_parens(e);
+                            match e {
+                                KtExpr::Reference(r) => {
+                                    if let Some(n) = r.name() {
+                                        out.push(n.to_string());
+                                    }
+                                }
+                                KtExpr::Binary(b) => {
+                                    if let Some(l) = b.lhs() {
+                                        collect_refs(l, out);
+                                    }
+                                    if let Some(r) = b.rhs() {
+                                        collect_refs(r, out);
+                                    }
+                                }
+                                KtExpr::DotQualified(dq) => {
+                                    for child in skotch_ast::children(dq.syntax()) {
+                                        if let Some(ce) = KtExpr::cast(child) {
+                                            collect_refs(ce, out);
+                                        }
+                                    }
+                                }
+                                KtExpr::Call(call) => {
+                                    if let Some(arg_list) = call.value_argument_list() {
+                                        for arg in arg_list.arguments() {
+                                            if let Some(ae) = arg.expression() {
+                                                collect_refs(ae, out);
+                                            }
+                                        }
+                                    }
+                                }
+                                _ => {}
+                            }
+                        }
+                        let mut refs: Vec<String> = Vec::new();
+                        collect_refs(inner, &mut refs);
+                        for n in refs {
+                            if snap_locals.iter().any(|(nm, _)| nm == &n) {
+                                continue;
+                            }
+                            if let Some((fname, fty)) =
+                                field_names.iter().find(|(nm, _)| nm == &n)
+                            {
+                                let slot = skotch_mir::LocalId(next_slot);
+                                next_slot += 1;
+                                extra_locals.push(fty.clone());
+                                pre_stmts.push(skotch_mir::Stmt::Assign {
+                                    dest: slot,
+                                    value: skotch_mir::Rvalue::GetField {
+                                        receiver: skotch_mir::LocalId(0),
+                                        class_name: cname.to_string(),
+                                        field_name: fname.clone(),
+                                    },
+                                });
+                                snap_locals.push((n.clone(), slot));
+                            }
+                        }
+                    }
+                    let snap = snap_locals.clone();
+                    let lookup = |n: &str| -> Option<skotch_mir::LocalId> {
+                        snap.iter()
+                            .rev()
+                            .find(|(nm, _)| nm == n)
+                            .map(|(_, l)| *l)
+                    };
+                    let empty_fn_lookup:
+                        rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)> =
+                        rustc_hash::FxHashMap::default();
+                    let Some(slot) = lower_rich_expr_to_slot(
+                        inner,
+                        &lookup,
+                        &empty_fn_lookup,
+                        &mut next_slot,
+                        &mut pre_stmts,
+                        &mut extra_locals,
+                        strings,
+                    ) else {
+                        ok = false;
+                        break;
+                    };
+                    let ty = slot_ty_with_param_fallback(slot.0, &extra_locals);
+                    arg_descs.push(ty_to_descriptor(&ty));
+                    arg_slots.push(slot);
+                    recipe.push('\x01');
+                }
+                S::ESCAPE_STRING_TEMPLATE_ENTRY => {
+                    for cc in skotch_ast::children(child) {
+                        if let skotch_sil::SilData::Token { text } = &cc.data {
+                            let raw = text.as_str();
+                            if let Some(stripped) = raw.strip_prefix('\\') {
+                                match stripped.chars().next() {
+                                    Some('n') => recipe.push('\n'),
+                                    Some('t') => recipe.push('\t'),
+                                    Some('r') => recipe.push('\r'),
+                                    Some('\\') => recipe.push('\\'),
+                                    Some('"') => recipe.push('"'),
+                                    Some('\'') => recipe.push('\''),
+                                    Some('$') => recipe.push('$'),
+                                    Some('b') => recipe.push('\u{0008}'),
+                                    Some('0') => recipe.push('\0'),
+                                    Some(other) => recipe.push(other),
+                                    None => {}
+                                }
+                            } else {
+                                recipe.push_str(raw);
+                            }
+                        }
+                    }
+                }
                 S::STRING_START | S::STRING_END | S::WHITE_SPACE => {}
                 _ => {
                     ok = false;
@@ -21140,23 +21387,131 @@ fn method_simple_body_full(
         }
     }
 
-    let Some((c, ty)) = literal_to_const(&body_expr, strings) else {
+    if let Some((c, ty)) = literal_to_const(&body_expr, strings) {
+        // Slot layout for class methods:
+        //   local 0: `this`
+        //   locals 1..N+1: user params
+        //   local N+2: result
+        let result_slot = skotch_mir::LocalId((1 + param_count) as u32);
+        let blocks = vec![BasicBlock {
+            stmts: vec![skotch_mir::Stmt::Assign {
+                dest: result_slot,
+                value: skotch_mir::Rvalue::Const(c),
+            }],
+            terminator: Terminator::ReturnValue(result_slot),
+        }];
+        return (blocks, vec![ty]);
+    }
+
+    // Generic fallback: route the body through lower_rich_expr_to_slot.
+    // Catches shapes the specialized arms above don't recognize —
+    // KtExpr::Prefix (`-x.eval()`), nested Call (`foo(bar())`),
+    // DotQualified at the top of the body (`this.x.show()`), etc.
+    //
+    // Builds a snap_locals lookup that maps:
+    //   - each user param to slot 1+idx (`this` at 0)
+    //   - each bare-Reference field encountered in `body_expr` to a
+    //     freshly-allocated GetField slot
+    //
+    // The recipe mirrors the Binary-resolve fallback added earlier
+    // for two-operand bodies; this fires for one-operand / DotQ /
+    // Prefix bodies that don't match the Binary arm.
+    let mut next_slot = (1 + param_count) as u32;
+    let mut pre_stmts: Vec<skotch_mir::Stmt> = Vec::new();
+    let mut extra_locals: Vec<Ty> = Vec::new();
+    let mut snap_locals: Vec<(String, skotch_mir::LocalId)> = param_names
+        .iter()
+        .enumerate()
+        .map(|(i, n)| (n.clone(), skotch_mir::LocalId((1 + i) as u32)))
+        .collect();
+    if let Some(cname) = class_name {
+        fn collect_refs<'a>(e: skotch_ast::KtExpr<'a>, out: &mut Vec<String>) {
+            use skotch_ast::KtExpr;
+            let e = unwrap_parens(e);
+            match e {
+                KtExpr::Reference(r) => {
+                    if let Some(n) = r.name() {
+                        out.push(n.to_string());
+                    }
+                }
+                KtExpr::Binary(b) => {
+                    if let Some(l) = b.lhs() {
+                        collect_refs(l, out);
+                    }
+                    if let Some(r) = b.rhs() {
+                        collect_refs(r, out);
+                    }
+                }
+                KtExpr::Prefix(p) => {
+                    for child in skotch_ast::children(p.syntax()) {
+                        if let Some(ce) = KtExpr::cast(child) {
+                            collect_refs(ce, out);
+                        }
+                    }
+                }
+                KtExpr::DotQualified(dq) => {
+                    for child in skotch_ast::children(dq.syntax()) {
+                        if let Some(ce) = KtExpr::cast(child) {
+                            collect_refs(ce, out);
+                        }
+                    }
+                }
+                KtExpr::Call(call) => {
+                    if let Some(arg_list) = call.value_argument_list() {
+                        for arg in arg_list.arguments() {
+                            if let Some(ae) = arg.expression() {
+                                collect_refs(ae, out);
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        let mut refs: Vec<String> = Vec::new();
+        collect_refs(body_expr, &mut refs);
+        for n in refs {
+            if snap_locals.iter().any(|(nm, _)| nm == &n) {
+                continue;
+            }
+            if let Some((fname, fty)) = field_names.iter().find(|(nm, _)| nm == &n) {
+                let slot = skotch_mir::LocalId(next_slot);
+                next_slot += 1;
+                extra_locals.push(fty.clone());
+                pre_stmts.push(skotch_mir::Stmt::Assign {
+                    dest: slot,
+                    value: skotch_mir::Rvalue::GetField {
+                        receiver: skotch_mir::LocalId(0),
+                        class_name: cname.to_string(),
+                        field_name: fname.clone(),
+                    },
+                });
+                snap_locals.push((n.clone(), slot));
+            }
+        }
+    }
+    let snap = snap_locals.clone();
+    let lookup = |n: &str| -> Option<skotch_mir::LocalId> {
+        snap.iter().rev().find(|(nm, _)| nm == n).map(|(_, l)| *l)
+    };
+    let empty_fn_lookup: rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)> =
+        rustc_hash::FxHashMap::default();
+    let Some(result_slot) = lower_rich_expr_to_slot(
+        body_expr,
+        &lookup,
+        &empty_fn_lookup,
+        &mut next_slot,
+        &mut pre_stmts,
+        &mut extra_locals,
+        strings,
+    ) else {
         return make_placeholder();
     };
-
-    // Slot layout for class methods:
-    //   local 0: `this`
-    //   locals 1..N+1: user params
-    //   local N+2: result
-    let result_slot = skotch_mir::LocalId((1 + param_count) as u32);
     let blocks = vec![BasicBlock {
-        stmts: vec![skotch_mir::Stmt::Assign {
-            dest: result_slot,
-            value: skotch_mir::Rvalue::Const(c),
-        }],
+        stmts: pre_stmts,
         terminator: Terminator::ReturnValue(result_slot),
     }];
-    (blocks, vec![ty])
+    (blocks, extra_locals)
 }
 
 /// Build a MirFunction from a typed KtFun. `is_abstract_default`
