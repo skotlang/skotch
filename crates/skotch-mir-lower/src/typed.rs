@@ -8327,6 +8327,63 @@ fn try_lower_multi_stmt_block_with_offset(
     let mut explicit_return_slot: Option<LocalId> = None;
     let block_children: Vec<&skotch_sil::SilNode> =
         skotch_ast::children(block.syntax()).iter().collect();
+
+    // Bail to the builder path when ANY top-level if-stmt has an arm
+    // that contains a Throw/Try — the legacy linear walker uses
+    // `lower_loop_body` for if-arm bodies, which silently drops Throw
+    // (lacks terminator emission). The builder path's
+    // `lower_loop_body_blocks` recognizes Special::ThrowStmt / TryStmt
+    // and emits the right terminator.
+    fn arm_kids_have_throw_or_try(kids: &[&skotch_sil::SilNode]) -> bool {
+        kids.iter().any(|c| {
+            if let Some(e) = skotch_ast::KtExpr::cast(c) {
+                matches!(e, skotch_ast::KtExpr::Throw(_) | skotch_ast::KtExpr::Try(_))
+            } else {
+                false
+            }
+        })
+    }
+    let body_has_throw_or_try_arm = block_children.iter().any(|c| {
+        let Some(e) = skotch_ast::KtExpr::cast(c) else {
+            return false;
+        };
+        match e {
+            skotch_ast::KtExpr::If(if_e) => {
+                let mut cur = if_e;
+                loop {
+                    let then_expr = cur.then_branch().and_then(|t| t.expression());
+                    let then_kids: Vec<&skotch_sil::SilNode> = match then_expr {
+                        Some(skotch_ast::KtExpr::Block(bl)) => {
+                            skotch_ast::children(bl.syntax()).iter().collect()
+                        }
+                        Some(other) => vec![other.syntax()],
+                        None => vec![],
+                    };
+                    if arm_kids_have_throw_or_try(&then_kids) {
+                        return true;
+                    }
+                    match cur.else_branch().and_then(|t| t.expression()) {
+                        Some(skotch_ast::KtExpr::If(inner)) => cur = inner,
+                        Some(skotch_ast::KtExpr::Block(bl)) => {
+                            let else_kids: Vec<&skotch_sil::SilNode> =
+                                skotch_ast::children(bl.syntax()).iter().collect();
+                            return arm_kids_have_throw_or_try(&else_kids);
+                        }
+                        Some(other) => {
+                            return arm_kids_have_throw_or_try(&[other.syntax()]);
+                        }
+                        None => return false,
+                    }
+                }
+            }
+            skotch_ast::KtExpr::Try(_) | skotch_ast::KtExpr::Throw(_) => true,
+            _ => false,
+        }
+    });
+    if body_has_throw_or_try_arm {
+        return None;
+    }
+
     let mut child_idx: usize = 0;
     while child_idx < block_children.len() {
         let c = block_children[child_idx];
