@@ -16735,6 +16735,60 @@ fn lower_rich_expr_to_slot(
                                             "(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)I",
                                             Ty::Int,
                                         )),
+                                        "zip" => Some((
+                                            "kotlin/collections/CollectionsKt",
+                                            "zip",
+                                            "(Ljava/lang/Iterable;Ljava/lang/Iterable;)Ljava/util/List;",
+                                            Ty::Class("java/util/List".to_string()),
+                                        )),
+                                        "take" => Some((
+                                            "kotlin/collections/CollectionsKt",
+                                            "take",
+                                            "(Ljava/lang/Iterable;I)Ljava/util/List;",
+                                            Ty::Class("java/util/List".to_string()),
+                                        )),
+                                        "drop" => Some((
+                                            "kotlin/collections/CollectionsKt",
+                                            "drop",
+                                            "(Ljava/lang/Iterable;I)Ljava/util/List;",
+                                            Ty::Class("java/util/List".to_string()),
+                                        )),
+                                        "groupBy" => Some((
+                                            "kotlin/collections/CollectionsKt",
+                                            "groupBy",
+                                            "(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Ljava/util/Map;",
+                                            Ty::Class("java/util/Map".to_string()),
+                                        )),
+                                        "sum" => Some((
+                                            "kotlin/collections/CollectionsKt",
+                                            "sumOfInt",
+                                            "(Ljava/lang/Iterable;)I",
+                                            Ty::Int,
+                                        )),
+                                        "max" => Some((
+                                            "kotlin/collections/CollectionsKt",
+                                            "max",
+                                            "(Ljava/lang/Iterable;)Ljava/lang/Comparable;",
+                                            Ty::Any,
+                                        )),
+                                        "min" => Some((
+                                            "kotlin/collections/CollectionsKt",
+                                            "min",
+                                            "(Ljava/lang/Iterable;)Ljava/lang/Comparable;",
+                                            Ty::Any,
+                                        )),
+                                        "average" => Some((
+                                            "kotlin/collections/CollectionsKt",
+                                            "averageOfInt",
+                                            "(Ljava/lang/Iterable;)D",
+                                            Ty::Double,
+                                        )),
+                                        "size" => Some((
+                                            "kotlin/collections/CollectionsKt",
+                                            "getSize",
+                                            "()I",
+                                            Ty::Int,
+                                        )),
                                         _ => None,
                                     };
                                     if let Some((cls, method, desc, ret_ty)) = mapped {
