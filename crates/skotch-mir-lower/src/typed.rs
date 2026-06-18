@@ -15667,6 +15667,59 @@ fn lower_rich_expr_to_slot(
                         });
                         return Some(result_slot);
                     }
+                    // Map indexing: `m[key]` → `Map.get(Object)Object` via
+                    // invokeinterface on java/util/Map. Required for
+                    // Kotlin map sugar (parity 04 `byParity["even"]`).
+                    if matches!(&array_ty, Ty::Class(c) if c == "java/util/Map") {
+                        // Autobox primitive index if needed.
+                        let idx_ty = slot_ty_with_param_fallback(index_slot.0, extra_locals);
+                        let boxed_idx = match &idx_ty {
+                            Ty::Int | Ty::Long | Ty::Float | Ty::Double
+                            | Ty::Bool | Ty::Byte | Ty::Short | Ty::Char => {
+                                let (cls, prim) = match &idx_ty {
+                                    Ty::Int => ("java/lang/Integer", "I"),
+                                    Ty::Long => ("java/lang/Long", "J"),
+                                    Ty::Float => ("java/lang/Float", "F"),
+                                    Ty::Double => ("java/lang/Double", "D"),
+                                    Ty::Bool => ("java/lang/Boolean", "Z"),
+                                    Ty::Byte => ("java/lang/Byte", "B"),
+                                    Ty::Short => ("java/lang/Short", "S"),
+                                    Ty::Char => ("java/lang/Character", "C"),
+                                    _ => unreachable!(),
+                                };
+                                let boxed = LocalId(*next_slot);
+                                *next_slot += 1;
+                                extra_locals.push(Ty::Class(cls.to_string()));
+                                pre_stmts.push(MStmt::Assign {
+                                    dest: boxed,
+                                    value: skotch_mir::Rvalue::Call {
+                                        kind: skotch_mir::CallKind::StaticJava {
+                                            class_name: cls.to_string(),
+                                            method_name: "valueOf".to_string(),
+                                            descriptor: format!("({})L{};", prim, cls),
+                                        },
+                                        args: vec![index_slot],
+                                    },
+                                });
+                                boxed
+                            }
+                            _ => index_slot,
+                        };
+                        let result_slot = LocalId(*next_slot);
+                        *next_slot += 1;
+                        extra_locals.push(Ty::Any);
+                        pre_stmts.push(MStmt::Assign {
+                            dest: result_slot,
+                            value: skotch_mir::Rvalue::Call {
+                                kind: skotch_mir::CallKind::Virtual {
+                                    class_name: "java/util/Map".to_string(),
+                                    method_name: "get".to_string(),
+                                },
+                                args: vec![array_slot, boxed_idx],
+                            },
+                        });
+                        return Some(result_slot);
+                    }
                     let elem_ty = match &array_ty {
                         Ty::IntArray => Ty::Int,
                         Ty::LongArray => Ty::Long,
