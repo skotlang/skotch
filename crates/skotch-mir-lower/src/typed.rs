@@ -149,6 +149,27 @@ fn reset_lambda_counter() {
 }
 
 thread_local! {
+    /// Function-scoped exception handler registry. Special::TryStmt
+    /// arms push entries here as they build try/catch CFGs. The
+    /// function-body assembly layer drains it after `lower_loop_body_blocks`
+    /// returns and attaches the entries to the MirFunction.
+    static EXCEPTION_HANDLERS: std::cell::RefCell<Vec<skotch_mir::ExceptionHandler>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+fn register_exception_handler(h: skotch_mir::ExceptionHandler) {
+    EXCEPTION_HANDLERS.with(|r| r.borrow_mut().push(h));
+}
+
+fn take_exception_handlers() -> Vec<skotch_mir::ExceptionHandler> {
+    EXCEPTION_HANDLERS.with(|r| std::mem::take(&mut *r.borrow_mut()))
+}
+
+fn reset_exception_handlers() {
+    EXCEPTION_HANDLERS.with(|r| r.borrow_mut().clear());
+}
+
+thread_local! {
     /// Function-scoped param-Ty fallback. Set by `lower_simple_body`
     /// (and similar entry points) before recursing into the body
     /// walker; cleared on the way out. Lookup sites that read
@@ -1432,7 +1453,7 @@ pub fn lower_file(
                     &wrapper_class,
                 )
             } else {
-                lower_simple_body(
+                let r = lower_simple_body(
                     f,
                     &mut module.strings,
                     &fn_lookup,
@@ -1441,7 +1462,9 @@ pub fn lower_file(
                     &class_fields,
                     &wrapper_class,
                     &mut exception_handlers,
-                )
+                );
+                exception_handlers.extend(take_exception_handlers());
+                r
             };
 
             // Empty-body diagnostic: when the source provides a body
@@ -4160,6 +4183,9 @@ fn try_lower_if_expression(
                                     ok = false;
                                     break;
                                 };
+                                if std::env::var_os("SKOTCH_DEBUG_BAILS").is_some() {
+                                    eprintln!("[probe template@4153] inner kind={}", kt_expr_kind(&inner));
+                                }
                                 let slot = lower_inline_expr_to_slot(
                                     inner,
                                     &template_lookup,
@@ -5892,6 +5918,7 @@ fn lower_loop_body_blocks(
         NestedForIn,
         WhenStmt,
         ThrowStmt,
+        TryStmt,
     }
     let mut i: usize = 0;
     while i < body_children.len() {
@@ -5930,6 +5957,10 @@ fn lower_loop_body_blocks(
             }
             if matches!(expr, KtExpr::Throw(_)) {
                 special_at = Some((j, Special::ThrowStmt));
+                break;
+            }
+            if matches!(expr, KtExpr::Try(_)) {
+                special_at = Some((j, Special::TryStmt));
                 break;
             }
             if matches!(expr, KtExpr::While(_)) {
@@ -6114,6 +6145,190 @@ fn lower_loop_body_blocks(
                     terminator: Terminator::Throw(slot),
                 });
                 return Some(blocks);
+            }
+            Some((j, Special::TryStmt)) => {
+                // `try { try_body } catch (e: T) { catch_body }` as
+                // a statement. Build a 4-block CFG:
+                //   pre  -> Goto(try_start)
+                //   try  -> Goto(join)        // body lowered flat
+                //   hdlr -> first stmt is the
+                //           catch-param placeholder Assign{e_slot,
+                //           Null}; backend converts it to astore.
+                //           Then catch body, Goto(join).
+                //   join -> accumulates post-try stmts.
+                // Registers an ExceptionHandler with try_start..try_end
+                // = [try_block, try_block+1) and handler = handler_block.
+                //
+                // Falls back to silently skipping the try (i.e. acting
+                // like the linear-stmt walker's unrecognized-stmt skip)
+                // when any sub-lowering fails, so a not-yet-handled
+                // catch-body shape doesn't kill the entire enclosing
+                // function — that matches the pre-feature behavior of
+                // lower_loop_body silently dropping the try-catch.
+                let try_node = body_children[j];
+                let Some(KtExpr::Try(t)) = KtExpr::cast(try_node) else {
+                    i = j + 1;
+                    continue;
+                };
+                let Some(try_block_ast) = t.try_block() else {
+                    i = j + 1;
+                    continue;
+                };
+                let catches: Vec<_> = t.catches().collect();
+                if catches.len() != 1 {
+                    trace_bail!(
+                        "TryStmt: expected exactly 1 catch clause, got {}",
+                        catches.len()
+                    );
+                    i = j + 1;
+                    continue;
+                }
+                let cat = catches[0];
+                let (Some(catch_param), Some(catch_body_ast)) =
+                    (cat.parameter(), cat.body())
+                else {
+                    i = j + 1;
+                    continue;
+                };
+                let Some(catch_param_name) = catch_param.name() else {
+                    i = j + 1;
+                    continue;
+                };
+                let catch_param_name = catch_param_name.to_string();
+                let catch_ty_name = catch_param
+                    .type_reference()
+                    .and_then(|tr| tr.user_type())
+                    .and_then(|u| u.name())
+                    .unwrap_or("Exception")
+                    .to_string();
+                let catch_internal = match catch_ty_name.as_str() {
+                    "Exception" => "java/lang/Exception".to_string(),
+                    "RuntimeException" => "java/lang/RuntimeException".to_string(),
+                    "Throwable" => "java/lang/Throwable".to_string(),
+                    "ArithmeticException" => "java/lang/ArithmeticException".to_string(),
+                    "IllegalArgumentException" => {
+                        "java/lang/IllegalArgumentException".to_string()
+                    }
+                    "IllegalStateException" => {
+                        "java/lang/IllegalStateException".to_string()
+                    }
+                    "IndexOutOfBoundsException" => {
+                        "java/lang/IndexOutOfBoundsException".to_string()
+                    }
+                    "NullPointerException" => {
+                        "java/lang/NullPointerException".to_string()
+                    }
+                    "NumberFormatException" => {
+                        "java/lang/NumberFormatException".to_string()
+                    }
+                    other => format!("java/lang/{}", other),
+                };
+
+                // Snapshot state so we can roll back on inner failure.
+                let snap_next_slot = *next_slot;
+                let snap_local_tys = local_tys.len();
+                let snap_strings = strings.len();
+                let snap_names = name_to_local.len();
+
+                // Pre-lower the try-body and catch-body OFF-LINE
+                // (without modifying `blocks` yet), so we can bail
+                // safely if either fails.
+                let try_children: Vec<&skotch_sil::SilNode> =
+                    skotch_ast::children(try_block_ast.syntax())
+                        .iter()
+                        .collect();
+                let try_stmts_opt = lower_loop_body(
+                    &try_children,
+                    name_to_local,
+                    next_slot,
+                    local_tys,
+                    strings,
+                    fn_lookup_ref,
+                    function_param_names,
+                );
+                let try_stmts = match try_stmts_opt {
+                    Some(v) => v,
+                    None => {
+                        trace_bail!(
+                            "TryStmt: try-body lower_loop_body returned None — skipping try-catch"
+                        );
+                        *next_slot = snap_next_slot;
+                        local_tys.truncate(snap_local_tys);
+                        strings.truncate(snap_strings);
+                        name_to_local.truncate(snap_names);
+                        i = j + 1;
+                        continue;
+                    }
+                };
+
+                let e_slot = LocalId(*next_slot);
+                *next_slot += 1;
+                local_tys.push(Ty::Class(catch_internal.clone()));
+                name_to_local.push((catch_param_name.clone(), e_slot));
+                let catch_children: Vec<&skotch_sil::SilNode> =
+                    skotch_ast::children(catch_body_ast.syntax())
+                        .iter()
+                        .collect();
+                let catch_stmts_opt = lower_loop_body(
+                    &catch_children,
+                    name_to_local,
+                    next_slot,
+                    local_tys,
+                    strings,
+                    fn_lookup_ref,
+                    function_param_names,
+                );
+                let catch_stmts = match catch_stmts_opt {
+                    Some(v) => v,
+                    None => {
+                        trace_bail!(
+                            "TryStmt: catch-body lower_loop_body returned None — skipping try-catch"
+                        );
+                        *next_slot = snap_next_slot;
+                        local_tys.truncate(snap_local_tys);
+                        strings.truncate(snap_strings);
+                        name_to_local.truncate(snap_names);
+                        i = j + 1;
+                        continue;
+                    }
+                };
+                name_to_local.truncate(snap_names);
+
+                // Block IDs (we'll push 3 blocks: pre, try_body, handler;
+                // the join block becomes whatever the next iteration of
+                // the outer while-loop produces).
+                let pre_id = block_offset + blocks.len() as u32;
+                let try_id = pre_id + 1;
+                let handler_id = pre_id + 2;
+                let join_id = pre_id + 3;
+
+                blocks.push(BasicBlock {
+                    stmts: std::mem::take(&mut cur_stmts),
+                    terminator: Terminator::Goto(try_id),
+                });
+                blocks.push(BasicBlock {
+                    stmts: try_stmts,
+                    terminator: Terminator::Goto(join_id),
+                });
+                let mut handler_stmts: Vec<MStmt> = vec![MStmt::Assign {
+                    dest: e_slot,
+                    value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Null),
+                }];
+                handler_stmts.extend(catch_stmts);
+                blocks.push(BasicBlock {
+                    stmts: handler_stmts,
+                    terminator: Terminator::Goto(join_id),
+                });
+
+                register_exception_handler(skotch_mir::ExceptionHandler {
+                    try_start_block: try_id,
+                    try_end_block: try_id + 1,
+                    handler_block: handler_id,
+                    catch_type: Some(catch_internal),
+                });
+
+                i = j + 1;
+                continue;
             }
             Some((
                 j,
@@ -18560,6 +18775,12 @@ fn lower_simple_body(
 ) -> (Vec<BasicBlock>, Vec<Ty>) {
     use skotch_ast::KtExpr;
     use skotch_mir::{LocalId, MirConst};
+
+    // Drain any stale exception-handler entries so a panic / early-
+    // return mid-body in a prior lower call doesn't leak. Whatever
+    // the current function's Special::TryStmt arms register will
+    // accumulate here and we drain at function end.
+    reset_exception_handlers();
 
     let make_placeholder = || {
         (
