@@ -14677,25 +14677,124 @@ fn lower_rich_expr_to_slot(
             explicit_params
         };
         let arity = param_names.len();
+        // Walk the body for free References — names that resolve in
+        // the OUTER scope via `lookup_name` but aren't lambda params.
+        // Each becomes a capture: ctor param + field on the Lambda$N
+        // class, getfield'd at use sites inside the invoke body.
+        fn collect_free_refs(
+            e: skotch_ast::KtExpr<'_>,
+            params: &[String],
+            out: &mut Vec<String>,
+        ) {
+            use skotch_ast::KtExpr;
+            let e = unwrap_parens(e);
+            match e {
+                KtExpr::Reference(r) => {
+                    if let Some(n) = r.name() {
+                        if !params.contains(&n.to_string())
+                            && !out.contains(&n.to_string())
+                        {
+                            out.push(n.to_string());
+                        }
+                    }
+                }
+                KtExpr::Binary(b) => {
+                    if let Some(l) = b.lhs() {
+                        collect_free_refs(l, params, out);
+                    }
+                    if let Some(r) = b.rhs() {
+                        collect_free_refs(r, params, out);
+                    }
+                }
+                KtExpr::Prefix(p) => {
+                    for child in skotch_ast::children(p.syntax()) {
+                        if let Some(ce) = KtExpr::cast(child) {
+                            collect_free_refs(ce, params, out);
+                        }
+                    }
+                }
+                KtExpr::DotQualified(dq) => {
+                    // Only walk the receiver — the method name slot
+                    // (`.foo`) is a member access, not a free ref.
+                    let mut child_exprs: Vec<KtExpr<'_>> = skotch_ast::children(dq.syntax())
+                        .iter()
+                        .filter_map(|c| KtExpr::cast(c))
+                        .collect();
+                    if let Some(recv) = child_exprs.first().cloned() {
+                        collect_free_refs(recv, params, out);
+                    }
+                    // ...but still walk Call arguments inside the rhs.
+                    if let Some(KtExpr::Call(call)) = child_exprs.get(1).cloned() {
+                        if let Some(al) = call.value_argument_list() {
+                            for arg in al.arguments() {
+                                if let Some(ae) = arg.expression() {
+                                    collect_free_refs(ae, params, out);
+                                }
+                            }
+                        }
+                    }
+                }
+                KtExpr::Call(call) => {
+                    if let Some(al) = call.value_argument_list() {
+                        for arg in al.arguments() {
+                            if let Some(ae) = arg.expression() {
+                                collect_free_refs(ae, params, out);
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        let body_stmts: Vec<skotch_ast::KtExpr<'_>> =
+            body_block.statements().collect();
+        let mut free_refs: Vec<String> = Vec::new();
+        for s in &body_stmts {
+            collect_free_refs(*s, &param_names, &mut free_refs);
+        }
+        // Resolve which free refs actually exist as outer locals.
+        let captures: Vec<(String, LocalId)> = free_refs
+            .iter()
+            .filter_map(|n| lookup_name(n).map(|slot| (n.clone(), slot)))
+            .collect();
         // Synthesize invoke method.
-        // Layout: local 0 = this, locals 1..arity+1 = params
-        //         (each Ty::Any since Function.invoke uses Object).
+        // Layout: local 0 = this, locals 1..arity+1 = params,
+        //         then captures pre-loaded via GetField into next slots.
         let mut next_slot_inv: u32 = (1 + arity) as u32;
         let mut pre_stmts_inv: Vec<MStmt> = Vec::new();
         let mut extra_locals_inv: Vec<Ty> = Vec::new();
-        let snap_locals: Vec<(String, LocalId)> = param_names
+        let mut snap_locals: Vec<(String, LocalId)> = param_names
             .iter()
             .enumerate()
             .map(|(i, n)| (n.clone(), LocalId((1 + i) as u32)))
             .collect();
+        // For each capture: emit GetField at entry to invoke body,
+        // bind capture name → field slot in snap_locals.
+        // Capture field name is the source-side capture name (matches
+        // kotlinc's shape for non-clashing free vars). Use placeholder
+        // Lambda name first; we patch fields after counter assignment.
+        let lambda_idx = next_lambda_idx();
+        let lambda_name = format!("Lambda${}", lambda_idx);
+        for (cap_name, _) in &captures {
+            let field_slot = LocalId(next_slot_inv);
+            next_slot_inv += 1;
+            extra_locals_inv.push(Ty::Any);
+            pre_stmts_inv.push(MStmt::Assign {
+                dest: field_slot,
+                value: skotch_mir::Rvalue::GetField {
+                    receiver: LocalId(0),
+                    class_name: lambda_name.clone(),
+                    field_name: cap_name.clone(),
+                },
+            });
+            snap_locals.push((cap_name.clone(), field_slot));
+        }
         let snap = snap_locals.clone();
         let lookup = |n: &str| -> Option<LocalId> {
             snap.iter().rev().find(|(nm, _)| nm == n).map(|(_, l)| *l)
         };
         // The body block: single-statement expression body is the
         // common case (`{ it % 2 == 0 }`).
-        let body_stmts: Vec<skotch_ast::KtExpr<'_>> =
-            body_block.statements().collect();
         let result_slot = if body_stmts.len() == 1 {
             lower_rich_expr_to_slot(
                 body_stmts[0],
@@ -14709,12 +14808,7 @@ fn lower_rich_expr_to_slot(
         } else {
             return None;
         };
-        // Lambda name uses CLASS_METHODS thread-local'd wrapper class
-        // via context; here we just use a generic prefix + counter.
-        // The actual wrapper is stamped in at the backend via the
-        // file's main wrapper class name.
-        let lambda_idx = next_lambda_idx();
-        let lambda_name = format!("Lambda${}", lambda_idx);
+        let _ = lambda_idx;
         let func_class = format!("kotlin/jvm/functions/Function{}", arity);
         // invoke locals: [Class(lambda), Any, Any, ...] + body extras.
         let mut invoke_locals: Vec<Ty> =
@@ -14755,28 +14849,53 @@ fn lower_rich_expr_to_slot(
             needs_leading_nop: false,
             local_generic_args: rustc_hash::FxHashMap::default(),
         };
-        // Empty constructor that chains to Function<N>.<init>().
+        // Constructor: takes captures as params, putfield each, then
+        // chains to Lambda.<init>().
         let ctor_this = LocalId(0);
+        let n_captures = captures.len();
+        let mut ctor_locals: Vec<Ty> = Vec::with_capacity(1 + n_captures);
+        ctor_locals.push(Ty::Class(lambda_name.clone()));
+        for _ in 0..n_captures {
+            ctor_locals.push(Ty::Any);
+        }
+        let ctor_params: Vec<LocalId> =
+            (0..=n_captures).map(|i| LocalId(i as u32)).collect();
+        let mut ctor_stmts: Vec<MStmt> = Vec::new();
+        // Super-ctor call first.
+        ctor_stmts.push(MStmt::Assign {
+            dest: ctor_this,
+            value: skotch_mir::Rvalue::Call {
+                kind: skotch_mir::CallKind::Constructor(
+                    "kotlin/jvm/internal/Lambda".to_string(),
+                ),
+                args: vec![ctor_this],
+            },
+        });
+        // PutField each capture.
+        for (i, (cap_name, _)) in captures.iter().enumerate() {
+            let param_slot = LocalId((1 + i) as u32);
+            ctor_stmts.push(MStmt::Assign {
+                dest: ctor_this,
+                value: skotch_mir::Rvalue::PutField {
+                    receiver: ctor_this,
+                    class_name: lambda_name.clone(),
+                    field_name: cap_name.clone(),
+                    value: param_slot,
+                },
+            });
+        }
         let constructor = MirFunction {
             id: FuncId(0),
             name: "<init>".to_string(),
-            params: vec![ctor_this],
-            locals: vec![Ty::Class(lambda_name.clone())],
+            params: ctor_params,
+            locals: ctor_locals,
             blocks: vec![BasicBlock {
-                stmts: vec![MStmt::Assign {
-                    dest: ctor_this,
-                    value: skotch_mir::Rvalue::Call {
-                        kind: skotch_mir::CallKind::Constructor(
-                            "kotlin/jvm/internal/Lambda".to_string(),
-                        ),
-                        args: vec![ctor_this],
-                    },
-                }],
+                stmts: ctor_stmts,
                 terminator: Terminator::Return,
             }],
             return_ty: Ty::Unit,
-            required_params: 0,
-            param_names: Vec::new(),
+            required_params: n_captures,
+            param_names: captures.iter().map(|(n, _)| n.clone()).collect(),
             param_receiver_types: Vec::new(),
             param_defaults: Vec::new(),
             is_abstract: false,
@@ -14795,6 +14914,14 @@ fn lower_rich_expr_to_slot(
             needs_leading_nop: false,
             local_generic_args: rustc_hash::FxHashMap::default(),
         };
+        let capture_fields: Vec<skotch_mir::MirField> = captures
+            .iter()
+            .map(|(n, _)| skotch_mir::MirField {
+                name: n.clone(),
+                ty: Ty::Any,
+                is_jvm_field: false,
+            })
+            .collect();
         let lambda_class = skotch_mir::MirClass {
             name: lambda_name.clone(),
             super_class: Some("kotlin/jvm/internal/Lambda".to_string()),
@@ -14802,7 +14929,7 @@ fn lower_rich_expr_to_slot(
             is_abstract: false,
             is_interface: false,
             interfaces: vec![func_class.clone()],
-            fields: Vec::new(),
+            fields: capture_fields,
             methods: vec![invoke_method],
             constructor,
             secondary_constructors: Vec::new(),
@@ -14817,7 +14944,7 @@ fn lower_rich_expr_to_slot(
             clinit: None,
         };
         register_lambda_class(lambda_class);
-        // Allocation site: emit NewInstance + Constructor.
+        // Allocation site: emit NewInstance + Constructor with capture slots.
         let result = LocalId(*next_slot);
         *next_slot += 1;
         extra_locals.push(Ty::Class(lambda_name.clone()));
@@ -14825,11 +14952,12 @@ fn lower_rich_expr_to_slot(
             dest: result,
             value: skotch_mir::Rvalue::NewInstance(lambda_name.clone()),
         });
+        let ctor_args: Vec<LocalId> = captures.iter().map(|(_, s)| *s).collect();
         pre_stmts.push(MStmt::Assign {
             dest: result,
             value: skotch_mir::Rvalue::Call {
                 kind: skotch_mir::CallKind::Constructor(lambda_name),
-                args: Vec::new(),
+                args: ctor_args,
             },
         });
         return Some(result);
