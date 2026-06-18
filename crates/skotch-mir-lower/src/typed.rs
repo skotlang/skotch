@@ -15909,6 +15909,78 @@ fn lower_rich_expr_to_slot(
             return Some(result);
         }
     }
+    // Elvis `lhs ?: rhs` — straight-line approximation via
+    // `java/util/Objects.requireNonNullElse(Object, Object): Object`.
+    // Doesn't match kotlinc's IFNONNULL CFG shape byte-for-byte but
+    // produces the same runtime value for parity (the lhs when non-
+    // null, rhs otherwise). Both operands are boxed Object slots so
+    // primitives need to be autoboxed by callers — currently scoped
+    // to reference operands (the common `nullable.message ?: "x"`
+    // shape).
+    if let KtExpr::Binary(b) = &e {
+        if b.operation().map(|o| o.text()).as_deref() == Some("?:") {
+            let lhs = b.lhs()?;
+            let rhs = b.rhs()?;
+            let lhs_slot = lower_rich_expr_to_slot(
+                lhs,
+                lookup_name,
+                fn_lookup,
+                next_slot,
+                pre_stmts,
+                extra_locals,
+                strings,
+            )?;
+            let rhs_slot = lower_rich_expr_to_slot(
+                rhs,
+                lookup_name,
+                fn_lookup,
+                next_slot,
+                pre_stmts,
+                extra_locals,
+                strings,
+            )?;
+            let lhs_ty =
+                slot_ty_with_param_fallback(lhs_slot.0, extra_locals);
+            // Intermediate Object slot from the call.
+            let obj_slot = LocalId(*next_slot);
+            *next_slot += 1;
+            extra_locals.push(Ty::Any);
+            pre_stmts.push(MStmt::Assign {
+                dest: obj_slot,
+                value: skotch_mir::Rvalue::Call {
+                    kind: skotch_mir::CallKind::StaticJava {
+                        class_name: "java/util/Objects".to_string(),
+                        method_name: "requireNonNullElse".to_string(),
+                        descriptor:
+                            "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;"
+                                .to_string(),
+                    },
+                    args: vec![lhs_slot, rhs_slot],
+                },
+            });
+            // CheckCast back to the lhs's specific reference type so
+            // downstream consumers (string concat, virtual calls)
+            // verify against the right type. For Ty::String we cast
+            // to java/lang/String; for other reference types we use
+            // their class name.
+            let (target_class, result_ty) = match &lhs_ty {
+                Ty::String => ("java/lang/String".to_string(), Ty::String),
+                Ty::Class(c) => (c.clone(), Ty::Class(c.clone())),
+                _ => ("java/lang/Object".to_string(), Ty::Any),
+            };
+            let result = LocalId(*next_slot);
+            *next_slot += 1;
+            extra_locals.push(result_ty);
+            pre_stmts.push(MStmt::Assign {
+                dest: result,
+                value: skotch_mir::Rvalue::CheckCast {
+                    obj: obj_slot,
+                    target_class,
+                },
+            });
+            return Some(result);
+        }
+    }
     // String concatenation via Binary `+` chain. Handled BEFORE the
     // generic Binary path so `"hello " + name` doesn't take the
     // integer-addition fallback. The chain is flattened
@@ -16928,6 +17000,43 @@ fn lower_rich_expr_to_slot(
                                     | "kotlin/Triple"
                                     | "kotlin/ranges/IntRange"
                             ) {
+                                // Throwable/Exception family: `.message`
+                                // maps to `getMessage()Ljava/lang/String;`
+                                // — emit with explicit VirtualJava
+                                // descriptor since backend has no
+                                // classinfo for these JDK classes.
+                                let is_throwable_like = matches!(
+                                    cname.as_str(),
+                                    "java/lang/Throwable"
+                                        | "java/lang/Exception"
+                                        | "java/lang/RuntimeException"
+                                        | "java/lang/ArithmeticException"
+                                        | "java/lang/IllegalArgumentException"
+                                        | "java/lang/IllegalStateException"
+                                        | "java/lang/IndexOutOfBoundsException"
+                                        | "java/lang/NullPointerException"
+                                        | "java/lang/NumberFormatException"
+                                );
+                                if is_throwable_like && prop_name == "message" {
+                                    let result_slot = LocalId(*next_slot);
+                                    *next_slot += 1;
+                                    extra_locals.push(Ty::String);
+                                    pre_stmts.push(MStmt::Assign {
+                                        dest: result_slot,
+                                        value: skotch_mir::Rvalue::Call {
+                                            kind: skotch_mir::CallKind::VirtualJava {
+                                                class_name: cname.clone(),
+                                                method_name: "getMessage"
+                                                    .to_string(),
+                                                descriptor:
+                                                    "()Ljava/lang/String;"
+                                                        .to_string(),
+                                            },
+                                            args: vec![recv_slot],
+                                        },
+                                    });
+                                    return Some(result_slot);
+                                }
                                 // Capitalize the first char of the
                                 // property name: `count` → `getCount`.
                                 let mut chars = prop_name.chars();
