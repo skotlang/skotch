@@ -6557,6 +6557,10 @@ fn lower_loop_body_blocks(
                 // hi`) or a Reference range (`val r = (1..20); for (i
                 // in r)`). Reference path calls `IntRange.getFirst()`/
                 // `getLast()` on the slot.
+                // When the for-in is over a List/Iterable, `list_recv` is
+                // set to the receiver slot so the body-preamble can emit
+                // `elem_slot = list.get(i)`; remains None for IntRange.
+                let mut list_recv: Option<LocalId> = None;
                 let (lo_slot, hi_slot, inner_cmp_op, inner_step): (
                     LocalId,
                     LocalId,
@@ -6592,35 +6596,75 @@ fn lower_loop_body_blocks(
                 } else if let KtExpr::Reference(rref) = &range_expr {
                     let rname = rref.name()?;
                     let range_slot = lookup(rname)?;
-                    let lo = LocalId(*next_slot);
-                    *next_slot += 1;
-                    local_tys.push(Ty::Int);
-                    cur_stmts.push(MStmt::Assign {
-                        dest: lo,
-                        value: skotch_mir::Rvalue::Call {
-                            kind: skotch_mir::CallKind::VirtualJava {
-                                class_name: "kotlin/ranges/IntRange".to_string(),
-                                method_name: "getFirst".to_string(),
-                                descriptor: "()I".to_string(),
+                    // Detect List/Iterable receiver. For those, we
+                    // synthesize a `for (i in 0 until list.size())`
+                    // loop and bind the user's loop variable to
+                    // `list.get(i)` (per-iteration element). Falls
+                    // back to IntRange path for other receivers.
+                    let range_ty = slot_ty_with_param_fallback(range_slot.0, local_tys);
+                    let is_list = matches!(
+                        &range_ty,
+                        Ty::Class(c) if matches!(
+                            c.as_str(),
+                            "java/util/List" | "java/util/Collection" | "java/lang/Iterable"
+                        )
+                    );
+                    if is_list {
+                        list_recv = Some(range_slot);
+                        let lo = LocalId(*next_slot);
+                        *next_slot += 1;
+                        local_tys.push(Ty::Int);
+                        cur_stmts.push(MStmt::Assign {
+                            dest: lo,
+                            value: skotch_mir::Rvalue::Const(
+                                skotch_mir::MirConst::Int(0),
+                            ),
+                        });
+                        let hi = LocalId(*next_slot);
+                        *next_slot += 1;
+                        local_tys.push(Ty::Int);
+                        cur_stmts.push(MStmt::Assign {
+                            dest: hi,
+                            value: skotch_mir::Rvalue::Call {
+                                kind: skotch_mir::CallKind::Virtual {
+                                    class_name: "java/util/List".to_string(),
+                                    method_name: "size".to_string(),
+                                },
+                                args: vec![range_slot],
                             },
-                            args: vec![range_slot],
-                        },
-                    });
-                    let hi = LocalId(*next_slot);
-                    *next_slot += 1;
-                    local_tys.push(Ty::Int);
-                    cur_stmts.push(MStmt::Assign {
-                        dest: hi,
-                        value: skotch_mir::Rvalue::Call {
-                            kind: skotch_mir::CallKind::VirtualJava {
-                                class_name: "kotlin/ranges/IntRange".to_string(),
-                                method_name: "getLast".to_string(),
-                                descriptor: "()I".to_string(),
+                        });
+                        (lo, hi, skotch_mir::BinOp::CmpLt, 1)
+                    } else {
+                        let lo = LocalId(*next_slot);
+                        *next_slot += 1;
+                        local_tys.push(Ty::Int);
+                        cur_stmts.push(MStmt::Assign {
+                            dest: lo,
+                            value: skotch_mir::Rvalue::Call {
+                                kind: skotch_mir::CallKind::VirtualJava {
+                                    class_name: "kotlin/ranges/IntRange".to_string(),
+                                    method_name: "getFirst".to_string(),
+                                    descriptor: "()I".to_string(),
+                                },
+                                args: vec![range_slot],
                             },
-                            args: vec![range_slot],
-                        },
-                    });
-                    (lo, hi, skotch_mir::BinOp::CmpLe, 1)
+                        });
+                        let hi = LocalId(*next_slot);
+                        *next_slot += 1;
+                        local_tys.push(Ty::Int);
+                        cur_stmts.push(MStmt::Assign {
+                            dest: hi,
+                            value: skotch_mir::Rvalue::Call {
+                                kind: skotch_mir::CallKind::VirtualJava {
+                                    class_name: "kotlin/ranges/IntRange".to_string(),
+                                    method_name: "getLast".to_string(),
+                                    descriptor: "()I".to_string(),
+                                },
+                                args: vec![range_slot],
+                            },
+                        });
+                        (lo, hi, skotch_mir::BinOp::CmpLe, 1)
+                    }
                 } else {
                     return None;
                 };
@@ -6631,7 +6675,23 @@ fn lower_loop_body_blocks(
                     dest: i_slot,
                     value: skotch_mir::Rvalue::Local(lo_slot),
                 });
-                name_to_local.push((loop_var_name.to_string(), i_slot));
+                // For List receivers: allocate elem_slot (Object) here
+                // so the body can resolve loop_var → elem_slot. The
+                // elem-load block is emitted between cond and body and
+                // sets `elem_slot = list.get(i)`.
+                let elem_slot_opt: Option<LocalId> = if list_recv.is_some() {
+                    let s = LocalId(*next_slot);
+                    *next_slot += 1;
+                    local_tys.push(Ty::Any);
+                    Some(s)
+                } else {
+                    None
+                };
+                if let Some(es) = elem_slot_opt {
+                    name_to_local.push((loop_var_name.to_string(), es));
+                } else {
+                    name_to_local.push((loop_var_name.to_string(), i_slot));
+                }
                 let inner_cond_id = block_offset + blocks.len() as u32 + 1;
                 blocks.push(BasicBlock {
                     stmts: std::mem::take(&mut cur_stmts),
@@ -6671,6 +6731,25 @@ fn lower_loop_body_blocks(
                     SENT_BACK,
                     SENT_BREAK,
                 )?;
+                // For List for-in: prepend `elem_slot = list.get(i)` to
+                // the first body block so the loop variable is bound
+                // to the per-iteration element before user stmts run.
+                if let (Some(recv), Some(elem)) = (list_recv, elem_slot_opt) {
+                    if let Some(first_body) = inner_body_blocks.first_mut() {
+                        let mut prepend: Vec<MStmt> = vec![MStmt::Assign {
+                            dest: elem,
+                            value: skotch_mir::Rvalue::Call {
+                                kind: skotch_mir::CallKind::Virtual {
+                                    class_name: "java/util/List".to_string(),
+                                    method_name: "get".to_string(),
+                                },
+                                args: vec![recv, i_slot],
+                            },
+                        }];
+                        prepend.append(&mut first_body.stmts);
+                        first_body.stmts = prepend;
+                    }
+                }
                 let n = inner_body_blocks.len() as u32;
                 let step_id = inner_cond_id + 1 + n;
                 let after_id = step_id + 1;
