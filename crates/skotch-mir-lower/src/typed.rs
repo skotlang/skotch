@@ -16794,6 +16794,107 @@ fn lower_rich_expr_to_slot(
                                     if let Some((cls, method, desc, ret_ty)) = mapped {
                                         let mut arg_slots: Vec<LocalId> = vec![slot];
                                         let mut all_ok = true;
+                                        // Helper: box a primitive slot into the matching wrapper
+                                        // type for descriptors that expect Object/Iterable/etc.
+                                        // Returns (maybe_new_slot, new_next_slot).
+                                        fn maybe_box(
+                                            s: LocalId,
+                                            target_is_object: bool,
+                                            extra_locals: &mut Vec<Ty>,
+                                            pre_stmts: &mut Vec<MStmt>,
+                                            next_slot: &mut u32,
+                                        ) -> LocalId {
+                                            if !target_is_object {
+                                                return s;
+                                            }
+                                            let ty = slot_ty_with_param_fallback(s.0, extra_locals);
+                                            let (boxed_cls, prim_desc) = match &ty {
+                                                Ty::Int => ("java/lang/Integer", "I"),
+                                                Ty::Long => ("java/lang/Long", "J"),
+                                                Ty::Float => ("java/lang/Float", "F"),
+                                                Ty::Double => ("java/lang/Double", "D"),
+                                                Ty::Bool => ("java/lang/Boolean", "Z"),
+                                                Ty::Byte => ("java/lang/Byte", "B"),
+                                                Ty::Short => ("java/lang/Short", "S"),
+                                                Ty::Char => ("java/lang/Character", "C"),
+                                                _ => return s,
+                                            };
+                                            let boxed = LocalId(*next_slot);
+                                            *next_slot += 1;
+                                            extra_locals.push(Ty::Class(boxed_cls.to_string()));
+                                            pre_stmts.push(MStmt::Assign {
+                                                dest: boxed,
+                                                value: skotch_mir::Rvalue::Call {
+                                                    kind: skotch_mir::CallKind::StaticJava {
+                                                        class_name: boxed_cls.to_string(),
+                                                        method_name: "valueOf".to_string(),
+                                                        descriptor: format!(
+                                                            "({})L{};",
+                                                            prim_desc, boxed_cls
+                                                        ),
+                                                    },
+                                                    args: vec![s],
+                                                },
+                                            });
+                                            boxed
+                                        }
+                                        // Walk the target descriptor to figure out which positional
+                                        // arg slots need boxing. The receiver is always the first
+                                        // arg (Iterable) — descriptor's first param. Subsequent
+                                        // params in the descriptor map to subsequent arg slots.
+                                        let param_descs: Vec<String> = {
+                                            // Parse descriptor between ( and ) into one entry per
+                                            // JVM type token.
+                                            let mut out = Vec::new();
+                                            let s = desc;
+                                            let start = s.find('(').unwrap_or(0) + 1;
+                                            let end = s.find(')').unwrap_or(s.len());
+                                            let mut i = start;
+                                            let bytes = s.as_bytes();
+                                            while i < end {
+                                                let c = bytes[i] as char;
+                                                if c == 'L' {
+                                                    let semi =
+                                                        s[i..].find(';').map(|k| i + k).unwrap_or(end);
+                                                    out.push(s[i..=semi].to_string());
+                                                    i = semi + 1;
+                                                } else if c == '[' {
+                                                    // Array: skip leading [s
+                                                    let mut j = i;
+                                                    while j < end && bytes[j] as char == '[' {
+                                                        j += 1;
+                                                    }
+                                                    if j < end && (bytes[j] as char) == 'L' {
+                                                        let semi =
+                                                            s[j..].find(';').map(|k| j + k).unwrap_or(end);
+                                                        out.push(s[i..=semi].to_string());
+                                                        i = semi + 1;
+                                                    } else {
+                                                        out.push(s[i..=j].to_string());
+                                                        i = j + 1;
+                                                    }
+                                                } else {
+                                                    out.push(s[i..=i].to_string());
+                                                    i += 1;
+                                                }
+                                            }
+                                            out
+                                        };
+                                        // First arg is the receiver — already lowered. Box if needed.
+                                        if let Some(p0) = param_descs.first() {
+                                            let target_is_object = !matches!(
+                                                p0.as_str(),
+                                                "I" | "J" | "F" | "D" | "Z" | "B" | "S" | "C"
+                                            );
+                                            arg_slots[0] = maybe_box(
+                                                arg_slots[0],
+                                                target_is_object,
+                                                extra_locals,
+                                                pre_stmts,
+                                                next_slot,
+                                            );
+                                        }
+                                        let mut next_param_idx = 1usize;
                                         if let Some(arg_list) = call.value_argument_list() {
                                             for arg in arg_list.arguments() {
                                                 let Some(arg_e) = arg.expression() else {
@@ -16812,7 +16913,25 @@ fn lower_rich_expr_to_slot(
                                                     all_ok = false;
                                                     break;
                                                 };
-                                                arg_slots.push(s);
+                                                let target_is_object = param_descs
+                                                    .get(next_param_idx)
+                                                    .map(|p| {
+                                                        !matches!(
+                                                            p.as_str(),
+                                                            "I" | "J" | "F" | "D" | "Z"
+                                                                | "B" | "S" | "C"
+                                                        )
+                                                    })
+                                                    .unwrap_or(false);
+                                                let boxed_s = maybe_box(
+                                                    s,
+                                                    target_is_object,
+                                                    extra_locals,
+                                                    pre_stmts,
+                                                    next_slot,
+                                                );
+                                                arg_slots.push(boxed_s);
+                                                next_param_idx += 1;
                                             }
                                         }
                                         if all_ok {
