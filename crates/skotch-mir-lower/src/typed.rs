@@ -14932,16 +14932,102 @@ fn lower_rich_expr_to_slot(
         };
         // The body block: single-statement expression body is the
         // common case (`{ it % 2 == 0 }`).
-        let result_slot = if body_stmts.len() == 1 {
-            lower_rich_expr_to_slot(
-                body_stmts[0],
-                &lookup,
-                fn_lookup,
-                &mut next_slot_inv,
-                &mut pre_stmts_inv,
-                &mut extra_locals_inv,
-                strings,
-            )?
+        // Body lowering can produce either a single block (rvalue
+        // path) OR a multi-block CFG when the body is If/When and
+        // requires branches. Both shapes get the same final
+        // ReturnValue terminator on the join block.
+        let invoke_blocks: Vec<BasicBlock> = if body_stmts.len() == 1 {
+            if let KtExpr::If(if_e) = body_stmts[0] {
+                // Build 4-block CFG: cond ; then-arm ; else-arm ; join.
+                let cond_expr = if_e
+                    .condition()
+                    .and_then(|c| c.expression())
+                    .map(unwrap_parens)?;
+                let then_expr = if_e
+                    .then_branch()
+                    .and_then(|t| t.expression())
+                    .map(unwrap_parens)?;
+                let else_expr = if_e
+                    .else_branch()
+                    .and_then(|e| e.expression())
+                    .map(unwrap_parens)?;
+                let cond_slot = lower_rich_expr_to_slot(
+                    cond_expr,
+                    &lookup,
+                    fn_lookup,
+                    &mut next_slot_inv,
+                    &mut pre_stmts_inv,
+                    &mut extra_locals_inv,
+                    strings,
+                )?;
+                let result_slot = LocalId(next_slot_inv);
+                next_slot_inv += 1;
+                extra_locals_inv.push(Ty::Any);
+                let mut then_stmts: Vec<MStmt> = Vec::new();
+                let then_value = lower_rich_expr_to_slot(
+                    then_expr,
+                    &lookup,
+                    fn_lookup,
+                    &mut next_slot_inv,
+                    &mut then_stmts,
+                    &mut extra_locals_inv,
+                    strings,
+                )?;
+                then_stmts.push(MStmt::Assign {
+                    dest: result_slot,
+                    value: skotch_mir::Rvalue::Local(then_value),
+                });
+                let mut else_stmts: Vec<MStmt> = Vec::new();
+                let else_value = lower_rich_expr_to_slot(
+                    else_expr,
+                    &lookup,
+                    fn_lookup,
+                    &mut next_slot_inv,
+                    &mut else_stmts,
+                    &mut extra_locals_inv,
+                    strings,
+                )?;
+                else_stmts.push(MStmt::Assign {
+                    dest: result_slot,
+                    value: skotch_mir::Rvalue::Local(else_value),
+                });
+                vec![
+                    BasicBlock {
+                        stmts: pre_stmts_inv,
+                        terminator: Terminator::Branch {
+                            cond: cond_slot,
+                            then_block: 1,
+                            else_block: 2,
+                        },
+                    },
+                    BasicBlock {
+                        stmts: then_stmts,
+                        terminator: Terminator::Goto(3),
+                    },
+                    BasicBlock {
+                        stmts: else_stmts,
+                        terminator: Terminator::Goto(3),
+                    },
+                    BasicBlock {
+                        stmts: Vec::new(),
+                        terminator: Terminator::ReturnValue(result_slot),
+                    },
+                ]
+            } else {
+                let result_slot = lower_rich_expr_to_slot(
+                    body_stmts[0],
+                    &lookup,
+                    fn_lookup,
+                    &mut next_slot_inv,
+                    &mut pre_stmts_inv,
+                    &mut extra_locals_inv,
+                    strings,
+                )?;
+                vec![BasicBlock {
+                    stmts: pre_stmts_inv,
+                    terminator: Terminator::ReturnValue(result_slot),
+                }]
+            }
         } else {
             return None;
         };
@@ -14961,10 +15047,7 @@ fn lower_rich_expr_to_slot(
             name: "invoke".to_string(),
             params: invoke_params,
             locals: invoke_locals,
-            blocks: vec![BasicBlock {
-                stmts: pre_stmts_inv,
-                terminator: Terminator::ReturnValue(result_slot),
-            }],
+            blocks: invoke_blocks,
             return_ty: Ty::Any,
             required_params: arity,
             param_names: param_names.clone(),
