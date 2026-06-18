@@ -14773,30 +14773,14 @@ fn lower_rich_expr_to_slot(
             })
             .unwrap_or_default();
         let param_names: Vec<String> = if explicit_params.is_empty() {
-            // Look for bare `it` in body — if present, implicit it
-            // param.
-            fn body_uses_it(block: skotch_ast::KtBlock<'_>) -> bool {
-                fn check(e: skotch_ast::KtExpr<'_>) -> bool {
-                    use skotch_ast::KtExpr;
-                    let e = unwrap_parens(e);
-                    if let KtExpr::Reference(r) = e {
-                        return r.name() == Some("it");
-                    }
-                    // Generic recursive walk over all child KtExprs
-                    // — catches `it` references in If/When/Lambda
-                    // / nested arbitrary positions.
-                    skotch_ast::children(e.syntax())
-                        .iter()
-                        .filter_map(|c| KtExpr::cast(c))
-                        .any(check)
-                }
-                block.statements().any(check)
-            }
-            if body_uses_it(body_block) {
-                vec!["it".to_string()]
-            } else {
-                Vec::new()
-            }
+            // Implicit `it` for unparam'd lambdas. Without type info
+            // we can't tell Function0 from Function1, but Kotlin's
+            // common shape is Function1 (filter/map/groupBy/etc.)
+            // and the explicit-zero-arg variant `{ -> ... }` would
+            // have explicit_params=[] too — assume arity 1 either
+            // way; an unused `it` slot is a 1-slot waste but the
+            // function still type-checks against Function1.
+            vec!["it".to_string()]
         } else {
             explicit_params
         };
