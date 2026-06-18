@@ -15979,6 +15979,111 @@ fn lower_rich_expr_to_slot(
             }
         }
     }
+    // Function<N>.invoke on a fn-typed local/param:
+    //   `onEach(current, step)` where onEach: (Int, Step) -> Unit →
+    //     invokeinterface FunctionN.invoke(Object, Object, ...)Object
+    //
+    // Fires when the call's callee is a Reference resolving to a slot
+    // whose Ty is a Function<N> class. Args get autoboxed if their
+    // slot Ty is primitive (invoke params are Object).
+    if let KtExpr::Call(call) = e {
+        if let Some(KtExpr::Reference(rc)) = call.callee() {
+            if let Some(name) = rc.name() {
+                if let Some(slot) = lookup_name(name) {
+                    let recv_ty = slot_ty_with_param_fallback(slot.0, extra_locals);
+                    let arity = match &recv_ty {
+                        Ty::Class(c) if c.starts_with("kotlin/jvm/functions/Function") => {
+                            c.trim_start_matches("kotlin/jvm/functions/Function")
+                                .parse::<u32>()
+                                .ok()
+                        }
+                        _ => None,
+                    };
+                    if let Some(arity) = arity {
+                        let func_class = format!(
+                            "kotlin/jvm/functions/Function{}",
+                            arity
+                        );
+                        let mut arg_slots: Vec<LocalId> = vec![slot];
+                        let mut all_ok = true;
+                        if let Some(arg_list) = call.value_argument_list() {
+                            for arg in arg_list.arguments() {
+                                let Some(arg_e) = arg.expression() else {
+                                    all_ok = false;
+                                    break;
+                                };
+                                let Some(s) = lower_rich_expr_to_slot(
+                                    arg_e,
+                                    lookup_name,
+                                    fn_lookup,
+                                    next_slot,
+                                    pre_stmts,
+                                    extra_locals,
+                                    strings,
+                                ) else {
+                                    all_ok = false;
+                                    break;
+                                };
+                                let arg_ty = slot_ty_with_param_fallback(s.0, extra_locals);
+                                let boxed = match &arg_ty {
+                                    Ty::Int | Ty::Long | Ty::Float | Ty::Double
+                                    | Ty::Bool | Ty::Byte | Ty::Short | Ty::Char => {
+                                        let (cls, prim) = match &arg_ty {
+                                            Ty::Int => ("java/lang/Integer", "I"),
+                                            Ty::Long => ("java/lang/Long", "J"),
+                                            Ty::Float => ("java/lang/Float", "F"),
+                                            Ty::Double => ("java/lang/Double", "D"),
+                                            Ty::Bool => ("java/lang/Boolean", "Z"),
+                                            Ty::Byte => ("java/lang/Byte", "B"),
+                                            Ty::Short => ("java/lang/Short", "S"),
+                                            Ty::Char => ("java/lang/Character", "C"),
+                                            _ => unreachable!(),
+                                        };
+                                        let bs = LocalId(*next_slot);
+                                        *next_slot += 1;
+                                        extra_locals.push(Ty::Class(cls.to_string()));
+                                        pre_stmts.push(MStmt::Assign {
+                                            dest: bs,
+                                            value: skotch_mir::Rvalue::Call {
+                                                kind: skotch_mir::CallKind::StaticJava {
+                                                    class_name: cls.to_string(),
+                                                    method_name: "valueOf".to_string(),
+                                                    descriptor: format!(
+                                                        "({})L{};",
+                                                        prim, cls
+                                                    ),
+                                                },
+                                                args: vec![s],
+                                            },
+                                        });
+                                        bs
+                                    }
+                                    _ => s,
+                                };
+                                arg_slots.push(boxed);
+                            }
+                        }
+                        if all_ok {
+                            let result_slot = LocalId(*next_slot);
+                            *next_slot += 1;
+                            extra_locals.push(Ty::Any);
+                            pre_stmts.push(MStmt::Assign {
+                                dest: result_slot,
+                                value: skotch_mir::Rvalue::Call {
+                                    kind: skotch_mir::CallKind::Virtual {
+                                        class_name: func_class,
+                                        method_name: "invoke".to_string(),
+                                    },
+                                    args: arg_slots,
+                                },
+                            });
+                            return Some(result_slot);
+                        }
+                    }
+                }
+            }
+        }
+    }
     // Call to top-level fn.
     if let KtExpr::Call(call) = e {
         if let Some(KtExpr::Reference(rc)) = call.callee() {
