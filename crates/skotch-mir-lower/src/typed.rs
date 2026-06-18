@@ -7835,6 +7835,8 @@ fn lower_loop_body_blocks(
                                 | KtExpr::For(_)
                                 | KtExpr::Return(_)
                                 | KtExpr::If(_)
+                                | KtExpr::Throw(_)
+                                | KtExpr::Try(_)
                         )
                     } else {
                         false
