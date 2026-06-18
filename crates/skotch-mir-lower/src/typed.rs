@@ -15041,6 +15041,345 @@ fn lower_rich_expr_to_slot(
         });
         return Some(result);
     }
+    // Object literal: `object : Interface { override fun ... }` —
+    // synthesizes an anonymous class implementing the named interface
+    // with the user-provided override methods. Captures of outer
+    // locals become ctor params + fields just like lambda captures.
+    //
+    // MVP scope: implements one interface, one or more methods each
+    // with an expression body. Captures resolved via outer
+    // `lookup_name`.
+    if let KtExpr::ObjectLiteral(lit) = &e {
+        // Find the OBJECT_DECLARATION child.
+        let obj_decl = skotch_ast::children(lit.syntax())
+            .iter()
+            .find_map(|c| {
+                if c.kind == skotch_syntax::SyntaxKind::OBJECT_DECLARATION {
+                    skotch_ast::KtObjectDeclaration::cast(c)
+                } else {
+                    None
+                }
+            })?;
+        // Interface: first non-CALL super-type entry. For now just
+        // pick the first super type if any.
+        let interface_name: Option<String> = obj_decl
+            .super_type_list()
+            .and_then(|stl| {
+                stl.entries().find_map(|entry| {
+                    entry
+                        .type_reference()
+                        .and_then(|tr| tr.user_type())
+                        .and_then(|u| u.name())
+                        .map(String::from)
+                })
+            });
+        let interface_name = interface_name?;
+        // Methods: each KtFun decl in the body.
+        let body = obj_decl.body()?;
+        let user_funs: Vec<skotch_ast::KtFun<'_>> = body
+            .declarations()
+            .filter_map(|d| match d {
+                skotch_ast::KtDecl::Fun(f) => Some(f),
+                _ => None,
+            })
+            .collect();
+        if user_funs.is_empty() {
+            return None;
+        }
+        // Pre-compute a unique anonymous-class name.
+        let obj_idx = next_lambda_idx();
+        let obj_name = format!("ObjectLit${}", obj_idx);
+        // Collect captures from all method bodies.
+        // Use the same collect_free_refs as the Lambda arm.
+        fn collect_refs(
+            e: skotch_ast::KtExpr<'_>,
+            params: &[String],
+            out: &mut Vec<String>,
+        ) {
+            use skotch_ast::KtExpr;
+            let e = unwrap_parens(e);
+            match e {
+                KtExpr::Reference(r) => {
+                    if let Some(n) = r.name() {
+                        if !params.contains(&n.to_string())
+                            && !out.contains(&n.to_string())
+                        {
+                            out.push(n.to_string());
+                        }
+                    }
+                }
+                KtExpr::Binary(b) => {
+                    if let Some(l) = b.lhs() {
+                        collect_refs(l, params, out);
+                    }
+                    if let Some(r) = b.rhs() {
+                        collect_refs(r, params, out);
+                    }
+                }
+                KtExpr::DotQualified(dq) => {
+                    let child_exprs: Vec<KtExpr<'_>> =
+                        skotch_ast::children(dq.syntax())
+                            .iter()
+                            .filter_map(|c| KtExpr::cast(c))
+                            .collect();
+                    if let Some(recv) = child_exprs.first().cloned() {
+                        collect_refs(recv, params, out);
+                    }
+                    if let Some(KtExpr::Call(call)) = child_exprs.get(1).cloned() {
+                        if let Some(al) = call.value_argument_list() {
+                            for arg in al.arguments() {
+                                if let Some(ae) = arg.expression() {
+                                    collect_refs(ae, params, out);
+                                }
+                            }
+                        }
+                    }
+                }
+                KtExpr::Call(call) => {
+                    if let Some(al) = call.value_argument_list() {
+                        for arg in al.arguments() {
+                            if let Some(ae) = arg.expression() {
+                                collect_refs(ae, params, out);
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        let mut free_refs: Vec<String> = Vec::new();
+        for f in &user_funs {
+            let fparams: Vec<String> = f
+                .value_parameter_list()
+                .map(|pl| {
+                    pl.parameters()
+                        .map(|p| p.name().unwrap_or("").to_string())
+                        .collect()
+                })
+                .unwrap_or_default();
+            if let Some(be) = f.body_expression() {
+                collect_refs(be, &fparams, &mut free_refs);
+            } else if let Some(bb) = f.body_block() {
+                for s in bb.statements() {
+                    collect_refs(s, &fparams, &mut free_refs);
+                }
+            }
+        }
+        let captures: Vec<(String, LocalId)> = free_refs
+            .iter()
+            .filter_map(|n| lookup_name(n).map(|slot| (n.clone(), slot)))
+            .collect();
+        // Build method MirFunctions. For each KtFun:
+        let mut methods: Vec<MirFunction> = Vec::new();
+        for kt_fun in &user_funs {
+            let method_name = kt_fun.name()?.to_string();
+            let param_names: Vec<String> = kt_fun
+                .value_parameter_list()
+                .map(|pl| {
+                    pl.parameters()
+                        .map(|p| p.name().unwrap_or("").to_string())
+                        .collect()
+                })
+                .unwrap_or_default();
+            let param_count = param_names.len();
+            let return_ty = match kt_fun
+                .return_type()
+                .and_then(|tr| tr.user_type())
+                .and_then(|u| u.name())
+            {
+                Some(n) => resolve_user_ty(n),
+                None => Ty::Unit,
+            };
+            let mut next_slot_m: u32 = (1 + param_count) as u32;
+            let mut pre_stmts_m: Vec<MStmt> = Vec::new();
+            let mut extra_locals_m: Vec<Ty> = Vec::new();
+            let mut snap_m: Vec<(String, LocalId)> = param_names
+                .iter()
+                .enumerate()
+                .map(|(i, n)| (n.clone(), LocalId((1 + i) as u32)))
+                .collect();
+            // Pre-load captures as fields at start of method body.
+            for (cap_name, _) in &captures {
+                let field_slot = LocalId(next_slot_m);
+                next_slot_m += 1;
+                extra_locals_m.push(Ty::Any);
+                pre_stmts_m.push(MStmt::Assign {
+                    dest: field_slot,
+                    value: skotch_mir::Rvalue::GetField {
+                        receiver: LocalId(0),
+                        class_name: obj_name.clone(),
+                        field_name: cap_name.clone(),
+                    },
+                });
+                snap_m.push((cap_name.clone(), field_slot));
+            }
+            let snap = snap_m.clone();
+            let lookup_m = |n: &str| -> Option<LocalId> {
+                snap.iter().rev().find(|(nm, _)| nm == n).map(|(_, l)| *l)
+            };
+            let result_slot = if let Some(body_expr) = kt_fun.body_expression() {
+                lower_rich_expr_to_slot(
+                    body_expr,
+                    &lookup_m,
+                    fn_lookup,
+                    &mut next_slot_m,
+                    &mut pre_stmts_m,
+                    &mut extra_locals_m,
+                    strings,
+                )?
+            } else {
+                return None;
+            };
+            // Build invoke locals: [Class(self), p1_ty, p2_ty, ...] + extras
+            let mut method_locals: Vec<Ty> =
+                Vec::with_capacity(1 + param_count + extra_locals_m.len());
+            method_locals.push(Ty::Class(obj_name.clone()));
+            for _ in 0..param_count {
+                method_locals.push(Ty::Any);
+            }
+            method_locals.extend(extra_locals_m);
+            let method_params: Vec<LocalId> =
+                (0..=param_count).map(|i| LocalId(i as u32)).collect();
+            methods.push(MirFunction {
+                id: FuncId(0),
+                name: method_name,
+                params: method_params,
+                locals: method_locals,
+                blocks: vec![BasicBlock {
+                    stmts: pre_stmts_m,
+                    terminator: Terminator::ReturnValue(result_slot),
+                }],
+                return_ty,
+                required_params: param_count,
+                param_names,
+                param_receiver_types: Vec::new(),
+                param_defaults: Vec::new(),
+                is_abstract: false,
+                vararg_index: None,
+                exception_handlers: Vec::new(),
+                is_suspend: false,
+                is_inline: false,
+                has_type_params: false,
+                suspend_original_return_ty: None,
+                suspend_state_machine: None,
+                annotations: Vec::new(),
+                named_locals: Vec::new(),
+                is_private: false,
+                is_static: false,
+                default_call_masks: Vec::new(),
+                needs_leading_nop: false,
+                local_generic_args: rustc_hash::FxHashMap::default(),
+            });
+        }
+        // Constructor taking captures.
+        let ctor_this = LocalId(0);
+        let n_captures = captures.len();
+        let mut ctor_locals: Vec<Ty> = Vec::with_capacity(1 + n_captures);
+        ctor_locals.push(Ty::Class(obj_name.clone()));
+        for _ in 0..n_captures {
+            ctor_locals.push(Ty::Any);
+        }
+        let ctor_params: Vec<LocalId> =
+            (0..=n_captures).map(|i| LocalId(i as u32)).collect();
+        let mut ctor_stmts: Vec<MStmt> = Vec::new();
+        ctor_stmts.push(MStmt::Assign {
+            dest: ctor_this,
+            value: skotch_mir::Rvalue::Call {
+                kind: skotch_mir::CallKind::Constructor(
+                    "java/lang/Object".to_string(),
+                ),
+                args: vec![ctor_this],
+            },
+        });
+        for (i, (cap_name, _)) in captures.iter().enumerate() {
+            let param_slot = LocalId((1 + i) as u32);
+            ctor_stmts.push(MStmt::Assign {
+                dest: ctor_this,
+                value: skotch_mir::Rvalue::PutField {
+                    receiver: ctor_this,
+                    class_name: obj_name.clone(),
+                    field_name: cap_name.clone(),
+                    value: param_slot,
+                },
+            });
+        }
+        let constructor = MirFunction {
+            id: FuncId(0),
+            name: "<init>".to_string(),
+            params: ctor_params,
+            locals: ctor_locals,
+            blocks: vec![BasicBlock {
+                stmts: ctor_stmts,
+                terminator: Terminator::Return,
+            }],
+            return_ty: Ty::Unit,
+            required_params: n_captures,
+            param_names: captures.iter().map(|(n, _)| n.clone()).collect(),
+            param_receiver_types: Vec::new(),
+            param_defaults: Vec::new(),
+            is_abstract: false,
+            vararg_index: None,
+            exception_handlers: Vec::new(),
+            is_suspend: false,
+            is_inline: false,
+            has_type_params: false,
+            suspend_original_return_ty: None,
+            suspend_state_machine: None,
+            annotations: Vec::new(),
+            named_locals: Vec::new(),
+            is_private: false,
+            is_static: false,
+            default_call_masks: Vec::new(),
+            needs_leading_nop: false,
+            local_generic_args: rustc_hash::FxHashMap::default(),
+        };
+        let capture_fields: Vec<skotch_mir::MirField> = captures
+            .iter()
+            .map(|(n, _)| skotch_mir::MirField {
+                name: n.clone(),
+                ty: Ty::Any,
+                is_jvm_field: false,
+            })
+            .collect();
+        let obj_class = skotch_mir::MirClass {
+            name: obj_name.clone(),
+            super_class: Some("java/lang/Object".to_string()),
+            is_open: false,
+            is_abstract: false,
+            is_interface: false,
+            interfaces: vec![interface_name],
+            fields: capture_fields,
+            methods,
+            constructor,
+            secondary_constructors: Vec::new(),
+            is_suspend_lambda: false,
+            is_lambda: false,
+            is_cross_file_stub: false,
+            annotations: Vec::new(),
+            has_type_params: false,
+            is_object_singleton: false,
+            companion_class_name: None,
+            static_fields: Vec::new(),
+            clinit: None,
+        };
+        register_lambda_class(obj_class);
+        let result = LocalId(*next_slot);
+        *next_slot += 1;
+        extra_locals.push(Ty::Class(obj_name.clone()));
+        pre_stmts.push(MStmt::Assign {
+            dest: result,
+            value: skotch_mir::Rvalue::NewInstance(obj_name.clone()),
+        });
+        let ctor_args: Vec<LocalId> = captures.iter().map(|(_, s)| *s).collect();
+        pre_stmts.push(MStmt::Assign {
+            dest: result,
+            value: skotch_mir::Rvalue::Call {
+                kind: skotch_mir::CallKind::Constructor(obj_name),
+                args: ctor_args,
+            },
+        });
+        return Some(result);
+    }
     // Unary prefix at the top of lower_rich. The simpler
     // `lower_inline_expr_to_slot` already has a Prefix arm but it
     // recurses through `lower_inline` for the inner operand —
