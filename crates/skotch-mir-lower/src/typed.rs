@@ -8888,6 +8888,39 @@ fn try_lower_multi_stmt_block_with_offset(
                                     }
                                 }
                             }
+                            // Trailing lambda arg (`runPipeline(10, steps)
+                            // { value, step -> ... }`). lambda_argument()
+                            // returns it separately from value_argument_list.
+                            if ok {
+                                if let Some(la) = call.lambda_argument() {
+                                    if let Some(le) = skotch_ast::children(la.syntax())
+                                        .iter()
+                                        .find_map(|c| KtExpr::cast(c))
+                                    {
+                                        let snap = name_to_local.clone();
+                                        let lookup = |n: &str| -> Option<LocalId> {
+                                            snap.iter()
+                                                .rev()
+                                                .find(|(name, _)| name == n)
+                                                .map(|(_, l)| *l)
+                                        };
+                                        let slot = lower_rich_expr_to_slot(
+                                            le,
+                                            &lookup,
+                                            fn_lookup,
+                                            &mut next_slot,
+                                            &mut stmts,
+                                            &mut local_tys,
+                                            strings,
+                                        );
+                                        if let Some(s) = slot {
+                                            arg_slots.push(s);
+                                        } else {
+                                            ok = false;
+                                        }
+                                    }
+                                }
+                            }
                             if ok {
                                 let slot = LocalId(next_slot);
                                 next_slot += 1;
@@ -16459,6 +16492,26 @@ fn lower_rich_expr_to_slot(
                             let arg_e = arg.expression()?;
                             let slot = lower_rich_expr_to_slot(
                                 arg_e,
+                                lookup_name,
+                                fn_lookup,
+                                next_slot,
+                                pre_stmts,
+                                extra_locals,
+                                strings,
+                            )?;
+                            arg_slots.push(slot);
+                        }
+                    }
+                    // Trailing lambda arg: `runPipeline(10, steps) {
+                    // current, step -> ... }` — the lambda is in
+                    // call.lambda_argument(), not value_argument_list.
+                    if let Some(la) = call.lambda_argument() {
+                        if let Some(le) = skotch_ast::children(la.syntax())
+                            .iter()
+                            .find_map(|c| KtExpr::cast(c))
+                        {
+                            let slot = lower_rich_expr_to_slot(
+                                le,
                                 lookup_name,
                                 fn_lookup,
                                 next_slot,
