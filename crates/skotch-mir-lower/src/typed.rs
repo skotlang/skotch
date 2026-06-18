@@ -205,6 +205,31 @@ fn resolve_user_ty(name: &str) -> Ty {
     })
 }
 
+/// Like [`resolve_user_ty`] but accepts a full `KtTypeReference` so
+/// function-type annotations (`(Int, Step) -> Unit`) are recognized
+/// and lowered to `Ty::Class("kotlin/jvm/functions/Function<arity>")`.
+/// Falls back to the name-based resolver for plain user types.
+///
+/// This is the canonical entry point for param/field/return Ty
+/// resolution — call sites that previously did
+/// `tr.user_type().and_then(|u| u.name()).map(resolve_user_ty)` should
+/// migrate to this so fn-typed params are picked up.
+fn resolve_type_ref(tr: skotch_ast::KtTypeReference<'_>) -> Ty {
+    // Function-type annotation (`(A, B) -> R`).
+    if let Some(ft) = tr.function_type() {
+        let arity = ft
+            .parameter_list()
+            .map(|pl| pl.parameters().count())
+            .unwrap_or(0);
+        return Ty::Class(format!("kotlin/jvm/functions/Function{}", arity));
+    }
+    // Plain user-type name.
+    tr.user_type()
+        .and_then(|u| u.name())
+        .map(resolve_user_ty)
+        .unwrap_or(Ty::Any)
+}
+
 /// Look up the Ty for a slot, consulting either `extra_locals` or
 /// the function-scoped param fallback. Returns `Ty::Any` if neither
 /// has a binding (which preserves the historical no-Ty behavior so
@@ -20801,17 +20826,7 @@ fn lower_simple_body(
         .value_parameter_list()
         .map(|pl| {
             pl.parameters()
-                .map(|p| {
-                    let type_name: Option<String> = p
-                        .type_reference()
-                        .and_then(|tr| tr.user_type())
-                        .and_then(|u| u.name())
-                        .map(String::from);
-                    match type_name.as_deref() {
-                        Some(n) => resolve_user_ty(n),
-                        None => Ty::Any,
-                    }
-                })
+                .map(|p| p.type_reference().map(resolve_type_ref).unwrap_or(Ty::Any))
                 .collect()
         })
         .unwrap_or_default();
@@ -20891,25 +20906,13 @@ fn constructor_from_primary_impl(
     let user_param_tys: Vec<Ty> = params_iter
         .iter()
         .map(|p| {
-            // Preserve user-class param Tys (not just primitives).
-            // Without this, `class Mul(val l: Expr, val r: Expr)` got
-            // `(Object, Object)V` as its <init> descriptor, but the
-            // caller's site emitted `(LExpr;,LExpr;)V` from the
-            // typed locals → NoSuchMethodError at runtime.
-            let type_name: Option<String> = p
-                .type_reference()
-                .and_then(|tr| tr.user_type())
-                .and_then(|u| u.name())
-                .map(String::from);
-            match type_name.as_deref() {
-                Some(n) => skotch_types::ty_from_name(n).unwrap_or_else(|| {
-                    let fq = skotch_types::intrinsics::kotlin_to_jvm_class(n)
-                        .map(|s| s.to_string())
-                        .unwrap_or_else(|| n.to_string());
-                    Ty::Class(fq)
-                }),
-                None => Ty::Any,
-            }
+            // Preserve user-class + function-type param Tys (not just
+            // primitives). Without this, `class Mul(val l: Expr, val
+            // r: Expr)` got `(Object, Object)V` as its <init>
+            // descriptor; with the function-type extension,
+            // `fun runPipeline(..., onEach: (Int, Step) -> Unit)`
+            // also picks up `LFunction2;` instead of `LObject;`.
+            p.type_reference().map(resolve_type_ref).unwrap_or(Ty::Any)
         })
         .collect();
     // local 0 = `this`; locals 1..=N hold user params.
@@ -21623,15 +21626,10 @@ fn method_simple_body_full(
     }
     if let Some(pl) = f.value_parameter_list() {
         for p in pl.parameters() {
-            let type_name: Option<String> = p
+            let pty = p
                 .type_reference()
-                .and_then(|tr| tr.user_type())
-                .and_then(|u| u.name())
-                .map(String::from);
-            let pty = match type_name.as_deref() {
-                Some(n) => resolve_user_ty(n),
-                None => Ty::Any,
-            };
+                .map(resolve_type_ref)
+                .unwrap_or(Ty::Any);
             method_param_fallback.push(pty);
         }
     }
@@ -23422,14 +23420,10 @@ fn method_from_fun_with_class(
                 .collect()
         })
         .unwrap_or_default();
-    let return_ty = match f
+    let return_ty = f
         .return_type()
-        .and_then(|tr| tr.user_type())
-        .and_then(|u| u.name())
-    {
-        Some(name) => resolve_user_ty(name),
-        None => Ty::Unit,
-    };
+        .map(resolve_type_ref)
+        .unwrap_or(Ty::Unit);
     let has_body = f.body_block().is_some() || f.body_expression().is_some();
     let is_abstract = f.is_abstract() || (is_abstract_default && !has_body);
     // Try to lower a simple literal body. method_simple_body lays
@@ -23470,21 +23464,7 @@ fn method_from_fun_with_class(
     );
     if let Some(pl) = f.value_parameter_list() {
         for p in pl.parameters() {
-            let type_name: Option<String> = p
-                .type_reference()
-                .and_then(|tr| tr.user_type())
-                .and_then(|u| u.name())
-                .map(String::from);
-            let ty = match type_name.as_deref() {
-                Some(n) => skotch_types::ty_from_name(n).unwrap_or_else(|| {
-                    let fq = skotch_types::intrinsics::kotlin_to_jvm_class(n)
-                        .map(|s| s.to_string())
-                        .unwrap_or_else(|| n.to_string());
-                    Ty::Class(fq)
-                }),
-                None => Ty::Any,
-            };
-            locals.push(ty);
+            locals.push(p.type_reference().map(resolve_type_ref).unwrap_or(Ty::Any));
         }
     } else {
         for _ in 0..param_count {
