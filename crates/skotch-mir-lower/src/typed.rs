@@ -14779,29 +14779,16 @@ fn lower_rich_expr_to_slot(
                 fn check(e: skotch_ast::KtExpr<'_>) -> bool {
                     use skotch_ast::KtExpr;
                     let e = unwrap_parens(e);
-                    match e {
-                        KtExpr::Reference(r) => r.name() == Some("it"),
-                        KtExpr::Binary(b) => {
-                            b.lhs().is_some_and(check) || b.rhs().is_some_and(check)
-                        }
-                        KtExpr::Prefix(p) => skotch_ast::children(p.syntax())
-                            .iter()
-                            .filter_map(|c| KtExpr::cast(c))
-                            .any(check),
-                        KtExpr::DotQualified(dq) => skotch_ast::children(dq.syntax())
-                            .iter()
-                            .filter_map(|c| KtExpr::cast(c))
-                            .any(check),
-                        KtExpr::Call(call) => call
-                            .value_argument_list()
-                            .map(|al| {
-                                al.arguments()
-                                    .filter_map(|a| a.expression())
-                                    .any(check)
-                            })
-                            .unwrap_or(false),
-                        _ => false,
+                    if let KtExpr::Reference(r) = e {
+                        return r.name() == Some("it");
                     }
+                    // Generic recursive walk over all child KtExprs
+                    // — catches `it` references in If/When/Lambda
+                    // / nested arbitrary positions.
+                    skotch_ast::children(e.syntax())
+                        .iter()
+                        .filter_map(|c| KtExpr::cast(c))
+                        .any(check)
                 }
                 block.statements().any(check)
             }
