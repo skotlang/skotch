@@ -16237,6 +16237,137 @@ fn lower_rich_expr_to_slot(
     ) {
         return Some(slot);
     }
+    // Standalone interpolated string template:
+    //   `"hello $name"`, `"size=${list.size}"`.
+    // Pure (non-interpolated) string literals are caught by
+    // literal_to_const in lower_inline above; this arm handles the
+    // interpolated case by emitting a MakeConcatWithConstants call.
+    // Each LITERAL_STRING_TEMPLATE_ENTRY contributes recipe text; each
+    // SHORT_STRING_TEMPLATE_ENTRY ($name) becomes a slot via
+    // lookup_name; each LONG_STRING_TEMPLATE_ENTRY (${expr}) recurses
+    // through lower_rich_expr_to_slot for the inner expression.
+    if let KtExpr::String(_) = e {
+        use skotch_syntax::SyntaxKind as S;
+        let mut recipe = String::new();
+        let mut dyn_args: Vec<LocalId> = Vec::new();
+        let mut desc = String::from("(");
+        let mut had_interp = false;
+        let mut ok = true;
+        for child in skotch_ast::children(e.syntax()) {
+            match child.kind {
+                S::LITERAL_STRING_TEMPLATE_ENTRY => {
+                    for cc in skotch_ast::children(child) {
+                        if cc.kind == S::STRING_CHUNK {
+                            if let skotch_sil::SilData::Token { text } = &cc.data {
+                                recipe.push_str(text);
+                            }
+                        }
+                    }
+                }
+                S::ESCAPE_STRING_TEMPLATE_ENTRY => {
+                    for cc in skotch_ast::children(child) {
+                        if let skotch_sil::SilData::Token { text } = &cc.data {
+                            let raw = text.as_str();
+                            if let Some(stripped) = raw.strip_prefix('\\') {
+                                match stripped.chars().next() {
+                                    Some('n') => recipe.push('\n'),
+                                    Some('t') => recipe.push('\t'),
+                                    Some('r') => recipe.push('\r'),
+                                    Some('\\') => recipe.push('\\'),
+                                    Some('"') => recipe.push('"'),
+                                    Some('\'') => recipe.push('\''),
+                                    Some('$') => recipe.push('$'),
+                                    Some('b') => recipe.push('\u{0008}'),
+                                    Some('0') => recipe.push('\0'),
+                                    Some(other) => recipe.push(other),
+                                    None => {}
+                                }
+                            } else {
+                                recipe.push_str(raw);
+                            }
+                        }
+                    }
+                }
+                S::SHORT_STRING_TEMPLATE_ENTRY => {
+                    had_interp = true;
+                    // Find the inner Reference identifier.
+                    let id_name = skotch_ast::children(child).iter().find_map(|c| {
+                        if c.kind == S::REFERENCE_EXPRESSION {
+                            for cc in skotch_ast::children(c) {
+                                if cc.kind == S::IDENTIFIER {
+                                    if let skotch_sil::SilData::Token { text } = &cc.data {
+                                        return Some(text.as_str().to_string());
+                                    }
+                                }
+                            }
+                        }
+                        None
+                    });
+                    let Some(id_name) = id_name else {
+                        ok = false;
+                        break;
+                    };
+                    let Some(slot) = lookup_name(&id_name) else {
+                        ok = false;
+                        break;
+                    };
+                    let ty = slot_ty_with_param_fallback(slot.0, extra_locals);
+                    recipe.push('\u{1}');
+                    desc.push_str(&ty_to_descriptor(&ty));
+                    dyn_args.push(slot);
+                }
+                S::LONG_STRING_TEMPLATE_ENTRY => {
+                    had_interp = true;
+                    let inner = skotch_ast::children(child)
+                        .iter()
+                        .find_map(KtExpr::cast)
+                        .map(unwrap_parens);
+                    let Some(inner) = inner else {
+                        ok = false;
+                        break;
+                    };
+                    let Some(slot) = lower_rich_expr_to_slot(
+                        inner,
+                        lookup_name,
+                        fn_lookup,
+                        next_slot,
+                        pre_stmts,
+                        extra_locals,
+                        strings,
+                    ) else {
+                        ok = false;
+                        break;
+                    };
+                    let ty = slot_ty_with_param_fallback(slot.0, extra_locals);
+                    recipe.push('\u{1}');
+                    desc.push_str(&ty_to_descriptor(&ty));
+                    dyn_args.push(slot);
+                }
+                S::STRING_START | S::STRING_END | S::WHITE_SPACE => {}
+                _ => {
+                    ok = false;
+                    break;
+                }
+            }
+        }
+        if ok && had_interp {
+            desc.push_str(")Ljava/lang/String;");
+            let result_slot = LocalId(*next_slot);
+            *next_slot += 1;
+            extra_locals.push(Ty::String);
+            pre_stmts.push(MStmt::Assign {
+                dest: result_slot,
+                value: skotch_mir::Rvalue::Call {
+                    kind: skotch_mir::CallKind::MakeConcatWithConstants {
+                        recipe,
+                        descriptor: desc,
+                    },
+                    args: dyn_args,
+                },
+            });
+            return Some(result_slot);
+        }
+    }
     // `a..b` IntRange creation → new IntRange(a, b).
     if let KtExpr::Binary(b) = e {
         let op_text = b.operation().map(|o| o.text()).unwrap_or_default();
