@@ -22433,11 +22433,118 @@ fn constructor_from_primary_impl(
             if let skotch_ast::KtExpr::Call(call) = &init {
                 if let Some(skotch_ast::KtExpr::Reference(r)) = call.callee() {
                     if let Some(callee_name) = r.name() {
+                        // Intrinsic collection builders — emit a
+                        // CollectionsKt static call directly.
+                        let arg_count = call
+                            .value_argument_list()
+                            .map(|a| a.arguments().count())
+                            .unwrap_or(0);
+                        let intrinsic: Option<(&str, &str, &str, Ty)> = match (
+                            callee_name,
+                            arg_count,
+                        ) {
+                            // mutableListOf() inlines to `new ArrayList<>()`
+                            // — kotlinc emits it as a direct ArrayList
+                            // constructor rather than a CollectionsKt call.
+                            ("mutableListOf", 0) => {
+                                let val_slot = skotch_mir::LocalId(next_slot);
+                                next_slot += 1;
+                                locals.push(Ty::Class(
+                                    "java/util/ArrayList".to_string(),
+                                ));
+                                stmts.push(skotch_mir::Stmt::Assign {
+                                    dest: val_slot,
+                                    value: skotch_mir::Rvalue::NewInstance(
+                                        "java/util/ArrayList".to_string(),
+                                    ),
+                                });
+                                stmts.push(skotch_mir::Stmt::Assign {
+                                    dest: val_slot,
+                                    value: skotch_mir::Rvalue::Call {
+                                        kind: skotch_mir::CallKind::ConstructorJava {
+                                            class_name: "java/util/ArrayList"
+                                                .to_string(),
+                                            descriptor: "()V".to_string(),
+                                        },
+                                        args: vec![],
+                                    },
+                                });
+                                stmts.push(skotch_mir::Stmt::Assign {
+                                    dest: this_slot,
+                                    value: skotch_mir::Rvalue::PutField {
+                                        receiver: this_slot,
+                                        class_name: class_name.to_string(),
+                                        field_name: field_name.to_string(),
+                                        value: val_slot,
+                                    },
+                                });
+                                continue;
+                            }
+                            ("dummy_unused", 0) => Some((
+                                "kotlin/collections/CollectionsKt",
+                                "mutableListOf",
+                                "()Ljava/util/List;",
+                                Ty::Class("java/util/List".to_string()),
+                            )),
+                            ("emptyList", 0) => Some((
+                                "kotlin/collections/CollectionsKt",
+                                "emptyList",
+                                "()Ljava/util/List;",
+                                Ty::Class("java/util/List".to_string()),
+                            )),
+                            ("mutableMapOf", 0) => Some((
+                                "kotlin/collections/MapsKt",
+                                "mutableMapOf",
+                                "()Ljava/util/Map;",
+                                Ty::Class("java/util/Map".to_string()),
+                            )),
+                            ("emptyMap", 0) => Some((
+                                "kotlin/collections/MapsKt",
+                                "emptyMap",
+                                "()Ljava/util/Map;",
+                                Ty::Class("java/util/Map".to_string()),
+                            )),
+                            ("mutableSetOf", 0) => Some((
+                                "kotlin/collections/SetsKt",
+                                "mutableSetOf",
+                                "()Ljava/util/Set;",
+                                Ty::Class("java/util/Set".to_string()),
+                            )),
+                            ("emptySet", 0) => Some((
+                                "kotlin/collections/SetsKt",
+                                "emptySet",
+                                "()Ljava/util/Set;",
+                                Ty::Class("java/util/Set".to_string()),
+                            )),
+                            _ => None,
+                        };
+                        if let Some((cls, method, desc, ret)) = intrinsic {
+                            let val_slot = skotch_mir::LocalId(next_slot);
+                            next_slot += 1;
+                            locals.push(ret);
+                            stmts.push(skotch_mir::Stmt::Assign {
+                                dest: val_slot,
+                                value: skotch_mir::Rvalue::Call {
+                                    kind: skotch_mir::CallKind::StaticJava {
+                                        class_name: cls.to_string(),
+                                        method_name: method.to_string(),
+                                        descriptor: desc.to_string(),
+                                    },
+                                    args: Vec::new(),
+                                },
+                            });
+                            stmts.push(skotch_mir::Stmt::Assign {
+                                dest: this_slot,
+                                value: skotch_mir::Rvalue::PutField {
+                                    receiver: this_slot,
+                                    class_name: class_name.to_string(),
+                                    field_name: field_name.to_string(),
+                                    value: val_slot,
+                                },
+                            });
+                            continue;
+                        }
                         if let Some((fid, ret_ty)) = fn_lookup.get(callee_name) {
-                            let arg_count = call
-                                .value_argument_list()
-                                .map(|a| a.arguments().count())
-                                .unwrap_or(0);
                             if arg_count == 0 {
                                 let val_slot = skotch_mir::LocalId(next_slot);
                                 next_slot += 1;
