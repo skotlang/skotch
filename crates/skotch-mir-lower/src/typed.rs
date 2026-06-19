@@ -1009,6 +1009,96 @@ pub fn lower_file(
                 None
             };
             let companion_class_name_str = companion_class_name.as_ref().map(|(n, _)| n.clone());
+            // Synthesize a `compareTo(Object): int` bridge when the
+            // class implements java/lang/Comparable and has a
+            // `compareTo(<T>)` method. Java's Comparable interface
+            // erases to `compareTo(Object)`; without the bridge,
+            // sorted()/Collections.sort and similar reflectively
+            // dispatch to the abstract method and throw
+            // AbstractMethodError at runtime.
+            let mut methods = methods;
+            if interfaces.iter().any(|i| i == "java/lang/Comparable") {
+                let has_typed_compareto =
+                    methods.iter().any(|m| m.name == "compareTo" && m.params.len() == 2);
+                let has_object_bridge =
+                    methods.iter().any(|m| m.name == "compareTo" && m.locals.get(1)
+                        .map(|t| matches!(t, Ty::Any))
+                        .unwrap_or(false));
+                if has_typed_compareto && !has_object_bridge {
+                    use skotch_mir::{LocalId, Stmt as MStmt};
+                    // Find the typed compareTo to extract the param type.
+                    let typed_param_class = methods
+                        .iter()
+                        .find(|m| m.name == "compareTo" && m.params.len() == 2)
+                        .and_then(|m| m.locals.get(1).cloned())
+                        .and_then(|t| match t {
+                            Ty::Class(c) => Some(c),
+                            _ => None,
+                        })
+                        .unwrap_or_else(|| name.clone());
+                    // Body: aload_0; aload_1; checkcast T; invokevirtual
+                    //   compareTo(T)I; ireturn.
+                    let this_slot = LocalId(0);
+                    let raw_slot = LocalId(1);
+                    let cast_slot = LocalId(2);
+                    let result_slot = LocalId(3);
+                    let bridge_body = vec![
+                        MStmt::Assign {
+                            dest: cast_slot,
+                            value: skotch_mir::Rvalue::CheckCast {
+                                obj: raw_slot,
+                                target_class: typed_param_class.clone(),
+                            },
+                        },
+                        MStmt::Assign {
+                            dest: result_slot,
+                            value: skotch_mir::Rvalue::Call {
+                                kind: skotch_mir::CallKind::Virtual {
+                                    class_name: name.clone(),
+                                    method_name: "compareTo".to_string(),
+                                },
+                                args: vec![this_slot, cast_slot],
+                            },
+                        },
+                    ];
+                    let bridge_fn = MirFunction {
+                        id: FuncId(0),
+                        name: "compareTo".to_string(),
+                        params: vec![this_slot, raw_slot],
+                        locals: vec![
+                            Ty::Class(name.clone()),
+                            Ty::Any,
+                            Ty::Class(typed_param_class),
+                            Ty::Int,
+                        ],
+                        blocks: vec![BasicBlock {
+                            stmts: bridge_body,
+                            terminator: Terminator::ReturnValue(result_slot),
+                        }],
+                        return_ty: Ty::Int,
+                        required_params: 1,
+                        param_names: vec!["other".to_string()],
+                        param_receiver_types: Vec::new(),
+                        param_defaults: Vec::new(),
+                        is_abstract: false,
+                        vararg_index: None,
+                        exception_handlers: Vec::new(),
+                        is_suspend: false,
+                        is_inline: false,
+                        has_type_params: false,
+                        suspend_original_return_ty: None,
+                        suspend_state_machine: None,
+                        annotations: Vec::new(),
+                        named_locals: Vec::new(),
+                        is_private: false,
+                        is_static: false,
+                        default_call_masks: Vec::new(),
+                        needs_leading_nop: false,
+                        local_generic_args: rustc_hash::FxHashMap::default(),
+                    };
+                    methods.push(bridge_fn);
+                }
+            }
             let mir_class = skotch_mir::MirClass {
                 name: name.clone(),
                 super_class,
@@ -17984,6 +18074,31 @@ fn lower_rich_expr_to_slot(
                             .and_then(lookup_name)
                             .map(|s| slot_ty_with_param_fallback(s.0, extra_locals)),
                         KtExpr::String(_) => Some(Ty::String),
+                        KtExpr::Call(c) => {
+                            // listOf / mapOf / setOf chained call
+                            // receivers return List / Map / Set. Peek
+                            // at the callee name to infer the receiver
+                            // Ty so CollectionsKt method dispatch fires
+                            // on `listOf(...).sorted()`.
+                            match c.callee() {
+                                Some(KtExpr::Reference(r)) => match r.name() {
+                                    Some("listOf") | Some("mutableListOf")
+                                    | Some("listOfNotNull") | Some("emptyList") => {
+                                        Some(Ty::Class("java/util/List".to_string()))
+                                    }
+                                    Some("setOf") | Some("mutableSetOf")
+                                    | Some("emptySet") => {
+                                        Some(Ty::Class("java/util/Set".to_string()))
+                                    }
+                                    Some("mapOf") | Some("mutableMapOf")
+                                    | Some("emptyMap") => {
+                                        Some(Ty::Class("java/util/Map".to_string()))
+                                    }
+                                    _ => None,
+                                },
+                                _ => None,
+                            }
+                        }
                         KtExpr::DotQualified(_) => {
                             // For chained method calls, recursively
                             // peek at what the inner DotQualified
