@@ -19193,7 +19193,13 @@ fn lower_rich_expr_to_slot(
     if let KtExpr::Call(call) = e {
         if let Some(KtExpr::Reference(rc)) = call.callee() {
             if let Some(method_name) = rc.name() {
-                if let Some(class_name) = current_class_name() {
+                // Skip when callee starts uppercase — that's a
+                // constructor call (e.g. `Box(second, first)`), not a
+                // same-class method dispatch. The constructor heuristic
+                // earlier in this function handles those.
+                if method_name.starts_with(char::is_uppercase) {
+                    // fall through to next arm
+                } else if let Some(class_name) = current_class_name() {
                     if let Some(ret_ty) = class_method_return_ty(&class_name, method_name) {
                         let mut arg_slots: Vec<LocalId> = vec![LocalId(0)];
                         let mut all_ok = true;
@@ -24098,7 +24104,16 @@ fn method_simple_body_full(
     if let KtExpr::Call(call) = &body_expr {
         if let Some(KtExpr::Reference(r)) = call.callee() {
             if let Some(name) = r.name() {
-                if name != "println" && name != "print" && !fn_lookup.contains_key(name) {
+                // Skip uppercase callees — those are constructor calls
+                // (e.g. `fun swap() = Pair2(b, a)`), not sibling-method
+                // dispatches. The generic fallback below routes them
+                // through lower_rich's constructor heuristic, which
+                // emits NewInstance + Constructor.
+                if name != "println"
+                    && name != "print"
+                    && !name.starts_with(char::is_uppercase)
+                    && !fn_lookup.contains_key(name)
+                {
                     if let Some(cname) = class_name {
                         let this_slot = skotch_mir::LocalId(0);
                         let mut next_slot = (1 + param_count) as u32;
