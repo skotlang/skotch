@@ -24466,6 +24466,25 @@ fn collect_class_methods(
     wrapper_class: &str,
 ) -> Vec<MirFunction> {
     let mut methods = Vec::new();
+    // Generic erasure: class type params seen in field annotations
+    // resolve to Ty::Class("A") via resolve_user_ty; erase to Ty::Any
+    // so body-lowering field-load slot Tys come out as Object.
+    let class_tp_set: std::collections::HashSet<String> = c
+        .type_parameter_list()
+        .map(|tpl| {
+            tpl.parameters()
+                .filter_map(|tp| tp.name().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
+    let erase_tp = |ty: Ty| -> Ty {
+        if let Ty::Class(n) = &ty {
+            if class_tp_set.contains(n) {
+                return Ty::Any;
+            }
+        }
+        ty
+    };
     // Collect (name, Ty) for primary-ctor val/var params — methods
     // can reference them as `this.x` (implicit) or bare `x`.
     let mut field_names: Vec<(String, Ty)> = Vec::new();
@@ -24480,7 +24499,7 @@ fn collect_class_methods(
                             .and_then(|u| u.name())
                             .map(resolve_user_ty)
                             .unwrap_or(Ty::Any);
-                        field_names.push((n.to_string(), ty));
+                        field_names.push((n.to_string(), erase_tp(ty)));
                     }
                 }
             }
@@ -24498,7 +24517,7 @@ fn collect_class_methods(
                         .and_then(|u| u.name())
                         .map(resolve_user_ty)
                         .unwrap_or(Ty::Any);
-                    field_names.push((n.to_string(), ty));
+                    field_names.push((n.to_string(), erase_tp(ty)));
                 }
             }
         }
