@@ -3977,6 +3977,204 @@ fn try_lower_try_expression(
     Some((blocks, extra_locals, handlers))
 }
 
+/// Try to lower an expression-bodied function whose body is a
+/// `when (subject) { is X -> exprX; is Y -> exprY; ... else -> ... }`
+/// shape. Each arm becomes an instanceof check + result-slot assign.
+///
+/// CFG layout for N is-arms and optional else:
+///   block 0..N-1: instanceof cascade. Each tests `subject is Class_i`
+///                 and branches to its arm block (then) or the next
+///                 cascade block (else).
+///   block N..2N-1: arm bodies — assign arm expr into result_slot,
+///                   goto exit.
+///   block 2N: else arm (if present) — assigns else expr into result.
+///             Goto exit.
+///   block 2N+1 (or 2N if no else): ReturnValue(result_slot).
+#[allow(clippy::too_many_arguments)]
+fn try_lower_when_is_expression(
+    when_e: &skotch_ast::KtWhen<'_>,
+    f: skotch_ast::KtFun<'_>,
+    strings: &mut Vec<String>,
+    fn_lookup: &rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)>,
+    val_lookup: &rustc_hash::FxHashMap<String, Ty>,
+    wrapper_class: &str,
+) -> Option<(Vec<BasicBlock>, Vec<Ty>)> {
+    use skotch_ast::KtExpr;
+    use skotch_mir::{LocalId, Stmt as MStmt};
+
+    let subject = when_e.subject().map(unwrap_parens)?;
+    // Subject must be a bare Reference to a fn param (the smart-cast
+    // anchor). Other subject shapes need more plumbing.
+    let KtExpr::Reference(subj_ref) = subject else {
+        return None;
+    };
+    let subj_name = subj_ref.name()?;
+
+    let param_count = f
+        .value_parameter_list()
+        .map(|pl| pl.parameters().count())
+        .unwrap_or(0);
+    let outer_param_names: Vec<String> = f
+        .value_parameter_list()
+        .map(|pl| {
+            pl.parameters()
+                .map(|p| p.name().unwrap_or("").to_string())
+                .collect()
+        })
+        .unwrap_or_default();
+    let outer_param_tys: Vec<Ty> = f
+        .value_parameter_list()
+        .map(|pl| {
+            pl.parameters()
+                .map(|p| p.type_reference().map(resolve_type_ref).unwrap_or(Ty::Any))
+                .collect()
+        })
+        .unwrap_or_default();
+    let _param_scope = ParamTyScope::new(outer_param_tys);
+    let subj_idx = outer_param_names.iter().position(|p| p == subj_name)?;
+    let subj_slot = LocalId(subj_idx as u32);
+
+    // Parse arms. Each is-arm gets (class_name, body_expr). Other
+    // condition kinds bail.
+    let mut arms: Vec<(String, KtExpr<'_>)> = Vec::new();
+    let mut else_body: Option<KtExpr<'_>> = None;
+    for entry in when_e.entries() {
+        if entry.is_else() {
+            else_body = entry.body().map(unwrap_parens);
+            continue;
+        }
+        let conds = entry.conditions();
+        if conds.len() != 1 {
+            return None;
+        }
+        let cond = conds[0];
+        if cond.kind != skotch_syntax::SyntaxKind::WHEN_CONDITION_IS_PATTERN {
+            return None;
+        }
+        let type_name = skotch_ast::children(cond).iter().find_map(|cc| {
+            if cc.kind == skotch_syntax::SyntaxKind::TYPE_REFERENCE {
+                if let Some(tr) = skotch_ast::KtTypeReference::cast(cc) {
+                    return tr.user_type().and_then(|u| u.name()).map(String::from);
+                }
+            }
+            None
+        })?;
+        let body = entry.body().map(unwrap_parens)?;
+        arms.push((type_name, body));
+    }
+    if arms.is_empty() {
+        return None;
+    }
+
+    let n = arms.len();
+    let has_else = else_body.is_some();
+    let cond_block_base = 0u32;
+    let arm_block_base = n as u32;
+    let else_block = (2 * n) as u32;
+    let exit_block = if has_else { else_block + 1 } else { else_block };
+
+    let mut next_slot = param_count as u32;
+    let mut extra_locals: Vec<Ty> = Vec::new();
+    let result_slot = LocalId(next_slot);
+    next_slot += 1;
+    extra_locals.push(Ty::Any);
+
+    let mut blocks: Vec<BasicBlock> = Vec::new();
+
+    // Cond cascade blocks: one per arm.
+    for (i, (class_name, _)) in arms.iter().enumerate() {
+        let test_slot = LocalId(next_slot);
+        next_slot += 1;
+        extra_locals.push(Ty::Bool);
+        let is_class_stmt = MStmt::Assign {
+            dest: test_slot,
+            value: skotch_mir::Rvalue::InstanceOf {
+                obj: subj_slot,
+                type_descriptor: class_name.clone(),
+            },
+        };
+        let next_cond_or_else = if i + 1 < n {
+            cond_block_base + (i as u32) + 1
+        } else if has_else {
+            else_block
+        } else {
+            exit_block
+        };
+        blocks.push(BasicBlock {
+            stmts: vec![is_class_stmt],
+            terminator: Terminator::Branch {
+                cond: test_slot,
+                then_block: arm_block_base + i as u32,
+                else_block: next_cond_or_else,
+            },
+        });
+    }
+
+    // Arm body blocks.
+    let outer_param_names_clone = outer_param_names.clone();
+    let snap_locals: Vec<(String, LocalId)> = outer_param_names_clone
+        .iter()
+        .enumerate()
+        .map(|(i, n)| (n.clone(), LocalId(i as u32)))
+        .collect();
+    let snap = snap_locals.clone();
+    let lookup = |n: &str| -> Option<LocalId> {
+        snap.iter().rev().find(|(nm, _)| nm == n).map(|(_, l)| *l)
+    };
+    for (_class_name, arm_body) in arms.iter() {
+        let mut stmts: Vec<MStmt> = Vec::new();
+        let value_slot = lower_rich_expr_to_slot(
+            *arm_body,
+            &lookup,
+            fn_lookup,
+            &mut next_slot,
+            &mut stmts,
+            &mut extra_locals,
+            strings,
+        )?;
+        stmts.push(MStmt::Assign {
+            dest: result_slot,
+            value: skotch_mir::Rvalue::Local(value_slot),
+        });
+        blocks.push(BasicBlock {
+            stmts,
+            terminator: Terminator::Goto(exit_block),
+        });
+    }
+
+    // Else arm (optional).
+    if let Some(else_body) = else_body {
+        let mut stmts: Vec<MStmt> = Vec::new();
+        let value_slot = lower_rich_expr_to_slot(
+            else_body,
+            &lookup,
+            fn_lookup,
+            &mut next_slot,
+            &mut stmts,
+            &mut extra_locals,
+            strings,
+        )?;
+        stmts.push(MStmt::Assign {
+            dest: result_slot,
+            value: skotch_mir::Rvalue::Local(value_slot),
+        });
+        blocks.push(BasicBlock {
+            stmts,
+            terminator: Terminator::Goto(exit_block),
+        });
+    }
+
+    // Exit block.
+    blocks.push(BasicBlock {
+        stmts: Vec::new(),
+        terminator: Terminator::ReturnValue(result_slot),
+    });
+
+    let _ = val_lookup;
+    let _ = wrapper_class;
+    Some((blocks, extra_locals))
+}
+
 /// Try to lower a simple `if (cond) then-arm else else-arm` expression
 /// body. Returns None when the if's condition / arms / else are not
 /// simple binary-comparison + literal/ref arms.
@@ -20394,6 +20592,22 @@ fn lower_simple_body(
         if let Some(blocks_and_locals) =
             try_lower_if_expression(if_e, f, strings, fn_lookup, val_lookup, wrapper_class)
         {
+            return blocks_and_locals;
+        }
+    }
+
+    // when-as-expression body with `is X -> exprX` arms (sealed-class
+    // smart-cast dispatch). Emits an instanceof cascade + per-arm result
+    // assigns + ReturnValue at the join.
+    if let KtExpr::When(when_e) = &body_expr {
+        if let Some(blocks_and_locals) = try_lower_when_is_expression(
+            when_e,
+            f,
+            strings,
+            fn_lookup,
+            val_lookup,
+            wrapper_class,
+        ) {
             return blocks_and_locals;
         }
     }
