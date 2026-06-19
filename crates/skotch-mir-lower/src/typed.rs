@@ -210,6 +210,45 @@ impl Drop for ParamTyScope {
     }
 }
 
+thread_local! {
+    /// Function-scoped cross-file val lookup. Set by the legacy and
+    /// builder body-walkers before invoking lower_rich so a bare
+    /// Reference that doesn't resolve to a local can fall back to a
+    /// `GetStaticField` read on the file's wrapper class. Cleared on
+    /// drop so nested entries don't leak.
+    static VAL_LOOKUP_FALLBACK:
+        std::cell::RefCell<(rustc_hash::FxHashMap<String, Ty>, String)> =
+        std::cell::RefCell::new((rustc_hash::FxHashMap::default(), String::new()));
+}
+
+struct ValLookupScope {
+    prev: (rustc_hash::FxHashMap<String, Ty>, String),
+}
+
+impl ValLookupScope {
+    fn new(map: rustc_hash::FxHashMap<String, Ty>, wrapper_class: String) -> Self {
+        let prev = VAL_LOOKUP_FALLBACK
+            .with(|cell| std::mem::take(&mut *cell.borrow_mut()));
+        VAL_LOOKUP_FALLBACK
+            .with(|cell| *cell.borrow_mut() = (map, wrapper_class));
+        ValLookupScope { prev }
+    }
+}
+
+impl Drop for ValLookupScope {
+    fn drop(&mut self) {
+        VAL_LOOKUP_FALLBACK
+            .with(|cell| *cell.borrow_mut() = std::mem::take(&mut self.prev));
+    }
+}
+
+fn val_lookup_fallback(name: &str) -> Option<(Ty, String)> {
+    VAL_LOOKUP_FALLBACK.with(|cell| {
+        let b = cell.borrow();
+        b.0.get(name).map(|ty| (ty.clone(), b.1.clone()))
+    })
+}
+
 /// Resolve a Kotlin user-type name to a `Ty`. Primitives and stdlib
 /// shorthand go through `ty_from_name`; everything else (user
 /// classes, cross-file references) falls back to `Ty::Class(<JVM
@@ -8320,6 +8359,11 @@ fn try_lower_multi_stmt_block_with_offset(
     // writes in this body can fall back to `this.field` PutField /
     // GetField when they don't match a local. Restored on drop.
     let _class_scope = ClassMethodScope::new(class_name, field_names);
+    // Install cross-file val lookup so lower_rich can resolve bare
+    // Reference to a top-level val as a GetStaticField on the file's
+    // wrapper class.
+    let _val_scope_inner =
+        ValLookupScope::new(val_lookup.clone(), wrapper_class.to_string());
     let mut local_tys: Vec<Ty> = Vec::new();
     let mut stmts: Vec<MStmt> = Vec::new();
     let mut next_slot: u32 = param_count as u32 + slot_offset;
@@ -18663,6 +18707,31 @@ fn lower_rich_expr_to_slot(
         });
         return Some(slot);
     }
+    // Final Reference fallback: a bare identifier that didn't
+    // resolve as a local or class field. Try cross-file `val_lookup`
+    // (top-level vals in this or any other file of the module) →
+    // emit GetStaticField on the file's wrapper class with the val's
+    // descriptor. Kotlin's top-level vals lower to static fields on
+    // the file's wrapper class (e.g. `MainKt`), so the cross-file
+    // get is a no-op on the source side.
+    if let KtExpr::Reference(r) = &e {
+        if let Some(name) = r.name() {
+            if let Some((val_ty, wrapper)) = val_lookup_fallback(name) {
+                let slot = LocalId(*next_slot);
+                *next_slot += 1;
+                extra_locals.push(val_ty.clone());
+                pre_stmts.push(MStmt::Assign {
+                    dest: slot,
+                    value: skotch_mir::Rvalue::GetStaticField {
+                        class_name: wrapper,
+                        field_name: name.to_string(),
+                        descriptor: ty_to_descriptor(&val_ty),
+                    },
+                });
+                return Some(slot);
+            }
+        }
+    }
     trace_bail!(
         "lower_rich_expr_to_slot fell through all arms: kind={}",
         kt_expr_kind(&e)
@@ -18949,6 +19018,11 @@ fn lower_simple_body(
     // the current function's Special::TryStmt arms register will
     // accumulate here and we drain at function end.
     reset_exception_handlers();
+
+    // Install cross-file val lookup so lower_rich's Reference
+    // fallback can emit GetStaticField for bare references to
+    // top-level vals defined in this or another file in the module.
+    let _val_scope = ValLookupScope::new(val_lookup.clone(), wrapper_class.to_string());
 
     let make_placeholder = || {
         (
