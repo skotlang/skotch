@@ -59,6 +59,12 @@ impl Drop for ClassMethodScope {
 /// `Some((class_name, field_name, field_ty))` when the name matches
 /// a declared field, `None` otherwise (or when no context is
 /// active).
+fn current_class_name() -> Option<String> {
+    CLASS_METHOD_CTX.with(|cell| {
+        cell.borrow().as_ref().map(|(c, _)| c.clone())
+    })
+}
+
 fn class_field_lookup(name: &str) -> Option<(String, String, Ty)> {
     CLASS_METHOD_CTX.with(|cell| {
         let borrow = cell.borrow();
@@ -18706,6 +18712,60 @@ fn lower_rich_expr_to_slot(
             },
         });
         return Some(slot);
+    }
+    // Implicit-this method call: inside a class method, a bare
+    // `foo(args)` whose callee doesn't resolve as a top-level fn or
+    // intrinsic may be a method on the current class. Look up the
+    // method in CLASS_METHODS and emit a Virtual call on slot 0
+    // (`this`).
+    if let KtExpr::Call(call) = e {
+        if let Some(KtExpr::Reference(rc)) = call.callee() {
+            if let Some(method_name) = rc.name() {
+                if let Some(class_name) = current_class_name() {
+                    if let Some(ret_ty) = class_method_return_ty(&class_name, method_name) {
+                        let mut arg_slots: Vec<LocalId> = vec![LocalId(0)];
+                        let mut all_ok = true;
+                        if let Some(arg_list) = call.value_argument_list() {
+                            for arg in arg_list.arguments() {
+                                let Some(arg_e) = arg.expression() else {
+                                    all_ok = false;
+                                    break;
+                                };
+                                let Some(s) = lower_rich_expr_to_slot(
+                                    arg_e,
+                                    lookup_name,
+                                    fn_lookup,
+                                    next_slot,
+                                    pre_stmts,
+                                    extra_locals,
+                                    strings,
+                                ) else {
+                                    all_ok = false;
+                                    break;
+                                };
+                                arg_slots.push(s);
+                            }
+                        }
+                        if all_ok {
+                            let result_slot = LocalId(*next_slot);
+                            *next_slot += 1;
+                            extra_locals.push(ret_ty);
+                            pre_stmts.push(MStmt::Assign {
+                                dest: result_slot,
+                                value: skotch_mir::Rvalue::Call {
+                                    kind: skotch_mir::CallKind::Virtual {
+                                        class_name,
+                                        method_name: method_name.to_string(),
+                                    },
+                                    args: arg_slots,
+                                },
+                            });
+                            return Some(result_slot);
+                        }
+                    }
+                }
+            }
+        }
     }
     // Final Reference fallback: a bare identifier that didn't
     // resolve as a local or class field. Try cross-file `val_lookup`
