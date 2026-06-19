@@ -24667,6 +24667,15 @@ fn method_from_fun_with_class(
     );
     let has_body = f.body_block().is_some() || f.body_expression().is_some();
     let is_abstract = f.is_abstract() || (is_abstract_default && !has_body);
+    // Install the class context for the entire body lowering — both
+    // the legacy walker (which installs it again internally with the
+    // same field_names; RAII save/restore makes nesting safe) AND
+    // method_simple_body_full's mini-walker / expression-body
+    // fallbacks (which previously had no class scope, so a bare
+    // identifier `height` inside a class method body fell through
+    // class_field_lookup and produced empty MIR).
+    let _outer_class_scope_method =
+        ClassMethodScope::new(class_name, field_names);
     // Try to lower a simple literal body. method_simple_body lays
     // out: local 0 = this; locals 1..N+1 = user params; local N+2 =
     // result. Bodies that can't be lowered fall back to an empty
