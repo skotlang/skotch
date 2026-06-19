@@ -15626,6 +15626,16 @@ fn lower_rich_expr_to_slot(
                         .collect()
                 })
                 .unwrap_or_default();
+            let param_tys: Vec<Ty> = kt_fun
+                .value_parameter_list()
+                .map(|pl| {
+                    pl.parameters()
+                        .map(|p| {
+                            p.type_reference().map(resolve_type_ref).unwrap_or(Ty::Any)
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
             let param_count = param_names.len();
             let return_ty = match kt_fun
                 .return_type()
@@ -15679,7 +15689,11 @@ fn lower_rich_expr_to_slot(
             let mut method_locals: Vec<Ty> =
                 Vec::with_capacity(1 + param_count + extra_locals_m.len());
             method_locals.push(Ty::Class(obj_name.clone()));
-            for _ in 0..param_count {
+            for ty in &param_tys {
+                method_locals.push(ty.clone());
+            }
+            // Pad with Any if any param ty failed to resolve.
+            while method_locals.len() < 1 + param_count {
                 method_locals.push(Ty::Any);
             }
             method_locals.extend(extra_locals_m);
