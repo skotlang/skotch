@@ -16714,6 +16714,78 @@ fn lower_rich_expr_to_slot(
             return Some(result_slot);
         }
     }
+    // `x in collection` → `collection.contains(x)` for a user-class
+    // collection with `operator fun contains`. Kotlin swaps the args:
+    // the lhs becomes the contains arg, the rhs becomes the receiver.
+    if let KtExpr::Binary(b) = e {
+        let op_text = b.operation().map(|o| o.text()).unwrap_or_default();
+        if op_text == "in" || op_text == "!in" {
+            let lhs = b.lhs()?;
+            let rhs = b.rhs()?;
+            let rhs_slot = lower_rich_expr_to_slot(
+                rhs,
+                lookup_name,
+                fn_lookup,
+                next_slot,
+                pre_stmts,
+                extra_locals,
+                strings,
+            )?;
+            let recv_ty = slot_ty_with_param_fallback(rhs_slot.0, extra_locals);
+            if let Ty::Class(cname) = &recv_ty {
+                if let Some(ret_ty) = class_method_return_ty(cname, "contains") {
+                    let lhs_slot = lower_rich_expr_to_slot(
+                        lhs,
+                        lookup_name,
+                        fn_lookup,
+                        next_slot,
+                        pre_stmts,
+                        extra_locals,
+                        strings,
+                    )?;
+                    let result_slot = LocalId(*next_slot);
+                    *next_slot += 1;
+                    extra_locals.push(ret_ty);
+                    pre_stmts.push(MStmt::Assign {
+                        dest: result_slot,
+                        value: skotch_mir::Rvalue::Call {
+                            kind: skotch_mir::CallKind::Virtual {
+                                class_name: cname.clone(),
+                                method_name: "contains".to_string(),
+                            },
+                            args: vec![rhs_slot, lhs_slot],
+                        },
+                    });
+                    // `!in` negates: emit a bool flip via xor with 1.
+                    if op_text == "!in" {
+                        let one_slot = LocalId(*next_slot);
+                        *next_slot += 1;
+                        extra_locals.push(Ty::Int);
+                        pre_stmts.push(MStmt::Assign {
+                            dest: one_slot,
+                            value: skotch_mir::Rvalue::Const(
+                                skotch_mir::MirConst::Int(1),
+                            ),
+                        });
+                        let neg_slot = LocalId(*next_slot);
+                        *next_slot += 1;
+                        extra_locals.push(Ty::Bool);
+                        // Bool XOR via BinOp::SubI: 1 - x flips.
+                        pre_stmts.push(MStmt::Assign {
+                            dest: neg_slot,
+                            value: skotch_mir::Rvalue::BinOp {
+                                op: skotch_mir::BinOp::SubI,
+                                lhs: one_slot,
+                                rhs: result_slot,
+                            },
+                        });
+                        return Some(neg_slot);
+                    }
+                    return Some(result_slot);
+                }
+            }
+        }
+    }
     // User-defined infix method call: `a add b` → `a.add(b)`.
     // Triggers when the Binary operation is an alphanumeric
     // identifier (not a symbolic operator like `+`, `==`, etc.) AND
