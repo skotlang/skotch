@@ -25390,6 +25390,11 @@ fn collect_class_super_iface(
     };
     let mut super_class = None;
     let mut ifaces = Vec::new();
+    let to_fq = |n: String| -> String {
+        skotch_types::intrinsics::kotlin_to_jvm_class(&n)
+            .map(|s| s.to_string())
+            .unwrap_or(n)
+    };
     for entry in l.entries() {
         let name = entry
             .type_reference()
@@ -25397,8 +25402,8 @@ fn collect_class_super_iface(
             .and_then(|u| u.name())
             .map(|s| s.to_string());
         match (name, &entry) {
-            (Some(n), skotch_ast::SuperTypeEntry::Call(_)) => super_class = Some(n),
-            (Some(n), _) => ifaces.push(n),
+            (Some(n), skotch_ast::SuperTypeEntry::Call(_)) => super_class = Some(to_fq(n)),
+            (Some(n), _) => ifaces.push(to_fq(n)),
             (None, _) => {}
         }
     }
