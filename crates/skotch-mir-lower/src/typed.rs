@@ -18602,6 +18602,66 @@ fn lower_rich_expr_to_slot(
                                             "()I",
                                             Ty::Int,
                                         )),
+                                        "sorted" => Some((
+                                            "kotlin/collections/CollectionsKt",
+                                            "sorted",
+                                            "(Ljava/lang/Iterable;)Ljava/util/List;",
+                                            Ty::Class("java/util/List".to_string()),
+                                        )),
+                                        "sortedDescending" => Some((
+                                            "kotlin/collections/CollectionsKt",
+                                            "sortedDescending",
+                                            "(Ljava/lang/Iterable;)Ljava/util/List;",
+                                            Ty::Class("java/util/List".to_string()),
+                                        )),
+                                        "reversed" => Some((
+                                            "kotlin/collections/CollectionsKt",
+                                            "reversed",
+                                            "(Ljava/lang/Iterable;)Ljava/util/List;",
+                                            Ty::Class("java/util/List".to_string()),
+                                        )),
+                                        "first" => Some((
+                                            "kotlin/collections/CollectionsKt",
+                                            "first",
+                                            "(Ljava/lang/Iterable;)Ljava/lang/Object;",
+                                            Ty::Any,
+                                        )),
+                                        "last" => Some((
+                                            "kotlin/collections/CollectionsKt",
+                                            "last",
+                                            "(Ljava/lang/Iterable;)Ljava/lang/Object;",
+                                            Ty::Any,
+                                        )),
+                                        "isEmpty" => Some((
+                                            "kotlin/collections/CollectionsKt",
+                                            "isEmpty",
+                                            "(Ljava/lang/Iterable;)Z",
+                                            Ty::Bool,
+                                        )),
+                                        "isNotEmpty" => Some((
+                                            "kotlin/collections/CollectionsKt",
+                                            "isNotEmpty",
+                                            "(Ljava/lang/Iterable;)Z",
+                                            Ty::Bool,
+                                        )),
+                                        "toList" => Some((
+                                            "kotlin/collections/CollectionsKt",
+                                            "toList",
+                                            "(Ljava/lang/Iterable;)Ljava/util/List;",
+                                            Ty::Class("java/util/List".to_string()),
+                                        )),
+                                        "toSet" => Some((
+                                            "kotlin/collections/CollectionsKt",
+                                            "toSet",
+                                            "(Ljava/lang/Iterable;)Ljava/util/Set;",
+                                            Ty::Class("java/util/Set".to_string()),
+                                        )),
+                                        "joinToString" => Some((
+                                            "kotlin/collections/CollectionsKt",
+                                            "joinToString",
+                                            "(Ljava/lang/Iterable;Ljava/lang/CharSequence;)Ljava/lang/String;",
+                                            Ty::String,
+                                        )),
                                         _ => None,
                                     };
                                     if let Some((cls, method, desc, ret_ty)) = mapped {
