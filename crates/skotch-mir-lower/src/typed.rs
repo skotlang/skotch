@@ -1428,6 +1428,33 @@ pub fn lower_file(
                             }
                         }
                     }
+                    // Companion object methods register under
+                    // `<Outer>$Companion` so `Outer.method()` call
+                    // sites can dispatch through the companion
+                    // accessor.
+                    for d in body.declarations() {
+                        if let KtDecl::Object(o) = d {
+                            if o.is_companion() {
+                                let comp_name = format!("{}$Companion", cname);
+                                let mut comp_methods:
+                                    rustc_hash::FxHashMap<String, Ty> =
+                                        rustc_hash::FxHashMap::default();
+                                if let Some(obody) = o.body() {
+                                    for od in obody.declarations() {
+                                        if let KtDecl::Fun(f) = od {
+                                            if let Some(mname) = f.name() {
+                                                comp_methods.insert(
+                                                    mname.to_string(),
+                                                    resolve_ret_ty(&f),
+                                                );
+                                            }
+                                        }
+                                    }
+                                }
+                                table.insert(comp_name, comp_methods);
+                            }
+                        }
+                    }
                 }
                 table.insert(cname.to_string(), methods);
             }
@@ -17784,6 +17811,85 @@ fn lower_rich_expr_to_slot(
                                 },
                             });
                             return Some(result_slot);
+                        }
+                    }
+                }
+            }
+            // Companion factory dispatch: `Color.white()` →
+            //   getstatic Color.Companion : LColor$Companion;
+            //   invokevirtual Color$Companion.white()LColor;
+            // Triggered when lhs is a bare uppercase Reference that
+            // doesn't resolve as a local AND Color$Companion is in
+            // CLASS_METHODS with the method registered.
+            if let (KtExpr::Reference(cls_ref), KtExpr::Call(call)) =
+                (&dq_exprs[0], &dq_exprs[1])
+            {
+                if let Some(cls_name) = cls_ref.name() {
+                    if cls_name.starts_with(char::is_uppercase)
+                        && lookup_name(cls_name).is_none()
+                    {
+                        let companion = format!("{}$Companion", cls_name);
+                        if let Some(KtExpr::Reference(meth_ref)) = call.callee() {
+                            if let Some(method_n) = meth_ref.name() {
+                                if let Some(ret_ty) =
+                                    class_method_return_ty(&companion, method_n)
+                                {
+                                    // Get Companion instance.
+                                    let comp_slot = LocalId(*next_slot);
+                                    *next_slot += 1;
+                                    extra_locals.push(Ty::Class(companion.clone()));
+                                    pre_stmts.push(MStmt::Assign {
+                                        dest: comp_slot,
+                                        value: skotch_mir::Rvalue::GetStaticField {
+                                            class_name: cls_name.to_string(),
+                                            field_name: "Companion".to_string(),
+                                            descriptor: format!("L{};", companion),
+                                        },
+                                    });
+                                    // Lower args.
+                                    let mut arg_slots: Vec<LocalId> = vec![comp_slot];
+                                    let mut all_ok = true;
+                                    if let Some(arg_list) = call.value_argument_list()
+                                    {
+                                        for arg in arg_list.arguments() {
+                                            let Some(arg_e) = arg.expression() else {
+                                                all_ok = false;
+                                                break;
+                                            };
+                                            let Some(s) = lower_rich_expr_to_slot(
+                                                arg_e,
+                                                lookup_name,
+                                                fn_lookup,
+                                                next_slot,
+                                                pre_stmts,
+                                                extra_locals,
+                                                strings,
+                                            ) else {
+                                                all_ok = false;
+                                                break;
+                                            };
+                                            arg_slots.push(s);
+                                        }
+                                    }
+                                    if all_ok {
+                                        let result_slot = LocalId(*next_slot);
+                                        *next_slot += 1;
+                                        extra_locals.push(ret_ty);
+                                        pre_stmts.push(MStmt::Assign {
+                                            dest: result_slot,
+                                            value: skotch_mir::Rvalue::Call {
+                                                kind: skotch_mir::CallKind::Virtual {
+                                                    class_name: companion,
+                                                    method_name: method_n
+                                                        .to_string(),
+                                                },
+                                                args: arg_slots,
+                                            },
+                                        });
+                                        return Some(result_slot);
+                                    }
+                                }
+                            }
                         }
                     }
                 }
