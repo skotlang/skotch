@@ -939,7 +939,27 @@ pub fn lower_file(
                 None => continue,
             };
             let (super_class, interfaces) = collect_class_super_iface(c.super_type_list());
-            let fields = collect_class_fields(c);
+            let mut fields = collect_class_fields(c);
+            // Generic erasure for class fields: type params appear as
+            // Ty::Class("A"). Erase to Ty::Any so descriptors come out
+            // as `Ljava/lang/Object;` matching kotlinc.
+            let class_type_param_names: std::collections::HashSet<String> = c
+                .type_parameter_list()
+                .map(|tpl| {
+                    tpl.parameters()
+                        .filter_map(|tp| tp.name().map(String::from))
+                        .collect()
+                })
+                .unwrap_or_default();
+            if !class_type_param_names.is_empty() {
+                for fld in fields.iter_mut() {
+                    if let Ty::Class(n) = &fld.ty {
+                        if class_type_param_names.contains(n) {
+                            fld.ty = Ty::Any;
+                        }
+                    }
+                }
+            }
             let methods = collect_class_methods(
                 c,
                 &name,
@@ -1453,7 +1473,27 @@ pub fn lower_file(
             // Pull param/return Ty from the TypedFile pass-1 output if
             // the indices line up.
             let typed_fn = typed.functions.iter().find(|tf| tf.name_index == fn_id);
-            let return_ty = typed_fn.map(|tf| tf.return_ty.clone()).unwrap_or(Ty::Unit);
+            let mut return_ty = typed_fn.map(|tf| tf.return_ty.clone()).unwrap_or(Ty::Unit);
+            // Generic erasure: if the function declares type params and
+            // the return type is a Ty::Class matching one of them,
+            // erase to Ty::Any.
+            {
+                let type_param_names_ret: std::collections::HashSet<String> = f
+                    .type_parameter_list()
+                    .map(|tpl| {
+                        tpl.parameters()
+                            .filter_map(|tp| tp.name().map(String::from))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                if !type_param_names_ret.is_empty() {
+                    if let Ty::Class(n) = &return_ty {
+                        if type_param_names_ret.contains(n) {
+                            return_ty = Ty::Any;
+                        }
+                    }
+                }
+            }
             let user_param_count = f
                 .value_parameter_list()
                 .map(|pl| pl.parameters().count())
@@ -1468,6 +1508,27 @@ pub fn lower_file(
             if is_extension {
                 // Prepend receiver Ty.
                 param_tys.insert(0, receiver_ty.clone().unwrap_or(Ty::Any));
+            }
+            // Generic erasure: type params appear as `Ty::Class("A")`
+            // in typeck output. Collect the function's declared type
+            // parameter names and erase matching param Tys to Ty::Any
+            // (which descriptors as `Ljava/lang/Object;`).
+            let type_param_names: std::collections::HashSet<String> = f
+                .type_parameter_list()
+                .map(|tpl| {
+                    tpl.parameters()
+                        .filter_map(|tp| tp.name().map(String::from))
+                        .collect()
+                })
+                .unwrap_or_default();
+            if !type_param_names.is_empty() {
+                for ty in param_tys.iter_mut() {
+                    if let Ty::Class(n) = ty {
+                        if type_param_names.contains(n) {
+                            *ty = Ty::Any;
+                        }
+                    }
+                }
             }
             let param_names: Vec<String> = f
                 .value_parameter_list()
@@ -21687,16 +21748,26 @@ fn constructor_from_primary_impl(
         .iter()
         .map(|p| p.name().unwrap_or("").to_string())
         .collect();
+    // Generic erasure: ctor params named after class type params get
+    // erased to Ty::Any so `<init>` descriptor matches kotlinc.
+    let class_type_param_set: std::collections::HashSet<String> = c
+        .type_parameter_list()
+        .map(|tpl| {
+            tpl.parameters()
+                .filter_map(|tp| tp.name().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
     let user_param_tys: Vec<Ty> = params_iter
         .iter()
         .map(|p| {
-            // Preserve user-class + function-type param Tys (not just
-            // primitives). Without this, `class Mul(val l: Expr, val
-            // r: Expr)` got `(Object, Object)V` as its <init>
-            // descriptor; with the function-type extension,
-            // `fun runPipeline(..., onEach: (Int, Step) -> Unit)`
-            // also picks up `LFunction2;` instead of `LObject;`.
-            p.type_reference().map(resolve_type_ref).unwrap_or(Ty::Any)
+            let ty = p.type_reference().map(resolve_type_ref).unwrap_or(Ty::Any);
+            if let Ty::Class(n) = &ty {
+                if class_type_param_set.contains(n) {
+                    return Ty::Any;
+                }
+            }
+            ty
         })
         .collect();
     // local 0 = `this`; locals 1..=N hold user params.
@@ -24166,6 +24237,7 @@ fn method_from_fun(
         &rustc_hash::FxHashMap::default(),
         &rustc_hash::FxHashMap::default(),
         "",
+        &[],
     )
 }
 
@@ -24180,7 +24252,31 @@ fn method_from_fun_with_class(
     fn_lookup: &rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)>,
     val_lookup: &rustc_hash::FxHashMap<String, Ty>,
     wrapper_class: &str,
+    outer_class_type_params: &[String],
 ) -> MirFunction {
+    // Collect the union of class-level + method-level type param
+    // names for generic erasure. Param Tys / return Ty that name one
+    // of these get erased to Ty::Any so descriptors come out as
+    // `Ljava/lang/Object;` matching kotlinc.
+    let mut method_type_param_names: std::collections::HashSet<String> = f
+        .type_parameter_list()
+        .map(|tpl| {
+            tpl.parameters()
+                .filter_map(|tp| tp.name().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
+    for n in outer_class_type_params {
+        method_type_param_names.insert(n.clone());
+    }
+    let erase_generic = |ty: Ty| -> Ty {
+        if let Ty::Class(n) = &ty {
+            if method_type_param_names.contains(n) {
+                return Ty::Any;
+            }
+        }
+        ty
+    };
     let name = f.name().unwrap_or("<anon>").to_string();
     let user_param_count = f
         .value_parameter_list()
@@ -24204,10 +24300,11 @@ fn method_from_fun_with_class(
                 .collect()
         })
         .unwrap_or_default();
-    let return_ty = f
-        .return_type()
-        .map(resolve_type_ref)
-        .unwrap_or(Ty::Unit);
+    let return_ty = erase_generic(
+        f.return_type()
+            .map(resolve_type_ref)
+            .unwrap_or(Ty::Unit),
+    );
     let has_body = f.body_block().is_some() || f.body_expression().is_some();
     let is_abstract = f.is_abstract() || (is_abstract_default && !has_body);
     // Try to lower a simple literal body. method_simple_body lays
@@ -24248,7 +24345,11 @@ fn method_from_fun_with_class(
     );
     if let Some(pl) = f.value_parameter_list() {
         for p in pl.parameters() {
-            locals.push(p.type_reference().map(resolve_type_ref).unwrap_or(Ty::Any));
+            let pty = p
+                .type_reference()
+                .map(resolve_type_ref)
+                .unwrap_or(Ty::Any);
+            locals.push(erase_generic(pty));
         }
     } else {
         for _ in 0..param_count {
@@ -24409,6 +24510,14 @@ fn collect_class_methods(
             })
             .enumerate()
         {
+            let outer_tp: Vec<String> = c
+                .type_parameter_list()
+                .map(|tpl| {
+                    tpl.parameters()
+                        .filter_map(|tp| tp.name().map(String::from))
+                        .collect()
+                })
+                .unwrap_or_default();
             methods.push(method_from_fun_with_class(
                 f,
                 method_idx as u32,
@@ -24419,6 +24528,7 @@ fn collect_class_methods(
                 fn_lookup,
                 val_lookup,
                 wrapper_class,
+                &outer_tp,
             ));
         }
     }
@@ -24457,7 +24567,18 @@ fn collect_class_methods(
                     .and_then(|tr| tr.user_type())
                     .and_then(|u| u.name())
                     .map(String::from);
+                // Generic erasure: class type params name synthesized
+                // getter return types as Object.
+                let class_tp_set: std::collections::HashSet<String> = c
+                    .type_parameter_list()
+                    .map(|tpl| {
+                        tpl.parameters()
+                            .filter_map(|tp| tp.name().map(String::from))
+                            .collect()
+                    })
+                    .unwrap_or_default();
                 let ret_ty = match ret_ty_name.as_deref() {
+                    Some(n) if class_tp_set.contains(n) => Ty::Any,
                     Some(n) => {
                         skotch_types::ty_from_name(n).unwrap_or_else(|| {
                             let fq = skotch_types::intrinsics::kotlin_to_jvm_class(n)
