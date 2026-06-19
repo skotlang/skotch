@@ -17715,6 +17715,43 @@ fn lower_rich_expr_to_slot(
                                     });
                                     return Some(result_slot);
                                 }
+                                // Java collection size / isEmpty access:
+                                // `list.size` → `list.size()I`, not
+                                // `list.getSize()`. JDK collections have
+                                // pre-Kotlin Java APIs that don't follow
+                                // Kotlin's getter convention.
+                                let is_jdk_collection = matches!(
+                                    cname.as_str(),
+                                    "java/util/List"
+                                        | "java/util/Set"
+                                        | "java/util/Map"
+                                        | "java/util/Collection"
+                                        | "java/util/Iterator"
+                                );
+                                if is_jdk_collection {
+                                    let (m, d, t) = match prop_name {
+                                        "size" => Some(("size", "()I", Ty::Int)),
+                                        "isEmpty" | "empty" => {
+                                            Some(("isEmpty", "()Z", Ty::Bool))
+                                        }
+                                        _ => None,
+                                    }?;
+                                    let result_slot = LocalId(*next_slot);
+                                    *next_slot += 1;
+                                    extra_locals.push(t.clone());
+                                    pre_stmts.push(MStmt::Assign {
+                                        dest: result_slot,
+                                        value: skotch_mir::Rvalue::Call {
+                                            kind: skotch_mir::CallKind::VirtualJava {
+                                                class_name: cname.clone(),
+                                                method_name: m.to_string(),
+                                                descriptor: d.to_string(),
+                                            },
+                                            args: vec![recv_slot],
+                                        },
+                                    });
+                                    return Some(result_slot);
+                                }
                                 // Capitalize the first char of the
                                 // property name: `count` → `getCount`.
                                 let mut chars = prop_name.chars();
