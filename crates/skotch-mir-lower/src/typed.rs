@@ -7237,7 +7237,44 @@ fn lower_loop_body_blocks(
                         (lo, hi, skotch_mir::BinOp::CmpLe, 1)
                     }
                 } else {
-                    return None;
+                    // Generic-expression range: lower the range
+                    // expression via lower_rich and treat the result
+                    // as an Iterable / List receiver. Covers
+                    // `for (x in ps.sorted())`, `for (e in m.entries)`,
+                    // `for (i in fnReturningList())`, etc.
+                    let range_slot = lower_rich_expr_to_slot(
+                        range_expr,
+                        &lookup,
+                        fn_lookup_ref,
+                        next_slot,
+                        &mut cur_stmts,
+                        local_tys,
+                        strings,
+                    )?;
+                    list_recv = Some(range_slot);
+                    let lo = LocalId(*next_slot);
+                    *next_slot += 1;
+                    local_tys.push(Ty::Int);
+                    cur_stmts.push(MStmt::Assign {
+                        dest: lo,
+                        value: skotch_mir::Rvalue::Const(
+                            skotch_mir::MirConst::Int(0),
+                        ),
+                    });
+                    let hi = LocalId(*next_slot);
+                    *next_slot += 1;
+                    local_tys.push(Ty::Int);
+                    cur_stmts.push(MStmt::Assign {
+                        dest: hi,
+                        value: skotch_mir::Rvalue::Call {
+                            kind: skotch_mir::CallKind::Virtual {
+                                class_name: "java/util/List".to_string(),
+                                method_name: "size".to_string(),
+                            },
+                            args: vec![range_slot],
+                        },
+                    });
+                    (lo, hi, skotch_mir::BinOp::CmpLt, 1)
                 };
                 let i_slot = LocalId(*next_slot);
                 *next_slot += 1;
