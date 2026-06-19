@@ -16516,6 +16516,65 @@ fn lower_rich_expr_to_slot(
             return Some(result_slot);
         }
     }
+    // User-defined infix method call: `a add b` → `a.add(b)`.
+    // Triggers when the Binary operation is an alphanumeric
+    // identifier (not a symbolic operator like `+`, `==`, etc.) AND
+    // the lhs receiver resolves to a `Ty::Class` whose CLASS_METHODS
+    // entry contains the method. Falls back to the regular Binary
+    // arms when either condition fails.
+    if let KtExpr::Binary(b) = e {
+        let op_text = b.operation().map(|o| o.text()).unwrap_or_default();
+        let is_alpha_ident = !op_text.is_empty()
+            && op_text.chars().next().map(|c| c.is_alphabetic() || c == '_').unwrap_or(false)
+            && op_text.chars().all(|c| c.is_alphanumeric() || c == '_');
+        let is_stdlib_infix = matches!(
+            op_text.as_str(),
+            "to" | "and" | "or" | "xor" | "shl" | "shr" | "ushr"
+                | "until" | "downTo" | "step"
+                | "in" | "is" | "as"
+        );
+        if is_alpha_ident && !is_stdlib_infix {
+            let lhs = b.lhs()?;
+            let rhs = b.rhs()?;
+            let lhs_slot = lower_rich_expr_to_slot(
+                lhs,
+                lookup_name,
+                fn_lookup,
+                next_slot,
+                pre_stmts,
+                extra_locals,
+                strings,
+            )?;
+            let recv_ty = slot_ty_with_param_fallback(lhs_slot.0, extra_locals);
+            if let Ty::Class(cname) = &recv_ty {
+                if let Some(ret_ty) = class_method_return_ty(cname, &op_text) {
+                    let rhs_slot = lower_rich_expr_to_slot(
+                        rhs,
+                        lookup_name,
+                        fn_lookup,
+                        next_slot,
+                        pre_stmts,
+                        extra_locals,
+                        strings,
+                    )?;
+                    let result_slot = LocalId(*next_slot);
+                    *next_slot += 1;
+                    extra_locals.push(ret_ty);
+                    pre_stmts.push(MStmt::Assign {
+                        dest: result_slot,
+                        value: skotch_mir::Rvalue::Call {
+                            kind: skotch_mir::CallKind::Virtual {
+                                class_name: cname.clone(),
+                                method_name: op_text.to_string(),
+                            },
+                            args: vec![lhs_slot, rhs_slot],
+                        },
+                    });
+                    return Some(result_slot);
+                }
+            }
+        }
+    }
     // `listOf(a, b, c)` intrinsic. kotlinc lowers this to:
     //   iconst N            // size
     //   anewarray Object    // []Object
