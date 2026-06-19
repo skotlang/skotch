@@ -15486,32 +15486,41 @@ fn lower_rich_expr_to_slot(
     // with an expression body. Captures resolved via outer
     // `lookup_name`.
     if let KtExpr::ObjectLiteral(lit) = &e {
-        // Find the OBJECT_DECLARATION child.
-        let obj_decl = skotch_ast::children(lit.syntax())
+        // OBJECT_LITERAL children: KW_OBJECT, COLON, super_type_entry+,
+        // class_body. The super-type and body are direct children of
+        // the OBJECT_LITERAL node (no inner OBJECT_DECLARATION wrapper —
+        // that's the named `object Foo { ... }` declaration form).
+        let lit_children: Vec<&skotch_sil::SilNode> =
+            skotch_ast::children(lit.syntax()).iter().collect();
+        // Super-type entries are direct children of OBJECT_LITERAL
+        // (no SUPER_TYPE_LIST wrapper — that's the named-class path).
+        // Pick the first SUPER_TYPE_ENTRY's user-type name as the
+        // interface this object implements.
+        let interface_name: Option<String> = lit_children
             .iter()
             .find_map(|c| {
-                if c.kind == skotch_syntax::SyntaxKind::OBJECT_DECLARATION {
-                    skotch_ast::KtObjectDeclaration::cast(c)
+                if c.kind == skotch_syntax::SyntaxKind::SUPER_TYPE_ENTRY {
+                    skotch_ast::KtSuperTypeEntry::cast(c)
                 } else {
                     None
                 }
-            })?;
-        // Interface: first non-CALL super-type entry. For now just
-        // pick the first super type if any.
-        let interface_name: Option<String> = obj_decl
-            .super_type_list()
-            .and_then(|stl| {
-                stl.entries().find_map(|entry| {
-                    entry
-                        .type_reference()
-                        .and_then(|tr| tr.user_type())
-                        .and_then(|u| u.name())
-                        .map(String::from)
-                })
+            })
+            .and_then(|entry| {
+                entry
+                    .type_reference()
+                    .and_then(|tr| tr.user_type())
+                    .and_then(|u| u.name())
+                    .map(String::from)
             });
         let interface_name = interface_name?;
-        // Methods: each KtFun decl in the body.
-        let body = obj_decl.body()?;
+        // Methods: each KtFun decl in the class body.
+        let body = lit_children.iter().find_map(|c| {
+            if c.kind == skotch_syntax::SyntaxKind::CLASS_BODY {
+                skotch_ast::KtClassBody::cast(c)
+            } else {
+                None
+            }
+        })?;
         let user_funs: Vec<skotch_ast::KtFun<'_>> = body
             .declarations()
             .filter_map(|d| match d {
