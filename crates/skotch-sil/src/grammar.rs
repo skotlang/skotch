@@ -1792,8 +1792,13 @@ fn parse_property_body(p: &mut Parser<'_, '_>) {
         d.complete(p, S::DESTRUCTURING_DECLARATION);
     } else if has_receiver_prefix(p) {
         parse_receiver_then_name(p);
-    } else if p.at(S::IDENTIFIER) || is_soft_keyword(p.current()) {
+    } else if p.at(S::IDENTIFIER) {
         p.bump();
+    } else if is_soft_keyword(p.current()) {
+        // Reclassify the soft keyword as IDENTIFIER so KtProperty::name
+        // (which looks for an IDENTIFIER child) finds the var name.
+        // Kotlin permits `val inline = ...`, `val data = ...`, etc.
+        p.bump_as(S::IDENTIFIER);
     }
     skip_trivia(p);
     if p.at(S::COLON) {
