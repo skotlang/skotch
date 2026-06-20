@@ -6905,6 +6905,85 @@ fn lower_loop_body(
         // above don't recognize: chained ctor-then-method
         // (`Vm(prog).run()`), method on the result of a Call, etc.
         if let Some(stmt_expr) = skotch_ast::KtExpr::cast(bn) {
+            // Preload bare-Reference class fields appearing in the
+            // stmt expression so lower_rich's lookup_name can resolve
+            // them to GetField slots. Without this, `items.add(v)` in
+            // a class method body falls through every DotQualified
+            // arm in lower_rich (items doesn't resolve as a local).
+            fn collect_refs<'a>(
+                e: skotch_ast::KtExpr<'a>,
+                out: &mut Vec<String>,
+            ) {
+                use skotch_ast::KtExpr;
+                let e = unwrap_parens(e);
+                match e {
+                    KtExpr::Reference(r) => {
+                        if let Some(n) = r.name() {
+                            out.push(n.to_string());
+                        }
+                    }
+                    KtExpr::Binary(b) => {
+                        if let Some(l) = b.lhs() {
+                            collect_refs(l, out);
+                        }
+                        if let Some(r) = b.rhs() {
+                            collect_refs(r, out);
+                        }
+                    }
+                    KtExpr::DotQualified(dq) => {
+                        for c in skotch_ast::children(dq.syntax()) {
+                            if let Some(ce) = KtExpr::cast(c) {
+                                collect_refs(ce, out);
+                            }
+                        }
+                    }
+                    KtExpr::Call(call) => {
+                        if let Some(arg_list) = call.value_argument_list() {
+                            for arg in arg_list.arguments() {
+                                if let Some(ae) = arg.expression() {
+                                    collect_refs(ae, out);
+                                }
+                            }
+                        }
+                    }
+                    KtExpr::Prefix(p) => {
+                        for c in skotch_ast::children(p.syntax()) {
+                            if let Some(ce) = KtExpr::cast(c) {
+                                collect_refs(ce, out);
+                            }
+                        }
+                    }
+                    KtExpr::ArrayAccess(aa) => {
+                        for c in skotch_ast::children(aa.syntax()) {
+                            if let Some(ce) = KtExpr::cast(c) {
+                                collect_refs(ce, out);
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            let mut refs: Vec<String> = Vec::new();
+            collect_refs(stmt_expr, &mut refs);
+            for n in refs {
+                if name_to_local.iter().any(|(nm, _)| nm == &n) {
+                    continue;
+                }
+                if let Some((cname, fname, fty)) = class_field_lookup(&n) {
+                    let slot = LocalId(*next_slot);
+                    *next_slot += 1;
+                    local_tys.push(fty);
+                    body_mstmts.push(MStmt::Assign {
+                        dest: slot,
+                        value: skotch_mir::Rvalue::GetField {
+                            receiver: LocalId(0),
+                            class_name: cname,
+                            field_name: fname,
+                        },
+                    });
+                    name_to_local.push((n, slot));
+                }
+            }
             let snap = name_to_local.clone();
             let lookup = |n: &str| -> Option<LocalId> {
                 snap.iter()
