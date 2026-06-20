@@ -910,6 +910,53 @@ pub fn lower_file(
         }
     }
 
+    // Pre-pass: interface method signatures so `class X : Iface by inner`
+    // can synthesize forwarder methods to inner.method(args) for every
+    // iface method the class doesn't override. Maps simple iface name
+    // → list of (method_name, [param_tys], return_ty, [param_names]).
+    let mut interface_methods: rustc_hash::FxHashMap<
+        String,
+        Vec<(String, Vec<Ty>, Ty, Vec<String>)>,
+    > = rustc_hash::FxHashMap::default();
+    for decl in file.decls() {
+        if let KtDecl::Interface(i) = decl {
+            let Some(iface_name) = i.name() else { continue };
+            let Some(body) = i.body() else { continue };
+            let mut methods: Vec<(String, Vec<Ty>, Ty, Vec<String>)> = Vec::new();
+            for d in body.declarations() {
+                if let KtDecl::Fun(f) = d {
+                    let Some(mname) = f.name() else { continue };
+                    let param_tys: Vec<Ty> = f
+                        .value_parameter_list()
+                        .map(|pl| {
+                            pl.parameters()
+                                .map(|p| {
+                                    p.type_reference()
+                                        .map(resolve_type_ref)
+                                        .unwrap_or(Ty::Any)
+                                })
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    let param_names: Vec<String> = f
+                        .value_parameter_list()
+                        .map(|pl| {
+                            pl.parameters()
+                                .map(|p| p.name().unwrap_or("").to_string())
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    let return_ty = f
+                        .return_type()
+                        .map(resolve_type_ref)
+                        .unwrap_or(Ty::Unit);
+                    methods.push((mname.to_string(), param_tys, return_ty, param_names));
+                }
+            }
+            interface_methods.insert(iface_name.to_string(), methods);
+        }
+    }
+
     // Pre-pass: top-level val lookup so class method bodies can resolve
     // sibling top-level val refs to GetStaticField on the wrapper class.
     let mut val_lookup: rustc_hash::FxHashMap<String, Ty> = rustc_hash::FxHashMap::default();
@@ -1099,6 +1146,227 @@ pub fn lower_file(
                     methods.push(bridge_fn);
                 }
             }
+            // By-delegation forwarder synthesis. For each
+            // `: Iface by inner` clause where `inner` resolves to a
+            // ctor param, add a synthetic field `inner: Iface`, push
+            // the matching PutField into the constructor's first
+            // block, then for every iface method not already present
+            // in `methods`, generate a forwarder:
+            //   fun foo(args) = this.inner.foo(args)
+            let mut fields = fields;
+            let mut methods = methods;
+            let mut constructor = constructor;
+            if let Some(stl) = c.super_type_list() {
+                let mut delegations: Vec<(String, String)> = Vec::new(); // (iface_simple, param_name)
+                for entry in stl.entries() {
+                    if let skotch_ast::SuperTypeEntry::Delegated(d) = entry {
+                        let Some(iface_name) = d
+                            .type_reference()
+                            .and_then(|t| t.user_type())
+                            .and_then(|u| u.name())
+                        else {
+                            continue;
+                        };
+                        let Some(delegate_expr) = d.delegate_expression() else {
+                            continue;
+                        };
+                        let delegate_expr = unwrap_parens(delegate_expr);
+                        let param_name = if let skotch_ast::KtExpr::Reference(r) =
+                            delegate_expr
+                        {
+                            r.name().map(|s| s.to_string())
+                        } else {
+                            None
+                        };
+                        let Some(param_name) = param_name else { continue };
+                        // Confirm `param_name` IS a primary-ctor param.
+                        let is_ctor_param = c
+                            .primary_constructor()
+                            .and_then(|pc| pc.value_parameter_list())
+                            .map(|pl| {
+                                pl.parameters().any(|p| p.name() == Some(&param_name))
+                            })
+                            .unwrap_or(false);
+                        if !is_ctor_param {
+                            continue;
+                        }
+                        delegations.push((iface_name.to_string(), param_name));
+                    }
+                }
+                if !delegations.is_empty() {
+                    use skotch_mir::{LocalId, Stmt as MStmt};
+                    let this_slot = LocalId(0);
+                    // Identify ctor param slot index for each delegate.
+                    let param_names_v: Vec<String> = c
+                        .primary_constructor()
+                        .and_then(|pc| pc.value_parameter_list())
+                        .map(|pl| {
+                            pl.parameters()
+                                .map(|p| p.name().unwrap_or("").to_string())
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    let already_field: std::collections::HashSet<String> =
+                        fields.iter().map(|f| f.name.clone()).collect();
+                    for (iface_simple, param_name) in &delegations {
+                        let iface_jvm = skotch_types::intrinsics::kotlin_to_jvm_class(
+                            iface_simple,
+                        )
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| iface_simple.clone());
+                        // 1. Add field if not present (param wasn't `val`/`var`).
+                        if !already_field.contains(param_name) {
+                            fields.push(skotch_mir::MirField {
+                                name: param_name.clone(),
+                                ty: Ty::Class(iface_jvm.clone()),
+                                is_jvm_field: false,
+                            });
+                            // 2. PutField in constructor.
+                            let Some(idx) =
+                                param_names_v.iter().position(|n| n == param_name)
+                            else {
+                                continue;
+                            };
+                            let param_slot = LocalId((idx + 1) as u32);
+                            if let Some(first_block) = constructor.blocks.first_mut() {
+                                first_block.stmts.push(MStmt::Assign {
+                                    dest: this_slot,
+                                    value: skotch_mir::Rvalue::PutField {
+                                        receiver: this_slot,
+                                        class_name: name.clone(),
+                                        field_name: param_name.clone(),
+                                        value: param_slot,
+                                    },
+                                });
+                            }
+                        }
+                        // 3. Forwarder methods. Look up iface in
+                        //    pre-collected interface_methods (same-file)
+                        //    OR fall back to the cross-file
+                        //    package_symbols table for ifaces in sibling
+                        //    files. Skip any method already overridden
+                        //    in `methods`.
+                        let iface_method_sigs = interface_methods
+                            .get(iface_simple)
+                            .cloned()
+                            .or_else(|| {
+                                package_symbols.and_then(|ps| {
+                                    ps.classes.get(iface_simple).map(|cd| {
+                                        cd.methods
+                                            .iter()
+                                            .filter(|m| m.receiver_ty.is_none())
+                                            .map(|m| {
+                                                let pnames: Vec<String> = m
+                                                    .params
+                                                    .iter()
+                                                    .map(|p| p.name.clone())
+                                                    .collect();
+                                                let ptys: Vec<Ty> = m
+                                                    .params
+                                                    .iter()
+                                                    .map(|p| p.ty.clone())
+                                                    .collect();
+                                                (
+                                                    m.name.clone(),
+                                                    ptys,
+                                                    m.return_ty.clone(),
+                                                    pnames,
+                                                )
+                                            })
+                                            .collect()
+                                    })
+                                })
+                            });
+                        let Some(iface_method_sigs) = iface_method_sigs else {
+                            continue;
+                        };
+                        let existing_methods: std::collections::HashSet<String> =
+                            methods.iter().map(|m| m.name.clone()).collect();
+                        for (m_name, param_tys, ret_ty, m_param_names) in iface_method_sigs
+                        {
+                            if existing_methods.contains(&m_name) {
+                                continue;
+                            }
+                            // Body: getfield this.inner; <load args>;
+                            //   invokeinterface inner.m_name(...); return.
+                            let n_params = param_tys.len();
+                            let mut locals: Vec<Ty> = Vec::with_capacity(2 + n_params);
+                            locals.push(Ty::Class(name.clone()));
+                            locals.extend(param_tys.iter().cloned());
+                            // delegate field load slot.
+                            let inner_slot = LocalId((1 + n_params) as u32);
+                            locals.push(Ty::Class(iface_jvm.clone()));
+                            // result slot (only used if non-Unit return).
+                            let result_slot = LocalId((2 + n_params) as u32);
+                            let is_unit =
+                                matches!(ret_ty, Ty::Unit | Ty::Nothing);
+                            if !is_unit {
+                                locals.push(ret_ty.clone());
+                            }
+                            let mut stmts: Vec<MStmt> = Vec::new();
+                            stmts.push(MStmt::Assign {
+                                dest: inner_slot,
+                                value: skotch_mir::Rvalue::GetField {
+                                    receiver: this_slot,
+                                    class_name: name.clone(),
+                                    field_name: param_name.clone(),
+                                },
+                            });
+                            let mut call_args: Vec<LocalId> = vec![inner_slot];
+                            for i in 0..n_params {
+                                call_args.push(LocalId((1 + i) as u32));
+                            }
+                            stmts.push(MStmt::Assign {
+                                dest: result_slot,
+                                value: skotch_mir::Rvalue::Call {
+                                    kind: skotch_mir::CallKind::Virtual {
+                                        class_name: iface_jvm.clone(),
+                                        method_name: m_name.clone(),
+                                    },
+                                    args: call_args,
+                                },
+                            });
+                            let terminator = if is_unit {
+                                Terminator::Return
+                            } else {
+                                Terminator::ReturnValue(result_slot)
+                            };
+                            let params: Vec<LocalId> =
+                                (0..=n_params).map(|i| LocalId(i as u32)).collect();
+                            let forwarder = MirFunction {
+                                id: FuncId(0),
+                                name: m_name.clone(),
+                                params,
+                                locals,
+                                blocks: vec![BasicBlock { stmts, terminator }],
+                                return_ty: ret_ty.clone(),
+                                required_params: n_params,
+                                param_names: m_param_names.clone(),
+                                param_receiver_types: Vec::new(),
+                                param_defaults: Vec::new(),
+                                is_abstract: false,
+                                vararg_index: None,
+                                exception_handlers: Vec::new(),
+                                is_suspend: false,
+                                is_inline: false,
+                                has_type_params: false,
+                                suspend_original_return_ty: None,
+                                suspend_state_machine: None,
+                                annotations: Vec::new(),
+                                named_locals: Vec::new(),
+                                is_private: false,
+                                is_static: false,
+                                default_call_masks: Vec::new(),
+                                needs_leading_nop: false,
+                                local_generic_args:
+                                    rustc_hash::FxHashMap::default(),
+                            };
+                            methods.push(forwarder);
+                        }
+                    }
+                }
+            }
+
             let mir_class = skotch_mir::MirClass {
                 name: name.clone(),
                 super_class,
