@@ -2093,6 +2093,31 @@ pub fn lower_file(
                         .collect()
                 })
                 .unwrap_or_default();
+            // Extract literal default values for each param so the
+            // backend's `<name>$default` synthetic shim can fill in
+            // missing args at the call site. Non-literal defaults
+            // (function calls, complex exprs) stay as None — the
+            // backend currently falls through to a 0/null fill.
+            let param_defaults_v: Vec<Option<skotch_mir::MirConst>> = f
+                .value_parameter_list()
+                .map(|pl| {
+                    pl.parameters()
+                        .map(|p| {
+                            p.default_value()
+                                .map(unwrap_parens)
+                                .and_then(lower_const_init_typed)
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            let required_params_count = f
+                .value_parameter_list()
+                .map(|pl| {
+                    pl.parameters()
+                        .filter(|p| p.default_value().is_none())
+                        .count()
+                })
+                .unwrap_or(0);
             let _ = param_names;
             // Body lowering: expression-bodied fns with a literal
             // expression now emit MStmt::Assign + ReturnValue. Block
@@ -2256,10 +2281,10 @@ pub fn lower_file(
                 locals,
                 blocks,
                 return_ty,
-                required_params: param_count,
+                required_params: required_params_count,
                 param_names,
                 param_receiver_types: Vec::new(),
-                param_defaults: Vec::new(),
+                param_defaults: param_defaults_v,
                 is_abstract: false,
                 vararg_index: None,
                 exception_handlers,
@@ -26211,8 +26236,15 @@ fn lower_const_init_typed(e: skotch_ast::KtExpr<'_>) -> Option<skotch_mir::MirCo
                 }
                 None
             })?;
-            let v: i64 = text.parse().ok()?;
-            Some(MirConst::Int(v as i32))
+            // `0L` → Long; bare `0` → Int. The `L` suffix is the
+            // only way Kotlin spells a long literal.
+            if let Some(stripped) = text.strip_suffix('L') {
+                let v: i64 = stripped.parse().ok()?;
+                Some(MirConst::Long(v))
+            } else {
+                let v: i64 = text.parse().ok()?;
+                Some(MirConst::Int(v as i32))
+            }
         }
         KtExpr::Float(_) => {
             let text = skotch_ast::children(e.syntax()).iter().find_map(|c| {
