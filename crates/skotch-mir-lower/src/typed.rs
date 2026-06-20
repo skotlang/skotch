@@ -17559,6 +17559,34 @@ fn lower_rich_expr_to_slot(
                         });
                         return Some(result_slot);
                     }
+                    // List indexing: `xs[i]` → `List.get(int)Object` via
+                    // invokeinterface on java/util/List. Without this,
+                    // a `MutableList<Int>` field at `stack[stack.size-1]`
+                    // would fall through to ArrayLoad → aaload, which
+                    // the verifier rejects because the receiver is a
+                    // List reference, not an array.
+                    if matches!(
+                        &array_ty,
+                        Ty::Class(c) if matches!(
+                            c.as_str(),
+                            "java/util/List" | "java/util/ArrayList"
+                        )
+                    ) {
+                        let result_slot = LocalId(*next_slot);
+                        *next_slot += 1;
+                        extra_locals.push(Ty::Any);
+                        pre_stmts.push(MStmt::Assign {
+                            dest: result_slot,
+                            value: skotch_mir::Rvalue::Call {
+                                kind: skotch_mir::CallKind::Virtual {
+                                    class_name: "java/util/List".to_string(),
+                                    method_name: "get".to_string(),
+                                },
+                                args: vec![array_slot, index_slot],
+                            },
+                        });
+                        return Some(result_slot);
+                    }
                     // Map indexing: `m[key]` → `Map.get(Object)Object` via
                     // invokeinterface on java/util/Map. Required for
                     // Kotlin map sugar (parity 04 `byParity["even"]`).
