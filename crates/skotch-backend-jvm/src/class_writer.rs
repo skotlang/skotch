@@ -3052,6 +3052,44 @@ fn wrap_method(
     method
 }
 
+/// Dump the bytecode of `func` at a given `phase` label, gated on
+/// `SKOTCH_DUMP_BYTECODE=<class>.<method>` (comma-separated patterns,
+/// same shape as `SKOTCH_DUMP_MIR`). Each instruction prints as
+/// `offset: opcode-byte (mnemonic guess) operand_bytes`. The
+/// disassembly is rough — designed to diff one peephole pass against
+/// the next, not as a full JVM disassembler.
+fn dump_bytecode_phase(code: &[u8], func_name: &str, class_name: &str, phase: &str) {
+    let Some(patterns) = std::env::var("SKOTCH_DUMP_BYTECODE").ok() else {
+        return;
+    };
+    let parts: Vec<&str> = patterns.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
+    if parts.is_empty() {
+        return;
+    }
+    let class_simple = class_name.rsplit('/').next().unwrap_or(class_name);
+    let matches = parts.iter().any(|p| {
+        let (pw, pm) = match p.split_once('.') {
+            Some((w, m)) => (w, m),
+            None => (*p, "*"),
+        };
+        let w_ok = pw == "*" || pw == class_name || pw == class_simple;
+        let m_ok = pm == "*" || pm == func_name;
+        w_ok && m_ok
+    });
+    if !matches {
+        return;
+    }
+    eprintln!("==== BYTECODE [{}] {}.{} ({} bytes) ====", phase, class_simple, func_name, code.len());
+    let mut i = 0;
+    while i < code.len() {
+        let op = code[i];
+        let n = instruction_len(code, i);
+        let hex: String = (i..i + n).map(|k| format!("{:02x}", code[k])).collect::<Vec<_>>().join(" ");
+        eprintln!("  {:4}: {:02x}  {}", i, op, hex);
+        i += n.max(1);
+    }
+}
+
 fn emit_user_method(
     func: &MirFunction,
     module: &MirModule,
@@ -4346,6 +4384,7 @@ fn emit_method_body(
         // its `dup; ldc; invokestatic checkNotNullExpressionValue`
         // anchor) and can preserve the surrounding spill pattern.
         peephole_uppercase_to_locale_root(&mut code, &mut [], &mut [], &mut [], cp);
+        dump_bytecode_phase(&code, &func.name, class_name, "post-uppercase");
         // Look up the methodref for `Intrinsics.checkNotNullExpressionValue`
         // so the swap-pattern peephole can recognize and preserve the
         // `dup; ldc; invokestatic check..; astore_T; ...; aload_T` shape
@@ -4356,19 +4395,23 @@ fn emit_method_body(
             "(Ljava/lang/Object;Ljava/lang/String;)V",
         );
         peephole_elide_store_load(&mut code, &named_slots, check_notnull_expr_mref);
+        dump_bytecode_phase(&code, &func.name, class_name, "post-elide-store-load");
         // Non-adjacent variant: collapse `xstore N; <balanced code>; xload N`
         // when the intermediate is straight-line, has zero net stack effect,
         // and never touches slot N. Matches kotlinc's stack-resident temp
         // shape for expressions like `dx*dx + dy*dy`.
         peephole_collapse_temp_via_balanced(&mut code, &mut [], &mut [], &named_slots, &*cp);
+        dump_bytecode_phase(&code, &func.name, class_name, "post-collapse-temp");
         // General operand-hoist: `<expr>; xstore T; xload N; xload T; <op>`
         // → `xload N; <expr>; <op>`. Pulls the receiver/lhs ahead so the
         // computed RHS doesn't materialize through a temp slot.
         peephole_hoist_op_general(&mut code, &mut [], &mut [], &named_slots, &*cp);
+        dump_bytecode_phase(&code, &func.name, class_name, "post-hoist-op-general");
         // Hoist `xload N; swap` after a value computation, eliminating
         // the swap. Matches kotlinc's preference for receiver-first
         // operand order on isub / non-commutative ops.
         peephole_hoist_swap_pattern(&mut code, &mut [], &mut [], &*cp);
+        dump_bytecode_phase(&code, &func.name, class_name, "post-hoist-swap");
         peephole_hoist_getstatic_swap_pattern(&mut code, &mut [], &mut [], &*cp);
         peephole_hoist_aconst_null_swap_pattern(&mut code, &mut [], &mut [], &*cp);
         peephole_hoist_new_dup_around_arg(&mut code, &mut [], &mut [], &*cp);
