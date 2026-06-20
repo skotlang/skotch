@@ -24445,15 +24445,19 @@ fn method_simple_body_full(
                     continue;
                 };
                 // `name = <rhs>` reassignment of an existing snap_locals
-                // binding (a `var`). Emits an Assign into the same slot
-                // so subsequent reads see the new value.
+                // binding (a `var`), an implicit-this field (`_count
+                // = ...`), OR a compound assignment (`_count += 1`
+                // → `_count = _count + 1` desugar at lex/parser time).
                 if let KtExpr::Binary(b) = stmt_e {
                     let op_text = b.operation().map(|o| o.text()).unwrap_or_default();
-                    if op_text == "=" {
+                    let is_compound = matches!(op_text.as_str(), "+=" | "-=" | "*=" | "/=" | "%=");
+                    if op_text == "=" || is_compound {
                         let lhs = b.lhs().map(unwrap_parens);
                         let rhs = b.rhs().map(unwrap_parens);
                         if let (Some(KtExpr::Reference(rcv)), Some(rhs_e)) = (lhs, rhs) {
                             if let Some(name) = rcv.name() {
+                                // Path A: local snap_locals binding (var
+                                // declared earlier in body, or param).
                                 if let Some(slot) = snap_locals
                                     .iter()
                                     .rev()
@@ -24483,6 +24487,123 @@ fn method_simple_body_full(
                                                 value: skotch_mir::Rvalue::Local(
                                                     rhs_slot,
                                                 ),
+                                            },
+                                        );
+                                        continue;
+                                    } else {
+                                        mini_ok = false;
+                                        break;
+                                    }
+                                }
+                                // Path B: implicit-this class field. Emit
+                                // PutField for the assignment.
+                                if let (Some(cname), Some((fname, fty))) = (
+                                    class_name,
+                                    field_names.iter().find(|(nm, _)| nm == name),
+                                ) {
+                                    // For compound assignment `n += rhs`,
+                                    // we need to LOAD `n` before
+                                    // computing `n op rhs` — preload it
+                                    // into snap_locals.
+                                    if is_compound
+                                        && !snap_locals.iter().any(|(nm, _)| nm == name)
+                                    {
+                                        let slot = skotch_mir::LocalId(next_slot_inner);
+                                        next_slot_inner += 1;
+                                        extra_locals_inner.push(fty.clone());
+                                        pre_stmts_inner.push(
+                                            skotch_mir::Stmt::Assign {
+                                                dest: slot,
+                                                value: skotch_mir::Rvalue::GetField {
+                                                    receiver: skotch_mir::LocalId(0),
+                                                    class_name: cname.to_string(),
+                                                    field_name: fname.clone(),
+                                                },
+                                            },
+                                        );
+                                        snap_locals.push((name.to_string(), slot));
+                                    }
+                                    // Preload field-name refs in rhs (so
+                                    // `_count = _count + 1` resolves the
+                                    // `_count` read).
+                                    prebind_class_fields(
+                                        rhs_e,
+                                        &mut snap_locals,
+                                        &mut next_slot_inner,
+                                        &mut pre_stmts_inner,
+                                        &mut extra_locals_inner,
+                                        Some(cname),
+                                        field_names,
+                                    );
+                                    let snap = snap_locals.clone();
+                                    let lookup =
+                                        |n: &str| -> Option<skotch_mir::LocalId> {
+                                            snap.iter()
+                                                .rev()
+                                                .find(|(nm, _)| nm == n)
+                                                .map(|(_, l)| *l)
+                                        };
+                                    // For compound assignment `_count
+                                    // += N`, we need a `_count` load
+                                    // (already preloaded above) and a
+                                    // BinOp to compute the new value.
+                                    let final_rhs_slot: Option<skotch_mir::LocalId> = if is_compound {
+                                        let lhs_load = snap.iter().rev().find(|(nm, _)| nm == name).map(|(_, l)| *l);
+                                        let rhs_lowered = lower_rich_expr_to_slot(
+                                            rhs_e,
+                                            &lookup,
+                                            fn_lookup,
+                                            &mut next_slot_inner,
+                                            &mut pre_stmts_inner,
+                                            &mut extra_locals_inner,
+                                            strings,
+                                        );
+                                        match (lhs_load, rhs_lowered) {
+                                            (Some(lhs_slot), Some(rhs_slot)) => {
+                                                let mir_op = match op_text.as_str() {
+                                                    "+=" => skotch_mir::BinOp::AddI,
+                                                    "-=" => skotch_mir::BinOp::SubI,
+                                                    "*=" => skotch_mir::BinOp::MulI,
+                                                    "/=" => skotch_mir::BinOp::DivI,
+                                                    "%=" => skotch_mir::BinOp::ModI,
+                                                    _ => unreachable!(),
+                                                };
+                                                let r = skotch_mir::LocalId(next_slot_inner);
+                                                next_slot_inner += 1;
+                                                extra_locals_inner.push(fty.clone());
+                                                pre_stmts_inner.push(skotch_mir::Stmt::Assign {
+                                                    dest: r,
+                                                    value: skotch_mir::Rvalue::BinOp {
+                                                        op: mir_op,
+                                                        lhs: lhs_slot,
+                                                        rhs: rhs_slot,
+                                                    },
+                                                });
+                                                Some(r)
+                                            }
+                                            _ => None,
+                                        }
+                                    } else {
+                                        lower_rich_expr_to_slot(
+                                            rhs_e,
+                                            &lookup,
+                                            fn_lookup,
+                                            &mut next_slot_inner,
+                                            &mut pre_stmts_inner,
+                                            &mut extra_locals_inner,
+                                            strings,
+                                        )
+                                    };
+                                    if let Some(rhs_slot) = final_rhs_slot {
+                                        pre_stmts_inner.push(
+                                            skotch_mir::Stmt::Assign {
+                                                dest: skotch_mir::LocalId(0),
+                                                value: skotch_mir::Rvalue::PutField {
+                                                    receiver: skotch_mir::LocalId(0),
+                                                    class_name: cname.to_string(),
+                                                    field_name: fname.clone(),
+                                                    value: rhs_slot,
+                                                },
                                             },
                                         );
                                         continue;
