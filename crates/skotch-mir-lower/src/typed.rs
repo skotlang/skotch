@@ -1962,6 +1962,30 @@ pub fn lower_file(
         };
         let mut table: rustc_hash::FxHashMap<String, rustc_hash::FxHashMap<String, Ty>> =
             rustc_hash::FxHashMap::default();
+        // Local interfaces — register their method returns so
+        // virtual-call sites against an interface-typed receiver
+        // (e.g. `binaryOp.apply(a, b)` where `binaryOp: BinaryOp`)
+        // can promote the result slot Ty from Any to the declared
+        // return Ty. Without this, `println(triple.apply(2, 5))`
+        // sees Any-typed slot and dispatches println(Object), but
+        // the JVM stack has a primitive int → VerifyError.
+        for decl in file.decls() {
+            if let KtDecl::Interface(i) = decl {
+                let Some(iname) = i.name() else { continue };
+                let mut methods: rustc_hash::FxHashMap<String, Ty> =
+                    rustc_hash::FxHashMap::default();
+                if let Some(body) = i.body() {
+                    for d in body.declarations() {
+                        if let KtDecl::Fun(f) = d {
+                            if let Some(mname) = f.name() {
+                                methods.insert(mname.to_string(), resolve_ret_ty(&f));
+                            }
+                        }
+                    }
+                }
+                table.insert(iname.to_string(), methods);
+            }
+        }
         // Local classes.
         for decl in file.decls() {
             if let KtDecl::Class(c) = decl {
