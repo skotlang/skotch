@@ -35,6 +35,17 @@ use skotch_parser_core::{CompletedMarker, Parser};
 use skotch_syntax::SyntaxKind as S;
 use skotch_syntax::SyntaxKind;
 
+thread_local! {
+    /// When set, `parse_postfix`'s `LBRACE` arm bails instead of
+    /// consuming the brace as a trailing lambda. Used by callers that
+    /// know an open brace is starting the surrounding construct's body
+    /// (currently `parse_super_type_entry`'s by-delegation arm —
+    /// `class Foo : Bar by inner { ... }` would otherwise consume
+    /// the class body as `inner { ... }` lambda call).
+    static SUPPRESS_TRAILING_LAMBDA: std::cell::Cell<bool> =
+        const { std::cell::Cell::new(false) };
+}
+
 pub fn parse_file_root(p: &mut Parser<'_, '_>) {
     let file = p.start();
     // Leading trivia at the very top of the file sits under FILE.
@@ -992,7 +1003,12 @@ fn parse_super_type_entry(p: &mut Parser<'_, '_>) {
             p.bump();
         }
         skip_trivia(p);
+        // Don't let `by inner { ... }` consume the class body's
+        // open brace as a trailing-lambda call. Toggle the suppression
+        // flag for the duration of this expression parse.
+        SUPPRESS_TRAILING_LAMBDA.with(|f| f.set(true));
         parse_expression(p);
+        SUPPRESS_TRAILING_LAMBDA.with(|f| f.set(false));
         m.complete(p, S::DELEGATED_SUPER_TYPE_ENTRY);
     } else {
         m.complete(p, S::SUPER_TYPE_ENTRY);
@@ -2966,7 +2982,9 @@ fn parse_postfix(p: &mut Parser<'_, '_>) -> CompletedMarker {
                 // Optional trailing lambda. Only swallow WS if a `{`
                 // actually follows; otherwise the trailing WS belongs
                 // to the OUTER composite.
-                if next_non_trivia(p, 0) == S::LBRACE {
+                if next_non_trivia(p, 0) == S::LBRACE
+                    && !SUPPRESS_TRAILING_LAMBDA.with(|f| f.get())
+                {
                     skip_ws(p);
                     let la = p.start();
                     parse_lambda_expression(p);
@@ -2975,6 +2993,9 @@ fn parse_postfix(p: &mut Parser<'_, '_>) -> CompletedMarker {
                 lhs = m.complete(p, S::CALL_EXPRESSION);
             }
             S::LBRACE => {
+                if SUPPRESS_TRAILING_LAMBDA.with(|f| f.get()) {
+                    return lhs;
+                }
                 // Trailing lambda only (no preceding arg list).
                 let m = lhs.precede(p);
                 let la = p.start();
