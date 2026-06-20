@@ -2624,6 +2624,13 @@ pub fn lower_file(
         module.push_class(cls);
     }
 
+    // Optional MIR dump for debugging. Gated on `SKOTCH_DUMP_MIR` env
+    // var (one or more `Wrapper.method` patterns, comma-separated).
+    // Same shape as the post-compose dump in skotch-compose; useful
+    // for diffing MIR before bytecode emission against expected
+    // shape when a function emits wrong bytecode.
+    skotch_mir::dump::maybe_dump_module(&module, "post-mir-lower");
+
     module
 }
 
