@@ -19219,6 +19219,123 @@ fn lower_rich_expr_to_slot(
                         ) {
                             let recv_ty =
                                 slot_ty_with_param_fallback(recv_slot.0, extra_locals);
+                            // CollectionsKt dispatch on chained collection
+                            // receivers — `listOf(...).sorted()`,
+                            // `mapOf(...).entries`, etc. Without this,
+                            // recv_ty=List dropped through to an
+                            // invokevirtual on java/util/List.sorted()
+                            // which doesn't exist on the JDK interface.
+                            let recv_is_collection = matches!(
+                                &recv_ty,
+                                Ty::Class(c) if matches!(
+                                    c.as_str(),
+                                    "java/util/List"
+                                        | "java/util/Set"
+                                        | "java/util/Collection"
+                                        | "java/lang/Iterable"
+                                )
+                            );
+                            if recv_is_collection {
+                                let mapped: Option<(&str, &str, &str, Ty)> = match method_n {
+                                    "sorted" => Some((
+                                        "kotlin/collections/CollectionsKt",
+                                        "sorted",
+                                        "(Ljava/lang/Iterable;)Ljava/util/List;",
+                                        Ty::Class("java/util/List".to_string()),
+                                    )),
+                                    "sortedDescending" => Some((
+                                        "kotlin/collections/CollectionsKt",
+                                        "sortedDescending",
+                                        "(Ljava/lang/Iterable;)Ljava/util/List;",
+                                        Ty::Class("java/util/List".to_string()),
+                                    )),
+                                    "reversed" => Some((
+                                        "kotlin/collections/CollectionsKt",
+                                        "reversed",
+                                        "(Ljava/lang/Iterable;)Ljava/util/List;",
+                                        Ty::Class("java/util/List".to_string()),
+                                    )),
+                                    "first" => Some((
+                                        "kotlin/collections/CollectionsKt",
+                                        "first",
+                                        "(Ljava/lang/Iterable;)Ljava/lang/Object;",
+                                        Ty::Any,
+                                    )),
+                                    "last" => Some((
+                                        "kotlin/collections/CollectionsKt",
+                                        "last",
+                                        "(Ljava/lang/Iterable;)Ljava/lang/Object;",
+                                        Ty::Any,
+                                    )),
+                                    "isEmpty" => Some((
+                                        "kotlin/collections/CollectionsKt",
+                                        "isEmpty",
+                                        "(Ljava/lang/Iterable;)Z",
+                                        Ty::Bool,
+                                    )),
+                                    "isNotEmpty" => Some((
+                                        "kotlin/collections/CollectionsKt",
+                                        "isNotEmpty",
+                                        "(Ljava/lang/Iterable;)Z",
+                                        Ty::Bool,
+                                    )),
+                                    "toList" => Some((
+                                        "kotlin/collections/CollectionsKt",
+                                        "toList",
+                                        "(Ljava/lang/Iterable;)Ljava/util/List;",
+                                        Ty::Class("java/util/List".to_string()),
+                                    )),
+                                    "toSet" => Some((
+                                        "kotlin/collections/CollectionsKt",
+                                        "toSet",
+                                        "(Ljava/lang/Iterable;)Ljava/util/Set;",
+                                        Ty::Class("java/util/Set".to_string()),
+                                    )),
+                                    _ => None,
+                                };
+                                if let Some((cls, method, desc, ret_ty)) = mapped {
+                                    let mut arg_slots: Vec<LocalId> = vec![recv_slot];
+                                    let mut all_ok = true;
+                                    if let Some(arg_list) = call.value_argument_list() {
+                                        for arg in arg_list.arguments() {
+                                            let Some(arg_e) = arg.expression() else {
+                                                all_ok = false;
+                                                break;
+                                            };
+                                            let Some(s) = lower_rich_expr_to_slot(
+                                                arg_e,
+                                                lookup_name,
+                                                fn_lookup,
+                                                next_slot,
+                                                pre_stmts,
+                                                extra_locals,
+                                                strings,
+                                            ) else {
+                                                all_ok = false;
+                                                break;
+                                            };
+                                            arg_slots.push(s);
+                                        }
+                                    }
+                                    if all_ok {
+                                        let result_slot = LocalId(*next_slot);
+                                        *next_slot += 1;
+                                        extra_locals.push(ret_ty);
+                                        pre_stmts.push(MStmt::Assign {
+                                            dest: result_slot,
+                                            value: skotch_mir::Rvalue::Call {
+                                                kind: skotch_mir::CallKind::StaticJava {
+                                                    class_name: cls.to_string(),
+                                                    method_name: method.to_string(),
+                                                    descriptor: desc.to_string(),
+                                                },
+                                                args: arg_slots,
+                                            },
+                                        });
+                                        return Some(result_slot);
+                                    }
+                                }
+                            }
                             if let Ty::Class(cname) = recv_ty {
                                 let mut arg_slots: Vec<LocalId> = vec![recv_slot];
                                 let mut all_args_ok = true;
