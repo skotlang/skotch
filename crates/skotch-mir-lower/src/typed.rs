@@ -2764,12 +2764,28 @@ fn fixup_binop_variants(f: &mut MirFunction) {
     let resolve_ty = |slot: skotch_mir::LocalId| -> Option<Ty> {
         locals.get(slot.0 as usize).cloned()
     };
+    // Collect dest slot Ty updates so the result_slot for an Int-coded
+    // arith op promoted to a wide variant gets re-typed to match the
+    // op's result kind. Without this the result_slot stays Ty::Int
+    // and the backend's `xstore` opcode picks `istore` for a `ladd`
+    // result, blowing up the verifier.
+    let mut dest_ty_updates: Vec<(u32, Ty)> = Vec::new();
     for blk in &mut f.blocks {
         for stmt in &mut blk.stmts {
-            let Stmt::Assign { value, .. } = stmt;
-            if let Rvalue::BinOp { op, lhs, .. } = value {
+            let Stmt::Assign { dest, value } = stmt;
+            if let Rvalue::BinOp { op, lhs, rhs } = value {
                 let ty = resolve_ty(*lhs).unwrap_or(Ty::Any);
-                let new_op = match (*op, &ty) {
+                let rhs_ty = resolve_ty(*rhs).unwrap_or(Ty::Any);
+                // Pick the "widest" operand Ty so `Int + Long`
+                // promotes to AddL (Long wins), `Long + Double`
+                // promotes to AddD, etc.
+                let wide_ty = match (&ty, &rhs_ty) {
+                    (Ty::Double, _) | (_, Ty::Double) => Ty::Double,
+                    (Ty::Float, _) | (_, Ty::Float) => Ty::Float,
+                    (Ty::Long, _) | (_, Ty::Long) => Ty::Long,
+                    _ => ty.clone(),
+                };
+                let new_op = match (*op, &wide_ty) {
                     (BinOp::AddI, Ty::Double) => Some(BinOp::AddD),
                     (BinOp::SubI, Ty::Double) => Some(BinOp::SubD),
                     (BinOp::MulI, Ty::Double) => Some(BinOp::MulD),
@@ -2788,8 +2804,27 @@ fn fixup_binop_variants(f: &mut MirFunction) {
                 };
                 if let Some(n) = new_op {
                     *op = n;
+                    // Update result slot Ty to match.
+                    let res_ty = match n {
+                        BinOp::AddL | BinOp::SubL | BinOp::MulL | BinOp::DivL | BinOp::ModL => {
+                            Ty::Long
+                        }
+                        BinOp::AddD | BinOp::SubD | BinOp::MulD | BinOp::DivD | BinOp::ModD => {
+                            Ty::Double
+                        }
+                        BinOp::AddF | BinOp::SubF | BinOp::MulF | BinOp::DivF | BinOp::ModF => {
+                            Ty::Float
+                        }
+                        _ => Ty::Int,
+                    };
+                    dest_ty_updates.push((dest.0, res_ty));
                 }
             }
+        }
+    }
+    for (slot, ty) in dest_ty_updates {
+        if let Some(local) = f.locals.get_mut(slot as usize) {
+            *local = ty;
         }
     }
 }

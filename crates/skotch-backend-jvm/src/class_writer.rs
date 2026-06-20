@@ -14505,6 +14505,68 @@ fn walk_block(
                 }
 
                 load_local(code, stack, max_stack, slots, *lhs, &func.locals);
+                // Promote an Int operand to match a wide-arithmetic op:
+                // `acc + n` where acc:Long, n:Int and the MIR has been
+                // fixed up to AddL. Without conversion, the bytecode
+                // emits `iload n; ladd` and the verifier rejects it
+                // because ladd requires two longs (4 stack slots).
+                let lhs_ty = func
+                    .locals
+                    .get(lhs.0 as usize)
+                    .cloned()
+                    .unwrap_or(Ty::Any);
+                let wide_promo_opcode: Option<u8> = match (&op, &lhs_ty) {
+                    (
+                        MBinOp::AddL
+                        | MBinOp::SubL
+                        | MBinOp::MulL
+                        | MBinOp::DivL
+                        | MBinOp::ModL,
+                        Ty::Int | Ty::Byte | Ty::Short | Ty::Char,
+                    ) => Some(0x85), // i2l
+                    (
+                        MBinOp::AddD
+                        | MBinOp::SubD
+                        | MBinOp::MulD
+                        | MBinOp::DivD
+                        | MBinOp::ModD,
+                        Ty::Int | Ty::Byte | Ty::Short | Ty::Char,
+                    ) => Some(0x87), // i2d
+                    (
+                        MBinOp::AddD
+                        | MBinOp::SubD
+                        | MBinOp::MulD
+                        | MBinOp::DivD
+                        | MBinOp::ModD,
+                        Ty::Long,
+                    ) => Some(0x8A), // l2d
+                    (
+                        MBinOp::AddD
+                        | MBinOp::SubD
+                        | MBinOp::MulD
+                        | MBinOp::DivD
+                        | MBinOp::ModD,
+                        Ty::Float,
+                    ) => Some(0x8D), // f2d
+                    (
+                        MBinOp::AddF
+                        | MBinOp::SubF
+                        | MBinOp::MulF
+                        | MBinOp::DivF
+                        | MBinOp::ModF,
+                        Ty::Int | Ty::Byte | Ty::Short | Ty::Char,
+                    ) => Some(0x86), // i2f
+                    _ => None,
+                };
+                if let Some(promo) = wide_promo_opcode {
+                    code.push(promo);
+                    // i2l/i2d push one extra slot; f2d pushes one
+                    // extra; l2d / l2f are net 0.
+                    match promo {
+                        0x85 | 0x87 | 0x8D => bump(stack, max_stack, 1),
+                        _ => {}
+                    }
+                }
                 // For integer comparisons against constant 0, skip the rhs
                 // load entirely — we'll use `if<COND>` (single operand) which
                 // doesn't need the 0 on the stack. This matches kotlinc and
@@ -14528,6 +14590,62 @@ fn walk_block(
                 });
                 if !skip_rhs_load {
                     load_local(code, stack, max_stack, slots, *rhs, &func.locals);
+                    let rhs_ty = func
+                        .locals
+                        .get(rhs.0 as usize)
+                        .cloned()
+                        .unwrap_or(Ty::Any);
+                    // Same promotion logic for the rhs operand.
+                    let rhs_promo_opcode: Option<u8> = match (&op, &rhs_ty) {
+                        (
+                            MBinOp::AddL
+                            | MBinOp::SubL
+                            | MBinOp::MulL
+                            | MBinOp::DivL
+                            | MBinOp::ModL,
+                            Ty::Int | Ty::Byte | Ty::Short | Ty::Char,
+                        ) => Some(0x85),
+                        (
+                            MBinOp::AddD
+                            | MBinOp::SubD
+                            | MBinOp::MulD
+                            | MBinOp::DivD
+                            | MBinOp::ModD,
+                            Ty::Int | Ty::Byte | Ty::Short | Ty::Char,
+                        ) => Some(0x87),
+                        (
+                            MBinOp::AddD
+                            | MBinOp::SubD
+                            | MBinOp::MulD
+                            | MBinOp::DivD
+                            | MBinOp::ModD,
+                            Ty::Long,
+                        ) => Some(0x8A),
+                        (
+                            MBinOp::AddD
+                            | MBinOp::SubD
+                            | MBinOp::MulD
+                            | MBinOp::DivD
+                            | MBinOp::ModD,
+                            Ty::Float,
+                        ) => Some(0x8D),
+                        (
+                            MBinOp::AddF
+                            | MBinOp::SubF
+                            | MBinOp::MulF
+                            | MBinOp::DivF
+                            | MBinOp::ModF,
+                            Ty::Int | Ty::Byte | Ty::Short | Ty::Char,
+                        ) => Some(0x86),
+                        _ => None,
+                    };
+                    if let Some(promo) = rhs_promo_opcode {
+                        code.push(promo);
+                        match promo {
+                            0x85 | 0x87 | 0x8D => bump(stack, max_stack, 1),
+                            _ => {}
+                        }
+                    }
                 }
                 match op {
                     MBinOp::ConcatStr => unreachable!("handled above"),
