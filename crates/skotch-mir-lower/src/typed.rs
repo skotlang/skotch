@@ -7221,28 +7221,11 @@ fn lower_loop_body_blocks(
                     .and_then(|u| u.name())
                     .unwrap_or("Exception")
                     .to_string();
-                let catch_internal = match catch_ty_name.as_str() {
-                    "Exception" => "java/lang/Exception".to_string(),
-                    "RuntimeException" => "java/lang/RuntimeException".to_string(),
-                    "Throwable" => "java/lang/Throwable".to_string(),
-                    "ArithmeticException" => "java/lang/ArithmeticException".to_string(),
-                    "IllegalArgumentException" => {
-                        "java/lang/IllegalArgumentException".to_string()
-                    }
-                    "IllegalStateException" => {
-                        "java/lang/IllegalStateException".to_string()
-                    }
-                    "IndexOutOfBoundsException" => {
-                        "java/lang/IndexOutOfBoundsException".to_string()
-                    }
-                    "NullPointerException" => {
-                        "java/lang/NullPointerException".to_string()
-                    }
-                    "NumberFormatException" => {
-                        "java/lang/NumberFormatException".to_string()
-                    }
-                    other => format!("java/lang/{}", other),
-                };
+                let catch_internal = skotch_types::intrinsics::kotlin_to_jvm_class(
+                    &catch_ty_name,
+                )
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| catch_ty_name.clone());
 
                 // Snapshot state so we can roll back on inner failure.
                 let snap_next_slot = *next_slot;
