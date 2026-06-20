@@ -19547,6 +19547,153 @@ fn lower_rich_expr_to_slot(
                                     )
                                 );
                                 if is_collection {
+                                    // Direct List/MutableList instance
+                                    // methods. These are JDK interface
+                                    // methods, dispatched via
+                                    // invokeinterface — NOT
+                                    // CollectionsKt static extensions.
+                                    // Args are Object-typed at the JDK
+                                    // level so primitive args need
+                                    // autobox at the call site.
+                                    let direct_method: Option<(&str, Ty, bool)> = match method_n {
+                                        // (descriptor, ret_ty, autobox_args)
+                                        "add" => {
+                                            let arg_count = call
+                                                .value_argument_list()
+                                                .map(|al| al.arguments().count())
+                                                .unwrap_or(0);
+                                            match arg_count {
+                                                1 => Some((
+                                                    "(Ljava/lang/Object;)Z",
+                                                    Ty::Bool,
+                                                    true,
+                                                )),
+                                                2 => Some((
+                                                    "(ILjava/lang/Object;)V",
+                                                    Ty::Unit,
+                                                    true,
+                                                )),
+                                                _ => None,
+                                            }
+                                        }
+                                        "remove" => Some((
+                                            "(Ljava/lang/Object;)Z",
+                                            Ty::Bool,
+                                            true,
+                                        )),
+                                        "removeAt" => Some((
+                                            "(I)Ljava/lang/Object;",
+                                            Ty::Any,
+                                            false,
+                                        )),
+                                        "get" => Some((
+                                            "(I)Ljava/lang/Object;",
+                                            Ty::Any,
+                                            false,
+                                        )),
+                                        "set" => Some((
+                                            "(ILjava/lang/Object;)Ljava/lang/Object;",
+                                            Ty::Any,
+                                            true,
+                                        )),
+                                        "clear" => Some(("()V", Ty::Unit, false)),
+                                        "contains" => Some((
+                                            "(Ljava/lang/Object;)Z",
+                                            Ty::Bool,
+                                            true,
+                                        )),
+                                        "indexOf" => Some((
+                                            "(Ljava/lang/Object;)I",
+                                            Ty::Int,
+                                            true,
+                                        )),
+                                        _ => None,
+                                    };
+                                    if let Some((desc, ret_ty, autobox)) = direct_method {
+                                        let mut arg_slots: Vec<LocalId> = vec![slot];
+                                        let mut all_ok = true;
+                                        if let Some(arg_list) = call.value_argument_list() {
+                                            for arg in arg_list.arguments() {
+                                                let Some(arg_e) = arg.expression() else {
+                                                    all_ok = false;
+                                                    break;
+                                                };
+                                                let Some(s) = lower_rich_expr_to_slot(
+                                                    arg_e,
+                                                    lookup_name,
+                                                    fn_lookup,
+                                                    next_slot,
+                                                    pre_stmts,
+                                                    extra_locals,
+                                                    strings,
+                                                ) else {
+                                                    all_ok = false;
+                                                    break;
+                                                };
+                                                // Autobox primitive
+                                                // args when the JDK
+                                                // signature expects Object.
+                                                let boxed = if autobox {
+                                                    let ty = slot_ty_with_param_fallback(
+                                                        s.0, extra_locals,
+                                                    );
+                                                    match &ty {
+                                                        Ty::Int | Ty::Long | Ty::Float
+                                                        | Ty::Double | Ty::Bool | Ty::Byte
+                                                        | Ty::Short | Ty::Char => {
+                                                            let (cls, prim) = match &ty {
+                                                                Ty::Int => ("java/lang/Integer", "I"),
+                                                                Ty::Long => ("java/lang/Long", "J"),
+                                                                Ty::Float => ("java/lang/Float", "F"),
+                                                                Ty::Double => ("java/lang/Double", "D"),
+                                                                Ty::Bool => ("java/lang/Boolean", "Z"),
+                                                                Ty::Byte => ("java/lang/Byte", "B"),
+                                                                Ty::Short => ("java/lang/Short", "S"),
+                                                                Ty::Char => ("java/lang/Character", "C"),
+                                                                _ => unreachable!(),
+                                                            };
+                                                            let bs = LocalId(*next_slot);
+                                                            *next_slot += 1;
+                                                            extra_locals.push(Ty::Class(cls.to_string()));
+                                                            pre_stmts.push(MStmt::Assign {
+                                                                dest: bs,
+                                                                value: skotch_mir::Rvalue::Call {
+                                                                    kind: skotch_mir::CallKind::StaticJava {
+                                                                        class_name: cls.to_string(),
+                                                                        method_name: "valueOf".to_string(),
+                                                                        descriptor: format!("({}){};", prim, format!("L{}", cls)),
+                                                                    },
+                                                                    args: vec![s],
+                                                                },
+                                                            });
+                                                            bs
+                                                        }
+                                                        _ => s,
+                                                    }
+                                                } else {
+                                                    s
+                                                };
+                                                arg_slots.push(boxed);
+                                            }
+                                        }
+                                        if all_ok {
+                                            let result_slot = LocalId(*next_slot);
+                                            *next_slot += 1;
+                                            extra_locals.push(ret_ty);
+                                            pre_stmts.push(MStmt::Assign {
+                                                dest: result_slot,
+                                                value: skotch_mir::Rvalue::Call {
+                                                    kind: skotch_mir::CallKind::VirtualJava {
+                                                        class_name: "java/util/List".to_string(),
+                                                        method_name: method_n.to_string(),
+                                                        descriptor: desc.to_string(),
+                                                    },
+                                                    args: arg_slots,
+                                                },
+                                            });
+                                            return Some(result_slot);
+                                        }
+                                    }
                                     // (jvm-class, jvm-method, descriptor, ret_ty)
                                     let mapped: Option<(&str, &str, &str, Ty)> = match method_n {
                                         "filter" => Some((
@@ -23818,6 +23965,35 @@ fn method_simple_body_full(
         )
     };
 
+    // Install the function-scoped param Ty fallback EARLY (covers both
+    // the body_block walker AND the expression-body specialized arms
+    // below). Without this, the mini-walker fallback's lower_rich calls
+    // saw `slot_ty_with_param_fallback` return Ty::Any for receiver
+    // slots, which defeated the Ty::Class collection dispatch (e.g.
+    // `items.add(v)` on a MutableList field bailed because recv_ty=Any).
+    // Layout matches the lower_simple_body's PARAM_TY_FALLBACK: index
+    // 0 = `this` (Class<owning>), indices 1..=N = value params.
+    let early_param_count = f
+        .value_parameter_list()
+        .map(|pl| pl.parameters().count())
+        .unwrap_or(0);
+    let mut early_param_fallback: Vec<Ty> = Vec::with_capacity(1 + early_param_count);
+    early_param_fallback.push(
+        class_name
+            .map(|c| Ty::Class(c.to_string()))
+            .unwrap_or(Ty::Any),
+    );
+    if let Some(pl) = f.value_parameter_list() {
+        for p in pl.parameters() {
+            let pty = p
+                .type_reference()
+                .map(resolve_type_ref)
+                .unwrap_or(Ty::Any);
+            early_param_fallback.push(pty);
+        }
+    }
+    let _early_param_scope = ParamTyScope::new(early_param_fallback);
+
     let body_expr = match f.body_expression() {
         Some(e) => e,
         None => {
@@ -24272,8 +24448,148 @@ fn method_simple_body_full(
                         // belongs to a fall-through block (index n+2).
                         continue;
                     }
-                    _ => {}
+                    other => {
+                        // Generic expression-statement: lower as a void
+                        // call / side-effect. Covers
+                        //   `items.add(v)`           (DotQualified+Call)
+                        //   `bump()`                 (Call alone)
+                        //   `++x` / postfix          (Prefix/Postfix)
+                        // The result slot is allocated but unused — the
+                        // backend doesn't emit a pop for it (the Call
+                        // arm in the backend handles Unit results by
+                        // skipping the store).
+                        //
+                        // Preload bare-Reference field accesses (same
+                        // shape as the val-init path) so a stmt like
+                        // `items.add(v)` resolves `items` to a fresh
+                        // GetField slot inside the lookup closure.
+                        if let Some(cname) = class_name {
+                            fn collect_refs<'a>(
+                                e: skotch_ast::KtExpr<'a>,
+                                out: &mut Vec<String>,
+                            ) {
+                                use skotch_ast::KtExpr;
+                                let e = unwrap_parens(e);
+                                match e {
+                                    KtExpr::Reference(r) => {
+                                        if let Some(n) = r.name() {
+                                            out.push(n.to_string());
+                                        }
+                                    }
+                                    KtExpr::Binary(b) => {
+                                        if let Some(l) = b.lhs() {
+                                            collect_refs(l, out);
+                                        }
+                                        if let Some(r) = b.rhs() {
+                                            collect_refs(r, out);
+                                        }
+                                    }
+                                    KtExpr::Prefix(p) => {
+                                        for child in
+                                            skotch_ast::children(p.syntax())
+                                        {
+                                            if let Some(ce) = KtExpr::cast(child)
+                                            {
+                                                collect_refs(ce, out);
+                                            }
+                                        }
+                                    }
+                                    KtExpr::DotQualified(dq) => {
+                                        for child in
+                                            skotch_ast::children(dq.syntax())
+                                        {
+                                            if let Some(ce) = KtExpr::cast(child)
+                                            {
+                                                collect_refs(ce, out);
+                                            }
+                                        }
+                                    }
+                                    KtExpr::Call(call) => {
+                                        if let Some(arg_list) =
+                                            call.value_argument_list()
+                                        {
+                                            for arg in arg_list.arguments() {
+                                                if let Some(ae) = arg.expression()
+                                                {
+                                                    collect_refs(ae, out);
+                                                }
+                                            }
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                            }
+                            let mut refs: Vec<String> = Vec::new();
+                            collect_refs(other, &mut refs);
+                            for n in refs {
+                                if snap_locals.iter().any(|(nm, _)| nm == &n) {
+                                    continue;
+                                }
+                                if let Some((fname, fty)) = field_names
+                                    .iter()
+                                    .find(|(nm, _)| nm == &n)
+                                {
+                                    let slot =
+                                        skotch_mir::LocalId(next_slot_inner);
+                                    next_slot_inner += 1;
+                                    extra_locals_inner.push(fty.clone());
+                                    pre_stmts_inner.push(
+                                        skotch_mir::Stmt::Assign {
+                                            dest: slot,
+                                            value: skotch_mir::Rvalue::GetField {
+                                                receiver: skotch_mir::LocalId(0),
+                                                class_name: cname.to_string(),
+                                                field_name: fname.clone(),
+                                            },
+                                        },
+                                    );
+                                    snap_locals.push((n.clone(), slot));
+                                }
+                            }
+                        }
+                        let snap = snap_locals.clone();
+                        let lookup =
+                            |n: &str| -> Option<skotch_mir::LocalId> {
+                                snap.iter()
+                                    .rev()
+                                    .find(|(nm, _)| nm == n)
+                                    .map(|(_, l)| *l)
+                            };
+                        if lower_rich_expr_to_slot(
+                            other,
+                            &lookup,
+                            fn_lookup,
+                            &mut next_slot_inner,
+                            &mut pre_stmts_inner,
+                            &mut extra_locals_inner,
+                            strings,
+                        )
+                        .is_none()
+                        {
+                            // Lowering failed — bail to the literal
+                            // fall-through so the body doesn't silently
+                            // truncate.
+                            mini_ok = false;
+                            break;
+                        }
+                        continue;
+                    }
                 }
+            }
+            // If the body had no explicit return and we lowered some
+            // statements, treat as a Unit-returning method (terminator =
+            // Return). Without this, a single-stmt Unit method like
+            // `fun push(v: Int) { items.add(v) }` would fall through to
+            // the trailing literal-search path, find no return, and
+            // produce make_placeholder (an empty body).
+            if mini_ok && return_slot.is_none() && !pre_stmts_inner.is_empty() {
+                let final_block = BasicBlock {
+                    stmts: pre_stmts_inner,
+                    terminator: Terminator::Return,
+                };
+                let mut blocks = mini_extra_blocks;
+                blocks.push(final_block);
+                return (blocks, extra_locals_inner);
             }
             if mini_ok {
                 if let Some(rs) = return_slot {
