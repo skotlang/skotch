@@ -1469,6 +1469,72 @@ pub fn lower_file(
                     };
                     methods.push(to_string_fn);
                 }
+
+                // Data-class copy(): construct a new instance from the
+                // arg slots. Match kotlinc shape (`new C; dup; iload
+                // arg1..N; invokespecial <init>; areturn`). Skip when
+                // user explicitly declared a copy method.
+                if !methods.iter().any(|m| m.name == "copy") {
+                    let this_slot_copy = LocalId(0);
+                    let mut copy_locals: Vec<Ty> = vec![Ty::Class(name.clone())];
+                    let mut param_slot_ids: Vec<LocalId> = vec![this_slot_copy];
+                    let mut ctor_arg_slots: Vec<LocalId> = Vec::new();
+                    for (i, (_, fty)) in data_fields.iter().enumerate() {
+                        let pslot = LocalId((1 + i) as u32);
+                        copy_locals.push(fty.clone());
+                        param_slot_ids.push(pslot);
+                        ctor_arg_slots.push(pslot);
+                    }
+                    let result_idx = 1 + data_fields.len();
+                    let result_slot = LocalId(result_idx as u32);
+                    copy_locals.push(Ty::Class(name.clone()));
+                    let mut copy_stmts: Vec<MStmt> = Vec::new();
+                    copy_stmts.push(MStmt::Assign {
+                        dest: result_slot,
+                        value: skotch_mir::Rvalue::NewInstance(name.clone()),
+                    });
+                    copy_stmts.push(MStmt::Assign {
+                        dest: result_slot,
+                        value: skotch_mir::Rvalue::Call {
+                            kind: skotch_mir::CallKind::Constructor(name.clone()),
+                            args: ctor_arg_slots,
+                        },
+                    });
+                    let copy_fn = MirFunction {
+                        id: FuncId(0),
+                        name: "copy".to_string(),
+                        params: param_slot_ids,
+                        locals: copy_locals,
+                        blocks: vec![BasicBlock {
+                            stmts: copy_stmts,
+                            terminator: Terminator::ReturnValue(result_slot),
+                        }],
+                        return_ty: Ty::Class(name.clone()),
+                        required_params: 0,
+                        param_names: data_fields
+                            .iter()
+                            .map(|(n, _)| n.clone())
+                            .collect(),
+                        param_receiver_types: Vec::new(),
+                        param_defaults: Vec::new(),
+                        is_abstract: false,
+                        vararg_index: None,
+                        exception_handlers: Vec::new(),
+                        is_suspend: false,
+                        is_inline: false,
+                        has_type_params: false,
+                        suspend_original_return_ty: None,
+                        suspend_state_machine: None,
+                        annotations: Vec::new(),
+                        named_locals: Vec::new(),
+                        is_private: false,
+                        is_static: false,
+                        default_call_masks: Vec::new(),
+                        needs_leading_nop: false,
+                        local_generic_args: rustc_hash::FxHashMap::default(),
+                    };
+                    methods.push(copy_fn);
+                }
             }
 
             let mir_class = skotch_mir::MirClass {
