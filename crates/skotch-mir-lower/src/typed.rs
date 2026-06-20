@@ -23874,6 +23874,11 @@ fn method_simple_body_full(
             let mut extra_locals_inner: Vec<Ty> = Vec::new();
             let mut return_slot: Option<skotch_mir::LocalId> = None;
             let mut mini_ok = true;
+            // Accumulated CFG blocks for the mini-walker. Empty for the
+            // simple linear case; populated when an `if (cond) return X`
+            // statement appears mid-body (we split the linear flow into
+            // a pre-block + return-block + fall-through-block triple).
+            let mut mini_extra_blocks: Vec<BasicBlock> = Vec::new();
             // Walk raw SIL children so we see both KtProperty (val
             // decl) and KtExpr (regular stmts) — block.statements()
             // only surfaces expressions.
@@ -24096,15 +24101,137 @@ fn method_simple_body_full(
                         return_slot = Some(rs);
                         break;
                     }
+                    KtExpr::If(if_e) => {
+                        // Recognize `if (cond) return <literal>` with no
+                        // else. Emits two new blocks: a return-block for
+                        // the then-arm, and a fall-through block that
+                        // continues accumulating subsequent stmts. The
+                        // current `pre_stmts_inner` becomes a Branch
+                        // terminator into both, then we reset for the
+                        // fall-through. With-else / non-literal returns
+                        // bail to the simpler fallback below.
+                        let cond_expr_opt = if_e
+                            .condition()
+                            .and_then(|c| c.expression())
+                            .map(unwrap_parens);
+                        let then_arm_opt = if_e
+                            .then_branch()
+                            .and_then(|t| t.expression())
+                            .map(unwrap_parens);
+                        let else_arm = if_e
+                            .else_branch()
+                            .and_then(|e| e.expression())
+                            .map(unwrap_parens);
+                        let (Some(cond_expr), Some(then_arm)) =
+                            (cond_expr_opt, then_arm_opt)
+                        else {
+                            mini_ok = false;
+                            break;
+                        };
+                        if else_arm.is_some() {
+                            mini_ok = false;
+                            break;
+                        }
+                        fn extract_return(e: skotch_ast::KtExpr<'_>) -> Option<skotch_ast::KtExpr<'_>> {
+                            use skotch_ast::KtExpr;
+                            let e = unwrap_parens(e);
+                            let r = match e {
+                                KtExpr::Return(r) => r,
+                                KtExpr::Block(b) => {
+                                    let s: Vec<KtExpr<'_>> =
+                                        b.statements().collect();
+                                    if s.len() != 1 {
+                                        return None;
+                                    }
+                                    if let KtExpr::Return(r) = s[0] {
+                                        r
+                                    } else {
+                                        return None;
+                                    }
+                                }
+                                _ => return None,
+                            };
+                            skotch_ast::children(r.syntax())
+                                .iter()
+                                .find_map(KtExpr::cast)
+                                .map(unwrap_parens)
+                        }
+                        let Some(ret_expr) = extract_return(then_arm) else {
+                            mini_ok = false;
+                            break;
+                        };
+                        // Lower cond → cond_slot via lower_rich.
+                        let snap = snap_locals.clone();
+                        let lookup = |n: &str| -> Option<skotch_mir::LocalId> {
+                            snap.iter()
+                                .rev()
+                                .find(|(nm, _)| nm == n)
+                                .map(|(_, l)| *l)
+                        };
+                        let Some(cond_slot) = lower_rich_expr_to_slot(
+                            cond_expr,
+                            &lookup,
+                            fn_lookup,
+                            &mut next_slot_inner,
+                            &mut pre_stmts_inner,
+                            &mut extra_locals_inner,
+                            strings,
+                        ) else {
+                            mini_ok = false;
+                            break;
+                        };
+                        // Lower the return value via lower_rich into a
+                        // fresh stmts vec — that becomes the return-block.
+                        let mut ret_stmts: Vec<skotch_mir::Stmt> = Vec::new();
+                        let Some(ret_slot) = lower_rich_expr_to_slot(
+                            ret_expr,
+                            &lookup,
+                            fn_lookup,
+                            &mut next_slot_inner,
+                            &mut ret_stmts,
+                            &mut extra_locals_inner,
+                            strings,
+                        ) else {
+                            mini_ok = false;
+                            break;
+                        };
+                        // Block layout:
+                        //   N = mini_extra_blocks.len() so far
+                        //   pre-block (current pre_stmts_inner): Branch
+                        //     to block N+1 (return) or N+2 (fall-through).
+                        //   block N+1: ret_stmts + ReturnValue(ret_slot).
+                        //   block N+2: fall-through (continues
+                        //     accumulating).
+                        let n = mini_extra_blocks.len();
+                        let pre_block = BasicBlock {
+                            stmts: std::mem::take(&mut pre_stmts_inner),
+                            terminator: Terminator::Branch {
+                                cond: cond_slot,
+                                then_block: (n + 1) as u32,
+                                else_block: (n + 2) as u32,
+                            },
+                        };
+                        let return_block = BasicBlock {
+                            stmts: ret_stmts,
+                            terminator: Terminator::ReturnValue(ret_slot),
+                        };
+                        mini_extra_blocks.push(pre_block);
+                        mini_extra_blocks.push(return_block);
+                        // The next iteration's accumulated pre_stmts_inner
+                        // belongs to a fall-through block (index n+2).
+                        continue;
+                    }
                     _ => {}
                 }
             }
             if mini_ok {
                 if let Some(rs) = return_slot {
-                    let blocks = vec![BasicBlock {
+                    let final_block = BasicBlock {
                         stmts: pre_stmts_inner,
                         terminator: Terminator::ReturnValue(rs),
-                    }];
+                    };
+                    let mut blocks = mini_extra_blocks;
+                    blocks.push(final_block);
                     return (blocks, extra_locals_inner);
                 }
             }
