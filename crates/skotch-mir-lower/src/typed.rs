@@ -17577,12 +17577,11 @@ fn lower_rich_expr_to_slot(
                             ok = false;
                             break;
                         };
-                        let ty = extra_locals
-                            .get(slot.0 as usize)
-                            .cloned()
-                            .unwrap_or_else(|| {
-                                slot_ty_with_param_fallback(slot.0, extra_locals)
-                            });
+                        // extra_locals is indexed starting at 0 for
+                        // the FIRST body-introduced local, not by
+                        // absolute slot id — slot_ty_with_param_fallback
+                        // handles the param-vs-body split correctly.
+                        let ty = slot_ty_with_param_fallback(slot.0, extra_locals);
                         recipe.push('\u{1}');
                         desc.push_str(&ty_to_descriptor(&ty));
                         dyn_args.push(slot);
@@ -27485,13 +27484,29 @@ fn collect_class_super_iface(
 /// declared primary or secondary ctors. Mirrors what kotlinc emits
 /// for a class with no body (`class Foo`).
 fn empty_constructor(class_name: &str) -> MirFunction {
+    empty_constructor_super(class_name, "java/lang/Object")
+}
+
+/// Synthesize a parameterless `<init>` that just calls
+/// `super.<init>()` on the named superclass and returns. Every class
+/// except java/lang/Object itself MUST call a super constructor
+/// before any return — the JVM verifier rejects bytecode that
+/// doesn't.
+fn empty_constructor_super(class_name: &str, super_class: &str) -> MirFunction {
+    let this_slot = skotch_mir::LocalId(0);
     MirFunction {
         id: FuncId(0),
         name: "<init>".to_string(),
-        params: Vec::new(),
+        params: vec![this_slot],
         locals: vec![Ty::Class(class_name.to_string())],
         blocks: vec![BasicBlock {
-            stmts: Vec::new(),
+            stmts: vec![skotch_mir::Stmt::Assign {
+                dest: this_slot,
+                value: skotch_mir::Rvalue::Call {
+                    kind: skotch_mir::CallKind::Constructor(super_class.to_string()),
+                    args: vec![this_slot],
+                },
+            }],
             terminator: Terminator::Return,
         }],
         return_ty: Ty::Unit,

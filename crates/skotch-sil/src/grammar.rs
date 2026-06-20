@@ -1126,11 +1126,29 @@ fn parse_class_body_impl(p: &mut Parser<'_, '_>, enum_entries: bool) {
             // No entries (e.g. enum body containing only methods).
             entries_done = true;
         }
+        // Don't enter parse_class_member if the only thing left
+        // before `}` is trivia (comments + whitespace) — otherwise
+        // parse_class_member's "absorb leading comments" branch eats
+        // the comment and its default arm then consumes the `}` as
+        // an ERROR_ELEMENT, dropping us into the OUTER body. Trailing
+        // trivia belongs to the surrounding CLASS_BODY.
+        if next_non_trivia(p, 0) == S::RBRACE {
+            break;
+        }
         parse_class_member(p);
         // Between members: only WS at CLASS_BODY level.
         while p.at(S::WHITE_SPACE) {
             p.bump();
         }
+    }
+    // Consume any trailing trivia (line comments, block comments, WS,
+    // NL) so it ends up under CLASS_BODY rather than escaping to the
+    // outer scope.
+    while matches!(
+        p.current(),
+        S::WHITE_SPACE | S::NEWLINE | S::LINE_COMMENT | S::BLOCK_COMMENT
+    ) {
+        p.bump();
     }
     if p.at(S::RBRACE) {
         p.bump();
