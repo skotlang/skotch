@@ -4394,7 +4394,7 @@ fn emit_method_body(
             "checkNotNullExpressionValue",
             "(Ljava/lang/Object;Ljava/lang/String;)V",
         );
-        peephole_elide_store_load(&mut code, &named_slots, check_notnull_expr_mref);
+        peephole_elide_store_load(&mut code, &named_slots, check_notnull_expr_mref, &*cp, &func.name, class_name);
         dump_bytecode_phase(&code, &func.name, class_name, "post-elide-store-load");
         // Non-adjacent variant: collapse `xstore N; <balanced code>; xload N`
         // when the intermediate is straight-line, has zero net stack effect,
@@ -26379,7 +26379,11 @@ fn peephole_elide_store_load(
     code: &mut Vec<u8>,
     named_slots: &FxHashSet<u8>,
     check_notnull_expr_mref: Option<u16>,
+    cp: &ConstantPool,
+    dump_name: &str,
+    dump_class: &str,
 ) {
+    dump_bytecode_phase(code, dump_name, dump_class, "elide-enter");
     // We may need multiple passes since removing one pair can create new
     // adjacent pairs (e.g., astore_1; aload_1; astore_2; aload_2 → after
     // removing the first pair, astore_2; aload_2 becomes exposed).
@@ -26419,19 +26423,22 @@ fn peephole_elide_store_load(
         }
     }
 
+    dump_bytecode_phase(code, dump_name, dump_class, "elide-after-pair");
     // Second pass: swap pattern.
     //   Xstore_N ; <single-push> ; Xload_N → <single-push> ; swap
     // when slot N is not used elsewhere AND not a named local. This matches
     // kotlinc's pattern for arguments computed inline before another value
     // (e.g., `println(literal)` where receiver is pushed after the arg).
     peephole_swap_pattern(code, named_slots, check_notnull_expr_mref);
+    dump_bytecode_phase(code, dump_name, dump_class, "elide-after-swap");
 
     // Third pass: elide `istore_N ; <RHS> ; iload_N ; swap ; <op>` when slot
     // N is dead afterward, not named, and <RHS> doesn't touch N. The LHS
     // value (already on stack before istore_N) stays on the stack; <RHS>
     // pushes its value; <op> consumes the pair. Same final state as kotlinc's
     // emission `<lhs> ; <rhs> ; <op>`.
-    peephole_elide_lhs_save_swap(code, named_slots);
+    peephole_elide_lhs_save_swap(code, named_slots, cp);
+    dump_bytecode_phase(code, dump_name, dump_class, "elide-after-lhs-save");
 
     // Fourth pass: cancel adjacent `swap; swap` pairs (each is a no-op).
     peephole_cancel_double_swap(code);
@@ -26446,7 +26453,7 @@ fn peephole_elide_store_load(
 /// The simple swap_pattern peephole handles only single-instruction RHS;
 /// this one handles the multi-instruction case (e.g., `aload_0;
 /// invokevirtual getSecond`).
-fn peephole_elide_lhs_save_swap(code: &mut Vec<u8>, named_slots: &FxHashSet<u8>) {
+fn peephole_elide_lhs_save_swap(code: &mut Vec<u8>, named_slots: &FxHashSet<u8>, cp: &ConstantPool) {
     loop {
         let mut applied: Option<(usize, usize, usize, usize)> = None;
         // (istore_pos, store_len, iload_pos, load_len)
@@ -26465,9 +26472,13 @@ fn peephole_elide_lhs_save_swap(code: &mut Vec<u8>, named_slots: &FxHashSet<u8>)
             }
             // Walk forward, tracking that the RHS bytes are tame, until we
             // find Xload_N or hit an instruction that bars elision.
+            // Also track running stack depth: the elision keeps <lhs> on
+            // the stack across <RHS>, so <RHS> must never consume below
+            // its starting depth (else it would eat <lhs>).
             let rhs_start = i + store_len;
             let mut j = rhs_start;
             let mut iload_at: Option<(usize, usize)> = None;
+            let mut depth: i32 = 0;
             while j < code.len() {
                 let op = code[j];
                 // Reject branches, returns, throws, switches, jsr/ret.
@@ -26494,7 +26505,11 @@ fn peephole_elide_lhs_save_swap(code: &mut Vec<u8>, named_slots: &FxHashSet<u8>)
                 }
                 // Match a load whose category matches the original store.
                 if let Some(load_len) = decode_aload_of_slot(code, j, slot, is_int) {
-                    iload_at = Some((j, load_len));
+                    // <RHS> must end at exactly depth 0 (only the saved
+                    // <lhs> below remains — iload_N then puts it back).
+                    if depth == 0 {
+                        iload_at = Some((j, load_len));
+                    }
                     break;
                 }
                 // A load of the SAME slot but DIFFERENT category aliases the
@@ -26503,6 +26518,13 @@ fn peephole_elide_lhs_save_swap(code: &mut Vec<u8>, named_slots: &FxHashSet<u8>)
                     break;
                 }
                 if op == 0x84 && j + 1 < code.len() && code[j + 1] == slot {
+                    break;
+                }
+                // Update running stack depth. Bar elision if <RHS> would
+                // consume below its starting level (which would pop the
+                // saved <lhs> that's supposed to remain underneath).
+                depth += stack_effect_of_op(code, cp, j);
+                if depth < 0 {
                     break;
                 }
                 j += instruction_len(code, j);
