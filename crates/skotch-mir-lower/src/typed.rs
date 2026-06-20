@@ -2148,6 +2148,27 @@ pub fn lower_file(
                         }
                     })
                     .or_insert(methods);
+                // Cross-file companion methods register under
+                // `<Outer>$Companion` so call sites like
+                // `Outer.factory()` resolve through the companion
+                // accessor — mirrors the local-file registration
+                // above at the `is_companion()` branch.
+                if !decl.companion_methods.is_empty() {
+                    let comp_name = format!("{}$Companion", simple_name);
+                    let mut comp_methods: rustc_hash::FxHashMap<String, Ty> =
+                        rustc_hash::FxHashMap::default();
+                    for m in decl.companion_methods.iter() {
+                        comp_methods.insert(m.name.clone(), m.return_ty.clone());
+                    }
+                    table
+                        .entry(comp_name)
+                        .and_modify(|m| {
+                            for (k, v) in &comp_methods {
+                                m.entry(k.clone()).or_insert_with(|| v.clone());
+                            }
+                        })
+                        .or_insert(comp_methods);
+                }
             }
         }
         table
@@ -3788,24 +3809,7 @@ fn try_lower_when_expression(
         .value_parameter_list()
         .map(|pl| {
             pl.parameters()
-                .map(|p| {
-                    let type_name: Option<String> = p
-                        .type_reference()
-                        .and_then(|tr| tr.user_type())
-                        .and_then(|u| u.name())
-                        .map(String::from);
-                    match type_name.as_deref() {
-                        Some(n) => {
-                            skotch_types::ty_from_name(n).unwrap_or_else(|| {
-                                let fq = skotch_types::intrinsics::kotlin_to_jvm_class(n)
-                                    .map(|s| s.to_string())
-                                    .unwrap_or_else(|| n.to_string());
-                                Ty::Class(fq)
-                            })
-                        }
-                        None => Ty::Any,
-                    }
-                })
+                .map(|p| p.type_reference().map(resolve_type_ref).unwrap_or(Ty::Any))
                 .collect()
         })
         .unwrap_or_default();
@@ -9388,25 +9392,7 @@ fn try_lower_function_body_via_blocks(
     }
     if let Some(pl) = f.value_parameter_list() {
         for p in pl.parameters() {
-            let type_name: Option<String> = p
-                .type_reference()
-                .and_then(|tr| tr.user_type())
-                .and_then(|u| u.name())
-                .map(String::from);
-            let ty = match type_name.as_deref() {
-                Some(n) => {
-                    skotch_types::ty_from_name(n).unwrap_or_else(|| {
-                        // Non-primitive class name → Ty::Class with
-                        // JVM FQ form when known (StringBuilder →
-                        // java/lang/StringBuilder), else bare name.
-                        let fq = skotch_types::intrinsics::kotlin_to_jvm_class(n)
-                            .map(|s| s.to_string())
-                            .unwrap_or_else(|| n.to_string());
-                        Ty::Class(fq)
-                    })
-                }
-                None => Ty::Any,
-            };
+            let ty = p.type_reference().map(resolve_type_ref).unwrap_or(Ty::Any);
             param_fallback_tys.push(ty);
         }
     }
@@ -9544,25 +9530,7 @@ fn try_lower_multi_stmt_block_with_offset(
     }
     if let Some(pl) = f.value_parameter_list() {
         for p in pl.parameters() {
-            let type_name: Option<String> = p
-                .type_reference()
-                .and_then(|tr| tr.user_type())
-                .and_then(|u| u.name())
-                .map(String::from);
-            let ty = match type_name.as_deref() {
-                Some(n) => {
-                    skotch_types::ty_from_name(n).unwrap_or_else(|| {
-                        // Non-primitive class name → Ty::Class with
-                        // JVM FQ form when known (StringBuilder →
-                        // java/lang/StringBuilder), else bare name.
-                        let fq = skotch_types::intrinsics::kotlin_to_jvm_class(n)
-                            .map(|s| s.to_string())
-                            .unwrap_or_else(|| n.to_string());
-                        Ty::Class(fq)
-                    })
-                }
-                None => Ty::Any,
-            };
+            let ty = p.type_reference().map(resolve_type_ref).unwrap_or(Ty::Any);
             param_fallback_tys.push(ty);
         }
     }
@@ -20990,6 +20958,107 @@ fn lower_rich_expr_to_slot(
             }
         }
     }
+    // `<operand> is <Type>`: emit Rvalue::InstanceOf into a fresh
+    // Bool slot. Operand may be any rich expression (Reference,
+    // DotQualified, Call, etc.) — recurse via lower_rich_expr_to_slot.
+    if let KtExpr::Is(is_e) = &e {
+        let children: Vec<_> = skotch_ast::children(is_e.syntax()).iter().collect();
+        let operand = children
+            .iter()
+            .find_map(|c| KtExpr::cast(c))
+            .map(unwrap_parens);
+        let type_name = children.iter().find_map(|c| {
+            if c.kind == skotch_syntax::SyntaxKind::TYPE_REFERENCE {
+                if let Some(tr) = skotch_ast::KtTypeReference::cast(c) {
+                    return tr.user_type().and_then(|u| u.name()).map(String::from);
+                }
+            }
+            None
+        });
+        if let (Some(operand), Some(tname)) = (operand, type_name) {
+            let obj_slot = lower_rich_expr_to_slot(
+                operand,
+                lookup_name,
+                fn_lookup,
+                next_slot,
+                pre_stmts,
+                extra_locals,
+                strings,
+            )?;
+            let descriptor = skotch_types::intrinsics::kotlin_to_jvm_class(&tname)
+                .map(|s| s.to_string())
+                .unwrap_or(tname);
+            let result_slot = LocalId(*next_slot);
+            *next_slot += 1;
+            extra_locals.push(Ty::Bool);
+            pre_stmts.push(MStmt::Assign {
+                dest: result_slot,
+                value: skotch_mir::Rvalue::InstanceOf {
+                    obj: obj_slot,
+                    type_descriptor: descriptor,
+                },
+            });
+            return Some(result_slot);
+        }
+    }
+
+    // `<operand> as <Type>`: emit Rvalue::CheckCast into a slot
+    // typed to the target. As with Is, operand can be any rich
+    // expression — recurse via lower_rich_expr_to_slot.
+    if let KtExpr::BinaryWithTypeRhs(b) = &e {
+        let children: Vec<_> = skotch_ast::children(b.syntax()).iter().collect();
+        let operand = children
+            .iter()
+            .find_map(|c| KtExpr::cast(c))
+            .map(unwrap_parens);
+        let type_name = children.iter().find_map(|c| {
+            if c.kind == skotch_syntax::SyntaxKind::TYPE_REFERENCE {
+                if let Some(tr) = skotch_ast::KtTypeReference::cast(c) {
+                    return tr.user_type().and_then(|u| u.name()).map(String::from);
+                }
+            }
+            None
+        });
+        let is_as = children.iter().any(|c| {
+            if c.kind == skotch_syntax::SyntaxKind::OPERATION_REFERENCE {
+                skotch_ast::children(c)
+                    .iter()
+                    .any(|cc| cc.kind == skotch_syntax::SyntaxKind::KW_AS)
+            } else {
+                false
+            }
+        });
+        if is_as {
+            if let (Some(operand), Some(tname)) = (operand, type_name) {
+                let obj_slot = lower_rich_expr_to_slot(
+                    operand,
+                    lookup_name,
+                    fn_lookup,
+                    next_slot,
+                    pre_stmts,
+                    extra_locals,
+                    strings,
+                )?;
+                let target_class = skotch_types::intrinsics::kotlin_to_jvm_class(&tname)
+                    .map(|s| s.to_string())
+                    .unwrap_or(tname.clone());
+                let ret_ty = skotch_types::ty_from_name(&tname)
+                    .unwrap_or_else(|| Ty::Class(target_class.clone()));
+                let result_slot = LocalId(*next_slot);
+                *next_slot += 1;
+                extra_locals.push(ret_ty);
+                pre_stmts.push(MStmt::Assign {
+                    dest: result_slot,
+                    value: skotch_mir::Rvalue::CheckCast {
+                        obj: obj_slot,
+                        target_class,
+                    },
+                });
+                return Some(result_slot);
+            }
+        }
+    }
+
     trace_bail!(
         "lower_rich_expr_to_slot fell through all arms: kind={}",
         kt_expr_kind(&e)
