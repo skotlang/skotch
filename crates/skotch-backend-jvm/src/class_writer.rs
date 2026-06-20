@@ -3967,9 +3967,79 @@ fn emit_method_body(
                 );
                 // Insert checkcast/unbox if the local is Any/Object but
                 // the function return type is more specific.
-                // If the local is Any/Object but the function returns a
-                // specific type, insert cast/unbox before returning.
-                if matches!(ty, Ty::Any | Ty::Nullable(_)) && *ty != func.return_ty {
+                //
+                // Suppress when the value just loaded was produced by a
+                // primitive-producing operation: ArrayLoad on a
+                // primitive-array slot, integer arithmetic, primitive
+                // Const, etc. In those cases the stack already holds a
+                // primitive value, so `checkcast Number; intValue`
+                // would VerifyError. The slot's MIR Ty was lost
+                // somewhere upstream (the result_slot was registered
+                // as Ty::Any), but the actual operand is still int.
+                let last_assign_is_primitive = block
+                    .stmts
+                    .iter()
+                    .rev()
+                    .find_map(|s| match s {
+                        Stmt::Assign { dest, value } if dest == local => Some(value),
+                        _ => None,
+                    })
+                    .map(|rv| match rv {
+                        Rvalue::ArrayLoad { array, .. } => {
+                            // Primitive when the array slot's Ty is a
+                            // typed primitive array.
+                            matches!(
+                                &func.locals[array.0 as usize],
+                                Ty::IntArray
+                                    | Ty::LongArray
+                                    | Ty::DoubleArray
+                                    | Ty::ByteArray
+                            )
+                        }
+                        Rvalue::BinOp { op, .. } => matches!(
+                            op,
+                            MBinOp::AddI
+                                | MBinOp::SubI
+                                | MBinOp::MulI
+                                | MBinOp::DivI
+                                | MBinOp::ModI
+                                | MBinOp::AddL
+                                | MBinOp::SubL
+                                | MBinOp::MulL
+                                | MBinOp::DivL
+                                | MBinOp::ModL
+                                | MBinOp::AddD
+                                | MBinOp::SubD
+                                | MBinOp::MulD
+                                | MBinOp::DivD
+                                | MBinOp::ModD
+                                | MBinOp::AddF
+                                | MBinOp::SubF
+                                | MBinOp::MulF
+                                | MBinOp::DivF
+                                | MBinOp::ModF
+                                | MBinOp::CmpEq
+                                | MBinOp::CmpNe
+                                | MBinOp::CmpLt
+                                | MBinOp::CmpGt
+                                | MBinOp::CmpLe
+                                | MBinOp::CmpGe
+                        ),
+                        Rvalue::Const(c) => matches!(
+                            c,
+                            MirConst::Int(_)
+                                | MirConst::Long(_)
+                                | MirConst::Float(_)
+                                | MirConst::Double(_)
+                                | MirConst::Bool(_)
+                        ),
+                        _ => false,
+                    })
+                    .unwrap_or(false);
+                let coerce = !last_assign_is_primitive
+                    && matches!(ty, Ty::Any | Ty::Nullable(_))
+                    && *ty != func.return_ty;
+                if coerce {
                     match &func.return_ty {
                         Ty::Int => {
                             // Unbox: checkcast Number; intValue(). kotlinc
