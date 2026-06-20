@@ -1367,6 +1367,110 @@ pub fn lower_file(
                 }
             }
 
+            // Data class synthesis:
+            //   override fun toString(): String =
+            //       "ClassName(f1=" + f1 + ", f2=" + f2 + ")"
+            //
+            // Emits a single MakeConcatWithConstants for the recipe
+            // "ClassName(f1=, f2=, ...)" with one 
+            // placeholder per primary-ctor val/var field. Skip when
+            // the user already declared toString explicitly.
+            if c.is_data() && !methods.iter().any(|m| m.name == "toString") {
+                use skotch_mir::{LocalId, Stmt as MStmt};
+                // Walk primary-ctor params, collect val/var ones in
+                // declaration order with their resolved Ty.
+                let mut data_fields: Vec<(String, Ty)> = Vec::new();
+                if let Some(pc) = c.primary_constructor() {
+                    if let Some(pl) = pc.value_parameter_list() {
+                        for p in pl.parameters() {
+                            if p.is_val() || p.is_var() {
+                                if let Some(n) = p.name() {
+                                    let ty = p
+                                        .type_reference()
+                                        .map(resolve_type_ref)
+                                        .unwrap_or(Ty::Any);
+                                    data_fields.push((n.to_string(), ty));
+                                }
+                            }
+                        }
+                    }
+                }
+                if !data_fields.is_empty() {
+                    let this_slot = LocalId(0);
+                    let mut locals: Vec<Ty> = vec![Ty::Class(name.clone())];
+                    let mut stmts: Vec<MStmt> = Vec::new();
+                    let mut recipe = format!("{}(", name);
+                    let mut desc = String::from("(");
+                    let mut arg_slots: Vec<LocalId> = Vec::new();
+                    for (i, (fname, fty)) in data_fields.iter().enumerate() {
+                        if i > 0 {
+                            recipe.push_str(", ");
+                        }
+                        recipe.push_str(fname);
+                        recipe.push('=');
+                        recipe.push('\u{0001}');
+                        desc.push_str(&ty_to_descriptor(fty));
+                        // GetField → temporary slot.
+                        let field_slot = LocalId((1 + i) as u32);
+                        locals.push(fty.clone());
+                        stmts.push(MStmt::Assign {
+                            dest: field_slot,
+                            value: skotch_mir::Rvalue::GetField {
+                                receiver: this_slot,
+                                class_name: name.clone(),
+                                field_name: fname.clone(),
+                            },
+                        });
+                        arg_slots.push(field_slot);
+                    }
+                    recipe.push(')');
+                    desc.push_str(")Ljava/lang/String;");
+                    let result_slot = LocalId((1 + data_fields.len()) as u32);
+                    locals.push(Ty::String);
+                    stmts.push(MStmt::Assign {
+                        dest: result_slot,
+                        value: skotch_mir::Rvalue::Call {
+                            kind: skotch_mir::CallKind::MakeConcatWithConstants {
+                                recipe,
+                                descriptor: desc,
+                            },
+                            args: arg_slots,
+                        },
+                    });
+                    let to_string_fn = MirFunction {
+                        id: FuncId(0),
+                        name: "toString".to_string(),
+                        params: vec![this_slot],
+                        locals,
+                        blocks: vec![BasicBlock {
+                            stmts,
+                            terminator: Terminator::ReturnValue(result_slot),
+                        }],
+                        return_ty: Ty::String,
+                        required_params: 0,
+                        param_names: Vec::new(),
+                        param_receiver_types: Vec::new(),
+                        param_defaults: Vec::new(),
+                        is_abstract: false,
+                        vararg_index: None,
+                        exception_handlers: Vec::new(),
+                        is_suspend: false,
+                        is_inline: false,
+                        has_type_params: false,
+                        suspend_original_return_ty: None,
+                        suspend_state_machine: None,
+                        annotations: Vec::new(),
+                        named_locals: Vec::new(),
+                        is_private: false,
+                        is_static: false,
+                        default_call_masks: Vec::new(),
+                        needs_leading_nop: false,
+                        local_generic_args: rustc_hash::FxHashMap::default(),
+                    };
+                    methods.push(to_string_fn);
+                }
+            }
+
             let mir_class = skotch_mir::MirClass {
                 name: name.clone(),
                 super_class,
