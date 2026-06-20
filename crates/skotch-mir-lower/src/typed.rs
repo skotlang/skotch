@@ -23723,6 +23723,49 @@ fn method_simple_body_full(
     //   fun add(a: Int, b: Int) = a + b
     //   fun double() = x * 2      (x is a field)
     //   fun bump() = x + 1
+    //
+    // Skipped for multi-leaf String `+` concat chains
+    //   `"(" + x + ", " + y + ")"`
+    // The Binary handler below can only build a single-step ConcatStr,
+    // so a nested chain ends up recursing through
+    // lower_inline_expr_to_slot, which doesn't recognize String concat
+    // and emits AddI on String operands — invalid bytecode that
+    // triggers a stub fallback at emit time. Defer those to the generic
+    // lower_rich fallback at the end of this function; that path
+    // flattens the chain and emits a single MakeConcatWithConstants
+    // call.
+    let body_is_string_concat_chain = if let KtExpr::Binary(b) = &body_expr {
+        let op_text = b.operation().map(|o| o.text()).unwrap_or_default();
+        if op_text == "+" {
+            fn chain<'a>(e: skotch_ast::KtExpr<'a>, depth: usize) -> (bool, usize) {
+                use skotch_ast::KtExpr;
+                let e = unwrap_parens(e);
+                if let KtExpr::Binary(bb) = e {
+                    if bb.operation().map(|o| o.text()).as_deref() == Some("+") {
+                        let l = bb.lhs().map(|l| chain(l, depth + 1));
+                        let r = bb.rhs().map(|r| chain(r, depth + 1));
+                        let has = l.as_ref().map(|(h, _)| *h).unwrap_or(false)
+                            || r.as_ref().map(|(h, _)| *h).unwrap_or(false);
+                        let d = l
+                            .as_ref()
+                            .map(|(_, d)| *d)
+                            .unwrap_or(depth)
+                            .max(r.as_ref().map(|(_, d)| *d).unwrap_or(depth));
+                        return (has, d);
+                    }
+                }
+                (matches!(e, KtExpr::String(_)), depth)
+            }
+            let (has_string_leaf, max_depth) = chain(KtExpr::Binary(*b), 0);
+            has_string_leaf && max_depth >= 2
+        } else {
+            false
+        }
+    } else {
+        false
+    };
+
+    if !body_is_string_concat_chain {
     if let KtExpr::Binary(b) = &body_expr {
         let op_text = b.operation().map(|o| o.text()).unwrap_or_default();
         // Check whether either operand is String-typed (literal or
@@ -24062,6 +24105,7 @@ fn method_simple_body_full(
             }
         }
     }
+    } // end !body_is_string_concat_chain
 
     // `as` type cast on a param or implicit-this field:
     //   class P(val x: Any) { fun str(): String = x as String }
