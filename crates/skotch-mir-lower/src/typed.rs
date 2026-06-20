@@ -23994,6 +23994,57 @@ fn method_simple_body_full(
                 let Some(stmt_e) = skotch_ast::KtExpr::cast(child) else {
                     continue;
                 };
+                // `name = <rhs>` reassignment of an existing snap_locals
+                // binding (a `var`). Emits an Assign into the same slot
+                // so subsequent reads see the new value.
+                if let KtExpr::Binary(b) = stmt_e {
+                    let op_text = b.operation().map(|o| o.text()).unwrap_or_default();
+                    if op_text == "=" {
+                        let lhs = b.lhs().map(unwrap_parens);
+                        let rhs = b.rhs().map(unwrap_parens);
+                        if let (Some(KtExpr::Reference(rcv)), Some(rhs_e)) = (lhs, rhs) {
+                            if let Some(name) = rcv.name() {
+                                if let Some(slot) = snap_locals
+                                    .iter()
+                                    .rev()
+                                    .find(|(nm, _)| nm == name)
+                                    .map(|(_, l)| *l)
+                                {
+                                    let snap = snap_locals.clone();
+                                    let lookup =
+                                        |n: &str| -> Option<skotch_mir::LocalId> {
+                                            snap.iter()
+                                                .rev()
+                                                .find(|(nm, _)| nm == n)
+                                                .map(|(_, l)| *l)
+                                        };
+                                    if let Some(rhs_slot) = lower_rich_expr_to_slot(
+                                        rhs_e,
+                                        &lookup,
+                                        fn_lookup,
+                                        &mut next_slot_inner,
+                                        &mut pre_stmts_inner,
+                                        &mut extra_locals_inner,
+                                        strings,
+                                    ) {
+                                        pre_stmts_inner.push(
+                                            skotch_mir::Stmt::Assign {
+                                                dest: slot,
+                                                value: skotch_mir::Rvalue::Local(
+                                                    rhs_slot,
+                                                ),
+                                            },
+                                        );
+                                        continue;
+                                    } else {
+                                        mini_ok = false;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 match stmt_e {
                     KtExpr::Return(r) => {
                         let inner = skotch_ast::children(r.syntax())
