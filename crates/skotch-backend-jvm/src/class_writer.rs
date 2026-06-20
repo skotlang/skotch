@@ -15394,26 +15394,107 @@ fn walk_block(
                     if let Some((owner_class, method_name, descriptor)) =
                         module.cross_file_fn_stubs.get(&target_id.0).cloned()
                     {
-                        for a in args.iter() {
-                            load_local(code, stack, max_stack, slots, *a, &func.locals);
+                        let target = &module.functions[target_id.0 as usize];
+                        let use_default = call_default_mask != 0
+                            && !target.param_defaults.is_empty();
+                        // For each arg position whose mask bit is set,
+                        // push a typed placeholder (matching the
+                        // target param's Ty) instead of loading the
+                        // dummy slot the mir-lower pad-up emitted
+                        // — its Ty (often Int) won't satisfy the
+                        // descriptor (Long / Double / Object).
+                        for (i, a) in args.iter().enumerate() {
+                            let is_defaulted = use_default
+                                && i < 32
+                                && (call_default_mask & (1u32 << i)) != 0;
+                            if is_defaulted {
+                                let param_ty = target
+                                    .params
+                                    .get(i)
+                                    .and_then(|p| target.locals.get(p.0 as usize));
+                                match param_ty.cloned().unwrap_or(Ty::Any) {
+                                    Ty::Long => {
+                                        code.push(0x09);
+                                        bump(stack, max_stack, 2);
+                                    }
+                                    Ty::Float => {
+                                        code.push(0x0B);
+                                        bump(stack, max_stack, 1);
+                                    }
+                                    Ty::Double => {
+                                        code.push(0x0E);
+                                        bump(stack, max_stack, 2);
+                                    }
+                                    Ty::Bool
+                                    | Ty::Byte
+                                    | Ty::Short
+                                    | Ty::Char
+                                    | Ty::Int => {
+                                        code.push(0x03);
+                                        bump(stack, max_stack, 1);
+                                    }
+                                    _ => {
+                                        code.push(0x01);
+                                        bump(stack, max_stack, 1);
+                                    }
+                                }
+                            } else {
+                                load_local(code, stack, max_stack, slots, *a, &func.locals);
+                            }
                         }
+                        let (call_name, call_desc) = if use_default {
+                            emit_simple_iconst(code, call_default_mask as i32);
+                            bump(stack, max_stack, 1);
+                            code.push(0x01); // aconst_null
+                            bump(stack, max_stack, 1);
+                            let default_name = format!("{}$default", method_name);
+                            // Re-derive arg descriptor: open paren +
+                            // every arg's typed JVM descriptor.
+                            let mut d = String::from("(");
+                            for &p in &target.params {
+                                let ty = &target.locals[p.0 as usize];
+                                d.push_str(&jvm_param_type_string(ty));
+                            }
+                            d.push_str("ILjava/lang/Object;)");
+                            d.push_str(&jvm_type_string(&target.return_ty));
+                            (default_name, d)
+                        } else {
+                            (method_name.clone(), descriptor.clone())
+                        };
                         let mref =
-                            cp.methodref(&owner_class, &method_name, &descriptor);
+                            cp.methodref(&owner_class, &call_name, &call_desc);
                         code.push(0xB8); // invokestatic
                         code.write_u16::<BigEndian>(mref).unwrap();
-                        let arg_pop: i32 = args
-                            .iter()
-                            .map(|a| {
-                                if matches!(
-                                    func.locals.get(a.0 as usize),
-                                    Some(Ty::Long) | Some(Ty::Double)
-                                ) {
-                                    2
-                                } else {
-                                    1
-                                }
-                            })
-                            .sum();
+                        let mut arg_pop: i32 = if use_default {
+                            target
+                                .params
+                                .iter()
+                                .map(|p| {
+                                    let ty = &target.locals[p.0 as usize];
+                                    if matches!(ty, Ty::Long | Ty::Double) {
+                                        2
+                                    } else {
+                                        1
+                                    }
+                                })
+                                .sum()
+                        } else {
+                            args.iter()
+                                .map(|a| {
+                                    if matches!(
+                                        func.locals.get(a.0 as usize),
+                                        Some(Ty::Long) | Some(Ty::Double)
+                                    ) {
+                                        2
+                                    } else {
+                                        1
+                                    }
+                                })
+                                .sum()
+                        };
+                        if use_default {
+                            arg_pop += 2; // mask + marker
+                        }
                         let ret_ty = &func.locals[dest.0 as usize];
                         let ret_push: i32 = match ret_ty {
                             Ty::Unit | Ty::Nothing => 0,

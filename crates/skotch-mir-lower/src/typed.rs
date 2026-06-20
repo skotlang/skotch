@@ -698,6 +698,22 @@ pub fn lower_file(
                 .map(|i| skotch_mir::LocalId(i as u32))
                 .collect();
             let locals: Vec<Ty> = decl.param_tys.clone();
+            // Mirror `has_default` from the cross-file ExternalDecl so
+            // the typed mir-lower's default-arg pad-up post-process
+            // can fire for sibling-file fn calls too — without this,
+            // `sumTo(2_000)` (defined in Math.kt, called from Main.kt)
+            // never gets the call_default_mask set and the call site
+            // emits `invokestatic sumTo:(IJ)J` with only one int on
+            // the stack → VerifyError. The MirConst placeholder
+            // (`MirConst::Int(0)`) doesn't need to be the real
+            // default — the backend uses it only to detect "this
+            // param has a default" via `is_some()`.
+            let stub_param_defaults: Vec<Option<skotch_mir::MirConst>> = decl
+                .has_default
+                .iter()
+                .map(|&hd| if hd { Some(skotch_mir::MirConst::Int(0)) } else { None })
+                .collect();
+            let stub_required = decl.has_default.iter().filter(|d| !**d).count();
             module.functions.push(MirFunction {
                 id: FuncId(stub_id),
                 name: name.clone(),
@@ -708,10 +724,14 @@ pub fn lower_file(
                     terminator: Terminator::Return,
                 }],
                 return_ty: decl.return_ty.clone(),
-                required_params: decl.param_tys.len(),
+                required_params: if stub_param_defaults.is_empty() {
+                    decl.param_tys.len()
+                } else {
+                    stub_required
+                },
                 param_names: Vec::new(),
                 param_receiver_types: Vec::new(),
-                param_defaults: Vec::new(),
+                param_defaults: stub_param_defaults,
                 is_abstract: false,
                 vararg_index: None,
                 exception_handlers: Vec::new(),
@@ -2324,6 +2344,87 @@ pub fn lower_file(
             fixup_binop_variants(m);
         }
         fixup_binop_variants(&mut c.constructor);
+    }
+
+    // Default-arg fixup: snapshot each function's param shape (count
+    // + which positions have defaults), then walk every function
+    // looking for `Stmt::Assign { value: Rvalue::Call { kind:
+    // CallKind::Static(fid), args } }` where `args.len()` is less
+    // than the target's param count. For each missing position that
+    // has a default value, pad `args` with a dummy slot (re-use
+    // args[0] / the receiver — the backend ignores the value when
+    // the mask bit is set) and OR the bit into the call's
+    // default-mask. Without this, `foo(5)` against `fun foo(n: Int,
+    // acc: Long = 0L)` emitted `invokestatic foo:(IJ)J` with only
+    // one int on the stack → VerifyError.
+    let fn_param_shape: rustc_hash::FxHashMap<u32, (usize, Vec<bool>)> = module
+        .functions
+        .iter()
+        .map(|f| {
+            let has_default: Vec<bool> = f
+                .param_defaults
+                .iter()
+                .map(|d| d.is_some())
+                .collect();
+            (f.id.0, (f.params.len(), has_default))
+        })
+        .collect();
+    let fixup_default_calls = |f: &mut MirFunction,
+                               fn_param_shape: &rustc_hash::FxHashMap<
+        u32,
+        (usize, Vec<bool>),
+    >| {
+        for (block_idx, block) in f.blocks.iter_mut().enumerate() {
+            for (stmt_idx, stmt) in block.stmts.iter_mut().enumerate() {
+                let skotch_mir::Stmt::Assign { value, .. } = stmt;
+                let skotch_mir::Rvalue::Call {
+                    kind: skotch_mir::CallKind::Static(target_fid),
+                    args,
+                } = value
+                else {
+                    continue;
+                };
+                let Some((total, has_default)) = fn_param_shape.get(&target_fid.0) else {
+                    continue;
+                };
+                if args.len() >= *total {
+                    continue;
+                }
+                let missing_start = args.len();
+                let mut mask: u32 = 0;
+                let mut all_have_defaults = true;
+                for i in missing_start..*total {
+                    if !has_default.get(i).copied().unwrap_or(false) {
+                        all_have_defaults = false;
+                        break;
+                    }
+                    if i < 32 {
+                        mask |= 1u32 << i;
+                    }
+                }
+                if !all_have_defaults || mask == 0 {
+                    continue;
+                }
+                let dummy = args
+                    .first()
+                    .copied()
+                    .unwrap_or(skotch_mir::LocalId(0));
+                for _ in missing_start..*total {
+                    args.push(dummy);
+                }
+                f.default_call_masks
+                    .push((block_idx as u32, stmt_idx as u32, mask));
+            }
+        }
+    };
+    for f in &mut module.functions {
+        fixup_default_calls(f, &fn_param_shape);
+    }
+    for c in &mut module.classes {
+        for m in &mut c.methods {
+            fixup_default_calls(m, &fn_param_shape);
+        }
+        fixup_default_calls(&mut c.constructor, &fn_param_shape);
     }
 
     // Field-type fixup: snapshot class field declarations, then walk
@@ -26228,21 +26329,47 @@ fn lower_const_init_typed(e: skotch_ast::KtExpr<'_>) -> Option<skotch_mir::MirCo
             Some(MirConst::Bool(is_true))
         }
         KtExpr::Integer(_) => {
-            let text = skotch_ast::children(e.syntax()).iter().find_map(|c| {
-                if c.kind == skotch_syntax::SyntaxKind::INTEGER_LITERAL {
-                    if let skotch_sil::SilData::Token { text } = &c.data {
-                        return Some(text.as_str());
+            // KtIntegerConstant wraps either an INTEGER_LITERAL or
+            // a LONG_LITERAL token. The lexer routes `0L` to
+            // LongLit; the parser puts both kinds under
+            // INTEGER_CONSTANT.
+            let (text, is_long) = skotch_ast::children(e.syntax())
+                .iter()
+                .find_map(|c| match c.kind {
+                    skotch_syntax::SyntaxKind::INTEGER_LITERAL
+                    | skotch_syntax::SyntaxKind::LONG_LITERAL => {
+                        if let skotch_sil::SilData::Token { text } = &c.data {
+                            Some((
+                                text.as_str(),
+                                c.kind == skotch_syntax::SyntaxKind::LONG_LITERAL,
+                            ))
+                        } else {
+                            None
+                        }
                     }
-                }
-                None
-            })?;
-            // `0L` → Long; bare `0` → Int. The `L` suffix is the
-            // only way Kotlin spells a long literal.
-            if let Some(stripped) = text.strip_suffix('L') {
-                let v: i64 = stripped.parse().ok()?;
+                    _ => None,
+                })?;
+            // Strip any trailing `L` from the source text (LongLit
+            // tokens preserve it; the explicit-L suffix on an
+            // INTEGER_LITERAL token shouldn't happen but stripping
+            // is harmless).
+            let s = text
+                .trim_end_matches('L')
+                .chars()
+                .filter(|c| *c != '_')
+                .collect::<String>();
+            let v: i64 = if let Some(hex) = s.strip_prefix("0x").or(s.strip_prefix("0X")) {
+                i64::from_str_radix(hex, 16).ok()?
+            } else if let Some(bin) =
+                s.strip_prefix("0b").or(s.strip_prefix("0B"))
+            {
+                i64::from_str_radix(bin, 2).ok()?
+            } else {
+                s.parse::<i64>().ok()?
+            };
+            if is_long || text.ends_with('L') {
                 Some(MirConst::Long(v))
             } else {
-                let v: i64 = text.parse().ok()?;
                 Some(MirConst::Int(v as i32))
             }
         }
