@@ -1009,6 +1009,94 @@ pub fn lower_file(
         }
     }
 
+    // CLASS_METHODS scope must be installed BEFORE class
+    // processing — otherwise method bodies that reference sibling
+    // methods (e.g. `cellAt(r, c) == 1` inside Generation.show()
+    // body) can't find them in the table at lookup time, fall back
+    // to the unresolved-Call bail, and produce empty MIR.
+    let class_method_returns_early: rustc_hash::FxHashMap<
+        String,
+        rustc_hash::FxHashMap<String, Ty>,
+    > = {
+        let resolve_ret_ty = |f: &skotch_ast::KtFun<'_>| -> Ty {
+            let name_opt: Option<&str> = f
+                .return_type()
+                .and_then(|tr| tr.user_type())
+                .and_then(|u| u.name());
+            match name_opt {
+                Some(n) => skotch_types::ty_from_name(n).unwrap_or_else(|| {
+                    let fq = skotch_types::intrinsics::kotlin_to_jvm_class(n)
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| n.to_string());
+                    Ty::Class(fq)
+                }),
+                None => {
+                    if f.body_block().is_some() || f.body_expression().is_some() {
+                        Ty::Unit
+                    } else {
+                        Ty::Any
+                    }
+                }
+            }
+        };
+        let mut table: rustc_hash::FxHashMap<String, rustc_hash::FxHashMap<String, Ty>> =
+            rustc_hash::FxHashMap::default();
+        for decl in file.decls() {
+            if let KtDecl::Interface(i) = decl {
+                let Some(iname) = i.name() else { continue };
+                let mut methods: rustc_hash::FxHashMap<String, Ty> =
+                    rustc_hash::FxHashMap::default();
+                if let Some(body) = i.body() {
+                    for d in body.declarations() {
+                        if let KtDecl::Fun(f) = d {
+                            if let Some(mname) = f.name() {
+                                methods.insert(mname.to_string(), resolve_ret_ty(&f));
+                            }
+                        }
+                    }
+                }
+                table.insert(iname.to_string(), methods);
+            }
+        }
+        for decl in file.decls() {
+            if let KtDecl::Class(c) = decl {
+                let Some(cname) = c.name() else { continue };
+                let mut methods: rustc_hash::FxHashMap<String, Ty> =
+                    rustc_hash::FxHashMap::default();
+                if let Some(body) = c.body() {
+                    for d in body.declarations() {
+                        if let KtDecl::Fun(f) = d {
+                            if let Some(mname) = f.name() {
+                                methods.insert(mname.to_string(), resolve_ret_ty(&f));
+                            }
+                        }
+                    }
+                }
+                table.insert(cname.to_string(), methods);
+            }
+        }
+        if let Some(tbl) = package_symbols {
+            for (simple_name, decl) in tbl.classes.iter() {
+                let mut methods: rustc_hash::FxHashMap<String, Ty> =
+                    rustc_hash::FxHashMap::default();
+                for m in decl.methods.iter() {
+                    methods.insert(m.name.clone(), m.return_ty.clone());
+                }
+                table
+                    .entry(simple_name.clone())
+                    .and_modify(|m| {
+                        for (k, v) in &methods {
+                            m.entry(k.clone()).or_insert_with(|| v.clone());
+                        }
+                    })
+                    .or_insert(methods);
+            }
+        }
+        table
+    };
+    let _class_methods_scope_early =
+        ClassMethodsScope::new(class_method_returns_early);
+
     // Top-level classes — emit minimal MirClass entries. Body
     // method shapes (empty Return bodies) populated below; method
     // body lowering is deferred to follow-up sessions.
