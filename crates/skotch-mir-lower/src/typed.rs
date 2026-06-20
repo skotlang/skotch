@@ -104,6 +104,19 @@ fn class_method_return_ty(class_name: &str, method_name: &str) -> Option<Ty> {
     })
 }
 
+/// Register a method's return Ty for a class in CLASS_METHODS at
+/// body-lowering time. Used by synthesized classes (object literals,
+/// lambda classes) whose method shapes weren't known when the table
+/// was first populated from the source `file.decls()`.
+fn register_class_method(class_name: &str, method_name: &str, ret_ty: Ty) {
+    CLASS_METHODS.with(|c| {
+        let mut tbl = c.borrow_mut();
+        tbl.entry(class_name.to_string())
+            .or_default()
+            .insert(method_name.to_string(), ret_ty);
+    });
+}
+
 struct ClassMethodsScope {
     prev: rustc_hash::FxHashMap<String, rustc_hash::FxHashMap<String, Ty>>,
 }
@@ -16553,6 +16566,19 @@ fn lower_rich_expr_to_slot(
         // Pre-compute a unique anonymous-class name.
         let obj_idx = next_lambda_idx();
         let obj_name = format!("ObjectLit${}", obj_idx);
+        // Register each declared method's return Ty in CLASS_METHODS
+        // so downstream dispatch sites (e.g. `println(obj.apply(2,
+        // 5))` where obj is a local of this ObjectLit's type) can
+        // promote the call result slot from Any to the declared Ty
+        // and pick the right println overload.
+        for f in &user_funs {
+            let Some(mname) = f.name() else { continue };
+            let ret_ty = f
+                .return_type()
+                .map(resolve_type_ref)
+                .unwrap_or(Ty::Unit);
+            register_class_method(&obj_name, mname, ret_ty);
+        }
         // Collect captures from all method bodies.
         // Use the same collect_free_refs as the Lambda arm.
         fn collect_refs(
