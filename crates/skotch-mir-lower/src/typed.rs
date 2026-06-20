@@ -11650,6 +11650,15 @@ fn try_lower_multi_stmt_block_with_offset(
                             val_lookup,
                             wrapper_class,
                         );
+                        prebind_class_fields(
+                            l,
+                            &mut name_to_local,
+                            &mut next_slot,
+                            &mut cond_stmts,
+                            &mut local_tys,
+                            class_name,
+                            field_names,
+                        );
                     }
                     if let Some(r) = cmp_b.rhs() {
                         prebind_top_level_vals(
@@ -11661,6 +11670,15 @@ fn try_lower_multi_stmt_block_with_offset(
                             val_lookup,
                             wrapper_class,
                         );
+                        prebind_class_fields(
+                            r,
+                            &mut name_to_local,
+                            &mut next_slot,
+                            &mut cond_stmts,
+                            &mut local_tys,
+                            class_name,
+                            field_names,
+                        );
                     }
                     let cond_lookup = {
                         let snap = name_to_local.clone();
@@ -11671,22 +11689,46 @@ fn try_lower_multi_stmt_block_with_offset(
                                 .map(|(_, l)| *l)
                         }
                     };
-                    let lhs_slot = lower_inline_expr_to_slot(
+                    // Try lower_rich first (handles `items.size`
+                    // DotQualified shape); fall back to lower_inline.
+                    let lhs_slot = lower_rich_expr_to_slot(
                         cmp_b.lhs()?,
                         &cond_lookup,
+                        fn_lookup,
                         &mut next_slot,
                         &mut cond_stmts,
                         &mut local_tys,
                         strings,
-                    )?;
-                    let rhs_slot = lower_inline_expr_to_slot(
+                    )
+                    .or_else(|| {
+                        lower_inline_expr_to_slot(
+                            cmp_b.lhs()?,
+                            &cond_lookup,
+                            &mut next_slot,
+                            &mut cond_stmts,
+                            &mut local_tys,
+                            strings,
+                        )
+                    })?;
+                    let rhs_slot = lower_rich_expr_to_slot(
                         cmp_b.rhs()?,
                         &cond_lookup,
+                        fn_lookup,
                         &mut next_slot,
                         &mut cond_stmts,
                         &mut local_tys,
                         strings,
-                    )?;
+                    )
+                    .or_else(|| {
+                        lower_inline_expr_to_slot(
+                            cmp_b.rhs()?,
+                            &cond_lookup,
+                            &mut next_slot,
+                            &mut cond_stmts,
+                            &mut local_tys,
+                            strings,
+                        )
+                    })?;
                     let cmp_slot = LocalId(next_slot);
                     next_slot += 1;
                     local_tys.push(Ty::Bool);
@@ -16174,6 +16216,159 @@ fn prebind_top_level_vals(
                     val_lookup,
                     wrapper_class,
                 );
+            }
+        }
+        KtExpr::DotQualified(dq) => {
+            for c in skotch_ast::children(dq.syntax()) {
+                if let Some(ce) = KtExpr::cast(c) {
+                    prebind_top_level_vals(
+                        ce,
+                        name_to_local,
+                        next_slot,
+                        pre_stmts,
+                        extra_locals,
+                        val_lookup,
+                        wrapper_class,
+                    );
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Walk an expression looking for bare-Reference field accesses that
+/// resolve to the current class's declared fields. For each one not
+/// already in `name_to_local`, emit a GetField on `this` (slot 0)
+/// into a fresh slot and push the binding so downstream lookups
+/// resolve it as a local. Mirrors the val-init / generic-stmt
+/// preload pattern, lifted here so any caller that needs field
+/// access (while-cond, for-cond, etc.) gets it.
+#[allow(clippy::too_many_arguments)]
+fn prebind_class_fields(
+    e: skotch_ast::KtExpr<'_>,
+    name_to_local: &mut Vec<(String, skotch_mir::LocalId)>,
+    next_slot: &mut u32,
+    pre_stmts: &mut Vec<skotch_mir::Stmt>,
+    extra_locals: &mut Vec<Ty>,
+    class_name: Option<&str>,
+    field_names: &[(String, Ty)],
+) {
+    use skotch_ast::KtExpr;
+    use skotch_mir::{LocalId, Stmt as MStmt};
+    let Some(cname) = class_name else {
+        return;
+    };
+    let e = unwrap_parens(e);
+    match e {
+        KtExpr::Reference(r) => {
+            if let Some(n) = r.name() {
+                if name_to_local.iter().any(|(nm, _)| nm == n) {
+                    return;
+                }
+                if let Some((fname, fty)) =
+                    field_names.iter().find(|(nm, _)| nm == n)
+                {
+                    let slot = LocalId(*next_slot);
+                    *next_slot += 1;
+                    extra_locals.push(fty.clone());
+                    pre_stmts.push(MStmt::Assign {
+                        dest: slot,
+                        value: skotch_mir::Rvalue::GetField {
+                            receiver: LocalId(0),
+                            class_name: cname.to_string(),
+                            field_name: fname.clone(),
+                        },
+                    });
+                    name_to_local.push((n.to_string(), slot));
+                }
+            }
+        }
+        KtExpr::Binary(b) => {
+            if let Some(l) = b.lhs() {
+                prebind_class_fields(
+                    l,
+                    name_to_local,
+                    next_slot,
+                    pre_stmts,
+                    extra_locals,
+                    class_name,
+                    field_names,
+                );
+            }
+            if let Some(r) = b.rhs() {
+                prebind_class_fields(
+                    r,
+                    name_to_local,
+                    next_slot,
+                    pre_stmts,
+                    extra_locals,
+                    class_name,
+                    field_names,
+                );
+            }
+        }
+        KtExpr::DotQualified(dq) => {
+            for c in skotch_ast::children(dq.syntax()) {
+                if let Some(ce) = KtExpr::cast(c) {
+                    prebind_class_fields(
+                        ce,
+                        name_to_local,
+                        next_slot,
+                        pre_stmts,
+                        extra_locals,
+                        class_name,
+                        field_names,
+                    );
+                }
+            }
+        }
+        KtExpr::Call(call) => {
+            if let Some(arg_list) = call.value_argument_list() {
+                for arg in arg_list.arguments() {
+                    if let Some(arg_e) = arg.expression() {
+                        prebind_class_fields(
+                            arg_e,
+                            name_to_local,
+                            next_slot,
+                            pre_stmts,
+                            extra_locals,
+                            class_name,
+                            field_names,
+                        );
+                    }
+                }
+            }
+        }
+        KtExpr::Prefix(p) => {
+            if let Some(inner) = skotch_ast::children(p.syntax())
+                .iter()
+                .find_map(KtExpr::cast)
+            {
+                prebind_class_fields(
+                    inner,
+                    name_to_local,
+                    next_slot,
+                    pre_stmts,
+                    extra_locals,
+                    class_name,
+                    field_names,
+                );
+            }
+        }
+        KtExpr::ArrayAccess(aa) => {
+            for c in skotch_ast::children(aa.syntax()) {
+                if let Some(ce) = KtExpr::cast(c) {
+                    prebind_class_fields(
+                        ce,
+                        name_to_local,
+                        next_slot,
+                        pre_stmts,
+                        extra_locals,
+                        class_name,
+                        field_names,
+                    );
+                }
             }
         }
         _ => {}
@@ -24383,10 +24578,7 @@ fn method_simple_body_full(
                                 .find_map(KtExpr::cast)
                                 .map(unwrap_parens)
                         }
-                        let Some(ret_expr) = extract_return(then_arm) else {
-                            mini_ok = false;
-                            break;
-                        };
+                        let ret_expr_opt = extract_return(then_arm);
                         // Lower cond → cond_slot via lower_rich.
                         let snap = snap_locals.clone();
                         let lookup = |n: &str| -> Option<skotch_mir::LocalId> {
@@ -24407,28 +24599,115 @@ fn method_simple_body_full(
                             mini_ok = false;
                             break;
                         };
-                        // Lower the return value via lower_rich into a
-                        // fresh stmts vec — that becomes the return-block.
-                        let mut ret_stmts: Vec<skotch_mir::Stmt> = Vec::new();
-                        let Some(ret_slot) = lower_rich_expr_to_slot(
-                            ret_expr,
-                            &lookup,
-                            fn_lookup,
-                            &mut next_slot_inner,
-                            &mut ret_stmts,
-                            &mut extra_locals_inner,
-                            strings,
-                        ) else {
+                        if let Some(ret_expr) = ret_expr_opt {
+                            // Lower the return value via lower_rich into a
+                            // fresh stmts vec — that becomes the return-block.
+                            let mut ret_stmts: Vec<skotch_mir::Stmt> = Vec::new();
+                            let Some(ret_slot) = lower_rich_expr_to_slot(
+                                ret_expr,
+                                &lookup,
+                                fn_lookup,
+                                &mut next_slot_inner,
+                                &mut ret_stmts,
+                                &mut extra_locals_inner,
+                                strings,
+                            ) else {
+                                mini_ok = false;
+                                break;
+                            };
+                            // Block layout:
+                            //   N = mini_extra_blocks.len() so far
+                            //   pre-block (current pre_stmts_inner): Branch
+                            //     to block N+1 (return) or N+2 (fall-through).
+                            //   block N+1: ret_stmts + ReturnValue(ret_slot).
+                            //   block N+2: fall-through (continues
+                            //     accumulating).
+                            let n = mini_extra_blocks.len();
+                            let pre_block = BasicBlock {
+                                stmts: std::mem::take(&mut pre_stmts_inner),
+                                terminator: Terminator::Branch {
+                                    cond: cond_slot,
+                                    then_block: (n + 1) as u32,
+                                    else_block: (n + 2) as u32,
+                                },
+                            };
+                            let return_block = BasicBlock {
+                                stmts: ret_stmts,
+                                terminator: Terminator::ReturnValue(ret_slot),
+                            };
+                            mini_extra_blocks.push(pre_block);
+                            mini_extra_blocks.push(return_block);
+                            continue;
+                        }
+                        // `if (cond) { non-return-stmts }` shape. Lower
+                        // each then-arm stmt into a then-block whose
+                        // terminator is Goto(fall-through).
+                        let then_block_kids: Vec<&skotch_sil::SilNode> =
+                            match then_arm {
+                                KtExpr::Block(bl) => skotch_ast::children(
+                                    bl.syntax(),
+                                )
+                                .iter()
+                                .collect(),
+                                other => vec![other.syntax()],
+                            };
+                        // Preload class-field references appearing in
+                        // the then-stmts so lookup(items) resolves to
+                        // a GetField slot when items.add(x) etc. is
+                        // lowered.
+                        if let Some(cname) = class_name {
+                            for tn in &then_block_kids {
+                                if let Some(te) = skotch_ast::KtExpr::cast(tn) {
+                                    prebind_class_fields(
+                                        te,
+                                        &mut snap_locals,
+                                        &mut next_slot_inner,
+                                        &mut pre_stmts_inner,
+                                        &mut extra_locals_inner,
+                                        Some(cname),
+                                        field_names,
+                                    );
+                                }
+                            }
+                        }
+                        let snap2 = snap_locals.clone();
+                        let lookup2 = |n: &str| -> Option<skotch_mir::LocalId> {
+                            snap2.iter()
+                                .rev()
+                                .find(|(nm, _)| nm == n)
+                                .map(|(_, l)| *l)
+                        };
+                        let mut then_stmts: Vec<skotch_mir::Stmt> = Vec::new();
+                        let mut then_ok = true;
+                        for tn in &then_block_kids {
+                            let Some(te) = skotch_ast::KtExpr::cast(tn) else {
+                                continue;
+                            };
+                            if lower_rich_expr_to_slot(
+                                te,
+                                &lookup2,
+                                fn_lookup,
+                                &mut next_slot_inner,
+                                &mut then_stmts,
+                                &mut extra_locals_inner,
+                                strings,
+                            )
+                            .is_none()
+                            {
+                                then_ok = false;
+                                break;
+                            }
+                        }
+                        if !then_ok {
                             mini_ok = false;
                             break;
-                        };
+                        }
                         // Block layout:
                         //   N = mini_extra_blocks.len() so far
-                        //   pre-block (current pre_stmts_inner): Branch
-                        //     to block N+1 (return) or N+2 (fall-through).
-                        //   block N+1: ret_stmts + ReturnValue(ret_slot).
-                        //   block N+2: fall-through (continues
-                        //     accumulating).
+                        //   pre-block: pre_stmts_inner + Branch(then=N+1,
+                        //     else=N+2)
+                        //   N+1: then_stmts + Goto(N+2)
+                        //   N+2: fall-through
                         let n = mini_extra_blocks.len();
                         let pre_block = BasicBlock {
                             stmts: std::mem::take(&mut pre_stmts_inner),
@@ -24438,14 +24717,12 @@ fn method_simple_body_full(
                                 else_block: (n + 2) as u32,
                             },
                         };
-                        let return_block = BasicBlock {
-                            stmts: ret_stmts,
-                            terminator: Terminator::ReturnValue(ret_slot),
+                        let then_block = BasicBlock {
+                            stmts: then_stmts,
+                            terminator: Terminator::Goto((n + 2) as u32),
                         };
                         mini_extra_blocks.push(pre_block);
-                        mini_extra_blocks.push(return_block);
-                        // The next iteration's accumulated pre_stmts_inner
-                        // belongs to a fall-through block (index n+2).
+                        mini_extra_blocks.push(then_block);
                         continue;
                     }
                     other => {
