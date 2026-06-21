@@ -1886,7 +1886,7 @@ pub fn lower_file(
                 interfaces: Vec::new(),
                 fields: Vec::new(),
                 methods: Vec::new(),
-                constructor: empty_constructor(&name),
+                constructor: empty_constructor_super(&name, "java/lang/Enum"),
                 secondary_constructors: Vec::new(),
                 is_suspend_lambda: false,
                 is_lambda: false,
@@ -20744,6 +20744,27 @@ fn lower_rich_expr_to_slot(
             if let Some(slot) = lookup_name(name) {
                 return Some(slot);
             }
+            // Implicit `this.field` for class-method bodies. Mirrors
+            // the same fallback in lower_inline_expr_to_slot — when
+            // the bare ident doesn't resolve to a local and the
+            // active class-method context advertises the name as a
+            // field, emit a GetField off `this` (slot 0).
+            if let Some((class_name, field_name, field_ty)) =
+                class_field_lookup(name)
+            {
+                let slot = LocalId(*next_slot);
+                *next_slot += 1;
+                extra_locals.push(field_ty);
+                pre_stmts.push(MStmt::Assign {
+                    dest: slot,
+                    value: skotch_mir::Rvalue::GetField {
+                        receiver: LocalId(0),
+                        class_name,
+                        field_name,
+                    },
+                });
+                return Some(slot);
+            }
             // Capitalized name with no local match → likely an
             // object-singleton reference (`val current = Idle`).
             // Emit `getstatic Idle.INSTANCE LIdle;` to materialize
@@ -21058,6 +21079,24 @@ fn lower_rich_expr_to_slot(
         }
     }
 
+    // Final fallback: route the expression through
+    // lower_inline_expr_to_slot. The two helpers grew in parallel
+    // and lower_inline handles a few simpler shapes (Reference with
+    // class_field_lookup, `this`, Binary on literals/refs) that
+    // lower_rich's specialized arms above don't all replicate. This
+    // catch-all absorbs Reference/Binary/literal shapes that would
+    // otherwise bail and cascade the enclosing call/loop body to
+    // empty MIR.
+    if let Some(slot) = lower_inline_expr_to_slot(
+        e,
+        lookup_name,
+        next_slot,
+        pre_stmts,
+        extra_locals,
+        strings,
+    ) {
+        return Some(slot);
+    }
     trace_bail!(
         "lower_rich_expr_to_slot fell through all arms: kind={}",
         kt_expr_kind(&e)
@@ -24394,6 +24433,13 @@ fn method_simple_body_full(
                 .enumerate()
                 .map(|(i, n)| (n.clone(), skotch_mir::LocalId((1 + i) as u32)))
                 .collect();
+            // Bind `this` to slot 0 inside class-method mini-walker
+            // bodies so that bare `this` references and `this in foo`
+            // shapes resolve (was: only worked from class-method paths
+            // that pre-registered, which the mini-walker skipped).
+            if class_name.is_some() {
+                snap_locals.insert(0, ("this".to_string(), skotch_mir::LocalId(0)));
+            }
             let mut next_slot_inner = (1 + param_count_inner) as u32;
             let mut pre_stmts_inner: Vec<skotch_mir::Stmt> = Vec::new();
             let mut extra_locals_inner: Vec<Ty> = Vec::new();
