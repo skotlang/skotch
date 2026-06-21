@@ -4973,6 +4973,15 @@ fn try_lower_when_is_expression(
     let lookup = |n: &str| -> Option<LocalId> {
         snap.iter().rev().find(|(nm, _)| nm == n).map(|(_, l)| *l)
     };
+    // Block-shaped arm bodies need full statement-list lowering (val
+    // decls, prior stmts, last-expr-is-value), which this single-pass
+    // rich-expr lowerer doesn't do. Bail so the function-body
+    // multi-stmt walker takes over instead.
+    for (_class_name, arm_body) in arms.iter() {
+        if matches!(unwrap_parens(*arm_body), KtExpr::Block(_)) {
+            return None;
+        }
+    }
     for (_class_name, arm_body) in arms.iter() {
         let mut stmts: Vec<MStmt> = Vec::new();
         let value_slot = lower_rich_expr_to_slot(
