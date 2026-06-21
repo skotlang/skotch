@@ -6329,21 +6329,29 @@ fn lower_loop_body(
                             .iter()
                             .find_map(|c| KtExpr::cast(*c))
                             .map(unwrap_parens);
-                        let index_expr_opt =
-                            arr_children.iter().find_map(|c| {
-                                if c.kind
-                                    == skotch_syntax::SyntaxKind::INDICES
-                                {
-                                    skotch_ast::children(c)
-                                        .iter()
-                                        .find_map(KtExpr::cast)
-                                        .map(unwrap_parens)
+                        // Collect ALL index expressions inside INDICES.
+                        // `m[i, j]` has two index exprs and desugars to
+                        // `m.set(i, j, value)` via the operator-set
+                        // dispatch. `m[i]` keeps the ArrayStore path
+                        // for primitive/typed-array shapes.
+                        let index_exprs: Vec<KtExpr<'_>> = arr_children
+                            .iter()
+                            .find_map(|c| {
+                                if c.kind == skotch_syntax::SyntaxKind::INDICES {
+                                    Some(
+                                        skotch_ast::children(c)
+                                            .iter()
+                                            .filter_map(|cc| KtExpr::cast(cc))
+                                            .map(unwrap_parens)
+                                            .collect::<Vec<_>>(),
+                                    )
                                 } else {
                                     None
                                 }
-                            });
-                        if let (Some(array_expr), Some(index_expr)) =
-                            (array_expr_opt, index_expr_opt)
+                            })
+                            .unwrap_or_default();
+                        if let (Some(array_expr), false) =
+                            (array_expr_opt, index_exprs.is_empty())
                         {
                             let snap = name_to_local.clone();
                             let lookup = |n: &str| -> Option<LocalId> {
@@ -6361,15 +6369,59 @@ fn lower_loop_body(
                                 local_tys,
                                 strings,
                             )?;
-                            let index_slot = lower_rich_expr_to_slot(
-                                index_expr,
-                                &lookup,
-                                fn_lookup_ref,
-                                next_slot,
-                                &mut body_mstmts,
-                                local_tys,
-                                strings,
-                            )?;
+                            if index_exprs.len() == 1 {
+                                let index_slot = lower_rich_expr_to_slot(
+                                    index_exprs[0],
+                                    &lookup,
+                                    fn_lookup_ref,
+                                    next_slot,
+                                    &mut body_mstmts,
+                                    local_tys,
+                                    strings,
+                                )?;
+                                let value_slot = lower_rich_expr_to_slot(
+                                    rhs,
+                                    &lookup,
+                                    fn_lookup_ref,
+                                    next_slot,
+                                    &mut body_mstmts,
+                                    local_tys,
+                                    strings,
+                                )?;
+                                let unused = LocalId(*next_slot);
+                                *next_slot += 1;
+                                local_tys.push(Ty::Unit);
+                                body_mstmts.push(MStmt::Assign {
+                                    dest: unused,
+                                    value: skotch_mir::Rvalue::ArrayStore {
+                                        array: array_slot,
+                                        index: index_slot,
+                                        value: value_slot,
+                                    },
+                                });
+                                continue;
+                            }
+                            // Multi-index → user-defined `operator set`.
+                            // Build args = [receiver, idx1, idx2, ..., value]
+                            // and emit Virtual call to `set` on the receiver's
+                            // class. Falls back to bail if any lower fails.
+                            let mut arg_slots: Vec<LocalId> = vec![array_slot];
+                            let mut ok = true;
+                            for ie in &index_exprs {
+                                let Some(s) = lower_rich_expr_to_slot(
+                                    *ie,
+                                    &lookup,
+                                    fn_lookup_ref,
+                                    next_slot,
+                                    &mut body_mstmts,
+                                    local_tys,
+                                    strings,
+                                ) else {
+                                    ok = false;
+                                    break;
+                                };
+                                arg_slots.push(s);
+                            }
                             let value_slot = lower_rich_expr_to_slot(
                                 rhs,
                                 &lookup,
@@ -6378,19 +6430,31 @@ fn lower_loop_body(
                                 &mut body_mstmts,
                                 local_tys,
                                 strings,
-                            )?;
-                            let unused = LocalId(*next_slot);
-                            *next_slot += 1;
-                            local_tys.push(Ty::Unit);
-                            body_mstmts.push(MStmt::Assign {
-                                dest: unused,
-                                value: skotch_mir::Rvalue::ArrayStore {
-                                    array: array_slot,
-                                    index: index_slot,
-                                    value: value_slot,
-                                },
-                            });
-                            continue;
+                            );
+                            if !ok || value_slot.is_none() {
+                                continue;
+                            }
+                            arg_slots.push(value_slot.unwrap());
+                            let recv_ty = slot_ty_with_param_fallback(
+                                array_slot.0,
+                                local_tys,
+                            );
+                            if let Ty::Class(cname) = recv_ty {
+                                let unused = LocalId(*next_slot);
+                                *next_slot += 1;
+                                local_tys.push(Ty::Unit);
+                                body_mstmts.push(MStmt::Assign {
+                                    dest: unused,
+                                    value: skotch_mir::Rvalue::Call {
+                                        kind: skotch_mir::CallKind::Virtual {
+                                            class_name: cname,
+                                            method_name: "set".to_string(),
+                                        },
+                                        args: arg_slots,
+                                    },
+                                });
+                                continue;
+                            }
                         }
                     }
                 }
