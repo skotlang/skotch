@@ -2349,6 +2349,23 @@ pub fn lower_file(
     };
     let _class_methods_scope = ClassMethodsScope::new(class_method_returns);
 
+    // Register synthesized forwarder methods (by-delegation, data-class
+    // copy(), data-class hashCode/equals/toString, etc.) into
+    // CLASS_METHODS. The table was built from the source AST BEFORE
+    // class lowering, so methods synthesized during lowering aren't
+    // visible to call-site dispatch yet. Walk each class and register
+    // any methods not already present (is_none() guard preserves any
+    // explicit AST entry).
+    for class in module.classes.iter() {
+        if !class.is_interface {
+            for method in class.methods.iter() {
+                if class_method_return_ty(&class.name, &method.name).is_none() {
+                    register_class_method(&class.name, &method.name, method.return_ty.clone());
+                }
+            }
+        }
+    }
+
     // Top-level functions — one MirFunction per KtFun decl.
     let mut fn_id = 0u32;
     for decl in file.decls() {
@@ -6077,6 +6094,14 @@ fn lower_loop_body(
                 kt_expr_kind(&init)
             );
             return None;
+        }
+        // Local function declaration: `fun helper(...) { ... }`
+        // declared inside another fn's body. MVP: skip the declaration
+        // for now so it doesn't bail the walker. Call resolution will
+        // use pre-populated fn_lookup entries (not yet implemented),
+        // or fall through to the unresolved-call path.
+        if skotch_ast::KtFun::cast(bn).is_some() {
+            continue;
         }
         let be: KtExpr<'_> = match KtExpr::cast(bn) {
             Some(e) => e,
