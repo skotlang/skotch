@@ -159,6 +159,38 @@ impl Drop for ClassMethodsScope {
 }
 
 thread_local! {
+    /// File-scoped type-alias map: `Name → resolved Ty`. Populated in
+    /// `lower_file` BEFORE class processing so resolve_type_ref can
+    /// substitute `Predicate` → `Ty::Class("kotlin/jvm/functions/Function1")`
+    /// when later type references appear. Cleared via TypeAliasScope
+    /// at end-of-file so the map doesn't leak across modules.
+    static TYPEALIAS_MAP: std::cell::RefCell<rustc_hash::FxHashMap<String, Ty>> =
+        std::cell::RefCell::new(rustc_hash::FxHashMap::default());
+}
+
+fn resolve_typealias(name: &str) -> Option<Ty> {
+    TYPEALIAS_MAP.with(|t| t.borrow().get(name).cloned())
+}
+
+struct TypeAliasScope {
+    prev: rustc_hash::FxHashMap<String, Ty>,
+}
+
+impl TypeAliasScope {
+    fn new(table: rustc_hash::FxHashMap<String, Ty>) -> Self {
+        let prev = TYPEALIAS_MAP.with(|t| std::mem::take(&mut *t.borrow_mut()));
+        TYPEALIAS_MAP.with(|t| *t.borrow_mut() = table);
+        TypeAliasScope { prev }
+    }
+}
+
+impl Drop for TypeAliasScope {
+    fn drop(&mut self) {
+        TYPEALIAS_MAP.with(|t| *t.borrow_mut() = std::mem::take(&mut self.prev));
+    }
+}
+
+thread_local! {
     /// File-scoped registry for synthesized lambda classes. A
     /// `KtExpr::Lambda` arm in lower_rich produces a MirClass (one
     /// per lambda expression) and pushes it here; `lower_file` drains
@@ -317,19 +349,27 @@ fn resolve_user_ty(name: &str) -> Ty {
 /// `tr.user_type().and_then(|u| u.name()).map(resolve_user_ty)` should
 /// migrate to this so fn-typed params are picked up.
 fn resolve_type_ref(tr: skotch_ast::KtTypeReference<'_>) -> Ty {
-    // Function-type annotation (`(A, B) -> R`).
+    // Function-type annotation (`(A, B) -> R` or `T.(A, B) -> R`).
+    // Extension-fn receivers add 1 to arity since the receiver is
+    // the first JVM-level param of the resulting FunctionN class.
     if let Some(ft) = tr.function_type() {
+        let receiver_count = if ft.receiver().is_some() { 1 } else { 0 };
         let arity = ft
             .parameter_list()
             .map(|pl| pl.parameters().count())
-            .unwrap_or(0);
+            .unwrap_or(0)
+            + receiver_count;
         return Ty::Class(format!("kotlin/jvm/functions/Function{}", arity));
     }
-    // Plain user-type name.
-    tr.user_type()
-        .and_then(|u| u.name())
-        .map(resolve_user_ty)
-        .unwrap_or(Ty::Any)
+    // Plain user-type name. Check typealias map first, then the
+    // built-in resolver.
+    if let Some(name) = tr.user_type().and_then(|u| u.name()) {
+        if let Some(alias_ty) = resolve_typealias(name) {
+            return alias_ty;
+        }
+        return resolve_user_ty(name);
+    }
+    Ty::Any
 }
 
 /// Look up the Ty for a slot, consulting either `extra_locals` or
@@ -1031,6 +1071,26 @@ pub fn lower_file(
             }
         }
     }
+
+    // Pre-pass: populate TYPEALIAS_MAP so resolve_type_ref can
+    // substitute `typealias Predicate = (Int) -> Boolean` when later
+    // type refs name Predicate. The TypeAliasScope below scopes the
+    // map to this file's lowering; cleared on drop so cross-module
+    // state doesn't leak. Resolving aliases via resolve_type_ref
+    // itself handles chains (alias -> alias -> ...) up to the
+    // recursion limit imposed by ordinary type resolution.
+    let typealias_table: rustc_hash::FxHashMap<String, Ty> = {
+        let mut table: rustc_hash::FxHashMap<String, Ty> = rustc_hash::FxHashMap::default();
+        for decl in file.decls() {
+            if let KtDecl::TypeAlias(ta) = decl {
+                if let (Some(name), Some(tr)) = (ta.name(), ta.type_reference()) {
+                    table.insert(name.to_string(), resolve_type_ref(tr));
+                }
+            }
+        }
+        table
+    };
+    let _typealias_scope = TypeAliasScope::new(typealias_table);
 
     // CLASS_METHODS scope must be installed BEFORE class
     // processing — otherwise method bodies that reference sibling
