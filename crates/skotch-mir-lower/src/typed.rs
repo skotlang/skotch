@@ -16088,8 +16088,13 @@ fn lower_inline_expr_to_slot(
             )?;
             // Pick Int vs Long arith based on operand types when both
             // are Long (Long literals or known-Long locals).
-            let lhs_ty = extra_locals.get(lhs.0 as usize).cloned().unwrap_or(Ty::Int);
-            let rhs_ty = extra_locals.get(rhs.0 as usize).cloned().unwrap_or(Ty::Int);
+            // Use slot_ty_with_param_fallback to honor PARAM_TY_FALLBACK
+            // (param slots) and the body-local-shifted indexing convention
+            // (extra_locals[i] = slot id param_count + i). Direct
+            // extra_locals.get(slot.0) was off-by-param-count and ignored
+            // the param-Ty thread-local.
+            let lhs_ty = slot_ty_with_param_fallback(lhs.0, extra_locals);
+            let rhs_ty = slot_ty_with_param_fallback(rhs.0, extra_locals);
             let is_long = matches!(lhs_ty, Ty::Long) || matches!(rhs_ty, Ty::Long);
             let is_double = matches!(lhs_ty, Ty::Double) || matches!(rhs_ty, Ty::Double);
             let mir_op = if is_cmp_op {
