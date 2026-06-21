@@ -20616,6 +20616,19 @@ fn lower_rich_expr_to_slot(
                                 if let Some((cname, result_ty)) = dispatch {
                                     let mut arg_slots: Vec<LocalId> = vec![slot];
                                     if let Some(arg_list) = call.value_argument_list() {
+                                        // Bail on named arguments: Virtual
+                                        // dispatch can't map names to positions
+                                        // without target-method introspection.
+                                        // Named-arg calls like `p.copy(y=10)`
+                                        // need the `name$default` shim path,
+                                        // not plain Virtual.
+                                        if arg_list.arguments().any(|arg| arg.name().is_some()) {
+                                            trace_bail!(
+                                                "DotQualified Virtual fallback bails on named args (method={}, class={})",
+                                                method_n, cname
+                                            );
+                                            return None;
+                                        }
                                         for arg in arg_list.arguments() {
                                             let arg_e = arg.expression()?;
                                             let s = lower_rich_expr_to_slot(
