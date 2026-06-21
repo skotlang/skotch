@@ -104,6 +104,29 @@ fn class_method_return_ty(class_name: &str, method_name: &str) -> Option<Ty> {
     })
 }
 
+/// Search CLASS_METHODS for classes owning a method by that name.
+/// Returns Some((class_name, return_ty)) iff EXACTLY one class
+/// declares the method — ambiguous matches return None so callers
+/// fall through to a different dispatch path. Used by the
+/// DotQualified+Call fallback when the receiver Ty has erased to
+/// Ty::Any (e.g. via untyped collection elements, missing class
+/// registrations).
+fn unique_class_owning_method(method_name: &str) -> Option<(String, Ty)> {
+    CLASS_METHODS.with(|c| {
+        let table = c.borrow();
+        let mut hit: Option<(String, Ty)> = None;
+        for (cname, methods) in table.iter() {
+            if let Some(rt) = methods.get(method_name) {
+                if hit.is_some() {
+                    return None;
+                }
+                hit = Some((cname.clone(), rt.clone()));
+            }
+        }
+        hit
+    })
+}
+
 /// Register a method's return Ty for a class in CLASS_METHODS at
 /// body-lowering time. Used by synthesized classes (object literals,
 /// lambda classes) whose method shapes weren't known when the table
@@ -20530,7 +20553,24 @@ fn lower_rich_expr_to_slot(
                             if let Some(slot) = lookup_name(rn) {
                                 let recv_ty =
                                     slot_ty_with_param_fallback(slot.0, extra_locals);
-                                if let Ty::Class(cname) = recv_ty {
+                                // Determine the dispatch class. If
+                                // recv_ty is Ty::Class(_), use it
+                                // directly. Otherwise fall back to a
+                                // unique CLASS_METHODS owner search —
+                                // accepts Ty::Any receivers when
+                                // exactly one user-class owns the
+                                // method name (common when the
+                                // receiver is a generic collection
+                                // element or a lost-type local).
+                                let dispatch: Option<(String, Ty)> = match &recv_ty {
+                                    Ty::Class(c) => Some((
+                                        c.clone(),
+                                        class_method_return_ty(c, method_n).unwrap_or(Ty::Any),
+                                    )),
+                                    Ty::Any => unique_class_owning_method(method_n),
+                                    _ => None,
+                                };
+                                if let Some((cname, result_ty)) = dispatch {
                                     let mut arg_slots: Vec<LocalId> = vec![slot];
                                     if let Some(arg_list) = call.value_argument_list() {
                                         for arg in arg_list.arguments() {
@@ -20549,8 +20589,6 @@ fn lower_rich_expr_to_slot(
                                     }
                                     let result_slot = LocalId(*next_slot);
                                     *next_slot += 1;
-                                    let result_ty = class_method_return_ty(&cname, method_n)
-                                        .unwrap_or(Ty::Any);
                                     extra_locals.push(result_ty);
                                     pre_stmts.push(MStmt::Assign {
                                         dest: result_slot,
