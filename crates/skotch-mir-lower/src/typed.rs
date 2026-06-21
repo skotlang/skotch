@@ -18172,7 +18172,28 @@ fn lower_rich_expr_to_slot(
                 | "until" | "downTo" | "step"
                 | "in" | "is" | "as"
         );
-        if is_alpha_ident && !is_stdlib_infix {
+        // Symbolic operator → method name mapping. Kotlin allows
+        // `operator fun plus(rhs)` etc. on user classes so `a + b`
+        // desugars to `a.plus(b)`. Symbol comparisons (==, !=) and
+        // pure-int arithmetic still take the existing Binary path
+        // below — this only fires when the lhs receiver carries a
+        // Ty::Class whose CLASS_METHODS entry advertises the operator
+        // method.
+        let symbol_method: Option<&'static str> = match op_text.as_str() {
+            "+" => Some("plus"),
+            "-" => Some("minus"),
+            "*" => Some("times"),
+            "/" => Some("div"),
+            "%" => Some("rem"),
+            ".." => Some("rangeTo"),
+            _ => None,
+        };
+        let mapped_method = if is_alpha_ident && !is_stdlib_infix {
+            Some(op_text.clone())
+        } else {
+            symbol_method.map(|s| s.to_string())
+        };
+        if let Some(method_name) = mapped_method {
             let lhs = b.lhs()?;
             let rhs = b.rhs()?;
             let lhs_slot = lower_rich_expr_to_slot(
@@ -18186,7 +18207,7 @@ fn lower_rich_expr_to_slot(
             )?;
             let recv_ty = slot_ty_with_param_fallback(lhs_slot.0, extra_locals);
             if let Ty::Class(cname) = &recv_ty {
-                if let Some(ret_ty) = class_method_return_ty(cname, &op_text) {
+                if let Some(ret_ty) = class_method_return_ty(cname, &method_name) {
                     let rhs_slot = lower_rich_expr_to_slot(
                         rhs,
                         lookup_name,
@@ -18204,7 +18225,7 @@ fn lower_rich_expr_to_slot(
                         value: skotch_mir::Rvalue::Call {
                             kind: skotch_mir::CallKind::Virtual {
                                 class_name: cname.clone(),
-                                method_name: op_text.to_string(),
+                                method_name,
                             },
                             args: vec![lhs_slot, rhs_slot],
                         },
