@@ -4,9 +4,7 @@
 //! key and asserts the output matches the committed `golden-*-out.apk` from
 //! apksig's own test suite, exactly as apksigner would produce it.
 
-use skotch_apksig::{
-    ApkSigner, Certificate, PrivateKey, SigningCertificateLineage, SignerConfig,
-};
+use skotch_apksig::{ApkSigner, Certificate, PrivateKey, SignerConfig, SigningCertificateLineage};
 use std::path::{Path, PathBuf};
 
 fn fixtures() -> PathBuf {
@@ -18,9 +16,10 @@ fn fixtures() -> PathBuf {
 
 fn rsa2048_signer() -> SignerConfig {
     let dir = fixtures().join("keys");
-    let key = PrivateKey::from_pkcs8_der(&std::fs::read(dir.join("rsa-2048.pk8")).unwrap()).unwrap();
-    let cert =
-        Certificate::from_pem_or_der(&std::fs::read(dir.join("rsa-2048.x509.pem")).unwrap()).unwrap();
+    let key =
+        PrivateKey::from_pkcs8_der(&std::fs::read(dir.join("rsa-2048.pk8")).unwrap()).unwrap();
+    let cert = Certificate::from_pem_or_der(&std::fs::read(dir.join("rsa-2048.x509.pem")).unwrap())
+        .unwrap();
     SignerConfig {
         // apksig's golden tests name the signer after the key resource
         // ("rsa-2048"), which the v1 scheme sanitizes to "RSA-2048".
@@ -144,7 +143,9 @@ fn run_lineage_case(input_stem: &str, suffix: &str, v1: bool, v2: bool) {
         .signing_certificate_lineage(lineage);
     let result = signer.sign(&input).expect("sign");
 
-    let golden_path = fx.join("golden").join(format!("{input_stem}-{suffix}-out.apk"));
+    let golden_path = fx
+        .join("golden")
+        .join(format!("{input_stem}-{suffix}-out.apk"));
     let golden = std::fs::read(&golden_path)
         .unwrap_or_else(|_| panic!("golden missing: {}", golden_path.display()));
     if result.apk != golden {

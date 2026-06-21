@@ -74,9 +74,19 @@ fn generate_signer_block(
         .signer
         .signature_algorithms
         .iter()
-        .map(|alg| (alg.id(), content_digests[&alg.content_digest_algorithm()].clone()))
+        .map(|alg| {
+            (
+                alg.id(),
+                content_digests[&alg.content_digest_algorithm()].clone(),
+            )
+        })
         .collect();
-    let certs: Vec<Vec<u8>> = cfg.signer.certificates.iter().map(|c| c.der.clone()).collect();
+    let certs: Vec<Vec<u8>> = cfg
+        .signer
+        .certificates
+        .iter()
+        .map(|c| c.der.clone())
+        .collect();
     let additional_attributes = generate_additional_attributes(cfg, params);
 
     // signed data:

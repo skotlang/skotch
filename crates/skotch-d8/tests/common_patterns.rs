@@ -11,7 +11,11 @@ fn fixtures() -> PathBuf {
 
 fn assert_byte_identical(name: &str) {
     let cf = skotch_classfile::parse_class_file(&fixtures().join(format!("{name}.class"))).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let produced = dex_classes(&[cf], &opts).unwrap_or_else(|e| panic!("{name} should dex: {e:#}"));
     let golden = std::fs::read(fixtures().join(format!("{name}.d8.dex"))).unwrap();
     if produced != golden {
@@ -56,7 +60,9 @@ fn rev_byte_identical() {
 /// (`s += a[i].length()` method call in a loop).
 #[test]
 fn loop_shapes_byte_identical() {
-    for name in ["DoWhile", "ArrWrite", "CondUpd", "DepChain", "LongLoop", "NestedIf", "CallLoop"] {
+    for name in [
+        "DoWhile", "ArrWrite", "CondUpd", "DepChain", "LongLoop", "NestedIf", "CallLoop",
+    ] {
         assert_byte_identical(name);
     }
 }
@@ -134,7 +140,15 @@ fn stress_round5_byte_identical() {
 ///  - `S10Fact` (`long p=1; for(i) p*=i` — wide accumulator factorial).
 #[test]
 fn stress_round10_byte_identical() {
-    for name in ["S10PreInc", "S10ArrMul", "S10ArrShr", "S10Fld", "S10Idx2D", "S10ChAr", "S10Fact"] {
+    for name in [
+        "S10PreInc",
+        "S10ArrMul",
+        "S10ArrShr",
+        "S10Fld",
+        "S10Idx2D",
+        "S10ChAr",
+        "S10Fact",
+    ] {
         assert_byte_identical(name);
     }
 }
@@ -304,7 +318,9 @@ fn redundant_load_cse_byte_identical() {
 /// dead φ-entry const we DCE, so we emit smaller correct code — not committed.)
 #[test]
 fn stress_round6_byte_identical() {
-    for name in ["S6Rem", "S6Div", "S6Hash", "S6Bit", "S6Mix", "S6Ladder", "S6Narrow"] {
+    for name in [
+        "S6Rem", "S6Div", "S6Hash", "S6Bit", "S6Mix", "S6Ladder", "S6Narrow",
+    ] {
         assert_byte_identical(name);
     }
 }
@@ -349,9 +365,15 @@ fn loop_header_is_entry_now_dexes_via_preheader() {
             fixtures().join(format!("{name}.class"))
         };
         let cf = skotch_classfile::parse_class_file(&path).unwrap();
-        let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
-        let dex = dex_classes(&[cf], &opts).unwrap_or_else(|e| panic!("{name}: loop-header-is-entry should dex now: {e:#}"));
-        skotch_dex::validator::validate(&dex).unwrap_or_else(|e| panic!("{name}: invalid dex: {e:#}"));
+        let opts = D8Options {
+            min_api: 1,
+            mode: Mode::Release,
+            ..Default::default()
+        };
+        let dex = dex_classes(&[cf], &opts)
+            .unwrap_or_else(|e| panic!("{name}: loop-header-is-entry should dex now: {e:#}"));
+        skotch_dex::validator::validate(&dex)
+            .unwrap_or_else(|e| panic!("{name}: invalid dex: {e:#}"));
     }
 }
 
@@ -364,8 +386,13 @@ fn loop_header_is_entry_now_dexes_via_preheader() {
 #[test]
 fn over_16_registers_arith_now_dexes_via_widening() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("ArtManyRegs.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
-    let dex = dex_classes(&[cf], &opts).expect("ArtManyRegs (>16 registers) should now dex via widening");
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
+    let dex =
+        dex_classes(&[cf], &opts).expect("ArtManyRegs (>16 registers) should now dex via widening");
     skotch_dex::validator::validate(&dex).expect("ArtManyRegs dex must validate");
 }
 
@@ -381,8 +408,13 @@ fn over_16_registers_arith_now_dexes_via_widening() {
 #[test]
 fn over_16_registers_if_test_spills_through_scratch() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("ArtWideLoop.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
-    let dex = dex_classes(&[cf], &opts).expect("ArtWideLoop (>16 regs, if-test spill) should now dex");
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
+    let dex =
+        dex_classes(&[cf], &opts).expect("ArtWideLoop (>16 regs, if-test spill) should now dex");
     skotch_dex::validator::validate(&dex).expect("ArtWideLoop dex must validate");
 }
 
@@ -399,8 +431,13 @@ fn over_16_registers_invoke_args_use_range_via_final_check() {
         &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtWideCall.class"),
     )
     .unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
-    let dex = dex_classes(&[cf], &opts).expect("ArtWideCall (>16 regs, param args) should dex via range form");
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
+    let dex = dex_classes(&[cf], &opts)
+        .expect("ArtWideCall (>16 regs, param args) should dex via range form");
     skotch_dex::validator::validate(&dex).expect("ArtWideCall dex must validate");
 }
 
@@ -419,7 +456,11 @@ fn invoke_arg_pushed_high_by_scratch_uses_range_via_frame_hint() {
         &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtRangeGather.class"),
     )
     .unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let dex = dex_classes(&[cf], &opts)
         .expect("ArtRangeGather (scratch-pushed invoke arg) should dex via range gather");
     skotch_dex::validator::validate(&dex).expect("ArtRangeGather dex must validate");
@@ -438,9 +479,13 @@ fn over_16_phi_and_const_widen_via_frame_hint() {
         &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtPhiWideMove.class"),
     )
     .unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
-    let dex = dex_classes(&[cf], &opts)
-        .expect("ArtPhiWideMove (>16 φ-move/const widening) should dex");
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
+    let dex =
+        dex_classes(&[cf], &opts).expect("ArtPhiWideMove (>16 φ-move/const widening) should dex");
     skotch_dex::validator::validate(&dex).expect("ArtPhiWideMove dex must validate");
 }
 
@@ -455,7 +500,11 @@ fn over_16_if_test_args_spill_through_scratch() {
         &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtIfWide.class"),
     )
     .unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let dex = dex_classes(&[cf], &opts).expect("ArtIfWide (>16 if-test spill) should dex");
     skotch_dex::validator::validate(&dex).expect("ArtIfWide dex must validate");
 }
@@ -474,7 +523,11 @@ fn over_16_if_test_high_local_spills_via_pre_emit_reserve() {
         &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtHiLocalIf.class"),
     )
     .unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let dex = dex_classes(&[cf], &opts).expect("ArtHiLocalIf (>16 if-test high LOCAL) should dex");
     skotch_dex::validator::validate(&dex).expect("ArtHiLocalIf dex must validate");
 }
@@ -492,7 +545,11 @@ fn two_rematerializable_const_binop_keeps_left_in_register() {
         &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtTwoConst.class"),
     )
     .unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let dex = dex_classes(&[cf], &opts).expect("ArtTwoConst (two-const binop) should dex");
     skotch_dex::validator::validate(&dex).expect("ArtTwoConst dex must validate");
 }
@@ -512,8 +569,13 @@ fn stack_merge_in_handler_body_seeds_entry_stack() {
         &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtCatchMergeKt.class"),
     )
     .unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
-    let dex = dex_classes(&[cf], &opts).expect("ArtCatchMergeKt (handler-body stack merge) should dex");
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
+    let dex =
+        dex_classes(&[cf], &opts).expect("ArtCatchMergeKt (handler-body stack merge) should dex");
     skotch_dex::validator::validate(&dex).expect("ArtCatchMergeKt dex must validate");
 }
 
@@ -530,7 +592,11 @@ fn over_coalesce_net_skips_dead_dce_removed_values() {
         &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtDeadFoldKt.class"),
     )
     .unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let dex = dex_classes(&[cf], &opts).expect("ArtDeadFoldKt (dead folded binop) should dex");
     skotch_dex::validator::validate(&dex).expect("ArtDeadFoldKt dex must validate");
 }
@@ -551,8 +617,13 @@ fn lambda_wide_primitive_param_unbox_and_return_box() {
         &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtWideAdapt.class"),
     )
     .unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
-    let dex = dex_classes(&[cf], &opts).expect("ArtWideAdapt (wide param-unbox/return-box) should dex");
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
+    let dex =
+        dex_classes(&[cf], &opts).expect("ArtWideAdapt (wide param-unbox/return-box) should dex");
     skotch_dex::validator::validate(&dex).expect("ArtWideAdapt dex must validate");
 }
 
@@ -569,8 +640,13 @@ fn lambda_widens_primitive_to_wide_impl_param() {
         &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtWiden.class"),
     )
     .unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
-    let dex = dex_classes(&[cf], &opts).expect("ArtWiden (primitive-widening SAM bridge) should dex");
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
+    let dex =
+        dex_classes(&[cf], &opts).expect("ArtWiden (primitive-widening SAM bridge) should dex");
     skotch_dex::validator::validate(&dex).expect("ArtWiden dex must validate");
 }
 
@@ -585,7 +661,11 @@ fn lambda_covariant_reference_return() {
         &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtCovRet.class"),
     )
     .unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let dex = dex_classes(&[cf], &opts).expect("ArtCovRet (covariant ref return) should dex");
     skotch_dex::validator::validate(&dex).expect("ArtCovRet dex must validate");
 }
@@ -604,7 +684,11 @@ fn lambda_capturing_wide_primitive_param_unbox() {
         &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtCapWide.class"),
     )
     .unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let dex = dex_classes(&[cf], &opts).expect("ArtCapWide (capturing wide unbox) should dex");
     skotch_dex::validator::validate(&dex).expect("ArtCapWide dex must validate");
 }
@@ -622,8 +706,13 @@ fn byte_boolean_array_phi_cycle_resolves_via_skip() {
         &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtBoolArrPhi.class"),
     )
     .unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
-    let dex = dex_classes(&[cf], &opts).expect("ArtBoolArrPhi (byte/bool array φ-cycle) should dex");
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
+    let dex =
+        dex_classes(&[cf], &opts).expect("ArtBoolArrPhi (byte/bool array φ-cycle) should dex");
     skotch_dex::validator::validate(&dex).expect("ArtBoolArrPhi dex must validate");
 }
 
@@ -638,7 +727,11 @@ fn lambda_ctor_reference_invoke_range_form() {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art");
     let main = skotch_classfile::parse_class_file(&dir.join("ArtCtorRange.class")).unwrap();
     let iface = skotch_classfile::parse_class_file(&dir.join("ArtCtorRange$Mk.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let dex = dex_classes(&[main, iface], &opts).expect("ArtCtorRange (ctor-ref range) should dex");
     skotch_dex::validator::validate(&dex).expect("ArtCtorRange dex must validate");
 }
@@ -655,8 +748,13 @@ fn lambda_capturing_sam_invoke_range_form() {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art");
     let main = skotch_classfile::parse_class_file(&dir.join("ArtCapRange.class")).unwrap();
     let iface = skotch_classfile::parse_class_file(&dir.join("ArtCapRange$Sink.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
-    let dex = dex_classes(&[main, iface], &opts).expect("ArtCapRange (capturing-SAM range) should dex");
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
+    let dex =
+        dex_classes(&[main, iface], &opts).expect("ArtCapRange (capturing-SAM range) should dex");
     skotch_dex::validator::validate(&dex).expect("ArtCapRange dex must validate");
 }
 
@@ -672,8 +770,13 @@ fn lambda_capturing_sam_invoke_range_form() {
 fn wide_invoke_arg_high_half_forces_range() {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art");
     let cf = skotch_classfile::parse_class_file(&dir.join("ArtWideArgRange.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
-    let dex = dex_classes(&[cf], &opts).expect("ArtWideArgRange (wide-arg high-half range) should dex");
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
+    let dex =
+        dex_classes(&[cf], &opts).expect("ArtWideArgRange (wide-arg high-half range) should dex");
     skotch_dex::validator::validate(&dex).expect("ArtWideArgRange dex must validate");
 }
 
@@ -687,7 +790,11 @@ fn wide_invoke_arg_high_half_forces_range() {
 fn multianewarray_lowers_to_array_newinstance() {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art");
     let cf = skotch_classfile::parse_class_file(&dir.join("ArtMultiArray.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let dex = dex_classes(&[cf], &opts).expect("ArtMultiArray (multianewarray) should dex");
     skotch_dex::validator::validate(&dex).expect("ArtMultiArray dex must validate");
 }
@@ -704,7 +811,11 @@ fn multianewarray_lowers_to_array_newinstance() {
 fn multi_pred_handler_phi_force_coalesces() {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art");
     let cf = skotch_classfile::parse_class_file(&dir.join("ArtHandlerPhi.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let dex = dex_classes(&[cf], &opts).expect("ArtHandlerPhi (multi-pred handler-φ) should dex");
     skotch_dex::validator::validate(&dex).expect("ArtHandlerPhi dex must validate");
 }
@@ -721,7 +832,11 @@ fn multi_pred_handler_phi_force_coalesces() {
 fn high_arity_local_nibble_emits_final_register() {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art");
     let cf = skotch_classfile::parse_class_file(&dir.join("ArtHighArity.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let dex = dex_classes(&[cf], &opts).expect("ArtHighArity (high-arity local nibble) should dex");
     skotch_dex::validator::validate(&dex).expect("ArtHighArity dex must validate");
 }
@@ -737,8 +852,13 @@ fn over_16_array_length_and_instance_of_spill() {
         &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtArrInst.class"),
     )
     .unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
-    let dex = dex_classes(&[cf], &opts).expect("ArtArrInst (>16 array-length/instance-of spill) should dex");
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
+    let dex = dex_classes(&[cf], &opts)
+        .expect("ArtArrInst (>16 array-length/instance-of spill) should dex");
     skotch_dex::validator::validate(&dex).expect("ArtArrInst dex must validate");
 }
 
@@ -754,8 +874,13 @@ fn over_16_iget_iput_wide_obj_spills() {
         &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtWideField.class"),
     )
     .unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
-    let dex = dex_classes(&[cf], &opts).expect("ArtWideField (>16 iget/iput-wide obj spill) should dex");
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
+    let dex =
+        dex_classes(&[cf], &opts).expect("ArtWideField (>16 iget/iput-wide obj spill) should dex");
     skotch_dex::validator::validate(&dex).expect("ArtWideField dex must validate");
 }
 
@@ -771,8 +896,13 @@ fn over_16_switch_chain_spills_through_scratch() {
         &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtSwitchWide.class"),
     )
     .unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
-    let dex = dex_classes(&[cf], &opts).expect("ArtSwitchWide (>16 switch scratch spill) should dex");
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
+    let dex =
+        dex_classes(&[cf], &opts).expect("ArtSwitchWide (>16 switch scratch spill) should dex");
     skotch_dex::validator::validate(&dex).expect("ArtSwitchWide dex must validate");
 }
 
@@ -789,7 +919,11 @@ fn dead_catch_all_handler_over_nonthrowing_body_is_elided() {
         &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtTryNoThrow.class"),
     )
     .unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let dex = dex_classes(&[cf], &opts).expect("ArtTryNoThrow (dead catch-all) should now dex");
     skotch_dex::validator::validate(&dex).expect("ArtTryNoThrow dex must validate");
 }
@@ -803,15 +937,21 @@ fn dead_catch_all_handler_over_nonthrowing_body_is_elided() {
 /// INSIDE the loop) must STILL bail — the safety net is exact, not loosened.
 #[test]
 fn acyclic_used_catch_with_unrelated_loop_now_dexes() {
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let ok = skotch_classfile::parse_class_file(
         &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtCatchUnrelatedLoop.class"),
     )
     .unwrap();
-    let dex = dex_classes(&[ok], &opts).expect("ArtCatchUnrelatedLoop (acyclic used-catch) should dex");
+    let dex =
+        dex_classes(&[ok], &opts).expect("ArtCatchUnrelatedLoop (acyclic used-catch) should dex");
     skotch_dex::validator::validate(&dex).expect("ArtCatchUnrelatedLoop dex must validate");
 
-    let bail = skotch_classfile::parse_class_file(&fixtures().join("ArtLoopCatchUsed.class")).unwrap();
+    let bail =
+        skotch_classfile::parse_class_file(&fixtures().join("ArtLoopCatchUsed.class")).unwrap();
     dex_classes(&[bail], &opts)
         .expect_err("ArtLoopCatchUsed (used catch INSIDE a loop) must still bail, not miscompile");
 }
@@ -830,7 +970,11 @@ fn multi_throw_handler_phi_no_longer_needs_block_phis() {
         &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtMultiThrow.class"),
     )
     .unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let dex = dex_classes(&[cf], &opts).expect("ArtMultiThrow (multi-throw handler-φ) should dex");
     skotch_dex::validator::validate(&dex).expect("ArtMultiThrow dex must validate");
 }
@@ -845,12 +989,17 @@ fn multi_throw_handler_phi_no_longer_needs_block_phis() {
 #[test]
 fn nested_overlapping_try_regions_now_dex() {
     let art = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art");
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     for name in ["ArtNestedTry", "ArtNestedThrow", "ArtTwoCatch"] {
         let cf = skotch_classfile::parse_class_file(&art.join(format!("{name}.class"))).unwrap();
         let dex = dex_classes(&[cf], &opts)
             .unwrap_or_else(|e| panic!("{name} (nested try) should dex: {e:#}"));
-        skotch_dex::validator::validate(&dex).unwrap_or_else(|e| panic!("{name} dex must validate: {e:#}"));
+        skotch_dex::validator::validate(&dex)
+            .unwrap_or_else(|e| panic!("{name} dex must validate: {e:#}"));
     }
 }
 
@@ -866,7 +1015,11 @@ fn over_16_unop_conversion_spills_through_scratch() {
         &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtI2lDest.class"),
     )
     .unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let dex = dex_classes(&[cf], &opts).expect("ArtI2lDest (>16 i2l spill) should dex");
     skotch_dex::validator::validate(&dex).expect("ArtI2lDest dex must validate");
 }
@@ -884,7 +1037,11 @@ fn capturing_lambda_wide_sam_parameter_now_dexes() {
         &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtLongSam.class"),
     )
     .unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let dex = dex_classes(&[cf], &opts).expect("ArtLongSam (wide SAM param) should dex");
     skotch_dex::validator::validate(&dex).expect("ArtLongSam dex must validate");
 }
@@ -901,7 +1058,11 @@ fn ctor_ref_wide_parameter_now_dexes() {
         &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtLongCtorRef.class"),
     )
     .unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let dex = dex_classes(&[cf], &opts).expect("ArtLongCtorRef (wide ctor-ref param) should dex");
     skotch_dex::validator::validate(&dex).expect("ArtLongCtorRef dex must validate");
 }
@@ -918,7 +1079,11 @@ fn baload_bastore_via_checkcast_array_resolves_byte_vs_boolean() {
         &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtCastArray.class"),
     )
     .unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let dex = dex_classes(&[cf], &opts).expect("ArtCastArray (cast byte/boolean array) should dex");
     skotch_dex::validator::validate(&dex).expect("ArtCastArray dex must validate");
 }
@@ -939,11 +1104,22 @@ fn baload_bastore_via_checkcast_array_resolves_byte_vs_boolean() {
 #[test]
 fn over_16_registers_iget_iput_now_spill_through_scratch() {
     let art = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art");
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
-    for name in ["ArtSpillThis", "ArtSpillObj", "ArtSpillPut", "ArtSpillLoop", "ArtSpillArg"] {
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
+    for name in [
+        "ArtSpillThis",
+        "ArtSpillObj",
+        "ArtSpillPut",
+        "ArtSpillLoop",
+        "ArtSpillArg",
+    ] {
         let cf = skotch_classfile::parse_class_file(&art.join(format!("{name}.class"))).unwrap();
-        let dex = dex_classes(&[cf], &opts)
-            .unwrap_or_else(|e| panic!("{name} (>16-reg iget/iput) should dex via scratch spill: {e:#}"));
+        let dex = dex_classes(&[cf], &opts).unwrap_or_else(|e| {
+            panic!("{name} (>16-reg iget/iput) should dex via scratch spill: {e:#}")
+        });
         skotch_dex::validator::validate(&dex)
             .unwrap_or_else(|e| panic!("{name} spill dex must validate: {e:#}"));
     }
@@ -959,10 +1135,19 @@ fn over_16_registers_iget_iput_now_spill_through_scratch() {
 /// non-static impls, and generic/bridge SAMs still bail (never miscompile).
 #[test]
 fn lambda_metafactory_non_capturing_now_dexes() {
-    let cf = skotch_classfile::parse_class_file(&PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtLambda.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
-    let dex = dex_classes(&[cf], &opts).unwrap_or_else(|e| panic!("ArtLambda: non-capturing lambda should dex now: {e:#}"));
-    skotch_dex::validator::validate(&dex).unwrap_or_else(|e| panic!("ArtLambda: invalid dex: {e:#}"));
+    let cf = skotch_classfile::parse_class_file(
+        &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtLambda.class"),
+    )
+    .unwrap();
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
+    let dex = dex_classes(&[cf], &opts)
+        .unwrap_or_else(|e| panic!("ArtLambda: non-capturing lambda should dex now: {e:#}"));
+    skotch_dex::validator::validate(&dex)
+        .unwrap_or_else(|e| panic!("ArtLambda: invalid dex: {e:#}"));
 }
 
 /// A CAPTURING lambda (`invokedynamic` → LambdaMetafactory whose indy descriptor has dynamic
@@ -977,10 +1162,19 @@ fn lambda_metafactory_non_capturing_now_dexes() {
 /// / method-ref / generic-bridge lambdas still bail (never miscompile).
 #[test]
 fn lambda_metafactory_capturing_now_dexes() {
-    let cf = skotch_classfile::parse_class_file(&PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtLambdaCapture.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
-    let dex = dex_classes(&[cf], &opts).unwrap_or_else(|e| panic!("ArtLambdaCapture: capturing lambda should dex now: {e:#}"));
-    skotch_dex::validator::validate(&dex).unwrap_or_else(|e| panic!("ArtLambdaCapture: invalid dex: {e:#}"));
+    let cf = skotch_classfile::parse_class_file(
+        &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtLambdaCapture.class"),
+    )
+    .unwrap();
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
+    let dex = dex_classes(&[cf], &opts)
+        .unwrap_or_else(|e| panic!("ArtLambdaCapture: capturing lambda should dex now: {e:#}"));
+    skotch_dex::validator::validate(&dex)
+        .unwrap_or_else(|e| panic!("ArtLambdaCapture: invalid dex: {e:#}"));
 }
 
 /// A GENERIC functional interface (e.g. `Function<String,Integer>`) has an ERASED SAM
@@ -993,10 +1187,19 @@ fn lambda_metafactory_capturing_now_dexes() {
 /// proven by `tests/art/ArtLambdaGeneric`; here: dexes (incl. synthetics) + self-validates.
 #[test]
 fn lambda_metafactory_generic_sam_now_dexes() {
-    let cf = skotch_classfile::parse_class_file(&PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtLambdaGeneric.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
-    let dex = dex_classes(&[cf], &opts).unwrap_or_else(|e| panic!("ArtLambdaGeneric: generic SAM lambda should dex now: {e:#}"));
-    skotch_dex::validator::validate(&dex).unwrap_or_else(|e| panic!("ArtLambdaGeneric: invalid dex: {e:#}"));
+    let cf = skotch_classfile::parse_class_file(
+        &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtLambdaGeneric.class"),
+    )
+    .unwrap();
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
+    let dex = dex_classes(&[cf], &opts)
+        .unwrap_or_else(|e| panic!("ArtLambdaGeneric: generic SAM lambda should dex now: {e:#}"));
+    skotch_dex::validator::validate(&dex)
+        .unwrap_or_else(|e| panic!("ArtLambdaGeneric: invalid dex: {e:#}"));
 }
 
 /// METHOD REFERENCES (`Type::method`) are invokedynamic+LambdaMetafactory like lambdas, but the
@@ -1010,10 +1213,19 @@ fn lambda_metafactory_generic_sam_now_dexes() {
 /// adaptations, bound/instance-capturing refs, and constructor refs (kind 8) still bail.
 #[test]
 fn lambda_method_references_now_dex() {
-    let cf = skotch_classfile::parse_class_file(&PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtMethodRef.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
-    let dex = dex_classes(&[cf], &opts).unwrap_or_else(|e| panic!("ArtMethodRef: method references should dex now: {e:#}"));
-    skotch_dex::validator::validate(&dex).unwrap_or_else(|e| panic!("ArtMethodRef: invalid dex: {e:#}"));
+    let cf = skotch_classfile::parse_class_file(
+        &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtMethodRef.class"),
+    )
+    .unwrap();
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
+    let dex = dex_classes(&[cf], &opts)
+        .unwrap_or_else(|e| panic!("ArtMethodRef: method references should dex now: {e:#}"));
+    skotch_dex::validator::validate(&dex)
+        .unwrap_or_else(|e| panic!("ArtMethodRef: invalid dex: {e:#}"));
 }
 
 /// BOUND instance method references (`sb::toString`, `"key"::equals`, `prefix::startsWith`) capture
@@ -1026,10 +1238,19 @@ fn lambda_method_references_now_dex() {
 /// self-validates. Constructor refs (kind 8) and boxing adaptations still bail.
 #[test]
 fn lambda_bound_method_references_now_dex() {
-    let cf = skotch_classfile::parse_class_file(&PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtBoundRef.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
-    let dex = dex_classes(&[cf], &opts).unwrap_or_else(|e| panic!("ArtBoundRef: bound method references should dex now: {e:#}"));
-    skotch_dex::validator::validate(&dex).unwrap_or_else(|e| panic!("ArtBoundRef: invalid dex: {e:#}"));
+    let cf = skotch_classfile::parse_class_file(
+        &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtBoundRef.class"),
+    )
+    .unwrap();
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
+    let dex = dex_classes(&[cf], &opts)
+        .unwrap_or_else(|e| panic!("ArtBoundRef: bound method references should dex now: {e:#}"));
+    skotch_dex::validator::validate(&dex)
+        .unwrap_or_else(|e| panic!("ArtBoundRef: invalid dex: {e:#}"));
 }
 
 /// RETURN-BOXING adaptation: when a method reference's impl returns a primitive but the
@@ -1041,10 +1262,19 @@ fn lambda_bound_method_references_now_dex() {
 /// wide (Long/Double) boxing still bail.
 #[test]
 fn lambda_return_boxing_now_dexes() {
-    let cf = skotch_classfile::parse_class_file(&PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtLambdaBox.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
-    let dex = dex_classes(&[cf], &opts).unwrap_or_else(|e| panic!("ArtLambdaBox: return-boxing lambda should dex now: {e:#}"));
-    skotch_dex::validator::validate(&dex).unwrap_or_else(|e| panic!("ArtLambdaBox: invalid dex: {e:#}"));
+    let cf = skotch_classfile::parse_class_file(
+        &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtLambdaBox.class"),
+    )
+    .unwrap();
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
+    let dex = dex_classes(&[cf], &opts)
+        .unwrap_or_else(|e| panic!("ArtLambdaBox: return-boxing lambda should dex now: {e:#}"));
+    skotch_dex::validator::validate(&dex)
+        .unwrap_or_else(|e| panic!("ArtLambdaBox: invalid dex: {e:#}"));
 }
 
 /// A capturing lambda whose impl is an INSTANCE method — it closes over `this` (plus locals), so
@@ -1058,10 +1288,19 @@ fn lambda_return_boxing_now_dexes() {
 /// String. Proven on a REAL device by `tests/art/ArtCaptureThis`; here: dexes + self-validates.
 #[test]
 fn lambda_instance_impl_capturing_this_now_dexes() {
-    let cf = skotch_classfile::parse_class_file(&PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtCaptureThis.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
-    let dex = dex_classes(&[cf], &opts).unwrap_or_else(|e| panic!("ArtCaptureThis: this-capturing lambda should dex now: {e:#}"));
-    skotch_dex::validator::validate(&dex).unwrap_or_else(|e| panic!("ArtCaptureThis: invalid dex: {e:#}"));
+    let cf = skotch_classfile::parse_class_file(
+        &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtCaptureThis.class"),
+    )
+    .unwrap();
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
+    let dex = dex_classes(&[cf], &opts)
+        .unwrap_or_else(|e| panic!("ArtCaptureThis: this-capturing lambda should dex now: {e:#}"));
+    skotch_dex::validator::validate(&dex)
+        .unwrap_or_else(|e| panic!("ArtCaptureThis: invalid dex: {e:#}"));
 }
 
 /// CONSTRUCTOR REFERENCES (`ArrayList::new`, `StringBuilder::new`) use method-handle kind 8
@@ -1074,10 +1313,19 @@ fn lambda_instance_impl_capturing_this_now_dexes() {
 /// refs still bail.
 #[test]
 fn lambda_constructor_references_now_dex() {
-    let cf = skotch_classfile::parse_class_file(&PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtCtorRef.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
-    let dex = dex_classes(&[cf], &opts).unwrap_or_else(|e| panic!("ArtCtorRef: constructor references should dex now: {e:#}"));
-    skotch_dex::validator::validate(&dex).unwrap_or_else(|e| panic!("ArtCtorRef: invalid dex: {e:#}"));
+    let cf = skotch_classfile::parse_class_file(
+        &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtCtorRef.class"),
+    )
+    .unwrap();
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
+    let dex = dex_classes(&[cf], &opts)
+        .unwrap_or_else(|e| panic!("ArtCtorRef: constructor references should dex now: {e:#}"));
+    skotch_dex::validator::validate(&dex)
+        .unwrap_or_else(|e| panic!("ArtCtorRef: invalid dex: {e:#}"));
 }
 
 /// Lambda metafactory SIGNATURE ADAPTATIONS that don't require (un)boxing: (1) RETURN-TO-VOID — a
@@ -1090,10 +1338,19 @@ fn lambda_constructor_references_now_dex() {
 /// Primitive (un)boxing adaptations still bail.
 #[test]
 fn lambda_signature_adaptations_now_dex() {
-    let cf = skotch_classfile::parse_class_file(&PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtLambdaAdapt.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
-    let dex = dex_classes(&[cf], &opts).unwrap_or_else(|e| panic!("ArtLambdaAdapt: signature adaptations should dex now: {e:#}"));
-    skotch_dex::validator::validate(&dex).unwrap_or_else(|e| panic!("ArtLambdaAdapt: invalid dex: {e:#}"));
+    let cf = skotch_classfile::parse_class_file(
+        &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtLambdaAdapt.class"),
+    )
+    .unwrap();
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
+    let dex = dex_classes(&[cf], &opts)
+        .unwrap_or_else(|e| panic!("ArtLambdaAdapt: signature adaptations should dex now: {e:#}"));
+    skotch_dex::validator::validate(&dex)
+        .unwrap_or_else(|e| panic!("ArtLambdaAdapt: invalid dex: {e:#}"));
 }
 
 /// PARAMETER UNBOXING: when an instantiated SAM parameter is a boxed wrapper (Integer) but the impl
@@ -1106,10 +1363,19 @@ fn lambda_signature_adaptations_now_dex() {
 /// capturing/bound param-unbox still bail.
 #[test]
 fn lambda_param_unboxing_now_dexes() {
-    let cf = skotch_classfile::parse_class_file(&PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtLambdaUnbox.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
-    let dex = dex_classes(&[cf], &opts).unwrap_or_else(|e| panic!("ArtLambdaUnbox: param unboxing should dex now: {e:#}"));
-    skotch_dex::validator::validate(&dex).unwrap_or_else(|e| panic!("ArtLambdaUnbox: invalid dex: {e:#}"));
+    let cf = skotch_classfile::parse_class_file(
+        &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtLambdaUnbox.class"),
+    )
+    .unwrap();
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
+    let dex = dex_classes(&[cf], &opts)
+        .unwrap_or_else(|e| panic!("ArtLambdaUnbox: param unboxing should dex now: {e:#}"));
+    skotch_dex::validator::validate(&dex)
+        .unwrap_or_else(|e| panic!("ArtLambdaUnbox: invalid dex: {e:#}"));
 }
 
 /// WIDE (long/double) lambda SAM parameters and returns. A wide value occupies a register PAIR, so
@@ -1121,10 +1387,19 @@ fn lambda_param_unboxing_now_dexes() {
 /// (Wide captures and >5-word invokes still bail.)
 #[test]
 fn lambda_wide_params_now_dex() {
-    let cf = skotch_classfile::parse_class_file(&PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtLambdaWide.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
-    let dex = dex_classes(&[cf], &opts).unwrap_or_else(|e| panic!("ArtLambdaWide: wide lambda params should dex now: {e:#}"));
-    skotch_dex::validator::validate(&dex).unwrap_or_else(|e| panic!("ArtLambdaWide: invalid dex: {e:#}"));
+    let cf = skotch_classfile::parse_class_file(
+        &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtLambdaWide.class"),
+    )
+    .unwrap();
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
+    let dex = dex_classes(&[cf], &opts)
+        .unwrap_or_else(|e| panic!("ArtLambdaWide: wide lambda params should dex now: {e:#}"));
+    skotch_dex::validator::validate(&dex)
+        .unwrap_or_else(|e| panic!("ArtLambdaWide: invalid dex: {e:#}"));
 }
 
 /// A φ whose operand is a SIBLING φ in the same loop header is a parallel copy on the
@@ -1146,9 +1421,15 @@ fn sibling_phi_parallel_copy_now_dexes() {
             fixtures().join(format!("{name}.class"))
         };
         let cf = skotch_classfile::parse_class_file(&path).unwrap();
-        let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
-        let dex = dex_classes(&[cf], &opts).unwrap_or_else(|e| panic!("{name}: sibling-φ parallel copy should dex now: {e:#}"));
-        skotch_dex::validator::validate(&dex).unwrap_or_else(|e| panic!("{name}: invalid dex: {e:#}"));
+        let opts = D8Options {
+            min_api: 1,
+            mode: Mode::Release,
+            ..Default::default()
+        };
+        let dex = dex_classes(&[cf], &opts)
+            .unwrap_or_else(|e| panic!("{name}: sibling-φ parallel copy should dex now: {e:#}"));
+        skotch_dex::validator::validate(&dex)
+            .unwrap_or_else(|e| panic!("{name}: invalid dex: {e:#}"));
     }
 }
 
@@ -1170,10 +1451,17 @@ fn sibling_phi_parallel_copy_now_dexes() {
 #[test]
 fn array_literal_now_dexes_via_ssa_fallback() {
     for name in ["IArr", "NCArr"] {
-        let cf = skotch_classfile::parse_class_file(&fixtures().join(format!("{name}.class"))).unwrap();
-        let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
-        let dex = dex_classes(&[cf], &opts).unwrap_or_else(|e| panic!("{name}: array literal should dex now: {e:#}"));
-        skotch_dex::validator::validate(&dex).unwrap_or_else(|e| panic!("{name}: invalid dex: {e:#}"));
+        let cf =
+            skotch_classfile::parse_class_file(&fixtures().join(format!("{name}.class"))).unwrap();
+        let opts = D8Options {
+            min_api: 1,
+            mode: Mode::Release,
+            ..Default::default()
+        };
+        let dex = dex_classes(&[cf], &opts)
+            .unwrap_or_else(|e| panic!("{name}: array literal should dex now: {e:#}"));
+        skotch_dex::validator::validate(&dex)
+            .unwrap_or_else(|e| panic!("{name}: invalid dex: {e:#}"));
     }
 }
 
@@ -1212,7 +1500,11 @@ fn stress_round16_byte_identical() {
 /// divergent — we reuse the first counter's register for the second; not byte-identical.)
 #[test]
 fn sequential_and_nested_loops_now_dex() {
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     // sequential loops: dex + self-validate (no false-positive nested bail).
     let cf = skotch_classfile::parse_class_file(&fixtures().join("S15TwoLoop.class")).unwrap();
     let p = dex_classes(&[cf], &opts).expect("sequential loops must dex, not bail");
@@ -1341,7 +1633,14 @@ fn stress_round22_byte_identical() {
 ///  - `ShortNarrow` (`(short)(x+1)` — `int`→`short` `i2s` narrowing conversion).
 #[test]
 fn stress_round23_byte_identical() {
-    for name in ["AndChain", "MathMax", "FCmpChain", "NestTernF", "AbsLoop", "ShortNarrow"] {
+    for name in [
+        "AndChain",
+        "MathMax",
+        "FCmpChain",
+        "NestTernF",
+        "AbsLoop",
+        "ShortNarrow",
+    ] {
         assert_byte_identical(name);
     }
 }
@@ -1359,7 +1658,15 @@ fn stress_round23_byte_identical() {
 /// deferred.)
 #[test]
 fn stress_round71_byte_identical() {
-    for name in ["LastIdx", "FAbs", "IsLetter", "LongTernC2", "DblFldAr", "MultiStmt", "ArrLenBr"] {
+    for name in [
+        "LastIdx",
+        "FAbs",
+        "IsLetter",
+        "LongTernC2",
+        "DblFldAr",
+        "MultiStmt",
+        "ArrLenBr",
+    ] {
         assert_byte_identical(name);
     }
 }
@@ -1381,7 +1688,15 @@ fn stress_round71_byte_identical() {
 ///  - `MixStat` — mixed `int` + `double` + `String` statics in one encoded_array.
 #[test]
 fn static_values_float_double_string_byte_identical() {
-    for name in ["DblConst", "FloatConst", "StrConst", "StaticFinalD", "DblClinit", "FloatClinit", "MixStat"] {
+    for name in [
+        "DblConst",
+        "FloatConst",
+        "StrConst",
+        "StaticFinalD",
+        "DblClinit",
+        "FloatClinit",
+        "MixStat",
+    ] {
         assert_byte_identical(name);
     }
 }
@@ -1426,7 +1741,16 @@ fn getfield_coalesce_into_temp_receiver_byte_identical() {
 ///  - `BoolArr` (`a[i]` over boolean[] — aget-boolean, SSA-routed via the byte/bool array op).
 #[test]
 fn stress_round77_byte_identical() {
-    for name in ["LCmpBr", "UShift", "DRem", "DCmpBr", "ArrLenA", "CharAri", "NestTernRef", "BoolArr"] {
+    for name in [
+        "LCmpBr",
+        "UShift",
+        "DRem",
+        "DCmpBr",
+        "ArrLenA",
+        "CharAri",
+        "NestTernRef",
+        "BoolArr",
+    ] {
         assert_byte_identical(name);
     }
 }
@@ -1546,7 +1870,13 @@ fn inner_class_system_annotations_byte_identical() {
 ///    so d8 (and now skotch) emits NO empty annotation_set singleton.
 #[test]
 fn enum_and_empty_set_annotations_byte_identical() {
-    for name in ["EnumAnnVal", "EnumArrayAnnVal", "Target", "MustBeDocumented", "Repeatable"] {
+    for name in [
+        "EnumAnnVal",
+        "EnumArrayAnnVal",
+        "Target",
+        "MustBeDocumented",
+        "Repeatable",
+    ] {
         assert_byte_identical(name);
     }
 }
@@ -1678,7 +2008,18 @@ fn athrow_byte_identical() {
 ///  - `DblCmpConv` (`(double)x > y` — i2d feeding a dcmp+branch; routed via the branch, no isNaN).
 #[test]
 fn widening_conversions_byte_identical() {
-    for name in ["I2Donly", "I2Lonly", "L2Donly", "F2Lonly", "F2Donly", "CastChain", "SumLong", "MulL", "SqrtI", "DblCmpConv"] {
+    for name in [
+        "I2Donly",
+        "I2Lonly",
+        "L2Donly",
+        "F2Lonly",
+        "F2Donly",
+        "CastChain",
+        "SumLong",
+        "MulL",
+        "SqrtI",
+        "DblCmpConv",
+    ] {
         assert_byte_identical(name);
     }
 }
@@ -1702,10 +2043,17 @@ fn widening_conversions_byte_identical() {
 #[test]
 fn widening_conv_and_l2i_now_dex_via_ssa_fallback() {
     for name in ["AvgD", "L2Ionly"] {
-        let cf = skotch_classfile::parse_class_file(&fixtures().join(format!("{name}.class"))).unwrap();
-        let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
-        let dex = dex_classes(&[cf], &opts).unwrap_or_else(|e| panic!("{name}: should dex now: {e:#}"));
-        skotch_dex::validator::validate(&dex).unwrap_or_else(|e| panic!("{name}: invalid dex: {e:#}"));
+        let cf =
+            skotch_classfile::parse_class_file(&fixtures().join(format!("{name}.class"))).unwrap();
+        let opts = D8Options {
+            min_api: 1,
+            mode: Mode::Release,
+            ..Default::default()
+        };
+        let dex =
+            dex_classes(&[cf], &opts).unwrap_or_else(|e| panic!("{name}: should dex now: {e:#}"));
+        skotch_dex::validator::validate(&dex)
+            .unwrap_or_else(|e| panic!("{name}: invalid dex: {e:#}"));
     }
 }
 
@@ -1724,7 +2072,9 @@ fn widening_conv_and_l2i_now_dex_via_ssa_fallback() {
 ///  CSE, because a param needs no re-load.)
 #[test]
 fn stress_round74_byte_identical() {
-    for name in ["DblMod", "LongDiv2", "LongRem", "ArrSum3", "TernNest", "ShiftOr", "XorChain", "AndOr"] {
+    for name in [
+        "DblMod", "LongDiv2", "LongRem", "ArrSum3", "TernNest", "ShiftOr", "XorChain", "AndOr",
+    ] {
         assert_byte_identical(name);
     }
 }
@@ -1740,7 +2090,16 @@ fn stress_round74_byte_identical() {
 ///  - `Expm1` (`Math.expm1(x)` — double intrinsic; NOT desugared, unlike Math.*Exact).
 #[test]
 fn stress_round73_byte_identical() {
-    for name in ["CompareStr", "BitCnt", "LBitCnt", "Contains", "RevInt", "TrailZ", "SignI", "Expm1"] {
+    for name in [
+        "CompareStr",
+        "BitCnt",
+        "LBitCnt",
+        "Contains",
+        "RevInt",
+        "TrailZ",
+        "SignI",
+        "Expm1",
+    ] {
         assert_byte_identical(name);
     }
 }
@@ -1754,7 +2113,14 @@ fn stress_round73_byte_identical() {
 ///  - `SubInt` (`s.substring(i, i+3)` — two-arg String.substring).
 #[test]
 fn stress_round72_byte_identical() {
-    for name in ["IsUpper2", "Hypot2", "LongFldAr", "CharWiden2", "TwoArrAdd", "SubInt"] {
+    for name in [
+        "IsUpper2",
+        "Hypot2",
+        "LongFldAr",
+        "CharWiden2",
+        "TwoArrAdd",
+        "SubInt",
+    ] {
         assert_byte_identical(name);
     }
 }
@@ -1800,10 +2166,17 @@ fn stress_round69_byte_identical() {
 #[test]
 fn multi_use_local_straightline_now_dexes() {
     for name in ["AbsLocal", "ElemTwice"] {
-        let cf = skotch_classfile::parse_class_file(&fixtures().join(format!("{name}.class"))).unwrap();
-        let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
-        let dex = dex_classes(&[cf], &opts).unwrap_or_else(|e| panic!("{name}: multi-use local should dex now: {e:#}"));
-        skotch_dex::validator::validate(&dex).unwrap_or_else(|e| panic!("{name}: invalid dex: {e:#}"));
+        let cf =
+            skotch_classfile::parse_class_file(&fixtures().join(format!("{name}.class"))).unwrap();
+        let opts = D8Options {
+            min_api: 1,
+            mode: Mode::Release,
+            ..Default::default()
+        };
+        let dex = dex_classes(&[cf], &opts)
+            .unwrap_or_else(|e| panic!("{name}: multi-use local should dex now: {e:#}"));
+        skotch_dex::validator::validate(&dex)
+            .unwrap_or_else(|e| panic!("{name}: invalid dex: {e:#}"));
     }
 }
 
@@ -1835,7 +2208,15 @@ fn stress_round68_byte_identical() {
 /// both paths to one `return v0`; skotch emits both); same total size; deferred.)
 #[test]
 fn stress_round67_byte_identical() {
-    for name in ["IsWS", "LNLZ", "TwoTmp", "BrTmp", "FldParam2", "BitCombo", "ThreeSum"] {
+    for name in [
+        "IsWS",
+        "LNLZ",
+        "TwoTmp",
+        "BrTmp",
+        "FldParam2",
+        "BitCombo",
+        "ThreeSum",
+    ] {
         assert_byte_identical(name);
     }
 }
@@ -1870,7 +2251,15 @@ fn stress_round66_loops_byte_identical() {
 /// (d8 s=v0/i=v1, skotch i=v0/s=v1); same instructions, same size; deferred.)
 #[test]
 fn stress_round65_loops_byte_identical() {
-    for name in ["TmpReuse", "TwoCondWhile", "FldProd", "LoopArith", "Transform", "CountPos", "RunMul"] {
+    for name in [
+        "TmpReuse",
+        "TwoCondWhile",
+        "FldProd",
+        "LoopArith",
+        "Transform",
+        "CountPos",
+        "RunMul",
+    ] {
         assert_byte_identical(name);
     }
 }
@@ -1889,7 +2278,14 @@ fn stress_round65_loops_byte_identical() {
 /// forcing the re-load, where d8 uses a fresh rem dest). Traced correct, larger; deferred.)
 #[test]
 fn stress_round64_loops_byte_identical() {
-    for name in ["ArrFill", "TwoAccum", "GeoLoop", "AdjCmp", "CharSum2", "CallAccum"] {
+    for name in [
+        "ArrFill",
+        "TwoAccum",
+        "GeoLoop",
+        "AdjCmp",
+        "CharSum2",
+        "CallAccum",
+    ] {
         assert_byte_identical(name);
     }
 }
@@ -1924,7 +2320,14 @@ fn stress_round63_loops_byte_identical() {
 /// with a fresh aget. Traced fully correct, skotch one unit larger; deferred (cross-block CSE).)
 #[test]
 fn stress_round62_loops_byte_identical() {
-    for name in ["DownLoop", "StepLoop", "WhileDec", "ProdLoop", "LongAccum", "FindLoop"] {
+    for name in [
+        "DownLoop",
+        "StepLoop",
+        "WhileDec",
+        "ProdLoop",
+        "LongAccum",
+        "FindLoop",
+    ] {
         assert_byte_identical(name);
     }
 }
@@ -1958,7 +2361,14 @@ fn stress_round61_exceptions_byte_identical() {
 /// (d8 reuses index const 0 as the boolean false return; skotch re-materializes; larger). Deferred.)
 #[test]
 fn stress_round60_byte_identical() {
-    for name in ["LongLtBool", "DblConstAr", "MultiCharRet", "VoidSide", "FldShiftR", "DblToFloat"] {
+    for name in [
+        "LongLtBool",
+        "DblConstAr",
+        "MultiCharRet",
+        "VoidSide",
+        "FldShiftR",
+        "DblToFloat",
+    ] {
         assert_byte_identical(name);
     }
 }
@@ -1975,7 +2385,15 @@ fn stress_round60_byte_identical() {
 /// dead `this` reg (`iget v0,v0`), d8 reuses dead `b` reg (`iget v1,v0`); both dead, same size.)
 #[test]
 fn stress_round59_byte_identical() {
-    for name in ["BoolFld", "LongArrLen", "CastCast", "BoolArrR", "CondLong", "CharRetCmp", "NegCond"] {
+    for name in [
+        "BoolFld",
+        "LongArrLen",
+        "CastCast",
+        "BoolArrR",
+        "CondLong",
+        "CharRetCmp",
+        "NegCond",
+    ] {
         assert_byte_identical(name);
     }
 }
@@ -1992,7 +2410,13 @@ fn stress_round59_byte_identical() {
 /// array reg; same as ArrFld). Both same size; deferred.)
 #[test]
 fn stress_round58_byte_identical() {
-    for name in ["CharFld", "MixedCmp", "TernCallL", "LongChain2", "ShortFldW"] {
+    for name in [
+        "CharFld",
+        "MixedCmp",
+        "TernCallL",
+        "LongChain2",
+        "ShortFldW",
+    ] {
         assert_byte_identical(name);
     }
 }
@@ -2008,7 +2432,16 @@ fn stress_round58_byte_identical() {
 ///  - `LongAndC` (`x & 0xffffffL` — long AND with a constant mask).
 #[test]
 fn stress_round57_byte_identical() {
-    for name in ["DblCmpC", "LongXorC", "ArrNeg", "FldDiv", "ByteTern", "NestedRet", "CharSwitch3", "LongAndC"] {
+    for name in [
+        "DblCmpC",
+        "LongXorC",
+        "ArrNeg",
+        "FldDiv",
+        "ByteTern",
+        "NestedRet",
+        "CharSwitch3",
+        "LongAndC",
+    ] {
         assert_byte_identical(name);
     }
 }
@@ -2024,7 +2457,15 @@ fn stress_round57_byte_identical() {
 /// (LongToDbl `x * 1.5` (long→double) BAILS — l2d 0x8a, deliberately bailed widening conversion.)
 #[test]
 fn stress_round56_byte_identical() {
-    for name in ["LongCmpC", "DblToInt", "ThreeArg", "ArrIdxStore", "LongShlC", "FloatDiv", "CharCond"] {
+    for name in [
+        "LongCmpC",
+        "DblToInt",
+        "ThreeArg",
+        "ArrIdxStore",
+        "LongShlC",
+        "FloatDiv",
+        "CharCond",
+    ] {
         assert_byte_identical(name);
     }
 }
@@ -2042,7 +2483,14 @@ fn stress_round56_byte_identical() {
 /// Both deferred.)
 #[test]
 fn stress_round55_byte_identical() {
-    for name in ["DblDiv", "UpperArith", "FldMulParam", "UserLong", "FloatNegMul", "CondAdd"] {
+    for name in [
+        "DblDiv",
+        "UpperArith",
+        "FldMulParam",
+        "UserLong",
+        "FloatNegMul",
+        "CondAdd",
+    ] {
         assert_byte_identical(name);
     }
 }
@@ -2059,7 +2507,9 @@ fn stress_round55_byte_identical() {
 /// CondNeg): d8 merges both paths to one `return-wide v0`; skotch emits both. Deferred.)
 #[test]
 fn stress_round54_byte_identical() {
-    for name in ["LongDivC", "DblRem", "CharCmpI", "Shadow", "ShiftFld", "MidIdx", "LongSar"] {
+    for name in [
+        "LongDivC", "DblRem", "CharCmpI", "Shadow", "ShiftFld", "MidIdx", "LongSar",
+    ] {
         assert_byte_identical(name);
     }
 }
@@ -2076,7 +2526,14 @@ fn stress_round54_byte_identical() {
 /// `return 1` block, dropping d8's explicit goto; skotch tighter; deferred.)
 #[test]
 fn stress_round53_byte_identical() {
-    for name in ["LongTernC", "ArrSet", "CharRet", "DblLt", "ThreeStatic", "NestTern2"] {
+    for name in [
+        "LongTernC",
+        "ArrSet",
+        "CharRet",
+        "DblLt",
+        "ThreeStatic",
+        "NestTern2",
+    ] {
         assert_byte_identical(name);
     }
 }
@@ -2095,7 +2552,15 @@ fn stress_round53_byte_identical() {
 /// CSE; the straight-line path doesn't. Deferred.)
 #[test]
 fn stress_round52_byte_identical() {
-    for name in ["BitNot", "LongNot", "StaticFinal", "FloatChain", "LongArrAr", "MaxIf", "Grade"] {
+    for name in [
+        "BitNot",
+        "LongNot",
+        "StaticFinal",
+        "FloatChain",
+        "LongArrAr",
+        "MaxIf",
+        "Grade",
+    ] {
         assert_byte_identical(name);
     }
 }
@@ -2111,7 +2576,16 @@ fn stress_round52_byte_identical() {
 ///  - `WrapMul` (`x * 1000003` — large-constant multiply (mul-int/lit not applicable → 3-addr)).
 #[test]
 fn stress_round51_byte_identical() {
-    for name in ["LongZero", "IsUpper", "LenMinus", "StaticChain", "NestLen", "DblNegAdd", "MixShift", "WrapMul"] {
+    for name in [
+        "LongZero",
+        "IsUpper",
+        "LenMinus",
+        "StaticChain",
+        "NestLen",
+        "DblNegAdd",
+        "MixShift",
+        "WrapMul",
+    ] {
         assert_byte_identical(name);
     }
 }
@@ -2130,7 +2604,14 @@ fn stress_round51_byte_identical() {
 /// deferred (SSA-path pattern-match, risky).)
 #[test]
 fn stress_round50_byte_identical() {
-    for name in ["LongShMask", "NegConst", "CharRange2", "ByteRound", "DblBitsRT", "ArrPS"] {
+    for name in [
+        "LongShMask",
+        "NegConst",
+        "CharRange2",
+        "ByteRound",
+        "DblBitsRT",
+        "ArrPS",
+    ] {
         assert_byte_identical(name);
     }
 }
@@ -2146,7 +2627,14 @@ fn stress_round50_byte_identical() {
 /// divergences (mul-double / or-int operands swapped, both write the same value); same size.)
 #[test]
 fn stress_round49_byte_identical() {
-    for name in ["LongChain", "MixArith", "AndTern", "ModCombo", "ShiftAdd", "NegMul"] {
+    for name in [
+        "LongChain",
+        "MixArith",
+        "AndTern",
+        "ModCombo",
+        "ShiftAdd",
+        "NegMul",
+    ] {
         assert_byte_identical(name);
     }
 }
@@ -2163,7 +2651,15 @@ fn stress_round49_byte_identical() {
 /// deliberately bailed in the straight-line path; safe.)
 #[test]
 fn stress_round48_byte_identical() {
-    for name in ["SumSq", "DiffSq", "BoolLogic", "ArrMul", "CharArith2", "TernArith2", "NestArith"] {
+    for name in [
+        "SumSq",
+        "DiffSq",
+        "BoolLogic",
+        "ArrMul",
+        "CharArith2",
+        "TernArith2",
+        "NestArith",
+    ] {
         assert_byte_identical(name);
     }
 }
@@ -2198,7 +2694,14 @@ fn stress_round47_byte_identical() {
 /// larger). Both correct, deferred.)
 #[test]
 fn stress_round46_byte_identical() {
-    for name in ["ParseLong", "ParseDouble", "ParseBool", "FldArrLen", "CharMask", "ReplaceCS"] {
+    for name in [
+        "ParseLong",
+        "ParseDouble",
+        "ParseBool",
+        "FldArrLen",
+        "CharMask",
+        "ReplaceCS",
+    ] {
         assert_byte_identical(name);
     }
 }
@@ -2215,7 +2718,14 @@ fn stress_round46_byte_identical() {
 /// reg (`iget v0,v0`), d8 keeps it high (`iget v0,v1`); rest identical, same size.)
 #[test]
 fn stress_round45_byte_identical() {
-    for name in ["ToRad", "ParseFloat", "ParseRadix", "DblArrSum", "CharSub", "SubOne"] {
+    for name in [
+        "ToRad",
+        "ParseFloat",
+        "ParseRadix",
+        "DblArrSum",
+        "CharSub",
+        "SubOne",
+    ] {
         assert_byte_identical(name);
     }
 }
@@ -2234,7 +2744,15 @@ fn stress_round45_byte_identical() {
 /// ARRAY register; same size. Earlier multi-use-array fixtures matched (array stayed live).)
 #[test]
 fn stress_round44_byte_identical() {
-    for name in ["Arr2DW", "LongArrW", "IndexOfStr", "TernCall", "StaticCompound", "CharDigit", "DCmpChain"] {
+    for name in [
+        "Arr2DW",
+        "LongArrW",
+        "IndexOfStr",
+        "TernCall",
+        "StaticCompound",
+        "CharDigit",
+        "DCmpChain",
+    ] {
         assert_byte_identical(name);
     }
 }
@@ -2266,7 +2784,16 @@ fn stress_round43_byte_identical() {
 ///  - `NextUp` (`Math.nextUp(x)` — single-double-arg invoke-static).
 #[test]
 fn stress_round42_byte_identical() {
-    for name in ["LongFld", "DblTern", "LenArith", "CharTernI", "Reverse", "RevBytes", "CodePoint", "NextUp"] {
+    for name in [
+        "LongFld",
+        "DblTern",
+        "LenArith",
+        "CharTernI",
+        "Reverse",
+        "RevBytes",
+        "CodePoint",
+        "NextUp",
+    ] {
         assert_byte_identical(name);
     }
 }
@@ -2305,7 +2832,15 @@ fn stress_round41_byte_identical() {
 /// item-ORDERING difference shifts the string-data offset. Pure binary layout; deferred.)
 #[test]
 fn stress_round40_byte_identical() {
-    for name in ["DblFldW", "GetExp", "FloatSel2", "CharArrW", "UserCall", "BitCountAr", "LastChar"] {
+    for name in [
+        "DblFldW",
+        "GetExp",
+        "FloatSel2",
+        "CharArrW",
+        "UserCall",
+        "BitCountAr",
+        "LastChar",
+    ] {
         assert_byte_identical(name);
     }
 }
@@ -2322,7 +2857,15 @@ fn stress_round40_byte_identical() {
 /// (CharAtBr `if(s.charAt(0)=='x')` BAILS — invoke 0xb6 in CFG path; safe.)
 #[test]
 fn stress_round39_byte_identical() {
-    for name in ["FldWrite", "ArrStore", "LSignum", "NumVal", "Rint", "LongGcd", "StaticWrite"] {
+    for name in [
+        "FldWrite",
+        "ArrStore",
+        "LSignum",
+        "NumVal",
+        "Rint",
+        "LongGcd",
+        "StaticWrite",
+    ] {
         assert_byte_identical(name);
     }
 }
@@ -2354,7 +2897,14 @@ fn aconst_null_byte_identical() {
 /// skotch v0; same size). Both deferred/safe.)
 #[test]
 fn stress_round38_byte_identical() {
-    for name in ["Replace", "CharStr", "LongGet", "IsInf", "ParseShort", "MultiBool"] {
+    for name in [
+        "Replace",
+        "CharStr",
+        "LongGet",
+        "IsInf",
+        "ParseShort",
+        "MultiBool",
+    ] {
         assert_byte_identical(name);
     }
 }
@@ -2372,7 +2922,9 @@ fn stress_round38_byte_identical() {
 /// (same as FldCmp): skotch reuses dead `this` reg [2 regs], d8 keeps it high [3 regs]; same size.)
 #[test]
 fn stress_round37_byte_identical() {
-    for name in ["Concat", "RoundF", "AndVal", "FCompare", "BoolStr", "IntBin", "FloorI"] {
+    for name in [
+        "Concat", "RoundF", "AndVal", "FCompare", "BoolStr", "IntBin", "FloorI",
+    ] {
         assert_byte_identical(name);
     }
 }
@@ -2441,7 +2993,9 @@ fn stress_round34_byte_identical() {
 ///  - `Cbrt` (`Math.cbrt(x)` — single-double-arg invoke-static).
 #[test]
 fn stress_round33_byte_identical() {
-    for name in ["Atan2", "TwoFld", "LongMod", "CharTern", "StrCmp", "HighBit", "ByteRet", "Cbrt"] {
+    for name in [
+        "Atan2", "TwoFld", "LongMod", "CharTern", "StrCmp", "HighBit", "ByteRet", "Cbrt",
+    ] {
         assert_byte_identical(name);
     }
 }
@@ -2498,7 +3052,14 @@ fn stress_round31_byte_identical() {
 /// 0xb8 in the CFG path. Both deferred.)
 #[test]
 fn stress_round30_byte_identical() {
-    for name in ["Signum", "ToUpper", "LongMax", "NestedCall", "CharClass", "CopySign"] {
+    for name in [
+        "Signum",
+        "ToUpper",
+        "LongMax",
+        "NestedCall",
+        "CharClass",
+        "CopySign",
+    ] {
         assert_byte_identical(name);
     }
 }
@@ -2535,7 +3096,14 @@ fn array_length_in_cfg_path_byte_identical() {
 /// opcode gaps, safe, future contained opportunities alongside binops/invoke.)
 #[test]
 fn stress_round29_byte_identical() {
-    for name in ["TrimLen", "Round", "IsNaN", "StaticFld", "CeilFloor", "ValOf"] {
+    for name in [
+        "TrimLen",
+        "Round",
+        "IsNaN",
+        "StaticFld",
+        "CeilFloor",
+        "ValOf",
+    ] {
         assert_byte_identical(name);
     }
 }
@@ -2554,7 +3122,15 @@ fn stress_round29_byte_identical() {
 /// branch. A recurring `!bool` peephole worth a future iteration; deferred.)
 #[test]
 fn stress_round28_byte_identical() {
-    for name in ["SubStr", "DMax", "LAbs", "Clamp2", "IndexOf", "CharArith", "DblBr"] {
+    for name in [
+        "SubStr",
+        "DMax",
+        "LAbs",
+        "Clamp2",
+        "IndexOf",
+        "CharArith",
+        "DblBr",
+    ] {
         assert_byte_identical(name);
     }
 }
@@ -2572,7 +3148,14 @@ fn stress_round28_byte_identical() {
 /// `return c` into one shared exit; skotch emits both. Same size; deferred.)
 #[test]
 fn stress_round27_byte_identical() {
-    for name in ["StrCharAt", "Sqrt", "IntToStr", "LTrailing", "RotL", "StrEqB"] {
+    for name in [
+        "StrCharAt",
+        "Sqrt",
+        "IntToStr",
+        "LTrailing",
+        "RotL",
+        "StrEqB",
+    ] {
         assert_byte_identical(name);
     }
 }
@@ -2636,7 +3219,14 @@ fn stress_round26_byte_identical() {
 /// per-ternary lowering is one unit TIGHTER than d8's const-hoisting SSA lowering; left as-is.)
 #[test]
 fn stress_round25_byte_identical() {
-    for name in ["CharDisp", "LBitCount", "NestedCond", "MaskTest", "DCmp3w", "ShiftMask"] {
+    for name in [
+        "CharDisp",
+        "LBitCount",
+        "NestedCond",
+        "MaskTest",
+        "DCmp3w",
+        "ShiftMask",
+    ] {
         assert_byte_identical(name);
     }
 }
@@ -2761,7 +3351,11 @@ fn stress_round18_byte_identical() {
 #[test]
 fn const_with_register_use_not_rematerialized() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("RematK.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let p = dex_classes(&[cf], &opts).expect("RematK must dex (k gets a register), not bail");
     skotch_dex::validator::validate(&p).expect("RematK self-validates (no NO_REG operand)");
 }
@@ -2778,10 +3372,18 @@ fn const_with_register_use_not_rematerialized() {
 #[test]
 fn over_coalesced_ternary_still_bails() {
     for name in ["XbTmp", "S11Min", "S20MinT"] {
-        let cf = skotch_classfile::parse_class_file(&fixtures().join(format!("{name}.class"))).unwrap();
-        let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+        let cf =
+            skotch_classfile::parse_class_file(&fixtures().join(format!("{name}.class"))).unwrap();
+        let opts = D8Options {
+            min_api: 1,
+            mode: Mode::Release,
+            ..Default::default()
+        };
         let err = dex_classes(&[cf], &opts).expect_err("must bail, not miscompile");
-        assert!(format!("{err:#}").contains("over-coalesce"), "{name}: unexpected bail: {err:#}");
+        assert!(
+            format!("{err:#}").contains("over-coalesce"),
+            "{name}: unexpected bail: {err:#}"
+        );
     }
 }
 
@@ -2797,7 +3399,11 @@ fn dup_x2_and_dup2_x1_now_dex() {
         &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtDupX.class"),
     )
     .unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let dex = dex_classes(&[cf], &opts).expect("ArtDupX (dup_x2 + dup2_x1) should dex");
     skotch_dex::validator::validate(&dex).expect("ArtDupX dex must validate");
 }
@@ -2815,7 +3421,11 @@ fn synchronized_monitor_now_dexes() {
         &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtSync.class"),
     )
     .unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let dex = dex_classes(&[cf], &opts).expect("ArtSync (synchronized) should dex");
     skotch_dex::validator::validate(&dex).expect("ArtSync dex must validate");
 }
@@ -2831,7 +3441,11 @@ fn lambda_capturing_param_unbox_now_dexes() {
         &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtCapUnbox.class"),
     )
     .unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let dex = dex_classes(&[cf], &opts).expect("ArtCapUnbox (capturing param unbox) should dex");
     skotch_dex::validator::validate(&dex).expect("ArtCapUnbox dex must validate");
 }
@@ -2846,7 +3460,11 @@ fn lambda_wide_capture_now_dexes() {
         &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art/ArtWideCap.class"),
     )
     .unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let dex = dex_classes(&[cf], &opts).expect("ArtWideCap (wide capture) should dex");
     skotch_dex::validator::validate(&dex).expect("ArtWideCap dex must validate");
 }
@@ -2876,11 +3494,17 @@ fn stress_round11_byte_identical() {
 #[test]
 fn ssa_type_ops_and_object_array_now_dex() {
     for name in ["ArtTypes", "ObjArrStore"] {
-        let cf = skotch_classfile::parse_class_file(&fixtures().join(format!("{name}.class"))).unwrap();
-        let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+        let cf =
+            skotch_classfile::parse_class_file(&fixtures().join(format!("{name}.class"))).unwrap();
+        let opts = D8Options {
+            min_api: 1,
+            mode: Mode::Release,
+            ..Default::default()
+        };
         let dex = dex_classes(&[cf], &opts)
             .unwrap_or_else(|e| panic!("{name}: type-ops/object-array should dex now: {e:#}"));
-        skotch_dex::validator::validate(&dex).unwrap_or_else(|e| panic!("{name}: invalid dex: {e:#}"));
+        skotch_dex::validator::validate(&dex)
+            .unwrap_or_else(|e| panic!("{name}: invalid dex: {e:#}"));
     }
 }
 
@@ -2895,9 +3519,15 @@ fn ssa_type_ops_and_object_array_now_dex() {
 #[test]
 fn ssa_athrow_now_dexes() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("ArtThrow.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
-    let dex = dex_classes(&[cf], &opts).unwrap_or_else(|e| panic!("ArtThrow: athrow should dex now: {e:#}"));
-    skotch_dex::validator::validate(&dex).unwrap_or_else(|e| panic!("ArtThrow: invalid dex: {e:#}"));
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
+    let dex = dex_classes(&[cf], &opts)
+        .unwrap_or_else(|e| panic!("ArtThrow: athrow should dex now: {e:#}"));
+    skotch_dex::validator::validate(&dex)
+        .unwrap_or_else(|e| panic!("ArtThrow: invalid dex: {e:#}"));
 }
 
 /// SSA-path reference-equality branches: if_acmpeq (0xa5) / if_acmpne (0xa6), the
@@ -2908,9 +3538,15 @@ fn ssa_athrow_now_dexes() {
 #[test]
 fn ssa_ref_equality_branches_now_dex() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("ArtRefEq.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
-    let dex = dex_classes(&[cf], &opts).unwrap_or_else(|e| panic!("ArtRefEq: if_acmp should dex now: {e:#}"));
-    skotch_dex::validator::validate(&dex).unwrap_or_else(|e| panic!("ArtRefEq: invalid dex: {e:#}"));
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
+    let dex = dex_classes(&[cf], &opts)
+        .unwrap_or_else(|e| panic!("ArtRefEq: if_acmp should dex now: {e:#}"));
+    skotch_dex::validator::validate(&dex)
+        .unwrap_or_else(|e| panic!("ArtRefEq: invalid dex: {e:#}"));
 }
 
 /// SSA FALLBACK routing: `dex_method` now tries the bootstrap straight-line/CFG path
@@ -2922,9 +3558,15 @@ fn ssa_ref_equality_branches_now_dex() {
 #[test]
 fn ssa_fallback_acyclic_now_dexes() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("ArtFallback.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
-    let dex = dex_classes(&[cf], &opts).unwrap_or_else(|e| panic!("ArtFallback: should dex now: {e:#}"));
-    skotch_dex::validator::validate(&dex).unwrap_or_else(|e| panic!("ArtFallback: invalid dex: {e:#}"));
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
+    let dex =
+        dex_classes(&[cf], &opts).unwrap_or_else(|e| panic!("ArtFallback: should dex now: {e:#}"));
+    skotch_dex::validator::validate(&dex)
+        .unwrap_or_else(|e| panic!("ArtFallback: invalid dex: {e:#}"));
 }
 
 /// tableswitch (0xaa) + lookupswitch (0xab) now DEX (both paths bailed before). Lowered
@@ -2936,9 +3578,15 @@ fn ssa_fallback_acyclic_now_dexes() {
 #[test]
 fn ssa_switch_now_dexes() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("ArtSwitch.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
-    let dex = dex_classes(&[cf], &opts).unwrap_or_else(|e| panic!("ArtSwitch: switch should dex now: {e:#}"));
-    skotch_dex::validator::validate(&dex).unwrap_or_else(|e| panic!("ArtSwitch: invalid dex: {e:#}"));
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
+    let dex = dex_classes(&[cf], &opts)
+        .unwrap_or_else(|e| panic!("ArtSwitch: switch should dex now: {e:#}"));
+    skotch_dex::validator::validate(&dex)
+        .unwrap_or_else(|e| panic!("ArtSwitch: invalid dex: {e:#}"));
 }
 
 /// `swap` (0x5f) — exchange the top two category-1 operand-stack values; a pure value-
@@ -2952,10 +3600,17 @@ fn ssa_switch_now_dexes() {
 #[test]
 fn ssa_swap_now_dexes() {
     for name in ["SwapVKt", "Buf"] {
-        let cf = skotch_classfile::parse_class_file(&fixtures().join(format!("{name}.class"))).unwrap();
-        let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
-        let dex = dex_classes(&[cf], &opts).unwrap_or_else(|e| panic!("{name}: swap should dex now: {e:#}"));
-        skotch_dex::validator::validate(&dex).unwrap_or_else(|e| panic!("{name}: invalid dex: {e:#}"));
+        let cf =
+            skotch_classfile::parse_class_file(&fixtures().join(format!("{name}.class"))).unwrap();
+        let opts = D8Options {
+            min_api: 1,
+            mode: Mode::Release,
+            ..Default::default()
+        };
+        let dex = dex_classes(&[cf], &opts)
+            .unwrap_or_else(|e| panic!("{name}: swap should dex now: {e:#}"));
+        skotch_dex::validator::validate(&dex)
+            .unwrap_or_else(|e| panic!("{name}: invalid dex: {e:#}"));
     }
 }
 
@@ -2970,9 +3625,15 @@ fn ssa_swap_now_dexes() {
 #[test]
 fn ssa_const_class_now_dexes() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("ArtClassLit.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
-    let dex = dex_classes(&[cf], &opts).unwrap_or_else(|e| panic!("ArtClassLit: const-class should dex now: {e:#}"));
-    skotch_dex::validator::validate(&dex).unwrap_or_else(|e| panic!("ArtClassLit: invalid dex: {e:#}"));
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
+    let dex = dex_classes(&[cf], &opts)
+        .unwrap_or_else(|e| panic!("ArtClassLit: const-class should dex now: {e:#}"));
+    skotch_dex::validator::validate(&dex)
+        .unwrap_or_else(|e| panic!("ArtClassLit: invalid dex: {e:#}"));
 }
 
 /// `invokedynamic` (0xba) string concatenation (`StringConcatFactory.makeConcat[WithConstants]`)
@@ -2985,9 +3646,15 @@ fn ssa_const_class_now_dexes() {
 #[test]
 fn ssa_string_concat_indy_now_dexes() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("ArtConcat.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
-    let dex = dex_classes(&[cf], &opts).unwrap_or_else(|e| panic!("ArtConcat: string-concat indy should dex now: {e:#}"));
-    skotch_dex::validator::validate(&dex).unwrap_or_else(|e| panic!("ArtConcat: invalid dex: {e:#}"));
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
+    let dex = dex_classes(&[cf], &opts)
+        .unwrap_or_else(|e| panic!("ArtConcat: string-concat indy should dex now: {e:#}"));
+    skotch_dex::validator::validate(&dex)
+        .unwrap_or_else(|e| panic!("ArtConcat: invalid dex: {e:#}"));
 }
 
 /// RANGE-FORM invokes (`invoke-*/range` 0x74-0x78, 3rc) — calls with >5 arg-registers
@@ -3002,9 +3669,15 @@ fn ssa_string_concat_indy_now_dexes() {
 #[test]
 fn ssa_range_invoke_now_dexes() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("ArtRange.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
-    let dex = dex_classes(&[cf], &opts).unwrap_or_else(|e| panic!("ArtRange: range invoke should dex now: {e:#}"));
-    skotch_dex::validator::validate(&dex).unwrap_or_else(|e| panic!("ArtRange: invalid dex: {e:#}"));
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
+    let dex = dex_classes(&[cf], &opts)
+        .unwrap_or_else(|e| panic!("ArtRange: range invoke should dex now: {e:#}"));
+    skotch_dex::validator::validate(&dex)
+        .unwrap_or_else(|e| panic!("ArtRange: invalid dex: {e:#}"));
 }
 
 /// φ-moves on BRANCHING edges (previously bailed "needs edge-splitting"). Three cases:
@@ -3018,9 +3691,15 @@ fn ssa_range_invoke_now_dexes() {
 #[test]
 fn ssa_phi_move_branching_edges_now_dex() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("ArtClamp.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
-    let dex = dex_classes(&[cf], &opts).unwrap_or_else(|e| panic!("ArtClamp: φ-move edges should dex now: {e:#}"));
-    skotch_dex::validator::validate(&dex).unwrap_or_else(|e| panic!("ArtClamp: invalid dex: {e:#}"));
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
+    let dex = dex_classes(&[cf], &opts)
+        .unwrap_or_else(|e| panic!("ArtClamp: φ-move edges should dex now: {e:#}"));
+    skotch_dex::validator::validate(&dex)
+        .unwrap_or_else(|e| panic!("ArtClamp: invalid dex: {e:#}"));
 }
 
 /// PARTIALLY-DEAD CONST: `int r=0; if(c)r=…; return r` / `String s="no"; if(b)s="yes"`.
@@ -3032,9 +3711,15 @@ fn ssa_phi_move_branching_edges_now_dex() {
 #[test]
 fn ssa_partially_dead_const_now_dexes() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("ArtConstSink.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
-    let dex = dex_classes(&[cf], &opts).unwrap_or_else(|e| panic!("ArtConstSink: should dex now: {e:#}"));
-    skotch_dex::validator::validate(&dex).unwrap_or_else(|e| panic!("ArtConstSink: invalid dex: {e:#}"));
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
+    let dex =
+        dex_classes(&[cf], &opts).unwrap_or_else(|e| panic!("ArtConstSink: should dex now: {e:#}"));
+    skotch_dex::validator::validate(&dex)
+        .unwrap_or_else(|e| panic!("ArtConstSink: invalid dex: {e:#}"));
 }
 
 /// NESTED loops (`for i { for j { s += i*j } }`) now DEX. The bail was a byte-identity
@@ -3044,9 +3729,15 @@ fn ssa_partially_dead_const_now_dexes() {
 #[test]
 fn ssa_nested_loops_now_dex() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("ArtNested.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
-    let dex = dex_classes(&[cf], &opts).unwrap_or_else(|e| panic!("ArtNested: nested loops should dex now: {e:#}"));
-    skotch_dex::validator::validate(&dex).unwrap_or_else(|e| panic!("ArtNested: invalid dex: {e:#}"));
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
+    let dex = dex_classes(&[cf], &opts)
+        .unwrap_or_else(|e| panic!("ArtNested: nested loops should dex now: {e:#}"));
+    skotch_dex::validator::validate(&dex)
+        .unwrap_or_else(|e| panic!("ArtNested: invalid dex: {e:#}"));
 }
 
 /// goto/16 BRANCH RELAXATION: a `goto` whose target is >±127 code-units away is widened
@@ -3057,8 +3748,13 @@ fn ssa_nested_loops_now_dex() {
 #[test]
 fn ssa_goto16_relaxation_now_dexes() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("ArtGoto.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
-    let dex = dex_classes(&[cf], &opts).unwrap_or_else(|e| panic!("ArtGoto: far goto should relax now: {e:#}"));
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
+    let dex = dex_classes(&[cf], &opts)
+        .unwrap_or_else(|e| panic!("ArtGoto: far goto should relax now: {e:#}"));
     skotch_dex::validator::validate(&dex).unwrap_or_else(|e| panic!("ArtGoto: invalid dex: {e:#}"));
 }
 
@@ -3072,10 +3768,17 @@ fn ssa_goto16_relaxation_now_dexes() {
 #[test]
 fn ssa_try_finally_now_dexes() {
     for name in ["ArtFinally", "FinOnly"] {
-        let cf = skotch_classfile::parse_class_file(&fixtures().join(format!("{name}.class"))).unwrap();
-        let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
-        let dex = dex_classes(&[cf], &opts).unwrap_or_else(|e| panic!("{name}: try-finally should dex now: {e:#}"));
-        skotch_dex::validator::validate(&dex).unwrap_or_else(|e| panic!("{name}: invalid dex: {e:#}"));
+        let cf =
+            skotch_classfile::parse_class_file(&fixtures().join(format!("{name}.class"))).unwrap();
+        let opts = D8Options {
+            min_api: 1,
+            mode: Mode::Release,
+            ..Default::default()
+        };
+        let dex = dex_classes(&[cf], &opts)
+            .unwrap_or_else(|e| panic!("{name}: try-finally should dex now: {e:#}"));
+        skotch_dex::validator::validate(&dex)
+            .unwrap_or_else(|e| panic!("{name}: invalid dex: {e:#}"));
     }
 }
 
@@ -3089,7 +3792,13 @@ fn ssa_try_finally_now_dexes() {
 #[test]
 fn ssa_multi_pred_handler_now_dexes() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("ArtMultiCatch.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
-    let dex = dex_classes(&[cf], &opts).unwrap_or_else(|e| panic!("ArtMultiCatch: multi-pred handler should dex now: {e:#}"));
-    skotch_dex::validator::validate(&dex).unwrap_or_else(|e| panic!("ArtMultiCatch: invalid dex: {e:#}"));
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
+    let dex = dex_classes(&[cf], &opts)
+        .unwrap_or_else(|e| panic!("ArtMultiCatch: multi-pred handler should dex now: {e:#}"));
+    skotch_dex::validator::validate(&dex)
+        .unwrap_or_else(|e| panic!("ArtMultiCatch: invalid dex: {e:#}"));
 }

@@ -71,7 +71,10 @@ pub struct CompileOptions {
 
 impl CompileOptions {
     pub fn new() -> Self {
-        CompileOptions { png_compression_level: 9, ..Default::default() }
+        CompileOptions {
+            png_compression_level: 9,
+            ..Default::default()
+        }
     }
 }
 
@@ -97,8 +100,14 @@ pub fn parse_flag(flag_text: &str) -> Option<FeatureFlagAttribute> {
         return None;
     }
     Some(match flag_text.strip_prefix('!') {
-        Some(name) => FeatureFlagAttribute { name: name.to_string(), negated: true },
-        None => FeatureFlagAttribute { name: flag_text.to_string(), negated: false },
+        Some(name) => FeatureFlagAttribute {
+            name: name.to_string(),
+            negated: true,
+        },
+        None => FeatureFlagAttribute {
+            name: flag_text.to_string(),
+            negated: false,
+        },
     })
 }
 
@@ -108,26 +117,35 @@ pub fn get_flag_status(
     flag: &Option<FeatureFlagAttribute>,
     feature_flag_values: &FeatureFlagValues,
 ) -> Result<FlagStatus, String> {
-    let Some(flag) = flag else { return Ok(FlagStatus::NoFlag) };
+    let Some(flag) = flag else {
+        return Ok(FlagStatus::NoFlag);
+    };
     let Some(properties) = feature_flag_values.get(&flag.name) else {
         return Err(format!("Resource flag value undefined: {}", flag.name));
     };
     if !properties.read_only {
-        return Err(format!("Only read only flags may be used with resources: {}", flag.name));
+        return Err(format!(
+            "Only read only flags may be used with resources: {}",
+            flag.name
+        ));
     }
     let Some(enabled) = properties.enabled else {
-        return Err(format!("Only flags with a value may be used with resources: {}", flag.name));
+        return Err(format!(
+            "Only flags with a value may be used with resources: {}",
+            flag.name
+        ));
     };
-    Ok(if enabled != flag.negated { FlagStatus::Enabled } else { FlagStatus::Disabled })
+    Ok(if enabled != flag.negated {
+        FlagStatus::Enabled
+    } else {
+        FlagStatus::Disabled
+    })
 }
 
 /// Parses one `--feature-flags` argument:
 /// `flag1=true,flag2:ro=false,flag3=`. Mirrors
 /// `aapt::ParseFeatureFlagsParameter`.
-pub fn parse_feature_flags_parameter(
-    arg: &str,
-    out: &mut FeatureFlagValues,
-) -> Result<(), String> {
+pub fn parse_feature_flags_parameter(arg: &str, out: &mut FeatureFlagValues) -> Result<(), String> {
     if arg.is_empty() {
         return Ok(());
     }
@@ -158,7 +176,9 @@ pub fn parse_feature_flags_parameter(
             Some(&"ro") | Some(&"READ_ONLY") => true,
             Some(&"READ_WRITE") | None => false,
             Some(other) => {
-                return Err(format!("Invalid feature flag permission '{other}' in: {arg}"))
+                return Err(format!(
+                    "Invalid feature flag permission '{other}' in: {arg}"
+                ))
             }
         };
         let enabled = match parts.get(1).map(|v| crate::util::trim_whitespace(v)) {
@@ -166,7 +186,9 @@ pub fn parse_feature_flags_parameter(
             Some("true") => Some(true),
             Some("false") => Some(false),
             Some(other) => {
-                return Err(format!("Invalid value '{other}' for feature flag '{flag_name}'"))
+                return Err(format!(
+                    "Invalid value '{other}' for feature flag '{flag_name}'"
+                ))
             }
         };
         // Verify it doesn't conflict with any existing value.
@@ -204,7 +226,10 @@ pub fn extract_resource_path_data(
         }
         true
     });
-    if parts.iter().any(|p| p.starts_with("flag(") && p.ends_with(')')) {
+    if parts
+        .iter()
+        .any(|p| p.starts_with("flag(") && p.ends_with(')'))
+    {
         return Err("resource path cannot contain more than one flag directory".to_string());
     }
 
@@ -226,7 +251,10 @@ pub fn extract_resource_path_data(
 
     const NINE_PNG: &str = ".9.png";
     let (name, extension) = if filename.len() > NINE_PNG.len() && filename.ends_with(NINE_PNG) {
-        (&filename[..filename.len() - NINE_PNG.len()], "9.png".to_string())
+        (
+            &filename[..filename.len() - NINE_PNG.len()],
+            "9.png".to_string(),
+        )
     } else {
         match filename.rfind('.') {
             Some(dot) => (&filename[..dot], filename[dot + 1..].to_string()),
@@ -383,8 +411,14 @@ fn compile_table(
     if options.pseudolocalize && translatable_file {
         pseudolocale::generate_pseudolocales(
             &mut table,
-            options.pseudo_localize_gender_values.as_deref().unwrap_or("f,m,n"),
-            options.pseudo_localize_gender_ratio.as_deref().unwrap_or("1.0"),
+            options
+                .pseudo_localize_gender_values
+                .as_deref()
+                .unwrap_or("f,m,n"),
+            options
+                .pseudo_localize_gender_ratio
+                .as_deref()
+                .unwrap_or("1.0"),
         )?;
     }
 
@@ -398,7 +432,11 @@ fn compile_table(
         Vec::new()
     };
 
-    Ok(CompiledArtifact { name: String::new(), data: writer.finish()?, text_symbols })
+    Ok(CompiledArtifact {
+        name: String::new(),
+        data: writer.finish()?,
+        text_symbols,
+    })
 }
 
 /// R.txt lines for a compiled values table. Mirrors the
@@ -425,8 +463,7 @@ fn table_text_symbols(table: &ResourceTable) -> Vec<String> {
                         if let ValueKind::Styleable(Styleable { entries }) = &value.kind {
                             for attr in entries {
                                 if let Some(name) = &attr.name {
-                                    let mut line =
-                                        format!("default int styleable {}", entry.name);
+                                    let mut line = format!("default int styleable {}", entry.name);
                                     if !name.package.is_empty() {
                                         line.push('_');
                                         line.push_str(&name.package.replace('.', "_"));
@@ -457,12 +494,13 @@ fn product_filter(table: &mut ResourceTable, product: &str) {
                 let mut by_config: BTreeMap<Vec<u8>, Vec<crate::res::table::ResourceConfigValue>> =
                     BTreeMap::new();
                 for value in values {
-                    by_config.entry(value.config.to_bytes()).or_default().push(value);
+                    by_config
+                        .entry(value.config.to_bytes())
+                        .or_default()
+                        .push(value);
                 }
                 for (_, group) in by_config {
-                    if let Some(mut selected) =
-                        group.into_iter().find(|v| v.product == product)
-                    {
+                    if let Some(mut selected) = group.into_iter().find(|v| v.product == product) {
                         selected.product = String::new();
                         kept.push(selected);
                     }
@@ -503,7 +541,9 @@ fn compile_xml(
             flag_status,
             flag,
         },
-        root: parsed.root.ok_or_else(|| anyhow!("{}: no root element", path_data.source))?,
+        root: parsed
+            .root
+            .ok_or_else(|| anyhow!("{}: no root element", path_data.source))?,
     };
 
     // Collect @+id exported symbols.
@@ -523,10 +563,17 @@ fn compile_xml(
         for symbol in &xmlres.file.exported_symbols {
             text_symbols.push(format!("default int id {}", symbol.name.entry));
         }
-        text_symbols.push(format!("default int {} {}", path_data.resource_dir, path_data.name));
+        text_symbols.push(format!(
+            "default int {} {}",
+            path_data.resource_dir, path_data.name
+        ));
     }
 
-    Ok(CompiledArtifact { name: String::new(), data: writer.finish()?, text_symbols })
+    Ok(CompiledArtifact {
+        name: String::new(),
+        data: writer.finish()?,
+        text_symbols,
+    })
 }
 
 /// A compiled XML document: metadata plus DOM.
@@ -554,10 +601,7 @@ pub fn collect_exported_ids(
         if let Some(parsed) = parse_reference(&attr.value) {
             if parsed.create && parsed.name.ty.ty == ResourceType::Id {
                 if crate::res::table::first_invalid_entry_name_char(&parsed.name.entry).is_some() {
-                    diag.error(format!(
-                        "id '{}' has an invalid entry name",
-                        parsed.name
-                    ));
+                    diag.error(format!("id '{}' has an invalid entry name", parsed.name));
                 } else {
                     let position = out.binary_search_by(|s| s.name.cmp(&parsed.name));
                     if let Err(index) = position {
@@ -620,7 +664,11 @@ fn compile_png(
     let compiled_file_pb = pb::encode_compiled_file(&file);
     let mut writer = ContainerWriter::new(1);
     writer.add_res_file(&compiled_file_pb, &processed);
-    Ok(CompiledArtifact { name: String::new(), data: writer.finish()?, text_symbols: vec![] })
+    Ok(CompiledArtifact {
+        name: String::new(),
+        data: writer.finish()?,
+        text_symbols: vec![],
+    })
 }
 
 fn compile_file(
@@ -642,7 +690,11 @@ fn compile_file(
     let compiled_file_pb = pb::encode_compiled_file(&file);
     let mut writer = ContainerWriter::new(1);
     writer.add_res_file(&compiled_file_pb, data);
-    Ok(CompiledArtifact { name: String::new(), data: writer.finish()?, text_symbols: vec![] })
+    Ok(CompiledArtifact {
+        name: String::new(),
+        data: writer.finish()?,
+        text_symbols: vec![],
+    })
 }
 
 // ───────────────────────── driver ─────────────────────────
@@ -707,8 +759,8 @@ pub fn compile(
         collect_res_dir(res_dir, res_dir, &mut paths)?;
         paths.sort();
         for (rel, abs) in paths {
-            let data = std::fs::read(&abs)
-                .with_context(|| format!("failed to open {}", abs.display()))?;
+            let data =
+                std::fs::read(&abs).with_context(|| format!("failed to open {}", abs.display()))?;
             inputs.push((rel, data));
         }
     } else if let Some(res_zip) = &options.res_zip {
@@ -767,11 +819,7 @@ pub fn compile(
 }
 
 /// Recursively collects `res/<type>/<file>` paths (two levels).
-fn collect_res_dir(
-    root: &Path,
-    dir: &Path,
-    out: &mut Vec<(String, PathBuf)>,
-) -> Result<()> {
+fn collect_res_dir(root: &Path, dir: &Path, out: &mut Vec<(String, PathBuf)>) -> Result<()> {
     for entry in std::fs::read_dir(dir)
         .with_context(|| format!("failed to read directory {}", dir.display()))?
     {
@@ -815,8 +863,8 @@ pub fn write_artifacts(artifacts: &[CompiledArtifact], output_path: &Path) -> Re
     let file = std::fs::File::create(output_path)
         .with_context(|| format!("failed to create {}", output_path.display()))?;
     let mut writer = zip::ZipWriter::new(file);
-    let zip_options = zip::write::SimpleFileOptions::default()
-        .compression_method(zip::CompressionMethod::Stored);
+    let zip_options =
+        zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
     for artifact in artifacts {
         writer.start_file(&*artifact.name, zip_options)?;
         writer.write_all(&artifact.data)?;
@@ -873,8 +921,7 @@ mod tests {
         assert_eq!(data.extension, "9.png");
         assert_eq!(data.name, "icon");
 
-        let data =
-            extract_resource_path_data("res/flag(my.flag)/values/bools.xml", None).unwrap();
+        let data = extract_resource_path_data("res/flag(my.flag)/values/bools.xml", None).unwrap();
         assert_eq!(data.flag_name, "my.flag");
         assert_eq!(data.resource_dir, "values");
 
@@ -889,13 +936,19 @@ mod tests {
         let data = extract_resource_path_data("res/values-de/strings.xml", None).unwrap();
         let mut renamed = data.clone();
         renamed.extension = "arsc".to_string();
-        assert_eq!(build_output_filename(&renamed), "values-de_strings.arsc.flat");
+        assert_eq!(
+            build_output_filename(&renamed),
+            "values-de_strings.arsc.flat"
+        );
 
         let data = extract_resource_path_data("res/layout/main.xml", None).unwrap();
         assert_eq!(build_output_filename(&data), "layout_main.xml.flat");
 
         let data = extract_resource_path_data("res/drawable-hdpi/icon.9.png", None).unwrap();
-        assert_eq!(build_output_filename(&data), "drawable-hdpi_icon.9.png.flat");
+        assert_eq!(
+            build_output_filename(&data),
+            "drawable-hdpi_icon.9.png.flat"
+        );
     }
 
     #[test]
@@ -904,15 +957,24 @@ mod tests {
         parse_feature_flags_parameter("one=true,two:ro=false,three=", &mut flags).unwrap();
         assert_eq!(
             flags.get("one"),
-            Some(&FeatureFlagProperties { read_only: false, enabled: Some(true) })
+            Some(&FeatureFlagProperties {
+                read_only: false,
+                enabled: Some(true)
+            })
         );
         assert_eq!(
             flags.get("two"),
-            Some(&FeatureFlagProperties { read_only: true, enabled: Some(false) })
+            Some(&FeatureFlagProperties {
+                read_only: true,
+                enabled: Some(false)
+            })
         );
         assert_eq!(
             flags.get("three"),
-            Some(&FeatureFlagProperties { read_only: false, enabled: None })
+            Some(&FeatureFlagProperties {
+                read_only: false,
+                enabled: None
+            })
         );
         assert!(parse_feature_flags_parameter("one=false", &mut flags).is_err());
     }

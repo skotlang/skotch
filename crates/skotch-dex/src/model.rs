@@ -105,15 +105,34 @@ pub struct DebugInfo {
 /// One debug state-machine event.
 #[derive(Debug, Clone)]
 pub enum DebugEvent {
-    AdvancePc { addr_diff: u32 },
-    AdvanceLine { line_diff: i32 },
-    StartLocal { register: u32, name: Option<String>, type_: Option<String> },
-    StartLocalExtended { register: u32, name: Option<String>, type_: Option<String>, sig: Option<String> },
-    EndLocal { register: u32 },
-    RestartLocal { register: u32 },
+    AdvancePc {
+        addr_diff: u32,
+    },
+    AdvanceLine {
+        line_diff: i32,
+    },
+    StartLocal {
+        register: u32,
+        name: Option<String>,
+        type_: Option<String>,
+    },
+    StartLocalExtended {
+        register: u32,
+        name: Option<String>,
+        type_: Option<String>,
+        sig: Option<String>,
+    },
+    EndLocal {
+        register: u32,
+    },
+    RestartLocal {
+        register: u32,
+    },
     SetPrologueEnd,
     SetEpilogueBegin,
-    SetFile { name: Option<String> },
+    SetFile {
+        name: Option<String>,
+    },
     /// Special opcode (0x0a..=0xff): combined line+addr advance.
     Special(u8),
 }

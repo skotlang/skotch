@@ -13,9 +13,19 @@ fn workspace_root() -> PathBuf {
 fn dump(label: &str, m: &MirModule) {
     eprintln!("--- {label} ---");
     for f in &m.functions {
-        eprintln!("fn {} (params={}, blocks={})", f.name, f.params.len(), f.blocks.len());
+        eprintln!(
+            "fn {} (params={}, blocks={})",
+            f.name,
+            f.params.len(),
+            f.blocks.len()
+        );
         for (i, blk) in f.blocks.iter().enumerate() {
-            eprintln!("  blk{}: {} stmts, term={:?}", i, blk.stmts.len(), summary_term(&blk.terminator));
+            eprintln!(
+                "  blk{}: {} stmts, term={:?}",
+                i,
+                blk.stmts.len(),
+                summary_term(&blk.terminator)
+            );
             for s in &blk.stmts {
                 eprintln!("    {}", short(s));
             }
@@ -28,7 +38,11 @@ fn summary_term(t: &Terminator) -> String {
         Terminator::Return => "Ret".to_string(),
         Terminator::ReturnValue(s) => format!("RetV({})", s.0),
         Terminator::Goto(b) => format!("Goto({b})"),
-        Terminator::Branch { cond, then_block, else_block } => {
+        Terminator::Branch {
+            cond,
+            then_block,
+            else_block,
+        } => {
             format!("Br({} -> {}/{})", cond.0, then_block, else_block)
         }
         _ => format!("{t:?}"),

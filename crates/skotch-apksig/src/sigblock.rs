@@ -94,7 +94,10 @@ impl<'a> Slice<'a> {
 
     pub fn get_bytes(&mut self, len: usize) -> Result<&'a [u8]> {
         if self.remaining() < len {
-            bail!("Remaining buffer too short: need {len}, have {}", self.remaining());
+            bail!(
+                "Remaining buffer too short: need {len}, have {}",
+                self.remaining()
+            );
         }
         let v = &self.data[self.pos..self.pos + len];
         self.pos += len;
@@ -126,7 +129,8 @@ pub fn generate_apk_signing_block(scheme_blocks: &[(Vec<u8>, u32)]) -> Vec<u8> {
     let mut result_size = 8 + blocks_size + 8 + 16;
     let mut padding_pair: Option<Vec<u8>> = None;
     if result_size % ANDROID_COMMON_PAGE_ALIGNMENT != 0 {
-        let mut padding = ANDROID_COMMON_PAGE_ALIGNMENT - (result_size % ANDROID_COMMON_PAGE_ALIGNMENT);
+        let mut padding =
+            ANDROID_COMMON_PAGE_ALIGNMENT - (result_size % ANDROID_COMMON_PAGE_ALIGNMENT);
         if padding < 12 {
             padding += ANDROID_COMMON_PAGE_ALIGNMENT;
         }
@@ -201,7 +205,10 @@ mod tests {
     fn signing_block_is_page_aligned_and_parses() {
         let block = generate_apk_signing_block(&[(vec![1, 2, 3], V2_BLOCK_ID)]);
         assert_eq!(block.len() % ANDROID_COMMON_PAGE_ALIGNMENT, 0);
-        assert_eq!(&block[block.len() - 16..], crate::zip::APK_SIGNING_BLOCK_MAGIC);
+        assert_eq!(
+            &block[block.len() - 16..],
+            crate::zip::APK_SIGNING_BLOCK_MAGIC
+        );
         let pairs = parse_apk_signing_block(&block).unwrap();
         assert_eq!(pairs.len(), 2); // v2 + padding
         assert_eq!(pairs[0], (V2_BLOCK_ID, vec![1, 2, 3]));

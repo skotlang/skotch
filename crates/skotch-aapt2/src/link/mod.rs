@@ -187,10 +187,8 @@ pub fn link(
     // ── 1. Manifest ────────────────────────────────────────────────
     let manifest_text = std::fs::read_to_string(&options.manifest_path)
         .with_context(|| format!("failed to read {}", options.manifest_path.display()))?;
-    let manifest_doc = crate::xml::parse_source_xml(
-        &options.manifest_path.to_string_lossy(),
-        &manifest_text,
-    )?;
+    let manifest_doc =
+        crate::xml::parse_source_xml(&options.manifest_path.to_string_lossy(), &manifest_text)?;
     let mut manifest = manifest_doc
         .root
         .ok_or_else(|| anyhow!("AndroidManifest.xml has no root element"))?;
@@ -420,13 +418,8 @@ pub fn link(
                 .rename_manifest_package
                 .clone(),
         };
-        let classes = java_gen::generate_java_classes(
-            &table,
-            &manifest,
-            &context,
-            &java_options,
-            diag,
-        )?;
+        let classes =
+            java_gen::generate_java_classes(&table, &manifest, &context, &java_options, diag)?;
         for (package, source) in &classes {
             let mut out_path = java_dir.clone();
             for part in package.split('.') {
@@ -440,10 +433,8 @@ pub fn link(
     }
 
     if let Some(proguard_path) = &options.generate_proguard_rules_path {
-        let rules = java_gen::generate_proguard_rules(
-            &keep_set,
-            options.no_proguard_location_reference,
-        );
+        let rules =
+            java_gen::generate_proguard_rules(&keep_set, options.no_proguard_location_reference);
         std::fs::write(proguard_path, &rules)?;
         outputs.proguard_rules = Some(rules);
     }
@@ -492,7 +483,15 @@ fn merge_path(
         _ => {
             let data = std::fs::read(path)
                 .with_context(|| format!("failed to open {}", path.display()))?;
-            merge_container(&path.to_string_lossy(), &data, overlay, table, context, options, diag)
+            merge_container(
+                &path.to_string_lossy(),
+                &data,
+                overlay,
+                table,
+                context,
+                options,
+                diag,
+            )
         }
     }
 }
@@ -520,7 +519,10 @@ fn merge_container(
                     diag,
                 )?;
             }
-            ContainerEntry::ResFile { compiled_file_pb, data } => {
+            ContainerEntry::ResFile {
+                compiled_file_pb,
+                data,
+            } => {
                 let file = crate::pb::decode_compiled_file(&compiled_file_pb)
                     .with_context(|| format!("invalid compiled file in {source}"))?;
                 table_merger::merge_compiled_file(
@@ -538,10 +540,7 @@ fn merge_container(
     Ok(())
 }
 
-fn write_stable_id_map(
-    path: &Path,
-    ids: &HashMap<ResourceName, ResourceId>,
-) -> Result<()> {
+fn write_stable_id_map(path: &Path, ids: &HashMap<ResourceName, ResourceId>) -> Result<()> {
     let mut entries: Vec<(&ResourceName, &ResourceId)> = ids.iter().collect();
     entries.sort();
     let mut out = String::new();

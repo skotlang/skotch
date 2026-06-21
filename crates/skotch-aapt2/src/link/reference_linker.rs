@@ -14,7 +14,9 @@ use crate::res::table::ResourceTable;
 use crate::res::utils::{parse_xml_attribute_name, try_parse_item_for_attribute_def};
 use crate::res::value::{format, Item, ItemValue, Reference, Value, ValueKind};
 use crate::res::{ResourceName, Source};
-use crate::xml::{extract_package_from_namespace, Element, AaptAttribute, SCHEMA_AUTO, SCHEMA_TOOLS};
+use crate::xml::{
+    extract_package_from_namespace, AaptAttribute, Element, SCHEMA_AUTO, SCHEMA_TOOLS,
+};
 use anyhow::{bail, Result};
 
 /// Fully qualifies and resolves one reference in place. Returns false
@@ -46,10 +48,7 @@ fn link_reference(
             true
         }
         None => {
-            diag.error_at(
-                source.clone(),
-                format!("resource {name} not found"),
-            );
+            diag.error_at(source.clone(), format!("resource {name} not found"));
             false
         }
     }
@@ -87,7 +86,9 @@ pub fn link_table_references(
                     .iter_mut()
                     .chain(entry.flag_disabled_values.iter_mut())
                 {
-                    let Some(value) = &mut config_value.value else { continue };
+                    let Some(value) = &mut config_value.value else {
+                        continue;
+                    };
                     let source = value.meta.source.clone();
                     if !link_value(value, &source, symbols, compilation_package, diag) {
                         error = true;
@@ -140,7 +141,10 @@ fn link_value(
                                         None => {
                                             if attr.type_mask & format::STRING != 0 {
                                                 entry.value.item = Item::String {
-                                                    value: crate::util::process_string_preserve_spaces(&raw),
+                                                    value:
+                                                        crate::util::process_string_preserve_spaces(
+                                                            &raw,
+                                                        ),
                                                     untranslatable_sections: vec![],
                                                 };
                                             } else {
@@ -174,7 +178,13 @@ fn link_value(
                         }
                     }
                 }
-                ok &= link_item(&mut entry.value.item, source, symbols, compilation_package, diag);
+                ok &= link_item(
+                    &mut entry.value.item,
+                    source,
+                    symbols,
+                    compilation_package,
+                    diag,
+                );
             }
         }
         ValueKind::Attribute(attr) => {
@@ -195,7 +205,13 @@ fn link_value(
         }
         ValueKind::Array(array) => {
             for element in &mut array.elements {
-                ok &= link_item(&mut element.item, source, symbols, compilation_package, diag);
+                ok &= link_item(
+                    &mut element.item,
+                    source,
+                    symbols,
+                    compilation_package,
+                    diag,
+                );
             }
         }
         ValueKind::Plural(plural) => {
@@ -265,40 +281,27 @@ fn link_element(
             } else {
                 extracted.package.clone()
             };
-            let attr_name = ResourceName::new(
-                package,
-                crate::res::ResourceType::Attr,
-                &attr.name,
-            );
+            let attr_name = ResourceName::new(package, crate::res::ResourceType::Attr, &attr.name);
             match symbols.find_by_name(&attr_name) {
                 Some(symbol) => {
-                    let attr_def = symbol.attribute.clone().unwrap_or_else(|| {
-                        crate::res::value::Attribute::new(format::ANY)
-                    });
+                    let attr_def = symbol
+                        .attribute
+                        .clone()
+                        .unwrap_or_else(|| crate::res::value::Attribute::new(format::ANY));
                     // Compile the value against the attribute formats.
                     if attr_def.type_mask != format::STRING || attr.value.starts_with('@') {
-                        attr.compiled_value = try_parse_item_for_attribute_def(
-                            &attr.value,
-                            &attr_def,
-                            None,
-                        );
+                        attr.compiled_value =
+                            try_parse_item_for_attribute_def(&attr.value, &attr_def, None);
                     }
                     if let Some(Item::Reference(reference)) = &mut attr.compiled_value {
                         let mut linked = reference.clone();
-                        if !link_reference(
-                            &mut linked,
-                            symbols,
-                            compilation_package,
-                            &source,
-                            diag,
-                        ) {
+                        if !link_reference(&mut linked, symbols, compilation_package, &source, diag)
+                        {
                             *error = true;
                         }
                         attr.compiled_value = Some(Item::Reference(linked));
                     }
-                    if attr.compiled_value.is_none()
-                        && attr_def.type_mask & format::STRING == 0
-                    {
+                    if attr.compiled_value.is_none() && attr_def.type_mask & format::STRING == 0 {
                         diag.error_at(
                             source.clone(),
                             format!(
@@ -310,8 +313,10 @@ fn link_element(
                         );
                         *error = true;
                     }
-                    attr.compiled_attribute =
-                        Some(AaptAttribute { attribute: attr_def, id: symbol.id });
+                    attr.compiled_attribute = Some(AaptAttribute {
+                        attribute: attr_def,
+                        id: symbol.id,
+                    });
                 }
                 None => {
                     diag.error_at(

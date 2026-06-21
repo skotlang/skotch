@@ -74,7 +74,10 @@ pub fn extract_app_info(manifest: &Element) -> Result<AppInfo> {
         .ok_or_else(|| anyhow!("<manifest> must have a 'package' attribute"))?
         .to_string();
 
-    let mut info = AppInfo { package, ..Default::default() };
+    let mut info = AppInfo {
+        package,
+        ..Default::default()
+    };
 
     if let Some(value) = manifest.attr_value(SCHEMA_ANDROID, "versionCode") {
         info.version_code = value.parse().ok();
@@ -145,12 +148,18 @@ pub fn fix_manifest(
         }
         let uses_sdk = manifest.find_child_mut("", "uses-sdk").unwrap();
         if let Some(min_sdk) = &options.min_sdk_version_default {
-            if uses_sdk.attr_value(SCHEMA_ANDROID, "minSdkVersion").is_none() {
+            if uses_sdk
+                .attr_value(SCHEMA_ANDROID, "minSdkVersion")
+                .is_none()
+            {
                 uses_sdk.set_attribute(SCHEMA_ANDROID, "minSdkVersion", min_sdk);
             }
         }
         if let Some(target_sdk) = &options.target_sdk_version_default {
-            if uses_sdk.attr_value(SCHEMA_ANDROID, "targetSdkVersion").is_none() {
+            if uses_sdk
+                .attr_value(SCHEMA_ANDROID, "targetSdkVersion")
+                .is_none()
+            {
                 uses_sdk.set_attribute(SCHEMA_ANDROID, "targetSdkVersion", target_sdk);
             }
         }
@@ -166,7 +175,11 @@ pub fn fix_manifest(
         }
     };
     set_or_replace(manifest, "versionCode", &options.version_code_default);
-    set_or_replace(manifest, "versionCodeMajor", &options.version_code_major_default);
+    set_or_replace(
+        manifest,
+        "versionCodeMajor",
+        &options.version_code_major_default,
+    );
     set_or_replace(manifest, "versionName", &options.version_name_default);
     set_or_replace(manifest, "revisionCode", &options.revision_code_default);
 
@@ -189,7 +202,10 @@ pub fn fix_manifest(
     if let Some(target) = &options.rename_instrumentation_target_package {
         for child in manifest.child_elements_mut() {
             if child.name == "instrumentation" && child.namespace_uri.is_empty() {
-                if child.find_attribute(SCHEMA_ANDROID, "targetPackage").is_some() {
+                if child
+                    .find_attribute(SCHEMA_ANDROID, "targetPackage")
+                    .is_some()
+                {
                     child.set_attribute(SCHEMA_ANDROID, "targetPackage", target);
                 }
             }
@@ -265,9 +281,7 @@ fn rename_manifest_package(manifest: &mut Element, new_package: &str) {
     let class_attrs = ["name", "targetActivity", "parentActivityName"];
     fn fix_components(element: &mut Element, original: &str, class_attrs: &[&str]) {
         for attr in &mut element.attributes {
-            if attr.namespace_uri == SCHEMA_ANDROID
-                && class_attrs.contains(&attr.name.as_str())
-            {
+            if attr.namespace_uri == SCHEMA_ANDROID && class_attrs.contains(&attr.name.as_str()) {
                 if let Some(qualified) = fully_qualify_class_name(original, &attr.value) {
                     attr.value = qualified;
                 }
@@ -338,10 +352,22 @@ mod tests {
         let diag = Diagnostics::collecting();
         fix_manifest(&mut manifest, &options, &diag).unwrap();
         let uses_sdk = manifest.find_child("", "uses-sdk").unwrap();
-        assert_eq!(uses_sdk.attr_value(SCHEMA_ANDROID, "minSdkVersion"), Some("21"));
-        assert_eq!(uses_sdk.attr_value(SCHEMA_ANDROID, "targetSdkVersion"), Some("33"));
-        assert_eq!(manifest.attr_value(SCHEMA_ANDROID, "versionCode"), Some("7"));
-        assert_eq!(manifest.attr_value(SCHEMA_ANDROID, "versionName"), Some("1.2"));
+        assert_eq!(
+            uses_sdk.attr_value(SCHEMA_ANDROID, "minSdkVersion"),
+            Some("21")
+        );
+        assert_eq!(
+            uses_sdk.attr_value(SCHEMA_ANDROID, "targetSdkVersion"),
+            Some("33")
+        );
+        assert_eq!(
+            manifest.attr_value(SCHEMA_ANDROID, "versionCode"),
+            Some("7")
+        );
+        assert_eq!(
+            manifest.attr_value(SCHEMA_ANDROID, "versionName"),
+            Some("1.2")
+        );
     }
 
     #[test]
@@ -356,11 +382,17 @@ mod tests {
         };
         let diag = Diagnostics::collecting();
         fix_manifest(&mut manifest, &options, &diag).unwrap();
-        assert_eq!(manifest.attr_value(SCHEMA_ANDROID, "versionCode"), Some("10"));
+        assert_eq!(
+            manifest.attr_value(SCHEMA_ANDROID, "versionCode"),
+            Some("10")
+        );
 
         options.replace_version = true;
         fix_manifest(&mut manifest, &options, &diag).unwrap();
-        assert_eq!(manifest.attr_value(SCHEMA_ANDROID, "versionCode"), Some("7"));
+        assert_eq!(
+            manifest.attr_value(SCHEMA_ANDROID, "versionCode"),
+            Some("7")
+        );
     }
 
     #[test]

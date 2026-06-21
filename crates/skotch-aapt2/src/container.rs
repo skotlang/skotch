@@ -43,7 +43,10 @@ pub enum ContainerEntry {
     ResTable { table_pb: Vec<u8> },
     /// A compiled file: serialized `aapt.pb.internal.CompiledFile`
     /// header plus raw payload.
-    ResFile { compiled_file_pb: Vec<u8>, data: Vec<u8> },
+    ResFile {
+        compiled_file_pb: Vec<u8>,
+        data: Vec<u8>,
+    },
 }
 
 /// Writes a container to an in-memory buffer.
@@ -59,7 +62,11 @@ impl ContainerWriter {
         buf.extend_from_slice(&CONTAINER_MAGIC.to_le_bytes());
         buf.extend_from_slice(&CONTAINER_VERSION.to_le_bytes());
         buf.extend_from_slice(&(entry_count as u32).to_le_bytes());
-        ContainerWriter { buf, declared_entries: entry_count as u32, written_entries: 0 }
+        ContainerWriter {
+            buf,
+            declared_entries: entry_count as u32,
+            written_entries: 0,
+        }
     }
 
     fn align4(&mut self) {
@@ -73,7 +80,8 @@ impl ContainerWriter {
     pub fn add_res_table(&mut self, table_pb: &[u8]) {
         self.align4();
         self.buf.extend_from_slice(&ENTRY_RES_TABLE.to_le_bytes());
-        self.buf.extend_from_slice(&(table_pb.len() as u64).to_le_bytes());
+        self.buf
+            .extend_from_slice(&(table_pb.len() as u64).to_le_bytes());
         self.buf.extend_from_slice(table_pb);
         self.written_entries += 1;
     }
@@ -84,17 +92,16 @@ impl ContainerWriter {
         self.align4();
         let header_padding = (4 - compiled_file_pb.len() % 4) % 4;
         let data_padding = (4 - data.len() % 4) % 4;
-        let entry_length = 4
-            + 8
-            + compiled_file_pb.len()
-            + header_padding
-            + data.len()
-            + data_padding;
+        let entry_length =
+            4 + 8 + compiled_file_pb.len() + header_padding + data.len() + data_padding;
 
         self.buf.extend_from_slice(&ENTRY_RES_FILE.to_le_bytes());
-        self.buf.extend_from_slice(&(entry_length as u64).to_le_bytes());
-        self.buf.extend_from_slice(&(compiled_file_pb.len() as u32).to_le_bytes());
-        self.buf.extend_from_slice(&(data.len() as u64).to_le_bytes());
+        self.buf
+            .extend_from_slice(&(entry_length as u64).to_le_bytes());
+        self.buf
+            .extend_from_slice(&(compiled_file_pb.len() as u32).to_le_bytes());
+        self.buf
+            .extend_from_slice(&(data.len() as u64).to_le_bytes());
         self.buf.extend_from_slice(compiled_file_pb);
         self.buf.extend_from_slice(&vec![0u8; header_padding]);
         self.buf.extend_from_slice(data);
@@ -158,7 +165,10 @@ pub fn read_container(data: &[u8]) -> anyhow::Result<Vec<ContainerEntry>> {
                 cursor.read_exact(&mut payload)?;
                 let data_padding = (4 - data_size % 4) % 4;
                 cursor.set_position(cursor.position() + data_padding);
-                entries.push(ContainerEntry::ResFile { compiled_file_pb, data: payload });
+                entries.push(ContainerEntry::ResFile {
+                    compiled_file_pb,
+                    data: payload,
+                });
             }
             other => anyhow::bail!("entry type 0x{other:08x} is invalid"),
         }
@@ -186,7 +196,10 @@ mod tests {
         assert_eq!(entries[0], ContainerEntry::ResTable { table_pb });
         assert_eq!(
             entries[1],
-            ContainerEntry::ResFile { compiled_file_pb: file_pb, data: payload }
+            ContainerEntry::ResFile {
+                compiled_file_pb: file_pb,
+                data: payload
+            }
         );
     }
 

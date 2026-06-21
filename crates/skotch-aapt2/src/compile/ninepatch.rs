@@ -65,7 +65,12 @@ pub struct Bounds {
 
 impl Bounds {
     pub fn new(left: u32, top: u32, right: u32, bottom: u32) -> Self {
-        Bounds { left, top, right, bottom }
+        Bounds {
+            left,
+            top,
+            right,
+            bottom,
+        }
     }
 
     /// Port of `Bounds::nonZero`.
@@ -107,7 +112,10 @@ fn get_alpha(color: u32) -> u32 {
 /// Packs an RGBA_8888 pixel as 0xAARRGGBB (the way 9-patch expects it).
 /// Port of `NinePatch::PackRGBA`.
 pub fn pack_rgba(pixel: [u8; 4]) -> u32 {
-    ((pixel[3] as u32) << 24) | ((pixel[0] as u32) << 16) | ((pixel[1] as u32) << 8) | pixel[2] as u32
+    ((pixel[3] as u32) << 24)
+        | ((pixel[0] as u32) << 16)
+        | ((pixel[1] as u32) << 8)
+        | pixel[2] as u32
 }
 
 /// Determines whether a color on an image line is valid. A 9patch image
@@ -151,22 +159,49 @@ enum Axis {
 
 impl<'a> ImageLine<'a> {
     fn horizontal(image: &'a Image, xoffset: i32, yoffset: i32, length: i32) -> Self {
-        ImageLine { image, xoffset, yoffset, length, axis: Axis::Horizontal }
+        ImageLine {
+            image,
+            xoffset,
+            yoffset,
+            length,
+            axis: Axis::Horizontal,
+        }
     }
 
     fn vertical(image: &'a Image, xoffset: i32, yoffset: i32, length: i32) -> Self {
-        ImageLine { image, xoffset, yoffset, length, axis: Axis::Vertical }
+        ImageLine {
+            image,
+            xoffset,
+            yoffset,
+            length,
+            axis: Axis::Vertical,
+        }
     }
 
-    fn diagonal(image: &'a Image, xoffset: i32, yoffset: i32, xstep: i32, ystep: i32, length: i32) -> Self {
-        ImageLine { image, xoffset, yoffset, length, axis: Axis::Diagonal { xstep, ystep } }
+    fn diagonal(
+        image: &'a Image,
+        xoffset: i32,
+        yoffset: i32,
+        xstep: i32,
+        ystep: i32,
+        length: i32,
+    ) -> Self {
+        ImageLine {
+            image,
+            xoffset,
+            yoffset,
+            length,
+            axis: Axis::Diagonal { xstep, ystep },
+        }
     }
 
     fn color(&self, idx: i32) -> u32 {
         let (x, y) = match self.axis {
             Axis::Horizontal => (idx + self.xoffset, self.yoffset),
             Axis::Vertical => (self.xoffset, self.yoffset + idx),
-            Axis::Diagonal { xstep, ystep } => ((idx + self.xoffset) * xstep, self.yoffset + idx * ystep),
+            Axis::Diagonal { xstep, ystep } => {
+                ((idx + self.xoffset) * xstep, self.yoffset + idx * ystep)
+            }
         };
         pack_rgba(self.image.pixel(x as usize, y as usize))
     }
@@ -241,7 +276,9 @@ fn populate_bounds(
     }
 
     if layout_bounds.len() > 2 {
-        return Err(format!("too many layout bounds sections on {edge_name} border"));
+        return Err(format!(
+            "too many layout bounds sections on {edge_name} border"
+        ));
     }
 
     let mut layout_start = 0;
@@ -250,14 +287,18 @@ fn populate_bounds(
         // If there is only one layout bound segment, it might not start at
         // 0, but then it should end at length.
         if range.start != 0 && range.end != length {
-            return Err(format!("layout bounds on {edge_name} border must start at edge"));
+            return Err(format!(
+                "layout bounds on {edge_name} border must start at edge"
+            ));
         }
         layout_start = range.end;
 
         if layout_bounds.len() >= 2 {
             let range = layout_bounds[layout_bounds.len() - 1];
             if range.end != length {
-                return Err(format!("layout bounds on {edge_name} border must start at edge"));
+                return Err(format!(
+                    "layout bounds on {edge_name} border must start at edge"
+                ));
             }
             layout_end = length.saturating_sub(range.start);
         }
@@ -369,7 +410,10 @@ fn calculate_region_colors(
                 next_left = width;
                 bounds
             };
-            colors.push(get_region_color(image, Bounds::new(left, top, right, bottom)));
+            colors.push(get_region_color(
+                image,
+                Bounds::new(left, top, right, bottom),
+            ));
         }
     }
     colors
@@ -443,7 +487,11 @@ pub fn create(image: &Image) -> Result<NinePatch, String> {
     if image.width > i32::MAX as usize || image.height > i32::MAX as usize {
         return Err("image dimensions are too large".to_string());
     }
-    match image.width.checked_mul(image.height).and_then(|n| n.checked_mul(4)) {
+    match image
+        .width
+        .checked_mul(image.height)
+        .and_then(|n| n.checked_mul(4))
+    {
         Some(expected) if image.pixels.len() >= expected => {}
         _ => return Err("image pixel buffer is smaller than the image dimensions".to_string()),
     }
@@ -466,7 +514,12 @@ pub fn create(image: &Image) -> Result<NinePatch, String> {
     // unexpected here.
     let mut unexpected_ranges = Vec::new();
     let top_row = ImageLine::horizontal(image, 0, 0, width);
-    fill_ranges(&top_row, validator, &mut nine_patch.horizontal_stretch_regions, &mut unexpected_ranges)?;
+    fill_ranges(
+        &top_row,
+        validator,
+        &mut nine_patch.horizontal_stretch_regions,
+        &mut unexpected_ranges,
+    )?;
     if let Some(range) = unexpected_ranges.first() {
         return Err(format!(
             "found unexpected optical bounds (red pixel) on top border at x={}",
@@ -476,7 +529,12 @@ pub fn create(image: &Image) -> Result<NinePatch, String> {
 
     // Left border: vertical stretch regions.
     let left_col = ImageLine::vertical(image, 0, 0, height);
-    fill_ranges(&left_col, validator, &mut nine_patch.vertical_stretch_regions, &mut unexpected_ranges)?;
+    fill_ranges(
+        &left_col,
+        validator,
+        &mut nine_patch.vertical_stretch_regions,
+        &mut unexpected_ranges,
+    )?;
     if let Some(range) = unexpected_ranges.first() {
         // NOTE: the C++ builds this message but (due to an upstream bug)
         // returns without assigning it to *out_err; we surface the
@@ -491,7 +549,12 @@ pub fn create(image: &Image) -> Result<NinePatch, String> {
     let mut horizontal_padding = Vec::new();
     let mut horizontal_layout_bounds = Vec::new();
     let bottom_row = ImageLine::horizontal(image, 0, height - 1, width);
-    fill_ranges(&bottom_row, validator, &mut horizontal_padding, &mut horizontal_layout_bounds)?;
+    fill_ranges(
+        &bottom_row,
+        validator,
+        &mut horizontal_padding,
+        &mut horizontal_layout_bounds,
+    )?;
     let (pad_left, pad_right, layout_left, layout_right) = populate_bounds(
         &horizontal_padding,
         &horizontal_layout_bounds,
@@ -508,7 +571,12 @@ pub fn create(image: &Image) -> Result<NinePatch, String> {
     let mut vertical_padding = Vec::new();
     let mut vertical_layout_bounds = Vec::new();
     let right_col = ImageLine::vertical(image, width - 1, 0, height);
-    fill_ranges(&right_col, validator, &mut vertical_padding, &mut vertical_layout_bounds)?;
+    fill_ranges(
+        &right_col,
+        validator,
+        &mut vertical_padding,
+        &mut vertical_layout_bounds,
+    )?;
     let (pad_top, pad_bottom, layout_top, layout_bottom) = populate_bounds(
         &vertical_padding,
         &vertical_layout_bounds,
@@ -522,8 +590,10 @@ pub fn create(image: &Image) -> Result<NinePatch, String> {
     nine_patch.layout_bounds.bottom = layout_bottom;
 
     // Fill the region colors of the 9-patch.
-    let num_rows = calculate_segment_count(&nine_patch.horizontal_stretch_regions, (width - 2) as u32);
-    let num_cols = calculate_segment_count(&nine_patch.vertical_stretch_regions, (height - 2) as u32);
+    let num_rows =
+        calculate_segment_count(&nine_patch.horizontal_stretch_regions, (width - 2) as u32);
+    let num_cols =
+        calculate_segment_count(&nine_patch.vertical_stretch_regions, (height - 2) as u32);
     if num_rows as i64 * num_cols as i64 > 0x7f {
         return Err("too many regions in 9-patch".to_string());
     }
@@ -566,7 +636,8 @@ pub fn create(image: &Image) -> Result<NinePatch, String> {
         1 + outline_top,
         outline_height,
     );
-    nine_patch.outline_alpha = find_max_alpha(&outline_mid_row).max(find_max_alpha(&outline_mid_col));
+    nine_patch.outline_alpha =
+        find_max_alpha(&outline_mid_row).max(find_max_alpha(&outline_mid_col));
 
     // Assuming the image is a round rect, compute the radius by marching
     // diagonally from the top left corner towards the center.
@@ -591,7 +662,11 @@ pub fn create(image: &Image) -> Result<NinePatch, String> {
 }
 
 fn write_divs_be(out: &mut Vec<u8>, regions: &[Range], count: u8) {
-    for value in regions.iter().flat_map(|r| [r.start, r.end]).take(count as usize) {
+    for value in regions
+        .iter()
+        .flat_map(|r| [r.start, r.end])
+        .take(count as usize)
+    {
         out.extend_from_slice(&value.to_be_bytes());
     }
 }
@@ -715,7 +790,11 @@ mod tests {
                 pixels.extend_from_slice(&px(c));
             }
         }
-        Image { width, height, pixels }
+        Image {
+            width,
+            height,
+            pixels,
+        }
     }
 
     fn stretch_and_padding_5x5() -> Image {
@@ -731,7 +810,10 @@ mod tests {
     #[test]
     fn minimum_3x3() {
         let err = create(&img(&["WW", "WW"])).unwrap_err();
-        assert_eq!(err, "image must be at least 3x3 (1x1 image with 1 pixel border)");
+        assert_eq!(
+            err,
+            "image must be at least 3x3 (1x1 image with 1 pixel border)"
+        );
     }
 
     #[test]
@@ -759,7 +841,10 @@ mod tests {
         ]))
         .unwrap();
 
-        assert_eq!(nine_patch.horizontal_stretch_regions, vec![Range::new(1, 4)]);
+        assert_eq!(
+            nine_patch.horizontal_stretch_regions,
+            vec![Range::new(1, 4)]
+        );
         assert_eq!(nine_patch.vertical_stretch_regions, vec![Range::new(1, 3)]);
     }
 
@@ -811,7 +896,10 @@ mod tests {
     #[test]
     fn layout_bounds_are_on_wrong_edge() {
         let err = create(&img(&["WRW", "RWW", "WWW"])).unwrap_err();
-        assert_eq!(err, "found unexpected optical bounds (red pixel) on top border at x=1");
+        assert_eq!(
+            err,
+            "found unexpected optical bounds (red pixel) on top border at x=1"
+        );
     }
 
     #[test]
@@ -993,7 +1081,10 @@ mod tests {
         // 1 horizontal + 1 vertical stretch region, padding of 1 on all
         // edges, and 3x3 = 9 regions that are all solid red.
         let nine_patch = create(&stretch_and_padding_5x5()).unwrap();
-        assert_eq!(nine_patch.horizontal_stretch_regions, vec![Range::new(1, 2)]);
+        assert_eq!(
+            nine_patch.horizontal_stretch_regions,
+            vec![Range::new(1, 2)]
+        );
         assert_eq!(nine_patch.vertical_stretch_regions, vec![Range::new(1, 2)]);
         assert_eq!(nine_patch.padding, Bounds::new(1, 1, 1, 1));
         assert_eq!(nine_patch.region_colors.len(), 9);

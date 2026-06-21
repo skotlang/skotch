@@ -166,9 +166,10 @@ pub fn write_apk(
                 std::fs::create_dir_all(parent)?;
             }
         }
-        Sink::Zip(zip::ZipWriter::new(std::fs::File::create(output_path).with_context(
-            || format!("failed to create {}", output_path.display()),
-        )?))
+        Sink::Zip(zip::ZipWriter::new(
+            std::fs::File::create(output_path)
+                .with_context(|| format!("failed to create {}", output_path.display()))?,
+        ))
     };
 
     // ── Manifest ───────────────────────────────────────────────────
@@ -185,7 +186,10 @@ pub fn write_apk(
     let manifest_bytes = match options.output_format {
         OutputFormat::Binary => flatten_xml(
             manifest,
-            &XmlFlattenerOptions { keep_raw_values: options.keep_raw_values, use_utf16: true },
+            &XmlFlattenerOptions {
+                keep_raw_values: options.keep_raw_values,
+                use_utf16: true,
+            },
         ),
         OutputFormat::Proto => crate::xml::encode_pb_xml(manifest),
     };
@@ -207,7 +211,9 @@ pub fn write_apk(
         for ty in &mut package.types {
             for entry in &mut ty.entries {
                 for config_value in &mut entry.values {
-                    let Some(value) = &mut config_value.value else { continue };
+                    let Some(value) = &mut config_value.value else {
+                        continue;
+                    };
                     let ValueKind::Item(Item::FileReference(file_reference)) = &mut value.kind
                     else {
                         continue;
@@ -321,7 +327,8 @@ pub fn write_apk(
             sink.add("resources.arsc", &arsc, false, 4)?;
         }
         OutputFormat::Proto => {
-            let table_pb = crate::pb::encode_table(table, &crate::pb::SerializeTableOptions::default());
+            let table_pb =
+                crate::pb::encode_table(table, &crate::pb::SerializeTableOptions::default());
             sink.add("resources.pb", &table_pb, true, 1)?;
         }
     }
@@ -382,7 +389,10 @@ mod tests {
 
     #[test]
     fn regex_no_compress() {
-        assert!(simple_regex_search(".*\\.png$".replace("\\.", ".").as_str(), "res/a.png"));
+        assert!(simple_regex_search(
+            ".*\\.png$".replace("\\.", ".").as_str(),
+            "res/a.png"
+        ));
         assert!(simple_regex_search("ogg$|mp3$", "sounds/x.mp3"));
         assert!(!simple_regex_search("ogg$|mp3$", "sounds/x.wav"));
     }

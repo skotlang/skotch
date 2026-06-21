@@ -118,7 +118,6 @@ pub struct PackageSymbolTable {
     pub simple_name_to_fq: std::collections::HashMap<String, String>,
 }
 
-
 /// A single parameter on a cross-file function or constructor —
 /// name + type + whether the source declaration provided a default
 /// value. The `has_default` flag drives the JVM `$default(... I)`

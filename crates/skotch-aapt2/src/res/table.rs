@@ -103,7 +103,11 @@ pub struct ResourceConfigValue {
 
 impl ResourceConfigValue {
     pub fn new(config: ConfigDescription, product: impl Into<String>) -> Self {
-        ResourceConfigValue { config, product: product.into(), value: None }
+        ResourceConfigValue {
+            config,
+            product: product.into(),
+            value: None,
+        }
     }
 }
 
@@ -126,16 +130,25 @@ pub struct ResourceEntry {
 
 impl ResourceEntry {
     pub fn new(name: impl Into<String>) -> Self {
-        ResourceEntry { name: name.into(), ..Default::default() }
+        ResourceEntry {
+            name: name.into(),
+            ..Default::default()
+        }
     }
 
     fn position(&self, config: &ConfigDescription, product: &str) -> Result<usize, usize> {
         self.values.binary_search_by(|v| {
-            v.config.cmp(config).then_with(|| v.product.as_str().cmp(product))
+            v.config
+                .cmp(config)
+                .then_with(|| v.product.as_str().cmp(product))
         })
     }
 
-    pub fn find_value(&self, config: &ConfigDescription, product: &str) -> Option<&ResourceConfigValue> {
+    pub fn find_value(
+        &self,
+        config: &ConfigDescription,
+        product: &str,
+    ) -> Option<&ResourceConfigValue> {
         self.position(config, product).ok().map(|i| &self.values[i])
     }
 
@@ -144,7 +157,9 @@ impl ResourceEntry {
         config: &ConfigDescription,
         product: &str,
     ) -> Option<&mut ResourceConfigValue> {
-        self.position(config, product).ok().map(move |i| &mut self.values[i])
+        self.position(config, product)
+            .ok()
+            .map(move |i| &mut self.values[i])
     }
 
     pub fn find_or_create_value(
@@ -155,7 +170,8 @@ impl ResourceEntry {
         let index = match self.position(config, product) {
             Ok(i) => i,
             Err(i) => {
-                self.values.insert(i, ResourceConfigValue::new(config.clone(), product));
+                self.values
+                    .insert(i, ResourceConfigValue::new(config.clone(), product));
                 i
             }
         };
@@ -209,7 +225,11 @@ pub struct ResourceTableType {
 
 impl ResourceTableType {
     pub fn new(named_type: ResourceNamedType) -> Self {
-        ResourceTableType { named_type, visibility_level: VisibilityLevel::Undefined, entries: Vec::new() }
+        ResourceTableType {
+            named_type,
+            visibility_level: VisibilityLevel::Undefined,
+            entries: Vec::new(),
+        }
     }
 
     pub fn find_entry(&self, name: &str) -> Option<&ResourceEntry> {
@@ -241,7 +261,10 @@ pub struct ResourceTablePackage {
 
 impl ResourceTablePackage {
     pub fn new(name: impl Into<String>) -> Self {
-        ResourceTablePackage { name: name.into(), types: Vec::new() }
+        ResourceTablePackage {
+            name: name.into(),
+            types: Vec::new(),
+        }
     }
 
     pub fn find_type(&self, ty: &ResourceNamedType) -> Option<&ResourceTableType> {
@@ -332,7 +355,11 @@ pub fn resolve_value_collision(existing: &Value, incoming: &Value) -> CollisionR
 
     // Both are attributes: USE vs DECL handling.
     if attribute_compatible_with(existing_attr, incoming_attr) {
-        return if existing.meta.weak { CollisionResult::TakeNew } else { CollisionResult::KeepOriginal };
+        return if existing.meta.weak {
+            CollisionResult::TakeNew
+        } else {
+            CollisionResult::KeepOriginal
+        };
     }
 
     use super::value::format;
@@ -348,10 +375,7 @@ pub fn resolve_value_collision(existing: &Value, incoming: &Value) -> CollisionR
 /// Whether two attribute definitions have compatible formats: references
 /// are ignored on both sides, and enums/flags are never compatible.
 /// Mirrors `Attribute::IsCompatibleWith`.
-pub fn attribute_compatible_with(
-    a: &super::value::Attribute,
-    b: &super::value::Attribute,
-) -> bool {
+pub fn attribute_compatible_with(a: &super::value::Attribute, b: &super::value::Attribute) -> bool {
     use super::value::format;
     let a_mask = a.type_mask & !format::REFERENCE;
     let b_mask = b.type_mask & !format::REFERENCE;
@@ -380,7 +404,10 @@ pub struct NewResource {
 
 impl NewResource {
     pub fn with_name(name: ResourceName) -> Self {
-        NewResource { name: Some(name), ..Default::default() }
+        NewResource {
+            name: Some(name),
+            ..Default::default()
+        }
     }
 
     pub fn value(mut self, value: Value) -> Self {
@@ -481,12 +508,18 @@ pub struct ResourceTable {
 
 impl ResourceTable {
     pub fn new() -> Self {
-        ResourceTable { validator: ValidatorKind::Resource, ..Default::default() }
+        ResourceTable {
+            validator: ValidatorKind::Resource,
+            ..Default::default()
+        }
     }
 
     /// A table that skips name validation (for deserialized tables).
     pub fn new_unvalidated() -> Self {
-        ResourceTable { validator: ValidatorKind::Skip, ..Default::default() }
+        ResourceTable {
+            validator: ValidatorKind::Skip,
+            ..Default::default()
+        }
     }
 
     pub fn find_package(&self, name: &str) -> Option<&ResourceTablePackage> {
@@ -631,7 +664,8 @@ impl ResourceTable {
             let is_disabled = flag_status == FlagStatus::Disabled;
             if is_disabled {
                 let flag = value.meta.flag.clone().unwrap_or_default();
-                let slot = entry.find_or_create_flag_disabled_value(&flag, &res.config, &res.product);
+                let slot =
+                    entry.find_or_create_flag_disabled_value(&flag, &res.config, &res.product);
                 if slot.value.is_some() {
                     return Err(TableError {
                         message: format!(
@@ -647,8 +681,7 @@ impl ResourceTable {
                 match &slot.value {
                     None => slot.value = Some(value),
                     Some(existing) => {
-                        let existing_flag =
-                            existing.meta.flag_status;
+                        let existing_flag = existing.meta.flag_status;
                         let collision = if existing_flag != FlagStatus::NoFlag
                             || flag_status != FlagStatus::NoFlag
                         {
@@ -701,9 +734,7 @@ impl ResourceTable {
         if let Some(overlayable) = res.overlayable {
             if entry.overlayable_item.is_some() {
                 return Err(TableError {
-                    message: format!(
-                        "duplicate overlayable declaration for resource '{name}'"
-                    ),
+                    message: format!("duplicate overlayable declaration for resource '{name}'"),
                     source,
                 });
             }
@@ -730,7 +761,12 @@ impl ResourceTable {
     /// Iterates over every (package, type, entry) in sorted view order:
     /// packages by (name, id), types by (id, named_type), entries by
     /// (name, id). Returns owned references for read-only passes.
-    pub fn sorted_view(&self) -> Vec<(&ResourceTablePackage, Vec<(&ResourceTableType, Vec<&ResourceEntry>)>)> {
+    pub fn sorted_view(
+        &self,
+    ) -> Vec<(
+        &ResourceTablePackage,
+        Vec<(&ResourceTableType, Vec<&ResourceEntry>)>,
+    )> {
         let mut packages: Vec<&ResourceTablePackage> = self.packages.iter().collect();
         packages.sort_by(|a, b| a.name.cmp(&b.name));
         packages
@@ -764,7 +800,12 @@ pub struct SearchResult<'a> {
 /// (letters, digits, `_`, `.`, `-`, and `$` for AAPT compatibility).
 pub fn first_invalid_entry_name_char(name: &str) -> Option<char> {
     name.chars().find(|&c| {
-        !(c.is_ascii_alphanumeric() || c == '_' || c == '.' || c == '-' || c == '$' || !c.is_ascii())
+        !(c.is_ascii_alphanumeric()
+            || c == '_'
+            || c == '.'
+            || c == '-'
+            || c == '$'
+            || !c.is_ascii())
     })
 }
 
@@ -791,7 +832,10 @@ mod tests {
     use super::*;
 
     fn string_value(s: &str) -> Value {
-        Value::item(Item::String { value: s.to_string(), untranslatable_sections: vec![] })
+        Value::item(Item::String {
+            value: s.to_string(),
+            untranslatable_sections: vec![],
+        })
     }
 
     #[test]
@@ -799,7 +843,11 @@ mod tests {
         let mut table = ResourceTable::new();
         let name = resource_name("com.app", ResourceType::String, "hello");
         table
-            .add_value(name.clone(), ConfigDescription::default(), string_value("Hello"))
+            .add_value(
+                name.clone(),
+                ConfigDescription::default(),
+                string_value("Hello"),
+            )
             .unwrap();
         let result = table.find_resource(&name).unwrap();
         assert_eq!(result.entry.values.len(), 1);
@@ -811,7 +859,11 @@ mod tests {
         let mut table = ResourceTable::new();
         let name = resource_name("com.app", ResourceType::String, "hello");
         table
-            .add_value(name.clone(), ConfigDescription::default(), string_value("a"))
+            .add_value(
+                name.clone(),
+                ConfigDescription::default(),
+                string_value("a"),
+            )
             .unwrap();
         let err = table
             .add_value(name, ConfigDescription::default(), string_value("b"))
@@ -825,9 +877,15 @@ mod tests {
         let name = resource_name("com.app", ResourceType::Id, "x");
         let mut weak = string_value("weak");
         weak.meta.weak = true;
-        table.add_value(name.clone(), ConfigDescription::default(), weak).unwrap();
         table
-            .add_value(name.clone(), ConfigDescription::default(), string_value("strong"))
+            .add_value(name.clone(), ConfigDescription::default(), weak)
+            .unwrap();
+        table
+            .add_value(
+                name.clone(),
+                ConfigDescription::default(),
+                string_value("strong"),
+            )
             .unwrap();
         let result = table.find_resource(&name).unwrap();
         match &result.entry.values[0].value.as_ref().unwrap().kind {
@@ -843,7 +901,11 @@ mod tests {
         let err = table
             .add_value(name, ConfigDescription::default(), string_value("x"))
             .unwrap_err();
-        assert!(err.message.contains("invalid entry name"), "{}", err.message);
+        assert!(
+            err.message.contains("invalid entry name"),
+            "{}",
+            err.message
+        );
     }
 
     #[test]

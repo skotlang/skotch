@@ -212,7 +212,12 @@ impl<'a> Reader<'a> {
         match wire_type {
             WIRE_VARINT => {
                 let value = self.read_raw_varint()?;
-                Some(Field { number, wire_type, data: &[], value })
+                Some(Field {
+                    number,
+                    wire_type,
+                    data: &[],
+                    value,
+                })
             }
             WIRE_FIXED64 => {
                 let bytes = self.data.get(self.pos..self.pos + 8)?;
@@ -228,7 +233,12 @@ impl<'a> Reader<'a> {
                 let len = self.read_raw_varint()? as usize;
                 let data = self.data.get(self.pos..self.pos + len)?;
                 self.pos += len;
-                Some(Field { number, wire_type, data, value: 0 })
+                Some(Field {
+                    number,
+                    wire_type,
+                    data,
+                    value: 0,
+                })
             }
             WIRE_FIXED32 => {
                 let bytes = self.data.get(self.pos..self.pos + 4)?;
@@ -283,7 +293,13 @@ mod tests {
         for_each_field(&w.buf, |f| seen.push((f.number, f.wire_type)));
         assert_eq!(
             seen,
-            vec![(1, WIRE_VARINT), (2, WIRE_LEN), (3, WIRE_FIXED32), (4, WIRE_VARINT), (5, WIRE_LEN)]
+            vec![
+                (1, WIRE_VARINT),
+                (2, WIRE_LEN),
+                (3, WIRE_FIXED32),
+                (4, WIRE_VARINT),
+                (5, WIRE_LEN)
+            ]
         );
 
         let mut r = Reader::new(&w.buf);

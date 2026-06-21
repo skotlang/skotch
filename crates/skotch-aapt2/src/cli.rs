@@ -43,7 +43,10 @@ fn run_impl(args: &[String], diag: &Diagnostics) -> Result<i32> {
         "optimize" => crate::optimize::run(rest, diag),
         "convert" => crate::convert::run(rest, diag),
         "version" => {
-            eprintln!("Android Asset Packaging Tool (aapt) 2:aapt2-skotch-{}", env!("CARGO_PKG_VERSION"));
+            eprintln!(
+                "Android Asset Packaging Tool (aapt) 2:aapt2-skotch-{}",
+                env!("CARGO_PKG_VERSION")
+            );
             Ok(0)
         }
         "daemon" | "m" => run_daemon(diag),
@@ -192,17 +195,17 @@ fn run_compile(args: &[String], diag: &Diagnostics) -> Result<i32> {
     let mut options = CompileOptions::new();
     options.res_dir = parsed.value("--dir").map(PathBuf::from);
     options.res_zip = parsed.value("--zip").map(PathBuf::from);
-    options.generate_text_symbols_path =
-        parsed.value("--output-text-symbols").map(PathBuf::from);
+    options.generate_text_symbols_path = parsed.value("--output-text-symbols").map(PathBuf::from);
     options.pseudolocalize = parsed.has("--pseudo-localize");
-    options.pseudo_localize_gender_values =
-        parsed.value("--pseudo-localize-gender-values").map(String::from);
-    options.pseudo_localize_gender_ratio =
-        parsed.value("--pseudo-localize-gender-ratio").map(String::from);
+    options.pseudo_localize_gender_values = parsed
+        .value("--pseudo-localize-gender-values")
+        .map(String::from);
+    options.pseudo_localize_gender_ratio = parsed
+        .value("--pseudo-localize-gender-ratio")
+        .map(String::from);
     options.no_png_crunch = parsed.has("--no-crunch");
     options.legacy_mode = parsed.has("--legacy");
-    options.preserve_visibility_of_styleables =
-        parsed.has("--preserve-visibility-of-styleables");
+    options.preserve_visibility_of_styleables = parsed.has("--preserve-visibility-of-styleables");
     options.source_path = parsed.value("--source-path").map(String::from);
     options.product = parsed.value("--filter-product").map(String::from);
     options.verbose = parsed.has("-v");
@@ -342,7 +345,9 @@ fn run_link(args: &[String], diag: &Diagnostics) -> Result<i32> {
 
     let mut options = LinkOptions {
         output_path: PathBuf::from(
-            parsed.value("-o").ok_or_else(|| anyhow!("-o flag is required"))?,
+            parsed
+                .value("-o")
+                .ok_or_else(|| anyhow!("-o flag is required"))?,
         ),
         manifest_path: PathBuf::from(
             parsed
@@ -367,13 +372,14 @@ fn run_link(args: &[String], diag: &Diagnostics) -> Result<i32> {
         PackageType::App
     };
     if options.package_type != PackageType::App {
-        bail!(
-            "--static-lib/--shared-lib outputs are not yet supported by skotch aapt2"
-        );
+        bail!("--static-lib/--shared-lib outputs are not yet supported by skotch aapt2");
     }
 
-    options.output_format =
-        if parsed.has("--proto-format") { OutputFormat::Proto } else { OutputFormat::Binary };
+    options.output_format = if parsed.has("--proto-format") {
+        OutputFormat::Proto
+    } else {
+        OutputFormat::Binary
+    };
     options.output_to_directory = parsed.has("--output-to-dir");
 
     if let Some(package_id) = parsed.value("--package-id") {
@@ -404,19 +410,16 @@ fn run_link(args: &[String], diag: &Diagnostics) -> Result<i32> {
     options.generate_proguard_rules_path = parsed.value("--proguard").map(PathBuf::from);
     options.generate_main_dex_proguard_rules_path =
         parsed.value("--proguard-main-dex").map(PathBuf::from);
-    options.generate_conditional_proguard_rules =
-        parsed.has("--proguard-conditional-keep-rules");
+    options.generate_conditional_proguard_rules = parsed.has("--proguard-conditional-keep-rules");
     options.generate_minimal_proguard_rules = parsed.has("--proguard-minimal-keep-rules");
     options.no_proguard_location_reference = parsed.has("--no-proguard-location-reference");
-    options.generate_text_symbols_path =
-        parsed.value("--output-text-symbols").map(PathBuf::from);
+    options.generate_text_symbols_path = parsed.value("--output-text-symbols").map(PathBuf::from);
 
     options.auto_add_overlay = parsed.has("--auto-add-overlay");
     options.override_styles_instead_of_overlaying =
         parsed.has("--override-styles-instead-of-overlaying");
     options.strict_visibility = parsed.has("--strict-visibility");
-    options.rename_resources_package =
-        parsed.value("--rename-resources-package").map(String::from);
+    options.rename_resources_package = parsed.value("--rename-resources-package").map(String::from);
     options.no_static_lib_packages = parsed.has("--no-static-lib-packages");
     options.no_auto_version = parsed.has("--no-auto-version");
     options.no_version_vectors = parsed.has("--no-version-vectors");
@@ -436,7 +439,9 @@ fn run_link(args: &[String], diag: &Diagnostics) -> Result<i32> {
     options.verbose = parsed.has("-v");
 
     for extension in parsed.values("-0") {
-        options.extensions_to_not_compress.push(extension.to_string());
+        options
+            .extensions_to_not_compress
+            .push(extension.to_string());
     }
     for configs in parsed.values("-c") {
         for config in configs.split(',') {
@@ -481,9 +486,7 @@ fn run_link(args: &[String], diag: &Diagnostics) -> Result<i32> {
         revision_code_default: parsed.value("--revision-code").map(String::from),
         replace_version: parsed.has("--replace-version"),
         compile_sdk_version: parsed.value("--compile-sdk-version-code").map(String::from),
-        compile_sdk_version_codename: parsed
-            .value("--compile-sdk-version-name")
-            .map(String::from),
+        compile_sdk_version_codename: parsed.value("--compile-sdk-version-name").map(String::from),
         no_compile_sdk_metadata: parsed.has("--no-compile-sdk-metadata"),
         rename_manifest_package: parsed.value("--rename-manifest-package").map(String::from),
         rename_instrumentation_target_package: parsed

@@ -32,11 +32,15 @@ const NO_ENTRY: u32 = 0xffff_ffff;
 const NO_ENTRY16: u16 = 0xffff;
 
 fn read_u16(data: &[u8], offset: usize) -> Option<u16> {
-    Some(u16::from_le_bytes(data.get(offset..offset + 2)?.try_into().ok()?))
+    Some(u16::from_le_bytes(
+        data.get(offset..offset + 2)?.try_into().ok()?,
+    ))
 }
 
 fn read_u32(data: &[u8], offset: usize) -> Option<u32> {
-    Some(u32::from_le_bytes(data.get(offset..offset + 4)?.try_into().ok()?))
+    Some(u32::from_le_bytes(
+        data.get(offset..offset + 4)?.try_into().ok()?,
+    ))
 }
 
 struct ChunkPrinter<'a, 'p, 'd> {
@@ -92,7 +96,11 @@ impl ChunkPrinter<'_, '_, '_> {
             pool.len(),
             pool.style_count(),
             if pool.is_utf8() { "UTF-8" } else { "UTF-16" },
-            if pool.is_sorted() { "SORTED" } else { "NON-SORTED" }
+            if pool.is_sorted() {
+                "SORTED"
+            } else {
+                "NON-SORTED"
+            }
         ));
 
         let count = pool.len();
@@ -128,10 +136,7 @@ impl ChunkPrinter<'_, '_, '_> {
             TYPE_STRING => {
                 let idx = value.data as usize;
                 let (s, spans) = match &self.value_pool {
-                    Some((pool, _)) => (
-                        pool.get(idx).unwrap_or_default(),
-                        pool.spans(idx),
-                    ),
+                    Some((pool, _)) => (pool.get(idx).unwrap_or_default(), pool.spans(idx)),
                     None => (String::new(), Vec::new()),
                 };
                 if !spans.is_empty() {
@@ -167,7 +172,10 @@ impl ChunkPrinter<'_, '_, '_> {
                         file_contents: None,
                     });
                 }
-                Item::String { value: s, untranslatable_sections: Vec::new() }
+                Item::String {
+                    value: s,
+                    untranslatable_sections: Vec::new(),
+                }
             }
             TYPE_REFERENCE | TYPE_ATTRIBUTE | TYPE_DYNAMIC_REFERENCE | TYPE_DYNAMIC_ATTRIBUTE => {
                 let reference_type = if value.data_type == TYPE_ATTRIBUTE
@@ -178,7 +186,11 @@ impl ChunkPrinter<'_, '_, '_> {
                     ReferenceType::Resource
                 };
                 Item::Reference(Reference {
-                    id: if value.data != 0 { Some(ResourceId(value.data)) } else { None },
+                    id: if value.data != 0 {
+                        Some(ResourceId(value.data))
+                    } else {
+                        None
+                    },
                     reference_type,
                     is_dynamic: matches!(
                         value.data_type,
@@ -194,7 +206,8 @@ impl ChunkPrinter<'_, '_, '_> {
     fn print_res_value(&mut self, size: u16, value: &ResValue, ty: Option<ResourceType>) {
         self.printer.print("[Res_value]");
         self.printer.print(format!(" size: {size}"));
-        self.printer.print(format!(" dataType: 0x{:02x}", value.data_type));
+        self.printer
+            .print(format!(" dataType: 0x{:02x}", value.data_type));
         self.printer.print(format!(" data: 0x{:08x}", value.data));
         if let Some(ty) = ty {
             let item = self.parse_res_value(ty, value);
@@ -222,14 +235,20 @@ impl ChunkPrinter<'_, '_, '_> {
             (ConfigDescription::CONFIG_ORIENTATION, "orientation"),
             (ConfigDescription::CONFIG_DENSITY, "screen_density"),
             (ConfigDescription::CONFIG_SCREEN_SIZE, "screen_size"),
-            (ConfigDescription::CONFIG_SMALLEST_SCREEN_SIZE, "screen_smallest_size"),
+            (
+                ConfigDescription::CONFIG_SMALLEST_SCREEN_SIZE,
+                "screen_smallest_size",
+            ),
             (ConfigDescription::CONFIG_VERSION, "version"),
             (ConfigDescription::CONFIG_SCREEN_LAYOUT, "screen_layout"),
             (ConfigDescription::CONFIG_UI_MODE, "ui_mode"),
             (ConfigDescription::CONFIG_LAYOUTDIR, "layout_dir"),
             (ConfigDescription::CONFIG_SCREEN_ROUND, "screen_round"),
             (ConfigDescription::CONFIG_COLOR_MODE, "color_mode"),
-            (ConfigDescription::CONFIG_GRAMMATICAL_GENDER, "grammatical_gender"),
+            (
+                ConfigDescription::CONFIG_GRAMMATICAL_GENDER,
+                "grammatical_gender",
+            ),
         ];
         let mut delimiter = "";
         for (flag, name) in VALUES {
@@ -246,7 +265,8 @@ impl ChunkPrinter<'_, '_, '_> {
         let entry_count = read_u32(chunk, 12).unwrap_or(0);
         self.printer.print(format!(" id: 0x{id:02x}"));
         self.printer.print(format!(" types: {types_count}"));
-        self.printer.print(format!(" entry configs: {entry_count}\n"));
+        self.printer
+            .print(format!(" entry configs: {entry_count}\n"));
         self.printer.print("Entry qualifier masks:\n");
         self.printer.indent();
         let data = &chunk[(header_size as usize).min(chunk.len())..];
@@ -292,8 +312,8 @@ impl ChunkPrinter<'_, '_, '_> {
         self.printer.print(format!(" entryCount: {entry_count}"));
         self.printer.print(format!(" entryStart: {entries_start}"));
 
-        let config = ConfigDescription::from_bytes(&chunk[20.min(chunk.len())..])
-            .unwrap_or_default();
+        let config =
+            ConfigDescription::from_bytes(&chunk[20.min(chunk.len())..]).unwrap_or_default();
         self.printer.print(format!(" config: {config}\n"));
 
         let ty = ResourceType::parse(&type_name);
@@ -315,14 +335,18 @@ impl ChunkPrinter<'_, '_, '_> {
             }
         } else if flags & FLAG_OFFSET16 != 0 {
             for i in 0..entry_count {
-                let Some(offset) = read_u16(chunk, offsets_start + i * 2) else { break };
+                let Some(offset) = read_u16(chunk, offsets_start + i * 2) else {
+                    break;
+                };
                 if offset != NO_ENTRY16 {
                     entries.push((i, offset as usize * 4));
                 }
             }
         } else {
             for i in 0..entry_count {
-                let Some(offset) = read_u32(chunk, offsets_start + i * 4) else { break };
+                let Some(offset) = read_u32(chunk, offsets_start + i * 4) else {
+                    break;
+                };
                 if offset != NO_ENTRY {
                     entries.push((i, offset as usize));
                 }
@@ -331,15 +355,23 @@ impl ChunkPrinter<'_, '_, '_> {
 
         for (index, offset) in entries {
             let entry_offset = entries_start + offset;
-            let Some(first) = read_u16(chunk, entry_offset) else { continue };
-            let Some(entry_flags) = read_u16(chunk, entry_offset + 2) else { continue };
+            let Some(first) = read_u16(chunk, entry_offset) else {
+                continue;
+            };
+            let Some(entry_flags) = read_u16(chunk, entry_offset + 2) else {
+                continue;
+            };
             let compact = entry_flags & FLAG_COMPACT != 0;
             let complex = !compact && (entry_flags & FLAG_COMPLEX != 0);
 
             let (size, key, printed_flags): (usize, u32, u16) = if compact {
                 (8, first as u32, entry_flags)
             } else {
-                (first as usize, read_u32(chunk, entry_offset + 4).unwrap_or(0), entry_flags)
+                (
+                    first as usize,
+                    read_u32(chunk, entry_offset + 4).unwrap_or(0),
+                    entry_flags,
+                )
             };
 
             if complex {
@@ -368,7 +400,9 @@ impl ChunkPrinter<'_, '_, '_> {
                 let maps_offset = entry_offset + size;
                 for i in 0..count as usize {
                     let map_offset = maps_offset + i * 12;
-                    let Some(name_ident) = read_u32(chunk, map_offset) else { break };
+                    let Some(name_ident) = read_u32(chunk, map_offset) else {
+                        break;
+                    };
                     let value_size = read_u16(chunk, map_offset + 4).unwrap_or(0);
                     let data_type = chunk.get(map_offset + 7).copied().unwrap_or(0);
                     let data = read_u32(chunk, map_offset + 8).unwrap_or(0);
@@ -382,7 +416,11 @@ impl ChunkPrinter<'_, '_, '_> {
             } else {
                 self.printer.print("\n");
                 let (value_size, data_type, data) = if compact {
-                    (8u16, (entry_flags >> 8) as u8, read_u32(chunk, entry_offset + 4).unwrap_or(0))
+                    (
+                        8u16,
+                        (entry_flags >> 8) as u8,
+                        read_u32(chunk, entry_offset + 4).unwrap_or(0),
+                    )
                 } else {
                     let value_offset = entry_offset + size;
                     (
@@ -408,7 +446,9 @@ impl ChunkPrinter<'_, '_, '_> {
         // Package name: NUL-terminated UTF-16, 128 code units at offset 12.
         let mut name = String::new();
         for i in 0..128usize {
-            let Some(c) = read_u16(chunk, 12 + i * 2) else { break };
+            let Some(c) = read_u16(chunk, 12 + i * 2) else {
+                break;
+            };
             if c == 0 {
                 break;
             }
@@ -416,16 +456,26 @@ impl ChunkPrinter<'_, '_, '_> {
         }
 
         self.printer.print(format!("name: {name}"));
-        self.printer
-            .print(format!(" typeStrings: {}", read_u32(chunk, 268).unwrap_or(0)));
-        self.printer
-            .print(format!(" lastPublicType: {}", read_u32(chunk, 272).unwrap_or(0)));
-        self.printer
-            .print(format!(" keyStrings: {}", read_u32(chunk, 276).unwrap_or(0)));
-        self.printer
-            .print(format!(" lastPublicKey: {}", read_u32(chunk, 280).unwrap_or(0)));
-        self.printer
-            .print(format!(" typeIdOffset: {}\n", read_u32(chunk, 284).unwrap_or(0)));
+        self.printer.print(format!(
+            " typeStrings: {}",
+            read_u32(chunk, 268).unwrap_or(0)
+        ));
+        self.printer.print(format!(
+            " lastPublicType: {}",
+            read_u32(chunk, 272).unwrap_or(0)
+        ));
+        self.printer.print(format!(
+            " keyStrings: {}",
+            read_u32(chunk, 276).unwrap_or(0)
+        ));
+        self.printer.print(format!(
+            " lastPublicKey: {}",
+            read_u32(chunk, 280).unwrap_or(0)
+        ));
+        self.printer.print(format!(
+            " typeIdOffset: {}\n",
+            read_u32(chunk, 284).unwrap_or(0)
+        ));
 
         // The chunks contained within the package.
         self.printer.indent();
@@ -436,7 +486,8 @@ impl ChunkPrinter<'_, '_, '_> {
 
     fn print_table(&mut self, chunk: &[u8], header_size: u16) -> bool {
         let package_count = read_u32(chunk, 8).unwrap_or(0);
-        self.printer.print(format!(" Package count: {package_count}\n"));
+        self.printer
+            .print(format!(" Package count: {package_count}\n"));
         self.printer.indent();
         let success = self.print_chunks(&chunk[(header_size as usize).min(chunk.len())..]);
         self.printer.undent();
@@ -449,9 +500,12 @@ impl ChunkPrinter<'_, '_, '_> {
             let chunk_type = read_u16(data, offset).unwrap_or(0);
             let header_size = read_u16(data, offset + 2).unwrap_or(0);
             let chunk_size = read_u32(data, offset + 4).unwrap_or(0) as usize;
-            if chunk_size < 8 || offset + chunk_size > data.len() || (header_size as usize) > chunk_size
+            if chunk_size < 8
+                || offset + chunk_size > data.len()
+                || (header_size as usize) > chunk_size
             {
-                self.diag.error("corrupt resource table: chunk sizes are corrupt");
+                self.diag
+                    .error("corrupt resource table: chunk sizes are corrupt");
                 return false;
             }
             let chunk = &data[offset..offset + chunk_size];

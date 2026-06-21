@@ -36,20 +36,36 @@ pub fn remap_register(allocated: u16, num_arg: u16, registers_used: u16) -> u16 
 #[derive(Clone, Copy)]
 enum Field {
     /// Low nibble of word `w` high byte: bits 8..12.
-    NibbleA { w: usize },
+    NibbleA {
+        w: usize,
+    },
     /// High nibble of word `w` high byte: bits 12..16.
-    NibbleB { w: usize },
+    NibbleB {
+        w: usize,
+    },
     /// Whole high byte of word `w`: bits 8..16 (an 8-bit register).
-    ByteAA { w: usize },
+    ByteAA {
+        w: usize,
+    },
     /// Low byte of word `w`: bits 0..8.
-    ByteLo { w: usize },
+    ByteLo {
+        w: usize,
+    },
     /// High byte of word `w`: bits 8..16.
-    ByteHi { w: usize },
+    ByteHi {
+        w: usize,
+    },
     /// Low nibble of word `w` low byte: bits 0..4 (35c arg nibble vC..vF).
-    NibbleLo0 { w: usize },
-    NibbleLo1 { w: usize }, // bits 4..8
+    NibbleLo0 {
+        w: usize,
+    },
+    NibbleLo1 {
+        w: usize,
+    }, // bits 4..8
     /// The whole 16-bit word `w` as a register (move/from16 src BBBB, invoke/range CCCC).
-    Word { w: usize },
+    Word {
+        w: usize,
+    },
 }
 
 fn get_field(insns: &[u16], base: usize, f: Field) -> u16 {
@@ -67,14 +83,37 @@ fn get_field(insns: &[u16], base: usize, f: Field) -> u16 {
 
 fn set_field(insns: &mut [u16], base: usize, f: Field, v: u16) {
     match f {
-        Field::NibbleA { w } => { let x = &mut insns[base + w]; *x = (*x & !0x0f00) | ((v & 0xf) << 8); }
-        Field::NibbleB { w } => { let x = &mut insns[base + w]; *x = (*x & !0xf000) | ((v & 0xf) << 12); }
-        Field::ByteAA { w } => { let x = &mut insns[base + w]; *x = (*x & !0xff00) | ((v & 0xff) << 8); }
-        Field::ByteLo { w } => { let x = &mut insns[base + w]; *x = (*x & !0x00ff) | (v & 0xff); }
-        Field::ByteHi { w } => { let x = &mut insns[base + w]; *x = (*x & !0xff00) | ((v & 0xff) << 8); }
-        Field::NibbleLo0 { w } => { let x = &mut insns[base + w]; *x = (*x & !0x000f) | (v & 0xf); }
-        Field::NibbleLo1 { w } => { let x = &mut insns[base + w]; *x = (*x & !0x00f0) | ((v & 0xf) << 4); }
-        Field::Word { w } => { insns[base + w] = v; }
+        Field::NibbleA { w } => {
+            let x = &mut insns[base + w];
+            *x = (*x & !0x0f00) | ((v & 0xf) << 8);
+        }
+        Field::NibbleB { w } => {
+            let x = &mut insns[base + w];
+            *x = (*x & !0xf000) | ((v & 0xf) << 12);
+        }
+        Field::ByteAA { w } => {
+            let x = &mut insns[base + w];
+            *x = (*x & !0xff00) | ((v & 0xff) << 8);
+        }
+        Field::ByteLo { w } => {
+            let x = &mut insns[base + w];
+            *x = (*x & !0x00ff) | (v & 0xff);
+        }
+        Field::ByteHi { w } => {
+            let x = &mut insns[base + w];
+            *x = (*x & !0xff00) | ((v & 0xff) << 8);
+        }
+        Field::NibbleLo0 { w } => {
+            let x = &mut insns[base + w];
+            *x = (*x & !0x000f) | (v & 0xf);
+        }
+        Field::NibbleLo1 { w } => {
+            let x = &mut insns[base + w];
+            *x = (*x & !0x00f0) | ((v & 0xf) << 4);
+        }
+        Field::Word { w } => {
+            insns[base + w] = v;
+        }
     }
 }
 
@@ -87,7 +126,17 @@ fn dex_insn_len(op: u8) -> usize {
         //         move-object(0x07), throw(0x27), goto(0x28), array-length(0x21),
         //         monitor-enter(0x1d)/monitor-exit(0x1e), unops(0x7b-0x8f), 2addr(0xb0-0xcf)
         //         (NOTE: 0x05 move-wide/from16 is 22x = 2 words — NOT here.)
-        0x0a..=0x12 | 0x01 | 0x04 | 0x07 | 0x1d | 0x1e | 0x21 | 0x27 | 0x28 | 0x7b..=0x8f | 0xb0..=0xcf => 1,
+        0x0a..=0x12
+        | 0x01
+        | 0x04
+        | 0x07
+        | 0x1d
+        | 0x1e
+        | 0x21
+        | 0x27
+        | 0x28
+        | 0x7b..=0x8f
+        | 0xb0..=0xcf => 1,
         // 3-word: const(0x14), const-wide/32(0x17), goto/32(0x2a), invoke 35c(0x6e-0x72),
         //         invoke/range 3rc(0x74-0x78)
         0x14 | 0x17 | 0x2a | 0x6e..=0x72 | 0x74..=0x78 => 3,
@@ -131,9 +180,11 @@ fn reg_fields(op: u8) -> &'static [Field] {
         0xd8..=0xe2 => &[Field::ByteAA { w: 0 }, Field::ByteLo { w: 1 }],
         // 23x (3addr binops int/long/float/double, aget*/aput*, cmp*) —
         //   AA word0, BB word1 lo, CC hi
-        0x90..=0xaf | 0x44..=0x51 | 0x2d..=0x31 => {
-            &[Field::ByteAA { w: 0 }, Field::ByteLo { w: 1 }, Field::ByteHi { w: 1 }]
-        }
+        0x90..=0xaf | 0x44..=0x51 | 0x2d..=0x31 => &[
+            Field::ByteAA { w: 0 },
+            Field::ByteLo { w: 1 },
+            Field::ByteHi { w: 1 },
+        ],
         // 22x move/from16 + move-wide/from16 + move-object/from16:
         //   AA dest (word0 high byte) + BBBB src (whole word1).
         0x02 | 0x05 | 0x08 => &[Field::ByteAA { w: 0 }, Field::Word { w: 1 }],
@@ -151,7 +202,10 @@ fn reg_fields(op: u8) -> &'static [Field] {
 /// (which would otherwise be silently truncated by `set_field` — a miscompile).
 fn field_max(f: Field) -> u16 {
     match f {
-        Field::NibbleA { .. } | Field::NibbleB { .. } | Field::NibbleLo0 { .. } | Field::NibbleLo1 { .. } => 15,
+        Field::NibbleA { .. }
+        | Field::NibbleB { .. }
+        | Field::NibbleLo0 { .. }
+        | Field::NibbleLo1 { .. } => 15,
         Field::ByteAA { .. } | Field::ByteLo { .. } | Field::ByteHi { .. } => 255,
         Field::Word { .. } => u16::MAX,
     }
@@ -163,7 +217,12 @@ fn field_max(f: Field) -> u16 {
 /// blanket >16 bail, we check each field as we remap and FAIL (never truncate) when a register
 /// doesn't fit — that operand genuinely needs spilling, which this allocator doesn't do.
 pub fn remap_insns(insns: &mut [u16], num_arg: u16, registers_used: u16) -> anyhow::Result<()> {
-    remap_insns_skip(insns, num_arg, registers_used, &std::collections::HashSet::new())
+    remap_insns_skip(
+        insns,
+        num_arg,
+        registers_used,
+        &std::collections::HashSet::new(),
+    )
 }
 
 /// A nibble field at `insns[word]` bits `[shift, shift+4)` whose register was emitted PRE-REMAPPED
@@ -185,7 +244,13 @@ pub fn remap_insns_skip(
 ) -> anyhow::Result<()> {
     // Identity remap — nothing to do (and avoids touching anything).
     let identity = num_arg == 0 || registers_used == num_arg;
-    let map = |r: u16| if identity { r } else { remap_register(r, num_arg, registers_used) };
+    let map = |r: u16| {
+        if identity {
+            r
+        } else {
+            remap_register(r, num_arg, registers_used)
+        }
+    };
 
     let mut base = 0;
     while base < insns.len() {
@@ -213,7 +278,9 @@ pub fn remap_insns_skip(
             if count == 5 {
                 let g = map(get_field(insns, base, Field::NibbleA { w: 0 }));
                 if g > 15 {
-                    anyhow::bail!("regalloc: invoke 5th-arg register v{g} > 15 — needs range form/spilling");
+                    anyhow::bail!(
+                        "regalloc: invoke 5th-arg register v{g} > 15 — needs range form/spilling"
+                    );
                 }
                 set_field(insns, base, Field::NibbleA { w: 0 }, g);
             }
@@ -226,7 +293,9 @@ pub fn remap_insns_skip(
             for k in 0..(count.min(4) as usize) {
                 let r = map(get_field(insns, base, arg_fields[k]));
                 if r > 15 {
-                    anyhow::bail!("regalloc: invoke arg register v{r} > 15 — needs range form/spilling");
+                    anyhow::bail!(
+                        "regalloc: invoke arg register v{r} > 15 — needs range form/spilling"
+                    );
                 }
                 set_field(insns, base, arg_fields[k], r);
             }
@@ -288,7 +357,11 @@ mod opcode_table_audit {
 
     fn check(op: u16, regs: usize, len: usize, what: &str) {
         let o = op as u8;
-        assert_eq!(reg_fields(o).len(), regs, "{what}: op {o:#04x} reg_fields field count");
+        assert_eq!(
+            reg_fields(o).len(),
+            regs,
+            "{what}: op {o:#04x} reg_fields field count"
+        );
         assert_eq!(dex_insn_len(o), len, "{what}: op {o:#04x} dex_insn_len");
     }
 
@@ -367,7 +440,10 @@ mod opcode_table_audit {
     fn unop_and_conversion_ops_covered() {
         // neg-int/long/float/double + the i2x conversion ops emit_value produces
         // (12x: vA, vB — 2 register fields, 1 word).
-        for op in [0x7bu16, 0x7d, 0x7f, 0x80].into_iter().chain(0x81u16..=0x8f) {
+        for op in [0x7bu16, 0x7d, 0x7f, 0x80]
+            .into_iter()
+            .chain(0x81u16..=0x8f)
+        {
             check(op, 2, 1, "unop/convert (12x)");
         }
     }

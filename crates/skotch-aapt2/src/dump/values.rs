@@ -138,7 +138,11 @@ pub fn pretty_print_primitive(value: &ResValue, printer: &mut Printer) {
 }
 
 /// Port of `PrettyPrintReferenceImpl`.
-pub fn pretty_print_reference_impl(reference: &Reference, print_package: bool, printer: &mut Printer) {
+pub fn pretty_print_reference_impl(
+    reference: &Reference,
+    print_package: bool,
+    printer: &mut Printer,
+) {
     match reference.reference_type {
         ReferenceType::Resource => printer.print("@"),
         ReferenceType::Attribute => printer.print("?"),
@@ -245,7 +249,10 @@ pub fn item_print_string(item: &Item) -> String {
         Item::StyledString { value, spans, .. } => {
             let mut out = format!("(styled string) \"{value}\"");
             for span in spans {
-                out.push_str(&format!(" {}:{},{}", span.name, span.first_char, span.last_char));
+                out.push_str(&format!(
+                    " {}:{},{}",
+                    span.name, span.first_char, span.last_char
+                ));
             }
             out
         }
@@ -260,7 +267,10 @@ pub fn item_print_string(item: &Item) -> String {
             out
         }
         Item::BinaryPrimitive(rv) => {
-            format!("(primitive) type=0x{:02x} data=0x{:08x}", rv.data_type, rv.data)
+            format!(
+                "(primitive) type=0x{:02x} data=0x{:08x}",
+                rv.data_type, rv.data
+            )
         }
     }
 }
@@ -340,13 +350,19 @@ pub fn value_print_string(value: &Value) -> String {
         ValueKind::Attribute(attr) => attribute_print_string(attr),
         ValueKind::Style(style) => style_print_string(style),
         ValueKind::Styleable(styleable) => {
-            let entries: Vec<String> =
-                styleable.entries.iter().map(reference_print_string).collect();
+            let entries: Vec<String> = styleable
+                .entries
+                .iter()
+                .map(reference_print_string)
+                .collect();
             format!("(styleable)  [{}]", entries.join(", "))
         }
         ValueKind::Array(array) => {
-            let elements: Vec<String> =
-                array.elements.iter().map(|e| item_print_string(&e.item)).collect();
+            let elements: Vec<String> = array
+                .elements
+                .iter()
+                .map(|e| item_print_string(&e.item))
+                .collect();
             format!("(array) [{}]", elements.join(", "))
         }
         ValueKind::Plural(plural) => plural_print_string(plural),
@@ -370,7 +386,10 @@ mod tests {
         use res_value_type::TYPE_FLOAT;
         assert_eq!(pretty(ResValue::new(TYPE_FLOAT, 1.0f32.to_bits())), "1");
         assert_eq!(pretty(ResValue::new(TYPE_FLOAT, 0.5f32.to_bits())), "0.5");
-        assert_eq!(pretty(ResValue::new(TYPE_FLOAT, 1e-11f32.to_bits())), "1.000000e-11");
+        assert_eq!(
+            pretty(ResValue::new(TYPE_FLOAT, 1e-11f32.to_bits())),
+            "1.000000e-11"
+        );
         assert_eq!(pretty(ResValue::new(TYPE_FLOAT, 3.14f32.to_bits())), "3.14");
     }
 

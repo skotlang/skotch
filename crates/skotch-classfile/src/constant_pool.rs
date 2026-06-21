@@ -10,18 +10,49 @@ pub enum Constant {
     Float(f32),
     Long(i64),
     Double(f64),
-    Class { name_index: u16 },
-    String { string_index: u16 },
-    FieldRef { class_index: u16, name_and_type_index: u16 },
-    MethodRef { class_index: u16, name_and_type_index: u16 },
-    InterfaceMethodRef { class_index: u16, name_and_type_index: u16 },
-    NameAndType { name_index: u16, descriptor_index: u16 },
-    MethodHandle { reference_kind: u8, reference_index: u16 },
-    MethodType { descriptor_index: u16 },
-    Dynamic { bootstrap_method_attr_index: u16, name_and_type_index: u16 },
-    InvokeDynamic { bootstrap_method_attr_index: u16, name_and_type_index: u16 },
-    Module { name_index: u16 },
-    Package { name_index: u16 },
+    Class {
+        name_index: u16,
+    },
+    String {
+        string_index: u16,
+    },
+    FieldRef {
+        class_index: u16,
+        name_and_type_index: u16,
+    },
+    MethodRef {
+        class_index: u16,
+        name_and_type_index: u16,
+    },
+    InterfaceMethodRef {
+        class_index: u16,
+        name_and_type_index: u16,
+    },
+    NameAndType {
+        name_index: u16,
+        descriptor_index: u16,
+    },
+    MethodHandle {
+        reference_kind: u8,
+        reference_index: u16,
+    },
+    MethodType {
+        descriptor_index: u16,
+    },
+    Dynamic {
+        bootstrap_method_attr_index: u16,
+        name_and_type_index: u16,
+    },
+    InvokeDynamic {
+        bootstrap_method_attr_index: u16,
+        name_and_type_index: u16,
+    },
+    Module {
+        name_index: u16,
+    },
+    Package {
+        name_index: u16,
+    },
     /// The unused slot following a Long/Double.
     Unusable,
 }
@@ -68,12 +99,16 @@ impl ConstantPool {
                     Constant::Double(v)
                 }
                 7 => {
-                    let c = Constant::Class { name_index: u16(data, pos) };
+                    let c = Constant::Class {
+                        name_index: u16(data, pos),
+                    };
                     pos += 2;
                     c
                 }
                 8 => {
-                    let c = Constant::String { string_index: u16(data, pos) };
+                    let c = Constant::String {
+                        string_index: u16(data, pos),
+                    };
                     pos += 2;
                     c
                 }
@@ -118,7 +153,9 @@ impl ConstantPool {
                     c
                 }
                 16 => {
-                    let c = Constant::MethodType { descriptor_index: u16(data, pos) };
+                    let c = Constant::MethodType {
+                        descriptor_index: u16(data, pos),
+                    };
                     pos += 2;
                     c
                 }
@@ -139,12 +176,16 @@ impl ConstantPool {
                     c
                 }
                 19 => {
-                    let c = Constant::Module { name_index: u16(data, pos) };
+                    let c = Constant::Module {
+                        name_index: u16(data, pos),
+                    };
                     pos += 2;
                     c
                 }
                 20 => {
-                    let c = Constant::Package { name_index: u16(data, pos) };
+                    let c = Constant::Package {
+                        name_index: u16(data, pos),
+                    };
                     pos += 2;
                     c
                 }
@@ -184,9 +225,10 @@ impl ConstantPool {
     /// Resolves a `NameAndType` to `(name, descriptor)`.
     pub fn name_and_type(&self, index: u16) -> Result<(&str, &str)> {
         match self.get(index) {
-            Constant::NameAndType { name_index, descriptor_index } => {
-                Ok((self.utf8(*name_index)?, self.utf8(*descriptor_index)?))
-            }
+            Constant::NameAndType {
+                name_index,
+                descriptor_index,
+            } => Ok((self.utf8(*name_index)?, self.utf8(*descriptor_index)?)),
             _ => bail!("constant {index} is not NameAndType"),
         }
     }
@@ -194,11 +236,18 @@ impl ConstantPool {
     /// Resolves a `Field/Method/InterfaceMethodRef` to `(class, name, desc)`.
     pub fn member_ref(&self, index: u16) -> Result<(String, String, String)> {
         let (ci, nti) = match self.get(index) {
-            Constant::FieldRef { class_index, name_and_type_index }
-            | Constant::MethodRef { class_index, name_and_type_index }
-            | Constant::InterfaceMethodRef { class_index, name_and_type_index } => {
-                (*class_index, *name_and_type_index)
+            Constant::FieldRef {
+                class_index,
+                name_and_type_index,
             }
+            | Constant::MethodRef {
+                class_index,
+                name_and_type_index,
+            }
+            | Constant::InterfaceMethodRef {
+                class_index,
+                name_and_type_index,
+            } => (*class_index, *name_and_type_index),
             _ => bail!("constant {index} is not a member ref"),
         };
         let class = self.class_name(ci)?.to_string();

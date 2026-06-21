@@ -928,8 +928,7 @@ pub struct MirModule {
     /// class + name + descriptor at call sites. Mirrors the
     /// [`enum_entry_funcs`](Self::enum_entry_funcs) pattern.
     #[serde(skip)]
-    pub cross_file_fn_stubs:
-        rustc_hash::FxHashMap<u32, (String, String, String)>,
+    pub cross_file_fn_stubs: rustc_hash::FxHashMap<u32, (String, String, String)>,
     /// Transient: while a Companion class's method bodies are being
     /// lowered, this holds `(companion_class_name, method_names)` so
     /// the bare-call resolver can find sibling overloads even though

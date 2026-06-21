@@ -9,7 +9,7 @@
 
 use crate::crypto::{verify_signature, SignatureAlgorithm};
 use crate::digest::{compute_content_digests, ContentDigestAlgorithm};
-use crate::sigblock::{self, Slice, V31_BLOCK_ID, V3_BLOCK_ID, V2_BLOCK_ID};
+use crate::sigblock::{self, Slice, V2_BLOCK_ID, V31_BLOCK_ID, V3_BLOCK_ID};
 use crate::zip;
 use anyhow::{bail, Context, Result};
 use std::collections::BTreeMap;
@@ -74,7 +74,9 @@ impl ApkVerifier {
         let block_info = match zip::find_apk_signing_block(apk, &sections) {
             Ok(bi) => bi,
             Err(e) => {
-                result.errors.push(format!("Malformed APK Signing Block: {e}"));
+                result
+                    .errors
+                    .push(format!("Malformed APK Signing Block: {e}"));
                 None
             }
         };
@@ -95,7 +97,9 @@ impl ApkVerifier {
                         result.verified_v31 = true;
                         result.v31_signer_certs = certs;
                     }
-                    Err(e) => result.errors.push(format!("APK Signature Scheme v3.1: {e}")),
+                    Err(e) => result
+                        .errors
+                        .push(format!("APK Signature Scheme v3.1: {e}")),
                 }
             }
             // v3
@@ -108,7 +112,9 @@ impl ApkVerifier {
                             result.signer_certs = certs;
                         }
                     }
-                    Err(e) => result.errors.push(format!("APK Signature Scheme v3 signer: {e}")),
+                    Err(e) => result
+                        .errors
+                        .push(format!("APK Signature Scheme v3 signer: {e}")),
                 }
             }
             // v2
@@ -120,7 +126,9 @@ impl ApkVerifier {
                             result.signer_certs = certs;
                         }
                     }
-                    Err(e) => result.errors.push(format!("APK Signature Scheme v2 signer: {e}")),
+                    Err(e) => result
+                        .errors
+                        .push(format!("APK Signature Scheme v2 signer: {e}")),
                 }
             }
         }
@@ -197,7 +205,12 @@ impl ApkVerifier {
             &certificate,
             &additional_data,
         );
-        let ok = verify_signature(&cert.spki_der, alg.jca_signature_algorithm(), &signed, &signature)?;
+        let ok = verify_signature(
+            &cert.spki_der,
+            alg.jca_signature_algorithm(),
+            &signed,
+            &signature,
+        )?;
         Ok(ok)
     }
 }
@@ -218,8 +231,20 @@ fn build_v4_signed_data(
     certificate: &[u8],
     additional_data: &[u8],
 ) -> Vec<u8> {
-    let size = 4 + 8 + 4 + 1 + 4 + salt.len() + 4 + raw_root_hash.len() + 4 + apk_digest.len() + 4
-        + certificate.len() + 4 + additional_data.len();
+    let size = 4
+        + 8
+        + 4
+        + 1
+        + 4
+        + salt.len()
+        + 4
+        + raw_root_hash.len()
+        + 4
+        + apk_digest.len()
+        + 4
+        + certificate.len()
+        + 4
+        + additional_data.len();
     let mut out = Vec::with_capacity(size);
     out.extend_from_slice(&(size as u32).to_le_bytes());
     out.extend_from_slice(&file_size.to_le_bytes());
@@ -337,7 +362,12 @@ fn verify_signer_signed_data(
             Some(a) => a,
             None => continue,
         };
-        if !verify_signature(public_key, alg.jca_signature_algorithm(), signed_data, signature)? {
+        if !verify_signature(
+            public_key,
+            alg.jca_signature_algorithm(),
+            signed_data,
+            signature,
+        )? {
             bail!("signature did not verify over signed-data");
         }
         verified_any = true;

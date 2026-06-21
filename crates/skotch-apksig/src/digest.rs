@@ -124,7 +124,8 @@ pub fn verity_tree(sections: &[&[u8]], salt: Option<&[u8]>) -> Vec<u8> {
     let mut size = data_size as u64;
     loop {
         let chunk_count = size.div_ceil(VERITY_CHUNK as u64);
-        let level = (VERITY_CHUNK as u64) * (chunk_count * digest_size as u64).div_ceil(VERITY_CHUNK as u64);
+        let level = (VERITY_CHUNK as u64)
+            * (chunk_count * digest_size as u64).div_ceil(VERITY_CHUNK as u64);
         level_sizes.push(level as usize);
         if chunk_count * digest_size as u64 <= VERITY_CHUNK as u64 {
             break;

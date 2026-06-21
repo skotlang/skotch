@@ -3062,7 +3062,11 @@ fn dump_bytecode_phase(code: &[u8], func_name: &str, class_name: &str, phase: &s
     let Some(patterns) = std::env::var("SKOTCH_DUMP_BYTECODE").ok() else {
         return;
     };
-    let parts: Vec<&str> = patterns.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
+    let parts: Vec<&str> = patterns
+        .split(',')
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .collect();
     if parts.is_empty() {
         return;
     }
@@ -3079,12 +3083,21 @@ fn dump_bytecode_phase(code: &[u8], func_name: &str, class_name: &str, phase: &s
     if !matches {
         return;
     }
-    eprintln!("==== BYTECODE [{}] {}.{} ({} bytes) ====", phase, class_simple, func_name, code.len());
+    eprintln!(
+        "==== BYTECODE [{}] {}.{} ({} bytes) ====",
+        phase,
+        class_simple,
+        func_name,
+        code.len()
+    );
     let mut i = 0;
     while i < code.len() {
         let op = code[i];
         let n = instruction_len(code, i);
-        let hex: String = (i..i + n).map(|k| format!("{:02x}", code[k])).collect::<Vec<_>>().join(" ");
+        let hex: String = (i..i + n)
+            .map(|k| format!("{:02x}", code[k]))
+            .collect::<Vec<_>>()
+            .join(" ");
         eprintln!("  {:4}: {:02x}  {}", i, op, hex);
         i += n.max(1);
     }
@@ -4028,10 +4041,7 @@ fn emit_method_body(
                             // typed primitive array.
                             matches!(
                                 &func.locals[array.0 as usize],
-                                Ty::IntArray
-                                    | Ty::LongArray
-                                    | Ty::DoubleArray
-                                    | Ty::ByteArray
+                                Ty::IntArray | Ty::LongArray | Ty::DoubleArray | Ty::ByteArray
                             )
                         }
                         Rvalue::BinOp { op, .. } => matches!(
@@ -4394,7 +4404,14 @@ fn emit_method_body(
             "checkNotNullExpressionValue",
             "(Ljava/lang/Object;Ljava/lang/String;)V",
         );
-        peephole_elide_store_load(&mut code, &named_slots, check_notnull_expr_mref, &*cp, &func.name, class_name);
+        peephole_elide_store_load(
+            &mut code,
+            &named_slots,
+            check_notnull_expr_mref,
+            &*cp,
+            &func.name,
+            class_name,
+        );
         dump_bytecode_phase(&code, &func.name, class_name, "post-elide-store-load");
         // Non-adjacent variant: collapse `xstore N; <balanced code>; xload N`
         // when the intermediate is straight-line, has zero net stack effect,
@@ -14553,50 +14570,26 @@ fn walk_block(
                 // fixed up to AddL. Without conversion, the bytecode
                 // emits `iload n; ladd` and the verifier rejects it
                 // because ladd requires two longs (4 stack slots).
-                let lhs_ty = func
-                    .locals
-                    .get(lhs.0 as usize)
-                    .cloned()
-                    .unwrap_or(Ty::Any);
+                let lhs_ty = func.locals.get(lhs.0 as usize).cloned().unwrap_or(Ty::Any);
                 let wide_promo_opcode: Option<u8> = match (&op, &lhs_ty) {
                     (
-                        MBinOp::AddL
-                        | MBinOp::SubL
-                        | MBinOp::MulL
-                        | MBinOp::DivL
-                        | MBinOp::ModL,
+                        MBinOp::AddL | MBinOp::SubL | MBinOp::MulL | MBinOp::DivL | MBinOp::ModL,
                         Ty::Int | Ty::Byte | Ty::Short | Ty::Char,
                     ) => Some(0x85), // i2l
                     (
-                        MBinOp::AddD
-                        | MBinOp::SubD
-                        | MBinOp::MulD
-                        | MBinOp::DivD
-                        | MBinOp::ModD,
+                        MBinOp::AddD | MBinOp::SubD | MBinOp::MulD | MBinOp::DivD | MBinOp::ModD,
                         Ty::Int | Ty::Byte | Ty::Short | Ty::Char,
                     ) => Some(0x87), // i2d
                     (
-                        MBinOp::AddD
-                        | MBinOp::SubD
-                        | MBinOp::MulD
-                        | MBinOp::DivD
-                        | MBinOp::ModD,
+                        MBinOp::AddD | MBinOp::SubD | MBinOp::MulD | MBinOp::DivD | MBinOp::ModD,
                         Ty::Long,
                     ) => Some(0x8A), // l2d
                     (
-                        MBinOp::AddD
-                        | MBinOp::SubD
-                        | MBinOp::MulD
-                        | MBinOp::DivD
-                        | MBinOp::ModD,
+                        MBinOp::AddD | MBinOp::SubD | MBinOp::MulD | MBinOp::DivD | MBinOp::ModD,
                         Ty::Float,
                     ) => Some(0x8D), // f2d
                     (
-                        MBinOp::AddF
-                        | MBinOp::SubF
-                        | MBinOp::MulF
-                        | MBinOp::DivF
-                        | MBinOp::ModF,
+                        MBinOp::AddF | MBinOp::SubF | MBinOp::MulF | MBinOp::DivF | MBinOp::ModF,
                         Ty::Int | Ty::Byte | Ty::Short | Ty::Char,
                     ) => Some(0x86), // i2f
                     _ => None,
@@ -14633,11 +14626,7 @@ fn walk_block(
                 });
                 if !skip_rhs_load {
                     load_local(code, stack, max_stack, slots, *rhs, &func.locals);
-                    let rhs_ty = func
-                        .locals
-                        .get(rhs.0 as usize)
-                        .cloned()
-                        .unwrap_or(Ty::Any);
+                    let rhs_ty = func.locals.get(rhs.0 as usize).cloned().unwrap_or(Ty::Any);
                     // Same promotion logic for the rhs operand.
                     let rhs_promo_opcode: Option<u8> = match (&op, &rhs_ty) {
                         (
@@ -15412,8 +15401,7 @@ fn walk_block(
                     // the inlined arg is wide, skip the swap path and
                     // fall back to receiver-first emission.
                     let arg_ty_opt = args.first().map(|a| &func.locals[a.0 as usize]);
-                    let arg_is_wide =
-                        matches!(arg_ty_opt, Some(Ty::Long) | Some(Ty::Double));
+                    let arg_is_wide = matches!(arg_ty_opt, Some(Ty::Long) | Some(Ty::Double));
                     let arg_is_inlinable_getstatic = args.first().is_some_and(|a| {
                         INLINABLE_GETSTATIC.with(|cell| cell.borrow().contains_key(&a.0))
                     }) && !arg_is_wide;
@@ -15556,8 +15544,8 @@ fn walk_block(
                         module.cross_file_fn_stubs.get(&target_id.0).cloned()
                     {
                         let target = &module.functions[target_id.0 as usize];
-                        let use_default = call_default_mask != 0
-                            && !target.param_defaults.is_empty();
+                        let use_default =
+                            call_default_mask != 0 && !target.param_defaults.is_empty();
                         // For each arg position whose mask bit is set,
                         // push a typed placeholder (matching the
                         // target param's Ty) instead of loading the
@@ -15565,9 +15553,8 @@ fn walk_block(
                         // — its Ty (often Int) won't satisfy the
                         // descriptor (Long / Double / Object).
                         for (i, a) in args.iter().enumerate() {
-                            let is_defaulted = use_default
-                                && i < 32
-                                && (call_default_mask & (1u32 << i)) != 0;
+                            let is_defaulted =
+                                use_default && i < 32 && (call_default_mask & (1u32 << i)) != 0;
                             if is_defaulted {
                                 let param_ty = target
                                     .params
@@ -15586,11 +15573,7 @@ fn walk_block(
                                         code.push(0x0E);
                                         bump(stack, max_stack, 2);
                                     }
-                                    Ty::Bool
-                                    | Ty::Byte
-                                    | Ty::Short
-                                    | Ty::Char
-                                    | Ty::Int => {
+                                    Ty::Bool | Ty::Byte | Ty::Short | Ty::Char | Ty::Int => {
                                         code.push(0x03);
                                         bump(stack, max_stack, 1);
                                     }
@@ -15622,8 +15605,7 @@ fn walk_block(
                         } else {
                             (method_name.clone(), descriptor.clone())
                         };
-                        let mref =
-                            cp.methodref(&owner_class, &call_name, &call_desc);
+                        let mref = cp.methodref(&owner_class, &call_name, &call_desc);
                         code.push(0xB8); // invokestatic
                         code.write_u16::<BigEndian>(mref).unwrap();
                         let mut arg_pop: i32 = if use_default {
@@ -15664,9 +15646,7 @@ fn walk_block(
                         };
                         bump(stack, max_stack, ret_push - arg_pop);
                         if !matches!(ret_ty, Ty::Unit | Ty::Nothing) {
-                            store_local(
-                                code, stack, slots, next_slot, *dest, &func.locals,
-                            );
+                            store_local(code, stack, slots, next_slot, *dest, &func.locals);
                         }
                         continue;
                     }
@@ -17118,9 +17098,10 @@ fn walk_block(
                             // JVM resolver can't find. Hardcode the
                             // self-typed return for known fluent methods
                             // so we get the right `Ljava/lang/...;`.
-                            let fluent_self_ret =
-                                matches!(class_name.as_str(), "java/lang/StringBuilder" | "java/lang/StringBuffer")
-                                    && method_name == "append";
+                            let fluent_self_ret = matches!(
+                                class_name.as_str(),
+                                "java/lang/StringBuilder" | "java/lang/StringBuffer"
+                            ) && method_name == "append";
                             if fluent_self_ret {
                                 Some(format!("L{};", class_name))
                             } else {
@@ -26453,7 +26434,11 @@ fn peephole_elide_store_load(
 /// The simple swap_pattern peephole handles only single-instruction RHS;
 /// this one handles the multi-instruction case (e.g., `aload_0;
 /// invokevirtual getSecond`).
-fn peephole_elide_lhs_save_swap(code: &mut Vec<u8>, named_slots: &FxHashSet<u8>, cp: &ConstantPool) {
+fn peephole_elide_lhs_save_swap(
+    code: &mut Vec<u8>,
+    named_slots: &FxHashSet<u8>,
+    cp: &ConstantPool,
+) {
     loop {
         let mut applied: Option<(usize, usize, usize, usize)> = None;
         // (istore_pos, store_len, iload_pos, load_len)

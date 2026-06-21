@@ -19,7 +19,11 @@ fn fixtures() -> PathBuf {
 
 fn dex(name: &str) -> Result<Vec<u8>, String> {
     let cf = skotch_classfile::parse_class_file(&fixtures().join(format!("{name}.class"))).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     dex_classes(&[cf], &opts).map_err(|e| format!("{e:#}"))
 }
 
@@ -93,7 +97,13 @@ fn acyclic_void_try_byte_identical() {
         std::fs::write("/tmp/skotch-VoidTry-produced.dex", &produced).unwrap();
     }
     skotch_dex::validator::validate(&produced).expect("self-validation");
-    assert_eq!(produced, golden, "VoidTry: {} vs {}", produced.len(), golden.len());
+    assert_eq!(
+        produced,
+        golden,
+        "VoidTry: {} vs {}",
+        produced.len(),
+        golden.len()
+    );
 }
 
 /// Acyclic try/catch with computation AFTER the merge (`return s * 2`) — the merge
@@ -106,7 +116,13 @@ fn acyclic_compute_after_merge_byte_identical() {
         std::fs::write("/tmp/skotch-AfterCompute-produced.dex", &produced).unwrap();
     }
     skotch_dex::validator::validate(&produced).expect("self-validation");
-    assert_eq!(produced, golden, "AfterCompute: {} vs {}", produced.len(), golden.len());
+    assert_eq!(
+        produced,
+        golden,
+        "AfterCompute: {} vs {}",
+        produced.len(),
+        golden.len()
+    );
 }
 
 /// Acyclic USED catch variable (`s = e.hashCode()`) — `move-exception` emitted; the
@@ -120,7 +136,13 @@ fn acyclic_used_catch_byte_identical() {
         std::fs::write("/tmp/skotch-Acyc2-produced.dex", &produced).unwrap();
     }
     skotch_dex::validator::validate(&produced).expect("self-validation");
-    assert_eq!(produced, golden, "Acyc2: {} vs {}", produced.len(), golden.len());
+    assert_eq!(
+        produced,
+        golden,
+        "Acyc2: {} vs {}",
+        produced.len(),
+        golden.len()
+    );
 }
 
 /// A used catch variable IN A LOOP must BAIL: the handler sits on the loop path so
@@ -129,5 +151,8 @@ fn acyclic_used_catch_byte_identical() {
 #[test]
 fn loop_used_catch_var_bails() {
     let err = dex("TryLoop2").expect_err("loop used catch variable must bail");
-    assert!(err.contains("used catch variable in a loop"), "unexpected bail reason: {err}");
+    assert!(
+        err.contains("used catch variable in a loop"),
+        "unexpected bail reason: {err}"
+    );
 }

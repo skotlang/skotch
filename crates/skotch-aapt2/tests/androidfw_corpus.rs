@@ -110,7 +110,11 @@ fn value_signature(value: &skotch_aapt2::res::value::Value) -> String {
                 .map(|s| {
                     format!(
                         "{}={:08x}",
-                        s.symbol.name.as_ref().map(|n| n.entry.clone()).unwrap_or_default(),
+                        s.symbol
+                            .name
+                            .as_ref()
+                            .map(|n| n.entry.clone())
+                            .unwrap_or_default(),
                         s.value
                     )
                 })
@@ -139,14 +143,22 @@ fn value_signature(value: &skotch_aapt2::res::value::Value) -> String {
             entries.sort();
             format!(
                 "style:parent={:08x}:[{}]",
-                style.parent.as_ref().and_then(|p| p.id).map(|id| id.0).unwrap_or(0),
+                style
+                    .parent
+                    .as_ref()
+                    .and_then(|p| p.id)
+                    .map(|id| id.0)
+                    .unwrap_or(0),
                 entries.join(",")
             )
         }
         ValueKind::Styleable(s) => format!("styleable:{}", s.entries.len()),
         ValueKind::Array(array) => {
-            let items: Vec<String> =
-                array.elements.iter().map(|e| item_signature(&e.item)).collect();
+            let items: Vec<String> = array
+                .elements
+                .iter()
+                .map(|e| item_signature(&e.item))
+                .collect();
             format!("array:[{}]", items.join(","))
         }
         ValueKind::Plural(plural) => {
@@ -183,7 +195,9 @@ fn table_signature(table: &ResourceTable) -> BTreeSet<String> {
                     ));
                 }
                 for config_value in &entry.values {
-                    let Some(value) = &config_value.value else { continue };
+                    let Some(value) = &config_value.value else {
+                        continue;
+                    };
                     out.insert(format!(
                         "RES|{}|{}/{}|{id:08x}|{visibility}|{}|{}",
                         package.name,
@@ -355,8 +369,12 @@ fn basic_locale_and_density_variants() {
     // basic_de_fr.apk carries German and French strings.
     let table = apk_table(&root.join("basic/basic_de_fr.apk"));
     let test1 = find(&table, package, ResourceType::String, "test1");
-    let configs: BTreeSet<String> =
-        test1.entry.values.iter().map(|cv| cv.config.to_string()).collect();
+    let configs: BTreeSet<String> = test1
+        .entry
+        .values
+        .iter()
+        .map(|cv| cv.config.to_string())
+        .collect();
     assert!(configs.contains("de"), "{configs:?}");
     assert!(configs.contains("fr"), "{configs:?}");
 
@@ -368,8 +386,12 @@ fn basic_locale_and_density_variants() {
     ] {
         let table = apk_table(&root.join(apk));
         let density = find(&table, package, ResourceType::String, "density");
-        let configs: BTreeSet<String> =
-            density.entry.values.iter().map(|cv| cv.config.to_string()).collect();
+        let configs: BTreeSet<String> = density
+            .entry
+            .values
+            .iter()
+            .map(|cv| cv.config.to_string())
+            .collect();
         assert!(configs.contains(qualifier), "{apk}: {configs:?}");
     }
 }
@@ -412,8 +434,11 @@ fn shared_libraries_and_dynamic_references() {
 
     // The client references both libraries through its dynamic ref table.
     let libclient = apk_table(&root.join("libclient/libclient.apk"));
-    let names: BTreeSet<&str> =
-        libclient.included_packages.iter().map(|(_, n)| n.as_str()).collect();
+    let names: BTreeSet<&str> = libclient
+        .included_packages
+        .iter()
+        .map(|(_, n)| n.as_str())
+        .collect();
     assert!(names.contains("com.android.lib_one"), "{names:?}");
     assert!(names.contains("com.android.lib_two"), "{names:?}");
 }
@@ -435,7 +460,11 @@ fn overlayable_declarations_parse() {
 
     // <policy type="product|system"><item string/overlayable2></policy>
     let overlayable2 = find(&table, package, ResourceType::String, "overlayable2");
-    let item = overlayable2.entry.overlayable_item.as_ref().expect("overlayable2 item");
+    let item = overlayable2
+        .entry
+        .overlayable_item
+        .as_ref()
+        .expect("overlayable2 item");
     assert_eq!(
         item.policies & (policy::PRODUCT_PARTITION | policy::SYSTEM_PARTITION),
         policy::PRODUCT_PARTITION | policy::SYSTEM_PARTITION,
@@ -446,8 +475,16 @@ fn overlayable_declarations_parse() {
     // <policy type="public"> covers overlayable1 and overlayable4.
     for name in ["overlayable1", "overlayable4"] {
         let entry = find(&table, package, ResourceType::String, name);
-        let item = entry.entry.overlayable_item.as_ref().unwrap_or_else(|| panic!("{name}"));
-        assert!(item.policies & policy::PUBLIC != 0, "{name}: {:#x}", item.policies);
+        let item = entry
+            .entry
+            .overlayable_item
+            .as_ref()
+            .unwrap_or_else(|| panic!("{name}"));
+        assert!(
+            item.policies & policy::PUBLIC != 0,
+            "{name}: {:#x}",
+            item.policies
+        );
     }
 
     // not_overlayable has no overlayable declaration.
@@ -533,7 +570,10 @@ fn corpus_manifests_round_trip_through_xml_flattener() {
         };
         let flattened = flatten_xml(
             &original,
-            &XmlFlattenerOptions { keep_raw_values: false, use_utf16: true },
+            &XmlFlattenerOptions {
+                keep_raw_values: false,
+                use_utf16: true,
+            },
         );
         let reparsed = match parse_binary_xml(&flattened) {
             Ok(root) => root,
@@ -590,16 +630,18 @@ fn malformed_corpus_inputs_do_not_panic() {
 
     // length_decode_invalid.apk has a string with a corrupt encoded
     // length; the parser must reject or tolerate it without panicking.
-    if let Some(data) =
-        zip_entry(&root.join("length_decode/length_decode_invalid.apk"), "resources.arsc")
-    {
+    if let Some(data) = zip_entry(
+        &root.join("length_decode/length_decode_invalid.apk"),
+        "resources.arsc",
+    ) {
         let _ = parse_table(&data);
     }
 
     // The valid twin must parse.
-    if let Some(data) =
-        zip_entry(&root.join("length_decode/length_decode_valid.apk"), "resources.arsc")
-    {
+    if let Some(data) = zip_entry(
+        &root.join("length_decode/length_decode_valid.apk"),
+        "resources.arsc",
+    ) {
         parse_table(&data).expect("length_decode_valid parses");
     }
 

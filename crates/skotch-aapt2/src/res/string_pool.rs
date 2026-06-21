@@ -78,17 +78,26 @@ impl Context {
     pub const LOW_PRIORITY: u32 = 0xffff_ffff;
 
     pub fn new(priority: u32, config_sort_key: Vec<u8>) -> Self {
-        Context { priority, config_sort_key }
+        Context {
+            priority,
+            config_sort_key,
+        }
     }
 
     pub fn with_priority(priority: u32) -> Self {
-        Context { priority, config_sort_key: Vec::new() }
+        Context {
+            priority,
+            config_sort_key: Vec::new(),
+        }
     }
 }
 
 impl Default for Context {
     fn default() -> Self {
-        Context { priority: Context::NORMAL_PRIORITY, config_sort_key: Vec::new() }
+        Context {
+            priority: Context::NORMAL_PRIORITY,
+            config_sort_key: Vec::new(),
+        }
     }
 }
 
@@ -205,7 +214,11 @@ impl StringPool {
 
         let id = self.string_pos.len();
         self.string_pos.push(self.strings.len());
-        self.strings.push(Entry { id, value: s.to_string(), context });
+        self.strings.push(Entry {
+            id,
+            value: s.to_string(),
+            context,
+        });
         self.indexed.entry(s.to_string()).or_default().push(id);
         Ref(id)
     }
@@ -230,7 +243,12 @@ impl StringPool {
 
         let id = self.style_pos.len();
         self.style_pos.push(self.styles.len());
-        self.styles.push(StyleEntry { id, value: s.to_string(), context, spans });
+        self.styles.push(StyleEntry {
+            id,
+            value: s.to_string(),
+            context,
+            spans,
+        });
         StyleRef(id)
     }
 
@@ -282,8 +300,14 @@ impl StringPool {
         for entry in other.strings {
             let new_id = entry.id + id_offset;
             self.string_pos[new_id] = self.strings.len();
-            self.indexed.entry(entry.value.clone()).or_default().push(new_id);
-            self.strings.push(Entry { id: new_id, ..entry });
+            self.indexed
+                .entry(entry.value.clone())
+                .or_default()
+                .push(new_id);
+            self.strings.push(Entry {
+                id: new_id,
+                ..entry
+            });
         }
 
         // Styled strings: span names reference plain entries of `other`.
@@ -295,7 +319,10 @@ impl StringPool {
             }
             let new_id = entry.id + style_id_offset;
             self.style_pos[new_id] = self.styles.len();
-            self.styles.push(StyleEntry { id: new_id, ..entry });
+            self.styles.push(StyleEntry {
+                id: new_id,
+                ..entry
+            });
         }
 
         id_offset
@@ -752,12 +779,18 @@ impl BinaryStringPool {
         let mut pos = self.styles_start + unit_off * 4;
         let end = self.styles_start + self.style_pool_size * 4;
         while pos + 12 <= end {
-            let Some(name) = read_u32(&self.data, pos) else { break };
+            let Some(name) = read_u32(&self.data, pos) else {
+                break;
+            };
             if name == SPAN_END {
                 break;
             }
-            let Some(first) = read_u32(&self.data, pos + 4) else { break };
-            let Some(last) = read_u32(&self.data, pos + 8) else { break };
+            let Some(first) = read_u32(&self.data, pos + 4) else {
+                break;
+            };
+            let Some(last) = read_u32(&self.data, pos + 8) else {
+                break;
+            };
             result.push((name, first, last));
             pos += 12;
         }
@@ -917,10 +950,16 @@ mod tests {
         let long = "x".repeat(200); // > 127 bytes -> 2-byte u8 length encoding
         let inputs: Vec<(String, Context)> = vec![
             ("hello world".to_string(), Context::default()),
-            ("zebra".to_string(), Context::with_priority(Context::HIGH_PRIORITY)),
+            (
+                "zebra".to_string(),
+                Context::with_priority(Context::HIGH_PRIORITY),
+            ),
             ("apple".to_string(), Context::default()),
             ("emoji \u{1F389} party".to_string(), Context::default()), // surrogate pair
-            ("\u{4F60}\u{597D}\u{4E16}\u{754C}".to_string(), Context::default()), // CJK
+            (
+                "\u{4F60}\u{597D}\u{4E16}\u{754C}".to_string(),
+                Context::default(),
+            ), // CJK
             (long, Context::default()),
         ];
         let refs: Vec<(Ref, String)> = inputs
@@ -937,7 +976,11 @@ mod tests {
 
     fn check_roundtrip(utf8: bool) {
         let (pool, refs, style) = build_test_pool();
-        let bytes = if utf8 { pool.flatten_utf8() } else { pool.flatten_utf16() };
+        let bytes = if utf8 {
+            pool.flatten_utf8()
+        } else {
+            pool.flatten_utf16()
+        };
 
         // Whole chunk is 4-byte aligned and self-describing.
         assert_eq!(bytes.len() % 4, 0, "chunk must be 4-byte aligned");
@@ -961,7 +1004,10 @@ mod tests {
         // The styled string occupies index 0 (styles always come first).
         let style_idx = pool.resolve_style(style);
         assert_eq!(style_idx, 0);
-        assert_eq!(parsed.get(style_idx).as_deref(), Some("Bold and italic text"));
+        assert_eq!(
+            parsed.get(style_idx).as_deref(),
+            Some("Bold and italic text")
+        );
 
         // Spans round-trip, and the span names resolve through the pool.
         let spans = parsed.spans(style_idx);
@@ -996,7 +1042,11 @@ mod tests {
 
         let utf16_bytes = pool.flatten_utf16();
         let flags = read_u32(&utf16_bytes, 16).unwrap();
-        assert_eq!(flags & UTF8_FLAG, 0, "UTF8_FLAG must be clear in utf16 mode");
+        assert_eq!(
+            flags & UTF8_FLAG,
+            0,
+            "UTF8_FLAG must be clear in utf16 mode"
+        );
     }
 
     #[test]
@@ -1020,7 +1070,10 @@ mod tests {
         // Priority ascending wins over lexicographic order...
         assert!(zebra < apple, "high priority sorts before normal priority");
         // ...and equal priorities are ordered lexicographically.
-        assert!(apple < hello, "\"apple\" < \"hello world\" at equal priority");
+        assert!(
+            apple < hello,
+            "\"apple\" < \"hello world\" at equal priority"
+        );
     }
 
     #[test]
@@ -1065,7 +1118,10 @@ mod tests {
         // STRING_TOO_LARGE (and logs an error).
         let utf8_bytes = pool.flatten_utf8();
         let parsed = BinaryStringPool::parse(&utf8_bytes).expect("parse utf8");
-        assert_eq!(parsed.get(pool.resolve(r)).as_deref(), Some(STRING_TOO_LARGE));
+        assert_eq!(
+            parsed.get(pool.resolve(r)).as_deref(),
+            Some(STRING_TOO_LARGE)
+        );
     }
 
     #[test]
@@ -1085,8 +1141,14 @@ mod tests {
         let strings_start = read_u32(&bytes, 20).unwrap() as usize;
         assert_eq!(bytes[strings_start], 2); // UTF-16 length
         assert_eq!(bytes[strings_start + 1], 6); // Modified-UTF-8 byte length
-        assert_eq!(&bytes[strings_start + 2..strings_start + 5], &[0xED, 0xA0, 0xBD]);
-        assert_eq!(&bytes[strings_start + 5..strings_start + 8], &[0xED, 0xB8, 0x80]);
+        assert_eq!(
+            &bytes[strings_start + 2..strings_start + 5],
+            &[0xED, 0xA0, 0xBD]
+        );
+        assert_eq!(
+            &bytes[strings_start + 5..strings_start + 8],
+            &[0xED, 0xB8, 0x80]
+        );
     }
 
     #[test]

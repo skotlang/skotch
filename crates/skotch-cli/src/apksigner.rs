@@ -109,8 +109,12 @@ impl OptionsParser {
 
     fn required_int(&mut self, desc: &str) -> Result<u32> {
         let v = self.required_value(desc)?;
-        v.parse::<u32>()
-            .map_err(|_| anyhow!("{desc} ({}) must be a decimal number: {v}", self.last_original))
+        v.parse::<u32>().map_err(|_| {
+            anyhow!(
+                "{desc} ({}) must be a decimal number: {v}",
+                self.last_original
+            )
+        })
     }
 
     /// Optional boolean: `--flag` → `default`; `--flag=true/false` or a
@@ -157,8 +161,9 @@ fn resolve_password(spec: &str, prompt: &str) -> Result<String> {
     if let Some(p) = spec.strip_prefix("pass:") {
         Ok(p.to_string())
     } else if let Some(var) = spec.strip_prefix("env:") {
-        std::env::var(var)
-            .map_err(|_| anyhow!("Failed to read {prompt}: environment variable {var} not specified"))
+        std::env::var(var).map_err(|_| {
+            anyhow!("Failed to read {prompt}: environment variable {var} not specified")
+        })
     } else if let Some(path) = spec.strip_prefix("file:") {
         let content = std::fs::read_to_string(path)
             .with_context(|| format!("Failed to read {prompt} from {path}"))?;
@@ -203,7 +208,9 @@ impl SignerParams {
     fn handle(&mut self, name: &str, parser: &mut OptionsParser) -> Result<bool> {
         match name {
             "ks" => self.ks = Some(parser.required_value("KeyStore file")?),
-            "ks-key-alias" => self.ks_key_alias = Some(parser.required_value("KeyStore key alias")?),
+            "ks-key-alias" => {
+                self.ks_key_alias = Some(parser.required_value("KeyStore key alias")?)
+            }
             "ks-pass" => self.ks_pass = Some(parser.required_value("KeyStore password")?),
             "key-pass" => self.key_pass = Some(parser.required_value("Key password")?),
             "ks-type" => self.ks_type = Some(parser.required_value("KeyStore type")?),
@@ -288,9 +295,10 @@ impl SignerParams {
         }
 
         // --key + --cert path.
-        let key_path = self.key.as_ref().context(
-            "KeyStore (--ks) or private key file (--key) must be specified",
-        )?;
+        let key_path = self
+            .key
+            .as_ref()
+            .context("KeyStore (--ks) or private key file (--key) must be specified")?;
         let cert_path = self
             .cert
             .as_ref()
@@ -404,7 +412,10 @@ fn sign(args: &[String]) -> Result<()> {
         match positionals.len() {
             0 => bail!("Missing input APK"),
             1 => in_path = Some(positionals[0].clone()),
-            _ => bail!("Unexpected parameter(s) after input APK ({})", positionals[1]),
+            _ => bail!(
+                "Unexpected parameter(s) after input APK ({})",
+                positionals[1]
+            ),
         }
     } else if !positionals.is_empty() {
         bail!("Unexpected parameter(s) after options: {}", positionals[0]);
@@ -566,7 +577,11 @@ fn verify(args: &[String]) -> Result<()> {
     if print_certs {
         for (i, signer) in result.signer_certs.iter().enumerate() {
             let cert = Certificate::from_der(&signer.cert_der)?;
-            println!("Signer #{} certificate DN: {}", i + 1, cert.subject_rfc2253());
+            println!(
+                "Signer #{} certificate DN: {}",
+                i + 1,
+                cert.subject_rfc2253()
+            );
             println!(
                 "Signer #{} certificate SHA-256 digest: {}",
                 i + 1,
@@ -656,8 +671,7 @@ fn rotate(args: &[String]) -> Result<()> {
             min_sdk,
         )?,
     };
-    std::fs::write(&out_path, lineage.to_bytes())
-        .with_context(|| format!("writing {out_path}"))?;
+    std::fs::write(&out_path, lineage.to_bytes()).with_context(|| format!("writing {out_path}"))?;
     if verbose {
         println!("Rotation entry generated.");
     }
@@ -696,14 +710,21 @@ fn lineage(args: &[String]) -> Result<()> {
         for (i, node) in lineage.nodes.iter().enumerate() {
             let cert = Certificate::from_der(&node.signing_cert)?;
             println!("Signer #{} in lineage", i + 1);
-            println!("Signer #{} certificate DN: {}", i + 1, cert.subject_rfc2253());
+            println!(
+                "Signer #{} certificate DN: {}",
+                i + 1,
+                cert.subject_rfc2253()
+            );
             println!(
                 "Signer #{} certificate SHA-256 digest: {}",
                 i + 1,
                 hex(&sha256(&node.signing_cert))
             );
             let caps = SignerCapabilities::from_flags(node.flags);
-            println!("Has installed data capability: {}", caps.has_installed_data());
+            println!(
+                "Has installed data capability: {}",
+                caps.has_installed_data()
+            );
             println!("Has shared UID capability    : {}", caps.has_shared_uid());
             println!("Has permission capability    : {}", caps.has_permission());
             println!("Has rollback capability      : {}", caps.has_rollback());
@@ -781,7 +802,7 @@ mod tests {
         let mut p = OptionsParser::new(&args(&["-v", "--", "input.apk"]));
         assert_eq!(p.next_option().as_deref(), Some("v"));
         assert!(!p.optional_boolean(false).unwrap()); // no following true/false
-        // `--` ends options.
+                                                      // `--` ends options.
         assert!(p.next_option().is_none());
         assert_eq!(p.remaining(), vec!["input.apk".to_string()]);
     }
@@ -799,7 +820,10 @@ mod tests {
     fn password_specs() {
         assert_eq!(resolve_password("pass:secret", "x").unwrap(), "secret");
         std::env::set_var("APKSIG_TEST_PW", "envpw");
-        assert_eq!(resolve_password("env:APKSIG_TEST_PW", "x").unwrap(), "envpw");
+        assert_eq!(
+            resolve_password("env:APKSIG_TEST_PW", "x").unwrap(),
+            "envpw"
+        );
         assert!(resolve_password("bogus:foo", "x").is_err());
     }
 }

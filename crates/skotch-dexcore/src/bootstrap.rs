@@ -34,8 +34,14 @@ pub fn dex_class(cf: &ClassFile, min_api: u32) -> Result<ClassDef> {
     // or NONE — d8 writes a full annotation_directory; a partial one would be wrong. Gate the
     // whole class on ALL of its annotations being encodable.
     let annotations_ok = build_annotations(&cf.annotations, &cf.signature).is_some()
-        && cf.fields.iter().all(|f| build_annotations(&f.annotations, &f.signature).is_some())
-        && cf.methods.iter().all(|m| build_annotations(&m.annotations, &m.signature).is_some());
+        && cf
+            .fields
+            .iter()
+            .all(|f| build_annotations(&f.annotations, &f.signature).is_some())
+        && cf
+            .methods
+            .iter()
+            .all(|m| build_annotations(&m.annotations, &m.signature).is_some());
 
     let mut direct = Vec::new();
     let mut virtual_ = Vec::new();
@@ -101,14 +107,21 @@ pub fn dex_class(cf: &ClassFile, min_api: u32) -> Result<ClassDef> {
 /// `dalvik.annotation.Signature` from the generic `Signature` attribute. Returns `None` if any
 /// annotation element is a kind we can't yet encode — the caller then emits NO annotations for
 /// the WHOLE class (d8 writes a complete directory; a partial one would be wrong).
-fn build_annotations(anns: &[skotch_classfile::model::ClassAnnotation], signature: &Option<String>) -> Option<Vec<Annotation>> {
+fn build_annotations(
+    anns: &[skotch_classfile::model::ClassAnnotation],
+    signature: &Option<String>,
+) -> Option<Vec<Annotation>> {
     let mut out = Vec::new();
     for a in anns.iter().filter(|a| a.visibility == 1) {
         let mut elements = Vec::with_capacity(a.elements.len());
         for el in &a.elements {
             elements.push((el.name.clone(), ann_elem_to_encoded(&el.value)?));
         }
-        out.push(Annotation { visibility: a.visibility, type_: a.type_desc.clone(), elements });
+        out.push(Annotation {
+            visibility: a.visibility,
+            type_: a.type_desc.clone(),
+            elements,
+        });
     }
     if let Some(sig) = signature {
         out.push(signature_annotation(sig));
@@ -118,7 +131,10 @@ fn build_annotations(anns: &[skotch_classfile::model::ClassAnnotation], signatur
 
 /// The `dalvik.annotation.Signature` system annotation for a generic signature.
 fn signature_annotation(sig: &str) -> Annotation {
-    let chunks = split_signature(sig).into_iter().map(EncodedValue::String).collect();
+    let chunks = split_signature(sig)
+        .into_iter()
+        .map(EncodedValue::String)
+        .collect();
     Annotation {
         visibility: 2, // VISIBILITY_SYSTEM
         type_: "Ldalvik/annotation/Signature;".to_string(),
@@ -143,25 +159,42 @@ fn system_annotations(cf: &ClassFile) -> Vec<Annotation> {
                     "value",
                     EncodedValue::Method(MethodRef {
                         class: desc(&em.class),
-                        proto: ProtoRef { return_type: ret, params },
+                        proto: ProtoRef {
+                            return_type: ret,
+                            params,
+                        },
                         name: mname.clone(),
                     }),
                 ));
             } else {
-                out.push(sys_ann("Ldalvik/annotation/EnclosingClass;", "value", EncodedValue::Type(desc(&em.class))));
+                out.push(sys_ann(
+                    "Ldalvik/annotation/EnclosingClass;",
+                    "value",
+                    EncodedValue::Type(desc(&em.class)),
+                ));
             }
         } else if let Some(outer) = &entry.outer {
-            out.push(sys_ann("Ldalvik/annotation/EnclosingClass;", "value", EncodedValue::Type(desc(outer))));
+            out.push(sys_ann(
+                "Ldalvik/annotation/EnclosingClass;",
+                "value",
+                EncodedValue::Type(desc(outer)),
+            ));
         }
         // InnerClass: accessFlags (int) + name (String or null for anonymous).
         out.push(Annotation {
             visibility: 2,
             type_: "Ldalvik/annotation/InnerClass;".to_string(),
             elements: vec![
-                ("accessFlags".to_string(), EncodedValue::Int(entry.access_flags as i32)),
+                (
+                    "accessFlags".to_string(),
+                    EncodedValue::Int(entry.access_flags as i32),
+                ),
                 (
                     "name".to_string(),
-                    entry.inner_name.as_ref().map_or(EncodedValue::Null, |n| EncodedValue::String(n.clone())),
+                    entry
+                        .inner_name
+                        .as_ref()
+                        .map_or(EncodedValue::Null, |n| EncodedValue::String(n.clone())),
                 ),
             ],
         });
@@ -175,14 +208,22 @@ fn system_annotations(cf: &ClassFile) -> Vec<Annotation> {
         .map(|e| EncodedValue::Type(desc(&e.inner)))
         .collect();
     if !members.is_empty() {
-        out.push(sys_ann("Ldalvik/annotation/MemberClasses;", "value", EncodedValue::Array(members)));
+        out.push(sys_ann(
+            "Ldalvik/annotation/MemberClasses;",
+            "value",
+            EncodedValue::Array(members),
+        ));
     }
     out
 }
 
 /// A single-element SYSTEM (visibility 2) annotation.
 fn sys_ann(type_: &str, name: &str, value: EncodedValue) -> Annotation {
-    Annotation { visibility: 2, type_: type_.to_string(), elements: vec![(name.to_string(), value)] }
+    Annotation {
+        visibility: 2,
+        type_: type_.to_string(),
+        elements: vec![(name.to_string(), value)],
+    }
 }
 
 /// Splits a generic signature into the chunks d8 emits (dx's `AnnotationUtils.splitSignature`):
@@ -200,7 +241,10 @@ fn split_signature(sig: &str) -> Vec<String> {
             // `Ljava/util/ArrayList<` as one chunk, not `Ljava/util/ArrayList` + `<`)
             while end < len {
                 match b[end] {
-                    b';' | b'<' => { end += 1; break; }
+                    b';' | b'<' => {
+                        end += 1;
+                        break;
+                    }
                     _ => end += 1,
                 }
             }
@@ -235,7 +279,10 @@ fn ann_elem_to_encoded(v: &skotch_classfile::model::AnnElemValue) -> Option<Enco
             EncodedValue::Array(out)
         }
         // An enum constant → its static field (class & type are the enum descriptor).
-        A::Enum { type_desc, const_name } => EncodedValue::Enum(FieldRef {
+        A::Enum {
+            type_desc,
+            const_name,
+        } => EncodedValue::Enum(FieldRef {
             class: type_desc.clone(),
             type_: type_desc.clone(),
             name: const_name.clone(),
@@ -251,7 +298,10 @@ fn empty_clinit_method(cf: &ClassFile, m: &Member) -> Result<EncodedMethod> {
     Ok(EncodedMethod {
         method: MethodRef {
             class: cf.descriptor(),
-            proto: ProtoRef { return_type: ret, params },
+            proto: ProtoRef {
+                return_type: ret,
+                params,
+            },
             name: m.name.clone(),
         },
         access_flags: (m.access_flags as u32) | ACC_CONSTRUCTOR,
@@ -363,7 +413,10 @@ fn const_push(cf: &ClassFile, bc: &[u8], pc: usize) -> Option<(EncodedValue, usi
     Some(match bc[pc] {
         0x02..=0x08 => (EncodedValue::Int(bc[pc] as i32 - 0x03), 1), // iconst_m1..5
         0x10 => (EncodedValue::Int(bc[pc + 1] as i8 as i32), 2),     // bipush
-        0x11 => (EncodedValue::Int(i16::from_be_bytes([bc[pc + 1], bc[pc + 2]]) as i32), 3), // sipush
+        0x11 => (
+            EncodedValue::Int(i16::from_be_bytes([bc[pc + 1], bc[pc + 2]]) as i32),
+            3,
+        ), // sipush
         0x09 | 0x0a => (EncodedValue::Long((bc[pc] - 0x09) as i64), 1), // lconst_0/1
         0x0b..=0x0d => (EncodedValue::Float((bc[pc] - 0x0b) as f32), 1), // fconst_0/1/2
         0x0e | 0x0f => (EncodedValue::Double((bc[pc] - 0x0e) as f64), 1), // dconst_0/1
@@ -438,7 +491,10 @@ fn default_value(desc: &str) -> EncodedValue {
 /// Whether a value equals its type's default (trailing such entries are trimmed).
 fn is_default_value(v: &EncodedValue) -> bool {
     match v {
-        EncodedValue::Int(0) | EncodedValue::Long(0) | EncodedValue::Boolean(false) | EncodedValue::Null => true,
+        EncodedValue::Int(0)
+        | EncodedValue::Long(0)
+        | EncodedValue::Boolean(false)
+        | EncodedValue::Null => true,
         // Match the bit pattern so a signed-zero (-0.0) const is NOT trimmed.
         EncodedValue::Float(f) => f.to_bits() == 0,
         EncodedValue::Double(d) => d.to_bits() == 0,
@@ -467,14 +523,20 @@ fn is_direct(m: &Member) -> bool {
     // `lambda$` impl method to package-private (so a desugared lambda's synthetic class can call
     // it cross-class); such a method is then VIRTUAL, so classify it accordingly here too — else
     // it lands in the wrong encoded list ("not in expected list"). Static lambda$ stay direct.
-    let relaxed_to_virtual = m.name.starts_with("lambda$") && !m.is_static() && m.access_flags & 0x0002 != 0;
+    let relaxed_to_virtual =
+        m.name.starts_with("lambda$") && !m.is_static() && m.access_flags & 0x0002 != 0;
     if relaxed_to_virtual {
         return false;
     }
     m.is_static() || m.access_flags & 0x0002 != 0 || m.name == "<init>" || m.name == "<clinit>"
 }
 
-fn dex_method(cf: &ClassFile, m: &Member, min_api: u32, emit_annotations: bool) -> Result<EncodedMethod> {
+fn dex_method(
+    cf: &ClassFile,
+    m: &Member,
+    min_api: u32,
+    emit_annotations: bool,
+) -> Result<EncodedMethod> {
     let (params, ret) = parse_descriptor(&m.descriptor)?;
     let mut access = m.access_flags as u32;
     if m.name == "<init>" || m.name == "<clinit>" {
@@ -489,7 +551,10 @@ fn dex_method(cf: &ClassFile, m: &Member, min_api: u32, emit_annotations: bool) 
     }
     let method = MethodRef {
         class: cf.descriptor(),
-        proto: ProtoRef { return_type: ret.clone(), params: params.clone() },
+        proto: ProtoRef {
+            return_type: ret.clone(),
+            params: params.clone(),
+        },
         name: m.name.clone(),
     };
     let code = if m.is_abstract() || m.is_native() {
@@ -513,7 +578,14 @@ fn dex_method(cf: &ClassFile, m: &Member, min_api: u32, emit_annotations: bool) 
             || method_has_widening_conv(&c.bytecode)
             || method_has_goto(&c.bytecode);
         let item = if needs_ssa {
-            crate::ssa::dex_method_ssa(cf, &c.bytecode, &params, instance, &c.line_numbers, &c.exceptions)?
+            crate::ssa::dex_method_ssa(
+                cf,
+                &c.bytecode,
+                &params,
+                instance,
+                &c.line_numbers,
+                &c.exceptions,
+            )?
         } else {
             // Try the bootstrap straight-line/CFG path first — it stays BYTE-IDENTICAL
             // to d8 for everything it handles (no register pressure beyond args; pure
@@ -523,7 +595,11 @@ fn dex_method(cf: &ClassFile, m: &Member, min_api: u32, emit_annotations: bool) 
             // loudly on the rest), so this only ADDS coverage without losing byte-identity.
             match translate_code(cf, m, c, &params, &ret, min_api) {
                 Ok(mut item) if item.registers_size <= 16 => {
-                    crate::regalloc::remap_insns(&mut item.insns, item.ins_size, item.registers_size)?;
+                    crate::regalloc::remap_insns(
+                        &mut item.insns,
+                        item.ins_size,
+                        item.registers_size,
+                    )?;
                     item
                 }
                 // A >16-register bootstrap item can't be trusted: the bootstrap path masks each
@@ -534,7 +610,12 @@ fn dex_method(cf: &ClassFile, m: &Member, min_api: u32, emit_annotations: bool) 
                 // loudly (never truncates) on any nibble form it can't widen. (This `_` arm also
                 // catches a genuine bootstrap bail, the original SSA fallback.)
                 _ => crate::ssa::dex_method_ssa(
-                    cf, &c.bytecode, &params, instance, &c.line_numbers, &c.exceptions,
+                    cf,
+                    &c.bytecode,
+                    &params,
+                    instance,
+                    &c.line_numbers,
+                    &c.exceptions,
                 )?,
             }
         };
@@ -552,7 +633,12 @@ fn dex_method(cf: &ClassFile, m: &Member, min_api: u32, emit_annotations: bool) 
     } else {
         Vec::new()
     };
-    Ok(EncodedMethod { method, access_flags: access, code, annotations })
+    Ok(EncodedMethod {
+        method,
+        access_flags: access,
+        code,
+        annotations,
+    })
 }
 
 /// A lazily-tracked operand-stack value.
@@ -572,7 +658,10 @@ enum Val {
 
 impl Val {
     fn is_wide(&self) -> bool {
-        matches!(self, Val::Local(_, true) | Val::Reg(_, true) | Val::ConstLong(_))
+        matches!(
+            self,
+            Val::Local(_, true) | Val::Reg(_, true) | Val::ConstLong(_)
+        )
     }
 }
 
@@ -764,7 +853,11 @@ fn translate_code(
         }
     }
     if !stack.is_empty() {
-        bail!("dexer: non-empty operand stack at end of {}{} (needs Phase 1 IR)", m.name, m.descriptor);
+        bail!(
+            "dexer: non-empty operand stack at end of {}{} (needs Phase 1 IR)",
+            m.name,
+            m.descriptor
+        );
     }
 
     let registers_size = e.registers_size();
@@ -826,8 +919,18 @@ pub(crate) fn cond_branch_dex_op(jvm: u8) -> Option<(u16, bool)> {
 pub(crate) fn jvm_step_len(bc: &[u8], pc: usize) -> usize {
     match bc[pc] {
         0x10 | 0x12 | 0x15..=0x19 | 0x36..=0x3a | 0xa9 | 0xbc => 2,
-        0x11 | 0x13 | 0x14 | 0x84 | 0x99..=0xa7 | 0xb2..=0xb8 | 0xbb | 0xbd | 0xc0
-        | 0xc1 | 0xc6 | 0xc7 => 3,
+        0x11
+        | 0x13
+        | 0x14
+        | 0x84
+        | 0x99..=0xa7
+        | 0xb2..=0xb8
+        | 0xbb
+        | 0xbd
+        | 0xc0
+        | 0xc1
+        | 0xc6
+        | 0xc7 => 3,
         0xc5 => 4,
         0xb9 | 0xba | 0xc8 | 0xc9 => 5,
         // tableswitch / lookupswitch — variable length (padded payload).
@@ -856,7 +959,12 @@ pub(crate) fn parse_switch(bc: &[u8], pc: usize) -> (usize, Vec<(i32, usize)>, u
         let npairs = rd(base + 4) as usize;
         let pairs = base + 8;
         let cases = (0..npairs)
-            .map(|k| (rd(pairs + 8 * k), (pc as i32 + rd(pairs + 8 * k + 4)) as usize))
+            .map(|k| {
+                (
+                    rd(pairs + 8 * k),
+                    (pc as i32 + rd(pairs + 8 * k + 4)) as usize,
+                )
+            })
             .collect();
         (default, cases, pairs + 8 * npairs)
     }
@@ -1059,13 +1167,18 @@ pub(crate) fn split_blocks_with(bc: &[u8], extra_leaders: &[usize]) -> Result<Ve
     let block_at = |pc: usize| leaders.iter().position(|&l| l == pc);
     let mut blocks = Vec::with_capacity(leaders.len());
     for (i, &start) in leaders.iter().enumerate() {
-        let end = if i + 1 < leaders.len() { leaders[i + 1] } else { bc.len() };
+        let end = if i + 1 < leaders.len() {
+            leaders[i + 1]
+        } else {
+            bc.len()
+        };
         let lpc = last_instr_pc(bc, start, end);
         let op = bc[lpc];
         let len = jvm_step_len(bc, lpc);
         let mut succ = Vec::new();
         if cond_branch_dex_op(op).is_some() {
-            let target = (lpc as i32 + i16::from_be_bytes([bc[lpc + 1], bc[lpc + 2]]) as i32) as usize;
+            let target =
+                (lpc as i32 + i16::from_be_bytes([bc[lpc + 1], bc[lpc + 2]]) as i32) as usize;
             if let Some(fb) = block_at(lpc + len) {
                 succ.push(fb);
             }
@@ -1073,7 +1186,8 @@ pub(crate) fn split_blocks_with(bc: &[u8], extra_leaders: &[usize]) -> Result<Ve
                 succ.push(tb);
             }
         } else if op == 0xa7 {
-            let target = (lpc as i32 + i16::from_be_bytes([bc[lpc + 1], bc[lpc + 2]]) as i32) as usize;
+            let target =
+                (lpc as i32 + i16::from_be_bytes([bc[lpc + 1], bc[lpc + 2]]) as i32) as usize;
             if let Some(tb) = block_at(target) {
                 succ.push(tb);
             }
@@ -1104,7 +1218,10 @@ pub(crate) fn split_blocks_with(bc: &[u8], extra_leaders: &[usize]) -> Result<Ve
 }
 
 /// Backward dataflow for per-block live-in AND live-out sets of local slots.
-type Liveness = (Vec<std::collections::BTreeSet<u16>>, Vec<std::collections::BTreeSet<u16>>);
+type Liveness = (
+    Vec<std::collections::BTreeSet<u16>>,
+    Vec<std::collections::BTreeSet<u16>>,
+);
 fn block_liveness(blocks: &[Block], bc: &[u8], _max_locals: usize) -> Liveness {
     use std::collections::BTreeSet;
     let n = blocks.len();
@@ -1273,34 +1390,96 @@ fn emit_cfg<'a>(
             e.set_pc(pc as u32);
             let op = bc[pc];
             match op {
-                0x1a..=0x1d => { stack.push(Val::Local((op - 0x1a) as u16, false)); pc += 1; }
-                0x1e..=0x21 => { stack.push(Val::Local((op - 0x1e) as u16, true)); pc += 1; }
-                0x22..=0x25 => { stack.push(Val::Local((op - 0x22) as u16, false)); pc += 1; }
-                0x26..=0x29 => { stack.push(Val::Local((op - 0x26) as u16, true)); pc += 1; }
-                0x2a..=0x2d => { stack.push(Val::Local((op - 0x2a) as u16, false)); pc += 1; }
-                0x15 | 0x17 | 0x19 => { stack.push(Val::Local(bc[pc + 1] as u16, false)); pc += 2; }
-                0x16 | 0x18 => { stack.push(Val::Local(bc[pc + 1] as u16, true)); pc += 2; }
+                0x1a..=0x1d => {
+                    stack.push(Val::Local((op - 0x1a) as u16, false));
+                    pc += 1;
+                }
+                0x1e..=0x21 => {
+                    stack.push(Val::Local((op - 0x1e) as u16, true));
+                    pc += 1;
+                }
+                0x22..=0x25 => {
+                    stack.push(Val::Local((op - 0x22) as u16, false));
+                    pc += 1;
+                }
+                0x26..=0x29 => {
+                    stack.push(Val::Local((op - 0x26) as u16, true));
+                    pc += 1;
+                }
+                0x2a..=0x2d => {
+                    stack.push(Val::Local((op - 0x2a) as u16, false));
+                    pc += 1;
+                }
+                0x15 | 0x17 | 0x19 => {
+                    stack.push(Val::Local(bc[pc + 1] as u16, false));
+                    pc += 2;
+                }
+                0x16 | 0x18 => {
+                    stack.push(Val::Local(bc[pc + 1] as u16, true));
+                    pc += 2;
+                }
                 // aconst_null — null is `const/4 v,#0` in DEX (an object register holding 0);
                 // the `return-object`/`aput-object`/object-arg context (not this const) makes it
                 // object-typed, so a plain const 0 is byte-identical to d8's null materialization.
-                0x01 => { stack.push(Val::ConstInt(0)); pc += 1; }
-                0x02..=0x08 => { stack.push(Val::ConstInt(op as i32 - 0x03)); pc += 1; }
-                0x10 => { stack.push(Val::ConstInt(bc[pc + 1] as i8 as i32)); pc += 2; }
-                0x11 => { stack.push(Val::ConstInt(i16::from_be_bytes([bc[pc + 1], bc[pc + 2]]) as i32)); pc += 3; }
+                0x01 => {
+                    stack.push(Val::ConstInt(0));
+                    pc += 1;
+                }
+                0x02..=0x08 => {
+                    stack.push(Val::ConstInt(op as i32 - 0x03));
+                    pc += 1;
+                }
+                0x10 => {
+                    stack.push(Val::ConstInt(bc[pc + 1] as i8 as i32));
+                    pc += 2;
+                }
+                0x11 => {
+                    stack.push(Val::ConstInt(
+                        i16::from_be_bytes([bc[pc + 1], bc[pc + 2]]) as i32
+                    ));
+                    pc += 3;
+                }
                 // long/float/double bit-pattern constants (mirrors the straight-line path).
-                0x09 | 0x0a => { stack.push(Val::ConstLong((op - 0x09) as i64)); pc += 1; }
-                0x0b => { stack.push(Val::ConstInt(0)); pc += 1; }
-                0x0c => { stack.push(Val::ConstInt(0x3f80_0000u32 as i32)); pc += 1; }
-                0x0d => { stack.push(Val::ConstInt(0x4000_0000u32 as i32)); pc += 1; }
-                0x0e => { stack.push(Val::ConstLong(0)); pc += 1; }
-                0x0f => { stack.push(Val::ConstLong(0x3ff0_0000_0000_0000u64 as i64)); pc += 1; }
+                0x09 | 0x0a => {
+                    stack.push(Val::ConstLong((op - 0x09) as i64));
+                    pc += 1;
+                }
+                0x0b => {
+                    stack.push(Val::ConstInt(0));
+                    pc += 1;
+                }
+                0x0c => {
+                    stack.push(Val::ConstInt(0x3f80_0000u32 as i32));
+                    pc += 1;
+                }
+                0x0d => {
+                    stack.push(Val::ConstInt(0x4000_0000u32 as i32));
+                    pc += 1;
+                }
+                0x0e => {
+                    stack.push(Val::ConstLong(0));
+                    pc += 1;
+                }
+                0x0f => {
+                    stack.push(Val::ConstLong(0x3ff0_0000_0000_0000u64 as i64));
+                    pc += 1;
+                }
                 // ldc / ldc_w / ldc2_w — string/int/float/long/double constants. These
                 // materialize lazily via cfg_materialize, exactly like the straight-line path,
                 // so a branchy method that loads a constant (`if(x>0) return "a"; return "b"`)
                 // dexes here instead of bailing.
-                0x12 => { stack.push(e.ldc(cf, bc[pc + 1] as u16)?); pc += 2; }
-                0x13 => { stack.push(e.ldc(cf, u16::from_be_bytes([bc[pc + 1], bc[pc + 2]]))?); pc += 3; }
-                0x14 => { stack.push(e.ldc2(cf, u16::from_be_bytes([bc[pc + 1], bc[pc + 2]]))?); pc += 3; }
+                0x12 => {
+                    stack.push(e.ldc(cf, bc[pc + 1] as u16)?);
+                    pc += 2;
+                }
+                0x13 => {
+                    stack.push(e.ldc(cf, u16::from_be_bytes([bc[pc + 1], bc[pc + 2]]))?);
+                    pc += 3;
+                }
+                0x14 => {
+                    stack.push(e.ldc2(cf, u16::from_be_bytes([bc[pc + 1], bc[pc + 2]]))?);
+                    pc += 3;
+                }
                 0x74 => {
                     // ineg — d8 negates in place (neg-int vR, vR).
                     let v = stack.pop().unwrap();
@@ -1340,7 +1519,8 @@ fn emit_cfg<'a>(
                     let dest = alloc_lowest(&mut used, &mut max_reg, false);
                     // array-length throws NPE on a null array → d8 records a position.
                     e.record_position();
-                    e.insns.push(0x21 | ((dest & 0xf) << 8) | ((ra & 0xf) << 12));
+                    e.insns
+                        .push(0x21 | ((dest & 0xf) << 8) | ((ra & 0xf) << 12));
                     stack.push(Val::Reg(dest, false));
                     pc += 1;
                 }
@@ -1375,9 +1555,11 @@ fn emit_cfg<'a>(
                 }
                 0x99..=0xa4 | 0xc6 | 0xc7 => {
                     let (dexop, two) = cond_branch_dex_op(op).unwrap();
-                    let target = (pc as i32 + i16::from_be_bytes([bc[pc + 1], bc[pc + 2]]) as i32) as usize;
-                    let tb = block_at(target)
-                        .ok_or_else(|| anyhow::anyhow!("dexer (cfg): branch target {target} not a block leader"))?;
+                    let target =
+                        (pc as i32 + i16::from_be_bytes([bc[pc + 1], bc[pc + 2]]) as i32) as usize;
+                    let tb = block_at(target).ok_or_else(|| {
+                        anyhow::anyhow!("dexer (cfg): branch target {target} not a block leader")
+                    })?;
                     let off_unit = if two {
                         let b = stack.pop().unwrap();
                         let a = stack.pop().unwrap();
@@ -1404,7 +1586,10 @@ fn emit_cfg<'a>(
                     }
                     pc += 1;
                 }
-                0xb1 => { e.return_void(); pc += 1; }
+                0xb1 => {
+                    e.return_void();
+                    pc += 1;
+                }
                 // athrow → throw vAA (0x27); d8 records a line position for the throw
                 0xbf => {
                     let v = stack.pop().unwrap();
@@ -1423,7 +1608,11 @@ fn emit_cfg<'a>(
                     e.insns.push(0x1f | (r << 8));
                     let unit = e.insns.len();
                     e.insns.push(0);
-                    e.fixups.push(Fixup { unit, item: ItemRef::Type(desc), wide: false });
+                    e.fixups.push(Fixup {
+                        unit,
+                        item: ItemRef::Type(desc),
+                        wide: false,
+                    });
                     stack.push(Val::Reg(r, false));
                     pc += 3;
                 }
@@ -1454,14 +1643,21 @@ fn emit_cfg<'a>(
                     }
                     let dest = alloc_lowest(&mut used, &mut max_reg, false);
                     let desc = class_ref_desc(cf, u16::from_be_bytes([bc[pc + 1], bc[pc + 2]]))?;
-                    e.insns.push(0x20 | ((dest & 0xf) << 8) | ((rb & 0xf) << 12));
+                    e.insns
+                        .push(0x20 | ((dest & 0xf) << 8) | ((rb & 0xf) << 12));
                     let unit = e.insns.len();
                     e.insns.push(0);
-                    e.fixups.push(Fixup { unit, item: ItemRef::Type(desc), wide: false });
+                    e.fixups.push(Fixup {
+                        unit,
+                        item: ItemRef::Type(desc),
+                        wide: false,
+                    });
                     stack.push(Val::Reg(dest, false));
                     pc += 3;
                 }
-                0x00 => { pc += 1; } // nop — d8 drops it
+                0x00 => {
+                    pc += 1;
+                } // nop — d8 drops it
                 other => bail!(
                     "dexer (cfg): unsupported opcode {other:#04x} in {mname}{mdesc} (needs Phase 1)"
                 ),
@@ -1479,7 +1675,12 @@ fn emit_cfg<'a>(
         e.insns[off_unit] = off as i16 as u16;
     }
 
-    Ok(CfgEmit { e, max_reg, ret_reg, bare_ret })
+    Ok(CfgEmit {
+        e,
+        max_reg,
+        ret_reg,
+        bare_ret,
+    })
 }
 
 fn translate_code_cfg(
@@ -1505,7 +1706,17 @@ fn translate_code_cfg(
 
     // Pass 1: emit without merging, to learn each block's return register.
     let pass1 = emit_cfg(
-        cf, code, ins_size, min_api, &blocks, &live_in, &live_out, bc, lu.loads.clone(), &no_drop, &m.name,
+        cf,
+        code,
+        ins_size,
+        min_api,
+        &blocks,
+        &live_in,
+        &live_out,
+        bc,
+        lu.loads.clone(),
+        &no_drop,
+        &m.name,
         &m.descriptor,
     )?;
 
@@ -1519,12 +1730,14 @@ fn translate_code_cfg(
             continue;
         }
         let r = pass1.ret_reg[bi];
-        let contributors: Vec<usize> =
-            (0..blocks.len()).filter(|&bj| bj != bi && pass1.ret_reg[bj] == r).collect();
+        let contributors: Vec<usize> = (0..blocks.len())
+            .filter(|&bj| bj != bi && pass1.ret_reg[bj] == r)
+            .collect();
         if contributors.is_empty() {
             continue;
         }
-        if contributors.len() == 1 && contributors[0] + 1 == bi && !pass1.bare_ret[contributors[0]] {
+        if contributors.len() == 1 && contributors[0] + 1 == bi && !pass1.bare_ret[contributors[0]]
+        {
             drops.insert(contributors[0]);
         } else {
             bail!(
@@ -1539,7 +1752,17 @@ fn translate_code_cfg(
         pass1
     } else {
         emit_cfg(
-            cf, code, ins_size, min_api, &blocks, &live_in, &live_out, bc, lu.loads, &drops, &m.name,
+            cf,
+            code,
+            ins_size,
+            min_api,
+            &blocks,
+            &live_in,
+            &live_out,
+            bc,
+            lu.loads,
+            &drops,
+            &m.name,
             &m.descriptor,
         )?
     };
@@ -1809,7 +2032,11 @@ impl<'a> Emitter<'a> {
         self.insns.push(0x1a | (reg << 8));
         let unit = self.insns.len();
         self.insns.push(0);
-        self.fixups.push(Fixup { unit, item: ItemRef::String(s), wide: false });
+        self.fixups.push(Fixup {
+            unit,
+            item: ItemRef::String(s),
+            wide: false,
+        });
     }
 
     fn ldc(&mut self, cf: &ClassFile, idx: u16) -> Result<Val> {
@@ -1817,9 +2044,9 @@ impl<'a> Emitter<'a> {
         match cf.constant_pool.get(idx) {
             Constant::Integer(v) => Ok(Val::ConstInt(*v)),
             Constant::Float(f) => Ok(Val::ConstInt(f.to_bits() as i32)),
-            Constant::String { string_index } => {
-                Ok(Val::ConstString(cf.constant_pool.utf8(*string_index)?.to_string()))
-            }
+            Constant::String { string_index } => Ok(Val::ConstString(
+                cf.constant_pool.utf8(*string_index)?.to_string(),
+            )),
             _ => bail!("dexer: unsupported ldc constant (needs Phase 1: class/methodhandle)"),
         }
     }
@@ -1851,7 +2078,8 @@ impl<'a> Emitter<'a> {
                         let src = self.materialize(&b)?;
                         self.release(&b);
                         let dest = self.alloc_result(src, false)?;
-                        self.insns.push(0xd1 | ((dest as u16) << 8) | ((src as u16) << 12));
+                        self.insns
+                            .push(0xd1 | ((dest as u16) << 8) | ((src as u16) << 12));
                         self.insns.push(c as u16);
                         return Ok(Val::Reg(dest, false));
                     }
@@ -1891,7 +2119,8 @@ impl<'a> Emitter<'a> {
                     if div_rem {
                         self.record_position();
                     }
-                    self.insns.push(op16 | ((dest as u16) << 8) | ((src as u16) << 12));
+                    self.insns
+                        .push(op16 | ((dest as u16) << 8) | ((src as u16) << 12));
                     self.insns.push(c as u16);
                     return Ok(Val::Reg(dest, false));
                 }
@@ -1924,10 +2153,16 @@ impl<'a> Emitter<'a> {
         // A constant operand was just materialized into a fresh register that the
         // binop consumes; free it so the result can coalesce into it as d8 does
         // (`(a|BIG)` → `or-int/2addr v0,v2` reuses the constant's register).
-        if matches!(a, Val::ConstInt(_) | Val::ConstLong(_) | Val::ConstString(_)) {
+        if matches!(
+            a,
+            Val::ConstInt(_) | Val::ConstLong(_) | Val::ConstString(_)
+        ) {
             self.free(ra, a.is_wide());
         }
-        if matches!(b, Val::ConstInt(_) | Val::ConstLong(_) | Val::ConstString(_)) {
+        if matches!(
+            b,
+            Val::ConstInt(_) | Val::ConstLong(_) | Val::ConstString(_)
+        ) {
             self.free(rb, b.is_wide());
         }
         let is_free = |e: &Self, r: u16| (0..need).all(|k| !e.used[r as usize + k]);
@@ -1960,7 +2195,8 @@ impl<'a> Emitter<'a> {
         let mul2addr_bug = self.min_api < 23 && is_mul_op(jvm_op);
         if let (Some(src), Some(op2)) = (src_for_2addr, binop_2addr_op(jvm_op)) {
             if !mul2addr_bug {
-                self.insns.push(op2 | ((dest as u16) << 8) | ((src as u16) << 12));
+                self.insns
+                    .push(op2 | ((dest as u16) << 8) | ((src as u16) << 12));
                 return Ok(Val::Reg(dest, wide));
             }
         }
@@ -2047,7 +2283,11 @@ impl<'a> Emitter<'a> {
         self.insns.push(op | (r << 8));
         let unit = self.insns.len();
         self.insns.push(0);
-        self.fixups.push(Fixup { unit, item: ItemRef::Field(field), wide: false });
+        self.fixups.push(Fixup {
+            unit,
+            item: ItemRef::Field(field),
+            wide: false,
+        });
         // (No load-to-load CSE for statics either — see the iget note: it can miscompile.)
         Ok(Val::Reg(r, wide))
     }
@@ -2062,7 +2302,11 @@ impl<'a> Emitter<'a> {
         self.insns.push(0x22 | (r << 8));
         let unit = self.insns.len();
         self.insns.push(0);
-        self.fixups.push(Fixup { unit, item: ItemRef::Type(desc), wide: false });
+        self.fixups.push(Fixup {
+            unit,
+            item: ItemRef::Type(desc),
+            wide: false,
+        });
         Ok(Val::Reg(r, false))
     }
 
@@ -2077,7 +2321,8 @@ impl<'a> Emitter<'a> {
         let src = self.materialize(&v)?;
         self.release(&v);
         let dest = self.alloc_result(src, wide)?;
-        self.insns.push(dex_op | ((dest & 0xf) << 8) | ((src & 0xf) << 12));
+        self.insns
+            .push(dex_op | ((dest & 0xf) << 8) | ((src & 0xf) << 12));
         Ok(Val::Reg(dest, wide))
     }
 
@@ -2090,7 +2335,11 @@ impl<'a> Emitter<'a> {
         self.insns.push(0x1f | (r << 8));
         let unit = self.insns.len();
         self.insns.push(0);
-        self.fixups.push(Fixup { unit, item: ItemRef::Type(desc), wide: false });
+        self.fixups.push(Fixup {
+            unit,
+            item: ItemRef::Type(desc),
+            wide: false,
+        });
         Ok(Val::Reg(r, false))
     }
 
@@ -2102,10 +2351,15 @@ impl<'a> Emitter<'a> {
         self.release(&obj);
         let dest = self.alloc_result(rb, false)?;
         self.record_position(); // d8 treats instance-of as position-bearing (like check-cast)
-        self.insns.push(0x20 | ((dest & 0xf) << 8) | ((rb & 0xf) << 12));
+        self.insns
+            .push(0x20 | ((dest & 0xf) << 8) | ((rb & 0xf) << 12));
         let unit = self.insns.len();
         self.insns.push(0);
-        self.fixups.push(Fixup { unit, item: ItemRef::Type(desc), wide: false });
+        self.fixups.push(Fixup {
+            unit,
+            item: ItemRef::Type(desc),
+            wide: false,
+        });
         Ok(Val::Reg(dest, false))
     }
 
@@ -2115,7 +2369,8 @@ impl<'a> Emitter<'a> {
         self.release(&arr);
         let r = self.alloc_result(ra, false)?;
         self.record_position();
-        self.insns.push(0x21 | ((r & 0xf) << 8) | ((ra & 0xf) << 12));
+        self.insns
+            .push(0x21 | ((r & 0xf) << 8) | ((ra & 0xf) << 12));
         Ok(Val::Reg(r, false))
     }
 
@@ -2157,10 +2412,15 @@ impl<'a> Emitter<'a> {
         self.release(&size);
         let dest = self.alloc_result(rs, false)?;
         self.record_position();
-        self.insns.push(0x23 | ((dest & 0xf) << 8) | ((rs & 0xf) << 12));
+        self.insns
+            .push(0x23 | ((dest & 0xf) << 8) | ((rs & 0xf) << 12));
         let unit = self.insns.len();
         self.insns.push(0);
-        self.fixups.push(Fixup { unit, item: ItemRef::Type(array_desc), wide: false });
+        self.fixups.push(Fixup {
+            unit,
+            item: ItemRef::Type(array_desc),
+            wide: false,
+        });
         Ok(Val::Reg(dest, false))
     }
 
@@ -2176,10 +2436,21 @@ impl<'a> Emitter<'a> {
         self.insns.push(op | (r << 8));
         let unit = self.insns.len();
         self.insns.push(0);
-        self.fixups.push(Fixup { unit, item: ItemRef::Field(field.clone()), wide: false });
+        self.fixups.push(Fixup {
+            unit,
+            item: ItemRef::Field(field.clone()),
+            wide: false,
+        });
         // Store-to-load forwarding for statics (obj_reg = STATIC_OBJ sentinel): a following
         // `sget` of the same field with nothing emitted between returns this value instead.
-        self.last_field_store = Some(FieldStore { obj_reg: STATIC_OBJ, field, value_reg: r, wide, insns_len: self.insns.len(), from_store: true });
+        self.last_field_store = Some(FieldStore {
+            obj_reg: STATIC_OBJ,
+            field,
+            value_reg: r,
+            wide,
+            insns_len: self.insns.len(),
+            from_store: true,
+        });
         Ok(())
     }
 
@@ -2196,9 +2467,9 @@ impl<'a> Emitter<'a> {
                 let (value_reg, w, from_store) = (fs.value_reg, fs.wide, fs.from_store);
                 self.last_field_store = None; // single forward; a third read re-loads (safe)
                 self.release(&obj); // the getfield consumed the receiver
-                // store-to-load: the value reg was freed by the put → re-acquire it. load-to-load:
-                // it's still live on the stack, so hand the same reg out again (consumer reads it
-                // twice and frees idempotently).
+                                    // store-to-load: the value reg was freed by the put → re-acquire it. load-to-load:
+                                    // it's still live on the stack, so hand the same reg out again (consumer reads it
+                                    // twice and frees idempotently).
                 if from_store {
                     self.used[value_reg as usize] = true;
                     if w {
@@ -2227,7 +2498,11 @@ impl<'a> Emitter<'a> {
         self.insns.push(op | ((r & 0xf) << 8) | ((ro & 0xf) << 12));
         let unit = self.insns.len();
         self.insns.push(0);
-        self.fixups.push(Fixup { unit, item: ItemRef::Field(field), wide: false });
+        self.fixups.push(Fixup {
+            unit,
+            item: ItemRef::Field(field),
+            wide: false,
+        });
         // NOTE: load-to-load CSE (reusing this result for a later iget of the same field) is NOT
         // done — it would create a SECOND live use of `r` that the bootstrap allocator doesn't
         // track, so an intervening op can clobber `r` (e.g. `f + f*2`: the `*2` reuses the freed
@@ -2248,10 +2523,21 @@ impl<'a> Emitter<'a> {
         self.insns.push(op | ((rv & 0xf) << 8) | ((ro & 0xf) << 12));
         let unit = self.insns.len();
         self.insns.push(0);
-        self.fixups.push(Fixup { unit, item: ItemRef::Field(field.clone()), wide: false });
+        self.fixups.push(Fixup {
+            unit,
+            item: ItemRef::Field(field.clone()),
+            wide: false,
+        });
         // Record for store-to-load forwarding into an immediately-following `iget` of the same
         // (object, field). `rv` still holds the value (the iput doesn't clobber its source).
-        self.last_field_store = Some(FieldStore { obj_reg: ro, field, value_reg: rv, wide, insns_len: self.insns.len(), from_store: true });
+        self.last_field_store = Some(FieldStore {
+            obj_reg: ro,
+            field,
+            value_reg: rv,
+            wide,
+            insns_len: self.insns.len(),
+            from_store: true,
+        });
         Ok(())
     }
 
@@ -2290,7 +2576,10 @@ impl<'a> Emitter<'a> {
             if v.is_wide() {
                 regs.push(r + 1);
             }
-            if matches!(v, Val::ConstInt(_) | Val::ConstLong(_) | Val::ConstString(_)) {
+            if matches!(
+                v,
+                Val::ConstInt(_) | Val::ConstLong(_) | Val::ConstString(_)
+            ) {
                 const_arg_regs.push((r, v.is_wide()));
             }
         }
@@ -2309,10 +2598,16 @@ impl<'a> Emitter<'a> {
             bail!("dexer: invoke needs range form / register moves (Phase 1)");
         }
         let dex_op: u16 = match jvm_op {
-            0xb6 => 0x6e,                                    // invokevirtual → invoke-virtual
-            0xb7 => if name == "<init>" { 0x70 } else { 0x6f }, // invokespecial → direct/super
-            0xb8 => 0x71,                                    // invokestatic → invoke-static
-            0xb9 => 0x72,                                    // invokeinterface → invoke-interface
+            0xb6 => 0x6e, // invokevirtual → invoke-virtual
+            0xb7 => {
+                if name == "<init>" {
+                    0x70
+                } else {
+                    0x6f
+                }
+            } // invokespecial → direct/super
+            0xb8 => 0x71, // invokestatic → invoke-static
+            0xb9 => 0x72, // invokeinterface → invoke-interface
             _ => bail!("bad invoke op"),
         };
         self.record_position();
@@ -2330,7 +2625,10 @@ impl<'a> Emitter<'a> {
             unit: method_unit,
             item: ItemRef::Method(MethodRef {
                 class: skotch_classfile::constant_pool::internal_to_descriptor(&class),
-                proto: ProtoRef { return_type: ret.clone(), params },
+                proto: ProtoRef {
+                    return_type: ret.clone(),
+                    params,
+                },
                 name,
             }),
             wide: false,
@@ -2352,7 +2650,13 @@ impl<'a> Emitter<'a> {
         }
         let r = self.alloc(wide)?;
         // move-result/-wide/-object
-        let mv: u16 = if wide { 0x0b } else if is_ref(&ret) { 0x0c } else { 0x0a };
+        let mv: u16 = if wide {
+            0x0b
+        } else if is_ref(&ret) {
+            0x0c
+        } else {
+            0x0a
+        };
         self.insns.push(mv | (r << 8));
         Ok((Some(Val::Reg(r, wide)), false))
     }
@@ -2386,7 +2690,8 @@ impl<'a> Emitter<'a> {
 
     /// neg-int / not-int style 12x unary: `op vA, vB`.
     fn emit_unary(&mut self, op: u16, dest: u16, src: u16) {
-        self.insns.push(op | ((dest & 0xf) << 8) | ((src & 0xf) << 12));
+        self.insns
+            .push(op | ((dest & 0xf) << 8) | ((src & 0xf) << 12));
     }
 
     /// if-testz vAA, +0000 (21t) — pushes a placeholder offset; returns the
@@ -2434,7 +2739,6 @@ impl<'a> Emitter<'a> {
     }
 }
 
-
 /// Per-slot load and store counts. Loads free an argument's register on its last
 /// use; stores let the bootstrap support single-assignment locals (it bails in
 /// the translator unless a stored slot is written once and read once).
@@ -2461,7 +2765,12 @@ pub(crate) fn store_slot(bc: &[u8], pc: usize) -> Option<(usize, usize)> {
 /// Loads a local: a stored single-assignment slot yields its bound register
 /// value (consumed — the subset guarantees a single read); an argument slot
 /// yields `Val::Local`, which materializes to its own register.
-fn load_local(e: &Emitter, stored: &mut std::collections::HashMap<u16, Val>, slot: u16, wide: bool) -> Val {
+fn load_local(
+    e: &Emitter,
+    stored: &mut std::collections::HashMap<u16, Val>,
+    slot: u16,
+    wide: bool,
+) -> Val {
     // A MULTI-USE local lives in a pinned register: clone it (don't consume) so later reads still
     // find it. A single-use local is consumed once (lazy/byte-identical). A param yields Val::Local.
     if let Some(v) = stored.get(&slot) {
@@ -2586,10 +2895,10 @@ fn count_local_loads(bc: &[u8], max_locals: usize) -> Result<LocalUses> {
 /// translator's loud error.
 fn instr_len(bc: &[u8], pc: usize) -> usize {
     match bc[pc] {
-        0x10 | 0x12 => 2,                // bipush, ldc
-        0x11 | 0x13 | 0x14 => 3,         // sipush, ldc_w, ldc2_w
-        0xb2..=0xb8 => 3,                // get/put field, invoke (non-interface)
-        0xb9 => 5,                       // invokeinterface
+        0x10 | 0x12 => 2,        // bipush, ldc
+        0x11 | 0x13 | 0x14 => 3, // sipush, ldc_w, ldc2_w
+        0xb2..=0xb8 => 3,        // get/put field, invoke (non-interface)
+        0xb9 => 5,               // invokeinterface
         _ => 1,
     }
 }
@@ -2613,10 +2922,7 @@ pub(crate) fn line_for(line_numbers: &[(u16, u16)], pc: u32) -> Option<u32> {
 /// instructions (d8's release shape): a position is emitted only when the line
 /// changes from the last emitted one; the address state advances only on emitted
 /// entries. Returns `None` when there are no positions (no debug_info_item).
-pub(crate) fn build_debug_info(
-    positions: &[(u32, u32)],
-    params: &[String],
-) -> Option<DebugInfo> {
+pub(crate) fn build_debug_info(positions: &[(u32, u32)], params: &[String]) -> Option<DebugInfo> {
     if positions.is_empty() {
         return None;
     }
@@ -2631,12 +2937,20 @@ pub(crate) fn build_debug_info(
         if !first && *line as i64 == cur_line {
             continue;
         }
-        emit_position(&mut events, *addr as i64 - cur_addr, *line as i64 - cur_line);
+        emit_position(
+            &mut events,
+            *addr as i64 - cur_addr,
+            *line as i64 - cur_line,
+        );
         cur_addr = *addr as i64;
         cur_line = *line as i64;
         first = false;
     }
-    Some(DebugInfo { line_start, parameter_names: vec![None; params.len()], events })
+    Some(DebugInfo {
+        line_start,
+        parameter_names: vec![None; params.len()],
+        events,
+    })
 }
 /// JVM comparison opcode → (DEX `cmp*` op, operands-are-wide). The narrow
 /// result is -1/0/1; `cmpl`/`cmpg` differ only in NaN handling.
@@ -2688,8 +3002,14 @@ pub(crate) fn class_ref_desc(cf: &ClassFile, idx: u16) -> Result<String> {
 /// `newarray` atype byte → array type descriptor.
 pub(crate) fn newarray_desc(atype: u8) -> &'static str {
     match atype {
-        4 => "[Z", 5 => "[C", 6 => "[F", 7 => "[D",
-        8 => "[B", 9 => "[S", 10 => "[I", _ => "[J",
+        4 => "[Z",
+        5 => "[C",
+        6 => "[F",
+        7 => "[D",
+        8 => "[B",
+        9 => "[S",
+        10 => "[I",
+        _ => "[J",
     }
 }
 
@@ -2767,15 +3087,41 @@ fn conv_op(jvm: u8) -> Option<(u16, bool)> {
 pub(crate) fn binop_2addr_op(jvm_op: u8) -> Option<u16> {
     Some(match jvm_op {
         // int
-        0x60 => 0xb0, 0x64 => 0xb1, 0x68 => 0xb2, 0x6c => 0xb3, 0x70 => 0xb4,
-        0x7e => 0xb5, 0x80 => 0xb6, 0x82 => 0xb7, 0x78 => 0xb8, 0x7a => 0xb9, 0x7c => 0xba,
+        0x60 => 0xb0,
+        0x64 => 0xb1,
+        0x68 => 0xb2,
+        0x6c => 0xb3,
+        0x70 => 0xb4,
+        0x7e => 0xb5,
+        0x80 => 0xb6,
+        0x82 => 0xb7,
+        0x78 => 0xb8,
+        0x7a => 0xb9,
+        0x7c => 0xba,
         // long
-        0x61 => 0xbb, 0x65 => 0xbc, 0x69 => 0xbd, 0x6d => 0xbe, 0x71 => 0xbf,
-        0x7f => 0xc0, 0x81 => 0xc1, 0x83 => 0xc2, 0x79 => 0xc3, 0x7b => 0xc4, 0x7d => 0xc5,
+        0x61 => 0xbb,
+        0x65 => 0xbc,
+        0x69 => 0xbd,
+        0x6d => 0xbe,
+        0x71 => 0xbf,
+        0x7f => 0xc0,
+        0x81 => 0xc1,
+        0x83 => 0xc2,
+        0x79 => 0xc3,
+        0x7b => 0xc4,
+        0x7d => 0xc5,
         // float
-        0x62 => 0xc6, 0x66 => 0xc7, 0x6a => 0xc8, 0x6e => 0xc9, 0x72 => 0xca,
+        0x62 => 0xc6,
+        0x66 => 0xc7,
+        0x6a => 0xc8,
+        0x6e => 0xc9,
+        0x72 => 0xca,
         // double
-        0x63 => 0xcb, 0x67 => 0xcc, 0x6b => 0xcd, 0x6f => 0xce, 0x73 => 0xcf,
+        0x63 => 0xcb,
+        0x67 => 0xcc,
+        0x6b => 0xcd,
+        0x6f => 0xce,
+        0x73 => 0xcf,
         _ => return None,
     })
 }
@@ -2783,15 +3129,41 @@ pub(crate) fn binop_2addr_op(jvm_op: u8) -> Option<u16> {
 pub(crate) fn binop_3addr_op(jvm_op: u8) -> Result<u16> {
     Ok(match jvm_op {
         // int
-        0x60 => 0x90, 0x64 => 0x91, 0x68 => 0x92, 0x6c => 0x93, 0x70 => 0x94,
-        0x7e => 0x95, 0x80 => 0x96, 0x82 => 0x97, 0x78 => 0x98, 0x7a => 0x99, 0x7c => 0x9a,
+        0x60 => 0x90,
+        0x64 => 0x91,
+        0x68 => 0x92,
+        0x6c => 0x93,
+        0x70 => 0x94,
+        0x7e => 0x95,
+        0x80 => 0x96,
+        0x82 => 0x97,
+        0x78 => 0x98,
+        0x7a => 0x99,
+        0x7c => 0x9a,
         // long
-        0x61 => 0x9b, 0x65 => 0x9c, 0x69 => 0x9d, 0x6d => 0x9e, 0x71 => 0x9f,
-        0x7f => 0xa0, 0x81 => 0xa1, 0x83 => 0xa2, 0x79 => 0xa3, 0x7b => 0xa4, 0x7d => 0xa5,
+        0x61 => 0x9b,
+        0x65 => 0x9c,
+        0x69 => 0x9d,
+        0x6d => 0x9e,
+        0x71 => 0x9f,
+        0x7f => 0xa0,
+        0x81 => 0xa1,
+        0x83 => 0xa2,
+        0x79 => 0xa3,
+        0x7b => 0xa4,
+        0x7d => 0xa5,
         // float
-        0x62 => 0xa6, 0x66 => 0xa7, 0x6a => 0xa8, 0x6e => 0xa9, 0x72 => 0xaa,
+        0x62 => 0xa6,
+        0x66 => 0xa7,
+        0x6a => 0xa8,
+        0x6e => 0xa9,
+        0x72 => 0xaa,
         // double
-        0x63 => 0xab, 0x67 => 0xac, 0x6b => 0xad, 0x6f => 0xae, 0x73 => 0xaf,
+        0x63 => 0xab,
+        0x67 => 0xac,
+        0x6b => 0xad,
+        0x6f => 0xae,
+        0x73 => 0xaf,
         _ => bail!("unsupported binop {jvm_op:#x}"),
     })
 }
@@ -2848,7 +3220,8 @@ mod tests {
 
     #[test]
     fn report_battery_per_method() {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../skotch-dex/tests/fixtures/B.class");
+        let path =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../skotch-dex/tests/fixtures/B.class");
         let cf = skotch_classfile::parse_class_file(&path).unwrap();
         for m in &cf.methods {
             let r = dex_method(&cf, m, 1, true);
@@ -2866,12 +3239,16 @@ const DBG_LINE_RANGE: i64 = 15;
 
 fn emit_position(events: &mut Vec<DebugEvent>, mut addr_diff: i64, mut line_diff: i64) {
     if line_diff < DBG_LINE_BASE || line_diff > DBG_LINE_BASE + DBG_LINE_RANGE - 1 {
-        events.push(DebugEvent::AdvanceLine { line_diff: line_diff as i32 });
+        events.push(DebugEvent::AdvanceLine {
+            line_diff: line_diff as i32,
+        });
         line_diff = 0;
     }
     let mut adjusted = (line_diff - DBG_LINE_BASE) + DBG_LINE_RANGE * addr_diff;
     if adjusted > 0xff - DBG_FIRST_SPECIAL {
-        events.push(DebugEvent::AdvancePc { addr_diff: addr_diff as u32 });
+        events.push(DebugEvent::AdvancePc {
+            addr_diff: addr_diff as u32,
+        });
         addr_diff = 0;
         adjusted = (line_diff - DBG_LINE_BASE) + DBG_LINE_RANGE * addr_diff;
     }

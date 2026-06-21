@@ -24,7 +24,11 @@ pub fn generate_v2_block(
 ) -> Result<(Vec<u8>, u32)> {
     let mut signer_blocks: Vec<Vec<u8>> = Vec::with_capacity(signers.len());
     for signer in signers {
-        signer_blocks.push(generate_signer_block(signer, content_digests, v3_signing_enabled)?);
+        signer_blocks.push(generate_signer_block(
+            signer,
+            content_digests,
+            v3_signing_enabled,
+        )?);
     }
     let block = sequence_of_length_prefixed(&[sequence_of_length_prefixed(&signer_blocks)]);
     Ok((block, V2_BLOCK_ID))
@@ -40,7 +44,12 @@ fn generate_signer_block(
     let digests: Vec<(u32, Vec<u8>)> = signer
         .signature_algorithms
         .iter()
-        .map(|alg| (alg.id(), content_digests[&alg.content_digest_algorithm()].clone()))
+        .map(|alg| {
+            (
+                alg.id(),
+                content_digests[&alg.content_digest_algorithm()].clone(),
+            )
+        })
         .collect();
     let certs: Vec<Vec<u8>> = signer.certificates.iter().map(|c| c.der.clone()).collect();
     let additional_attributes = v2_additional_attributes(v3_signing_enabled);

@@ -74,15 +74,18 @@ fn run_subcommand(
         }
         "packagename" => {
             let parsed = ParsedArgs::parse(rest, &[], &[])?;
-            for_each_apk(&parsed, diag, printer, |apk, printer, diag| {
-                match get_package_name(apk, diag) {
+            for_each_apk(
+                &parsed,
+                diag,
+                printer,
+                |apk, printer, diag| match get_package_name(apk, diag) {
                     Some(package_name) => {
                         printer.println(package_name);
                         0
                     }
                     None => 1,
-                }
-            })
+                },
+            )
         }
         "permissions" => {
             let parsed = ParsedArgs::parse(rest, &[], &[])?;
@@ -111,7 +114,10 @@ fn run_subcommand(
                 };
                 let target_style = table_printer::style_resource_name(&package_name, &style);
                 if apk.table.find_resource(&target_style).is_none() {
-                    diag.error(format!("Target style \"{}\" does not exist", target_style.entry));
+                    diag.error(format!(
+                        "Target style \"{}\" does not exist",
+                        target_style.entry
+                    ));
                     return 1;
                 }
                 table_printer::print_style_graph(&apk.table, target_style, printer);
@@ -147,14 +153,22 @@ fn run_subcommand(
         }
         "xmlstrings" => {
             let parsed = ParsedArgs::parse(rest, &["--file"], &[])?;
-            let files: Vec<String> = parsed.values("--file").iter().map(|s| s.to_string()).collect();
+            let files: Vec<String> = parsed
+                .values("--file")
+                .iter()
+                .map(|s| s.to_string())
+                .collect();
             for_each_apk(&parsed, diag, printer, |apk, printer, diag| {
                 dump_xml_strings(apk, &files, printer, diag)
             })
         }
         "xmltree" => {
             let parsed = ParsedArgs::parse(rest, &["--file"], &[])?;
-            let files: Vec<String> = parsed.values("--file").iter().map(|s| s.to_string()).collect();
+            let files: Vec<String> = parsed
+                .values("--file")
+                .iter()
+                .map(|s| s.to_string())
+                .collect();
             for_each_apk(&parsed, diag, printer, |apk, printer, diag| {
                 for file in &files {
                     let Some(root) = load_xml(apk, file) else {
@@ -399,10 +413,14 @@ fn dump_container(
     diag: &Diagnostics,
 ) -> Result<()> {
     let read_u32 = |offset: usize| -> Option<u32> {
-        Some(u32::from_le_bytes(data.get(offset..offset + 4)?.try_into().ok()?))
+        Some(u32::from_le_bytes(
+            data.get(offset..offset + 4)?.try_into().ok()?,
+        ))
     };
     let read_u64 = |offset: usize| -> Option<u64> {
-        Some(u64::from_le_bytes(data.get(offset..offset + 8)?.try_into().ok()?))
+        Some(u64::from_le_bytes(
+            data.get(offset..offset + 8)?.try_into().ok()?,
+        ))
     };
 
     let magic = read_u32(0).unwrap_or(0);
@@ -477,7 +495,8 @@ fn dump_container(
                         printer.println(file.source.to_string());
                         printer.print("Type:     ");
                         printer.println(resource_file_type_to_string(file.file_type));
-                        printer.println(format!("Data:     offset={data_offset} length={data_size}"));
+                        printer
+                            .println(format!("Data:     offset={data_offset} length={data_size}"));
                         printer.undent();
                     }
                     Err(e) => {
@@ -589,7 +608,10 @@ mod tests {
         assert_badging_golden(
             "components.apk",
             "components_expected.txt",
-            DumpManifestOptions { include_meta_data: true, only_permissions: false },
+            DumpManifestOptions {
+                include_meta_data: true,
+                only_permissions: false,
+            },
         );
     }
 
@@ -598,7 +620,10 @@ mod tests {
         assert_badging_golden(
             "components.apk",
             "components_permissions_expected.txt",
-            DumpManifestOptions { include_meta_data: false, only_permissions: true },
+            DumpManifestOptions {
+                include_meta_data: false,
+                only_permissions: true,
+            },
         );
     }
 

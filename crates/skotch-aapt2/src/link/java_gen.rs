@@ -149,7 +149,9 @@ fn write_styleable(out: &mut String, name: &str, styleable: &Styleable, finality
         ids.join(", ")
     );
     for (index, reference) in sorted.iter().enumerate() {
-        let Some(attr_name) = &reference.name else { continue };
+        let Some(attr_name) = &reference.name else {
+            continue;
+        };
         let mut suffix = String::new();
         if !attr_name.package.is_empty() {
             suffix.push_str(&attr_name.package.replace('.', "_"));
@@ -224,11 +226,15 @@ pub struct KeepSet {
 
 impl KeepSet {
     pub fn new(conditional: bool) -> Self {
-        KeepSet { conditional, ..Default::default() }
+        KeepSet {
+            conditional,
+            ..Default::default()
+        }
     }
 
     pub fn add_class(&mut self, usage: &str, class: &str, source: Source) {
-        self.classes.push((usage.to_string(), class.to_string(), source));
+        self.classes
+            .push((usage.to_string(), class.to_string(), source));
     }
 
     pub fn add_method(&mut self, class: &str, signature: &str, source: Source) {
@@ -245,8 +251,13 @@ impl KeepSet {
             XmlKind::Manifest => {
                 if matches!(
                     element.name.as_str(),
-                    "activity" | "service" | "receiver" | "provider" | "application"
-                        | "instrumentation" | "activity-alias"
+                    "activity"
+                        | "service"
+                        | "receiver"
+                        | "provider"
+                        | "application"
+                        | "instrumentation"
+                        | "activity-alias"
                 ) {
                     if let Some(name) = element.attr_value(crate::xml::SCHEMA_ANDROID, "name") {
                         self.add_class("AndroidManifest.xml", name, source.clone());
@@ -356,13 +367,20 @@ mod tests {
             )
             .unwrap();
         table
-            .find_resource_mut(&ResourceName::new("com.app", ResourceType::String, "app.name"))
+            .find_resource_mut(&ResourceName::new(
+                "com.app",
+                ResourceType::String,
+                "app.name",
+            ))
             .unwrap()
             .id = Some(ResourceId(0x7f020000));
 
         let source = generate_r_java(&table, "com.app", &JavaGenOptions::default());
         assert!(source.contains("package com.app;"), "{source}");
-        assert!(source.contains("public static final class string"), "{source}");
+        assert!(
+            source.contains("public static final class string"),
+            "{source}"
+        );
         assert!(
             source.contains("public static final int app_name=0x7f020000;"),
             "{source}"
@@ -383,8 +401,14 @@ mod tests {
             .find_resource_mut(&ResourceName::new("com.app", ResourceType::Id, "x"))
             .unwrap()
             .id = Some(ResourceId(0x7f010000));
-        let options = JavaGenOptions { non_final_ids: true, ..Default::default() };
+        let options = JavaGenOptions {
+            non_final_ids: true,
+            ..Default::default()
+        };
         let source = generate_r_java(&table, "com.app", &options);
-        assert!(source.contains("public static int x=0x7f010000;"), "{source}");
+        assert!(
+            source.contains("public static int x=0x7f010000;"),
+            "{source}"
+        );
     }
 }

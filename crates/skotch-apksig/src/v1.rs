@@ -113,7 +113,12 @@ pub fn sign_manifest(
     manifest: &OutputManifest,
 ) -> Result<V1Output> {
     let mut entries = Vec::with_capacity(2 * signers.len() + 1);
-    let sf_bytes = generate_signature_file(apk_signing_scheme_ids, digest_algorithm, created_by, manifest);
+    let sf_bytes = generate_signature_file(
+        apk_signing_scheme_ids,
+        digest_algorithm,
+        created_by,
+        manifest,
+    );
     for signer in signers {
         let block = generate_signature_block(signer, &sf_bytes)?;
         entries.push((format!("META-INF/{}.SF", signer.name), sf_bytes.clone()));
@@ -158,7 +163,10 @@ fn generate_signature_file(
         write_individual_section(
             &mut out,
             section_name,
-            &[(entry_digest_attr.to_string(), base64::encode(&section_digest))],
+            &[(
+                entry_digest_attr.to_string(),
+                base64::encode(&section_digest),
+            )],
         );
     }
 
@@ -222,7 +230,8 @@ fn write_main_section(out: &mut Vec<u8>, attrs: &[(String, String)], first_attr:
         .unwrap_or_else(|| "1.0".to_string());
     write_attribute(out, first_attr, &first_value);
     if attrs.len() > 1 {
-        let mut sorted: Vec<&(String, String)> = attrs.iter().filter(|(k, _)| k != first_attr).collect();
+        let mut sorted: Vec<&(String, String)> =
+            attrs.iter().filter(|(k, _)| k != first_attr).collect();
         sorted.sort_by(|a, b| a.0.cmp(&b.0));
         for (k, v) in sorted {
             write_attribute(out, k, v);
@@ -372,10 +381,14 @@ mod tests {
     #[test]
     fn manifest_digest_needed_predicate() {
         assert!(is_jar_entry_digest_needed_in_manifest("classes.dex"));
-        assert!(!is_jar_entry_digest_needed_in_manifest("META-INF/MANIFEST.MF"));
+        assert!(!is_jar_entry_digest_needed_in_manifest(
+            "META-INF/MANIFEST.MF"
+        ));
         assert!(!is_jar_entry_digest_needed_in_manifest("META-INF/CERT.SF"));
         assert!(!is_jar_entry_digest_needed_in_manifest("META-INF/CERT.RSA"));
-        assert!(is_jar_entry_digest_needed_in_manifest("META-INF/services/foo"));
+        assert!(is_jar_entry_digest_needed_in_manifest(
+            "META-INF/services/foo"
+        ));
         assert!(!is_jar_entry_digest_needed_in_manifest("res/"));
     }
 

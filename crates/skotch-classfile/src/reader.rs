@@ -77,7 +77,9 @@ pub fn parse_class(data: &[u8]) -> Result<ClassFile> {
             }
             // visibility 1 = RUNTIME, 0 = BUILD (RuntimeInvisible)
             "RuntimeVisibleAnnotations" => parse_class_annotations(body, &cp, 1, &mut annotations)?,
-            "RuntimeInvisibleAnnotations" => parse_class_annotations(body, &cp, 0, &mut annotations)?,
+            "RuntimeInvisibleAnnotations" => {
+                parse_class_annotations(body, &cp, 0, &mut annotations)?
+            }
             "Signature" => {
                 signature = Some(cp.utf8(u16::from_be_bytes([body[0], body[1]]))?.to_string());
             }
@@ -120,8 +122,16 @@ fn parse_inner_classes(body: &[u8], cp: &ConstantPool) -> Result<Vec<InnerClassE
         p += 8;
         out.push(InnerClassEntry {
             inner: cp.class_name(inner_idx)?.to_string(),
-            outer: if outer_idx == 0 { None } else { Some(cp.class_name(outer_idx)?.to_string()) },
-            inner_name: if name_idx == 0 { None } else { Some(cp.utf8(name_idx)?.to_string()) },
+            outer: if outer_idx == 0 {
+                None
+            } else {
+                Some(cp.class_name(outer_idx)?.to_string())
+            },
+            inner_name: if name_idx == 0 {
+                None
+            } else {
+                Some(cp.utf8(name_idx)?.to_string())
+            },
             access_flags,
         });
     }
@@ -134,8 +144,15 @@ fn parse_enclosing_method(body: &[u8], cp: &ConstantPool) -> Result<EnclosingMet
     let nt_idx = be_u16(body, 2);
     let method = if nt_idx == 0 {
         None
-    } else if let Constant::NameAndType { name_index, descriptor_index } = cp.get(nt_idx) {
-        Some((cp.utf8(*name_index)?.to_string(), cp.utf8(*descriptor_index)?.to_string()))
+    } else if let Constant::NameAndType {
+        name_index,
+        descriptor_index,
+    } = cp.get(nt_idx)
+    {
+        Some((
+            cp.utf8(*name_index)?.to_string(),
+            cp.utf8(*descriptor_index)?.to_string(),
+        ))
     } else {
         None
     };
@@ -185,7 +202,14 @@ fn parse_annotation(
         elements.push(AnnotationElement { name, value });
         p = np;
     }
-    Ok((ClassAnnotation { visibility, type_desc, elements }, p))
+    Ok((
+        ClassAnnotation {
+            visibility,
+            type_desc,
+            elements,
+        },
+        p,
+    ))
 }
 
 /// Parses one `element_value` at `body[p]`, returning it and the position after it. Every
@@ -197,41 +221,69 @@ fn parse_element_value(body: &[u8], p: usize, cp: &ConstantPool) -> Result<(AnnE
     let mut p = p + 1;
     let v = match tag {
         b'I' => {
-            let v = match cp.get(be_u16(body, p)) { Constant::Integer(v) => AnnElemValue::Int(*v), _ => AnnElemValue::Unsupported };
-            p += 2; v
+            let v = match cp.get(be_u16(body, p)) {
+                Constant::Integer(v) => AnnElemValue::Int(*v),
+                _ => AnnElemValue::Unsupported,
+            };
+            p += 2;
+            v
         }
         b'J' => {
-            let v = match cp.get(be_u16(body, p)) { Constant::Long(v) => AnnElemValue::Long(*v), _ => AnnElemValue::Unsupported };
-            p += 2; v
+            let v = match cp.get(be_u16(body, p)) {
+                Constant::Long(v) => AnnElemValue::Long(*v),
+                _ => AnnElemValue::Unsupported,
+            };
+            p += 2;
+            v
         }
         b'F' => {
-            let v = match cp.get(be_u16(body, p)) { Constant::Float(v) => AnnElemValue::Float(*v), _ => AnnElemValue::Unsupported };
-            p += 2; v
+            let v = match cp.get(be_u16(body, p)) {
+                Constant::Float(v) => AnnElemValue::Float(*v),
+                _ => AnnElemValue::Unsupported,
+            };
+            p += 2;
+            v
         }
         b'D' => {
-            let v = match cp.get(be_u16(body, p)) { Constant::Double(v) => AnnElemValue::Double(*v), _ => AnnElemValue::Unsupported };
-            p += 2; v
+            let v = match cp.get(be_u16(body, p)) {
+                Constant::Double(v) => AnnElemValue::Double(*v),
+                _ => AnnElemValue::Unsupported,
+            };
+            p += 2;
+            v
         }
         b'Z' => {
-            let v = match cp.get(be_u16(body, p)) { Constant::Integer(v) => AnnElemValue::Boolean(*v != 0), _ => AnnElemValue::Unsupported };
-            p += 2; v
+            let v = match cp.get(be_u16(body, p)) {
+                Constant::Integer(v) => AnnElemValue::Boolean(*v != 0),
+                _ => AnnElemValue::Unsupported,
+            };
+            p += 2;
+            v
         }
         b's' => {
             let v = AnnElemValue::Str(cp.utf8(be_u16(body, p))?.to_string());
-            p += 2; v
+            p += 2;
+            v
         }
         // byte/char/short carry distinct DEX value_types not yet emitted; class likewise.
-        b'B' | b'C' | b'S' | b'c' => { p += 2; AnnElemValue::Unsupported }
+        b'B' | b'C' | b'S' | b'c' => {
+            p += 2;
+            AnnElemValue::Unsupported
+        }
         b'e' => {
             // enum_const_value: type_name_index (descriptor) + const_name_index
             let type_desc = cp.utf8(be_u16(body, p))?.to_string();
             let const_name = cp.utf8(be_u16(body, p + 2))?.to_string();
             p += 4;
-            AnnElemValue::Enum { type_desc, const_name }
+            AnnElemValue::Enum {
+                type_desc,
+                const_name,
+            }
         }
         b'@' => {
             let (_, np) = parse_annotation(body, p, cp, 0)?; // skip nested annotation
-            p = np; AnnElemValue::Unsupported
+            p = np;
+            AnnElemValue::Unsupported
         }
         b'[' => {
             let count = be_u16(body, p);
@@ -272,19 +324,40 @@ fn parse_members(c: &mut Cursor, cp: &ConstantPool, is_field: bool) -> Result<Ve
                     constant_value = Some(cp.get(idx).clone());
                 }
                 "RuntimeVisibleAnnotations" => {
-                    parse_class_annotations(&c.d[body_start..body_start + len], cp, 1, &mut annotations)?;
+                    parse_class_annotations(
+                        &c.d[body_start..body_start + len],
+                        cp,
+                        1,
+                        &mut annotations,
+                    )?;
                 }
                 "RuntimeInvisibleAnnotations" => {
-                    parse_class_annotations(&c.d[body_start..body_start + len], cp, 0, &mut annotations)?;
+                    parse_class_annotations(
+                        &c.d[body_start..body_start + len],
+                        cp,
+                        0,
+                        &mut annotations,
+                    )?;
                 }
                 "Signature" => {
-                    signature = Some(cp.utf8(u16::from_be_bytes([c.d[body_start], c.d[body_start + 1]]))?.to_string());
+                    signature = Some(
+                        cp.utf8(u16::from_be_bytes([c.d[body_start], c.d[body_start + 1]]))?
+                            .to_string(),
+                    );
                 }
                 _ => {}
             }
             c.p = body_start + len;
         }
-        out.push(Member { access_flags, name, descriptor, code, constant_value, annotations, signature });
+        out.push(Member {
+            access_flags,
+            name,
+            descriptor,
+            code,
+            constant_value,
+            annotations,
+            signature,
+        });
     }
     Ok(out)
 }
@@ -307,7 +380,12 @@ fn parse_code(d: &[u8], start: usize, cp: &ConstantPool) -> Result<Code> {
         } else {
             Some(cp.class_name(catch_idx)?.to_string())
         };
-        exceptions.push(ExceptionEntry { start_pc, end_pc, handler_pc, catch_type });
+        exceptions.push(ExceptionEntry {
+            start_pc,
+            end_pc,
+            handler_pc,
+            catch_type,
+        });
     }
     let mut line_numbers = Vec::new();
     let mut local_variables = Vec::new();
@@ -333,18 +411,34 @@ fn parse_code(d: &[u8], start: usize, cp: &ConstantPool) -> Result<Code> {
                     let o = body_start + 2 + i * 10;
                     let start_pc = u16::from_be_bytes([c.d[o], c.d[o + 1]]);
                     let length = u16::from_be_bytes([c.d[o + 2], c.d[o + 3]]);
-                    let name = cp.utf8(u16::from_be_bytes([c.d[o + 4], c.d[o + 5]]))?.to_string();
-                    let descriptor =
-                        cp.utf8(u16::from_be_bytes([c.d[o + 6], c.d[o + 7]]))?.to_string();
+                    let name = cp
+                        .utf8(u16::from_be_bytes([c.d[o + 4], c.d[o + 5]]))?
+                        .to_string();
+                    let descriptor = cp
+                        .utf8(u16::from_be_bytes([c.d[o + 6], c.d[o + 7]]))?
+                        .to_string();
                     let index = u16::from_be_bytes([c.d[o + 8], c.d[o + 9]]);
-                    local_variables.push(LocalVariable { start_pc, length, name, descriptor, index });
+                    local_variables.push(LocalVariable {
+                        start_pc,
+                        length,
+                        name,
+                        descriptor,
+                        index,
+                    });
                 }
             }
             _ => {}
         }
         c.p = body_start + len;
     }
-    Ok(Code { max_stack, max_locals, bytecode, exceptions, line_numbers, local_variables })
+    Ok(Code {
+        max_stack,
+        max_locals,
+        bytecode,
+        exceptions,
+        line_numbers,
+        local_variables,
+    })
 }
 
 fn parse_bootstrap_methods(body: &[u8]) -> Vec<BootstrapMethod> {
@@ -360,7 +454,10 @@ fn parse_bootstrap_methods(body: &[u8]) -> Vec<BootstrapMethod> {
             args.push(u16::from_be_bytes([body[o], body[o + 1]]));
             o += 2;
         }
-        out.push(BootstrapMethod { method_handle_index: mh, arguments: args });
+        out.push(BootstrapMethod {
+            method_handle_index: mh,
+            arguments: args,
+        });
     }
     out
 }
@@ -371,8 +468,12 @@ mod tests {
     use std::path::Path;
 
     fn fixture(name: &str) -> Vec<u8> {
-        std::fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures").join(name))
-            .unwrap()
+        std::fs::read(
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/fixtures")
+                .join(name),
+        )
+        .unwrap()
     }
 
     #[test]

@@ -52,7 +52,11 @@ fn link_apk(
         options.include_paths.push(framework.to_path_buf());
     }
     options.generate_java_class_path = java_dir.map(Path::to_path_buf);
-    options.output_format = if proto { OutputFormat::Proto } else { OutputFormat::Binary };
+    options.output_format = if proto {
+        OutputFormat::Proto
+    } else {
+        OutputFormat::Binary
+    };
     options.manifest_fixer_options.min_sdk_version_default = Some("21".to_string());
     options.manifest_fixer_options.target_sdk_version_default = Some("33".to_string());
     options.verbose = false;
@@ -92,8 +96,7 @@ fn basic_test_compile_link_and_verify() {
     assert_eq!(package_name, "com.android.aapt.basic");
 
     // BasicTest defines attr/format_conflict via two styleables.
-    let attr_name =
-        ResourceName::new(package_name.clone(), ResourceType::Attr, "format_conflict");
+    let attr_name = ResourceName::new(package_name.clone(), ResourceType::Attr, "format_conflict");
     let entry = apk
         .table
         .find_resource(&attr_name)
@@ -102,7 +105,9 @@ fn basic_test_compile_link_and_verify() {
 
     // The manifest must parse as binary XML with injected SDK levels.
     let manifest = apk.manifest().expect("binary manifest parses");
-    let uses_sdk = manifest.find_child("", "uses-sdk").expect("uses-sdk injected");
+    let uses_sdk = manifest
+        .find_child("", "uses-sdk")
+        .expect("uses-sdk injected");
     assert!(uses_sdk
         .attributes
         .iter()
@@ -240,7 +245,11 @@ fn proto_format_link_and_convert_round_trip() {
     let package = binary_apk.package_name().unwrap();
     assert!(binary_apk
         .table
-        .find_resource(&ResourceName::new(package, ResourceType::Attr, "format_conflict"))
+        .find_resource(&ResourceName::new(
+            package,
+            ResourceType::Attr,
+            "format_conflict"
+        ))
         .is_some());
 }
 

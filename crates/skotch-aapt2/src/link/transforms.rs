@@ -78,7 +78,11 @@ pub fn move_private_attrs(table: &mut ResourceTable) -> Result<()> {
         package.types[attr_index].entries = public;
         if !private.is_empty() {
             let named_type = ResourceNamedType::with_default_name(ResourceType::AttrPrivate);
-            let private_type = match package.types.iter().position(|t| t.named_type == named_type) {
+            let private_type = match package
+                .types
+                .iter()
+                .position(|t| t.named_type == named_type)
+            {
                 Some(i) => &mut package.types[i],
                 None => {
                     package.types.push(ResourceTableType::new(named_type));
@@ -189,8 +193,12 @@ pub fn auto_version(table: &mut ResourceTable) -> Result<()> {
                         // Beyond L MR1 the runtime handles missing attrs.
                         continue;
                     }
-                    let Some(value) = &config_value.value else { continue };
-                    let ValueKind::Style(style) = &value.kind else { continue };
+                    let Some(value) = &config_value.value else {
+                        continue;
+                    };
+                    let ValueKind::Style(style) = &value.kind else {
+                        continue;
+                    };
 
                     // The minimum SDK any used attribute requires.
                     let mut needed_sdk = 0u16;
@@ -208,7 +216,10 @@ pub fn auto_version(table: &mut ResourceTable) -> Result<()> {
                         // versioned config.
                         let mut versioned_config = config_value.config.clone();
                         versioned_config.sdk_version = needed_sdk;
-                        if entry.find_value(&versioned_config, &config_value.product).is_none() {
+                        if entry
+                            .find_value(&versioned_config, &config_value.product)
+                            .is_none()
+                        {
                             let mut copy = config_value.clone();
                             copy.config = versioned_config;
                             new_values.push(copy);
@@ -288,8 +299,10 @@ pub fn collapse_versions(table: &mut ResourceTable, min_sdk: i32) -> Result<()> 
                 // the highest version <= minSdk plus everything above.
                 let values = std::mem::take(&mut entry.values);
                 let mut kept: Vec<crate::res::table::ResourceConfigValue> = Vec::new();
-                let mut groups: Vec<(ConfigDescription, Vec<crate::res::table::ResourceConfigValue>)> =
-                    Vec::new();
+                let mut groups: Vec<(
+                    ConfigDescription,
+                    Vec<crate::res::table::ResourceConfigValue>,
+                )> = Vec::new();
                 for value in values {
                     let mut key = value.config.clone();
                     key.sdk_version = 0;
@@ -327,7 +340,9 @@ pub fn collapse_versions(table: &mut ResourceTable, min_sdk: i32) -> Result<()> 
                     }
                 }
                 kept.sort_by(|a, b| {
-                    a.config.cmp(&b.config).then_with(|| a.product.cmp(&b.product))
+                    a.config
+                        .cmp(&b.config)
+                        .then_with(|| a.product.cmp(&b.product))
                 });
                 // Collapsing version qualifiers can produce duplicate
                 // configs; keep the last (highest original version).
@@ -350,10 +365,7 @@ pub fn collapse_versions(table: &mut ResourceTable, min_sdk: i32) -> Result<()> 
 /// excluded config (`--exclude-configs`). Mirrors `ResourceExcluder`:
 /// a value matches when, on every axis the excluded config sets, the
 /// value's config does not differ from it.
-pub fn exclude_configs(
-    table: &mut ResourceTable,
-    excluded: &[ConfigDescription],
-) -> Result<()> {
+pub fn exclude_configs(table: &mut ResourceTable, excluded: &[ConfigDescription]) -> Result<()> {
     let default_config = ConfigDescription::default();
     // Pre-compute each excluded config's set axes.
     let targets: Vec<(&ConfigDescription, u32)> = excluded
@@ -458,7 +470,9 @@ fn filter_element(
     has_error: &mut bool,
 ) {
     element.children.retain(|child| {
-        let crate::xml::Node::Element(el) = child else { return true };
+        let crate::xml::Node::Element(el) = child else {
+            return true;
+        };
         let Some(attr) = el.find_attribute(crate::xml::SCHEMA_ANDROID, "featureFlag") else {
             return true;
         };
@@ -564,7 +578,10 @@ mod tests {
     use crate::res::{ResourceName, ResourceType};
 
     fn string_value(s: &str) -> Value {
-        Value::item(Item::String { value: s.to_string(), untranslatable_sections: vec![] })
+        Value::item(Item::String {
+            value: s.to_string(),
+            untranslatable_sections: vec![],
+        })
     }
 
     #[test]
@@ -574,7 +591,11 @@ mod tests {
         let mut table = ResourceTable::new();
         let name = ResourceName::new("app", ResourceType::String, "x");
         table
-            .add_value(name.clone(), ConfigDescription::default(), string_value("same"))
+            .add_value(
+                name.clone(),
+                ConfigDescription::default(),
+                string_value("same"),
+            )
             .unwrap();
         table
             .add_value(
@@ -596,12 +617,13 @@ mod tests {
             entry.values.len(),
             2,
             "{:?}",
-            entry.values.iter().map(|v| v.config.to_string()).collect::<Vec<_>>()
+            entry
+                .values
+                .iter()
+                .map(|v| v.config.to_string())
+                .collect::<Vec<_>>()
         );
-        assert!(entry
-            .values
-            .iter()
-            .all(|v| v.config.to_string() != "land"));
+        assert!(entry.values.iter().all(|v| v.config.to_string() != "land"));
     }
 
     #[test]
@@ -609,7 +631,11 @@ mod tests {
         let mut table = ResourceTable::new();
         let name = ResourceName::new("app", ResourceType::String, "x");
         table
-            .add_value(name.clone(), ConfigDescription::default(), string_value("base"))
+            .add_value(
+                name.clone(),
+                ConfigDescription::default(),
+                string_value("base"),
+            )
             .unwrap();
         table
             .add_value(
@@ -637,7 +663,11 @@ mod tests {
         let mut table = ResourceTable::new();
         let with_default = ResourceName::new("app", ResourceType::String, "ok");
         table
-            .add_value(with_default.clone(), ConfigDescription::default(), string_value("x"))
+            .add_value(
+                with_default.clone(),
+                ConfigDescription::default(),
+                string_value("x"),
+            )
             .unwrap();
         let without_default = ResourceName::new("app", ResourceType::String, "bad");
         table

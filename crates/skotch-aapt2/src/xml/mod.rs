@@ -40,14 +40,23 @@ pub struct ExtractedPackage {
 pub fn extract_package_from_namespace(namespace_uri: &str) -> Option<ExtractedPackage> {
     if let Some(package) = namespace_uri.strip_prefix(SCHEMA_PUBLIC_PREFIX) {
         if !package.is_empty() {
-            return Some(ExtractedPackage { package: package.to_string(), private_namespace: false });
+            return Some(ExtractedPackage {
+                package: package.to_string(),
+                private_namespace: false,
+            });
         }
     } else if let Some(package) = namespace_uri.strip_prefix(SCHEMA_PRIVATE_PREFIX) {
         if !package.is_empty() {
-            return Some(ExtractedPackage { package: package.to_string(), private_namespace: true });
+            return Some(ExtractedPackage {
+                package: package.to_string(),
+                private_namespace: true,
+            });
         }
     } else if namespace_uri == SCHEMA_AUTO {
-        return Some(ExtractedPackage { package: String::new(), private_namespace: true });
+        return Some(ExtractedPackage {
+            package: String::new(),
+            private_namespace: true,
+        });
     }
     None
 }
@@ -55,7 +64,11 @@ pub fn extract_package_from_namespace(namespace_uri: &str) -> Option<ExtractedPa
 /// Builds the namespace URI for a package, mirroring
 /// `xml::BuildPackageNamespace`.
 pub fn build_package_namespace(package: &str, private_reference: bool) -> String {
-    let prefix = if private_reference { SCHEMA_PRIVATE_PREFIX } else { SCHEMA_PUBLIC_PREFIX };
+    let prefix = if private_reference {
+        SCHEMA_PRIVATE_PREFIX
+    } else {
+        SCHEMA_PUBLIC_PREFIX
+    };
     format!("{prefix}{package}")
 }
 
@@ -150,7 +163,10 @@ pub struct Element {
 
 impl Element {
     pub fn new(name: impl Into<String>) -> Self {
-        Element { name: name.into(), ..Default::default() }
+        Element {
+            name: name.into(),
+            ..Default::default()
+        }
     }
 
     pub fn find_attribute(&self, namespace_uri: &str, name: &str) -> Option<&XmlAttribute> {
@@ -170,7 +186,8 @@ impl Element {
     }
 
     pub fn attr_value(&self, namespace_uri: &str, name: &str) -> Option<&str> {
-        self.find_attribute(namespace_uri, name).map(|a| a.value.as_str())
+        self.find_attribute(namespace_uri, name)
+            .map(|a| a.value.as_str())
     }
 
     pub fn remove_attribute(&mut self, namespace_uri: &str, name: &str) -> Option<XmlAttribute> {
@@ -185,14 +202,17 @@ impl Element {
     pub fn set_attribute(&mut self, namespace_uri: &str, name: &str, value: &str) {
         match self.find_attribute_mut(namespace_uri, name) {
             Some(attr) => attr.value = value.to_string(),
-            None => self.attributes.push(XmlAttribute::new(namespace_uri, name, value)),
+            None => self
+                .attributes
+                .push(XmlAttribute::new(namespace_uri, name, value)),
         }
     }
 
     pub fn find_child(&self, namespace_uri: &str, name: &str) -> Option<&Element> {
-        self.children.iter().filter_map(Node::as_element).find(|el| {
-            el.namespace_uri == namespace_uri && el.name == name
-        })
+        self.children
+            .iter()
+            .filter_map(Node::as_element)
+            .find(|el| el.namespace_uri == namespace_uri && el.name == name)
     }
 
     pub fn find_child_mut(&mut self, namespace_uri: &str, name: &str) -> Option<&mut Element> {
@@ -245,12 +265,18 @@ pub struct XmlResource {
 
 /// Parses source XML into the aapt2-shaped DOM.
 pub fn parse_source_xml(source_path: &str, text: &str) -> anyhow::Result<XmlResource> {
-    let options = roxmltree::ParsingOptions { allow_dtd: true, ..Default::default() };
+    let options = roxmltree::ParsingOptions {
+        allow_dtd: true,
+        ..Default::default()
+    };
     let doc = roxmltree::Document::parse_with_options(text, options)
         .map_err(|e| anyhow::anyhow!("{source_path}:{}: {e}", e.pos().row))?;
     let root_node = doc.root_element();
     let root = convert_element(&doc, root_node, None)?;
-    Ok(XmlResource { source_path: source_path.to_string(), root: Some(root) })
+    Ok(XmlResource {
+        source_path: source_path.to_string(),
+        root: Some(root),
+    })
 }
 
 fn node_pos(doc: &roxmltree::Document, node: roxmltree::Node) -> (usize, usize) {
@@ -294,11 +320,9 @@ fn convert_element(
         ));
     }
     // aapt2 sorts attributes at parse time.
-    element
-        .attributes
-        .sort_by(|a, b| {
-            (&a.namespace_uri, &a.name, &a.value).cmp(&(&b.namespace_uri, &b.name, &b.value))
-        });
+    element.attributes.sort_by(|a, b| {
+        (&a.namespace_uri, &a.name, &a.value).cmp(&(&b.namespace_uri, &b.name, &b.value))
+    });
 
     // Children: elements and text; comments attach to the next element;
     // adjacent text runs merge; empty text drops.
@@ -446,7 +470,10 @@ fn decode_pb_node(data: &[u8]) -> anyhow::Result<(Option<Element>, Option<Text>)
         match (field.number, field.wire_type) {
             (1, WIRE_LEN) => element = Some(decode_pb_element(field.data)?),
             (2, WIRE_LEN) => {
-                text = Some(Text { text: field.as_string(), ..Default::default() })
+                text = Some(Text {
+                    text: field.as_string(),
+                    ..Default::default()
+                })
             }
             (3, WIRE_LEN) => {
                 let mut sub = Reader::new(field.data);
@@ -560,7 +587,10 @@ mod tests {
         assert_eq!(root.namespace_decls[0].uri, SCHEMA_ANDROID);
         assert_eq!(root.attr_value("", "package"), Some("com.app"));
         let app = root.find_child("", "application").unwrap();
-        assert_eq!(app.attr_value(SCHEMA_ANDROID, "label"), Some("@string/app_name"));
+        assert_eq!(
+            app.attr_value(SCHEMA_ANDROID, "label"),
+            Some("@string/app_name")
+        );
         assert!(app.find_child("", "activity").is_some());
     }
 
@@ -603,11 +633,17 @@ mod tests {
     fn extract_package() {
         assert_eq!(
             extract_package_from_namespace(SCHEMA_ANDROID),
-            Some(ExtractedPackage { package: "android".to_string(), private_namespace: false })
+            Some(ExtractedPackage {
+                package: "android".to_string(),
+                private_namespace: false
+            })
         );
         assert_eq!(
             extract_package_from_namespace(SCHEMA_AUTO),
-            Some(ExtractedPackage { package: String::new(), private_namespace: true })
+            Some(ExtractedPackage {
+                package: String::new(),
+                private_namespace: true
+            })
         );
         assert_eq!(extract_package_from_namespace(SCHEMA_TOOLS), None);
     }

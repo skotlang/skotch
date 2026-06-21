@@ -54,7 +54,9 @@ pub fn decode(bytes: &[u8]) -> String {
         } else {
             let b = bytes[i + 1];
             let c = bytes[i + 2];
-            units.push((((a & 0x0f) as u16) << 12) | (((b & 0x3f) as u16) << 6) | ((c & 0x3f) as u16));
+            units.push(
+                (((a & 0x0f) as u16) << 12) | (((b & 0x3f) as u16) << 6) | ((c & 0x3f) as u16),
+            );
             i += 3;
         }
     }

@@ -189,7 +189,7 @@ enum Command {
     #[command(
         allow_hyphen_values = true,
         trailing_var_arg = true,
-        disable_help_flag = true,
+        disable_help_flag = true
     )]
     Apksigner {
         /// apksigner-style arguments — see `skotch apksigner --help`.
@@ -209,7 +209,7 @@ enum Command {
     #[command(
         allow_hyphen_values = true,
         trailing_var_arg = true,
-        disable_help_flag = true,
+        disable_help_flag = true
     )]
     Aapt2 {
         /// aapt2-style arguments: a subcommand (compile, link, dump,
@@ -225,7 +225,7 @@ enum Command {
     #[command(
         allow_hyphen_values = true,
         trailing_var_arg = true,
-        disable_help_flag = true,
+        disable_help_flag = true
     )]
     D8 {
         /// d8-style arguments — see `skotch d8 --help`.

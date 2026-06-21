@@ -13,9 +13,10 @@ fn fixtures() -> PathBuf {
 
 fn rsa2048_signer() -> SignerConfig {
     let dir = fixtures().join("keys");
-    let key = PrivateKey::from_pkcs8_der(&std::fs::read(dir.join("rsa-2048.pk8")).unwrap()).unwrap();
-    let cert =
-        Certificate::from_pem_or_der(&std::fs::read(dir.join("rsa-2048.x509.pem")).unwrap()).unwrap();
+    let key =
+        PrivateKey::from_pkcs8_der(&std::fs::read(dir.join("rsa-2048.pk8")).unwrap()).unwrap();
+    let cert = Certificate::from_pem_or_der(&std::fs::read(dir.join("rsa-2048.x509.pem")).unwrap())
+        .unwrap();
     SignerConfig {
         name: "rsa-2048".to_string(),
         key,

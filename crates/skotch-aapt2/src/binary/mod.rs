@@ -278,7 +278,11 @@ pub struct ChunkIterator<'a> {
 
 impl<'a> ChunkIterator<'a> {
     pub fn new(data: &'a [u8]) -> Self {
-        ChunkIterator { data, pos: 0, error: None }
+        ChunkIterator {
+            data,
+            pos: 0,
+            error: None,
+        }
     }
 }
 
@@ -310,7 +314,11 @@ impl<'a> Iterator for ChunkIterator<'a> {
             return None;
         }
         self.pos += size;
-        Some(Chunk { type_id, header_size, data: &remaining[..size] })
+        Some(Chunk {
+            type_id,
+            header_size,
+            data: &remaining[..size],
+        })
     }
 }
 

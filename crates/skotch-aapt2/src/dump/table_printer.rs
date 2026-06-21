@@ -200,8 +200,7 @@ pub fn print_table(table: &ResourceTable, options: DebugPrintTableOptions, print
 
         printer.indent();
         for (ty, entries) in types {
-            let type_id: Option<u8> =
-                ty.entries.iter().find_map(|e| e.id.map(|id| id.type_id()));
+            let type_id: Option<u8> = ty.entries.iter().find_map(|e| e.id.map(|id| id.type_id()));
             printer.print("type ");
             printer.print(ty.named_type.to_string());
             if let Some(id) = type_id {
@@ -382,14 +381,21 @@ pub fn print_style_graph(table: &ResourceTable, target_style: ResourceName, prin
     let mut styles_to_visit: VecDeque<ResourceName> = VecDeque::new();
     styles_to_visit.push_back(target_style);
     while let Some(style_name) = styles_to_visit.pop_front() {
-        if graph.get(&style_name).is_some_and(|parents| !parents.is_empty()) {
+        if graph
+            .get(&style_name)
+            .is_some_and(|parents| !parents.is_empty())
+        {
             // Already visited.
             continue;
         }
         let parents = graph.entry(style_name.clone()).or_default();
         if let Some(result) = table.find_resource(&style_name) {
             for value in &result.entry.values {
-                if let Some(Value { kind: ValueKind::Style(style), .. }) = &value.value {
+                if let Some(Value {
+                    kind: ValueKind::Style(style),
+                    ..
+                }) = &value.value
+                {
                     if let Some(parent) = &style.parent {
                         if let Some(parent_name) = &parent.name {
                             parents.insert(parent_name.clone());
@@ -402,15 +408,15 @@ pub fn print_style_graph(table: &ResourceTable, target_style: ResourceName, prin
     }
 
     let names: Vec<&ResourceName> = graph.keys().collect();
-    let node_index =
-        |name: &ResourceName| names.binary_search_by(|probe| probe.cmp(&name)).unwrap_or(0);
+    let node_index = |name: &ResourceName| {
+        names
+            .binary_search_by(|probe| probe.cmp(&name))
+            .unwrap_or(0)
+    };
 
     printer.print("digraph styles {\n");
     for name in &names {
-        printer.print(format!(
-            "  node_{} [label=\"{name}\"];\n",
-            node_index(name)
-        ));
+        printer.print(format!("  node_{} [label=\"{name}\"];\n", node_index(name)));
     }
     for (style_name, parents) in &graph {
         let style_node_index = node_index(style_name);
@@ -441,13 +447,20 @@ pub fn dump_res_string_pool(pool: &BinaryStringPool, chunk_size: usize, printer:
         "String pool of {} unique {} {} strings, {} entries and {} styles using {} bytes:\n",
         unique.len(),
         if pool.is_utf8() { "UTF-8" } else { "UTF-16" },
-        if pool.is_sorted() { "sorted" } else { "non-sorted" },
+        if pool.is_sorted() {
+            "sorted"
+        } else {
+            "non-sorted"
+        },
         count,
         pool.style_count(),
         chunk_size
     ));
     for i in 0..count {
-        printer.print(format!("String #{i} : {}\n", pool.get(i).unwrap_or_default()));
+        printer.print(format!(
+            "String #{i} : {}\n",
+            pool.get(i).unwrap_or_default()
+        ));
     }
 }
 

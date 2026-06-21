@@ -313,7 +313,12 @@ mod rand_compat {
 /// Verifies `signature` over `data` using the public key in `spki_der`, for
 /// the JCA-style signature algorithm name. Returns `Ok(true)` on a valid
 /// signature, `Ok(false)` on a well-formed but incorrect one.
-pub fn verify_signature(spki_der: &[u8], jca_alg: &str, data: &[u8], signature: &[u8]) -> Result<bool> {
+pub fn verify_signature(
+    spki_der: &[u8],
+    jca_alg: &str,
+    data: &[u8],
+    signature: &[u8],
+) -> Result<bool> {
     use spki::DecodePublicKey;
     if jca_alg.contains("RSA") {
         use rsa::RsaPublicKey;
@@ -370,8 +375,8 @@ fn rsa_sig(sig: &[u8]) -> rsa::pkcs1v15::Signature {
 }
 
 fn dsa_verify(key: &dsa::VerifyingKey, jca_alg: &str, data: &[u8], sig: &[u8]) -> bool {
-    use dsa::signature::hazmat::PrehashVerifier;
     use der::Decode;
+    use dsa::signature::hazmat::PrehashVerifier;
     use sha2::Digest as _;
     let signature = match dsa::Signature::from_der(sig) {
         Ok(s) => s,
@@ -388,8 +393,8 @@ fn dsa_verify(key: &dsa::VerifyingKey, jca_alg: &str, data: &[u8], sig: &[u8]) -
 fn ec_verify(spki_der: &[u8], jca_alg: &str, data: &[u8], sig: &[u8]) -> Result<bool> {
     use der::Decode;
     use spki::SubjectPublicKeyInfoRef;
-    let spki = SubjectPublicKeyInfoRef::from_der(spki_der)
-        .map_err(|e| anyhow!("parsing EC SPKI: {e}"))?;
+    let spki =
+        SubjectPublicKeyInfoRef::from_der(spki_der).map_err(|e| anyhow!("parsing EC SPKI: {e}"))?;
     let curve = spki
         .algorithm
         .parameters_oid()
@@ -459,11 +464,7 @@ impl Certificate {
             .subject_public_key_info
             .to_der()
             .context("encoding SPKI")?;
-        let key_oid = tbs
-            .subject_public_key_info
-            .algorithm
-            .oid
-            .to_string();
+        let key_oid = tbs.subject_public_key_info.algorithm.oid.to_string();
         let key_algorithm = match key_oid.as_str() {
             "1.2.840.113549.1.1.1" => KeyAlgorithm::Rsa,
             "1.2.840.10040.4.1" => KeyAlgorithm::Dsa,
@@ -508,8 +509,14 @@ fn pem_to_der(pem: &str, label: &str) -> Result<Vec<u8>> {
     let begin = format!("-----BEGIN {label}-----");
     let end = format!("-----END {label}-----");
     let start = pem.find(&begin).context("PEM begin marker not found")? + begin.len();
-    let stop = pem[start..].find(&end).context("PEM end marker not found")? + start;
-    let b64: String = pem[start..stop].chars().filter(|c| !c.is_whitespace()).collect();
+    let stop = pem[start..]
+        .find(&end)
+        .context("PEM end marker not found")?
+        + start;
+    let b64: String = pem[start..stop]
+        .chars()
+        .filter(|c| !c.is_whitespace())
+        .collect();
     crate::base64::decode(&b64).context("decoding base64 in PEM")
 }
 
@@ -676,10 +683,7 @@ impl DigestAlgorithm {
     }
 }
 
-pub fn suggested_v1_digest_algorithm(
-    key: &PrivateKey,
-    min_sdk: u32,
-) -> Result<DigestAlgorithm> {
+pub fn suggested_v1_digest_algorithm(key: &PrivateKey, min_sdk: u32) -> Result<DigestAlgorithm> {
     match key.algorithm() {
         KeyAlgorithm::Rsa => Ok(if min_sdk < crate::sdk::JELLY_BEAN_MR2 {
             DigestAlgorithm::Sha1

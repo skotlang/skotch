@@ -42,8 +42,8 @@ impl Pools {
         let mut methods: std::collections::BTreeSet<MethodRef> = Default::default();
 
         let add_type = |types: &mut std::collections::BTreeSet<String>,
-                            strings: &mut std::collections::BTreeSet<String>,
-                            t: &str| {
+                        strings: &mut std::collections::BTreeSet<String>,
+                        t: &str| {
             types.insert(t.to_string());
             strings.insert(t.to_string());
         };
@@ -82,14 +82,34 @@ impl Pools {
                 add_type(&mut types, &mut strings, &a.type_);
                 for (name, value) in &a.elements {
                     strings.insert(name.clone());
-                    collect_value_refs(value, &mut strings, &mut types, &mut fields, &mut methods, &mut protos);
+                    collect_value_refs(
+                        value,
+                        &mut strings,
+                        &mut types,
+                        &mut fields,
+                        &mut methods,
+                        &mut protos,
+                    );
                 }
             }
             for em in c.direct_methods.iter().chain(&c.virtual_methods) {
-                collect_method(&em.method, &mut strings, &mut types, &mut protos, &mut methods);
+                collect_method(
+                    &em.method,
+                    &mut strings,
+                    &mut types,
+                    &mut protos,
+                    &mut methods,
+                );
                 if let Some(code) = &em.code {
                     for fx in &code.fixups {
-                        collect_itemref(&fx.item, &mut strings, &mut types, &mut protos, &mut fields, &mut methods);
+                        collect_itemref(
+                            &fx.item,
+                            &mut strings,
+                            &mut types,
+                            &mut protos,
+                            &mut fields,
+                            &mut methods,
+                        );
                     }
                     for t in &code.tries {
                         for h in &t.handlers {
@@ -299,12 +319,17 @@ impl Pools {
                 })
                 .collect();
             fields.sort_by_key(|o| o.idx);
-            layouts.push((methods, fields, sort_anns_by_type(&c.annotations, &self.type_idx)));
+            layouts.push((
+                methods,
+                fields,
+                sort_anns_by_type(&c.annotations, &self.type_idx),
+            ));
         }
 
         // 5. annotation_item (no align): emitted in layout order (methods, fields, class per
         //    class), deduped by full content. MUST precede class_data.
-        let mut item_off: std::collections::HashMap<Vec<u8>, u32> = std::collections::HashMap::new();
+        let mut item_off: std::collections::HashMap<Vec<u8>, u32> =
+            std::collections::HashMap::new();
         let mut item_count = 0u32;
         let mut first_item_off = 0u32;
         {
@@ -412,8 +437,11 @@ impl Pools {
                 continue;
             }
             annotation_dir_off[ci] = data.align(4);
-            let class_off =
-                if class_set_off[ci] != 0 { class_set_off[ci] } else { annotation_set_off };
+            let class_off = if class_set_off[ci] != 0 {
+                class_set_off[ci]
+            } else {
+                annotation_set_off
+            };
             data.put_u32(class_off);
             data.put_u32(field_dir[ci].len() as u32);
             data.put_u32(method_dir[ci].len() as u32);
@@ -431,11 +459,17 @@ impl Pools {
 
         // map_list (align 4)
         let map_off = data.align(4);
-        let annotation_item_map: Option<(u32, u32)> =
-            if item_count > 0 { Some((item_count, first_item_off)) } else { None };
+        let annotation_item_map: Option<(u32, u32)> = if item_count > 0 {
+            Some((item_count, first_item_off))
+        } else {
+            None
+        };
         let annotation_dir_first = annotation_dir_off.iter().copied().filter(|&o| o != 0).min();
         let annotation_dir_map: Option<(u32, u32)> = annotation_dir_first.map(|first| {
-            (annotation_dir_off.iter().filter(|&&o| o != 0).count() as u32, first)
+            (
+                annotation_dir_off.iter().filter(|&&o| o != 0).count() as u32,
+                first,
+            )
         });
         let map = self.build_map(
             file,
@@ -509,7 +543,10 @@ impl Pools {
             put_u32(
                 &mut out,
                 base + 8,
-                c.superclass.as_ref().map(|s| self.type_idx[s]).unwrap_or(NO_INDEX),
+                c.superclass
+                    .as_ref()
+                    .map(|s| self.type_idx[s])
+                    .unwrap_or(NO_INDEX),
             );
             let interfaces_off = if c.interfaces.is_empty() {
                 0
@@ -520,7 +557,10 @@ impl Pools {
             put_u32(
                 &mut out,
                 base + 16,
-                c.source_file.as_ref().map(|s| self.string_idx[s]).unwrap_or(NO_INDEX),
+                c.source_file
+                    .as_ref()
+                    .map(|s| self.string_idx[s])
+                    .unwrap_or(NO_INDEX),
             );
             put_u32(&mut out, base + 20, annotation_dir_off[ci]); // annotations_off
             put_u32(&mut out, base + 24, class_data_off[ci]);
@@ -589,7 +629,8 @@ impl Pools {
             write_uleb128(&mut handler_data, code.tries.len() as u32);
             for t in &code.tries {
                 handler_offsets.push(handler_data.len() as u16);
-                let size = t.handlers.len() as i32 * if t.catch_all_addr.is_some() { -1 } else { 1 };
+                let size =
+                    t.handlers.len() as i32 * if t.catch_all_addr.is_some() { -1 } else { 1 };
                 write_sleb128(&mut handler_data, size);
                 for h in &t.handlers {
                     write_uleb128(&mut handler_data, self.type_idx[&h.exception_type]);
@@ -638,18 +679,54 @@ impl Pools {
                 buf.push(0x02);
                 write_sleb128(buf, *line_diff);
             }
-            DebugEvent::StartLocal { register, name, type_ } => {
+            DebugEvent::StartLocal {
+                register,
+                name,
+                type_,
+            } => {
                 buf.push(0x03);
                 write_uleb128(buf, *register);
-                write_uleb128p1(buf, name.as_ref().map(|n| self.string_idx[n] as i32).unwrap_or(-1));
-                write_uleb128p1(buf, type_.as_ref().map(|t| self.type_idx[t] as i32).unwrap_or(-1));
+                write_uleb128p1(
+                    buf,
+                    name.as_ref()
+                        .map(|n| self.string_idx[n] as i32)
+                        .unwrap_or(-1),
+                );
+                write_uleb128p1(
+                    buf,
+                    type_
+                        .as_ref()
+                        .map(|t| self.type_idx[t] as i32)
+                        .unwrap_or(-1),
+                );
             }
-            DebugEvent::StartLocalExtended { register, name, type_, sig } => {
+            DebugEvent::StartLocalExtended {
+                register,
+                name,
+                type_,
+                sig,
+            } => {
                 buf.push(0x04);
                 write_uleb128(buf, *register);
-                write_uleb128p1(buf, name.as_ref().map(|n| self.string_idx[n] as i32).unwrap_or(-1));
-                write_uleb128p1(buf, type_.as_ref().map(|t| self.type_idx[t] as i32).unwrap_or(-1));
-                write_uleb128p1(buf, sig.as_ref().map(|s| self.string_idx[s] as i32).unwrap_or(-1));
+                write_uleb128p1(
+                    buf,
+                    name.as_ref()
+                        .map(|n| self.string_idx[n] as i32)
+                        .unwrap_or(-1),
+                );
+                write_uleb128p1(
+                    buf,
+                    type_
+                        .as_ref()
+                        .map(|t| self.type_idx[t] as i32)
+                        .unwrap_or(-1),
+                );
+                write_uleb128p1(
+                    buf,
+                    sig.as_ref()
+                        .map(|s| self.string_idx[s] as i32)
+                        .unwrap_or(-1),
+                );
             }
             DebugEvent::EndLocal { register } => {
                 buf.push(0x05);
@@ -663,7 +740,12 @@ impl Pools {
             DebugEvent::SetEpilogueBegin => buf.push(0x08),
             DebugEvent::SetFile { name } => {
                 buf.push(0x09);
-                write_uleb128p1(buf, name.as_ref().map(|n| self.string_idx[n] as i32).unwrap_or(-1));
+                write_uleb128p1(
+                    buf,
+                    name.as_ref()
+                        .map(|n| self.string_idx[n] as i32)
+                        .unwrap_or(-1),
+                );
             }
             DebugEvent::Special(op) => buf.push(*op),
         }
@@ -728,7 +810,9 @@ impl Pools {
         match v {
             EncodedValue::Int(c) => put_signed_value(buf, 0x04, *c as i64),
             EncodedValue::Long(c) => put_signed_value(buf, 0x06, *c),
-            EncodedValue::Float(f) => put_right_zero_extended(buf, 0x10, (f.to_bits() as u64) << 32),
+            EncodedValue::Float(f) => {
+                put_right_zero_extended(buf, 0x10, (f.to_bits() as u64) << 32)
+            }
             EncodedValue::Double(d) => put_right_zero_extended(buf, 0x11, d.to_bits()),
             EncodedValue::String(s) => put_unsigned_value(buf, 0x17, self.string_idx[s]),
             EncodedValue::Boolean(b) => buf.push((u8::from(*b) << 5) | 0x1f),
@@ -806,7 +890,8 @@ impl Pools {
             let first = *debug_offsets.values().min().unwrap();
             // Count DISTINCT debug_info_item offsets — d8 shares one item across
             // methods with identical debug info, so method count != item count.
-            let distinct: std::collections::BTreeSet<u32> = debug_offsets.values().copied().collect();
+            let distinct: std::collections::BTreeSet<u32> =
+                debug_offsets.values().copied().collect();
             entries.push((0x2003, distinct.len() as u32, first));
         }
         if !type_list_off.is_empty() {
@@ -877,7 +962,11 @@ fn put_signed_value(buf: &mut Vec<u8>, value_type: u8, mut v: i64) {
 /// `EncodedValueCodec.writeRightZeroExtendedValue`.
 fn put_right_zero_extended(buf: &mut Vec<u8>, value_type: u8, bits: u64) {
     let required_bits = 64 - bits.trailing_zeros() as usize; // 0 only when bits == 0
-    let required_bytes = if required_bits == 0 { 1 } else { required_bits.div_ceil(8) };
+    let required_bytes = if required_bits == 0 {
+        1
+    } else {
+        required_bits.div_ceil(8)
+    };
     let v = bits >> (64 - required_bytes * 8); // bring the high bytes down
     buf.push(((required_bytes as u8 - 1) << 5) | value_type);
     for i in 0..required_bytes {
@@ -915,7 +1004,10 @@ struct DataSection {
 
 impl DataSection {
     fn new(base: usize) -> DataSection {
-        DataSection { base, buf: Vec::new() }
+        DataSection {
+            base,
+            buf: Vec::new(),
+        }
     }
     fn pos(&self) -> u32 {
         (self.base + self.buf.len()) as u32
@@ -957,7 +1049,12 @@ impl DataSection {
 // ── helpers ─────────────────────────────────────────────────────────────────
 
 fn index_map<T: Clone + Ord>(items: &[T]) -> BTreeMap<T, u32> {
-    items.iter().cloned().enumerate().map(|(i, t)| (t, i as u32)).collect()
+    items
+        .iter()
+        .cloned()
+        .enumerate()
+        .map(|(i, t)| (t, i as u32))
+        .collect()
 }
 
 fn cmp_proto(a: &ProtoRef, b: &ProtoRef, type_idx: &BTreeMap<String, u32>) -> std::cmp::Ordering {
@@ -966,7 +1063,11 @@ fn cmp_proto(a: &ProtoRef, b: &ProtoRef, type_idx: &BTreeMap<String, u32>) -> st
         .then_with(|| cmp_type_list(&a.params, &b.params, type_idx))
 }
 
-fn cmp_type_list(a: &[String], b: &[String], type_idx: &BTreeMap<String, u32>) -> std::cmp::Ordering {
+fn cmp_type_list(
+    a: &[String],
+    b: &[String],
+    type_idx: &BTreeMap<String, u32>,
+) -> std::cmp::Ordering {
     for (x, y) in a.iter().zip(b.iter()) {
         match type_idx[x].cmp(&type_idx[y]) {
             std::cmp::Ordering::Equal => {}
@@ -1009,7 +1110,12 @@ fn cmp_method(
 fn code_sort_key(m: &MethodRef) -> String {
     let class = descriptor_to_source(&m.class);
     let ret = descriptor_to_source(&m.proto.return_type);
-    let params: Vec<String> = m.proto.params.iter().map(|p| descriptor_to_source(p)).collect();
+    let params: Vec<String> = m
+        .proto
+        .params
+        .iter()
+        .map(|p| descriptor_to_source(p))
+        .collect();
     format!("{class}{ret} {}({})", m.name, params.join(","))
 }
 
@@ -1219,17 +1325,57 @@ fn write_header(
     put_u32(out, 0x30, 0); // link_off
     put_u32(out, 0x34, map_off);
     put_u32(out, 0x38, string_ids_size as u32);
-    put_u32(out, 0x3c, if string_ids_size == 0 { 0 } else { string_ids_off as u32 });
+    put_u32(
+        out,
+        0x3c,
+        if string_ids_size == 0 {
+            0
+        } else {
+            string_ids_off as u32
+        },
+    );
     put_u32(out, 0x40, type_ids_size as u32);
-    put_u32(out, 0x44, if type_ids_size == 0 { 0 } else { type_ids_off as u32 });
+    put_u32(
+        out,
+        0x44,
+        if type_ids_size == 0 {
+            0
+        } else {
+            type_ids_off as u32
+        },
+    );
     put_u32(out, 0x48, proto_ids_size as u32);
-    put_u32(out, 0x4c, if proto_ids_size == 0 { 0 } else { proto_ids_off as u32 });
+    put_u32(
+        out,
+        0x4c,
+        if proto_ids_size == 0 {
+            0
+        } else {
+            proto_ids_off as u32
+        },
+    );
     put_u32(out, 0x50, field_ids_size as u32);
     put_u32(out, 0x54, field_ids_off as u32);
     put_u32(out, 0x58, method_ids_size as u32);
-    put_u32(out, 0x5c, if method_ids_size == 0 { 0 } else { method_ids_off as u32 });
+    put_u32(
+        out,
+        0x5c,
+        if method_ids_size == 0 {
+            0
+        } else {
+            method_ids_off as u32
+        },
+    );
     put_u32(out, 0x60, class_defs_size as u32);
-    put_u32(out, 0x64, if class_defs_size == 0 { 0 } else { class_defs_off as u32 });
+    put_u32(
+        out,
+        0x64,
+        if class_defs_size == 0 {
+            0
+        } else {
+            class_defs_off as u32
+        },
+    );
     put_u32(out, 0x68, data_size as u32);
     put_u32(out, 0x6c, data_off as u32);
 }

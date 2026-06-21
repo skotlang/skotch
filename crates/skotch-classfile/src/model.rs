@@ -81,7 +81,10 @@ pub enum AnnElemValue {
     Str(String),
     Array(Vec<AnnElemValue>),
     /// An enum constant ('e' tag): the enum type descriptor + the constant's name.
-    Enum { type_desc: String, const_name: String },
+    Enum {
+        type_desc: String,
+        const_name: String,
+    },
     /// A value tag the dexer does not yet emit (class 'c', nested '@', byte/char/short).
     Unsupported,
 }

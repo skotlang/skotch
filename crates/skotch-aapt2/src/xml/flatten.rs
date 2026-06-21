@@ -79,7 +79,11 @@ impl Flattener {
             return;
         }
         let reference = self.pool.make_ref(s, Context::with_priority(LOW_PRIORITY));
-        self.string_refs.push(StringRef { offset: self.nodes.len(), pool: 0, reference });
+        self.string_refs.push(StringRef {
+            offset: self.nodes.len(),
+            pool: 0,
+            reference,
+        });
         self.push_u32(0);
     }
 
@@ -283,9 +287,19 @@ impl Flattener {
                 self.add_string(text, false);
                 // Patch rawValue: raw original with keep_raw_values,
                 // otherwise the same compiled text.
-                let raw = if self.options.keep_raw_values { &attr.value } else { text };
-                let reference = self.pool.make_ref(raw, Context::with_priority(LOW_PRIORITY));
-                self.string_refs.push(StringRef { offset: raw_value_offset, pool: 0, reference });
+                let raw = if self.options.keep_raw_values {
+                    &attr.value
+                } else {
+                    text
+                };
+                let reference = self
+                    .pool
+                    .make_ref(raw, Context::with_priority(LOW_PRIORITY));
+                self.string_refs.push(StringRef {
+                    offset: raw_value_offset,
+                    pool: 0,
+                    reference,
+                });
                 self.nodes[raw_value_offset..raw_value_offset + 4]
                     .copy_from_slice(&0u32.to_le_bytes());
             }
@@ -293,8 +307,9 @@ impl Flattener {
                 self.push_u16((value.data_type as u16) << 8);
                 self.push_u32(value.data);
                 if self.options.keep_raw_values && !attr.value.is_empty() {
-                    let reference =
-                        self.pool.make_ref(&attr.value, Context::with_priority(LOW_PRIORITY));
+                    let reference = self
+                        .pool
+                        .make_ref(&attr.value, Context::with_priority(LOW_PRIORITY));
                     self.string_refs.push(StringRef {
                         offset: raw_value_offset,
                         pool: 0,
@@ -336,7 +351,13 @@ pub fn flatten_xml(root: &Element, options: &XmlFlattenerOptions) -> Vec<u8> {
     let mut flattener = Flattener::new(*options);
     flattener.visit_element(root);
 
-    let Flattener { nodes, mut pool, package_pools, string_refs, .. } = flattener;
+    let Flattener {
+        nodes,
+        mut pool,
+        package_pools,
+        string_refs,
+        ..
+    } = flattener;
 
     // Merge package pools into the main pool (no dedupe), remembering
     // how each sub-pool's refs translate.
@@ -352,7 +373,9 @@ pub fn flatten_xml(root: &Element, options: &XmlFlattenerOptions) -> Vec<u8> {
     // Patch all string indices.
     let mut nodes = nodes;
     for string_ref in &string_refs {
-        let reference = string_ref.reference.offset_by(merged_offsets[string_ref.pool]);
+        let reference = string_ref
+            .reference
+            .offset_by(merged_offsets[string_ref.pool]);
         let index = pool.resolve(reference);
         nodes[string_ref.offset..string_ref.offset + 4]
             .copy_from_slice(&(index as u32).to_le_bytes());
@@ -369,7 +392,11 @@ pub fn flatten_xml(root: &Element, options: &XmlFlattenerOptions) -> Vec<u8> {
         resource_map.push(id.0);
     }
 
-    let pool_chunk = if options.use_utf16 { pool.flatten_utf16() } else { pool.flatten_utf8() };
+    let pool_chunk = if options.use_utf16 {
+        pool.flatten_utf16()
+    } else {
+        pool.flatten_utf8()
+    };
 
     // Assemble: RES_XML_TYPE header + string pool + resource map + nodes.
     let mut out = Vec::new();

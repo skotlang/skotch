@@ -138,7 +138,10 @@ pub struct ResourceNamedType {
 
 impl ResourceNamedType {
     pub fn with_default_name(ty: ResourceType) -> Self {
-        ResourceNamedType { name: ty.as_str().to_string(), ty }
+        ResourceNamedType {
+            name: ty.as_str().to_string(),
+            ty,
+        }
     }
 
     /// Parses `"string"` or a custom-named type like `"string.foo"` where
@@ -149,7 +152,10 @@ impl ResourceNamedType {
             Some(dot) if dot + 1 < s.len() => ResourceType::parse(&s[..dot])?,
             _ => ResourceType::parse(s)?,
         };
-        Some(ResourceNamedType { name: s.to_string(), ty })
+        Some(ResourceNamedType {
+            name: s.to_string(),
+            ty,
+        })
     }
 }
 
@@ -161,7 +167,9 @@ impl PartialOrd for ResourceNamedType {
 
 impl Ord for ResourceNamedType {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.ty.cmp(&other.ty).then_with(|| self.name.cmp(&other.name))
+        self.ty
+            .cmp(&other.ty)
+            .then_with(|| self.name.cmp(&other.name))
     }
 }
 
@@ -193,7 +201,11 @@ impl ResourceName {
         ty: ResourceNamedType,
         entry: impl Into<String>,
     ) -> Self {
-        ResourceName { package: package.into(), ty, entry: entry.into() }
+        ResourceName {
+            package: package.into(),
+            ty,
+            entry: entry.into(),
+        }
     }
 
     pub fn is_valid(&self) -> bool {
@@ -304,11 +316,19 @@ pub struct Source {
 
 impl Source {
     pub fn new(path: impl Into<String>) -> Self {
-        Source { path: path.into(), line: None, archive: None }
+        Source {
+            path: path.into(),
+            line: None,
+            archive: None,
+        }
     }
 
     pub fn with_line(path: impl Into<String>, line: usize) -> Self {
-        Source { path: path.into(), line: Some(line), archive: None }
+        Source {
+            path: path.into(),
+            line: Some(line),
+            archive: None,
+        }
     }
 }
 

@@ -58,7 +58,7 @@ mod pkcs12 {
         let mut p = der_lite::Cursor::new(pfx.content);
         let _version = p.tlv()?; // INTEGER 3
         let auth_safe_ci = p.tlv()?; // ContentInfo (data)
-        // ContentInfo: SEQUENCE { contentType OID, [0] EXPLICIT content }
+                                     // ContentInfo: SEQUENCE { contentType OID, [0] EXPLICIT content }
         let authsafe_bytes = content_info_data(auth_safe_ci)?;
 
         // AuthenticatedSafe ::= SEQUENCE OF ContentInfo
@@ -113,9 +113,9 @@ mod pkcs12 {
             None => match keys.len() {
                 0 => bail!("keystore does not contain key entries"),
                 1 => Ok(keys[0].clone()),
-                _ => bail!(
-                    "keystore contains multiple key entries; --ks-key-alias must select one"
-                ),
+                _ => {
+                    bail!("keystore contains multiple key entries; --ks-key-alias must select one")
+                }
             },
         }
     }

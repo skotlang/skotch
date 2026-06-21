@@ -5,9 +5,9 @@
 //! both the string form and the typed value of each attribute.
 
 use super::flatten::{
-    RES_STRING_POOL_TYPE, RES_XML_CDATA_TYPE, RES_XML_END_ELEMENT_TYPE,
-    RES_XML_END_NAMESPACE_TYPE, RES_XML_RESOURCE_MAP_TYPE, RES_XML_START_ELEMENT_TYPE,
-    RES_XML_START_NAMESPACE_TYPE, RES_XML_TYPE,
+    RES_STRING_POOL_TYPE, RES_XML_CDATA_TYPE, RES_XML_END_ELEMENT_TYPE, RES_XML_END_NAMESPACE_TYPE,
+    RES_XML_RESOURCE_MAP_TYPE, RES_XML_START_ELEMENT_TYPE, RES_XML_START_NAMESPACE_TYPE,
+    RES_XML_TYPE,
 };
 use super::{AaptAttribute, Element, NamespaceDecl, Node, Text, XmlAttribute};
 use crate::res::string_pool::BinaryStringPool;
@@ -20,11 +20,15 @@ use anyhow::{anyhow, bail, Result};
 const NULL_INDEX: u32 = 0xffff_ffff;
 
 fn read_u16(data: &[u8], offset: usize) -> Option<u16> {
-    Some(u16::from_le_bytes(data.get(offset..offset + 2)?.try_into().ok()?))
+    Some(u16::from_le_bytes(
+        data.get(offset..offset + 2)?.try_into().ok()?,
+    ))
 }
 
 fn read_u32(data: &[u8], offset: usize) -> Option<u32> {
-    Some(u32::from_le_bytes(data.get(offset..offset + 4)?.try_into().ok()?))
+    Some(u32::from_le_bytes(
+        data.get(offset..offset + 4)?.try_into().ok()?,
+    ))
 }
 
 struct PendingNamespace {
@@ -118,8 +122,7 @@ pub fn parse_binary_xml(data: &[u8]) -> Result<Element> {
 
                 for i in 0..attribute_count {
                     let attr_offset = ext + attribute_start + i * attribute_size;
-                    let Some(attr) =
-                        parse_attribute(chunk, attr_offset, &pool, &resource_map)
+                    let Some(attr) = parse_attribute(chunk, attr_offset, &pool, &resource_map)
                     else {
                         continue;
                     };
@@ -190,8 +193,10 @@ fn parse_attribute(
     if (name_idx as usize) < resource_map.len() {
         let id = ResourceId(resource_map[name_idx as usize]);
         if id.is_valid() {
-            attr.compiled_attribute =
-                Some(AaptAttribute { attribute: AttrDef::new(format::ANY), id: Some(id) });
+            attr.compiled_attribute = Some(AaptAttribute {
+                attribute: AttrDef::new(format::ANY),
+                id: Some(id),
+            });
         }
     }
 
@@ -206,7 +211,10 @@ fn parse_attribute(
             if attr.value.is_empty() {
                 attr.value = s.clone();
             }
-            Item::String { value: s, untranslatable_sections: vec![] }
+            Item::String {
+                value: s,
+                untranslatable_sections: vec![],
+            }
         }
         TYPE_REFERENCE | TYPE_DYNAMIC_REFERENCE => Item::Reference(Reference {
             id: Some(ResourceId(data)),

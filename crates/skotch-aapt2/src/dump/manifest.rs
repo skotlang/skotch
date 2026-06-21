@@ -141,7 +141,9 @@ fn best_config_value<'t>(
             continue;
         }
         if let Some(best_value) = best {
-            if !value.config.is_better_than(&best_value.config, Some(wanted))
+            if !value
+                .config
+                .is_better_than(&best_value.config, Some(wanted))
                 && value.config.compare(&best_value.config) != std::cmp::Ordering::Equal
             {
                 continue;
@@ -353,7 +355,11 @@ impl FeatureGroupData {
         for (name, feature) in &self.features {
             printer.print(format!(
                 "  uses-feature{}: name='{}'",
-                if feature.required { "" } else { "-not-required" },
+                if feature.required {
+                    ""
+                } else {
+                    "-not-required"
+                },
                 name
             ));
             if feature.version > 0 {
@@ -385,7 +391,10 @@ impl CommonFeatureGroup {
         let entry = self
             .implied
             .entry(name.to_string())
-            .or_insert_with(|| ImpliedFeature { implied_from_sdk_23: sdk23, ..Default::default() });
+            .or_insert_with(|| ImpliedFeature {
+                implied_from_sdk_23: sdk23,
+                ..Default::default()
+            });
         // A non-sdk-23 implied feature takes precedence.
         if entry.implied_from_sdk_23 && !sdk23 {
             entry.implied_from_sdk_23 = false;
@@ -508,9 +517,15 @@ impl CommonFeatureGroup {
             if self.group.features.contains_key(name) {
                 continue;
             }
-            let sdk23 = if feature.implied_from_sdk_23 { "-sdk-23" } else { "" };
+            let sdk23 = if feature.implied_from_sdk_23 {
+                "-sdk-23"
+            } else {
+                ""
+            };
             printer.print(format!("  uses-feature{sdk23}: name='{name}'\n"));
-            printer.print(format!("  uses-implied-feature{sdk23}: name='{name}' reason='"));
+            printer.print(format!(
+                "  uses-implied-feature{sdk23}: name='{name}' reason='"
+            ));
             let total = feature.reasons.len();
             for (count, reason) in feature.reasons.iter().enumerate() {
                 printer.print(reason);
@@ -649,7 +664,11 @@ impl SupportsScreenData {
         printer.print("\n");
         printer.print(format!(
             "supports-any-density: '{}'\n",
-            if self.is_any_density_supported(target_sdk) { "true" } else { "false" }
+            if self.is_any_density_supported(target_sdk) {
+                "true"
+            } else {
+                "false"
+            }
         ));
         if self.requires_smallest_width_dp > 0 {
             printer.print(format!(
@@ -794,32 +813,82 @@ enum Data {
     UsesPermissionSdk23(UsesPermissionSdk23Data),
     RequiredFeature,
     RequiredNotFeature,
-    Permission { name: String },
+    Permission {
+        name: String,
+    },
     Activity(ActivityData),
     IntentFilter,
-    Category { component: String },
-    Action { component: String },
-    Provider { has_required_saf_attributes: bool },
-    Receiver { permission: Option<String>, has_component: bool },
-    Service { permission: Option<String>, has_component: bool },
-    UsesLibrary { name: String, required: i32 },
-    StaticLibrary { name: String, version: i32, version_major: i32 },
-    UsesStaticLibrary { name: String, version: i32, version_major: i32, cert_digests: Vec<String> },
-    SdkLibrary { name: String, version_major: i32 },
-    UsesSdkLibrary { name: String, version_major: i32, cert_digests: Vec<String> },
-    UsesNativeLibrary { name: String, required: i32 },
+    Category {
+        component: String,
+    },
+    Action {
+        component: String,
+    },
+    Provider {
+        has_required_saf_attributes: bool,
+    },
+    Receiver {
+        permission: Option<String>,
+        has_component: bool,
+    },
+    Service {
+        permission: Option<String>,
+        has_component: bool,
+    },
+    UsesLibrary {
+        name: String,
+        required: i32,
+    },
+    StaticLibrary {
+        name: String,
+        version: i32,
+        version_major: i32,
+    },
+    UsesStaticLibrary {
+        name: String,
+        version: i32,
+        version_major: i32,
+        cert_digests: Vec<String>,
+    },
+    SdkLibrary {
+        name: String,
+        version_major: i32,
+    },
+    UsesSdkLibrary {
+        name: String,
+        version_major: i32,
+        cert_digests: Vec<String>,
+    },
+    UsesNativeLibrary {
+        name: String,
+        required: i32,
+    },
     MetaData(MetaDataData),
-    SupportsInput { inputs: Vec<String> },
+    SupportsInput {
+        inputs: Vec<String>,
+    },
     InputType,
-    InstallConstraints { fingerprint_prefixes: Vec<String> },
-    OriginalPackage { name: Option<String> },
+    InstallConstraints {
+        fingerprint_prefixes: Vec<String>,
+    },
+    OriginalPackage {
+        name: Option<String>,
+    },
     Overlay(OverlayData),
-    PackageVerifier { name: Option<String>, public_key: Option<String> },
+    PackageVerifier {
+        name: Option<String>,
+        public_key: Option<String>,
+    },
     UsesPackage(UsesPackageData),
     AdditionalCertificate,
-    Screen { size: Option<i32>, density: Option<i32> },
+    Screen {
+        size: Option<i32>,
+        density: Option<i32>,
+    },
     CompatibleScreens,
-    SupportsGlTexture { name: Option<String> },
+    SupportsGlTexture {
+        name: Option<String>,
+    },
     Property(PropertyData),
 }
 
@@ -962,7 +1031,11 @@ impl Architectures {
 /// Port of `android::util::ValidLibraryPathLastSlash`: returns the byte
 /// index of the last slash when `path` is a valid `lib/<abi>/lib*.so`
 /// member, else `None`.
-fn valid_library_path_last_slash(path: &str, suppress_64bit: bool, debuggable: bool) -> Option<usize> {
+fn valid_library_path_last_slash(
+    path: &str,
+    suppress_64bit: bool,
+    debuggable: bool,
+) -> Option<usize> {
     const APK_LIB: &str = "lib/";
     const LIB_PREFIX: &str = "/lib";
     const LIB_SUFFIX: &str = ".so";
@@ -977,8 +1050,7 @@ fn valid_library_path_last_slash(path: &str, suppress_64bit: bool, debuggable: b
     }
     // Make sure the filename is safe.
     if !path[last_slash + 1..].bytes().all(|b| {
-        b.is_ascii_alphanumeric()
-            || matches!(b, b'+' | b',' | b'-' | b'.' | b'/' | b'=' | b'_')
+        b.is_ascii_alphanumeric() || matches!(b, b'+' | b',' | b'-' | b'.' | b'/' | b'=' | b'_')
     }) {
         return None;
     }
@@ -989,9 +1061,7 @@ fn valid_library_path_last_slash(path: &str, suppress_64bit: bool, debuggable: b
     if path[APK_LIB.len()..].find('/').map(|i| i + APK_LIB.len()) != Some(last_slash) {
         return None;
     }
-    if !debuggable
-        && (!path.ends_with(LIB_SUFFIX) || !path[last_slash..].starts_with(LIB_PREFIX))
-    {
+    if !debuggable && (!path.ends_with(LIB_SUFFIX) || !path[last_slash..].starts_with(LIB_PREFIX)) {
         return None;
     }
     let abi = &path[APK_LIB.len()..last_slash];
@@ -1128,8 +1198,7 @@ impl<'a> ManifestExtractor<'a> {
             .filter(|&c| matches!(self.arena[c].data, Data::UsesSdk(_)))
             .collect();
         if uses_sdk_children.len() >= 2 {
-            let to_remove: BTreeSet<usize> = uses_sdk_children
-                [..uses_sdk_children.len() - 1]
+            let to_remove: BTreeSet<usize> = uses_sdk_children[..uses_sdk_children.len() - 1]
                 .iter()
                 .copied()
                 .collect();
@@ -1138,9 +1207,10 @@ impl<'a> ManifestExtractor<'a> {
 
         // Implied permissions.
         let find_permission = |s: &Self, name: &str| -> Option<usize> {
-            s.find_element(root, &|idx| {
-                matches!(&s.arena[idx].data, Data::UsesPermission(p) if p.name == name)
-            })
+            s.find_element(
+                root,
+                &|idx| matches!(&s.arena[idx].data, Data::UsesPermission(p) if p.name == name),
+            )
         };
 
         // Pre-1.6 implicitly granted permission compatibility logic.
@@ -1167,10 +1237,8 @@ impl<'a> ManifestExtractor<'a> {
 
         // Apps requesting WRITE_EXTERNAL_STORAGE always take
         // READ_EXTERNAL_STORAGE as well.
-        let read_external =
-            find_permission(self, "android.permission.READ_EXTERNAL_STORAGE");
-        if read_external.is_none()
-            && (insert_write_external || write_external_permission.is_some())
+        let read_external = find_permission(self, "android.permission.READ_EXTERNAL_STORAGE");
+        if read_external.is_none() && (insert_write_external || write_external_permission.is_some())
         {
             let max_sdk = write_external_permission
                 .map(|idx| match &self.arena[idx].data {
@@ -1303,9 +1371,10 @@ impl<'a> ManifestExtractor<'a> {
         // Presence of activities, receivers, and services with no
         // special components.
         self.components.other_activities = self
-            .find_element(root, &|idx| {
-                matches!(&self.arena[idx].data, Data::Activity(a) if !a.has_component)
-            })
+            .find_element(
+                root,
+                &|idx| matches!(&self.arena[idx].data, Data::Activity(a) if !a.has_component),
+            )
             .is_some();
         self.components.other_receivers = self
             .find_element(root, &|idx| {
@@ -1328,10 +1397,7 @@ impl<'a> ManifestExtractor<'a> {
         }
 
         // Gather the supported architectures of the app.
-        let has_renderscript_bitcode = self
-            .apk
-            .entries()
-            .any(|(path, _)| path.ends_with(".bc"));
+        let has_renderscript_bitcode = self.apk.entries().any(|(path, _)| path.ends_with(".bc"));
         let mut architectures_from_apk: BTreeSet<String> = BTreeSet::new();
         for (path, _) in self.apk.entries() {
             if let Some(last_slash) =
@@ -1432,7 +1498,10 @@ impl<'a> ManifestExtractor<'a> {
         } else {
             Data::None
         };
-        self.arena.push(El { data, children: Vec::new() });
+        self.arena.push(El {
+            data,
+            children: Vec::new(),
+        });
         self.arena.len() - 1
     }
 
@@ -1544,10 +1613,7 @@ impl<'a> ManifestExtractor<'a> {
                         find_attr_by_id(el, COMPATIBLE_WIDTH_LIMIT_DP_ATTR),
                         0,
                     ),
-                    largest_width_limit_dp: id(
-                        find_attr_by_id(el, LARGEST_WIDTH_LIMIT_DP_ATTR),
-                        0,
-                    ),
+                    largest_width_limit_dp: id(find_attr_by_id(el, LARGEST_WIDTH_LIMIT_DP_ATTR), 0),
                 };
                 // Infer screen size buckets from the width ranges.
                 if data.small_screen > 0
@@ -1562,10 +1628,26 @@ impl<'a> ManifestExtractor<'a> {
                         data.requires_smallest_width_dp
                     };
                     let rs = data.requires_smallest_width_dp;
-                    data.small_screen = if rs <= 240 && compat_width >= 240 { -1 } else { 0 };
-                    data.normal_screen = if rs <= 320 && compat_width >= 320 { -1 } else { 0 };
-                    data.large_screen = if rs <= 480 && compat_width >= 480 { -1 } else { 0 };
-                    data.xlarge_screen = if rs <= 720 && compat_width >= 720 { -1 } else { 0 };
+                    data.small_screen = if rs <= 240 && compat_width >= 240 {
+                        -1
+                    } else {
+                        0
+                    };
+                    data.normal_screen = if rs <= 320 && compat_width >= 320 {
+                        -1
+                    } else {
+                        0
+                    };
+                    data.large_screen = if rs <= 480 && compat_width >= 480 {
+                        -1
+                    } else {
+                        0
+                    };
+                    data.xlarge_screen = if rs <= 720 && compat_width >= 720 {
+                        -1
+                    } else {
+                        0
+                    };
                 }
                 Data::SupportsScreen(data)
             }
@@ -1630,10 +1712,7 @@ impl<'a> ManifestExtractor<'a> {
                     required_not_features,
                     required: id(find_attr_by_id(el, REQUIRED_ATTR), 1),
                     max_sdk_version: id(find_attr_by_id(el, MAX_SDK_VERSION_ATTR), -1),
-                    uses_permission_flags: id(
-                        find_attr_by_id(el, USES_PERMISSION_FLAGS_ATTR),
-                        0,
-                    ),
+                    uses_permission_flags: id(find_attr_by_id(el, USES_PERMISSION_FLAGS_ATTR), 0),
                     implied_reason: String::new(),
                 };
                 if !name.is_empty() {
@@ -1702,9 +1781,7 @@ impl<'a> ManifestExtractor<'a> {
                     Some(_) => {}
                 }
 
-                if let Some(orientation) =
-                    i(find_attr_by_id(el, SCREEN_ORIENTATION_ATTR))
-                {
+                if let Some(orientation) = i(find_attr_by_id(el, SCREEN_ORIENTATION_ATTR)) {
                     match orientation {
                         0 | 6 | 8 => self.common.add_implied_feature(
                             "android.hardware.screen.landscape",
@@ -1731,9 +1808,7 @@ impl<'a> ManifestExtractor<'a> {
             "category" => {
                 let category = s(find_attr_by_id(el, NAME_ATTR));
                 let mut component = String::new();
-                if let (Some(category), [first, second, ..]) =
-                    (&category, &self.parent_stack[..])
-                {
+                if let (Some(category), [first, second, ..]) = (&category, &self.parent_stack[..]) {
                     if matches!(self.arena[*first].data, Data::IntentFilter) {
                         let second = *second;
                         if let Data::Activity(activity) = &mut self.arena[second].data {
@@ -1796,7 +1871,10 @@ impl<'a> ManifestExtractor<'a> {
                                     activity.has_main_action = true;
                                 }
                             }
-                            Data::Receiver { permission, has_component } => {
+                            Data::Receiver {
+                                permission,
+                                has_component,
+                            } => {
                                 let mapped = match action.as_str() {
                                     "android.appwidget.action.APPWIDGET_UPDATE" => {
                                         Some(("app-widget", None))
@@ -1810,9 +1888,7 @@ impl<'a> ManifestExtractor<'a> {
                                 if let Some((mapped, required_permission)) = mapped {
                                     let allowed = match required_permission {
                                         None => true,
-                                        Some(required) => {
-                                            permission.as_deref() == Some(required)
-                                        }
+                                        Some(required) => permission.as_deref() == Some(required),
                                     };
                                     if allowed {
                                         *has_component = true;
@@ -1820,7 +1896,10 @@ impl<'a> ManifestExtractor<'a> {
                                     }
                                 }
                             }
-                            Data::Service { permission, has_component } => {
+                            Data::Service {
+                                permission,
+                                has_component,
+                            } => {
                                 let mapped: Option<(&str, Option<&str>)> = match action.as_str() {
                                     "android.view.InputMethod" => Some(("ime", None)),
                                     "android.service.wallpaper.WallpaperService" => {
@@ -1859,9 +1938,7 @@ impl<'a> ManifestExtractor<'a> {
                                 if let Some((mapped, required_permission)) = mapped {
                                     let allowed = match required_permission {
                                         None => true,
-                                        Some(required) => {
-                                            permission.as_deref() == Some(required)
-                                        }
+                                        Some(required) => permission.as_deref() == Some(required),
                                     };
                                     if allowed {
                                         *has_component = true;
@@ -1869,7 +1946,9 @@ impl<'a> ManifestExtractor<'a> {
                                     }
                                 }
                             }
-                            Data::Provider { has_required_saf_attributes } => {
+                            Data::Provider {
+                                has_required_saf_attributes,
+                            } => {
                                 if action == "android.content.action.DOCUMENTS_PROVIDER"
                                     && *has_required_saf_attributes
                                 {
@@ -1960,7 +2039,9 @@ impl<'a> ManifestExtractor<'a> {
                         }
                     }
                 }
-                Data::InstallConstraints { fingerprint_prefixes }
+                Data::InstallConstraints {
+                    fingerprint_prefixes,
+                }
             }
             "original-package" => Data::OriginalPackage {
                 name: s(find_attr_by_id(el, NAME_ATTR)),
@@ -1969,10 +2050,7 @@ impl<'a> ManifestExtractor<'a> {
                 target_package: s(find_attr_by_id(el, TARGET_PACKAGE_ATTR)),
                 priority: id(find_attr_by_id(el, PRIORITY_ATTR), 0),
                 is_static: id(find_attr_by_id(el, IS_STATIC_ATTR), 0) != 0,
-                required_property_name: s(find_attr_by_id(
-                    el,
-                    REQUIRED_SYSTEM_PROPERTY_NAME_ATTR,
-                )),
+                required_property_name: s(find_attr_by_id(el, REQUIRED_SYSTEM_PROPERTY_NAME_ATTR)),
                 required_property_value: s(find_attr_by_id(
                     el,
                     REQUIRED_SYSTEM_PROPERTY_VALUE_ATTR,
@@ -2179,12 +2257,21 @@ impl<'a> ManifestExtractor<'a> {
                     ));
                 }
             }
-            Data::StaticLibrary { name, version, version_major } => {
+            Data::StaticLibrary {
+                name,
+                version,
+                version_major,
+            } => {
                 printer.print(format!(
                     "static-library: name='{name}' version='{version}' versionMajor='{version_major}'\n"
                 ));
             }
-            Data::UsesStaticLibrary { name, version, version_major, cert_digests } => {
+            Data::UsesStaticLibrary {
+                name,
+                version,
+                version_major,
+                cert_digests,
+            } => {
                 printer.print(format!(
                     "uses-static-library: name='{name}' version='{version}' versionMajor='{version_major}'"
                 ));
@@ -2193,12 +2280,19 @@ impl<'a> ManifestExtractor<'a> {
                 }
                 printer.print("\n");
             }
-            Data::SdkLibrary { name, version_major } => {
+            Data::SdkLibrary {
+                name,
+                version_major,
+            } => {
                 printer.print(format!(
                     "sdk-library: name='{name}' versionMajor='{version_major}'\n"
                 ));
             }
-            Data::UsesSdkLibrary { name, version_major, cert_digests } => {
+            Data::UsesSdkLibrary {
+                name,
+                version_major,
+                cert_digests,
+            } => {
                 printer.print(format!(
                     "uses-sdk-library: name='{name}' versionMajor='{version_major}'"
                 ));
@@ -2240,7 +2334,9 @@ impl<'a> ManifestExtractor<'a> {
                     printer.print("\n");
                 }
             }
-            Data::InstallConstraints { fingerprint_prefixes } => {
+            Data::InstallConstraints {
+                fingerprint_prefixes,
+            } => {
                 if !fingerprint_prefixes.is_empty() {
                     printer.print("install-constraints:\n");
                     for prefix in fingerprint_prefixes {
@@ -2264,9 +2360,7 @@ impl<'a> ManifestExtractor<'a> {
                     if data.is_static { "true" } else { "false" }
                 ));
                 if let Some(required_property_name) = &data.required_property_name {
-                    printer.print(format!(
-                        " requiredPropertyName='{required_property_name}'"
-                    ));
+                    printer.print(format!(" requiredPropertyName='{required_property_name}'"));
                 }
                 if let Some(required_property_value) = &data.required_property_value {
                     printer.print(format!(

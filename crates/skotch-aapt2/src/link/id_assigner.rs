@@ -78,7 +78,9 @@ pub fn assign_ids(
         // assigns from.
         let mut type_order: Vec<usize> = (0..package.types.len()).collect();
         type_order.sort_by(|&a, &b| {
-            package.types[a].named_type.cmp(&package.types[b].named_type)
+            package.types[a]
+                .named_type
+                .cmp(&package.types[b].named_type)
         });
 
         let mut next_type_id: u8 = 1;
@@ -160,7 +162,10 @@ mod tests {
                 .unwrap()
         };
         // drawable sorts before string in type order.
-        assert_eq!(id_of(ResourceType::Drawable, "icon"), ResourceId(0x7f010000));
+        assert_eq!(
+            id_of(ResourceType::Drawable, "icon"),
+            ResourceId(0x7f010000)
+        );
         assert_eq!(id_of(ResourceType::String, "a"), ResourceId(0x7f020000));
         assert_eq!(id_of(ResourceType::String, "b"), ResourceId(0x7f020001));
     }

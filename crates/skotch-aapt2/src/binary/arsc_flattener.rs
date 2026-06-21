@@ -89,10 +89,7 @@ pub struct TableFlattenerOptions {
 ///
 /// Port of `TableFlattener::Consume`. Every resource entry must have an
 /// assigned ID (like the C++, which CHECK-fails otherwise).
-pub fn flatten_table(
-    table: &ResourceTable,
-    options: &TableFlattenerOptions,
-) -> Result<Vec<u8>> {
+pub fn flatten_table(table: &ResourceTable, options: &TableFlattenerOptions) -> Result<Vec<u8>> {
     let view = build_view(table);
 
     // Intern every pooled string of the table, then sort the pool the way
@@ -206,10 +203,24 @@ fn build_view(table: &ResourceTable) -> Vec<PackageView<'_>> {
     for package in &table.packages {
         for ty in &package.types {
             for entry in &ty.entries {
-                insert_entry_into_view(&mut packages, package, ty, entry, entry.id, entry.staged_id);
+                insert_entry_into_view(
+                    &mut packages,
+                    package,
+                    ty,
+                    entry,
+                    entry.id,
+                    entry.staged_id,
+                );
                 if let Some(staged) = entry.staged_id {
                     // The alias clone keeps everything but the staged ID.
-                    insert_entry_into_view(&mut packages, package, ty, entry, Some(staged.id), None);
+                    insert_entry_into_view(
+                        &mut packages,
+                        package,
+                        ty,
+                        entry,
+                        Some(staged.id),
+                        None,
+                    );
                 }
             }
         }
@@ -229,14 +240,18 @@ fn insert_entry_into_view<'a>(
     staged_id: Option<StagedId>,
 ) {
     let package_id = id.map(|i| i.package_id());
-    let package_pos = match packages.binary_search_by(|p| {
-        (p.name.as_str(), p.id).cmp(&(package.name.as_str(), package_id))
-    }) {
+    let package_pos = match packages
+        .binary_search_by(|p| (p.name.as_str(), p.id).cmp(&(package.name.as_str(), package_id)))
+    {
         Ok(i) => i,
         Err(i) => {
             packages.insert(
                 i,
-                PackageView { name: package.name.clone(), id: package_id, types: Vec::new() },
+                PackageView {
+                    name: package.name.clone(),
+                    id: package_id,
+                    types: Vec::new(),
+                },
             );
             i
         }
@@ -252,7 +267,11 @@ fn insert_entry_into_view<'a>(
         Err(i) => {
             package_view.types.insert(
                 i,
-                TypeView { named_type: ty.named_type.clone(), id: type_id, entries: Vec::new() },
+                TypeView {
+                    named_type: ty.named_type.clone(),
+                    id: type_id,
+                    entries: Vec::new(),
+                },
             );
             i
         }
@@ -346,8 +365,11 @@ fn config_sort_key(config: &ConfigDescription) -> Vec<u8> {
     let mut key = Vec::with_capacity(45);
     key.extend_from_slice(&config.imsi().to_be_bytes());
     key.extend_from_slice(&config.locale_u32().to_be_bytes());
-    let script: [u8; 4] =
-        if config.locale_script_was_computed { [0; 4] } else { config.locale_script };
+    let script: [u8; 4] = if config.locale_script_was_computed {
+        [0; 4]
+    } else {
+        config.locale_script
+    };
     key.extend_from_slice(&script);
     key.extend_from_slice(&config.locale_variant);
     key.extend_from_slice(&config.locale_numbering_system);
@@ -410,11 +432,17 @@ fn intern_item_strings(
     }
     match item {
         Item::String { value, .. } => {
-            let r = pool.make_ref(value, Context::new(Context::NORMAL_PRIORITY, config_sort_key(config)));
+            let r = pool.make_ref(
+                value,
+                Context::new(Context::NORMAL_PRIORITY, config_sort_key(config)),
+            );
             refs.insert(key, PoolRef::Plain(r));
         }
         Item::RawString(value) => {
-            let r = pool.make_ref(value, Context::new(Context::NORMAL_PRIORITY, config_sort_key(config)));
+            let r = pool.make_ref(
+                value,
+                Context::new(Context::NORMAL_PRIORITY, config_sort_key(config)),
+            );
             refs.insert(key, PoolRef::Plain(r));
         }
         Item::StyledString { value, spans, .. } => {
@@ -515,7 +543,10 @@ impl<'a> PackageFlattener<'a> {
         let package = self.package;
         let mut expected_type_id: u16 = 1;
         for ty in &package.types {
-            if matches!(ty.named_type.ty, ResourceType::Styleable | ResourceType::Macro) {
+            if matches!(
+                ty.named_type.ty,
+                ResourceType::Styleable | ResourceType::Macro
+            ) {
                 // Styleables and macros are not real resource types.
                 continue;
             }
@@ -531,7 +562,8 @@ impl<'a> PackageFlattener<'a> {
             // If there is a gap in the type IDs, fill in the StringPool
             // with placeholder values until we reach the ID we expect.
             while (type_id as u16) > expected_type_id {
-                self.type_pool.make_ref_plain(&format!("?{expected_type_id}"));
+                self.type_pool
+                    .make_ref_plain(&format!("?{expected_type_id}"));
                 expected_type_id += 1;
             }
             expected_type_id += 1;
@@ -553,7 +585,10 @@ impl<'a> PackageFlattener<'a> {
                 num_entries = num_entries.max(id as usize + 1);
             }
             if num_entries > u16::MAX as usize {
-                bail!("type '{}' has too many entries ({num_entries})", ty.named_type);
+                bail!(
+                    "type '{}' has too many entries ({num_entries})",
+                    ty.named_type
+                );
             }
 
             let spec_start = flatten_type_spec(ty, type_id, num_entries, buffer);
@@ -579,21 +614,26 @@ impl<'a> PackageFlattener<'a> {
                 // collapsing, every name becomes the single obfuscated key
                 // except overlayable entries (renaming those would break
                 // runtime overlays; the C++ warns and keeps the name).
-                let key_ref = if self.options.collapse_key_stringpool
-                    && entry.overlayable_item.is_none()
-                {
-                    self.key_pool.make_ref_plain(OBFUSCATED_RESOURCE_NAME)
-                } else {
-                    self.key_pool.make_ref_plain(entry.name)
-                };
+                let key_ref =
+                    if self.options.collapse_key_stringpool && entry.overlayable_item.is_none() {
+                        self.key_pool.make_ref_plain(OBFUSCATED_RESOURCE_NAME)
+                    } else {
+                        self.key_pool.make_ref_plain(entry.name)
+                    };
                 let entry_key = self.key_pool.resolve(key_ref) as u32;
 
                 for config_value in &entry.values {
-                    let Some(value) = config_value.value.as_ref() else { continue };
+                    let Some(value) = config_value.value.as_ref() else {
+                        continue;
+                    };
                     config_to_entries
                         .entry(config_value.config.clone())
                         .or_default()
-                        .push(FlatEntry { entry, value, entry_key });
+                        .push(FlatEntry {
+                            entry,
+                            value,
+                            entry_key,
+                        });
                 }
             }
 
@@ -784,9 +824,9 @@ impl<'a> PackageFlattener<'a> {
             }
             ValueKind::Style(style) => {
                 if let Some(parent) = &style.parent {
-                    let id = parent
-                        .id
-                        .ok_or_else(|| anyhow!("style parent of '{}' has no ID", flat_entry.entry.name))?;
+                    let id = parent.id.ok_or_else(|| {
+                        anyhow!("style parent of '{}' has no ID", flat_entry.entry.name)
+                    })?;
                     patch_u32(out, parent_at, id.0);
                 }
                 let mut sorted: Vec<&StyleEntry> = style.entries.iter().collect();
@@ -801,10 +841,9 @@ impl<'a> PackageFlattener<'a> {
                     }
                 });
                 for entry in sorted {
-                    let id = entry
-                        .key
-                        .id
-                        .ok_or_else(|| anyhow!("style entry key of '{}' has no ID", flat_entry.entry.name))?;
+                    let id = entry.key.id.ok_or_else(|| {
+                        anyhow!("style entry key of '{}' has no ID", flat_entry.entry.name)
+                    })?;
                     write_map_row(out, id.0, self.flatten_item(&entry.value.item)?);
                     count += 1;
                 }
@@ -825,8 +864,9 @@ impl<'a> PackageFlattener<'a> {
                 }
             }
             ValueKind::Plural(plural) => {
-                const PLURAL_ATTR_KEYS: [u32; PLURAL_COUNT] =
-                    [ATTR_ZERO, ATTR_ONE, ATTR_TWO, ATTR_FEW, ATTR_MANY, ATTR_OTHER];
+                const PLURAL_ATTR_KEYS: [u32; PLURAL_COUNT] = [
+                    ATTR_ZERO, ATTR_ONE, ATTR_TWO, ATTR_FEW, ATTR_MANY, ATTR_OTHER,
+                ];
                 for (i, slot) in plural.values.iter().enumerate() {
                     let Some(slot) = slot else { continue };
                     write_map_row(out, PLURAL_ATTR_KEYS[i], self.flatten_item(&slot.item)?);
@@ -834,7 +874,10 @@ impl<'a> PackageFlattener<'a> {
                 }
             }
             ValueKind::Item(_) | ValueKind::Macro(_) => {
-                bail!("value of '{}' cannot be flattened as a map", flat_entry.entry.name)
+                bail!(
+                    "value of '{}' cannot be flattened as a map",
+                    flat_entry.entry.name
+                )
             }
         }
         Ok(count)
@@ -901,15 +944,19 @@ impl<'a> PackageFlattener<'a> {
         for ty in &self.package.types {
             let Some(type_id) = ty.id else { continue };
             for entry in &ty.entries {
-                let Some(item) = entry.overlayable_item else { continue };
+                let Some(item) = entry.overlayable_item else {
+                    continue;
+                };
                 let overlayable =
-                    self.overlayables.get(item.overlayable_index).ok_or_else(|| {
-                        anyhow!(
-                            "overlayable index {} of resource '{}' is out of range",
-                            item.overlayable_index,
-                            entry.name
-                        )
-                    })?;
+                    self.overlayables
+                        .get(item.overlayable_index)
+                        .ok_or_else(|| {
+                            anyhow!(
+                                "overlayable index {} of resource '{}' is out of range",
+                                item.overlayable_index,
+                                entry.name
+                            )
+                        })?;
                 let Some(entry_id) = entry.id else { continue };
                 let id = ResourceId::new(self.package_id, type_id, entry_id);
 
@@ -949,7 +996,11 @@ impl<'a> PackageFlattener<'a> {
                 if item.policies == 0 {
                     bail!("overlayable {} does not specify policy", entry.name);
                 }
-                chunk.policy_ids.entry(item.policies).or_default().insert(id.0);
+                chunk
+                    .policy_ids
+                    .entry(item.policies)
+                    .or_default()
+                    .insert(id.0);
             }
         }
 
@@ -996,7 +1047,11 @@ impl<'a> PackageFlattener<'a> {
         }
         let alias_writer =
             ChunkWriter::start(out, RES_TABLE_STAGED_ALIAS_TYPE, STAGED_ALIAS_HEADER_SIZE);
-        patch_u32(out, alias_writer.start_offset() + 8, self.aliases.len() as u32);
+        patch_u32(
+            out,
+            alias_writer.start_offset() + 8,
+            self.aliases.len() as u32,
+        );
         for (staged, finalized) in &self.aliases {
             push_u32(out, *staged);
             push_u32(out, *finalized);
@@ -1104,10 +1159,13 @@ mod tests {
     use super::*;
     use crate::res::string_pool::BinaryStringPool;
     use crate::res::table::{policy, NewResource, OnIdConflict};
-    use crate::res::value::{Attribute, format, Item};
+    use crate::res::value::{format, Attribute, Item};
 
     fn string_item(s: &str) -> Item {
-        Item::String { value: s.to_string(), untranslatable_sections: Vec::new() }
+        Item::String {
+            value: s.to_string(),
+            untranslatable_sections: Vec::new(),
+        }
     }
 
     fn add(table: &mut ResourceTable, name: &str, id: u32, value: Value) {
@@ -1147,7 +1205,12 @@ mod tests {
         let mut table = ResourceTable::new_unvalidated();
         table.included_packages.push((0x05, "lib.five".to_string()));
         table.included_packages.push((0x02, "lib.two".to_string()));
-        add(&mut table, "com.app:string/s", 0x7f01_0000, Value::item(string_item("v")));
+        add(
+            &mut table,
+            "com.app:string/s",
+            0x7f01_0000,
+            Value::item(string_item("v")),
+        );
 
         let bytes = flatten_table(&table, &TableFlattenerOptions::default()).unwrap();
         let parsed = parse_table(&bytes).expect("parse");
@@ -1155,18 +1218,29 @@ mod tests {
         included.sort();
         assert_eq!(
             included,
-            vec![(0x02, "lib.two".to_string()), (0x05, "lib.five".to_string())]
+            vec![
+                (0x02, "lib.two".to_string()),
+                (0x05, "lib.five".to_string())
+            ]
         );
     }
 
     #[test]
     fn non_standard_package_id_gets_self_mapping() {
         let mut table = ResourceTable::new_unvalidated();
-        add(&mut table, "com.feature:string/s", 0x8001_0000, Value::item(string_item("v")));
+        add(
+            &mut table,
+            "com.feature:string/s",
+            0x8001_0000,
+            Value::item(string_item("v")),
+        );
 
         let bytes = flatten_table(&table, &TableFlattenerOptions::default()).unwrap();
         let parsed = parse_table(&bytes).expect("parse");
-        assert_eq!(parsed.included_packages, vec![(0x80, "com.feature".to_string())]);
+        assert_eq!(
+            parsed.included_packages,
+            vec![(0x80, "com.feature".to_string())]
+        );
         let (name, _) = crate::res::parse_resource_name("com.feature:string/s").unwrap();
         assert_eq!(
             parsed.find_resource(&name).unwrap().entry.id,
@@ -1177,9 +1251,24 @@ mod tests {
     #[test]
     fn overlayable_round_trip() {
         let mut table = ResourceTable::new_unvalidated();
-        add(&mut table, "com.app:string/a", 0x7f01_0000, Value::item(string_item("a")));
-        add(&mut table, "com.app:string/b", 0x7f01_0001, Value::item(string_item("b")));
-        add(&mut table, "com.app:string/c", 0x7f01_0002, Value::item(string_item("c")));
+        add(
+            &mut table,
+            "com.app:string/a",
+            0x7f01_0000,
+            Value::item(string_item("a")),
+        );
+        add(
+            &mut table,
+            "com.app:string/b",
+            0x7f01_0001,
+            Value::item(string_item("b")),
+        );
+        add(
+            &mut table,
+            "com.app:string/c",
+            0x7f01_0002,
+            Value::item(string_item("c")),
+        );
 
         table.overlayables.push(Overlayable {
             name: "ThemeGroup".to_string(),
@@ -1207,7 +1296,12 @@ mod tests {
             0x7f01_0000,
             policy::PUBLIC | policy::SYSTEM_PARTITION,
         );
-        add_overlayable(&mut table, "com.app:string/b", 0x7f01_0001, policy::PRODUCT_PARTITION);
+        add_overlayable(
+            &mut table,
+            "com.app:string/b",
+            0x7f01_0001,
+            policy::PRODUCT_PARTITION,
+        );
         add_overlayable(
             &mut table,
             "com.app:string/c",
@@ -1223,9 +1317,15 @@ mod tests {
         assert_eq!(parsed.overlayables[0].actor, "overlay://theme");
 
         for (name, policies) in [
-            ("com.app:string/a", policy::PUBLIC | policy::SYSTEM_PARTITION),
+            (
+                "com.app:string/a",
+                policy::PUBLIC | policy::SYSTEM_PARTITION,
+            ),
             ("com.app:string/b", policy::PRODUCT_PARTITION),
-            ("com.app:string/c", policy::PUBLIC | policy::SYSTEM_PARTITION),
+            (
+                "com.app:string/c",
+                policy::PUBLIC | policy::SYSTEM_PARTITION,
+            ),
         ] {
             let (resource_name, _) = crate::res::parse_resource_name(name).unwrap();
             let entry = parsed.find_resource(&resource_name).unwrap().entry;
@@ -1234,7 +1334,10 @@ mod tests {
                 .as_ref()
                 .unwrap_or_else(|| panic!("{name} lost its overlayable item"));
             assert_eq!(item.policies, policies, "policies of {name}");
-            assert_eq!(parsed.overlayables[item.overlayable_index].name, "ThemeGroup");
+            assert_eq!(
+                parsed.overlayables[item.overlayable_index].name,
+                "ThemeGroup"
+            );
         }
     }
 
@@ -1252,7 +1355,10 @@ mod tests {
                 NewResource::with_name(name)
                     .value(Value::item(string_item("a")))
                     .id_with_conflict(ResourceId(0x7f01_0000), OnIdConflict::CreateEntry)
-                    .overlayable(OverlayableItem { overlayable_index: 0, ..Default::default() })
+                    .overlayable(OverlayableItem {
+                        overlayable_index: 0,
+                        ..Default::default()
+                    })
                     .allow_mangled(true),
             )
             .unwrap();
@@ -1263,14 +1369,27 @@ mod tests {
     #[test]
     fn staged_alias_round_trip() {
         let mut table = ResourceTable::new_unvalidated();
-        add(&mut table, "com.app:string/s", 0x7f01_0000, Value::item(string_item("v")));
-        add(&mut table, "com.app:string/other", 0x7f01_0001, Value::item(string_item("w")));
+        add(
+            &mut table,
+            "com.app:string/s",
+            0x7f01_0000,
+            Value::item(string_item("v")),
+        );
+        add(
+            &mut table,
+            "com.app:string/other",
+            0x7f01_0001,
+            Value::item(string_item("w")),
+        );
         let (name, _) = crate::res::parse_resource_name("com.app:string/s").unwrap();
         table
             .add_resource_overlay(
                 NewResource::with_name(name.clone())
                     .id_with_conflict(ResourceId(0x7f01_0000), OnIdConflict::CreateEntry)
-                    .staged_id(StagedId { id: ResourceId(0x7f02_0000), ..Default::default() })
+                    .staged_id(StagedId {
+                        id: ResourceId(0x7f02_0000),
+                        ..Default::default()
+                    })
                     .allow_mangled(true),
             )
             .unwrap();
@@ -1301,10 +1420,23 @@ mod tests {
     #[test]
     fn collapse_key_stringpool_obfuscates_names() {
         let mut table = ResourceTable::new_unvalidated();
-        add(&mut table, "com.app:string/first", 0x7f01_0000, Value::item(string_item("a")));
-        add(&mut table, "com.app:string/second", 0x7f01_0001, Value::item(string_item("b")));
+        add(
+            &mut table,
+            "com.app:string/first",
+            0x7f01_0000,
+            Value::item(string_item("a")),
+        );
+        add(
+            &mut table,
+            "com.app:string/second",
+            0x7f01_0001,
+            Value::item(string_item("b")),
+        );
 
-        let options = TableFlattenerOptions { collapse_key_stringpool: true, ..Default::default() };
+        let options = TableFlattenerOptions {
+            collapse_key_stringpool: true,
+            ..Default::default()
+        };
         let bytes = flatten_table(&table, &options).unwrap();
         let parsed = parse_table(&bytes).expect("parse");
 
@@ -1358,11 +1490,19 @@ mod tests {
                 .push(crate::res::value::ItemValue::new(string_item("x")));
             Value::new(ValueKind::Array(array))
         });
-        add(&mut table, "com.app:string/s", 0x7f03_0000, Value::item(string_item("v")));
+        add(
+            &mut table,
+            "com.app:string/s",
+            0x7f03_0000,
+            Value::item(string_item("v")),
+        );
 
         let bytes = flatten_table(&table, &TableFlattenerOptions::default()).unwrap();
         let parsed = parse_table(&bytes).expect("parse");
-        for (name, id) in [("com.app:array/a", 0x7f01_0000u32), ("com.app:string/s", 0x7f03_0000)] {
+        for (name, id) in [
+            ("com.app:array/a", 0x7f01_0000u32),
+            ("com.app:string/s", 0x7f03_0000),
+        ] {
             let (resource_name, _) = crate::res::parse_resource_name(name).unwrap();
             let entry = parsed.find_resource(&resource_name).unwrap().entry;
             assert_eq!(entry.id, Some(ResourceId(id)), "{name}");
@@ -1390,7 +1530,12 @@ mod tests {
     #[test]
     fn value_pool_puts_file_references_first() {
         let mut table = ResourceTable::new_unvalidated();
-        add(&mut table, "com.app:string/aaa", 0x7f01_0000, Value::item(string_item("aaa text")));
+        add(
+            &mut table,
+            "com.app:string/aaa",
+            0x7f01_0000,
+            Value::item(string_item("aaa text")),
+        );
         add(
             &mut table,
             "com.app:drawable/icon",

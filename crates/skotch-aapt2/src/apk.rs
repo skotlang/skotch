@@ -94,9 +94,8 @@ impl LoadedApk {
                 let parsed = match format {
                     ApkFormat::Proto => crate::xml::decode_pb_xml(data)
                         .map_err(|e| anyhow!("failed to parse proto manifest in {source}: {e}")),
-                    _ => crate::xml::axml::parse_binary_xml(data).map_err(|e| {
-                        anyhow!("failed to parse binary manifest in {source}: {e}")
-                    }),
+                    _ => crate::xml::axml::parse_binary_xml(data)
+                        .map_err(|e| anyhow!("failed to parse binary manifest in {source}: {e}")),
                 };
                 match parsed {
                     Ok(root) => Some(root),
@@ -121,7 +120,13 @@ impl LoadedApk {
             None => None,
         };
 
-        Ok(LoadedApk { source, format, entries, table, manifest })
+        Ok(LoadedApk {
+            source,
+            format,
+            entries,
+            table,
+            manifest,
+        })
     }
 
     pub fn entry(&self, name: &str) -> Option<&[u8]> {
@@ -191,13 +196,19 @@ impl LoadedApk {
     pub fn package_name(&self) -> Result<String> {
         let manifest = self.manifest()?;
         if manifest.name != "manifest" {
-            bail!("{}: root tag of AndroidManifest.xml is not <manifest>", self.source);
+            bail!(
+                "{}: root tag of AndroidManifest.xml is not <manifest>",
+                self.source
+            );
         }
         manifest
             .attr_value("", "package")
             .map(str::to_string)
             .ok_or_else(|| {
-                anyhow!("{}: AndroidManifest.xml has no 'package' attribute", self.source)
+                anyhow!(
+                    "{}: AndroidManifest.xml has no 'package' attribute",
+                    self.source
+                )
             })
     }
 }

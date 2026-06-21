@@ -21,7 +21,12 @@ pub fn run(args: &[String]) -> Result<()> {
     for a in args {
         if let Some(file) = a.strip_prefix('@') {
             let content = std::fs::read_to_string(file)?;
-            expanded.extend(content.lines().map(|l| l.trim().to_string()).filter(|l| !l.is_empty()));
+            expanded.extend(
+                content
+                    .lines()
+                    .map(|l| l.trim().to_string())
+                    .filter(|l| !l.is_empty()),
+            );
         } else {
             expanded.push(a.clone());
         }
@@ -47,17 +52,24 @@ pub fn run(args: &[String]) -> Result<()> {
             }
             "--min-api" => {
                 i += 1;
-                opts.min_api = expanded[i].parse().map_err(|_| anyhow::anyhow!("bad --min-api"))?;
+                opts.min_api = expanded[i]
+                    .parse()
+                    .map_err(|_| anyhow::anyhow!("bad --min-api"))?;
             }
             // Accepted but not yet acted upon.
             "--lib" | "--classpath" | "--pg-map" | "--main-dex-list" | "--main-dex-rules"
             | "--thread-count" | "--desugared-lib" | "--globals" | "--globals-output" => {
                 i += 1; // skip the value
             }
-            "--no-desugaring" | "--intermediate" | "--file-per-class" | "--file-per-class-file"
+            "--no-desugaring"
+            | "--intermediate"
+            | "--file-per-class"
+            | "--file-per-class-file"
             | "--android-platform-build" => {}
             other if other.starts_with('-') => {
-                bail!("unsupported d8 option: {other} (see docs/skotch-d8-design.md for the roadmap)");
+                bail!(
+                    "unsupported d8 option: {other} (see docs/skotch-d8-design.md for the roadmap)"
+                );
             }
             _ => opts.inputs.push(PathBuf::from(arg)),
         }

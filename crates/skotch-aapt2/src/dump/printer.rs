@@ -14,7 +14,11 @@ pub struct Printer<'a> {
 
 impl<'a> Printer<'a> {
     pub fn new(out: &'a mut dyn std::fmt::Write) -> Printer<'a> {
-        Printer { out, indent_level: 0, needs_indent: false }
+        Printer {
+            out,
+            indent_level: 0,
+            needs_indent: false,
+        }
     }
 
     pub fn print(&mut self, s: impl AsRef<str>) -> &mut Self {

@@ -3000,8 +3000,7 @@ fn parse_postfix(p: &mut Parser<'_, '_>) -> CompletedMarker {
                 // Optional trailing lambda. Only swallow WS if a `{`
                 // actually follows; otherwise the trailing WS belongs
                 // to the OUTER composite.
-                if next_non_trivia(p, 0) == S::LBRACE
-                    && !SUPPRESS_TRAILING_LAMBDA.with(|f| f.get())
+                if next_non_trivia(p, 0) == S::LBRACE && !SUPPRESS_TRAILING_LAMBDA.with(|f| f.get())
                 {
                     skip_ws(p);
                     let la = p.start();

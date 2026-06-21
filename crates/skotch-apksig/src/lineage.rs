@@ -6,9 +6,7 @@
 //! serialized both standalone (the `apksigner rotate`/`lineage` file format,
 //! MAGIC `0x3eff39d1`) and embedded in the v3 proof-of-rotation attribute.
 
-use crate::crypto::{
-    suggested_signature_algorithms, Certificate, PrivateKey, SignatureAlgorithm,
-};
+use crate::crypto::{suggested_signature_algorithms, Certificate, PrivateKey, SignatureAlgorithm};
 use crate::sigblock::{length_prefixed, sequence_of_length_prefixed, Slice};
 use anyhow::{anyhow, bail, Context, Result};
 
@@ -198,7 +196,8 @@ impl SigningCertificateLineage {
             encode_signed_data(&child_cert.der, signature_algorithm.id() as i32);
         let signed_data = prefixed_signed_data[4..].to_vec();
 
-        let signature = parent_key.sign(signature_algorithm.jca_signature_algorithm(), &signed_data)?;
+        let signature =
+            parent_key.sign(signature_algorithm.jca_signature_algorithm(), &signed_data)?;
 
         let mut nodes = self.nodes.clone();
         nodes.last_mut().unwrap().sig_algorithm = Some(signature_algorithm);
@@ -253,8 +252,7 @@ fn encode_node(node: &SigningCertificateNode) -> Vec<u8> {
     let sig_id = node.sig_algorithm.map(|a| a.id()).unwrap_or(0);
     let prefixed_signed_data = encode_signed_data(&node.signing_cert, parent_sig_id as i32);
     let prefixed_signature = length_prefixed(&node.signature);
-    let mut out =
-        Vec::with_capacity(prefixed_signed_data.len() + 8 + prefixed_signature.len());
+    let mut out = Vec::with_capacity(prefixed_signed_data.len() + 8 + prefixed_signature.len());
     out.extend_from_slice(&prefixed_signed_data);
     out.extend_from_slice(&node.flags.to_le_bytes());
     out.extend_from_slice(&sig_id.to_le_bytes());

@@ -11,7 +11,11 @@ fn fixtures() -> PathBuf {
 
 fn assert_byte_identical(name: &str) {
     let cf = skotch_classfile::parse_class_file(&fixtures().join(format!("{name}.class"))).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let produced = dex_classes(&[cf], &opts).unwrap_or_else(|e| panic!("{name} should dex: {e:#}"));
     let golden = std::fs::read(fixtures().join(format!("{name}.d8.dex"))).unwrap();
     if produced != golden {

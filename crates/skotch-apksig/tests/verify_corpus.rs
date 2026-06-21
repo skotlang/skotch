@@ -15,7 +15,9 @@ fn signed_dir() -> PathBuf {
 
 fn verify(name: &str) -> skotch_apksig::verify::VerificationResult {
     let apk = std::fs::read(signed_dir().join(name)).unwrap();
-    ApkVerifier::new().verify(&apk).unwrap_or_else(|e| panic!("verify {name} errored: {e}"))
+    ApkVerifier::new()
+        .verify(&apk)
+        .unwrap_or_else(|e| panic!("verify {name} errored: {e}"))
 }
 
 /// Positive: must verify, with the expected scheme flags.
@@ -106,21 +108,20 @@ fn v31_rsa_tgt_33() {
 #[test]
 fn v31_rsa_dev_release() {
     let r = verify("v31-rsa-2048_2-tgt-10000-dev-release.apk");
-    assert!(r.verified, "v31 dev-release should verify; errors: {:?}", r.errors);
+    assert!(
+        r.verified,
+        "v31 dev-release should verify; errors: {:?}",
+        r.errors
+    );
 }
 
 // ── v4 ──────────────────────────────────────────────────────────────────────
 
 #[test]
 fn v4_idsig_verifies() {
-    let apk = std::fs::read(
-        signed_dir().join("v31-rsa-2048_2-tgt-10000-dev-release.apk"),
-    )
-    .unwrap();
-    let idsig = std::fs::read(
-        signed_dir().join("v31-rsa-2048_2-tgt-10000-dev-release.apk.idsig"),
-    )
-    .unwrap();
+    let apk = std::fs::read(signed_dir().join("v31-rsa-2048_2-tgt-10000-dev-release.apk")).unwrap();
+    let idsig =
+        std::fs::read(signed_dir().join("v31-rsa-2048_2-tgt-10000-dev-release.apk.idsig")).unwrap();
     let ok = ApkVerifier::new()
         .verify_v4(&apk, &idsig)
         .expect("v4 verify errored");

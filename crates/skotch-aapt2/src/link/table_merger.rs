@@ -72,7 +72,9 @@ pub fn merge_table(
                 })?;
 
                 for config_value in entry.values {
-                    let Some(value) = config_value.value else { continue };
+                    let Some(value) = config_value.value else {
+                        continue;
+                    };
                     let new_resource = NewResource::with_name(name.clone())
                         .config(config_value.config)
                         .product(config_value.product)
@@ -89,7 +91,9 @@ pub fn merge_table(
                     }
                 }
                 for config_value in entry.flag_disabled_values {
-                    let Some(value) = config_value.value else { continue };
+                    let Some(value) = config_value.value else {
+                        continue;
+                    };
                     let new_resource = NewResource::with_name(name.clone())
                         .config(config_value.config)
                         .product(config_value.product)
@@ -150,11 +154,8 @@ pub fn merge_compiled_file(
     value.meta.flag = file.flag.clone();
     value.meta.flag_status = file.flag_status;
 
-    let name = ResourceName::with_named_type(
-        compilation_package,
-        file.name.ty.clone(),
-        &file.name.entry,
-    );
+    let name =
+        ResourceName::with_named_type(compilation_package, file.name.ty.clone(), &file.name.entry);
     let new_resource = NewResource::with_name(name.clone())
         .config(file.config.clone())
         .value(value)
@@ -169,7 +170,12 @@ pub fn merge_compiled_file(
         bail!("failed to merge file {}", file.source);
     }
 
-    merge_exported_symbols(table, compilation_package, &file.source, file.exported_symbols)
+    merge_exported_symbols(
+        table,
+        compilation_package,
+        &file.source,
+        file.exported_symbols,
+    )
 }
 
 fn extension_for(file: &ResourceFile) -> &'static str {
@@ -240,10 +246,7 @@ pub fn merge_exported_symbols(
 
 /// Ensures only the compilation package (or empty) is present.
 /// Mirrors `Linker::VerifyNoExternalPackages`.
-pub fn verify_no_external_packages(
-    table: &ResourceTable,
-    compilation_package: &str,
-) -> Result<()> {
+pub fn verify_no_external_packages(table: &ResourceTable, compilation_package: &str) -> Result<()> {
     for package in &table.packages {
         if !package.name.is_empty() && package.name != compilation_package {
             bail!(

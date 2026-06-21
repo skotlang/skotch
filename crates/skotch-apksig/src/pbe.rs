@@ -95,7 +95,13 @@ fn pbes2_decrypt(params: Tlv, ciphertext: &[u8], password: &str) -> Result<Vec<u
     aes_cbc_decrypt(&key, &iv, ciphertext)
 }
 
-fn pbkdf2_derive(prf: &str, password: &[u8], salt: &[u8], iters: u32, dk_len: usize) -> Result<Vec<u8>> {
+fn pbkdf2_derive(
+    prf: &str,
+    password: &[u8],
+    salt: &[u8],
+    iters: u32,
+    dk_len: usize,
+) -> Result<Vec<u8>> {
     let mut out = vec![0u8; dk_len];
     match prf {
         OID_HMAC_SHA1 => {

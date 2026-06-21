@@ -97,7 +97,10 @@ pub struct ValueMeta {
 
 impl ValueMeta {
     pub fn new() -> Self {
-        ValueMeta { translatable: true, ..Default::default() }
+        ValueMeta {
+            translatable: true,
+            ..Default::default()
+        }
     }
 }
 
@@ -127,11 +130,17 @@ pub struct Reference {
 
 impl Reference {
     pub fn from_name(name: ResourceName) -> Self {
-        Reference { name: Some(name), ..Default::default() }
+        Reference {
+            name: Some(name),
+            ..Default::default()
+        }
     }
 
     pub fn from_id(id: ResourceId) -> Self {
-        Reference { id: Some(id), ..Default::default() }
+        Reference {
+            id: Some(id),
+            ..Default::default()
+        }
     }
 }
 
@@ -395,7 +404,10 @@ pub struct ItemValue {
 
 impl ItemValue {
     pub fn new(item: Item) -> Self {
-        ItemValue { item, meta: ValueMeta::new() }
+        ItemValue {
+            item,
+            meta: ValueMeta::new(),
+        }
     }
 }
 
@@ -420,7 +432,10 @@ pub struct Value {
 
 impl Value {
     pub fn new(kind: ValueKind) -> Self {
-        Value { kind, meta: ValueMeta::new() }
+        Value {
+            kind,
+            meta: ValueMeta::new(),
+        }
     }
 
     pub fn item(item: Item) -> Self {
@@ -456,7 +471,10 @@ impl Item {
                     (ReferenceType::Attribute, false) => TYPE_ATTRIBUTE,
                     (ReferenceType::Attribute, true) => TYPE_DYNAMIC_ATTRIBUTE,
                 };
-                Some(ResValue::new(data_type, reference.id.map(|id| id.0).unwrap_or(0)))
+                Some(ResValue::new(
+                    data_type,
+                    reference.id.map(|id| id.0).unwrap_or(0),
+                ))
             }
             Item::Id => Some(ResValue::new(TYPE_INT_BOOLEAN, 0)),
             Item::BinaryPrimitive(value) => Some(*value),

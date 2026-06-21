@@ -40,7 +40,14 @@ pub fn extract_inline_xml(root: &mut Element, file: &ResourceFile) -> Result<Vec
     let mut counter = 0usize;
     let root_decls = root.namespace_decls.clone();
     let mut namespace_stack = root_decls.clone();
-    extract_recursive(root, file, &root_decls, &mut namespace_stack, &mut counter, &mut out)?;
+    extract_recursive(
+        root,
+        file,
+        &root_decls,
+        &mut namespace_stack,
+        &mut counter,
+        &mut out,
+    )?;
     Ok(out)
 }
 
@@ -55,7 +62,9 @@ fn extract_recursive(
     // Identify <aapt:attr> children of this element.
     let mut extracted: Vec<(usize, XmlAttribute, CompiledXml)> = Vec::new();
     for (index, child) in element.children.iter_mut().enumerate() {
-        let Node::Element(child_el) = child else { continue };
+        let Node::Element(child_el) = child else {
+            continue;
+        };
         let pushed = child_el.namespace_decls.len();
         namespace_stack.extend(child_el.namespace_decls.iter().cloned());
 
@@ -68,9 +77,12 @@ fn extract_recursive(
 
             let reference = parse_xml_attribute_name(&attr.value);
             let name = reference.name.clone().unwrap();
-            let package = transform_package_alias(&name.package, namespace_stack)
-                .ok_or_else(|| {
-                    anyhow!("{source}:{line}: invalid namespace prefix '{}'", name.package)
+            let package =
+                transform_package_alias(&name.package, namespace_stack).ok_or_else(|| {
+                    anyhow!(
+                        "{source}:{line}: invalid namespace prefix '{}'",
+                        name.package
+                    )
                 })?;
             let private_namespace = package.private_namespace || reference.private_reference;
             let attr_namespace_uri = if name.package.is_empty() {
@@ -114,8 +126,7 @@ fn extract_recursive(
 
             let mut new_file = file.clone();
             new_file.source.line = Some(line);
-            new_file.name.entry =
-                mangle_entry("", &format!("{}__{}", file.name.entry, counter));
+            new_file.name.entry = mangle_entry("", &format!("{}__{}", file.name.entry, counter));
             new_file.exported_symbols.clear();
             *counter += 1;
 
@@ -134,7 +145,10 @@ fn extract_recursive(
             extracted.push((
                 index,
                 XmlAttribute::new(attr_namespace_uri, name.entry, value),
-                CompiledXml { file: new_file, root: new_root },
+                CompiledXml {
+                    file: new_file,
+                    root: new_root,
+                },
             ));
         } else {
             extract_recursive(child_el, file, root_decls, namespace_stack, counter, out)?;

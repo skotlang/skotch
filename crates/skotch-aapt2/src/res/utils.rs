@@ -50,9 +50,7 @@ pub fn extract_resource_name(s: &str) -> Option<(&str, &str, &str)> {
         }
     }
     let entry = &s[start..];
-    if (has_package_separator && package.is_empty())
-        || (has_type_separator && ty.is_empty())
-    {
+    if (has_package_separator && package.is_empty()) || (has_type_separator && ty.is_empty()) {
         return None;
     }
     Some((package, ty, entry))
@@ -105,7 +103,11 @@ pub fn parse_reference(s: &str) -> Option<ParsedReference> {
     if create && name.ty.ty != ResourceType::Id {
         return None;
     }
-    Some(ParsedReference { name, create, private_reference: private })
+    Some(ParsedReference {
+        name,
+        create,
+        private_reference: private,
+    })
 }
 
 /// Parses `?[package:][type/]entry` (type must be `attr` if present).
@@ -228,7 +230,10 @@ pub fn try_parse_enum_symbol(enum_attr: &Attribute, s: &str) -> Option<Item> {
     for symbol in &enum_attr.symbols {
         let name = symbol.symbol.name.as_ref()?;
         if trimmed == name.entry {
-            return Some(Item::BinaryPrimitive(ResValue::new(symbol.data_type, symbol.value)));
+            return Some(Item::BinaryPrimitive(ResValue::new(
+                symbol.data_type,
+                symbol.value,
+            )));
         }
     }
     None
@@ -240,7 +245,10 @@ pub fn try_parse_flag_symbol(flag_attr: &Attribute, s: &str) -> Option<Item> {
     let mut data = 0u32;
     if trim_whitespace(s).is_empty() {
         // The empty string is a valid flag set (0).
-        return Some(Item::BinaryPrimitive(ResValue::new(res_value_type::TYPE_INT_HEX, 0)));
+        return Some(Item::BinaryPrimitive(ResValue::new(
+            res_value_type::TYPE_INT_HEX,
+            0,
+        )));
     }
     for part in s.split('|') {
         let trimmed = trim_whitespace(part);
@@ -258,7 +266,10 @@ pub fn try_parse_flag_symbol(flag_attr: &Attribute, s: &str) -> Option<Item> {
             return None;
         }
     }
-    Some(Item::BinaryPrimitive(ResValue::new(res_value_type::TYPE_INT_HEX, data)))
+    Some(Item::BinaryPrimitive(ResValue::new(
+        res_value_type::TYPE_INT_HEX,
+        data,
+    )))
 }
 
 /// `#rgb`, `#argb`, `#rrggbb`, `#aarrggbb`.
@@ -280,7 +291,12 @@ pub fn try_parse_color(s: &str) -> Option<Item> {
             )
         }
         5 => {
-            let (a, r, g, b) = (hex(bytes[1])?, hex(bytes[2])?, hex(bytes[3])?, hex(bytes[4])?);
+            let (a, r, g, b) = (
+                hex(bytes[1])?,
+                hex(bytes[2])?,
+                hex(bytes[3])?,
+                hex(bytes[4])?,
+            );
             ResValue::new(
                 TYPE_INT_COLOR_ARGB4,
                 a << 28 | a << 24 | r << 20 | r << 16 | g << 12 | g << 8 | b << 4 | b,
@@ -376,7 +392,11 @@ pub fn string_to_int(s: &str) -> Option<ResValue> {
         value = -value;
     }
     Some(ResValue::new(
-        if is_hex { res_value_type::TYPE_INT_HEX } else { res_value_type::TYPE_INT_DEC },
+        if is_hex {
+            res_value_type::TYPE_INT_HEX
+        } else {
+            res_value_type::TYPE_INT_DEC
+        },
         value as u32,
     ))
 }
@@ -512,19 +532,33 @@ pub fn string_to_float(s: &str) -> Option<ResValue> {
         // A unit suffix: (name, dataType, unit, scale).
         let units: &[(&str, u8, u32, f32)] = &[
             ("px", res_value_type::TYPE_DIMENSION, complex::UNIT_PX, 1.0),
-            ("dip", res_value_type::TYPE_DIMENSION, complex::UNIT_DIP, 1.0),
+            (
+                "dip",
+                res_value_type::TYPE_DIMENSION,
+                complex::UNIT_DIP,
+                1.0,
+            ),
             ("dp", res_value_type::TYPE_DIMENSION, complex::UNIT_DIP, 1.0),
             ("sp", res_value_type::TYPE_DIMENSION, complex::UNIT_SP, 1.0),
             ("pt", res_value_type::TYPE_DIMENSION, complex::UNIT_PT, 1.0),
             ("in", res_value_type::TYPE_DIMENSION, complex::UNIT_IN, 1.0),
             ("mm", res_value_type::TYPE_DIMENSION, complex::UNIT_MM, 1.0),
-            ("%", res_value_type::TYPE_FRACTION, complex::UNIT_FRACTION, 1.0 / 100.0),
-            ("%p", res_value_type::TYPE_FRACTION, complex::UNIT_FRACTION_PARENT, 1.0 / 100.0),
+            (
+                "%",
+                res_value_type::TYPE_FRACTION,
+                complex::UNIT_FRACTION,
+                1.0 / 100.0,
+            ),
+            (
+                "%p",
+                res_value_type::TYPE_FRACTION,
+                complex::UNIT_FRACTION_PARENT,
+                1.0 / 100.0,
+            ),
         ];
         // Longest match wins ("%p" before "%", "dip" before "dp"-prefix
         // ambiguity is resolved by full-string equality).
-        let (_, data_type, unit, scale) =
-            units.iter().find(|(name, ..)| *name == unit_str)?;
+        let (_, data_type, unit, scale) = units.iter().find(|(name, ..)| *name == unit_str)?;
         let scaled = value * scale;
         return Some(ResValue::new(
             *data_type,
@@ -532,7 +566,10 @@ pub fn string_to_float(s: &str) -> Option<ResValue> {
         ));
     }
 
-    if rest.trim_matches(|c: char| c.is_ascii_whitespace()).is_empty() {
+    if rest
+        .trim_matches(|c: char| c.is_ascii_whitespace())
+        .is_empty()
+    {
         return Some(ResValue::new(res_value_type::TYPE_FLOAT, value.to_bits()));
     }
     None
@@ -547,7 +584,10 @@ pub fn try_parse_float(s: &str) -> Option<Item> {
 pub fn android_type_to_attribute_type_mask(data_type: u8) -> u32 {
     use res_value_type::*;
     match data_type {
-        TYPE_NULL | TYPE_REFERENCE | TYPE_ATTRIBUTE | TYPE_DYNAMIC_REFERENCE
+        TYPE_NULL
+        | TYPE_REFERENCE
+        | TYPE_ATTRIBUTE
+        | TYPE_DYNAMIC_REFERENCE
         | TYPE_DYNAMIC_ATTRIBUTE => format::REFERENCE,
         TYPE_STRING => format::STRING,
         TYPE_FLOAT => format::FLOAT,
@@ -555,8 +595,9 @@ pub fn android_type_to_attribute_type_mask(data_type: u8) -> u32 {
         TYPE_FRACTION => format::FRACTION,
         TYPE_INT_DEC | TYPE_INT_HEX => format::INTEGER | format::ENUM | format::FLAGS,
         TYPE_INT_BOOLEAN => format::BOOLEAN,
-        TYPE_INT_COLOR_ARGB8 | TYPE_INT_COLOR_RGB8 | TYPE_INT_COLOR_ARGB4
-        | TYPE_INT_COLOR_RGB4 => format::COLOR,
+        TYPE_INT_COLOR_ARGB8 | TYPE_INT_COLOR_RGB8 | TYPE_INT_COLOR_ARGB4 | TYPE_INT_COLOR_RGB4 => {
+            format::COLOR
+        }
         _ => 0,
     }
 }
@@ -774,7 +815,9 @@ mod tests {
 
     #[test]
     fn style_parents() {
-        let r = parse_style_parent_reference("@android:style/Theme").unwrap().unwrap();
+        let r = parse_style_parent_reference("@android:style/Theme")
+            .unwrap()
+            .unwrap();
         assert_eq!(r.name.as_ref().unwrap().package, "android");
 
         let r = parse_style_parent_reference("Theme.Base").unwrap().unwrap();
@@ -791,7 +834,10 @@ mod tests {
     fn sdk_versions() {
         assert_eq!(parse_sdk_version("21"), Some(21));
         assert_eq!(parse_sdk_version("Tiramisu"), Some(DEVELOPMENT_SDK_LEVEL));
-        assert_eq!(parse_sdk_version("VanillaIceCream"), Some(DEVELOPMENT_SDK_LEVEL));
+        assert_eq!(
+            parse_sdk_version("VanillaIceCream"),
+            Some(DEVELOPMENT_SDK_LEVEL)
+        );
         assert_eq!(parse_sdk_version("NotACodename"), None);
     }
 }

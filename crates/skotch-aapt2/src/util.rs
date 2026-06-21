@@ -104,8 +104,7 @@ impl StringBuilder {
             } else if !self.preserve_spaces && codepoint == '"' {
                 self.quote = !self.quote;
             } else if !self.preserve_spaces && !self.quote && codepoint == '\'' {
-                self.error =
-                    Some(format!("unescaped apostrophe in string\n\"{text}\""));
+                self.error = Some(format!("unescaped apostrophe in string\n\"{text}\""));
                 return self;
             } else {
                 self.out.text.push(codepoint);
@@ -139,7 +138,10 @@ impl StringBuilder {
         let offset = self.out.text.len();
         self.out
             .untranslatable_sections
-            .push(UntranslatableSection { start: offset, end: offset });
+            .push(UntranslatableSection {
+                start: offset,
+                end: offset,
+            });
         self.out.untranslatable_sections.len() - 1
     }
 

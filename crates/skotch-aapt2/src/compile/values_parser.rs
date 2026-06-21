@@ -16,7 +16,7 @@ use std::collections::HashMap;
 
 use crate::res::config::ConfigDescription;
 use crate::res::table::{
-    policy, AllowNew, NewResource, Overlayable, OverlayableItem, ResourceTable, StagedId, Source2,
+    policy, AllowNew, NewResource, Overlayable, OverlayableItem, ResourceTable, Source2, StagedId,
     Visibility, VisibilityLevel,
 };
 use crate::res::utils::{
@@ -141,7 +141,14 @@ impl<'a> ResourceParser<'a> {
         config: ConfigDescription,
         options: ResourceParserOptions,
     ) -> ResourceParser<'a> {
-        ResourceParser { table, source, config, options, errors: Vec::new(), warnings: Vec::new() }
+        ResourceParser {
+            table,
+            source,
+            config,
+            options,
+            errors: Vec::new(),
+            warnings: Vec::new(),
+        }
     }
 
     /// Parses a whole values document. The root element must be
@@ -207,8 +214,7 @@ impl<'a> ResourceParser<'a> {
             match child {
                 Node::Text(text) => {
                     if !trim_whitespace(&text.text).is_empty() {
-                        let source =
-                            Source::with_line(self.source.path.clone(), text.line_number);
+                        let source = Source::with_line(self.source.path.clone(), text.line_number);
                         self.error(&source, "plain text not allowed here");
                         error = true;
                     }
@@ -320,7 +326,10 @@ impl<'a> ResourceParser<'a> {
         // android:featureFlag handling.
         if let Some(flag) = parse_flag(find_attr_ns(el, SCHEMA_ANDROID, "featureFlag")) {
             if self.options.flag.is_some() {
-                self.error_at(el, "Resource flag are not allowed both in the path and in the file");
+                self.error_at(
+                    el,
+                    "Resource flag are not allowed both in the path and in the file",
+                );
                 return false;
             }
             match get_flag_status(&Some(flag.clone()), &self.options.feature_flags) {
@@ -410,9 +419,7 @@ impl<'a> ResourceParser<'a> {
                 }
                 // A null reference also means there is no inner element
                 // (<id name="name"/>).
-                Some(ValueKind::Item(Item::Reference(r)))
-                    if r.name.is_none() && r.id.is_none() =>
-                {
+                Some(ValueKind::Item(Item::Reference(r))) if r.name.is_none() && r.id.is_none() => {
                     IdShape::MakeId
                 }
                 // An existing inner element must be a reference to another
@@ -510,7 +517,9 @@ impl<'a> ResourceParser<'a> {
                     BagKind::StagingPublicGroupFinal => {
                         self.parse_staging_public_group_final(el, out)
                     }
-                    BagKind::StringArray => self.parse_array_impl(el, ns_stack, out, format::STRING),
+                    BagKind::StringArray => {
+                        self.parse_array_impl(el, ns_stack, out, format::STRING)
+                    }
                     BagKind::Style => self.parse_style(ResourceType::Style, el, ns_stack, out),
                 };
             }
@@ -526,8 +535,7 @@ impl<'a> ResourceParser<'a> {
                     self.error(&source, &format!("<{}> missing 'name' attribute", el.name));
                     return false;
                 };
-                out.name =
-                    ResourceName::with_named_type("", parsed_type.clone(), name.clone());
+                out.name = ResourceName::with_named_type("", parsed_type.clone(), name.clone());
                 match self.parse_xml(el, ns_stack, format::REFERENCE, false) {
                     Some(item) => {
                         out.value = Some(Value::item(item));
@@ -592,7 +600,13 @@ impl<'a> ResourceParser<'a> {
         allow_raw_value: bool,
     ) -> Option<Item> {
         let sub_tree = self.flatten_subtree(el, ns_stack)?;
-        Self::parse_flattened_xml(&sub_tree, type_mask, allow_raw_value, self.table, &mut self.errors)
+        Self::parse_flattened_xml(
+            &sub_tree,
+            type_mask,
+            allow_raw_value,
+            self.table,
+            &mut self.errors,
+        )
     }
 
     /// Static counterpart usable outside a full parse (macro substitution
@@ -662,7 +676,9 @@ impl<'a> ResourceParser<'a> {
 
         if allow_raw_value {
             // We can't parse this so return a RawString if we are allowed.
-            return Some(Item::RawString(trim_whitespace(&sub_tree.raw_value).to_string()));
+            return Some(Item::RawString(
+                trim_whitespace(&sub_tree.raw_value).to_string(),
+            ));
         }
         if trim_whitespace(&sub_tree.raw_value).is_empty() {
             // If the text is empty, and the value is not allowed to be a
@@ -697,7 +713,10 @@ impl<'a> ResourceParser<'a> {
                 Some(value) => translatable = value,
                 None => {
                     let source = out.source.clone();
-                    self.error(&source, "invalid value for 'translatable'. Must be a boolean");
+                    self.error(
+                        &source,
+                        "invalid value for 'translatable'. Must be a boolean",
+                    );
                     return false;
                 }
             }
@@ -789,7 +808,10 @@ impl<'a> ResourceParser<'a> {
         if !out.config.is_default() {
             let source = out.source.clone();
             let config = out.config.clone();
-            self.warn(&source, &format!("ignoring configuration '{config}' for <public> tag"));
+            self.warn(
+                &source,
+                &format!("ignoring configuration '{config}' for <public> tag"),
+            );
         }
 
         let Some(type_str) = find_non_empty_attr(el, "type") else {
@@ -799,7 +821,10 @@ impl<'a> ResourceParser<'a> {
         };
         let Some(parsed_type) = ResourceNamedType::parse(type_str) else {
             let source = out.source.clone();
-            self.error(&source, &format!("invalid resource type '{type_str}' in <public>"));
+            self.error(
+                &source,
+                &format!("invalid resource type '{type_str}' in <public>"),
+            );
             return false;
         };
         out.name.ty = parsed_type.clone();
@@ -809,7 +834,10 @@ impl<'a> ResourceParser<'a> {
                 Some(id) => out.id = Some(id),
                 None => {
                     let source = out.source.clone();
-                    self.error(&source, &format!("invalid resource ID '{id_str}' in <public>"));
+                    self.error(
+                        &source,
+                        &format!("invalid resource ID '{id_str}' in <public>"),
+                    );
                     return false;
                 }
             }
@@ -843,7 +871,10 @@ impl<'a> ResourceParser<'a> {
 
         let Some(type_str) = find_non_empty_attr(el, "type") else {
             let source = out.source.clone();
-            self.error(&source, &format!("<{tag_name}> must have a 'type' attribute"));
+            self.error(
+                &source,
+                &format!("<{tag_name}> must have a 'type' attribute"),
+            );
             return false;
         };
         let Some(parsed_type) = ResourceNamedType::parse(type_str) else {
@@ -857,12 +888,18 @@ impl<'a> ResourceParser<'a> {
 
         let Some(id_str) = find_non_empty_attr(el, "first-id") else {
             let source = out.source.clone();
-            self.error(&source, &format!("<{tag_name}> must have a 'first-id' attribute"));
+            self.error(
+                &source,
+                &format!("<{tag_name}> must have a 'first-id' attribute"),
+            );
             return false;
         };
         let Some(first_id) = parse_resource_id(id_str) else {
             let source = out.source.clone();
-            self.error(&source, &format!("invalid resource ID '{id_str}' in <{tag_name}>"));
+            self.error(
+                &source,
+                &format!("invalid resource ID '{id_str}' in <{tag_name}>"),
+            );
             return false;
         };
 
@@ -877,12 +914,18 @@ impl<'a> ResourceParser<'a> {
                     continue;
                 };
                 if find_non_empty_attr(child, "id").is_some() {
-                    self.error(&item_source, &format!("'id' is ignored within <{tag_name}>"));
+                    self.error(
+                        &item_source,
+                        &format!("'id' is ignored within <{tag_name}>"),
+                    );
                     error = true;
                     continue;
                 }
                 if find_non_empty_attr(child, "type").is_some() {
-                    self.error(&item_source, &format!("'type' is ignored within <{tag_name}>"));
+                    self.error(
+                        &item_source,
+                        &format!("'type' is ignored within <{tag_name}>"),
+                    );
                     error = true;
                     continue;
                 }
@@ -918,7 +961,10 @@ impl<'a> ResourceParser<'a> {
     fn parse_public_group(&mut self, el: &Element, out: &mut ParsedResource) -> bool {
         if self.options.visibility.is_some() {
             let source = out.source.clone();
-            self.error(&source, "<public-group> tag not allowed with --visibility flag");
+            self.error(
+                &source,
+                "<public-group> tag not allowed with --visibility flag",
+            );
             return false;
         }
         self.parse_group_impl(el, out, "public-group", &|entry, id| {
@@ -939,7 +985,10 @@ impl<'a> ResourceParser<'a> {
     /// Port of `ResourceParser::ParseStagingPublicGroupFinal`.
     fn parse_staging_public_group_final(&mut self, el: &Element, out: &mut ParsedResource) -> bool {
         self.parse_group_impl(el, out, "staging-public-group-final", &|entry, id| {
-            entry.staged_alias = Some(StagedId { id, source: Source2 });
+            entry.staged_alias = Some(StagedId {
+                id,
+                source: Source2,
+            });
         })
     }
 
@@ -947,7 +996,10 @@ impl<'a> ResourceParser<'a> {
     fn parse_symbol_impl(&mut self, el: &Element, out: &mut ParsedResource) -> bool {
         let Some(type_str) = find_non_empty_attr(el, "type") else {
             let source = out.source.clone();
-            self.error(&source, &format!("<{}> must have a 'type' attribute", el.name));
+            self.error(
+                &source,
+                &format!("<{}> must have a 'type' attribute", el.name),
+            );
             return false;
         };
         let Some(parsed_type) = ResourceNamedType::parse(type_str) else {
@@ -1063,9 +1115,7 @@ impl<'a> ResourceParser<'a> {
                                 None => {
                                     self.error(
                                         &element_source,
-                                        &format!(
-                                            "<policy> has unsupported type '{trimmed_part}'"
-                                        ),
+                                        &format!("<policy> has unsupported type '{trimmed_part}'"),
                                     );
                                     error = true;
                                     continue;
@@ -1129,11 +1179,17 @@ impl<'a> ResourceParser<'a> {
         // Items specify the name and type of resource that should be
         // overlayable.
         let Some(item_name) = find_non_empty_attr(el, "name") else {
-            self.error(&item_source, "<item> within an <overlayable> must have a 'name' attribute");
+            self.error(
+                &item_source,
+                "<item> within an <overlayable> must have a 'name' attribute",
+            );
             return false;
         };
         let Some(item_type) = find_non_empty_attr(el, "type") else {
-            self.error(&item_source, "<item> within an <overlayable> must have a 'type' attribute");
+            self.error(
+                &item_source,
+                "<item> within an <overlayable> must have a 'type' attribute",
+            );
             return false;
         };
         let Some(parsed_type) = ResourceNamedType::parse(item_type) else {
@@ -1231,14 +1287,20 @@ impl<'a> ResourceParser<'a> {
             {
                 if element_name == "enum" {
                     if type_mask & format::FLAGS != 0 {
-                        self.error(&item_source, "can not define an <enum>; already defined a <flag>");
+                        self.error(
+                            &item_source,
+                            "can not define an <enum>; already defined a <flag>",
+                        );
                         error = true;
                         continue;
                     }
                     type_mask |= format::ENUM;
                 } else {
                     if type_mask & format::ENUM != 0 {
-                        self.error(&item_source, "can not define a <flag>; already defined an <enum>");
+                        self.error(
+                            &item_source,
+                            "can not define a <flag>; already defined an <enum>",
+                        );
                         error = true;
                         continue;
                     }
@@ -1290,7 +1352,11 @@ impl<'a> ResourceParser<'a> {
             return false;
         }
 
-        let mut attr = Attribute::new(if type_mask != 0 { type_mask } else { format::ANY });
+        let mut attr = Attribute::new(if type_mask != 0 {
+            type_mask
+        } else {
+            format::ANY
+        });
         attr.symbols = symbols;
         attr.min_int = maybe_min.unwrap_or(i32::MIN);
         attr.max_int = maybe_max.unwrap_or(i32::MAX);
@@ -1306,11 +1372,17 @@ impl<'a> ResourceParser<'a> {
         let source = self.source_at(el);
 
         let Some(name) = find_non_empty_attr(el, "name") else {
-            self.error(&source, &format!("no attribute 'name' found for tag <{tag}>"));
+            self.error(
+                &source,
+                &format!("no attribute 'name' found for tag <{tag}>"),
+            );
             return None;
         };
         let Some(value_str) = find_non_empty_attr(el, "value") else {
-            self.error(&source, &format!("no attribute 'value' found for tag <{tag}>"));
+            self.error(
+                &source,
+                &format!("no attribute 'value' found for tag <{tag}>"),
+            );
             return None;
         };
         let Some(value) = string_to_int(value_str) else {
@@ -1361,7 +1433,10 @@ impl<'a> ResourceParser<'a> {
 
         if let Some(flag) = flag {
             if self.options.flag.is_some() {
-                self.error_at(el, "Resource flag are not allowed both in the path and in the file");
+                self.error_at(
+                    el,
+                    "Resource flag are not allowed both in the path and in the file",
+                );
                 return false;
             }
             match get_flag_status(&Some(flag.clone()), &self.options.feature_flags) {
@@ -1595,7 +1670,10 @@ impl<'a> ResourceParser<'a> {
                 Some(value) => translatable = value,
                 None => {
                     let source = out.source.clone();
-                    self.error(&source, "invalid value for 'translatable'. Must be a boolean");
+                    self.error(
+                        &source,
+                        "invalid value for 'translatable'. Must be a boolean",
+                    );
                     return false;
                 }
             }
@@ -1802,7 +1880,10 @@ impl<'a> ResourceParser<'a> {
 
         Some(FlattenedXmlSubTree {
             raw_value,
-            style_string: StyleString { str: processed.text, spans: processed.spans },
+            style_string: StyleString {
+                str: processed.text,
+                spans: processed.spans,
+            },
             untranslatable_sections: processed.untranslatable_sections,
             namespace_stack: ns_stack.to_vec(),
             source: self.source_at(el),
@@ -1922,12 +2003,14 @@ fn should_ignore_element(el: &Element) -> bool {
 
 /// `xml::FindAttribute`: the attribute's value, whitespace-trimmed.
 fn find_attr<'el>(el: &'el Element, name: &str) -> Option<&'el str> {
-    el.find_attribute("", name).map(|attr| trim_whitespace(&attr.value))
+    el.find_attribute("", name)
+        .map(|attr| trim_whitespace(&attr.value))
 }
 
 /// `xml::FindAttribute` with an explicit namespace.
 fn find_attr_ns<'el>(el: &'el Element, namespace_uri: &str, name: &str) -> Option<&'el str> {
-    el.find_attribute(namespace_uri, name).map(|attr| trim_whitespace(&attr.value))
+    el.find_attribute(namespace_uri, name)
+        .map(|attr| trim_whitespace(&attr.value))
 }
 
 /// `xml::FindNonEmptyAttribute`: trimmed and non-empty.
@@ -1942,8 +2025,14 @@ pub fn parse_flag(flag_text: Option<&str>) -> Option<FeatureFlagAttribute> {
         return None;
     }
     Some(match flag_text.strip_prefix('!') {
-        Some(rest) => FeatureFlagAttribute { name: rest.to_string(), negated: true },
-        None => FeatureFlagAttribute { name: flag_text.to_string(), negated: false },
+        Some(rest) => FeatureFlagAttribute {
+            name: rest.to_string(),
+            negated: true,
+        },
+        None => FeatureFlagAttribute {
+            name: flag_text.to_string(),
+            negated: false,
+        },
     })
 }
 
@@ -1959,12 +2048,22 @@ pub fn get_flag_status(
         return Err(format!("Resource flag value undefined: {}", flag.name));
     };
     if !properties.read_only {
-        return Err(format!("Only read only flags may be used with resources: {}", flag.name));
+        return Err(format!(
+            "Only read only flags may be used with resources: {}",
+            flag.name
+        ));
     }
     let Some(enabled) = properties.enabled else {
-        return Err(format!("Only flags with a value may be used with resources: {}", flag.name));
+        return Err(format!(
+            "Only flags with a value may be used with resources: {}",
+            flag.name
+        ));
     };
-    Ok(if enabled != flag.negated { FlagStatus::Enabled } else { FlagStatus::Disabled })
+    Ok(if enabled != flag.negated {
+        FlagStatus::Enabled
+    } else {
+        FlagStatus::Disabled
+    })
 }
 
 /// Port of the C++ `ParseFormatTypeNoEnumsOrFlags`.
@@ -2181,7 +2280,10 @@ pub fn verify_java_string_format(s: &str) -> bool {
 
             // Ignore size, width, flags, etc.
             while c < end
-                && matches!(bytes[c], b'-' | b'#' | b'+' | b' ' | b',' | b'(' | b'0'..=b'9')
+                && matches!(
+                    bytes[c],
+                    b'-' | b'#' | b'+' | b' ' | b',' | b'(' | b'0'..=b'9'
+                )
             {
                 c += 1;
             }
@@ -2247,7 +2349,9 @@ mod tests {
     }
 
     fn name(s: &str) -> ResourceName {
-        parse_resource_name(s).expect("valid resource name for test").0
+        parse_resource_name(s)
+            .expect("valid resource name for test")
+            .0
     }
 
     fn get_entry<'t>(table: &'t ResourceTable, name_str: &str) -> Option<&'t ResourceEntry> {
@@ -2260,7 +2364,10 @@ mod tests {
         config: &ConfigDescription,
         product: &str,
     ) -> Option<&'t Value> {
-        get_entry(table, name_str)?.find_value(config, product)?.value.as_ref()
+        get_entry(table, name_str)?
+            .find_value(config, product)?
+            .value
+            .as_ref()
     }
 
     fn get_value<'t>(table: &'t ResourceTable, name_str: &str) -> Option<&'t Value> {
@@ -2299,14 +2406,20 @@ mod tests {
             ResourceParserOptions::default(),
         );
         let err = parser.parse(&doc).unwrap_err();
-        assert!(err[0].contains("root element must be <resources>"), "{err:?}");
+        assert!(
+            err[0].contains("root element must be <resources>"),
+            "{err:?}"
+        );
     }
 
     #[test]
     fn parse_quoted_string() {
         let table = test_parse(r#"<string name="foo">   "  hey there " </string>"#).unwrap();
         match &get_value(&table, "string/foo").unwrap().kind {
-            ValueKind::Item(Item::String { value, untranslatable_sections }) => {
+            ValueKind::Item(Item::String {
+                value,
+                untranslatable_sections,
+            }) => {
                 assert_eq!(value, "  hey there ");
                 assert!(untranslatable_sections.is_empty());
             }
@@ -2327,7 +2440,10 @@ mod tests {
 
         let table =
             test_parse("<string name=\"bar\">This isn\\\u{2019}t a bad string</string>").unwrap();
-        assert_eq!(get_string(&table, "string/bar"), "This isn\u{2019}t a bad string");
+        assert_eq!(
+            get_string(&table, "string/bar"),
+            "This isn\u{2019}t a bad string"
+        );
     }
 
     #[test]
@@ -2350,7 +2466,11 @@ mod tests {
         let table = test_parse(input).unwrap();
 
         match &get_value(&table, "string/foo").unwrap().kind {
-            ValueKind::Item(Item::StyledString { value, spans, untranslatable_sections }) => {
+            ValueKind::Item(Item::StyledString {
+                value,
+                spans,
+                untranslatable_sections,
+            }) => {
                 assert_eq!(value, "This is my aunt\u{2019}s fickle string");
                 assert_eq!(spans.len(), 2);
                 assert!(untranslatable_sections.is_empty());
@@ -2374,7 +2494,10 @@ mod tests {
 
         let table =
             test_parse(r#"<string name="foo2">"  This is what  I think  "</string>"#).unwrap();
-        assert_eq!(get_string(&table, "string/foo2"), "  This is what  I think  ");
+        assert_eq!(
+            get_string(&table, "string/foo2"),
+            "  This is what  I think  "
+        );
     }
 
     #[test]
@@ -2391,7 +2514,10 @@ mod tests {
         // Non-ASCII whitespace is preserved.
         let table =
             test_parse(r#"<string name="foo3">&#160;Hello&#x202F;World&#160;</string>"#).unwrap();
-        assert_eq!(get_string(&table, "string/foo3"), "\u{A0}Hello\u{202F}World\u{A0}");
+        assert_eq!(
+            get_string(&table, "string/foo3"),
+            "\u{A0}Hello\u{202F}World\u{A0}"
+        );
 
         let table = test_parse(r#"<string name="foo4">2005年6月1日</string>"#).unwrap();
         assert_eq!(get_string(&table, "string/foo4"), "2005年6月1日");
@@ -2403,7 +2529,11 @@ mod tests {
         let table = test_parse(input).unwrap();
 
         match &get_value(&table, "string/foo").unwrap().kind {
-            ValueKind::Item(Item::StyledString { value, spans, untranslatable_sections }) => {
+            ValueKind::Item(Item::StyledString {
+                value,
+                spans,
+                untranslatable_sections,
+            }) => {
                 assert_eq!(value, "  My  favorite string  ");
                 assert!(untranslatable_sections.is_empty());
 
@@ -2434,7 +2564,9 @@ mod tests {
         assert!(!get_value(&table, "string/foo3").unwrap().meta.translatable);
 
         // Invalid value: must be a boolean.
-        assert!(test_parse(r#"<string name="foo4" translatable="yes">Translate</string>"#).is_err());
+        assert!(
+            test_parse(r#"<string name="foo4" translatable="yes">Translate</string>"#).is_err()
+        );
     }
 
     #[test]
@@ -2444,7 +2576,10 @@ mod tests {
           There are <xliff:source>no</xliff:source> apples</string>"#;
         let table = test_parse(input).unwrap();
         match &get_value(&table, "string/foo").unwrap().kind {
-            ValueKind::Item(Item::String { value, untranslatable_sections }) => {
+            ValueKind::Item(Item::String {
+                value,
+                untranslatable_sections,
+            }) => {
                 assert_eq!(value, "There are no apples");
                 assert!(untranslatable_sections.is_empty());
             }
@@ -2458,7 +2593,11 @@ mod tests {
       <string name="foo" xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
           Do not <xliff:g>translate <xliff:g>this</xliff:g></xliff:g></string>"#;
         let err = test_parse(input).unwrap_err();
-        assert!(err.iter().any(|e| e.contains("illegal nested XLIFF 'g' tag")), "{err:?}");
+        assert!(
+            err.iter()
+                .any(|e| e.contains("illegal nested XLIFF 'g' tag")),
+            "{err:?}"
+        );
     }
 
     #[test]
@@ -2468,7 +2607,10 @@ mod tests {
           There are <xliff:g id="count">%1$d</xliff:g> apples</string>"#;
         let table = test_parse(input).unwrap();
         match &get_value(&table, "string/foo").unwrap().kind {
-            ValueKind::Item(Item::String { value, untranslatable_sections }) => {
+            ValueKind::Item(Item::String {
+                value,
+                untranslatable_sections,
+            }) => {
                 assert_eq!(value, "There are %1$d apples");
                 assert_eq!(untranslatable_sections.len(), 1);
                 assert_eq!(untranslatable_sections[0].start, 10);
@@ -2485,7 +2627,11 @@ mod tests {
           There are <b><xliff:g id="count">%1$d</xliff:g></b> apples</string>"#;
         let table = test_parse(input).unwrap();
         match &get_value(&table, "string/foo").unwrap().kind {
-            ValueKind::Item(Item::StyledString { value, spans, untranslatable_sections }) => {
+            ValueKind::Item(Item::StyledString {
+                value,
+                spans,
+                untranslatable_sections,
+            }) => {
                 assert_eq!(value, " There are %1$d apples");
                 assert_eq!(untranslatable_sections.len(), 1);
                 assert_eq!(untranslatable_sections[0].start, 11);
@@ -2542,8 +2688,7 @@ mod tests {
 
     #[test]
     fn parse_attr_with_min_max() {
-        let table =
-            test_parse(r#"<attr name="foo" min="10" max="23" format="integer"/>"#).unwrap();
+        let table = test_parse(r#"<attr name="foo" min="10" max="23" format="integer"/>"#).unwrap();
         let attr = get_attr(&table, "attr/foo").unwrap();
         assert_eq!(attr.type_mask, format::INTEGER);
         assert_eq!(attr.min_int, 10);
@@ -2643,7 +2788,10 @@ mod tests {
         <enum name="bat" value="2"/>
       </attr>"#;
         let err = test_parse(input).unwrap_err();
-        assert!(err.iter().any(|e| e.contains("duplicate symbol 'bat'")), "{err:?}");
+        assert!(
+            err.iter().any(|e| e.contains("duplicate symbol 'bat'")),
+            "{err:?}"
+        );
     }
 
     #[test]
@@ -2668,7 +2816,10 @@ mod tests {
     fn parse_style_with_shorthand_parent() {
         let table = test_parse(r#"<style name="foo" parent="com.app:Theme"/>"#).unwrap();
         let style = get_style(&table, "style/foo");
-        assert_eq!(style.parent.as_ref().unwrap().name, Some(name("com.app:style/Theme")));
+        assert_eq!(
+            style.parent.as_ref().unwrap().name,
+            Some(name("com.app:style/Theme"))
+        );
     }
 
     #[test]
@@ -2678,7 +2829,10 @@ mod tests {
           name="foo" parent="app:Theme"/>"#;
         let table = test_parse(input).unwrap();
         let style = get_style(&table, "style/foo");
-        assert_eq!(style.parent.as_ref().unwrap().name, Some(name("android:style/Theme")));
+        assert_eq!(
+            style.parent.as_ref().unwrap().name,
+            Some(name("android:style/Theme"))
+        );
     }
 
     #[test]
@@ -2828,9 +2982,15 @@ mod tests {
             ValueKind::Styleable(styleable) => {
                 assert_eq!(styleable.entries.len(), 2);
                 assert!(styleable.entries[0].private_reference);
-                assert_eq!(styleable.entries[0].name.as_ref().unwrap().package, "android");
+                assert_eq!(
+                    styleable.entries[0].name.as_ref().unwrap().package,
+                    "android"
+                );
                 assert!(styleable.entries[1].private_reference);
-                assert_eq!(styleable.entries[1].name.as_ref().unwrap().package, "android");
+                assert_eq!(
+                    styleable.entries[1].name.as_ref().unwrap().package,
+                    "android"
+                );
             }
             other => panic!("{other:?}"),
         }
@@ -2926,7 +3086,10 @@ mod tests {
         <item quantity="other">apple</item>
       </plurals>"#;
         let err = test_parse(input).unwrap_err();
-        assert!(err.iter().any(|e| e.contains("duplicate quantity 'other'")), "{err:?}");
+        assert!(
+            err.iter().any(|e| e.contains("duplicate quantity 'other'")),
+            "{err:?}"
+        );
     }
 
     #[test]
@@ -3365,7 +3528,8 @@ mod tests {
       </overlayable>"#;
         let err = test_parse(input).unwrap_err();
         assert!(
-            err.iter().any(|e| e.contains("<policy> blocks cannot be recursively nested")),
+            err.iter()
+                .any(|e| e.contains("<policy> blocks cannot be recursively nested")),
             "{err:?}"
         );
     }
@@ -3382,8 +3546,14 @@ mod tests {
             &get_value(&table, "id/foo").unwrap().kind,
             ValueKind::Item(Item::Reference(_))
         ));
-        assert!(matches!(&get_value(&table, "id/bar").unwrap().kind, ValueKind::Item(Item::Id)));
-        assert!(matches!(&get_value(&table, "id/baz").unwrap().kind, ValueKind::Item(Item::Id)));
+        assert!(matches!(
+            &get_value(&table, "id/bar").unwrap().kind,
+            ValueKind::Item(Item::Id)
+        ));
+        assert!(matches!(
+            &get_value(&table, "id/baz").unwrap().kind,
+            ValueKind::Item(Item::Id)
+        ));
 
         let input = r#"
     <id name="foo2">@id/bar</id>
@@ -3395,8 +3565,14 @@ mod tests {
             &get_value(&table, "id/foo2").unwrap().kind,
             ValueKind::Item(Item::Reference(_))
         ));
-        assert!(matches!(&get_value(&table, "id/bar2").unwrap().kind, ValueKind::Item(Item::Id)));
-        assert!(matches!(&get_value(&table, "id/baz2").unwrap().kind, ValueKind::Item(Item::Id)));
+        assert!(matches!(
+            &get_value(&table, "id/bar2").unwrap().kind,
+            ValueKind::Item(Item::Id)
+        ));
+        assert!(matches!(
+            &get_value(&table, "id/baz2").unwrap().kind,
+            ValueKind::Item(Item::Id)
+        ));
 
         // Reject attribute references.
         assert!(test_parse(r#"<item name="foo3" type="id">?attr/bar"</item>"#).is_err());
@@ -3437,7 +3613,10 @@ This being <b><xliff:g>human</xliff:g></b> is a guest house.</macro>";
         match &get_value(&table, "macro/foo").unwrap().kind {
             ValueKind::Macro(value) => {
                 assert_eq!(value.raw_value, "\nThis being human is a guest house.");
-                assert_eq!(value.style_string.str, " This being human is a guest house.");
+                assert_eq!(
+                    value.style_string.str,
+                    " This being human is a guest house."
+                );
                 assert_eq!(value.style_string.spans.len(), 1);
                 assert_eq!(value.style_string.spans[0].name, "b");
                 assert_eq!(value.style_string.spans[0].first_char, 12);
@@ -3453,7 +3632,8 @@ This being <b><xliff:g>human</xliff:g></b> is a guest house.</macro>";
 
     #[test]
     fn parse_macro_namespaces() {
-        let input = "<macro name=\"foo\" xmlns:app=\"http://schemas.android.com/apk/res/android\">\n\
+        let input =
+            "<macro name=\"foo\" xmlns:app=\"http://schemas.android.com/apk/res/android\">\n\
 @app:string/foo</macro>";
         let table = test_parse(input).unwrap();
         match &get_value(&table, "macro/foo").unwrap().kind {
@@ -3527,14 +3707,17 @@ This being <b><xliff:g>human</xliff:g></b> is a guest house.</macro>";
         <attr name="baz" format="reference"/>
       </declare-styleable>"#;
         let mut table = ResourceTable::new();
-        parse_with(&mut table, input, watch_config.clone(), ResourceParserOptions::default())
-            .unwrap();
+        parse_with(
+            &mut table,
+            input,
+            watch_config.clone(),
+            ResourceParserOptions::default(),
+        )
+        .unwrap();
 
         assert!(get_value_for_config_product(&table, "attr/foo", &watch_config, "").is_none());
         assert!(get_value_for_config_product(&table, "attr/baz", &watch_config, "").is_none());
-        assert!(
-            get_value_for_config_product(&table, "styleable/bar", &watch_config, "").is_none()
-        );
+        assert!(get_value_for_config_product(&table, "styleable/bar", &watch_config, "").is_none());
 
         assert!(get_value(&table, "attr/foo").is_some());
         assert!(get_value(&table, "attr/baz").is_some());
@@ -3545,10 +3728,12 @@ This being <b><xliff:g>human</xliff:g></b> is a guest house.</macro>";
     fn parse_cdata() {
         // Double quotes should still change the state of whitespace
         // processing.
-        let input =
-            r#"<string name="foo">Hello<![CDATA[ "</string>' ]]>      World</string>"#;
+        let input = r#"<string name="foo">Hello<![CDATA[ "</string>' ]]>      World</string>"#;
         let table = test_parse(input).unwrap();
-        assert_eq!(get_string(&table, "string/foo"), "Hello </string>'       World");
+        assert_eq!(
+            get_string(&table, "string/foo"),
+            "Hello </string>'       World"
+        );
 
         let input = "<string name=\"foo2\"><![CDATA[Hello\n                                          World]]></string>";
         let table = test_parse(input).unwrap();
@@ -3577,7 +3762,10 @@ This being <b><xliff:g>human</xliff:g></b> is a guest house.</macro>";
         let mut options = ResourceParserOptions::default();
         options.feature_flags.insert(
             "flag.one".to_string(),
-            FeatureFlagProperties { read_only: true, enabled: Some(true) },
+            FeatureFlagProperties {
+                read_only: true,
+                enabled: Some(true),
+            },
         );
 
         // Enabled flag: the value lands as a regular value with its flag
@@ -3585,12 +3773,21 @@ This being <b><xliff:g>human</xliff:g></b> is a guest house.</macro>";
         let input = r#"<string xmlns:android="http://schemas.android.com/apk/res/android"
                                name="foo" android:featureFlag="flag.one">on</string>"#;
         let mut table = ResourceTable::new();
-        parse_with(&mut table, input, ConfigDescription::default(), options.clone()).unwrap();
+        parse_with(
+            &mut table,
+            input,
+            ConfigDescription::default(),
+            options.clone(),
+        )
+        .unwrap();
         let value = get_value(&table, "string/foo").unwrap();
         assert_eq!(value.meta.flag_status, FlagStatus::Enabled);
         assert_eq!(
             value.meta.flag,
-            Some(FeatureFlagAttribute { name: "flag.one".to_string(), negated: false })
+            Some(FeatureFlagAttribute {
+                name: "flag.one".to_string(),
+                negated: false
+            })
         );
 
         // Negated flag on an enabled feature: disabled, so the value is
@@ -3598,7 +3795,13 @@ This being <b><xliff:g>human</xliff:g></b> is a guest house.</macro>";
         let input = r#"<string xmlns:android="http://schemas.android.com/apk/res/android"
                                name="bar" android:featureFlag="!flag.one">off</string>"#;
         let mut table = ResourceTable::new();
-        parse_with(&mut table, input, ConfigDescription::default(), options.clone()).unwrap();
+        parse_with(
+            &mut table,
+            input,
+            ConfigDescription::default(),
+            options.clone(),
+        )
+        .unwrap();
         let entry = get_entry(&table, "string/bar").unwrap();
         assert!(entry.values.is_empty());
         assert_eq!(entry.flag_disabled_values.len(), 1);
@@ -3607,10 +3810,10 @@ This being <b><xliff:g>human</xliff:g></b> is a guest house.</macro>";
         let input = r#"<string xmlns:android="http://schemas.android.com/apk/res/android"
                                name="baz" android:featureFlag="flag.unknown">x</string>"#;
         let mut table = ResourceTable::new();
-        let err =
-            parse_with(&mut table, input, ConfigDescription::default(), options).unwrap_err();
+        let err = parse_with(&mut table, input, ConfigDescription::default(), options).unwrap_err();
         assert!(
-            err.iter().any(|e| e.contains("Resource flag value undefined: flag.unknown")),
+            err.iter()
+                .any(|e| e.contains("Resource flag value undefined: flag.unknown")),
             "{err:?}"
         );
     }

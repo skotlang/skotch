@@ -301,7 +301,12 @@ impl ConfigDescription {
 
     /// `locale` union view: the 4 language/country bytes as a LE u32.
     pub fn locale_u32(&self) -> u32 {
-        u32::from_le_bytes([self.language[0], self.language[1], self.country[0], self.country[1]])
+        u32::from_le_bytes([
+            self.language[0],
+            self.language[1],
+            self.country[0],
+            self.country[1],
+        ])
     }
 
     /// `screenType` union view: `orientation | touchscreen << 8 | density << 16`.
@@ -659,7 +664,9 @@ impl ConfigDescription {
         if r != Ordering::Equal {
             return r;
         }
-        let r = self.smallest_screen_width_dp.cmp(&o.smallest_screen_width_dp);
+        let r = self
+            .smallest_screen_width_dp
+            .cmp(&o.smallest_screen_width_dp);
         if r != Ordering::Equal {
             return r;
         }
@@ -690,7 +697,9 @@ impl ConfigDescription {
         if r != Ordering::Equal {
             return r;
         }
-        let r = self.smallest_screen_width_dp.cmp(&o.smallest_screen_width_dp);
+        let r = self
+            .smallest_screen_width_dp
+            .cmp(&o.smallest_screen_width_dp);
         if r != Ordering::Equal {
             return r;
         }
@@ -823,8 +832,16 @@ impl ConfigDescription {
     /// numbering systems).
     pub fn get_importance_score_of_locale(&self) -> i32 {
         (if self.locale_variant[0] != 0 { 4 } else { 0 })
-            + (if self.locale_script[0] != 0 && !self.locale_script_was_computed { 2 } else { 0 })
-            + (if self.locale_numbering_system[0] != 0 { 1 } else { 0 })
+            + (if self.locale_script[0] != 0 && !self.locale_script_was_computed {
+                2
+            } else {
+                0
+            })
+            + (if self.locale_numbering_system[0] != 0 {
+                1
+            } else {
+                0
+            })
     }
 
     /// Positive if `self` is more locale-specific than `o`, negative if `o`
@@ -1131,8 +1148,7 @@ impl ConfigDescription {
                         return self.country[0] == 0
                             || are_identical(&self.country, &K_UNITED_STATES);
                     } else {
-                        return !(o.country[0] == 0
-                            || are_identical(&o.country, &K_UNITED_STATES));
+                        return !(o.country[0] == 0 || are_identical(&o.country, &K_UNITED_STATES));
                     }
                 } else if locale_data_is_close_to_us_english(&requested.country) {
                     if self.language[0] != 0 {
@@ -1811,7 +1827,10 @@ impl ConfigDescription {
         !pred(self.mcc as u32, o.mcc as u32)
             || !pred(self.mnc as u32, o.mnc as u32)
             || !pred(self.locale_u32(), o.locale_u32())
-            || !pred(self.grammatical_inflection as u32, o.grammatical_inflection as u32)
+            || !pred(
+                self.grammatical_inflection as u32,
+                o.grammatical_inflection as u32,
+            )
             || !pred(
                 (self.screen_layout & Self::MASK_LAYOUTDIR) as u32,
                 (o.screen_layout & Self::MASK_LAYOUTDIR) as u32,
@@ -1872,8 +1891,7 @@ impl ConfigDescription {
         if self.language[0] == 0 {
             return;
         }
-        let script_was_provided =
-            self.locale_script[0] != 0 && !self.locale_script_was_computed;
+        let script_was_provided = self.locale_script[0] != 0 && !self.locale_script_was_computed;
         if !script_was_provided
             && self.locale_variant[0] == 0
             && self.locale_numbering_system[0] == 0
@@ -2272,7 +2290,10 @@ fn pack_language_or_region(input: &[u8], base: u8) -> [u8; 2] {
         let first = (c0.wrapping_sub(base) & 0x7f) as u32;
         let second = (c1.wrapping_sub(base) & 0x7f) as u32;
         let third = (c2.wrapping_sub(base) & 0x7f) as u32;
-        [(0x80 | (third << 2) | (second >> 3)) as u8, ((second << 5) | first) as u8]
+        [
+            (0x80 | (third << 2) | (second >> 3)) as u8,
+            ((second << 5) | first) as u8,
+        ]
     }
 }
 
@@ -2335,8 +2356,16 @@ fn compare_locales(l: &ConfigDescription, r: &ConfigDescription) -> Ordering {
     // Languages and regions are equal: compare scripts, variants, and
     // numbering systems, masking out computed scripts.
     const EMPTY_SCRIPT: [u8; 4] = [0; 4];
-    let l_script = if l.locale_script_was_computed { &EMPTY_SCRIPT } else { &l.locale_script };
-    let r_script = if r.locale_script_was_computed { &EMPTY_SCRIPT } else { &r.locale_script };
+    let l_script = if l.locale_script_was_computed {
+        &EMPTY_SCRIPT
+    } else {
+        &l.locale_script
+    };
+    let r_script = if r.locale_script_was_computed {
+        &EMPTY_SCRIPT
+    } else {
+        &r.locale_script
+    };
     let script = l_script.cmp(r_script);
     if script != Ordering::Equal {
         return script;
@@ -2456,9 +2485,7 @@ fn locale_data_compare_regions(
     let right_is_special_spanish = is_special_spanish(right);
     if left_is_special_spanish && !right_is_special_spanish && right != LATIN_AMERICAN_SPANISH {
         left = LATIN_AMERICAN_SPANISH;
-    } else if right_is_special_spanish
-        && !left_is_special_spanish
-        && left != LATIN_AMERICAN_SPANISH
+    } else if right_is_special_spanish && !left_is_special_spanish && left != LATIN_AMERICAN_SPANISH
     {
         right = LATIN_AMERICAN_SPANISH;
     }
@@ -2548,12 +2575,19 @@ struct LocaleParserState {
 
 impl Default for LocaleParserState {
     fn default() -> Self {
-        LocaleParserState { parser: ParserState::Base, unicode: UnicodeState::NoKey }
+        LocaleParserState {
+            parser: ParserState::Base,
+            unicode: UnicodeState::NoKey,
+        }
     }
 }
 
 /// Port of `assignLocaleComponent`.
-fn assign_locale_component(config: &mut ConfigDescription, part: &str, state: &mut LocaleParserState) {
+fn assign_locale_component(
+    config: &mut ConfigDescription,
+    part: &str,
+    state: &mut LocaleParserState,
+) {
     let bytes = part.as_bytes();
     let size = bytes.len();
 
@@ -2679,8 +2713,11 @@ impl LocaleValue {
     fn set_script(&mut self, script: &[u8]) {
         self.script = [0; 4];
         for (i, &b) in script.iter().take(4).enumerate() {
-            self.script[i] =
-                if i == 0 { b.to_ascii_uppercase() } else { b.to_ascii_lowercase() };
+            self.script[i] = if i == 0 {
+                b.to_ascii_uppercase()
+            } else {
+                b.to_ascii_lowercase()
+            };
         }
     }
 
@@ -2703,8 +2740,10 @@ impl LocaleValue {
 
     /// Port of `LocaleValue::InitFromBcp47TagImpl`.
     fn init_from_bcp47_tag_impl(&mut self, bcp47tag: &str, separator: char) -> bool {
-        let subtags: Vec<String> =
-            bcp47tag.split(separator).map(|s| s.to_ascii_lowercase()).collect();
+        let subtags: Vec<String> = bcp47tag
+            .split(separator)
+            .map(|s| s.to_ascii_lowercase())
+            .collect();
         match subtags.len() {
             1 => self.set_language(subtags[0].as_bytes()),
             2 => {
@@ -2811,7 +2850,10 @@ fn atoi_u16(s: &str) -> u16 {
 
 /// Splits a leading run of ASCII digits from the rest.
 fn split_digits_prefix(s: &str) -> (&str, &str) {
-    let end = s.bytes().position(|b| !b.is_ascii_digit()).unwrap_or(s.len());
+    let end = s
+        .bytes()
+        .position(|b| !b.is_ascii_digit())
+        .unwrap_or(s.len());
     s.split_at(end)
 }
 
@@ -3294,12 +3336,18 @@ mod tests {
     #[test]
     fn parse_hdr_qualifier() {
         let config = parse("highdr");
-        assert_eq!(config.color_mode & ConfigDescription::MASK_HDR, ConfigDescription::HDR_YES);
+        assert_eq!(
+            config.color_mode & ConfigDescription::MASK_HDR,
+            ConfigDescription::HDR_YES
+        );
         assert_eq!(config.sdk_version, SDK_O);
         assert_eq!(config.to_string(), "highdr-v26");
 
         let config = parse("lowdr");
-        assert_eq!(config.color_mode & ConfigDescription::MASK_HDR, ConfigDescription::HDR_NO);
+        assert_eq!(
+            config.color_mode & ConfigDescription::MASK_HDR,
+            ConfigDescription::HDR_NO
+        );
         assert_eq!(config.sdk_version, SDK_O);
         assert_eq!(config.to_string(), "lowdr-v26");
     }
@@ -3331,7 +3379,10 @@ mod tests {
         assert_eq!(config.to_string(), "masculine-v34");
 
         let config = parse("neuter");
-        assert_eq!(config.grammatical_inflection, ConfigDescription::GRAMMATICAL_GENDER_NEUTER);
+        assert_eq!(
+            config.grammatical_inflection,
+            ConfigDescription::GRAMMATICAL_GENDER_NEUTER
+        );
         assert_eq!(config.sdk_version, SDK_U);
         assert_eq!(config.to_string(), "neuter-v34");
     }
@@ -3377,7 +3428,10 @@ mod tests {
         // An explicit higher version is preserved.
         assert_eq!(round_trip("sw600dp-v21"), "sw600dp-v21");
         // The full chain example from the task statement.
-        assert_eq!(round_trip("sw600dp-land-night-hdpi-v21"), "sw600dp-land-night-hdpi-v21");
+        assert_eq!(
+            round_trip("sw600dp-land-night-hdpi-v21"),
+            "sw600dp-land-night-hdpi-v21"
+        );
     }
 
     // --- locale forms ----------------------------------------------------
@@ -3602,8 +3656,13 @@ mod tests {
 
     #[test]
     fn compare_ordering() {
-        let mut configs =
-            vec![parse("mcc310"), parse("en-rUS"), parse("v21"), parse(""), parse("en")];
+        let mut configs = vec![
+            parse("mcc310"),
+            parse("en-rUS"),
+            parse("v21"),
+            parse(""),
+            parse("en"),
+        ];
         configs.sort();
         let strings: Vec<String> = configs.iter().map(|c| c.to_string()).collect();
         assert_eq!(strings, vec!["", "v21", "en", "en-rUS", "mcc310"]);
@@ -3616,28 +3675,49 @@ mod tests {
     #[test]
     fn compare_logical_ordering() {
         // mcc sorts first in logical order.
-        assert_eq!(parse("mcc310").compare_logical(&parse("en")), Ordering::Greater);
+        assert_eq!(
+            parse("mcc310").compare_logical(&parse("en")),
+            Ordering::Greater
+        );
         assert_eq!(parse("en").compare_logical(&parse("fr")), Ordering::Less);
-        assert_eq!(parse("sw600dp").compare_logical(&parse("sw720dp")), Ordering::Less);
+        assert_eq!(
+            parse("sw600dp").compare_logical(&parse("sw720dp")),
+            Ordering::Less
+        );
         assert_eq!(parse("v13").compare_logical(&parse("v21")), Ordering::Less);
     }
 
     #[test]
     fn diff_bits() {
-        assert_eq!(parse("en").diff(&parse("fr")), ConfigDescription::CONFIG_LOCALE);
-        assert_eq!(parse("v4").diff(&parse("")), ConfigDescription::CONFIG_VERSION);
+        assert_eq!(
+            parse("en").diff(&parse("fr")),
+            ConfigDescription::CONFIG_LOCALE
+        );
+        assert_eq!(
+            parse("v4").diff(&parse("")),
+            ConfigDescription::CONFIG_VERSION
+        );
         // hdpi/mdpi differ only in density (both get v4).
-        assert_eq!(parse("hdpi").diff(&parse("mdpi")), ConfigDescription::CONFIG_DENSITY);
+        assert_eq!(
+            parse("hdpi").diff(&parse("mdpi")),
+            ConfigDescription::CONFIG_DENSITY
+        );
         assert_eq!(
             parse("hdpi").diff(&parse("")),
             ConfigDescription::CONFIG_DENSITY | ConfigDescription::CONFIG_VERSION
         );
-        assert_eq!(parse("land").diff(&parse("port")), ConfigDescription::CONFIG_ORIENTATION);
+        assert_eq!(
+            parse("land").diff(&parse("port")),
+            ConfigDescription::CONFIG_ORIENTATION
+        );
         assert_eq!(
             parse("sw600dp-v13").diff(&parse("sw720dp-v13")),
             ConfigDescription::CONFIG_SMALLEST_SCREEN_SIZE
         );
-        assert_eq!(parse("ldrtl").diff(&parse("ldltr")), ConfigDescription::CONFIG_LAYOUTDIR);
+        assert_eq!(
+            parse("ldrtl").diff(&parse("ldltr")),
+            ConfigDescription::CONFIG_LAYOUTDIR
+        );
         assert_eq!(parse("en").diff(&parse("en")), 0);
     }
 
@@ -3827,6 +3907,9 @@ mod tests {
         // Legacy locale forms with surrounding qualifiers.
         assert_eq!(round_trip("mcc310-en-rUS-land"), "mcc310-en-rUS-land");
         // Modified BCP-47 keeps its position between mnc and layout dir.
-        assert_eq!(round_trip("mcc310-mnc004-b+sr+Latn-ldrtl"), "mcc310-mnc4-b+sr+Latn-ldrtl");
+        assert_eq!(
+            round_trip("mcc310-mnc004-b+sr+Latn-ldrtl"),
+            "mcc310-mnc4-b+sr+Latn-ldrtl"
+        );
     }
 }

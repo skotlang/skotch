@@ -243,12 +243,7 @@ fn emit_resource_type_diff(
                         ),
                     );
                     diff = true;
-                } else if is_id_diff(
-                    a.visibility.level,
-                    a.id,
-                    b.visibility.level,
-                    b.id,
-                ) {
+                } else if is_id_diff(a.visibility.level, a.id, b.visibility.level, b.id) {
                     let id_string = |id: Option<crate::res::ResourceId>| match id {
                         Some(id) => format!("0x{:x}", id.0),
                         None => "none".to_string(),
@@ -266,9 +261,7 @@ fn emit_resource_type_diff(
                     );
                     diff = true;
                 }
-                diff |= emit_resource_entry_diff(
-                    apk_a, pkg_a, type_a, a, apk_b, pkg_b, type_b, b,
-                );
+                diff |= emit_resource_entry_diff(apk_a, pkg_a, type_a, a, apk_b, pkg_b, type_b, b);
             }
             (None, None) => unreachable!(),
         }

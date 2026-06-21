@@ -226,7 +226,12 @@ impl ApkSigner {
             let lfr = zip::parse_local_file_record(lfh_section, cd)?;
 
             // Copy any gap before this record verbatim.
-            input_offset = copy_gap(&mut output, lfh_section, input_offset, cd.lfh_offset as usize);
+            input_offset = copy_gap(
+                &mut output,
+                lfh_section,
+                input_offset,
+                cd.lfh_offset as usize,
+            );
 
             if !needed {
                 // Skipped entry: consume from input, do not output.
@@ -275,7 +280,8 @@ impl ApkSigner {
         }
 
         // ── Step 6: output CD records in input-CD order ───────────────────
-        let mut output_cd_records: Vec<CdRecord> = Vec::with_capacity(cd_records.len() + signers_extra(self));
+        let mut output_cd_records: Vec<CdRecord> =
+            Vec::with_capacity(cd_records.len() + signers_extra(self));
         for cd in &cd_records {
             if let Some(out) = output_cd_by_name.get(&cd.name) {
                 output_cd_records.push(out.clone());
@@ -334,13 +340,7 @@ impl ApkSigner {
 
         let signing_block = if v2_enabled || v3_enabled {
             Some(self.build_signing_block(
-                &output,
-                &output_cd,
-                &base_eocd,
-                cd_start,
-                min_sdk,
-                v2_enabled,
-                v3_enabled,
+                &output, &output_cd, &base_eocd, cd_start, min_sdk, v2_enabled, v3_enabled,
             )?)
         } else {
             None
@@ -403,8 +403,14 @@ impl ApkSigner {
         before_cd.resize(cd_start + padding, 0);
 
         let assemble = |eocd_for_digest: &[u8]| -> Result<Vec<u8>> {
-            let scheme_blocks =
-                self.scheme_blocks(&before_cd, output_cd, eocd_for_digest, min_sdk, v2_enabled, v3_enabled)?;
+            let scheme_blocks = self.scheme_blocks(
+                &before_cd,
+                output_cd,
+                eocd_for_digest,
+                min_sdk,
+                v2_enabled,
+                v3_enabled,
+            )?;
             Ok(generate_apk_signing_block(&scheme_blocks))
         };
 
@@ -415,8 +421,7 @@ impl ApkSigner {
         let mut final_eocd = base_eocd.to_vec();
 
         if self.align_file_size {
-            let file_size =
-                cd_start + output_cd.len() + padding + block.len() + base_eocd.len();
+            let file_size = cd_start + output_cd.len() + padding + block.len() + base_eocd.len();
             if file_size % ANDROID_FILE_ALIGNMENT != 0 {
                 let eocd_padding = ANDROID_FILE_ALIGNMENT - (file_size % ANDROID_FILE_ALIGNMENT);
                 final_eocd = eocd::with_padded_comment(base_eocd, eocd_padding);
@@ -470,7 +475,11 @@ impl ApkSigner {
         if v3_enabled {
             // v3.1 split only matters with multiple targeted signers; the
             // common single-/dual-signer goldens use the v3.0 block alone.
-            blocks.push(generate_v3_block(&v3_signers, &digests, &V3BlockParams::v3())?);
+            blocks.push(generate_v3_block(
+                &v3_signers,
+                &digests,
+                &V3BlockParams::v3(),
+            )?);
         }
         Ok(blocks)
     }
@@ -564,7 +573,11 @@ impl ApkSigner {
                 idx,
                 min_sdk,
                 max_sdk: INT_MAX,
-                algs: suggested_signature_algorithms(&s.key, self.verity_enabled, s.deterministic_dsa)?,
+                algs: suggested_signature_algorithms(
+                    &s.key,
+                    self.verity_enabled,
+                    s.deterministic_dsa,
+                )?,
             });
         }
 
@@ -598,9 +611,10 @@ impl ApkSigner {
         for cfg in processed {
             let signer = &self.signers[cfg.idx];
             // Attach the lineage to the newest signer (latest in the lineage).
-            let lineage = self.lineage.as_ref().filter(|l| {
-                l.current_cert_der() == Some(signer.certificates[0].der.as_slice())
-            });
+            let lineage = self
+                .lineage
+                .as_ref()
+                .filter(|l| l.current_cert_der() == Some(signer.certificates[0].der.as_slice()));
             out.push(V3SignerConfig {
                 signer: BlockSignerConfig {
                     key: &signer.key,
@@ -631,8 +645,7 @@ impl ApkSigner {
             return lfr.data_start_offset;
         }
         let align = self.entry_data_alignment_multiple(lfr);
-        if align <= 1
-            || (input_offset % align == output_offset % align && self.alignment_preserved)
+        if align <= 1 || (input_offset % align == output_offset % align && self.alignment_preserved)
         {
             output.extend_from_slice(&lfh_section[input_offset..input_offset + lfr.size]);
             return lfr.data_start_offset;

@@ -44,7 +44,11 @@ fn cov() {
         };
         match dex_classes(
             &[cf],
-            &D8Options { min_api: 1, mode: Mode::Release, ..Default::default() },
+            &D8Options {
+                min_api: 1,
+                mode: Mode::Release,
+                ..Default::default()
+            },
         ) {
             Ok(_) => ok += 1,
             Err(e) => {
@@ -57,7 +61,10 @@ fn cov() {
         }
     }
     let total = ok + bail;
-    eprintln!("=== corpus {root}: {} files ({parse_err} parse-err) ===", files.len());
+    eprintln!(
+        "=== corpus {root}: {} files ({parse_err} parse-err) ===",
+        files.len()
+    );
     eprintln!(
         "dex-OK: {ok}/{total} = {:.1}%   (bail {bail})",
         100.0 * ok as f64 / total.max(1) as f64

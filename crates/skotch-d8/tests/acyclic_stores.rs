@@ -35,7 +35,11 @@ fn fixtures() -> PathBuf {
 
 fn dex(name: &str) -> Result<Vec<u8>, String> {
     let cf = skotch_classfile::parse_class_file(&fixtures().join(format!("{name}.class"))).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     dex_classes(&[cf], &opts).map_err(|e| format!("{e:#}"))
 }
 
@@ -120,7 +124,9 @@ fn constant_folding_byte_identical() {
 #[test]
 fn partially_dead_const_now_dexes() {
     for name in ["Nested", "Compound", "StrSel"] {
-        let dex = dex(name).unwrap_or_else(|e| panic!("{name}: partially-dead const should dex now: {e}"));
-        skotch_dex::validator::validate(&dex).unwrap_or_else(|e| panic!("{name}: invalid dex: {e:#}"));
+        let dex = dex(name)
+            .unwrap_or_else(|e| panic!("{name}: partially-dead const should dex now: {e}"));
+        skotch_dex::validator::validate(&dex)
+            .unwrap_or_else(|e| panic!("{name}: invalid dex: {e:#}"));
     }
 }

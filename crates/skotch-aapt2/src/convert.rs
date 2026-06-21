@@ -25,7 +25,9 @@ pub fn run(args: &[String], diag: &Diagnostics) -> Result<i32> {
             "-v",
         ],
     )?;
-    let output = parsed.value("-o").ok_or_else(|| anyhow!("-o flag is required"))?;
+    let output = parsed
+        .value("-o")
+        .ok_or_else(|| anyhow!("-o flag is required"))?;
     let output_format = match parsed.value("--output-format").unwrap_or("binary") {
         "binary" => OutputFormat::Binary,
         "proto" => OutputFormat::Proto,
@@ -79,11 +81,16 @@ pub fn convert_apk(
             match (root, output_format) {
                 (Some(root), OutputFormat::Binary) => Some(flatten_xml(
                     &root,
-                    &XmlFlattenerOptions { keep_raw_values, use_utf16: true },
+                    &XmlFlattenerOptions {
+                        keep_raw_values,
+                        use_utf16: true,
+                    },
                 )),
                 (Some(root), OutputFormat::Proto) => Some(crate::xml::encode_pb_xml(&root)),
                 (None, _) => {
-                    diag.warn(format!("{name}: failed to parse compiled XML; copying as-is"));
+                    diag.warn(format!(
+                        "{name}: failed to parse compiled XML; copying as-is"
+                    ));
                     None
                 }
             }
@@ -153,20 +160,17 @@ fn is_compiled_xml(apk: &LoadedApk, name: &str) -> bool {
     }
     // Raw XML under res/raw is not compiled.
     !name.starts_with("res/raw")
-        && apk
-            .entry(name)
-            .is_some_and(|data| {
-                data.starts_with(&[0x03, 0x00]) || matches!(apk.format, ApkFormat::Proto)
-            })
+        && apk.entry(name).is_some_and(|data| {
+            data.starts_with(&[0x03, 0x00]) || matches!(apk.format, ApkFormat::Proto)
+        })
 }
 
 fn should_compress_entry(name: &str) -> bool {
     // Sound/video formats are stored by convention.
     const STORED: &[&str] = &[
-        ".jpg", ".jpeg", ".png", ".gif", ".opus", ".wav", ".mp2", ".mp3", ".ogg", ".aac",
-        ".mpg", ".mpeg", ".mid", ".midi", ".smf", ".jet", ".rtttl", ".imy", ".xmf", ".mp4",
-        ".m4a", ".m4v", ".3gp", ".3gpp", ".3g2", ".3gpp2", ".amr", ".awb", ".wma", ".wmv",
-        ".webm", ".mkv",
+        ".jpg", ".jpeg", ".png", ".gif", ".opus", ".wav", ".mp2", ".mp3", ".ogg", ".aac", ".mpg",
+        ".mpeg", ".mid", ".midi", ".smf", ".jet", ".rtttl", ".imy", ".xmf", ".mp4", ".m4a", ".m4v",
+        ".3gp", ".3gpp", ".3g2", ".3gpp2", ".amr", ".awb", ".wma", ".wmv", ".webm", ".mkv",
     ];
     !STORED.iter().any(|ext| name.ends_with(ext))
 }

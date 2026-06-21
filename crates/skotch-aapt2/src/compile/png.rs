@@ -43,8 +43,7 @@ fn for_each_chunk(data: &[u8], mut f: impl FnMut(&[u8], &[u8]) -> Result<()>) ->
     }
     let mut offset = PNG_SIGNATURE.len();
     while offset + 8 <= data.len() {
-        let length =
-            u32::from_be_bytes(data[offset..offset + 4].try_into().unwrap()) as usize;
+        let length = u32::from_be_bytes(data[offset..offset + 4].try_into().unwrap()) as usize;
         let chunk_type = &data[offset + 4..offset + 8];
         let total = 8 + length + 4;
         if offset + total > data.len() {
@@ -116,7 +115,11 @@ pub fn process_nine_patch(data: &[u8], compression_level: u8) -> Result<Vec<u8>>
         let row = image.row(y);
         pixels.extend_from_slice(&row[4..4 + inner_width * 4]);
     }
-    let inner = Image { width: inner_width, height: inner_height, pixels };
+    let inner = Image {
+        width: inner_width,
+        height: inner_height,
+        pixels,
+    };
 
     encode_png(&inner, Some(&nine_patch), compression_level)
 }
@@ -145,7 +148,10 @@ pub fn decode_png(data: &[u8]) -> Result<Image> {
                 ihdr = Some((width, height, bit_depth, color_type, interlace));
             }
             t if t == CHUNK_PLTE => {
-                palette = payload.chunks_exact(3).map(|c| [c[0], c[1], c[2]]).collect();
+                palette = payload
+                    .chunks_exact(3)
+                    .map(|c| [c[0], c[1], c[2]])
+                    .collect();
             }
             t if t == CHUNK_TRNS => trns = payload.to_vec(),
             t if t == CHUNK_IDAT => idat.extend_from_slice(payload),
@@ -236,7 +242,11 @@ pub fn decode_png(data: &[u8]) -> Result<Image> {
         }
     }
 
-    Ok(Image { width, height, pixels })
+    Ok(Image {
+        width,
+        height,
+        pixels,
+    })
 }
 
 fn read_sub_byte(row: &[u8], x: usize, bit_depth: u8, _width: usize) -> u8 {
@@ -285,7 +295,11 @@ fn unfilter_row(filter: u8, row: &mut [u8], prev: Option<&[u8]>, bpp: usize) -> 
             for i in 0..row.len() {
                 let left = if i >= bpp { row[i - bpp] as i16 } else { 0 };
                 let up = prev.map(|p| p[i] as i16).unwrap_or(0);
-                let up_left = if i >= bpp { prev.map(|p| p[i - bpp] as i16).unwrap_or(0) } else { 0 };
+                let up_left = if i >= bpp {
+                    prev.map(|p| p[i - bpp] as i16).unwrap_or(0)
+                } else {
+                    0
+                };
                 let p = left + up - up_left;
                 let pa = (p - left).abs();
                 let pb = (p - up).abs();
@@ -363,7 +377,11 @@ fn crc32(data: &[u8]) -> u32 {
     for &byte in data {
         crc ^= byte as u32;
         for _ in 0..8 {
-            crc = if crc & 1 != 0 { (crc >> 1) ^ 0xedb8_8320 } else { crc >> 1 };
+            crc = if crc & 1 != 0 {
+                (crc >> 1) ^ 0xedb8_8320
+            } else {
+                crc >> 1
+            };
         }
     }
     !crc

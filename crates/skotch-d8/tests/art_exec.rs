@@ -33,7 +33,11 @@ fn has_device(adb: &PathBuf) -> bool {
         .arg("devices")
         .output()
         .ok()
-        .map(|o| String::from_utf8_lossy(&o.stdout).lines().any(|l| l.trim_end().ends_with("\tdevice")))
+        .map(|o| {
+            String::from_utf8_lossy(&o.stdout)
+                .lines()
+                .any(|l| l.trim_end().ends_with("\tdevice"))
+        })
         .unwrap_or(false)
 }
 
@@ -77,24 +81,42 @@ fn art_execution() {
             .filter_map(|e| e.ok().map(|e| e.path()))
             .filter(|p| {
                 p.extension().and_then(|e| e.to_str()) == Some("class")
-                    && p.file_stem().and_then(|s| s.to_str()).is_some_and(|s| s.starts_with(&prefix))
+                    && p.file_stem()
+                        .and_then(|s| s.to_str())
+                        .is_some_and(|s| s.starts_with(&prefix))
             })
             .collect();
         helpers.sort();
         for h in &helpers {
             cfs.push(skotch_classfile::parse_class_file(h).unwrap());
         }
-        let dex = dex_classes(&cfs, &D8Options { min_api: 1, mode: Mode::Release, ..Default::default() })
-            .unwrap_or_else(|e| panic!("{name}: skotch dex failed: {e:#}"));
-        skotch_dex::validator::validate(&dex).unwrap_or_else(|e| panic!("{name}: invalid dex: {e:#}"));
+        let dex = dex_classes(
+            &cfs,
+            &D8Options {
+                min_api: 1,
+                mode: Mode::Release,
+                ..Default::default()
+            },
+        )
+        .unwrap_or_else(|e| panic!("{name}: skotch dex failed: {e:#}"));
+        skotch_dex::validator::validate(&dex)
+            .unwrap_or_else(|e| panic!("{name}: invalid dex: {e:#}"));
 
         // Push and run on ART.
         let tmp = std::env::temp_dir().join(format!("skotch_art_{name}.dex"));
         std::fs::write(&tmp, &dex).unwrap();
         let remote = format!("/data/local/tmp/skotch_art_{name}.dex");
-        assert!(Command::new(&adb).args(["push", tmp.to_str().unwrap(), &remote]).output().unwrap().status.success());
+        assert!(Command::new(&adb)
+            .args(["push", tmp.to_str().unwrap(), &remote])
+            .output()
+            .unwrap()
+            .status
+            .success());
         let out = Command::new(&adb)
-            .args(["shell", &format!("cd /data/local/tmp && dalvikvm -cp {remote} {name}")])
+            .args([
+                "shell",
+                &format!("cd /data/local/tmp && dalvikvm -cp {remote} {name}"),
+            ])
             .output()
             .unwrap();
         let stdout = String::from_utf8_lossy(&out.stdout);
@@ -103,7 +125,9 @@ fn art_execution() {
             expected.trim_end(),
             "{name}: skotch dex produced WRONG runtime output on ART (a functional MISCOMPILE)"
         );
-        let _ = Command::new(&adb).args(["shell", "rm", "-f", &remote]).output();
+        let _ = Command::new(&adb)
+            .args(["shell", "rm", "-f", &remote])
+            .output();
         ran += 1;
     }
     eprintln!("art_execution: {ran} fixture(s) ran correctly on ART");

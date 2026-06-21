@@ -51,7 +51,11 @@ impl SymbolTable {
             for ty in &package.types {
                 for entry in &ty.entries {
                     let name = ResourceName::with_named_type(
-                        if package.name.is_empty() { package_name } else { &package.name },
+                        if package.name.is_empty() {
+                            package_name
+                        } else {
+                            &package.name
+                        },
                         ty.named_type.clone(),
                         &entry.name,
                     );
@@ -113,7 +117,10 @@ impl SymbolTable {
                 for ty in &package.types {
                     for entry in &ty.entries {
                         if entry.id == Some(id) {
-                            return Some(Symbol { id: Some(id), ..Default::default() });
+                            return Some(Symbol {
+                                id: Some(id),
+                                ..Default::default()
+                            });
                         }
                     }
                 }

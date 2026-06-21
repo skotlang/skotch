@@ -56,8 +56,7 @@ pub fn verify_v1(apk: &[u8], sections: &ZipSections) -> Result<Option<V1Result>>
         let block_cd = ["RSA", "DSA", "EC"]
             .iter()
             .find_map(|ext| by_name.get(&format!("{base}.{ext}")).copied());
-        let block_cd = block_cd
-            .with_context(|| format!("no signature block for {name}"))?;
+        let block_cd = block_cd.with_context(|| format!("no signature block for {name}"))?;
         let block = entry_data(lfh_section, block_cd)?;
 
         let cert = verify_signature_block(&block, &sf)
@@ -252,8 +251,7 @@ fn parse_manifest_sections(manifest: &[u8]) -> Vec<ManifestSection> {
             .iter()
             .find(|(k, _)| k == "Name")
             .map(|(_, v)| v.clone());
-        let other: Vec<(String, String)> =
-            attrs.into_iter().filter(|(k, _)| k != "Name").collect();
+        let other: Vec<(String, String)> = attrs.into_iter().filter(|(k, _)| k != "Name").collect();
         sections.push(ManifestSection { name, attrs: other });
     }
     sections

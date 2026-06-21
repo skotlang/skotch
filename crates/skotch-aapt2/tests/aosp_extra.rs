@@ -29,8 +29,7 @@ fn aapt2_it() -> Option<PathBuf> {
 }
 
 fn temp_dir(name: &str) -> PathBuf {
-    let dir =
-        std::env::temp_dir().join(format!("skotch-aosp-extra-{name}-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("skotch-aosp-extra-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     dir
@@ -75,7 +74,9 @@ fn synthesize_feature_flag_framework(dir: &Path) -> PathBuf {
         .add_resource(
             skotch_aapt2::res::table::NewResource::with_name(name.clone())
                 .config(ConfigDescription::default())
-                .value(Value::new(ValueKind::Attribute(Attribute::new(format::STRING))))
+                .value(Value::new(ValueKind::Attribute(Attribute::new(
+                    format::STRING,
+                ))))
                 .id(ResourceId(0x0101_1001))
                 .visibility(Visibility {
                     level: VisibilityLevel::Public,
@@ -135,7 +136,9 @@ fn flagged_resources_disabled_resources_removed() {
     if framework.exists() {
         link_options.include_paths.push(framework);
     }
-    link_options.include_paths.push(synthesize_feature_flag_framework(&dir));
+    link_options
+        .include_paths
+        .push(synthesize_feature_flag_framework(&dir));
     parse_feature_flags_parameter(
         "test.package.falseFlag:ro=false,test.package.trueFlag:ro=true",
         &mut link_options.feature_flag_values,
@@ -154,7 +157,12 @@ fn flagged_resources_disabled_resources_removed() {
     let reload_diag = Diagnostics::collecting();
     let apk = LoadedApk::load(&apk_path, &reload_diag).expect("reload resapp.apk");
     let names = entry_names(&apk.table);
-    for gone in ["bool/bool4", "string/str1", "layout/layout2", "drawable/removedpng"] {
+    for gone in [
+        "bool/bool4",
+        "string/str1",
+        "layout/layout2",
+        "drawable/removedpng",
+    ] {
         assert!(
             !names.contains(&gone.to_string()),
             "{gone} should have been removed; table has {names:?}"
@@ -162,7 +170,10 @@ fn flagged_resources_disabled_resources_removed() {
     }
     // Enabled / unflagged siblings survive.
     for kept in ["bool/bool1", "layout/layout1", "layout/layout3"] {
-        assert!(names.contains(&kept.to_string()), "{kept} missing; table has {names:?}");
+        assert!(
+            names.contains(&kept.to_string()),
+            "{kept} missing; table has {names:?}"
+        );
     }
 
     // Port of DisabledStringRemovedFromPool: the disabled string's text
@@ -179,7 +190,9 @@ fn flagged_resources_disabled_resources_removed() {
     let archive = zip::ZipArchive::new(file).unwrap();
     let entries: Vec<&str> = archive.file_names().collect();
     assert!(
-        !entries.iter().any(|n| n.contains("removedpng") || n.contains("layout2")),
+        !entries
+            .iter()
+            .any(|n| n.contains("removedpng") || n.contains("layout2")),
         "disabled files leaked into the APK: {entries:?}"
     );
 }
@@ -236,7 +249,9 @@ fn idmap2_apks_parse_and_round_trip() {
 fn idmap2_target_overlayable_round_trips() {
     let root = PathBuf::from(IDMAP2_DATA);
     let path = root.join("target/target.apk");
-    let Some(arsc) = zip_entry(&path, "resources.arsc") else { return };
+    let Some(arsc) = zip_entry(&path, "resources.arsc") else {
+        return;
+    };
     let table = parse_table(&arsc).expect("target.apk parses");
     assert!(
         !table.overlayables.is_empty(),
@@ -309,9 +324,11 @@ fn compile_all_integration_res_trees() {
                 }
             }
             Err(e) => {
-                let messages: Vec<String> =
-                    diag.take().iter().map(|d| d.to_string()).collect();
-                failures.push(format!("{relative}: compile failed: {e}\n  {}", messages.join("\n  ")));
+                let messages: Vec<String> = diag.take().iter().map(|d| d.to_string()).collect();
+                failures.push(format!(
+                    "{relative}: compile failed: {e}\n  {}",
+                    messages.join("\n  ")
+                ));
             }
         }
     }

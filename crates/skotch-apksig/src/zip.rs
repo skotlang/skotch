@@ -70,8 +70,7 @@ pub fn find_eocd(apk: &[u8]) -> Option<usize> {
     let max_comment = (apk.len() - EOCD_MIN).min(0xffff);
     for comment_len in 0..=max_comment {
         let eocd_start = apk.len() - EOCD_MIN - comment_len;
-        if u32le(apk, eocd_start) == EOCD_SIG
-            && u16le(apk, eocd_start + 20) as usize == comment_len
+        if u32le(apk, eocd_start) == EOCD_SIG && u16le(apk, eocd_start + 20) as usize == comment_len
         {
             return Some(eocd_start);
         }
@@ -115,7 +114,10 @@ pub struct ApkSigningBlockInfo {
 
 /// Port of `ApkUtils.findApkSigningBlock`. Returns `Ok(None)` if the APK has
 /// no signing block, `Err` if a malformed block is present.
-pub fn find_apk_signing_block(apk: &[u8], sections: &ZipSections) -> Result<Option<ApkSigningBlockInfo>> {
+pub fn find_apk_signing_block(
+    apk: &[u8],
+    sections: &ZipSections,
+) -> Result<Option<ApkSigningBlockInfo>> {
     let cd_offset = sections.cd_offset;
     if cd_offset < APK_SIGNING_BLOCK_MIN_SIZE {
         return Ok(None);
@@ -256,8 +258,9 @@ pub fn parse_central_directory(apk: &[u8], sections: &ZipSections) -> Result<Vec
         if cd.len() - pos < record_size {
             bail!("Malformed ZIP CD record #{}: extends past CD", i + 1);
         }
-        let name = String::from_utf8_lossy(&cd[pos + CD_HEADER_SIZE..pos + CD_HEADER_SIZE + name_len])
-            .into_owned();
+        let name =
+            String::from_utf8_lossy(&cd[pos + CD_HEADER_SIZE..pos + CD_HEADER_SIZE + name_len])
+                .into_owned();
         records.push(CdRecord {
             raw: cd[pos..pos + record_size].to_vec(),
             gp_flags,
@@ -303,10 +306,7 @@ pub const LFH_EXTRA_LENGTH_OFFSET: usize = 28;
 /// Port of `LocalFileRecord.getRecord` (without data-sink streaming): parses
 /// the LFH referenced by `cd` inside `lfh_section` and computes the record's
 /// total span, including any data descriptor.
-pub fn parse_local_file_record(
-    lfh_section: &[u8],
-    cd: &CdRecord,
-) -> Result<LocalFileRecord> {
+pub fn parse_local_file_record(lfh_section: &[u8], cd: &CdRecord) -> Result<LocalFileRecord> {
     let offset = cd.lfh_offset as usize;
     if offset + LFH_HEADER_SIZE > lfh_section.len() {
         bail!(
@@ -388,8 +388,7 @@ pub fn inflate_raw(data: &[u8], size_hint: usize) -> Result<Vec<u8>> {
 /// byte-for-byte (flate2 is built with the C zlib backend).
 pub fn deflate_level9(data: &[u8]) -> (Vec<u8>, u32) {
     use std::io::Write;
-    let mut encoder =
-        flate2::write::DeflateEncoder::new(Vec::new(), flate2::Compression::new(9));
+    let mut encoder = flate2::write::DeflateEncoder::new(Vec::new(), flate2::Compression::new(9));
     encoder.write_all(data).expect("in-memory deflate");
     let compressed = encoder.finish().expect("in-memory deflate");
     let mut crc = flate2::Crc::new();

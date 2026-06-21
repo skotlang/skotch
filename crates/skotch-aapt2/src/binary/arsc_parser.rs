@@ -44,9 +44,12 @@ pub fn parse_table(data: &[u8]) -> Result<ResourceTable> {
     let mut parser = Parser::new();
 
     let mut iter = ChunkIterator::new(data);
-    let table_chunk = iter
-        .next()
-        .ok_or_else(|| anyhow!("corrupt resources.arsc: {}", iter.error.unwrap_or("empty input")))?;
+    let table_chunk = iter.next().ok_or_else(|| {
+        anyhow!(
+            "corrupt resources.arsc: {}",
+            iter.error.unwrap_or("empty input")
+        )
+    })?;
     if table_chunk.type_id != RES_TABLE_TYPE {
         bail!("unknown chunk of type 0x{:04x}", table_chunk.type_id);
     }
@@ -190,9 +193,9 @@ impl Parser {
         if type_id == 0 {
             bail!("ResTable_typeSpec has invalid id: 0");
         }
-        let entry_count =
-            read_u32(chunk.data, 12).ok_or_else(|| anyhow!("corrupt ResTable_typeSpec chunk"))?
-                as usize;
+        let entry_count = read_u32(chunk.data, 12)
+            .ok_or_else(|| anyhow!("corrupt ResTable_typeSpec chunk"))?
+            as usize;
         if entry_count > u16::MAX as usize {
             bail!("ResTable_typeSpec has too many entries ({entry_count})");
         }
@@ -202,7 +205,9 @@ impl Parser {
         }
         let base = chunk.header_size as usize;
         for i in 0..entry_count {
-            let Some(flags) = read_u32(chunk.data, base + i * 4) else { break };
+            let Some(flags) = read_u32(chunk.data, base + i * 4) else {
+                break;
+            };
             let id = ResourceId::new(package_id, type_id, i as u16);
             self.entry_type_spec_flags.insert(id, flags);
         }
@@ -257,8 +262,7 @@ impl Parser {
             };
 
             let key_str = key_pool.get(parsed.key as usize).unwrap_or_default();
-            let name =
-                ResourceName::with_named_type(package_name, parsed_type.clone(), key_str);
+            let name = ResourceName::with_named_type(package_name, parsed_type.clone(), key_str);
             let res_id = ResourceId::new(package_id, type_id, entry_idx);
 
             let mut value = match &parsed.body {
@@ -282,7 +286,10 @@ impl Parser {
 
             // Skip entries that were cloned under a staged alias ID and
             // already re-added under their finalized ID.
-            if self.staged_entries_to_remove.remove(&(name.clone(), res_id)) {
+            if self
+                .staged_entries_to_remove
+                .remove(&(name.clone(), res_id))
+            {
                 continue;
             }
 
@@ -383,13 +390,13 @@ impl Parser {
                     // A reference of 0 must be the magic @null reference.
                     return Ok(Item::Reference(Reference::default()));
                 }
-                let reference_type =
-                    if value.data_type == TYPE_ATTRIBUTE || value.data_type == TYPE_DYNAMIC_ATTRIBUTE
-                    {
-                        ReferenceType::Attribute
-                    } else {
-                        ReferenceType::Resource
-                    };
+                let reference_type = if value.data_type == TYPE_ATTRIBUTE
+                    || value.data_type == TYPE_DYNAMIC_ATTRIBUTE
+                {
+                    ReferenceType::Attribute
+                } else {
+                    ReferenceType::Resource
+                };
                 let is_dynamic = value.data_type == TYPE_DYNAMIC_REFERENCE
                     || value.data_type == TYPE_DYNAMIC_ATTRIBUTE;
                 Ok(Item::Reference(Reference {
@@ -505,13 +512,15 @@ impl Parser {
     /// `ResTable_lib_header { count }` followed by `count` entries of
     /// `{ packageId: u32, packageName: u16[128] }`.
     fn parse_library(&mut self, chunk: &Chunk) -> Result<()> {
-        let count =
-            read_u32(chunk.data, 8).ok_or_else(|| anyhow!("corrupt ResTable_lib_header chunk"))?
-                as usize;
+        let count = read_u32(chunk.data, 8)
+            .ok_or_else(|| anyhow!("corrupt ResTable_lib_header chunk"))?
+            as usize;
         let base = chunk.header_size as usize;
         for i in 0..count {
             let off = base + i * LIB_ENTRY_SIZE;
-            let Some(package_id) = read_u32(chunk.data, off) else { break };
+            let Some(package_id) = read_u32(chunk.data, off) else {
+                break;
+            };
             if package_id > u8::MAX as u32 {
                 continue;
             }
@@ -557,17 +566,15 @@ impl Parser {
                 as usize;
             let base = child.header_size as usize;
             for i in 0..entry_count {
-                let Some(ident) = read_u32(child.data, base + i * 4) else { break };
+                let Some(ident) = read_u32(child.data, base + i * 4) else {
+                    break;
+                };
                 let res_id = ResourceId(ident);
                 // If the overlayable chunk came before the type chunks the
                 // id → name pairing would not exist; that is an error.
-                let name = self
-                    .id_index
-                    .get(&res_id)
-                    .cloned()
-                    .ok_or_else(|| {
-                        anyhow!("failed to find resource name for overlayable resource {res_id}")
-                    })?;
+                let name = self.id_index.get(&res_id).cloned().ok_or_else(|| {
+                    anyhow!("failed to find resource name for overlayable resource {res_id}")
+                })?;
                 let item = OverlayableItem {
                     overlayable_index,
                     policies,
@@ -598,8 +605,12 @@ impl Parser {
         let base = chunk.header_size as usize;
         for i in 0..count {
             let off = base + i * STAGED_ALIAS_ENTRY_SIZE;
-            let Some(staged) = read_u32(chunk.data, off) else { break };
-            let Some(finalized) = read_u32(chunk.data, off + 4) else { break };
+            let Some(staged) = read_u32(chunk.data, off) else {
+                break;
+            };
+            let Some(finalized) = read_u32(chunk.data, off + 4) else {
+                break;
+            };
             let staged_id = ResourceId(staged);
             let finalized_id = ResourceId(finalized);
 
@@ -654,7 +665,9 @@ impl Parser {
                         .iter_mut()
                         .chain(entry.flag_disabled_values.iter_mut())
                     {
-                        let Some(value) = config_value.value.as_mut() else { continue };
+                        let Some(value) = config_value.value.as_mut() else {
+                            continue;
+                        };
                         match &mut value.kind {
                             ValueKind::Item(item) => fix_item(item),
                             ValueKind::Attribute(attr) => {
@@ -737,7 +750,9 @@ fn entry_offsets(d: &[u8], header_size: usize, flags: u8, entry_count: usize) ->
         let count = entry_count.min(avail / 4);
         out.reserve(count);
         for i in 0..count {
-            let Some(packed) = read_u32(d, header_size + i * 4) else { break };
+            let Some(packed) = read_u32(d, header_size + i * 4) else {
+                break;
+            };
             let idx = (packed & 0xFFFF) as u16;
             let offset = (packed >> 16) * 4;
             out.push((idx, offset));
@@ -746,7 +761,9 @@ fn entry_offsets(d: &[u8], header_size: usize, flags: u8, entry_count: usize) ->
         let count = entry_count.min(avail / 2).min(u16::MAX as usize + 1);
         out.reserve(count);
         for i in 0..count {
-            let Some(off16) = read_u16(d, header_size + i * 2) else { break };
+            let Some(off16) = read_u16(d, header_size + i * 2) else {
+                break;
+            };
             if off16 == NO_ENTRY16 {
                 continue;
             }
@@ -756,7 +773,9 @@ fn entry_offsets(d: &[u8], header_size: usize, flags: u8, entry_count: usize) ->
         let count = entry_count.min(avail / 4).min(u16::MAX as usize + 1);
         out.reserve(count);
         for i in 0..count {
-            let Some(off) = read_u32(d, header_size + i * 4) else { break };
+            let Some(off) = read_u32(d, header_size + i * 4) else {
+                break;
+            };
             if off == NO_ENTRY {
                 continue;
             }
@@ -1103,21 +1122,20 @@ mod tests {
             (Item::Reference(x), Item::Reference(y)) => {
                 // Names may have been resolved from the id index on one
                 // side; compare the binary-relevant fields only.
-                x.id == y.id
-                    && x.reference_type == y.reference_type
-                    && x.is_dynamic == y.is_dynamic
+                x.id == y.id && x.reference_type == y.reference_type && x.is_dynamic == y.is_dynamic
             }
             (Item::Id, Item::Id) => true,
-            (
-                Item::String { value: x, .. },
-                Item::String { value: y, .. },
-            ) => x == y,
+            (Item::String { value: x, .. }, Item::String { value: y, .. }) => x == y,
             (
                 Item::StyledString {
-                    value: x, spans: xs, ..
+                    value: x,
+                    spans: xs,
+                    ..
                 },
                 Item::StyledString {
-                    value: y, spans: ys, ..
+                    value: y,
+                    spans: ys,
+                    ..
                 },
             ) => x == y && xs == ys,
             (Item::FileReference(x), Item::FileReference(y)) => {
@@ -1206,15 +1224,14 @@ mod tests {
                         "staged_api mismatch for {name}"
                     );
                     for config_value in &entry.values {
-                        let Some(value) = config_value.value.as_ref() else { continue };
+                        let Some(value) = config_value.value.as_ref() else {
+                            continue;
+                        };
                         let found_value = found
                             .find_value(&config_value.config, &config_value.product)
                             .and_then(|cv| cv.value.as_ref())
                             .unwrap_or_else(|| {
-                                panic!(
-                                    "missing value for {name} config '{}'",
-                                    config_value.config
-                                )
+                                panic!("missing value for {name} config '{}'", config_value.config)
                             });
                         assert!(
                             values_logically_equal(value, found_value),
@@ -1357,7 +1374,11 @@ mod tests {
         );
 
         // Spot-check well-known resources and their IDs.
-        for name in ["android:string/ok", "android:attr/label", "android:id/background"] {
+        for name in [
+            "android:string/ok",
+            "android:attr/label",
+            "android:id/background",
+        ] {
             let (resource_name, _) = crate::res::parse_resource_name(name).unwrap();
             let found = table
                 .find_resource(&resource_name)

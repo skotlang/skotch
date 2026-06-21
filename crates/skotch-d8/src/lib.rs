@@ -39,7 +39,12 @@ pub struct D8Options {
 
 impl Default for D8Options {
     fn default() -> Self {
-        D8Options { inputs: vec![], output: PathBuf::from("."), min_api: 1, mode: Mode::Debug }
+        D8Options {
+            inputs: vec![],
+            output: PathBuf::from("."),
+            min_api: 1,
+            mode: Mode::Debug,
+        }
     }
 }
 
@@ -51,7 +56,12 @@ pub fn run(opts: &D8Options) -> Result<()> {
     }
     let dex = dex_classes(&classes, opts)?;
 
-    if opts.output.extension().map(|e| e == "zip" || e == "jar").unwrap_or(false) {
+    if opts
+        .output
+        .extension()
+        .map(|e| e == "zip" || e == "jar")
+        .unwrap_or(false)
+    {
         bail!("zip output not yet supported; pass an output directory");
     }
     std::fs::create_dir_all(&opts.output)
@@ -81,10 +91,14 @@ pub fn dex_classes(classes: &[ClassFile], opts: &D8Options) -> Result<Vec<u8>> {
         );
         // Lambda desugaring (invokedynamic → LambdaMetafactory) emits synthetic classes
         // implementing the functional interface; collect them into the output.
-        model.classes.extend(skotch_dexcore::take_pending_synthetic_classes());
+        model
+            .classes
+            .extend(skotch_dexcore::take_pending_synthetic_classes());
     }
     // Keep class_defs ordered by descriptor (synthetics interleave with the user classes).
-    model.classes.sort_by(|a, b| a.class_type.cmp(&b.class_type));
+    model
+        .classes
+        .sort_by(|a, b| a.class_type.cmp(&b.class_type));
     Ok(skotch_dex::write(&model))
 }
 
@@ -101,7 +115,8 @@ fn read_input(path: &Path, out: &mut Vec<ClassFile>) -> Result<()> {
     match ext {
         "class" => out.push(skotch_classfile::parse_class_file(path)?),
         "jar" | "zip" | "apk" => {
-            let bytes = std::fs::read(path).with_context(|| format!("reading {}", path.display()))?;
+            let bytes =
+                std::fs::read(path).with_context(|| format!("reading {}", path.display()))?;
             out.extend(skotch_classfile::parse_archive(&bytes)?);
         }
         "dex" => bail!(".dex inputs (merging) not yet supported"),

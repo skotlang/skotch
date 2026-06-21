@@ -47,7 +47,9 @@ pub fn run(args: &[String], diag: &Diagnostics) -> Result<i32> {
         bail!("--split is not yet supported by skotch aapt2 optimize");
     }
 
-    let output = parsed.value("-o").ok_or_else(|| anyhow!("-o flag is required"))?;
+    let output = parsed
+        .value("-o")
+        .ok_or_else(|| anyhow!("-o flag is required"))?;
     if parsed.positional.len() != 1 {
         bail!("must have one APK as argument");
     }
@@ -167,7 +169,9 @@ fn strip_densities(table: &mut crate::res::table::ResourceTable, targets: &[u16]
                     }
                 }
                 kept.sort_by(|a, b| {
-                    a.config.cmp(&b.config).then_with(|| a.product.cmp(&b.product))
+                    a.config
+                        .cmp(&b.config)
+                        .then_with(|| a.product.cmp(&b.product))
                 });
                 entry.values = kept;
             }

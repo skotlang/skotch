@@ -15,7 +15,11 @@ fn fixtures() -> PathBuf {
 #[test]
 fn straightline_battery_byte_identical() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("B.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let produced = dex_classes(&[cf], &opts).unwrap();
     let golden = std::fs::read(fixtures().join("B.d8.dex")).unwrap();
     if produced != golden {
@@ -39,7 +43,11 @@ fn straightline_battery_byte_identical() {
 #[test]
 fn wide_compare_branch_battery_byte_identical() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("Wcmp.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let produced = dex_classes(&[cf], &opts).unwrap();
     let golden = std::fs::read(fixtures().join("Wcmp.d8.dex")).unwrap();
     if produced != golden {
@@ -61,7 +69,11 @@ fn wide_compare_branch_battery_byte_identical() {
 #[test]
 fn neg_and_multiarg_battery_byte_identical() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("Misc.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let produced = dex_classes(&[cf], &opts).unwrap();
     let golden = std::fs::read(fixtures().join("Misc.d8.dex")).unwrap();
     if produced != golden {
@@ -84,7 +96,11 @@ fn neg_and_multiarg_battery_byte_identical() {
 #[test]
 fn div_rem_battery_byte_identical() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("Div.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let produced = dex_classes(&[cf], &opts).unwrap();
     let golden = std::fs::read(fixtures().join("Div.d8.dex")).unwrap();
     if produced != golden {
@@ -107,7 +123,11 @@ fn div_rem_battery_byte_identical() {
 #[test]
 fn cast_battery_byte_identical() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("Cast.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let produced = dex_classes(&[cf], &opts).unwrap();
     let golden = std::fs::read(fixtures().join("Cast.d8.dex")).unwrap();
     if produced != golden {
@@ -131,7 +151,11 @@ fn cast_battery_byte_identical() {
 #[test]
 fn array_battery_byte_identical() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("Arr.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let produced = dex_classes(&[cf], &opts).unwrap();
     let golden = std::fs::read(fixtures().join("Arr.d8.dex")).unwrap();
     if produced != golden {
@@ -155,7 +179,11 @@ fn array_battery_byte_identical() {
 #[test]
 fn object_alloc_battery_byte_identical() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("New.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let produced = dex_classes(&[cf], &opts).unwrap();
     let golden = std::fs::read(fixtures().join("New.d8.dex")).unwrap();
     if produced != golden {
@@ -179,7 +207,11 @@ fn object_alloc_battery_byte_identical() {
 #[test]
 fn pressure_mix_battery_byte_identical() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("Press2.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let produced = dex_classes(&[cf], &opts).unwrap();
     let golden = std::fs::read(fixtures().join("Press2.d8.dex")).unwrap();
     if produced != golden {
@@ -202,7 +234,11 @@ fn pressure_mix_battery_byte_identical() {
 #[test]
 fn nested_expr_battery_byte_identical() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("Stress.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let produced = dex_classes(&[cf], &opts).unwrap();
     let golden = std::fs::read(fixtures().join("Stress.d8.dex")).unwrap();
     if produced != golden {
@@ -226,7 +262,11 @@ fn nested_expr_battery_byte_identical() {
 #[test]
 fn instance_call_battery_byte_identical() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("Q.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let produced = dex_classes(&[cf], &opts).unwrap();
     let golden = std::fs::read(fixtures().join("Q.d8.dex")).unwrap();
     if produced != golden {
@@ -250,7 +290,11 @@ fn instance_call_battery_byte_identical() {
 #[test]
 fn arith_pressure_battery_byte_identical() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("Press.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let produced = dex_classes(&[cf], &opts).unwrap();
     let golden = std::fs::read(fixtures().join("Press.d8.dex")).unwrap();
     if produced != golden {
@@ -274,7 +318,11 @@ fn arith_pressure_battery_byte_identical() {
 #[test]
 fn instance_field_battery_byte_identical() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("P.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let produced = dex_classes(&[cf], &opts).unwrap();
     let golden = std::fs::read(fixtures().join("P.d8.dex")).unwrap();
     if produced != golden {
@@ -297,7 +345,11 @@ fn instance_field_battery_byte_identical() {
 #[test]
 fn static_invoke_battery_byte_identical() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("Call.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let produced = dex_classes(&[cf], &opts).unwrap();
     let golden = std::fs::read(fixtures().join("Call.d8.dex")).unwrap();
     if produced != golden {
@@ -320,7 +372,11 @@ fn static_invoke_battery_byte_identical() {
 #[test]
 fn literal_const_battery_byte_identical() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("Lit.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let produced = dex_classes(&[cf], &opts).unwrap();
     let golden = std::fs::read(fixtures().join("Lit.d8.dex")).unwrap();
     if produced != golden {
@@ -344,7 +400,11 @@ fn literal_const_battery_byte_identical() {
 #[test]
 fn conversion_battery_byte_identical() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("ConvAll.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let produced = dex_classes(&[cf], &opts).unwrap();
     let golden = std::fs::read(fixtures().join("ConvAll.d8.dex")).unwrap();
     if produced != golden {
@@ -368,7 +428,11 @@ fn conversion_battery_byte_identical() {
 #[test]
 fn wide_arith_battery_byte_identical() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("Wide.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let produced = dex_classes(&[cf], &opts).unwrap();
     let golden = std::fs::read(fixtures().join("Wide.d8.dex")).unwrap();
     if produced != golden {
@@ -392,7 +456,11 @@ fn wide_arith_battery_byte_identical() {
 #[test]
 fn args_high_pressure_byte_identical() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("ArgsHigh.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let produced = dex_classes(&[cf], &opts).unwrap();
     let golden = std::fs::read(fixtures().join("ArgsHigh.d8.dex")).unwrap();
     if produced != golden {
@@ -416,7 +484,11 @@ fn args_high_pressure_byte_identical() {
 #[test]
 fn branch_merge_battery_byte_identical() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("Br.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let produced = dex_classes(&[cf], &opts).unwrap();
     let golden = std::fs::read(fixtures().join("Br.d8.dex")).unwrap();
     if produced != golden {
@@ -440,7 +512,11 @@ fn branch_merge_battery_byte_identical() {
 #[test]
 fn branch_battery_byte_identical() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("Cmp.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let produced = dex_classes(&[cf], &opts).unwrap();
     let golden = std::fs::read(fixtures().join("Cmp.d8.dex")).unwrap();
     if produced != golden {
@@ -464,7 +540,11 @@ fn branch_battery_byte_identical() {
 #[test]
 fn local_var_battery_byte_identical() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("S.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let produced = dex_classes(&[cf], &opts).unwrap();
     let golden = std::fs::read(fixtures().join("S.d8.dex")).unwrap();
     if produced != golden {
@@ -489,7 +569,11 @@ fn local_var_battery_byte_identical() {
 fn multi_class_battery_byte_identical() {
     let b = skotch_classfile::parse_class_file(&fixtures().join("B.class")).unwrap();
     let calc = skotch_classfile::parse_class_file(&fixtures().join("Calc.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let produced = dex_classes(&[b, calc], &opts).unwrap();
     let golden = std::fs::read(fixtures().join("BC.d8.dex")).unwrap();
     if produced != golden {
@@ -516,7 +600,11 @@ fn multi_class_battery_byte_identical() {
 #[test]
 fn loop_battery_byte_identical() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("Loop.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let produced = dex_classes(&[cf], &opts).unwrap();
     let golden = std::fs::read(fixtures().join("Loop.d8.dex")).unwrap();
     if produced != golden {
@@ -541,7 +629,11 @@ fn loop_battery_byte_identical() {
 #[test]
 fn call_in_loop_byte_identical() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("Calls.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let produced = dex_classes(&[cf], &opts).unwrap();
     let golden = std::fs::read(fixtures().join("Calls.d8.dex")).unwrap();
     if produced != golden {
@@ -567,7 +659,11 @@ fn call_in_loop_byte_identical() {
 #[test]
 fn void_and_instance_calls_in_loop_byte_identical() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("Calls2.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let produced = dex_classes(&[cf], &opts).unwrap();
     let golden = std::fs::read(fixtures().join("Calls2.d8.dex")).unwrap();
     if produced != golden {
@@ -592,7 +688,11 @@ fn void_and_instance_calls_in_loop_byte_identical() {
 #[test]
 fn fields_in_loop_byte_identical() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("Fields.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let produced = dex_classes(&[cf], &opts).unwrap();
     let golden = std::fs::read(fixtures().join("Fields.d8.dex")).unwrap();
     if produced != golden {
@@ -616,7 +716,11 @@ fn fields_in_loop_byte_identical() {
 #[test]
 fn arrays_in_loop_byte_identical() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("ArrLoop.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let produced = dex_classes(&[cf], &opts).unwrap();
     let golden = std::fs::read(fixtures().join("ArrLoop.d8.dex")).unwrap();
     if produced != golden {
@@ -643,7 +747,11 @@ fn arrays_in_loop_byte_identical() {
 #[test]
 fn wide_arith_in_loop_byte_identical() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("WideLoop.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let produced = dex_classes(&[cf], &opts).unwrap();
     let golden = std::fs::read(fixtures().join("WideLoop.d8.dex")).unwrap();
     if produced != golden {
@@ -669,7 +777,11 @@ fn wide_arith_in_loop_byte_identical() {
 #[test]
 fn new_instance_and_array_in_loop_byte_identical() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("NewLoop.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let produced = dex_classes(&[cf], &opts).unwrap();
     let golden = std::fs::read(fixtures().join("NewLoop.d8.dex")).unwrap();
     if produced != golden {
@@ -693,7 +805,11 @@ fn new_instance_and_array_in_loop_byte_identical() {
 #[test]
 fn const_string_in_loop_byte_identical() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("StrLoop.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let produced = dex_classes(&[cf], &opts).unwrap();
     let golden = std::fs::read(fixtures().join("StrLoop.d8.dex")).unwrap();
     if produced != golden {
@@ -718,7 +834,11 @@ fn const_string_in_loop_byte_identical() {
 #[test]
 fn int_div_rem_in_loop_byte_identical() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("DivLoop.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let produced = dex_classes(&[cf], &opts).unwrap();
     let golden = std::fs::read(fixtures().join("DivLoop.d8.dex")).unwrap();
     if produced != golden {
@@ -743,7 +863,11 @@ fn int_div_rem_in_loop_byte_identical() {
 #[test]
 fn forward_branch_in_loop_byte_identical() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("IfLoop.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let produced = dex_classes(&[cf], &opts).unwrap();
     let golden = std::fs::read(fixtures().join("IfLoop.d8.dex")).unwrap();
     if produced != golden {
@@ -768,7 +892,11 @@ fn forward_branch_in_loop_byte_identical() {
 #[test]
 fn const_ternary_in_loop_byte_identical() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("TernLoop.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let produced = dex_classes(&[cf], &opts).unwrap();
     let golden = std::fs::read(fixtures().join("TernLoop.d8.dex")).unwrap();
     if produced != golden {
@@ -792,7 +920,11 @@ fn const_ternary_in_loop_byte_identical() {
 #[test]
 fn break_continue_in_loop_byte_identical() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("BreakLoop.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let produced = dex_classes(&[cf], &opts).unwrap();
     let golden = std::fs::read(fixtures().join("BreakLoop.d8.dex")).unwrap();
     if produced != golden {
@@ -816,7 +948,11 @@ fn break_continue_in_loop_byte_identical() {
 #[test]
 fn compound_conditions_in_loop_byte_identical() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("CondLoop.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let produced = dex_classes(&[cf], &opts).unwrap();
     let golden = std::fs::read(fixtures().join("CondLoop.d8.dex")).unwrap();
     if produced != golden {
@@ -841,7 +977,11 @@ fn compound_conditions_in_loop_byte_identical() {
 #[test]
 fn phi_move_select_in_loop_byte_identical() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("SelLoop.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let produced = dex_classes(&[cf], &opts).unwrap();
     let golden = std::fs::read(fixtures().join("SelLoop.d8.dex")).unwrap();
     if produced != golden {
@@ -865,7 +1005,11 @@ fn phi_move_select_in_loop_byte_identical() {
 #[test]
 fn two_phi_moves_per_edge_byte_identical() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("Sel2.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let produced = dex_classes(&[cf], &opts).unwrap();
     let golden = std::fs::read(fixtures().join("Sel2.d8.dex")).unwrap();
     if produced != golden {
@@ -889,7 +1033,11 @@ fn two_phi_moves_per_edge_byte_identical() {
 #[test]
 fn try_catch_in_loop_byte_identical() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("TryLoop.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let produced = dex_classes(&[cf], &opts).unwrap();
     let golden = std::fs::read(fixtures().join("TryLoop.d8.dex")).unwrap();
     if produced != golden {
@@ -909,7 +1057,11 @@ fn try_catch_in_loop_byte_identical() {
 #[test]
 fn empty_class_end_to_end_byte_identical() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("Empty.class")).unwrap();
-    let opts = D8Options { min_api: 1, mode: Mode::Release, ..Default::default() };
+    let opts = D8Options {
+        min_api: 1,
+        mode: Mode::Release,
+        ..Default::default()
+    };
     let produced = dex_classes(&[cf], &opts).unwrap();
     let golden = std::fs::read(fixtures().join("Empty.d8.dex")).unwrap();
 

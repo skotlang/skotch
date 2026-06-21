@@ -48,7 +48,10 @@ pub struct Diagnostics {
 impl Diagnostics {
     /// A sink that prints to stderr as aapt2 does.
     pub fn stderr() -> Self {
-        Diagnostics { print_to_stderr: true, ..Default::default() }
+        Diagnostics {
+            print_to_stderr: true,
+            ..Default::default()
+        }
     }
 
     /// A silent collecting sink (for library use and tests).
@@ -60,16 +63,18 @@ impl Diagnostics {
         if diagnostic.severity == Severity::Error {
             self.error_count.fetch_add(1, Ordering::Relaxed);
         }
-        if self.print_to_stderr
-            && (diagnostic.severity != Severity::Note || self.verbose)
-        {
+        if self.print_to_stderr && (diagnostic.severity != Severity::Note || self.verbose) {
             eprintln!("{diagnostic}");
         }
         self.messages.lock().unwrap().push(diagnostic);
     }
 
     pub fn error(&self, message: impl Into<String>) {
-        self.push(Diagnostic { severity: Severity::Error, source: None, message: message.into() });
+        self.push(Diagnostic {
+            severity: Severity::Error,
+            source: None,
+            message: message.into(),
+        });
     }
 
     pub fn error_at(&self, source: Source, message: impl Into<String>) {
@@ -81,7 +86,11 @@ impl Diagnostics {
     }
 
     pub fn warn(&self, message: impl Into<String>) {
-        self.push(Diagnostic { severity: Severity::Warn, source: None, message: message.into() });
+        self.push(Diagnostic {
+            severity: Severity::Warn,
+            source: None,
+            message: message.into(),
+        });
     }
 
     pub fn warn_at(&self, source: Source, message: impl Into<String>) {
@@ -93,7 +102,11 @@ impl Diagnostics {
     }
 
     pub fn note(&self, message: impl Into<String>) {
-        self.push(Diagnostic { severity: Severity::Note, source: None, message: message.into() });
+        self.push(Diagnostic {
+            severity: Severity::Note,
+            source: None,
+            message: message.into(),
+        });
     }
 
     pub fn note_at(&self, source: Source, message: impl Into<String>) {

@@ -76,7 +76,8 @@ mod tests {
         let parsed = skotch_ast::parse("input.kt", src);
         let file = parsed.file();
         let resolved = skotch_resolve::typed::resolve_file(file, &mut interner, None);
-        let typed = skotch_typeck::typed::type_check(file, &resolved, &mut interner, &mut diags, None);
+        let typed =
+            skotch_typeck::typed::type_check(file, &resolved, &mut interner, &mut diags, None);
         let m = skotch_mir_lower::typed::lower_file(
             file,
             &resolved,

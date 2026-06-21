@@ -31,20 +31,43 @@ pub(crate) type ValId = u32;
 #[derive(Clone, Debug)]
 pub(crate) enum SsaOp {
     /// A block-header φ for a local slot; operands parallel the block's preds.
-    Phi { slot: u16, operands: Vec<ValId> },
-    Argument { index: usize },
+    Phi {
+        slot: u16,
+        operands: Vec<ValId>,
+    },
+    Argument {
+        index: usize,
+    },
     ConstInt(i32),
     ConstLong(i64),
     /// A string constant (`const-string dest, string@`). Throwing in d8's model,
     /// so it records a debug position (`jvm_pc` locates the source line).
-    ConstString { value: String, jvm_pc: u32 },
+    ConstString {
+        value: String,
+        jvm_pc: u32,
+    },
     /// `const-class dest, type@` (21c) — the `X.class` literal. Throwing (class init /
     /// NoClassDefFound). Result is a `Ljava/lang/Class;` ref.
-    ConstClass { type_desc: String, jvm_pc: u32 },
+    ConstClass {
+        type_desc: String,
+        jvm_pc: u32,
+    },
     /// `jvm_pc` locates the source line for div/rem (which are throwing).
-    Binop { jvm_op: u8, a: ValId, b: ValId, jvm_pc: u32 },
-    Unop { jvm_op: u8, a: ValId },
-    Cmp { jvm_op: u8, a: ValId, b: ValId },
+    Binop {
+        jvm_op: u8,
+        a: ValId,
+        b: ValId,
+        jvm_pc: u32,
+    },
+    Unop {
+        jvm_op: u8,
+        a: ValId,
+    },
+    Cmp {
+        jvm_op: u8,
+        a: ValId,
+        b: ValId,
+    },
     /// A method call: emits `invoke-* {args}` (+ `move-result` if non-void). The
     /// value's register is the move-result destination; void calls allocate no
     /// register. `ret` is the result kind, `None` for void. `jvm_pc` locates the
@@ -57,27 +80,72 @@ pub(crate) enum SsaOp {
         jvm_pc: u32,
     },
     /// Instance field read (`iget* dest, obj, field@`). Throwing (NPE).
-    GetField { dex_op: u16, field: FieldRef, obj: ValId, jvm_pc: u32 },
+    GetField {
+        dex_op: u16,
+        field: FieldRef,
+        obj: ValId,
+        jvm_pc: u32,
+    },
     /// Static field read (`sget* dest, field@`). Throwing (class init).
-    GetStatic { dex_op: u16, field: FieldRef, jvm_pc: u32 },
+    GetStatic {
+        dex_op: u16,
+        field: FieldRef,
+        jvm_pc: u32,
+    },
     /// Instance field write (`iput* value, obj, field@`). A statement (no result).
-    PutField { dex_op: u16, field: FieldRef, obj: ValId, value: ValId, jvm_pc: u32 },
+    PutField {
+        dex_op: u16,
+        field: FieldRef,
+        obj: ValId,
+        value: ValId,
+        jvm_pc: u32,
+    },
     /// Static field write (`sput* value, field@`). A statement (no result).
-    PutStatic { dex_op: u16, field: FieldRef, value: ValId, jvm_pc: u32 },
+    PutStatic {
+        dex_op: u16,
+        field: FieldRef,
+        value: ValId,
+        jvm_pc: u32,
+    },
     /// `monitor-enter vAA` (0x1d) / `monitor-exit vAA` (0x1e), 11x — the `synchronized`
     /// lock acquire/release. A statement (no result). Throwing (NPE on a null monitor;
     /// monitor-exit can also throw IllegalMonitorStateException). `enter` selects the op.
-    Monitor { enter: bool, obj: ValId, jvm_pc: u32 },
+    Monitor {
+        enter: bool,
+        obj: ValId,
+        jvm_pc: u32,
+    },
     /// Array element read (`aget* dest, array, index`, 23x). Throwing (NPE/AIOOBE).
-    ArrayGet { dex_op: u16, array: ValId, index: ValId, jvm_pc: u32 },
+    ArrayGet {
+        dex_op: u16,
+        array: ValId,
+        index: ValId,
+        jvm_pc: u32,
+    },
     /// Array element write (`aput* value, array, index`, 23x). A statement.
-    ArrayPut { dex_op: u16, array: ValId, index: ValId, value: ValId, jvm_pc: u32 },
+    ArrayPut {
+        dex_op: u16,
+        array: ValId,
+        index: ValId,
+        value: ValId,
+        jvm_pc: u32,
+    },
     /// Array length (`array-length dest, array`, 12x). Throwing (NPE).
-    ArrayLength { array: ValId, jvm_pc: u32 },
+    ArrayLength {
+        array: ValId,
+        jvm_pc: u32,
+    },
     /// `new-instance dest, type@` (21c). Throwing (OOM/class-init). Result is a ref.
-    NewInstance { type_desc: String, jvm_pc: u32 },
+    NewInstance {
+        type_desc: String,
+        jvm_pc: u32,
+    },
     /// `new-array dest, size, type@` (22c). Throwing (NegativeArraySize). Ref result.
-    NewArray { type_desc: String, size: ValId, jvm_pc: u32 },
+    NewArray {
+        type_desc: String,
+        size: ValId,
+        jvm_pc: u32,
+    },
     /// The caught exception at an exception-handler's entry (`move-exception dest`,
     /// 11x). A ref result; emitted only if the caught value is actually used.
     CaughtException,
@@ -85,10 +153,18 @@ pub(crate) enum SsaOp {
     /// (operates on one register); SSA models a result value that aliases `obj`, so
     /// emission moves `obj` into the result register first if they didn't coalesce.
     /// Result is a ref.
-    CheckCast { obj: ValId, type_desc: String, jvm_pc: u32 },
+    CheckCast {
+        obj: ValId,
+        type_desc: String,
+        jvm_pc: u32,
+    },
     /// `instance-of vA, vB, type@` (22c). Non-throwing (null → false). Result is an
     /// int (boolean 0/1).
-    InstanceOf { obj: ValId, type_desc: String, jvm_pc: u32 },
+    InstanceOf {
+        obj: ValId,
+        type_desc: String,
+        jvm_pc: u32,
+    },
 }
 
 /// Whether a JVM opcode can throw (for placing exception edges from a try region
@@ -132,24 +208,43 @@ pub(crate) struct SsaValue {
 pub(crate) enum Terminator {
     /// Conditional branch on `cond` operands (1 or 2) to `taken`, else fall to
     /// `fallthrough`.
-    If { jvm_op: u8, operands: Vec<ValId>, taken: usize, fallthrough: usize },
-    Goto { target: usize },
+    If {
+        jvm_op: u8,
+        operands: Vec<ValId>,
+        taken: usize,
+        fallthrough: usize,
+    },
+    Goto {
+        target: usize,
+    },
     /// Returns `value` (None for void); `op` is the DEX return opcode
     /// (0x0e return-void, 0x0f return, 0x10 return-wide, 0x11 return-object).
-    Return { value: Option<ValId>, op: u16 },
+    Return {
+        value: Option<ValId>,
+        op: u16,
+    },
     /// Falls through to the single successor with no explicit branch.
-    Fall { target: usize },
+    Fall {
+        target: usize,
+    },
     /// `throw vAA` (0x27, 11x). Ends the block with no NORMAL successor; the
     /// exceptional edge to a covering handler is carried by `exc_succ`/the handler-φ
     /// snapshot (athrow is in `is_throwing_op`), not by `succ`. `jvm_pc` locates the
     /// athrow so its emitted span joins the try_item range (it IS a guarded throwing
     /// instruction — the one that actually raises, so the handler must cover it).
-    Throw { value: ValId, jvm_pc: u32 },
+    Throw {
+        value: ValId,
+        jvm_pc: u32,
+    },
     /// `tableswitch`/`lookupswitch` on `value`. Lowered (functional-correctness, not
     /// d8's packed/sparse-switch payload) to a `const tmp,k; if-eq value,tmp,case`
     /// chain + `goto default` in the emit phase. `cases` is `(key, target-block)`;
     /// `default` is the fall-through block.
-    Switch { value: ValId, default: usize, cases: Vec<(i32, usize)> },
+    Switch {
+        value: ValId,
+        default: usize,
+        cases: Vec<(i32, usize)>,
+    },
 }
 
 #[derive(Clone, Debug)]
@@ -216,8 +311,9 @@ impl Cfg {
         let leader_block = |pc: usize| blocks.iter().position(|b| b.start == pc);
         let mut exc_edges: Vec<(usize, usize)> = Vec::new();
         for e in exceptions {
-            let h = leader_block(e.handler_pc as usize)
-                .ok_or_else(|| anyhow::anyhow!("ssa: handler pc {} not a block leader", e.handler_pc))?;
+            let h = leader_block(e.handler_pc as usize).ok_or_else(|| {
+                anyhow::anyhow!("ssa: handler pc {} not a block leader", e.handler_pc)
+            })?;
             let (s, t) = (e.start_pc as usize, e.end_pc as usize);
             for (bi, blk) in blocks.iter().enumerate() {
                 if blk.start >= t || blk.end <= s {
@@ -241,7 +337,12 @@ impl Cfg {
             }
         }
         let rpo = reverse_postorder(&blocks, &exc_edges);
-        Ok(Cfg { blocks, preds, rpo, exc_edges })
+        Ok(Cfg {
+            blocks,
+            preds,
+            rpo,
+            exc_edges,
+        })
     }
 
     pub(crate) fn len(&self) -> usize {
@@ -261,7 +362,11 @@ impl Cfg {
 fn insert_entry_preheader(cfg: Cfg) -> Cfg {
     let mut blocks: Vec<Block> = Vec::with_capacity(cfg.blocks.len() + 1);
     // The pre-header: no bytecode, falls through to the former entry (now block 1).
-    blocks.push(Block { start: 0, end: 0, succ: vec![1] });
+    blocks.push(Block {
+        start: 0,
+        end: 0,
+        succ: vec![1],
+    });
     for mut blk in cfg.blocks {
         blk.succ = blk.succ.iter().map(|&s| s + 1).collect();
         blocks.push(blk);
@@ -274,14 +379,20 @@ fn insert_entry_preheader(cfg: Cfg) -> Cfg {
         }
     }
     // Exception edges shift with their blocks (empty here, but keep the graph consistent).
-    let exc_edges: Vec<(usize, usize)> = cfg.exc_edges.iter().map(|&(a, h)| (a + 1, h + 1)).collect();
+    let exc_edges: Vec<(usize, usize)> =
+        cfg.exc_edges.iter().map(|&(a, h)| (a + 1, h + 1)).collect();
     for &(from, h) in &exc_edges {
         if !preds[h].contains(&from) {
             preds[h].push(from);
         }
     }
     let rpo = reverse_postorder(&blocks, &exc_edges);
-    Cfg { blocks, preds, rpo, exc_edges }
+    Cfg {
+        blocks,
+        preds,
+        rpo,
+        exc_edges,
+    }
 }
 
 /// Reverse postorder from block 0 over normal + exception successors.
@@ -349,7 +460,11 @@ pub(crate) fn dominators(cfg: &Cfg) -> Vec<usize> {
                 if idom[p] == usize::MAX {
                     continue;
                 }
-                new_idom = if new_idom == usize::MAX { p } else { intersect(&idom, p, new_idom) };
+                new_idom = if new_idom == usize::MAX {
+                    p
+                } else {
+                    intersect(&idom, p, new_idom)
+                };
             }
             if new_idom != usize::MAX && idom[b] != new_idom {
                 idom[b] = new_idom;
@@ -425,12 +540,12 @@ fn dominates(idom: &[usize], a: usize, b: usize) -> bool {
 /// The local slot a load opcode reads at `pc`, or `None` if not a load.
 fn load_slot_at(bc: &[u8], pc: usize) -> Option<u16> {
     Some(match bc[pc] {
-        0x15..=0x19 => bc[pc + 1] as u16,         // i/l/f/d/aload <idx>
-        0x1a..=0x1d => (bc[pc] - 0x1a) as u16,     // iload_n
-        0x1e..=0x21 => (bc[pc] - 0x1e) as u16,     // lload_n
-        0x22..=0x25 => (bc[pc] - 0x22) as u16,     // fload_n
-        0x26..=0x29 => (bc[pc] - 0x26) as u16,     // dload_n
-        0x2a..=0x2d => (bc[pc] - 0x2a) as u16,     // aload_n
+        0x15..=0x19 => bc[pc + 1] as u16,      // i/l/f/d/aload <idx>
+        0x1a..=0x1d => (bc[pc] - 0x1a) as u16, // iload_n
+        0x1e..=0x21 => (bc[pc] - 0x1e) as u16, // lload_n
+        0x22..=0x25 => (bc[pc] - 0x22) as u16, // fload_n
+        0x26..=0x29 => (bc[pc] - 0x26) as u16, // dload_n
+        0x2a..=0x2d => (bc[pc] - 0x2a) as u16, // aload_n
         _ => return None,
     })
 }
@@ -527,75 +642,228 @@ fn slot_liveness(cfg: &Cfg, bc: &[u8]) -> Vec<BTreeSet<u16>> {
 /// Simulates a block's net effect on the operand stack, tracking the WIDTH (one
 /// entry per value, wide=true for long/double) of each entry — mirroring the stack
 /// effects in `rename`. Used to compute per-block entry stacks for stack-merge φs.
-fn sim_block(bc: &[u8], start: usize, end: usize, cf: &ClassFile, entry: &[bool]) -> Result<Vec<bool>> {
+fn sim_block(
+    bc: &[u8],
+    start: usize,
+    end: usize,
+    cf: &ClassFile,
+    entry: &[bool],
+) -> Result<Vec<bool>> {
     let mut st: Vec<bool> = entry.to_vec();
-    let pop = |st: &mut Vec<bool>| { st.pop(); };
+    let pop = |st: &mut Vec<bool>| {
+        st.pop();
+    };
     let mut pc = start;
     while pc < end {
         let op = bc[pc];
         match op {
-            0x1a..=0x1d | 0x22..=0x25 | 0x2a..=0x2d => { st.push(false); pc += 1; }   // i/f/a load_n
-            0x1e..=0x21 | 0x26..=0x29 => { st.push(true); pc += 1; }                  // l/d load_n
-            0x15 | 0x17 | 0x19 => { st.push(false); pc += 2; }                         // iload/fload/aload
-            0x16 | 0x18 => { st.push(true); pc += 2; }                                 // lload/dload
-            0x02..=0x08 | 0x0b..=0x0d => { st.push(false); pc += 1; }                  // iconst/fconst
-            0x10 => { st.push(false); pc += 2; }                                       // bipush
-            0x11 => { st.push(false); pc += 3; }                                       // sipush
-            0x09 | 0x0a | 0x0e | 0x0f => { st.push(true); pc += 1; }                   // lconst/dconst
-            0x12 => { st.push(false); pc += 2; }                                       // ldc
-            0x13 => { st.push(false); pc += 3; }                                       // ldc_w
-            0x14 => { st.push(true); pc += 3; }                                        // ldc2_w
-            0x36..=0x3a => { pop(&mut st); pc += 2; }                                  // store <idx>
-            0x3b..=0x4e => { pop(&mut st); pc += 1; }                                  // store_n
-            0x84 => { pc += 3; }                                                       // iinc
-            0x60..=0x73 | 0x78..=0x83 => { pop(&mut st); pop(&mut st); st.push(binop_result_wide(op)); pc += 1; }
-            0x74..=0x77 => { let w = st.pop().unwrap_or(false); st.push(w); pc += 1; } // neg
-            0x85..=0x93 => { pop(&mut st); st.push(conv_result_wide(op)); pc += 1; }   // conversions
-            0x94..=0x98 => { pop(&mut st); pop(&mut st); st.push(false); pc += 1; }    // cmp
-            0x99..=0x9e | 0xc6 | 0xc7 => { pop(&mut st); pc += 3; }                    // if<cond> / ifnull / ifnonnull
-            0x9f..=0xa6 => { pop(&mut st); pop(&mut st); pc += 3; }                    // if_icmp<cond> / if_acmp<eq,ne>
-            0xa7 => { pc += 3; }                                                       // goto
-            0xac..=0xb0 => { pop(&mut st); pc += 1; }                                  // <t>return
-            0xb1 => { pc += 1; }                                                       // return-void
+            0x1a..=0x1d | 0x22..=0x25 | 0x2a..=0x2d => {
+                st.push(false);
+                pc += 1;
+            } // i/f/a load_n
+            0x1e..=0x21 | 0x26..=0x29 => {
+                st.push(true);
+                pc += 1;
+            } // l/d load_n
+            0x15 | 0x17 | 0x19 => {
+                st.push(false);
+                pc += 2;
+            } // iload/fload/aload
+            0x16 | 0x18 => {
+                st.push(true);
+                pc += 2;
+            } // lload/dload
+            0x02..=0x08 | 0x0b..=0x0d => {
+                st.push(false);
+                pc += 1;
+            } // iconst/fconst
+            0x10 => {
+                st.push(false);
+                pc += 2;
+            } // bipush
+            0x11 => {
+                st.push(false);
+                pc += 3;
+            } // sipush
+            0x09 | 0x0a | 0x0e | 0x0f => {
+                st.push(true);
+                pc += 1;
+            } // lconst/dconst
+            0x12 => {
+                st.push(false);
+                pc += 2;
+            } // ldc
+            0x13 => {
+                st.push(false);
+                pc += 3;
+            } // ldc_w
+            0x14 => {
+                st.push(true);
+                pc += 3;
+            } // ldc2_w
+            0x36..=0x3a => {
+                pop(&mut st);
+                pc += 2;
+            } // store <idx>
+            0x3b..=0x4e => {
+                pop(&mut st);
+                pc += 1;
+            } // store_n
+            0x84 => {
+                pc += 3;
+            } // iinc
+            0x60..=0x73 | 0x78..=0x83 => {
+                pop(&mut st);
+                pop(&mut st);
+                st.push(binop_result_wide(op));
+                pc += 1;
+            }
+            0x74..=0x77 => {
+                let w = st.pop().unwrap_or(false);
+                st.push(w);
+                pc += 1;
+            } // neg
+            0x85..=0x93 => {
+                pop(&mut st);
+                st.push(conv_result_wide(op));
+                pc += 1;
+            } // conversions
+            0x94..=0x98 => {
+                pop(&mut st);
+                pop(&mut st);
+                st.push(false);
+                pc += 1;
+            } // cmp
+            0x99..=0x9e | 0xc6 | 0xc7 => {
+                pop(&mut st);
+                pc += 3;
+            } // if<cond> / ifnull / ifnonnull
+            0x9f..=0xa6 => {
+                pop(&mut st);
+                pop(&mut st);
+                pc += 3;
+            } // if_icmp<cond> / if_acmp<eq,ne>
+            0xa7 => {
+                pc += 3;
+            } // goto
+            0xac..=0xb0 => {
+                pop(&mut st);
+                pc += 1;
+            } // <t>return
+            0xb1 => {
+                pc += 1;
+            } // return-void
             0xb6..=0xb9 => {
                 let idx = u16::from_be_bytes([bc[pc + 1], bc[pc + 2]]);
                 let (_, _, desc) = cf.constant_pool.member_ref(idx)?;
                 let (mparams, ret) = crate::bootstrap::parse_descriptor(&desc)?;
-                for _ in 0..(mparams.len() + if op == 0xb8 { 0 } else { 1 }) { pop(&mut st); }
-                if ret != "V" { st.push(ret == "J" || ret == "D"); }
+                for _ in 0..(mparams.len() + if op == 0xb8 { 0 } else { 1 }) {
+                    pop(&mut st);
+                }
+                if ret != "V" {
+                    st.push(ret == "J" || ret == "D");
+                }
                 pc += if op == 0xb9 { 5 } else { 3 };
             }
             // invokedynamic — string-concat: pops the dynamic args, pushes the String result.
             0xba => {
                 let idx = u16::from_be_bytes([bc[pc + 1], bc[pc + 2]]);
                 let nt = match cf.constant_pool.get(idx) {
-                    skotch_classfile::constant_pool::Constant::InvokeDynamic { name_and_type_index, .. } => *name_and_type_index,
+                    skotch_classfile::constant_pool::Constant::InvokeDynamic {
+                        name_and_type_index,
+                        ..
+                    } => *name_and_type_index,
                     _ => return Err(anyhow::anyhow!("ssa stack-sim: indy not InvokeDynamic")),
                 };
                 let (_, desc) = cf.constant_pool.name_and_type(nt)?;
                 let (params, _) = crate::bootstrap::parse_descriptor(desc)?;
-                for _ in 0..params.len() { pop(&mut st); }
+                for _ in 0..params.len() {
+                    pop(&mut st);
+                }
                 st.push(false); // String result
                 pc += 5;
             }
-            0xb2 => { let (_, _, d) = cf.constant_pool.member_ref(u16::from_be_bytes([bc[pc+1], bc[pc+2]]))?; st.push(d == "J" || d == "D"); pc += 3; }
-            0xb3 => { pop(&mut st); pc += 3; }
-            0xb4 => { let (_, _, d) = cf.constant_pool.member_ref(u16::from_be_bytes([bc[pc+1], bc[pc+2]]))?; pop(&mut st); st.push(d == "J" || d == "D"); pc += 3; }
-            0xb5 => { pop(&mut st); pop(&mut st); pc += 3; }
-            0xbe => { pop(&mut st); st.push(false); pc += 1; }                         // arraylength
-            0x2e..=0x35 => { pop(&mut st); pop(&mut st); st.push(op == 0x2f || op == 0x31); pc += 1; } // aget
-            0x4f..=0x56 => { pop(&mut st); pop(&mut st); pop(&mut st); pc += 1; }      // astore
-            0xbb => { st.push(false); pc += 3; }                                       // new
-            0xbc => { pop(&mut st); st.push(false); pc += 2; }                         // newarray
-            0xbd => { pop(&mut st); st.push(false); pc += 3; }                         // anewarray
-            0xc5 => { for _ in 0..bc[pc + 3] { pop(&mut st); } st.push(false); pc += 4; } // multianewarray: pop N dims, push array ref
-            0x59 => { let w = *st.last().unwrap_or(&false); st.push(w); pc += 1; }      // dup
+            0xb2 => {
+                let (_, _, d) = cf
+                    .constant_pool
+                    .member_ref(u16::from_be_bytes([bc[pc + 1], bc[pc + 2]]))?;
+                st.push(d == "J" || d == "D");
+                pc += 3;
+            }
+            0xb3 => {
+                pop(&mut st);
+                pc += 3;
+            }
+            0xb4 => {
+                let (_, _, d) = cf
+                    .constant_pool
+                    .member_ref(u16::from_be_bytes([bc[pc + 1], bc[pc + 2]]))?;
+                pop(&mut st);
+                st.push(d == "J" || d == "D");
+                pc += 3;
+            }
+            0xb5 => {
+                pop(&mut st);
+                pop(&mut st);
+                pc += 3;
+            }
+            0xbe => {
+                pop(&mut st);
+                st.push(false);
+                pc += 1;
+            } // arraylength
+            0x2e..=0x35 => {
+                pop(&mut st);
+                pop(&mut st);
+                st.push(op == 0x2f || op == 0x31);
+                pc += 1;
+            } // aget
+            0x4f..=0x56 => {
+                pop(&mut st);
+                pop(&mut st);
+                pop(&mut st);
+                pc += 1;
+            } // astore
+            0xbb => {
+                st.push(false);
+                pc += 3;
+            } // new
+            0xbc => {
+                pop(&mut st);
+                st.push(false);
+                pc += 2;
+            } // newarray
+            0xbd => {
+                pop(&mut st);
+                st.push(false);
+                pc += 3;
+            } // anewarray
+            0xc5 => {
+                for _ in 0..bc[pc + 3] {
+                    pop(&mut st);
+                }
+                st.push(false);
+                pc += 4;
+            } // multianewarray: pop N dims, push array ref
+            0x59 => {
+                let w = *st.last().unwrap_or(&false);
+                st.push(w);
+                pc += 1;
+            } // dup
             // swap: `..., v2, v1 → ..., v1, v2` (both category-1).
-            0x5f => { let n = st.len(); st.swap(n - 2, n - 1); pc += 1; }
+            0x5f => {
+                let n = st.len();
+                st.swap(n - 2, n - 1);
+                pc += 1;
+            }
             // dup_x1: `..., v2, v1 → ..., v1, v2, v1` (both category-1).
             0x5a => {
-                let v1 = st.pop().unwrap(); let v2 = st.pop().unwrap();
-                st.push(v1); st.push(v2); st.push(v1); pc += 1;
+                let v1 = st.pop().unwrap();
+                let v2 = st.pop().unwrap();
+                st.push(v1);
+                st.push(v2);
+                st.push(v1);
+                pc += 1;
             }
             // dup_x2: insert a copy of the cat-1 top below the next one OR two values.
             // Form 2 (the value below is category-2/wide): `w, v1 → v1, w, v1`.
@@ -604,10 +872,16 @@ fn sim_block(bc: &[u8], start: usize, end: usize, cf: &ClassFile, entry: &[bool]
                 let v1 = st.pop().unwrap();
                 if *st.last().unwrap_or(&false) {
                     let w = st.pop().unwrap();
-                    st.push(v1); st.push(w); st.push(v1);
+                    st.push(v1);
+                    st.push(w);
+                    st.push(v1);
                 } else {
-                    let v2 = st.pop().unwrap(); let v3 = st.pop().unwrap();
-                    st.push(v1); st.push(v3); st.push(v2); st.push(v1);
+                    let v2 = st.pop().unwrap();
+                    let v3 = st.pop().unwrap();
+                    st.push(v1);
+                    st.push(v3);
+                    st.push(v2);
+                    st.push(v1);
                 }
                 pc += 1;
             }
@@ -615,11 +889,20 @@ fn sim_block(bc: &[u8], start: usize, end: usize, cf: &ClassFile, entry: &[bool]
             // Form 1 (two category-1 on top): `v3, v2, v1 → v2, v1, v3, v2, v1`.
             0x5d => {
                 if *st.last().unwrap_or(&false) {
-                    let w = st.pop().unwrap(); let v2 = st.pop().unwrap();
-                    st.push(w); st.push(v2); st.push(w);
+                    let w = st.pop().unwrap();
+                    let v2 = st.pop().unwrap();
+                    st.push(w);
+                    st.push(v2);
+                    st.push(w);
                 } else {
-                    let v1 = st.pop().unwrap(); let v2 = st.pop().unwrap(); let v3 = st.pop().unwrap();
-                    st.push(v2); st.push(v1); st.push(v3); st.push(v2); st.push(v1);
+                    let v1 = st.pop().unwrap();
+                    let v2 = st.pop().unwrap();
+                    let v3 = st.pop().unwrap();
+                    st.push(v2);
+                    st.push(v1);
+                    st.push(v3);
+                    st.push(v2);
+                    st.push(v1);
                 }
                 pc += 1;
             }
@@ -631,19 +914,51 @@ fn sim_block(bc: &[u8], start: usize, end: usize, cf: &ClassFile, entry: &[bool]
                 } else {
                     let n = st.len();
                     let (a, b) = (st[n - 2], st[n - 1]);
-                    st.push(a); st.push(b);
+                    st.push(a);
+                    st.push(b);
                 }
                 pc += 1;
             }
-            0x57 => { pop(&mut st); pc += 1; }                                         // pop
-            0x58 => { let w = st.pop().unwrap_or(false); if !w { pop(&mut st); } pc += 1; } // pop2
-            0x00 => { pc += 1; }                                                        // nop (d8 drops it)
-            0x01 => { st.push(false); pc += 1; }                                        // aconst_null (→ const 0)
-            0xaa | 0xab => { pop(&mut st); pc = crate::bootstrap::parse_switch(bc, pc).2; } // switch (pops key)
-            0xbf => { pop(&mut st); pc += 1; }                                          // athrow (block ends)
-            0xc0 => { pop(&mut st); st.push(false); pc += 3; }                          // checkcast (in-place ref)
-            0xc1 => { pop(&mut st); st.push(false); pc += 3; }                          // instanceof (int result)
-            0xc2 | 0xc3 => { pop(&mut st); pc += 1; }                                   // monitorenter / monitorexit (pop objectref)
+            0x57 => {
+                pop(&mut st);
+                pc += 1;
+            } // pop
+            0x58 => {
+                let w = st.pop().unwrap_or(false);
+                if !w {
+                    pop(&mut st);
+                }
+                pc += 1;
+            } // pop2
+            0x00 => {
+                pc += 1;
+            } // nop (d8 drops it)
+            0x01 => {
+                st.push(false);
+                pc += 1;
+            } // aconst_null (→ const 0)
+            0xaa | 0xab => {
+                pop(&mut st);
+                pc = crate::bootstrap::parse_switch(bc, pc).2;
+            } // switch (pops key)
+            0xbf => {
+                pop(&mut st);
+                pc += 1;
+            } // athrow (block ends)
+            0xc0 => {
+                pop(&mut st);
+                st.push(false);
+                pc += 3;
+            } // checkcast (in-place ref)
+            0xc1 => {
+                pop(&mut st);
+                st.push(false);
+                pc += 3;
+            } // instanceof (int result)
+            0xc2 | 0xc3 => {
+                pop(&mut st);
+                pc += 1;
+            } // monitorenter / monitorexit (pop objectref)
             other => bail!("ssa stack-sim: unsupported opcode {other:#04x}"),
         }
     }
@@ -660,7 +975,12 @@ fn sim_block(bc: &[u8], start: usize, end: usize, cf: &ClassFile, entry: &[bool]
 /// inside a handler body (e.g. Kotlin's `catch { throw if (c) a else b }`, where two
 /// checkcast-Throwable branches converge on one `athrow`) gets an empty entry stack, no
 /// stack-φ is built for it, and `rename` underflows at the consuming op.
-fn entry_stacks(cfg: &Cfg, bc: &[u8], cf: &ClassFile, handler_blocks: &BTreeSet<usize>) -> Result<Vec<Vec<bool>>> {
+fn entry_stacks(
+    cfg: &Cfg,
+    bc: &[u8],
+    cf: &ClassFile,
+    handler_blocks: &BTreeSet<usize>,
+) -> Result<Vec<Vec<bool>>> {
     let n = cfg.len();
     let mut entry: Vec<Option<Vec<bool>>> = vec![None; n];
     entry[0] = Some(Vec::new());
@@ -773,7 +1093,11 @@ pub(crate) fn build_ssa(
     // version live AT each throw point, not merged at block boundaries).
     let handler_block_set: BTreeSet<usize> = exceptions
         .iter()
-        .filter_map(|e| cfg.blocks.iter().position(|x| x.start == e.handler_pc as usize))
+        .filter_map(|e| {
+            cfg.blocks
+                .iter()
+                .position(|x| x.start == e.handler_pc as usize)
+        })
         .collect();
     let idom = dominators(&cfg);
     // (Nested loops were bailed only to stay byte-identical with d8, which leaves an
@@ -805,7 +1129,14 @@ pub(crate) fn build_ssa(
     let live_in = slot_liveness(&cfg, bc);
     let phis: BTreeMap<u16, BTreeSet<usize>> = phi_blocks(&df, &sites, &arg_slots)
         .into_iter()
-        .map(|(slot, blks)| (slot, blks.into_iter().filter(|&bb| live_in[bb].contains(&slot)).collect()))
+        .map(|(slot, blks)| {
+            (
+                slot,
+                blks.into_iter()
+                    .filter(|&bb| live_in[bb].contains(&slot))
+                    .collect(),
+            )
+        })
         .filter(|(_, blks): &(u16, BTreeSet<usize>)| !blks.is_empty())
         .collect();
 
@@ -814,14 +1145,24 @@ pub(crate) fn build_ssa(
         .map(|b| SsaBlock {
             phis: Vec::new(),
             body: Vec::new(),
-            term: Terminator::Return { value: None, op: 0x0e },
+            term: Terminator::Return {
+                value: None,
+                op: 0x0e,
+            },
             succ: cfg.blocks[b].succ.clone(),
             preds: cfg.preds[b].clone(),
-            exc_succ: cfg.exc_edges.iter().filter(|&&(from, _)| from == b).map(|&(_, h)| h).collect(),
+            exc_succ: cfg
+                .exc_edges
+                .iter()
+                .filter(|&&(from, _)| from == b)
+                .map(|&(_, h)| h)
+                .collect(),
         })
         .collect();
 
-    let mut b = Builder { values: &mut values };
+    let mut b = Builder {
+        values: &mut values,
+    };
 
     // Pre-create argument values and the initial slot→version mapping.
     let mut arg_value: BTreeMap<u16, ValId> = BTreeMap::new();
@@ -849,7 +1190,14 @@ pub(crate) fn build_ssa(
             if handler_block_set.contains(&blk) {
                 continue; // handler-φ snapshots own this slot (see handler_block_set)
             }
-            let id = b.new(SsaOp::Phi { slot, operands: Vec::new() }, false, blk);
+            let id = b.new(
+                SsaOp::Phi {
+                    slot,
+                    operands: Vec::new(),
+                },
+                false,
+                blk,
+            );
             blocks[blk].phis.push(id);
             block_phi_slots[blk].push(slot);
         }
@@ -868,7 +1216,14 @@ pub(crate) fn build_ssa(
         }
         if cfg.preds[blk].len() >= 2 && !estacks[blk].is_empty() {
             for &wide in &estacks[blk] {
-                let id = b.new(SsaOp::Phi { slot: u16::MAX, operands: Vec::new() }, wide, blk);
+                let id = b.new(
+                    SsaOp::Phi {
+                        slot: u16::MAX,
+                        operands: Vec::new(),
+                    },
+                    wide,
+                    blk,
+                );
                 blocks[blk].phis.push(id);
                 block_stack_phis[blk].push(id);
             }
@@ -902,7 +1257,9 @@ pub(crate) fn build_ssa(
                 .blocks
                 .iter()
                 .position(|x| x.start == e.handler_pc as usize)
-                .ok_or_else(|| anyhow::anyhow!("ssa: handler pc {} not a block leader", e.handler_pc))?;
+                .ok_or_else(|| {
+                    anyhow::anyhow!("ssa: handler pc {} not a block leader", e.handler_pc)
+                })?;
             exc_regions.push(ExcRegion {
                 start_pc: e.start_pc as usize,
                 end_pc: e.end_pc as usize,
@@ -920,8 +1277,9 @@ pub(crate) fn build_ssa(
         // released on every path (functionally exact, never a dropped monitor → no deadlock). The
         // condition `start_pc == handler-block start` matches ONLY a region whose try begins at its
         // own handler; a try-nested-in-a-handler has a DIFFERENT handler block, so it isn't dropped.
-        exc_regions
-            .retain(|r| !(r.catch_type.is_none() && r.start_pc == cfg.blocks[r.handler_block].start));
+        exc_regions.retain(|r| {
+            !(r.catch_type.is_none() && r.start_pc == cfg.blocks[r.handler_block].start)
+        });
         // Overlapping / nested try regions ARE supported now: the try_item emission computes the
         // handler set per guarded instruction (innermost-first, catch-all last) and splits the DEX
         // ranges so they don't overlap. (The handler-φ snapshot + the post-alloc coalesce net still
@@ -967,7 +1325,14 @@ pub(crate) fn build_ssa(
                 if !live_in[hb].contains(&slot) {
                     continue; // dead at the handler entry — no snapshot needed
                 }
-                let id = b.new(SsaOp::Phi { slot, operands: Vec::new() }, false, hb);
+                let id = b.new(
+                    SsaOp::Phi {
+                        slot,
+                        operands: Vec::new(),
+                    },
+                    false,
+                    hb,
+                );
                 blocks[hb].phis.push(id);
                 handler_phis[hb].push((slot, id));
             }
@@ -991,7 +1356,22 @@ pub(crate) fn build_ssa(
     }
 
     let mut exit_stacks: Vec<Option<Vec<ValId>>> = vec![None; n];
-    rename(cf, &cfg, bc, &children, &block_phi_slots, &block_stack_phis, &exc_regions, &handler_phis, &caught, &mut exit_stacks, &mut blocks, &mut b, &mut versions, 0)?;
+    rename(
+        cf,
+        &cfg,
+        bc,
+        &children,
+        &block_phi_slots,
+        &block_stack_phis,
+        &exc_regions,
+        &handler_phis,
+        &caught,
+        &mut exit_stacks,
+        &mut blocks,
+        &mut b,
+        &mut versions,
+        0,
+    )?;
 
     // φ-nodes inherit their width from their operands (all the same type). They
     // were created before their operands existed, so fix it up now — to a fixpoint
@@ -1030,9 +1410,12 @@ pub(crate) fn build_ssa(
         for i in 0..values.len() {
             values[i].is_ref = match &values[i].op {
                 SsaOp::Argument { index } => arg_is_ref.get(*index).copied().unwrap_or(false),
-                SsaOp::NewInstance { .. } | SsaOp::NewArray { .. } | SsaOp::ConstString { .. } | SsaOp::CaughtException => true,
+                SsaOp::NewInstance { .. }
+                | SsaOp::NewArray { .. }
+                | SsaOp::ConstString { .. }
+                | SsaOp::CaughtException => true,
                 SsaOp::CheckCast { .. } | SsaOp::ConstClass { .. } => true, // cast / Class literal are references
-                SsaOp::ArrayGet { dex_op, .. } => *dex_op == 0x46, // aget-object
+                SsaOp::ArrayGet { dex_op, .. } => *dex_op == 0x46,          // aget-object
                 SsaOp::GetField { field, .. } | SsaOp::GetStatic { field, .. } => {
                     field.type_.starts_with('L') || field.type_.starts_with('[')
                 }
@@ -1144,7 +1527,13 @@ pub(crate) fn build_ssa(
         }
     }
 
-    Ok(SsaFn { values, blocks, num_arg_registers, exc_regions, caught })
+    Ok(SsaFn {
+        values,
+        blocks,
+        num_arg_registers,
+        exc_regions,
+        caught,
+    })
 }
 
 struct Builder<'a> {
@@ -1153,7 +1542,13 @@ struct Builder<'a> {
 impl<'a> Builder<'a> {
     fn new(&mut self, op: SsaOp, wide: bool, block: usize) -> ValId {
         let id = self.values.len() as ValId;
-        self.values.push(SsaValue { id, op, wide, is_ref: false, block });
+        self.values.push(SsaValue {
+            id,
+            op,
+            wide,
+            is_ref: false,
+            block,
+        });
         id
     }
 }
@@ -1163,7 +1558,8 @@ impl<'a> Builder<'a> {
 /// crash the dexer (a panic was observed on real-world bytecode; must stay a clean bail).
 macro_rules! pop_stack {
     ($s:expr) => {
-        $s.pop().ok_or_else(|| anyhow::anyhow!("ssa: operand-stack underflow (unmodeled construct)"))?
+        $s.pop()
+            .ok_or_else(|| anyhow::anyhow!("ssa: operand-stack underflow (unmodeled construct)"))?
     };
 }
 
@@ -1239,41 +1635,131 @@ fn rename(
         }
         match op {
             // loads
-            0x1a..=0x1d => { stack.push(cur(versions, (op - 0x1a) as u16)?); pc += 1; }
-            0x1e..=0x21 => { stack.push(cur(versions, (op - 0x1e) as u16)?); pc += 1; }
-            0x22..=0x25 => { stack.push(cur(versions, (op - 0x22) as u16)?); pc += 1; }
-            0x26..=0x29 => { stack.push(cur(versions, (op - 0x26) as u16)?); pc += 1; }
-            0x2a..=0x2d => { stack.push(cur(versions, (op - 0x2a) as u16)?); pc += 1; }
-            0x15..=0x19 => { stack.push(cur(versions, bc[pc + 1] as u16)?); pc += 2; }
+            0x1a..=0x1d => {
+                stack.push(cur(versions, (op - 0x1a) as u16)?);
+                pc += 1;
+            }
+            0x1e..=0x21 => {
+                stack.push(cur(versions, (op - 0x1e) as u16)?);
+                pc += 1;
+            }
+            0x22..=0x25 => {
+                stack.push(cur(versions, (op - 0x22) as u16)?);
+                pc += 1;
+            }
+            0x26..=0x29 => {
+                stack.push(cur(versions, (op - 0x26) as u16)?);
+                pc += 1;
+            }
+            0x2a..=0x2d => {
+                stack.push(cur(versions, (op - 0x2a) as u16)?);
+                pc += 1;
+            }
+            0x15..=0x19 => {
+                stack.push(cur(versions, bc[pc + 1] as u16)?);
+                pc += 2;
+            }
             // aconst_null — d8 materializes null as `const/4 v, 0` (the "zero" type
             // unifies with any reference; φ-moves use the φ's is_ref for move-object).
-            0x01 => { let v = b.new(SsaOp::ConstInt(0), false, blk); blocks[blk].body.push(v); stack.push(v); pc += 1; }
+            0x01 => {
+                let v = b.new(SsaOp::ConstInt(0), false, blk);
+                blocks[blk].body.push(v);
+                stack.push(v);
+                pc += 1;
+            }
             // int constants
-            0x02..=0x08 => { let v = b.new(SsaOp::ConstInt(op as i32 - 0x03), false, blk); blocks[blk].body.push(v); stack.push(v); pc += 1; }
-            0x10 => { let v = b.new(SsaOp::ConstInt(bc[pc + 1] as i8 as i32), false, blk); blocks[blk].body.push(v); stack.push(v); pc += 2; }
-            0x11 => { let v = b.new(SsaOp::ConstInt(i16::from_be_bytes([bc[pc + 1], bc[pc + 2]]) as i32), false, blk); blocks[blk].body.push(v); stack.push(v); pc += 3; }
+            0x02..=0x08 => {
+                let v = b.new(SsaOp::ConstInt(op as i32 - 0x03), false, blk);
+                blocks[blk].body.push(v);
+                stack.push(v);
+                pc += 1;
+            }
+            0x10 => {
+                let v = b.new(SsaOp::ConstInt(bc[pc + 1] as i8 as i32), false, blk);
+                blocks[blk].body.push(v);
+                stack.push(v);
+                pc += 2;
+            }
+            0x11 => {
+                let v = b.new(
+                    SsaOp::ConstInt(i16::from_be_bytes([bc[pc + 1], bc[pc + 2]]) as i32),
+                    false,
+                    blk,
+                );
+                blocks[blk].body.push(v);
+                stack.push(v);
+                pc += 3;
+            }
             // long/double constants (lconst_0/1, dconst_0/1) — wide.
-            0x09 | 0x0a => { let v = b.new(SsaOp::ConstLong((op - 0x09) as i64), true, blk); blocks[blk].body.push(v); stack.push(v); pc += 1; }
-            0x0e => { let v = b.new(SsaOp::ConstLong(0), true, blk); blocks[blk].body.push(v); stack.push(v); pc += 1; }
-            0x0f => { let v = b.new(SsaOp::ConstLong(0x3ff0_0000_0000_0000u64 as i64), true, blk); blocks[blk].body.push(v); stack.push(v); pc += 1; }
+            0x09 | 0x0a => {
+                let v = b.new(SsaOp::ConstLong((op - 0x09) as i64), true, blk);
+                blocks[blk].body.push(v);
+                stack.push(v);
+                pc += 1;
+            }
+            0x0e => {
+                let v = b.new(SsaOp::ConstLong(0), true, blk);
+                blocks[blk].body.push(v);
+                stack.push(v);
+                pc += 1;
+            }
+            0x0f => {
+                let v = b.new(SsaOp::ConstLong(0x3ff0_0000_0000_0000u64 as i64), true, blk);
+                blocks[blk].body.push(v);
+                stack.push(v);
+                pc += 1;
+            }
             // float constants (fconst_0/1/2) — narrow, the IEEE-754 bit pattern.
-            0x0b => { let v = b.new(SsaOp::ConstInt(0), false, blk); blocks[blk].body.push(v); stack.push(v); pc += 1; }
-            0x0c => { let v = b.new(SsaOp::ConstInt(0x3f80_0000u32 as i32), false, blk); blocks[blk].body.push(v); stack.push(v); pc += 1; }
-            0x0d => { let v = b.new(SsaOp::ConstInt(0x4000_0000u32 as i32), false, blk); blocks[blk].body.push(v); stack.push(v); pc += 1; }
+            0x0b => {
+                let v = b.new(SsaOp::ConstInt(0), false, blk);
+                blocks[blk].body.push(v);
+                stack.push(v);
+                pc += 1;
+            }
+            0x0c => {
+                let v = b.new(SsaOp::ConstInt(0x3f80_0000u32 as i32), false, blk);
+                blocks[blk].body.push(v);
+                stack.push(v);
+                pc += 1;
+            }
+            0x0d => {
+                let v = b.new(SsaOp::ConstInt(0x4000_0000u32 as i32), false, blk);
+                blocks[blk].body.push(v);
+                stack.push(v);
+                pc += 1;
+            }
             // ldc / ldc_w — int / float / String constant from the pool.
             0x12 | 0x13 => {
                 use skotch_classfile::constant_pool::Constant;
-                let idx = if op == 0x12 { bc[pc + 1] as u16 } else { u16::from_be_bytes([bc[pc + 1], bc[pc + 2]]) };
+                let idx = if op == 0x12 {
+                    bc[pc + 1] as u16
+                } else {
+                    u16::from_be_bytes([bc[pc + 1], bc[pc + 2]])
+                };
                 let v = match cf.constant_pool.get(idx) {
                     Constant::Integer(c) => b.new(SsaOp::ConstInt(*c), false, blk),
                     Constant::Float(fl) => b.new(SsaOp::ConstInt(fl.to_bits() as i32), false, blk),
                     Constant::String { string_index } => {
                         let s = cf.constant_pool.utf8(*string_index)?.to_string();
-                        b.new(SsaOp::ConstString { value: s, jvm_pc: pc as u32 }, false, blk)
+                        b.new(
+                            SsaOp::ConstString {
+                                value: s,
+                                jvm_pc: pc as u32,
+                            },
+                            false,
+                            blk,
+                        )
                     }
                     Constant::Class { .. } => {
                         let desc = crate::bootstrap::class_ref_desc(cf, idx)?;
-                        b.new(SsaOp::ConstClass { type_desc: desc, jvm_pc: pc as u32 }, false, blk)
+                        b.new(
+                            SsaOp::ConstClass {
+                                type_desc: desc,
+                                jvm_pc: pc as u32,
+                            },
+                            false,
+                            blk,
+                        )
                     }
                     _ => bail!("ssa: unsupported ldc constant (methodhandle/methodtype)"),
                 };
@@ -1295,12 +1781,47 @@ fn rename(
                 pc += 3;
             }
             // stores: rename the slot to the popped value (no instruction)
-            0x36..=0x3a => { let v = pop_stack!(stack); versions.entry(bc[pc + 1] as u16).or_default().push(v); pushed.push(bc[pc + 1] as u16); pc += 2; }
-            0x3b..=0x3e => { let v = pop_stack!(stack); let s = (op - 0x3b) as u16; versions.entry(s).or_default().push(v); pushed.push(s); pc += 1; }
-            0x3f..=0x42 => { let v = pop_stack!(stack); let s = (op - 0x3f) as u16; versions.entry(s).or_default().push(v); pushed.push(s); pc += 1; }
-            0x43..=0x46 => { let v = pop_stack!(stack); let s = (op - 0x43) as u16; versions.entry(s).or_default().push(v); pushed.push(s); pc += 1; }
-            0x47..=0x4a => { let v = pop_stack!(stack); let s = (op - 0x47) as u16; versions.entry(s).or_default().push(v); pushed.push(s); pc += 1; }
-            0x4b..=0x4e => { let v = pop_stack!(stack); let s = (op - 0x4b) as u16; versions.entry(s).or_default().push(v); pushed.push(s); pc += 1; }
+            0x36..=0x3a => {
+                let v = pop_stack!(stack);
+                versions.entry(bc[pc + 1] as u16).or_default().push(v);
+                pushed.push(bc[pc + 1] as u16);
+                pc += 2;
+            }
+            0x3b..=0x3e => {
+                let v = pop_stack!(stack);
+                let s = (op - 0x3b) as u16;
+                versions.entry(s).or_default().push(v);
+                pushed.push(s);
+                pc += 1;
+            }
+            0x3f..=0x42 => {
+                let v = pop_stack!(stack);
+                let s = (op - 0x3f) as u16;
+                versions.entry(s).or_default().push(v);
+                pushed.push(s);
+                pc += 1;
+            }
+            0x43..=0x46 => {
+                let v = pop_stack!(stack);
+                let s = (op - 0x43) as u16;
+                versions.entry(s).or_default().push(v);
+                pushed.push(s);
+                pc += 1;
+            }
+            0x47..=0x4a => {
+                let v = pop_stack!(stack);
+                let s = (op - 0x47) as u16;
+                versions.entry(s).or_default().push(v);
+                pushed.push(s);
+                pc += 1;
+            }
+            0x4b..=0x4e => {
+                let v = pop_stack!(stack);
+                let s = (op - 0x4b) as u16;
+                versions.entry(s).or_default().push(v);
+                pushed.push(s);
+                pc += 1;
+            }
             // iinc slot, const → slot = slot + const
             0x84 => {
                 let slot = bc[pc + 1] as u16;
@@ -1308,7 +1829,16 @@ fn rename(
                 let cst = b.new(SsaOp::ConstInt(c), false, blk);
                 blocks[blk].body.push(cst);
                 let old = cur(versions, slot)?;
-                let sum = b.new(SsaOp::Binop { jvm_op: 0x60, a: old, b: cst, jvm_pc: pc as u32 }, false, blk);
+                let sum = b.new(
+                    SsaOp::Binop {
+                        jvm_op: 0x60,
+                        a: old,
+                        b: cst,
+                        jvm_pc: pc as u32,
+                    },
+                    false,
+                    blk,
+                );
                 blocks[blk].body.push(sum);
                 versions.entry(slot).or_default().push(sum);
                 pushed.push(slot);
@@ -1319,7 +1849,16 @@ fn rename(
             0x60..=0x73 | 0x78..=0x83 => {
                 let rb = pop_stack!(stack);
                 let ra = pop_stack!(stack);
-                let v = b.new(SsaOp::Binop { jvm_op: op, a: ra, b: rb, jvm_pc: pc as u32 }, binop_result_wide(op), blk);
+                let v = b.new(
+                    SsaOp::Binop {
+                        jvm_op: op,
+                        a: ra,
+                        b: rb,
+                        jvm_pc: pc as u32,
+                    },
+                    binop_result_wide(op),
+                    blk,
+                );
                 blocks[blk].body.push(v);
                 stack.push(v);
                 pc += 1;
@@ -1345,7 +1884,15 @@ fn rename(
             0x94..=0x98 => {
                 let rb = pop_stack!(stack);
                 let ra = pop_stack!(stack);
-                let v = b.new(SsaOp::Cmp { jvm_op: op, a: ra, b: rb }, false, blk);
+                let v = b.new(
+                    SsaOp::Cmp {
+                        jvm_op: op,
+                        a: ra,
+                        b: rb,
+                    },
+                    false,
+                    blk,
+                );
                 blocks[blk].body.push(v);
                 stack.push(v);
                 pc += 1;
@@ -1353,7 +1900,8 @@ fn rename(
             // conditional branches (int if<cond>z, if_icmp<cond>, and ref
             // ifnull/ifnonnull — the latter compare an object to null = if-eqz/if-nez)
             0x99..=0xa6 | 0xc6 | 0xc7 => {
-                let target = (pc as i32 + i16::from_be_bytes([bc[pc + 1], bc[pc + 2]]) as i32) as usize;
+                let target =
+                    (pc as i32 + i16::from_be_bytes([bc[pc + 1], bc[pc + 2]]) as i32) as usize;
                 let two = (0x9f..=0xa6).contains(&op);
                 let operands = if two {
                     let r = pop_stack!(stack);
@@ -1363,12 +1911,22 @@ fn rename(
                     vec![pop_stack!(stack)]
                 };
                 let taken = cfg.blocks.iter().position(|x| x.start == target).unwrap();
-                let fallthrough = *cfg.blocks[blk].succ.iter().find(|&&s| s != taken).unwrap_or(&taken);
-                term = Some(Terminator::If { jvm_op: op, operands, taken, fallthrough });
+                let fallthrough = *cfg.blocks[blk]
+                    .succ
+                    .iter()
+                    .find(|&&s| s != taken)
+                    .unwrap_or(&taken);
+                term = Some(Terminator::If {
+                    jvm_op: op,
+                    operands,
+                    taken,
+                    fallthrough,
+                });
                 pc += 3;
             }
             0xa7 => {
-                let target = (pc as i32 + i16::from_be_bytes([bc[pc + 1], bc[pc + 2]]) as i32) as usize;
+                let target =
+                    (pc as i32 + i16::from_be_bytes([bc[pc + 1], bc[pc + 2]]) as i32) as usize;
                 let t = cfg.blocks.iter().position(|x| x.start == target).unwrap();
                 term = Some(Terminator::Goto { target: t });
                 pc += 3;
@@ -1380,19 +1938,42 @@ fn rename(
                 let blk_at = |p: usize| cfg.blocks.iter().position(|x| x.start == p).unwrap();
                 let default = blk_at(default_pc);
                 let cases = raw_cases.iter().map(|&(k, t)| (k, blk_at(t))).collect();
-                term = Some(Terminator::Switch { value, default, cases });
+                term = Some(Terminator::Switch {
+                    value,
+                    default,
+                    cases,
+                });
                 pc = end;
             }
-            0xb1 => { term = Some(Terminator::Return { value: None, op: 0x0e }); pc += 1; }
+            0xb1 => {
+                term = Some(Terminator::Return {
+                    value: None,
+                    op: 0x0e,
+                });
+                pc += 1;
+            }
             // ireturn/lreturn/freturn/dreturn/areturn → return / return-wide / return-object
             0xac | 0xad | 0xae | 0xaf | 0xb0 => {
-                let rop = match op { 0xad | 0xaf => 0x10, 0xb0 => 0x11, _ => 0x0f };
-                term = Some(Terminator::Return { value: Some(pop_stack!(stack)), op: rop });
+                let rop = match op {
+                    0xad | 0xaf => 0x10,
+                    0xb0 => 0x11,
+                    _ => 0x0f,
+                };
+                term = Some(Terminator::Return {
+                    value: Some(pop_stack!(stack)),
+                    op: rop,
+                });
                 pc += 1;
             }
             // athrow → `throw v` — ends the block; the handler-φ snapshot at line ~1083
             // already captured locals (athrow is a throwing op), so no successor wiring.
-            0xbf => { term = Some(Terminator::Throw { value: pop_stack!(stack), jvm_pc: pc as u32 }); pc += 1; }
+            0xbf => {
+                term = Some(Terminator::Throw {
+                    value: pop_stack!(stack),
+                    jvm_pc: pc as u32,
+                });
+                pc += 1;
+            }
             // method calls: invokevirtual/special/static/interface
             0xb6 | 0xb7 | 0xb8 | 0xb9 => {
                 let idx = u16::from_be_bytes([bc[pc + 1], bc[pc + 2]]);
@@ -1406,25 +1987,43 @@ fn rename(
                 }
                 args.reverse();
                 let dex_op: u16 = match op {
-                    0xb6 => 0x6e,                                          // invoke-virtual
-                    0xb7 => if name == "<init>" { 0x70 } else { 0x6f },    // invoke-direct/super
-                    0xb8 => 0x71,                                          // invoke-static
-                    0xb9 => 0x72,                                          // invoke-interface
+                    0xb6 => 0x6e, // invoke-virtual
+                    0xb7 => {
+                        if name == "<init>" {
+                            0x70
+                        } else {
+                            0x6f
+                        }
+                    } // invoke-direct/super
+                    0xb8 => 0x71, // invoke-static
+                    0xb9 => 0x72, // invoke-interface
                     _ => unreachable!(),
                 };
                 let method = MethodRef {
                     class: skotch_classfile::constant_pool::internal_to_descriptor(&class),
-                    proto: ProtoRef { return_type: ret.clone(), params: mparams },
+                    proto: ProtoRef {
+                        return_type: ret.clone(),
+                        params: mparams,
+                    },
                     name,
                 };
                 let ret_kind = if ret == "V" {
                     None
                 } else {
-                    Some(RetKind { wide: ret == "J" || ret == "D", is_ref: crate::bootstrap::is_ref(&ret) })
+                    Some(RetKind {
+                        wide: ret == "J" || ret == "D",
+                        is_ref: crate::bootstrap::is_ref(&ret),
+                    })
                 };
                 let wide = ret_kind.map(|r| r.wide).unwrap_or(false);
                 let v = b.new(
-                    SsaOp::Invoke { dex_op, method, args, ret: ret_kind, jvm_pc: pc as u32 },
+                    SsaOp::Invoke {
+                        dex_op,
+                        method,
+                        args,
+                        ret: ret_kind,
+                        jvm_pc: pc as u32,
+                    },
                     wide,
                     blk,
                 );
@@ -1442,9 +2041,10 @@ fn rename(
                 use skotch_classfile::constant_pool::Constant;
                 let idx = u16::from_be_bytes([bc[pc + 1], bc[pc + 2]]);
                 let (bsm_idx, nt_idx) = match cf.constant_pool.get(idx) {
-                    Constant::InvokeDynamic { bootstrap_method_attr_index, name_and_type_index } => {
-                        (*bootstrap_method_attr_index, *name_and_type_index)
-                    }
+                    Constant::InvokeDynamic {
+                        bootstrap_method_attr_index,
+                        name_and_type_index,
+                    } => (*bootstrap_method_attr_index, *name_and_type_index),
                     _ => bail!("ssa: indy constant {idx} is not InvokeDynamic"),
                 };
                 let (name, desc) = cf.constant_pool.name_and_type(nt_idx)?;
@@ -1454,23 +2054,52 @@ fn rename(
                 // values popped off the stack. Returns None for other bootstraps (e.g. concat).
                 match crate::lambda::try_lambda_metafactory(cf, idx)? {
                     Some(crate::lambda::LambdaSite::Singleton(field)) => {
-                        let v = b.new(SsaOp::GetStatic { dex_op: 0x62, field, jvm_pc: pc as u32 }, false, blk);
+                        let v = b.new(
+                            SsaOp::GetStatic {
+                                dex_op: 0x62,
+                                field,
+                                jvm_pc: pc as u32,
+                            },
+                            false,
+                            blk,
+                        );
                         blocks[blk].body.push(v);
                         stack.push(v);
                         pc += 5;
                         continue;
                     }
-                    Some(crate::lambda::LambdaSite::Capturing { class, ctor, captures }) => {
+                    Some(crate::lambda::LambdaSite::Capturing {
+                        class,
+                        ctor,
+                        captures,
+                    }) => {
                         let mut cap_args: Vec<ValId> = Vec::with_capacity(captures.len());
                         for _ in 0..captures.len() {
                             cap_args.push(pop_stack!(stack));
                         }
                         cap_args.reverse();
-                        let obj = b.new(SsaOp::NewInstance { type_desc: class, jvm_pc: pc as u32 }, false, blk);
+                        let obj = b.new(
+                            SsaOp::NewInstance {
+                                type_desc: class,
+                                jvm_pc: pc as u32,
+                            },
+                            false,
+                            blk,
+                        );
                         blocks[blk].body.push(obj);
                         let mut init_args = vec![obj];
                         init_args.extend(cap_args);
-                        let init = b.new(SsaOp::Invoke { dex_op: 0x70, method: ctor, args: init_args, ret: None, jvm_pc: pc as u32 }, false, blk);
+                        let init = b.new(
+                            SsaOp::Invoke {
+                                dex_op: 0x70,
+                                method: ctor,
+                                args: init_args,
+                                ret: None,
+                                jvm_pc: pc as u32,
+                            },
+                            false,
+                            blk,
+                        );
                         blocks[blk].body.push(init);
                         stack.push(obj);
                         pc += 5;
@@ -1492,25 +2121,35 @@ fn rename(
                 // =constant from arg[1..], else literal). makeConcat: implicit *n.
                 let recipe: String = if name == "makeConcatWithConstants" {
                     match cf.constant_pool.get(bsm.arguments[0]) {
-                        Constant::String { string_index } => cf.constant_pool.utf8(*string_index)?.to_string(),
+                        Constant::String { string_index } => {
+                            cf.constant_pool.utf8(*string_index)?.to_string()
+                        }
                         _ => bail!("ssa: string-concat recipe is not a String constant"),
                     }
                 } else {
                     "\u{1}".repeat(param_tys.len())
                 };
                 // Parse the recipe into append pieces.
-                enum Piece { Lit(String), Arg, Const(u16) }
+                enum Piece {
+                    Lit(String),
+                    Arg,
+                    Const(u16),
+                }
                 let mut pieces: Vec<Piece> = Vec::new();
                 let mut lit = String::new();
                 let mut const_i = 1usize;
                 for ch in recipe.chars() {
                     match ch {
                         '\u{1}' => {
-                            if !lit.is_empty() { pieces.push(Piece::Lit(std::mem::take(&mut lit))); }
+                            if !lit.is_empty() {
+                                pieces.push(Piece::Lit(std::mem::take(&mut lit)));
+                            }
                             pieces.push(Piece::Arg);
                         }
                         '\u{2}' => {
-                            if !lit.is_empty() { pieces.push(Piece::Lit(std::mem::take(&mut lit))); }
+                            if !lit.is_empty() {
+                                pieces.push(Piece::Lit(std::mem::take(&mut lit)));
+                            }
                             let c = bsm.arguments[const_i];
                             const_i += 1;
                             pieces.push(Piece::Const(c));
@@ -1518,15 +2157,31 @@ fn rename(
                         c => lit.push(c),
                     }
                 }
-                if !lit.is_empty() { pieces.push(Piece::Lit(lit)); }
+                if !lit.is_empty() {
+                    pieces.push(Piece::Lit(lit));
+                }
                 // `new StringBuilder` + `<init>()`.
                 let sb_desc = "Ljava/lang/StringBuilder;".to_string();
-                let sb = b.new(SsaOp::NewInstance { type_desc: sb_desc.clone(), jvm_pc: pc as u32 }, false, blk);
+                let sb = b.new(
+                    SsaOp::NewInstance {
+                        type_desc: sb_desc.clone(),
+                        jvm_pc: pc as u32,
+                    },
+                    false,
+                    blk,
+                );
                 blocks[blk].body.push(sb);
                 let init = b.new(
                     SsaOp::Invoke {
                         dex_op: 0x70,
-                        method: MethodRef { class: sb_desc.clone(), proto: ProtoRef { return_type: "V".into(), params: vec![] }, name: "<init>".into() },
+                        method: MethodRef {
+                            class: sb_desc.clone(),
+                            proto: ProtoRef {
+                                return_type: "V".into(),
+                                params: vec![],
+                            },
+                            name: "<init>".into(),
+                        },
                         args: vec![sb],
                         ret: None,
                         jvm_pc: pc as u32,
@@ -1554,7 +2209,14 @@ fn rename(
                 for piece in pieces {
                     let (val, ptype): (ValId, String) = match piece {
                         Piece::Lit(s) => {
-                            let cv = b.new(SsaOp::ConstString { value: s, jvm_pc: pc as u32 }, false, blk);
+                            let cv = b.new(
+                                SsaOp::ConstString {
+                                    value: s,
+                                    jvm_pc: pc as u32,
+                                },
+                                false,
+                                blk,
+                            );
                             blocks[blk].body.push(cv);
                             (cv, "Ljava/lang/String;".to_string())
                         }
@@ -1567,7 +2229,14 @@ fn rename(
                         Piece::Const(c) => match cf.constant_pool.get(c) {
                             Constant::String { string_index } => {
                                 let s = cf.constant_pool.utf8(*string_index)?.to_string();
-                                let cv = b.new(SsaOp::ConstString { value: s, jvm_pc: pc as u32 }, false, blk);
+                                let cv = b.new(
+                                    SsaOp::ConstString {
+                                        value: s,
+                                        jvm_pc: pc as u32,
+                                    },
+                                    false,
+                                    blk,
+                                );
                                 blocks[blk].body.push(cv);
                                 (cv, "Ljava/lang/String;".to_string())
                             }
@@ -1582,7 +2251,14 @@ fn rename(
                     let ap = b.new(
                         SsaOp::Invoke {
                             dex_op: 0x6e,
-                            method: MethodRef { class: sb_desc.clone(), proto: ProtoRef { return_type: sb_desc.clone(), params: vec![ptype] }, name: "append".into() },
+                            method: MethodRef {
+                                class: sb_desc.clone(),
+                                proto: ProtoRef {
+                                    return_type: sb_desc.clone(),
+                                    params: vec![ptype],
+                                },
+                                name: "append".into(),
+                            },
                             args: vec![sb, val],
                             ret: None,
                             jvm_pc: pc as u32,
@@ -1596,9 +2272,19 @@ fn rename(
                 let result = b.new(
                     SsaOp::Invoke {
                         dex_op: 0x6e,
-                        method: MethodRef { class: sb_desc, proto: ProtoRef { return_type: "Ljava/lang/String;".into(), params: vec![] }, name: "toString".into() },
+                        method: MethodRef {
+                            class: sb_desc,
+                            proto: ProtoRef {
+                                return_type: "Ljava/lang/String;".into(),
+                                params: vec![],
+                            },
+                            name: "toString".into(),
+                        },
                         args: vec![sb],
-                        ret: Some(RetKind { wide: false, is_ref: true }),
+                        ret: Some(RetKind {
+                            wide: false,
+                            is_ref: true,
+                        }),
                         jvm_pc: pc as u32,
                     },
                     false,
@@ -1620,25 +2306,61 @@ fn rename(
                 let wide = desc == "J" || desc == "D";
                 match op {
                     0xb2 => {
-                        let v = b.new(SsaOp::GetStatic { dex_op: crate::bootstrap::sget_op(&desc), field, jvm_pc: pc as u32 }, wide, blk);
+                        let v = b.new(
+                            SsaOp::GetStatic {
+                                dex_op: crate::bootstrap::sget_op(&desc),
+                                field,
+                                jvm_pc: pc as u32,
+                            },
+                            wide,
+                            blk,
+                        );
                         blocks[blk].body.push(v);
                         stack.push(v);
                     }
                     0xb4 => {
                         let obj = pop_stack!(stack);
-                        let v = b.new(SsaOp::GetField { dex_op: crate::bootstrap::iget_op(&desc), field, obj, jvm_pc: pc as u32 }, wide, blk);
+                        let v = b.new(
+                            SsaOp::GetField {
+                                dex_op: crate::bootstrap::iget_op(&desc),
+                                field,
+                                obj,
+                                jvm_pc: pc as u32,
+                            },
+                            wide,
+                            blk,
+                        );
                         blocks[blk].body.push(v);
                         stack.push(v);
                     }
                     0xb3 => {
                         let value = pop_stack!(stack);
-                        let v = b.new(SsaOp::PutStatic { dex_op: crate::bootstrap::sput_op(&desc), field, value, jvm_pc: pc as u32 }, false, blk);
+                        let v = b.new(
+                            SsaOp::PutStatic {
+                                dex_op: crate::bootstrap::sput_op(&desc),
+                                field,
+                                value,
+                                jvm_pc: pc as u32,
+                            },
+                            false,
+                            blk,
+                        );
                         blocks[blk].body.push(v);
                     }
                     0xb5 => {
                         let value = pop_stack!(stack);
                         let obj = pop_stack!(stack);
-                        let v = b.new(SsaOp::PutField { dex_op: crate::bootstrap::iput_op(&desc), field, obj, value, jvm_pc: pc as u32 }, false, blk);
+                        let v = b.new(
+                            SsaOp::PutField {
+                                dex_op: crate::bootstrap::iput_op(&desc),
+                                field,
+                                obj,
+                                value,
+                                jvm_pc: pc as u32,
+                            },
+                            false,
+                            blk,
+                        );
                         blocks[blk].body.push(v);
                     }
                     _ => unreachable!(),
@@ -1649,7 +2371,15 @@ fn rename(
             // A statement (pops the monitor objectref, defines no value); throwing.
             0xc2 | 0xc3 => {
                 let obj = pop_stack!(stack);
-                let v = b.new(SsaOp::Monitor { enter: op == 0xc2, obj, jvm_pc: pc as u32 }, false, blk);
+                let v = b.new(
+                    SsaOp::Monitor {
+                        enter: op == 0xc2,
+                        obj,
+                        jvm_pc: pc as u32,
+                    },
+                    false,
+                    blk,
+                );
                 blocks[blk].body.push(v);
                 pc += 1;
             }
@@ -1658,7 +2388,16 @@ fn rename(
                 let (dex_op, wide) = crate::bootstrap::aget_op(op);
                 let index = pop_stack!(stack);
                 let array = pop_stack!(stack);
-                let v = b.new(SsaOp::ArrayGet { dex_op, array, index, jvm_pc: pc as u32 }, wide, blk);
+                let v = b.new(
+                    SsaOp::ArrayGet {
+                        dex_op,
+                        array,
+                        index,
+                        jvm_pc: pc as u32,
+                    },
+                    wide,
+                    blk,
+                );
                 blocks[blk].body.push(v);
                 stack.push(v);
                 pc += 1;
@@ -1669,14 +2408,31 @@ fn rename(
                 let value = pop_stack!(stack);
                 let index = pop_stack!(stack);
                 let array = pop_stack!(stack);
-                let v = b.new(SsaOp::ArrayPut { dex_op, array, index, value, jvm_pc: pc as u32 }, false, blk);
+                let v = b.new(
+                    SsaOp::ArrayPut {
+                        dex_op,
+                        array,
+                        index,
+                        value,
+                        jvm_pc: pc as u32,
+                    },
+                    false,
+                    blk,
+                );
                 blocks[blk].body.push(v);
                 pc += 1;
             }
             // arraylength
             0xbe => {
                 let array = pop_stack!(stack);
-                let v = b.new(SsaOp::ArrayLength { array, jvm_pc: pc as u32 }, false, blk);
+                let v = b.new(
+                    SsaOp::ArrayLength {
+                        array,
+                        jvm_pc: pc as u32,
+                    },
+                    false,
+                    blk,
+                );
                 blocks[blk].body.push(v);
                 stack.push(v);
                 pc += 1;
@@ -1687,7 +2443,14 @@ fn rename(
                 let idx = u16::from_be_bytes([bc[pc + 1], bc[pc + 2]]);
                 let internal = cf.constant_pool.class_name(idx)?.to_string();
                 let desc = skotch_classfile::constant_pool::internal_to_descriptor(&internal);
-                let v = b.new(SsaOp::NewInstance { type_desc: desc, jvm_pc: pc as u32 }, false, blk);
+                let v = b.new(
+                    SsaOp::NewInstance {
+                        type_desc: desc,
+                        jvm_pc: pc as u32,
+                    },
+                    false,
+                    blk,
+                );
                 blocks[blk].body.push(v);
                 stack.push(v);
                 pc += 3;
@@ -1701,7 +2464,15 @@ fn rename(
                     format!("[{}", crate::bootstrap::class_ref_desc(cf, idx)?)
                 };
                 let size = pop_stack!(stack);
-                let v = b.new(SsaOp::NewArray { type_desc: desc, size, jvm_pc: pc as u32 }, false, blk);
+                let v = b.new(
+                    SsaOp::NewArray {
+                        type_desc: desc,
+                        size,
+                        jvm_pc: pc as u32,
+                    },
+                    false,
+                    blk,
+                );
                 blocks[blk].body.push(v);
                 stack.push(v);
                 pc += if op == 0xbc { 2 } else { 3 };
@@ -1714,7 +2485,7 @@ fn rename(
                 let ndims = bc[pc + 3] as usize;
                 let array_desc = crate::bootstrap::class_ref_desc(cf, idx)?; // e.g. "[[C" / "[[Ljava/lang/Object;"
                 let base = array_desc.trim_start_matches('[').to_string(); // base element ("C" / "Ljava/lang/Object;")
-                // Pop `ndims` sizes — JVM pushes dim0..dimN-1, so dimN-1 is on top.
+                                                                           // Pop `ndims` sizes — JVM pushes dim0..dimN-1, so dimN-1 is on top.
                 let mut sizes = Vec::with_capacity(ndims);
                 for _ in 0..ndims {
                     sizes.push(pop_stack!(stack));
@@ -1723,13 +2494,27 @@ fn rename(
                 // dims = new int[ndims]; dims[i] = sizes[i].
                 let len = b.new(SsaOp::ConstInt(ndims as i32), false, blk);
                 blocks[blk].body.push(len);
-                let dims = b.new(SsaOp::NewArray { type_desc: "[I".into(), size: len, jvm_pc: pc as u32 }, false, blk);
+                let dims = b.new(
+                    SsaOp::NewArray {
+                        type_desc: "[I".into(),
+                        size: len,
+                        jvm_pc: pc as u32,
+                    },
+                    false,
+                    blk,
+                );
                 blocks[blk].body.push(dims);
                 for (i, &sz) in sizes.iter().enumerate() {
                     let idxc = b.new(SsaOp::ConstInt(i as i32), false, blk);
                     blocks[blk].body.push(idxc);
                     let put = b.new(
-                        SsaOp::ArrayPut { dex_op: crate::bootstrap::aput_op(0x4f), array: dims, index: idxc, value: sz, jvm_pc: pc as u32 },
+                        SsaOp::ArrayPut {
+                            dex_op: crate::bootstrap::aput_op(0x4f),
+                            array: dims,
+                            index: idxc,
+                            value: sz,
+                            jvm_pc: pc as u32,
+                        },
                         false,
                         blk,
                     );
@@ -1737,18 +2522,34 @@ fn rename(
                 }
                 // Component Class: const-class for a reference base, `getstatic <Wrapper>.TYPE` for a primitive.
                 let comp = if base.starts_with('L') || base.starts_with('[') {
-                    b.new(SsaOp::ConstClass { type_desc: base.clone(), jvm_pc: pc as u32 }, false, blk)
+                    b.new(
+                        SsaOp::ConstClass {
+                            type_desc: base.clone(),
+                            jvm_pc: pc as u32,
+                        },
+                        false,
+                        blk,
+                    )
                 } else {
                     let wrapper = match base.as_str() {
-                        "Z" => "Ljava/lang/Boolean;", "B" => "Ljava/lang/Byte;", "C" => "Ljava/lang/Character;",
-                        "S" => "Ljava/lang/Short;", "I" => "Ljava/lang/Integer;", "J" => "Ljava/lang/Long;",
-                        "F" => "Ljava/lang/Float;", "D" => "Ljava/lang/Double;",
+                        "Z" => "Ljava/lang/Boolean;",
+                        "B" => "Ljava/lang/Byte;",
+                        "C" => "Ljava/lang/Character;",
+                        "S" => "Ljava/lang/Short;",
+                        "I" => "Ljava/lang/Integer;",
+                        "J" => "Ljava/lang/Long;",
+                        "F" => "Ljava/lang/Float;",
+                        "D" => "Ljava/lang/Double;",
                         _ => bail!("ssa: multianewarray unexpected base element {base}"),
                     };
                     b.new(
                         SsaOp::GetStatic {
                             dex_op: 0x62, // sget-object
-                            field: FieldRef { class: wrapper.into(), type_: "Ljava/lang/Class;".into(), name: "TYPE".into() },
+                            field: FieldRef {
+                                class: wrapper.into(),
+                                type_: "Ljava/lang/Class;".into(),
+                                name: "TYPE".into(),
+                            },
                             jvm_pc: pc as u32,
                         },
                         false,
@@ -1761,25 +2562,41 @@ fn rename(
                         dex_op: 0x71, // invoke-static
                         method: MethodRef {
                             class: "Ljava/lang/reflect/Array;".into(),
-                            proto: ProtoRef { return_type: "Ljava/lang/Object;".into(), params: vec!["Ljava/lang/Class;".into(), "[I".into()] },
+                            proto: ProtoRef {
+                                return_type: "Ljava/lang/Object;".into(),
+                                params: vec!["Ljava/lang/Class;".into(), "[I".into()],
+                            },
                             name: "newInstance".into(),
                         },
                         args: vec![comp, dims],
-                        ret: Some(RetKind { wide: false, is_ref: true }),
+                        ret: Some(RetKind {
+                            wide: false,
+                            is_ref: true,
+                        }),
                         jvm_pc: pc as u32,
                     },
                     false,
                     blk,
                 );
                 blocks[blk].body.push(inv);
-                let cast = b.new(SsaOp::CheckCast { obj: inv, type_desc: array_desc, jvm_pc: pc as u32 }, false, blk);
+                let cast = b.new(
+                    SsaOp::CheckCast {
+                        obj: inv,
+                        type_desc: array_desc,
+                        jvm_pc: pc as u32,
+                    },
+                    false,
+                    blk,
+                );
                 blocks[blk].body.push(cast);
                 stack.push(cast);
                 pc += 4;
             }
             // dup: duplicate the top stack value (the `new X; dup; <init>` idiom).
             0x59 => {
-                let top = *stack.last().ok_or_else(|| anyhow::anyhow!("ssa: dup on empty operand stack"))?;
+                let top = *stack
+                    .last()
+                    .ok_or_else(|| anyhow::anyhow!("ssa: dup on empty operand stack"))?;
                 stack.push(top);
                 pc += 1;
             }
@@ -1807,7 +2624,9 @@ fn rename(
             // Pure value-stack reorder (no instruction) — the duplicated value-id is reused.
             0x5b => {
                 let v1 = pop_stack!(stack);
-                let below = *stack.last().ok_or_else(|| anyhow::anyhow!("ssa: dup_x2 underflow"))?;
+                let below = *stack
+                    .last()
+                    .ok_or_else(|| anyhow::anyhow!("ssa: dup_x2 underflow"))?;
                 if b.values[below as usize].wide {
                     let w = pop_stack!(stack);
                     stack.push(v1);
@@ -1826,7 +2645,9 @@ fn rename(
             // dup2_x1: Form 2 (category-2/wide top): `v2, w → w, v2, w`.
             // Form 1 (two category-1 on top): `v3, v2, v1 → v2, v1, v3, v2, v1`.
             0x5d => {
-                let top = *stack.last().ok_or_else(|| anyhow::anyhow!("ssa: dup2_x1 underflow"))?;
+                let top = *stack
+                    .last()
+                    .ok_or_else(|| anyhow::anyhow!("ssa: dup2_x1 underflow"))?;
                 if b.values[top as usize].wide {
                     let w = pop_stack!(stack);
                     let v2 = pop_stack!(stack);
@@ -1849,7 +2670,9 @@ fn rename(
             // top TWO category-1 values — `a[i]++`/`a[i]+=x` dup the array+index so one
             // aget + one aput share them (the SSA values are reused, no new instruction).
             0x5c => {
-                let top = *stack.last().ok_or_else(|| anyhow::anyhow!("ssa: dup2 on empty operand stack"))?;
+                let top = *stack
+                    .last()
+                    .ok_or_else(|| anyhow::anyhow!("ssa: dup2 on empty operand stack"))?;
                 if b.values[top as usize].wide {
                     stack.push(top);
                 } else {
@@ -1889,7 +2712,15 @@ fn rename(
                 let idx = u16::from_be_bytes([bc[pc + 1], bc[pc + 2]]);
                 let desc = crate::bootstrap::class_ref_desc(cf, idx)?;
                 let obj = pop_stack!(stack);
-                let v = b.new(SsaOp::CheckCast { obj, type_desc: desc, jvm_pc: pc as u32 }, false, blk);
+                let v = b.new(
+                    SsaOp::CheckCast {
+                        obj,
+                        type_desc: desc,
+                        jvm_pc: pc as u32,
+                    },
+                    false,
+                    blk,
+                );
                 blocks[blk].body.push(v);
                 stack.push(v);
                 pc += 3;
@@ -1899,12 +2730,22 @@ fn rename(
                 let idx = u16::from_be_bytes([bc[pc + 1], bc[pc + 2]]);
                 let desc = crate::bootstrap::class_ref_desc(cf, idx)?;
                 let obj = pop_stack!(stack);
-                let v = b.new(SsaOp::InstanceOf { obj, type_desc: desc, jvm_pc: pc as u32 }, false, blk);
+                let v = b.new(
+                    SsaOp::InstanceOf {
+                        obj,
+                        type_desc: desc,
+                        jvm_pc: pc as u32,
+                    },
+                    false,
+                    blk,
+                );
                 blocks[blk].body.push(v);
                 stack.push(v);
                 pc += 3;
             }
-            0x00 => { pc += 1; } // nop — d8 drops it
+            0x00 => {
+                pc += 1;
+            } // nop — d8 drops it
             other => bail!("ssa: unsupported opcode {other:#04x} (loop subset only)"),
         }
     }
@@ -1912,8 +2753,8 @@ fn rename(
     // branch arm); a successor merge resolves them via its stack-merge φs.
     exit_stacks[blk] = Some(stack);
     // A block with no explicit terminator falls through to its single successor.
-    blocks[blk].term = term.unwrap_or_else(|| {
-        Terminator::Fall { target: cfg.blocks[blk].succ.first().copied().unwrap_or(blk) }
+    blocks[blk].term = term.unwrap_or_else(|| Terminator::Fall {
+        target: cfg.blocks[blk].succ.first().copied().unwrap_or(blk),
     });
 
     // Fill φ operands in successors for this predecessor edge — local φs from the
@@ -1946,7 +2787,22 @@ fn rename(
 
     // Recurse into dominator-tree children.
     for &c in &children[blk] {
-        rename(cf, cfg, bc, children, block_phi_slots, block_stack_phis, exc_regions, handler_phis, caught, exit_stacks, blocks, b, versions, c)?;
+        rename(
+            cf,
+            cfg,
+            bc,
+            children,
+            block_phi_slots,
+            block_stack_phis,
+            exc_regions,
+            handler_phis,
+            caught,
+            exit_stacks,
+            blocks,
+            b,
+            versions,
+            c,
+        )?;
     }
 
     // Pop versions defined in this block.
@@ -2014,7 +2870,11 @@ pub(crate) fn number(f: &SsaFn) -> Numbering {
         }
         block_span[b] = (first, next);
     }
-    Numbering { def, block_span, layout }
+    Numbering {
+        def,
+        block_span,
+        layout,
+    }
 }
 
 /// A value's live range: [start, end). Loop-carried values get a single range
@@ -2124,10 +2984,11 @@ pub(crate) fn live_intervals(f: &SsaFn, num: &Numbering) -> Vec<Interval> {
     // range covering the loop.
     let mut start: BTreeMap<ValId, u32> = BTreeMap::new();
     let mut end: BTreeMap<ValId, u32> = BTreeMap::new();
-    let note = |v: ValId, lo: u32, hi: u32, s: &mut BTreeMap<ValId, u32>, e: &mut BTreeMap<ValId, u32>| {
-        s.entry(v).and_modify(|x| *x = (*x).min(lo)).or_insert(lo);
-        e.entry(v).and_modify(|x| *x = (*x).max(hi)).or_insert(hi);
-    };
+    let note =
+        |v: ValId, lo: u32, hi: u32, s: &mut BTreeMap<ValId, u32>, e: &mut BTreeMap<ValId, u32>| {
+            s.entry(v).and_modify(|x| *x = (*x).min(lo)).or_insert(lo);
+            e.entry(v).and_modify(|x| *x = (*x).max(hi)).or_insert(hi);
+        };
     for b in 0..n {
         let (bstart, bend) = num.block_span[b];
         // Values live through the whole block (live-in ∩ live-out).
@@ -2153,12 +3014,24 @@ pub(crate) fn live_intervals(f: &SsaFn, num: &Numbering) -> Vec<Interval> {
         let mut pos = bstart + NUMBER_DELTA;
         for &v in &f.blocks[b].body {
             for u in operands(&f.values[v as usize].op) {
-                note(u, num.def.get(u as usize).copied().unwrap_or(0), pos, &mut start, &mut end);
+                note(
+                    u,
+                    num.def.get(u as usize).copied().unwrap_or(0),
+                    pos,
+                    &mut start,
+                    &mut end,
+                );
             }
             pos += NUMBER_DELTA;
         }
         for u in term_operands(&f.blocks[b].term) {
-            note(u, num.def.get(u as usize).copied().unwrap_or(0), bend, &mut start, &mut end);
+            note(
+                u,
+                num.def.get(u as usize).copied().unwrap_or(0),
+                bend,
+                &mut start,
+                &mut end,
+            );
         }
         // live-in values extend back to block start.
         for &v in &live_in[b] {
@@ -2167,7 +3040,11 @@ pub(crate) fn live_intervals(f: &SsaFn, num: &Numbering) -> Vec<Interval> {
     }
     let mut intervals: Vec<Interval> = start
         .keys()
-        .map(|&v| Interval { value: v, start: start[&v], end: end[&v] })
+        .map(|&v| Interval {
+            value: v,
+            start: start[&v],
+            end: end[&v],
+        })
         .collect();
     intervals.sort_by_key(|iv| (iv.start, iv.value));
     intervals
@@ -2223,7 +3100,11 @@ fn live_ranges(f: &SsaFn, num: &Numbering) -> Vec<Vec<(u32, u32)>> {
         }
         cands.extend(last_use.keys().copied());
         for v in cands {
-            let lo = if live_in[b].contains(&v) { bstart } else { num.def[v as usize] };
+            let lo = if live_in[b].contains(&v) {
+                bstart
+            } else {
+                num.def[v as usize]
+            };
             let hi = if live_out[b].contains(&v) {
                 bend
             } else {
@@ -2260,7 +3141,12 @@ fn ranges_interfere(ranges: &[Vec<(u32, u32)>], a: ValId, b: ValId) -> bool {
 /// The value operands an op reads.
 fn operands(op: &SsaOp) -> Vec<ValId> {
     match op {
-        SsaOp::Phi { .. } | SsaOp::Argument { .. } | SsaOp::ConstInt(_) | SsaOp::ConstLong(_) | SsaOp::ConstString { .. } | SsaOp::ConstClass { .. } => Vec::new(),
+        SsaOp::Phi { .. }
+        | SsaOp::Argument { .. }
+        | SsaOp::ConstInt(_)
+        | SsaOp::ConstLong(_)
+        | SsaOp::ConstString { .. }
+        | SsaOp::ConstClass { .. } => Vec::new(),
         SsaOp::Binop { a, b, .. } | SsaOp::Cmp { a, b, .. } => vec![*a, *b],
         SsaOp::Unop { a, .. } => vec![*a],
         SsaOp::Invoke { args, .. } => args.clone(),
@@ -2269,7 +3155,12 @@ fn operands(op: &SsaOp) -> Vec<ValId> {
         SsaOp::PutStatic { value, .. } => vec![*value],
         SsaOp::PutField { obj, value, .. } => vec![*obj, *value],
         SsaOp::ArrayGet { array, index, .. } => vec![*array, *index],
-        SsaOp::ArrayPut { array, index, value, .. } => vec![*array, *index, *value],
+        SsaOp::ArrayPut {
+            array,
+            index,
+            value,
+            ..
+        } => vec![*array, *index, *value],
         SsaOp::ArrayLength { array, .. } => vec![*array],
         SsaOp::NewInstance { .. } => Vec::new(),
         SsaOp::NewArray { size, .. } => vec![*size],
@@ -2510,7 +3401,9 @@ struct Coalesce {
 }
 impl Coalesce {
     fn new(n: usize) -> Coalesce {
-        Coalesce { parent: (0..n as u32).collect() }
+        Coalesce {
+            parent: (0..n as u32).collect(),
+        }
     }
     fn find(&mut self, mut x: u32) -> u32 {
         while self.parent[x as usize] != x {
@@ -2648,10 +3541,16 @@ pub(crate) fn allocate(f: &SsaFn, num: &Numbering, intervals: &[Interval]) -> Al
             continue;
         }
         let leader = co.find(v);
-        group_segs.entry(leader).or_default().extend_from_slice(&ranges[v as usize]);
+        group_segs
+            .entry(leader)
+            .or_default()
+            .extend_from_slice(&ranges[v as usize]);
         *group_wide.entry(leader).or_insert(false) |= f.values[v as usize].wide;
         let st = ranges[v as usize].iter().map(|s| s.0).min().unwrap();
-        group_start.entry(leader).and_modify(|x| *x = (*x).min(st)).or_insert(st);
+        group_start
+            .entry(leader)
+            .and_modify(|x| *x = (*x).min(st))
+            .or_insert(st);
     }
     let mut order: Vec<u32> = group_segs.keys().copied().collect();
     order.sort_by_key(|&g| (group_start[&g], g));
@@ -2754,7 +3653,10 @@ pub(crate) fn allocate(f: &SsaFn, num: &Numbering, intervals: &[Interval]) -> Al
     }
 
     let _ = num;
-    Allocation { reg, registers_used: (max_reg + 1).max(num_arg as i32) as u16 }
+    Allocation {
+        reg,
+        registers_used: (max_reg + 1).max(num_arg as i32) as u16,
+    }
 }
 
 // ──────────────────────────── DexBuilder ────────────────────────────
@@ -2857,7 +3759,9 @@ pub(crate) fn dex_method_ssa(
     // these methods dex instead of bail; until then this is a complete never-miscompile net.)
     let conflated = |a: ValId, b: ValId| a != b && alloc.reg[a as usize] == alloc.reg[b as usize];
     let any_conflated = |ops: &[ValId]| -> bool {
-        ops.iter().enumerate().any(|(i, &a)| ops[i + 1..].iter().any(|&b| conflated(a, b)))
+        ops.iter()
+            .enumerate()
+            .any(|(i, &a)| ops[i + 1..].iter().any(|&b| conflated(a, b)))
     };
     // Only EMITTED values matter: DCE removed dead values from `blocks[].body`/`phis` but left them
     // in `f.values`, so iterating `f.values` would flag a folded-then-dead op (e.g. `0 + 2`, whose
@@ -2913,7 +3817,9 @@ pub(crate) fn dex_method_ssa(
     // invoke cases) this is knowable PRE-emit (it doesn't depend on scratch), so reserve here so
     // the Switch terminator routes the temp (and a high key) through the 2 low scratch.
     let switch_needs_low_tmp = alloc.registers_used >= 16
-        && f.blocks.iter().any(|b| matches!(b.term, Terminator::Switch { .. }));
+        && f.blocks
+            .iter()
+            .any(|b| matches!(b.term, Terminator::Switch { .. }));
     if (est > 16 || switch_needs_low_tmp) && num_arg <= 14 {
         let high = |r: u16| r != NO_REG && crate::regalloc::remap_register(r, num_arg, est) >= 16;
         // `nib()` (during the first/only build_dex emit) rejects any operand whose ALLOCATED
@@ -2922,24 +3828,29 @@ pub(crate) fn dex_method_ssa(
         // argument operands (locals "would have bailed earlier in nib()"). This allocated-aware
         // check catches those locals up-front so the first emit reserves the 2 scratch and spills
         // them through the If terminator's spill (the same emit the retry uses for high args).
-        let high_alloc =
-            |r: u16| r != NO_REG && (r >= 16 || crate::regalloc::remap_register(r, num_arg, est) >= 16);
+        let high_alloc = |r: u16| {
+            r != NO_REG && (r >= 16 || crate::regalloc::remap_register(r, num_arg, est) >= 16)
+        };
         let needs_spill = switch_needs_low_tmp
             || f.values.iter().enumerate().any(|(i, val)| match &val.op {
                 SsaOp::GetField { dex_op, obj, .. } if *dex_op != 0x53 => {
                     high(alloc.reg[i]) || high(alloc.reg[*obj as usize])
                 }
-                SsaOp::PutField { dex_op, obj, value, .. }
-                    if *dex_op != 0x5a && !f.values[*value as usize].wide =>
-                {
+                SsaOp::PutField {
+                    dex_op, obj, value, ..
+                } if *dex_op != 0x5a && !f.values[*value as usize].wide => {
                     high(alloc.reg[*value as usize]) || high(alloc.reg[*obj as usize])
                 }
                 _ => false,
             })
             || f.blocks.iter().any(|blk| match &blk.term {
-                Terminator::If { jvm_op, operands, .. } => {
-                    matches!(crate::bootstrap::cond_branch_dex_op(*jvm_op), Some((_, true)))
-                        && operands.iter().any(|&o| high_alloc(alloc.reg[o as usize]))
+                Terminator::If {
+                    jvm_op, operands, ..
+                } => {
+                    matches!(
+                        crate::bootstrap::cond_branch_dex_op(*jvm_op),
+                        Some((_, true))
+                    ) && operands.iter().any(|&o| high_alloc(alloc.reg[o as usize]))
                 }
                 _ => false,
             });
@@ -2979,7 +3890,12 @@ fn map_operands(op: &mut SsaOp, mut g: impl FnMut(ValId) -> ValId) {
             *array = g(*array);
             *index = g(*index);
         }
-        SsaOp::ArrayPut { array, index, value, .. } => {
+        SsaOp::ArrayPut {
+            array,
+            index,
+            value,
+            ..
+        } => {
             *array = g(*array);
             *index = g(*index);
             *value = g(*value);
@@ -3039,7 +3955,12 @@ fn combine_const_adds(f: &mut SsaFn) {
     let mut rewrites: Vec<(usize, ValId, u32, i32)> = Vec::new();
     for v in 0..n {
         let (op2, x, b2, pc2) = match f.values[v].op {
-            SsaOp::Binop { jvm_op, a, b, jvm_pc } => (jvm_op, a, b, jvm_pc),
+            SsaOp::Binop {
+                jvm_op,
+                a,
+                b,
+                jvm_pc,
+            } => (jvm_op, a, b, jvm_pc),
             _ => continue,
         };
         if !matches!(op2, 0x60 | 0x64) {
@@ -3073,10 +3994,21 @@ fn combine_const_adds(f: &mut SsaFn) {
     let base = f.values.len() as ValId;
     for (i, &(_, _, _, combined)) in rewrites.iter().enumerate() {
         let id = base + i as u32;
-        f.values.push(SsaValue { id, op: SsaOp::ConstInt(combined), wide: false, is_ref: false, block: 0 });
+        f.values.push(SsaValue {
+            id,
+            op: SsaOp::ConstInt(combined),
+            wide: false,
+            is_ref: false,
+            block: 0,
+        });
     }
     for (i, &(v, y, pc, _)) in rewrites.iter().enumerate() {
-        f.values[v].op = SsaOp::Binop { jvm_op: 0x60, a: y, b: base + i as u32, jvm_pc: pc };
+        f.values[v].op = SsaOp::Binop {
+            jvm_op: 0x60,
+            a: y,
+            b: base + i as u32,
+            jvm_pc: pc,
+        };
     }
 }
 
@@ -3175,7 +4107,11 @@ fn fix_byte_boolean_array_ops(f: &mut SsaFn, params: &[String], instance: bool) 
         }
         match &f.values[v as usize].op {
             SsaOp::Argument { index } => {
-                let pi = if instance { index.checked_sub(1)? } else { *index };
+                let pi = if instance {
+                    index.checked_sub(1)?
+                } else {
+                    *index
+                };
                 params.get(pi).cloned()
             }
             SsaOp::NewArray { type_desc, .. } => Some(type_desc.clone()),
@@ -3187,9 +4123,9 @@ fn fix_byte_boolean_array_ops(f: &mut SsaFn, params: &[String], instance: bool) 
             // null-check, e.g. `((byte[]) requireNonNull(table))[i]`).
             SsaOp::CheckCast { type_desc, .. } => Some(type_desc.clone()),
             // element of an array-of-arrays: "[[Z" → "[Z".
-            SsaOp::ArrayGet { array, .. } => {
-                array_desc(f, params, instance, *array, depth + 1)?.strip_prefix('[').map(str::to_string)
-            }
+            SsaOp::ArrayGet { array, .. } => array_desc(f, params, instance, *array, depth + 1)?
+                .strip_prefix('[')
+                .map(str::to_string),
             // All RESOLVABLE φ operands must agree on a descriptor. A cyclic/untraceable operand —
             // e.g. a loop back-edge through nested φs (a loop-carried array variable) — yields None
             // and is SKIPPED: a bastore/baload array φ merges versions of ONE array (the verifier
@@ -3260,10 +4196,15 @@ fn cse_loads(f: &mut SsaFn) {
     }
     fn load_key(op: &SsaOp) -> Option<Key> {
         match op {
-            SsaOp::ArrayGet { dex_op, array, index, .. } => Some(Key::Arr(*dex_op, *array, *index)),
-            SsaOp::GetField { dex_op, field, obj, .. } => {
-                Some(Key::Field(*dex_op, *obj, field.clone()))
-            }
+            SsaOp::ArrayGet {
+                dex_op,
+                array,
+                index,
+                ..
+            } => Some(Key::Arr(*dex_op, *array, *index)),
+            SsaOp::GetField {
+                dex_op, field, obj, ..
+            } => Some(Key::Field(*dex_op, *obj, field.clone())),
             SsaOp::GetStatic { dex_op, field, .. } => Some(Key::Static(*dex_op, field.clone())),
             SsaOp::ArrayLength { array, .. } => Some(Key::Len(*array)),
             _ => None,
@@ -3283,17 +4224,34 @@ fn cse_loads(f: &mut SsaFn) {
     ) {
         for &v in &f.blocks[b].body {
             match &f.values[v as usize].op {
-                SsaOp::ArrayPut { dex_op, array, index, value, .. } => {
+                SsaOp::ArrayPut {
+                    dex_op,
+                    array,
+                    index,
+                    value,
+                    ..
+                } => {
                     let k = Key::Arr(*dex_op - 7, *array, *index);
                     avail.clear();
                     avail.push((k, *value));
                 }
-                SsaOp::PutField { dex_op, field, obj, value, .. } => {
+                SsaOp::PutField {
+                    dex_op,
+                    field,
+                    obj,
+                    value,
+                    ..
+                } => {
                     let k = Key::Field(*dex_op - 7, *obj, field.clone());
                     avail.clear();
                     avail.push((k, *value));
                 }
-                SsaOp::PutStatic { dex_op, field, value, .. } => {
+                SsaOp::PutStatic {
+                    dex_op,
+                    field,
+                    value,
+                    ..
+                } => {
                     let k = Key::Static(*dex_op - 7, field.clone());
                     avail.clear();
                     avail.push((k, *value));
@@ -3404,7 +4362,9 @@ fn phi_first_use(f: &SsaFn, num: &Numbering) -> BTreeMap<ValId, u32> {
     let is_phi = |v: ValId| matches!(f.values[v as usize].op, SsaOp::Phi { .. });
     let mut first: BTreeMap<ValId, u32> = BTreeMap::new();
     let note = |phi: ValId, pos: u32, m: &mut BTreeMap<ValId, u32>| {
-        m.entry(phi).and_modify(|x| *x = (*x).min(pos)).or_insert(pos);
+        m.entry(phi)
+            .and_modify(|x| *x = (*x).min(pos))
+            .or_insert(pos);
     };
     for b in 0..f.blocks.len() {
         for &v in &f.blocks[b].body {
@@ -3477,7 +4437,10 @@ fn reorder_entry_inits(f: &mut SsaFn, ranks: &BTreeMap<ValId, u32>) {
                     if let Some(&o) = operands.get(pred_idx) {
                         if f.values[o as usize].block == b {
                             if let Some(&r) = ranks.get(&phi) {
-                                init_rank.entry(o).and_modify(|x| *x = (*x).min(r)).or_insert(r);
+                                init_rank
+                                    .entry(o)
+                                    .and_modify(|x| *x = (*x).min(r))
+                                    .or_insert(r);
                             }
                         }
                     }
@@ -3494,17 +4457,27 @@ fn reorder_entry_inits(f: &mut SsaFn, ranks: &BTreeMap<ValId, u32>) {
         // within each group by φ first-use rank. Only applies when ALL reordered inits
         // are constants (else d8's scheduling is murkier — leave source order).
         let body = &mut f.blocks[b].body;
-        let positions: Vec<usize> =
-            body.iter().enumerate().filter(|(_, &v)| init_rank.contains_key(&v)).map(|(i, _)| i).collect();
+        let positions: Vec<usize> = body
+            .iter()
+            .enumerate()
+            .filter(|(_, &v)| init_rank.contains_key(&v))
+            .map(|(i, _)| i)
+            .collect();
         let mut items: Vec<ValId> = positions.iter().map(|&i| body[i]).collect();
-        if items.iter().any(|&v| const_key(&f.values[v as usize].op).is_none()) {
+        if items
+            .iter()
+            .any(|&v| const_key(&f.values[v as usize].op).is_none())
+        {
             continue;
         }
         // Anchor (source position) of each const group = the lowest item index it holds.
         let mut group_anchor: BTreeMap<(u8, i64), usize> = BTreeMap::new();
         for (i, &v) in items.iter().enumerate() {
             let k = const_key(&f.values[v as usize].op).unwrap();
-            group_anchor.entry(k).and_modify(|x| *x = (*x).min(i)).or_insert(i);
+            group_anchor
+                .entry(k)
+                .and_modify(|x| *x = (*x).min(i))
+                .or_insert(i);
         }
         items.sort_by_key(|&v| {
             let k = const_key(&f.values[v as usize].op).unwrap();
@@ -3585,7 +4558,10 @@ pub(crate) fn build_dex(
             && f.caught[blk].is_none()
     };
     let no_if_pred = |t: usize| {
-        f.blocks[t].preds.iter().all(|&p| !matches!(f.blocks[p].term, Terminator::If { .. }))
+        f.blocks[t]
+            .preds
+            .iter()
+            .all(|&p| !matches!(f.blocks[p].term, Terminator::If { .. }))
     };
     // The value returned on edge P→T (φ resolved per-edge) and whether that differs
     // from the φ's own register (a φ-move the inline would absorb).
@@ -3597,8 +4573,17 @@ pub(crate) fn build_dex(
                     // A φ/pred bookkeeping mismatch (seen on some real-world bytecode)
                     // must DEGRADE, not panic: treat the edge as carrying no absorbable
                     // move (no tail-dup benefit) rather than index out of bounds.
-                    match f.blocks[t].preds.iter().position(|&x| x == p).and_then(|pi| operands.get(pi).copied()) {
-                        Some(o) => (Some(o), *op, alloc.reg[o as usize] != alloc.reg[*v as usize]),
+                    match f.blocks[t]
+                        .preds
+                        .iter()
+                        .position(|&x| x == p)
+                        .and_then(|pi| operands.get(pi).copied())
+                    {
+                        Some(o) => (
+                            Some(o),
+                            *op,
+                            alloc.reg[o as usize] != alloc.reg[*v as usize],
+                        ),
                         None => (Some(*v), *op, false),
                     }
                 } else {
@@ -3628,7 +4613,9 @@ pub(crate) fn build_dex(
             continue;
         }
         tret_emitted[t] = f.blocks[t].preds.iter().any(|&p| match &f.blocks[p].term {
-            Terminator::Goto { target } | Terminator::Fall { target } if *target == t => !inline_ret[p],
+            Terminator::Goto { target } | Terminator::Fall { target } if *target == t => {
+                !inline_ret[p]
+            }
             _ => true,
         });
     }
@@ -3671,7 +4658,11 @@ pub(crate) fn build_dex(
                 // MOST-RECENTLY materialized same-value reg (d8 chains: a→b→c, each copies
                 // from the previous, not all from the first).
                 let src = if r <= 15 {
-                    wide_consts.iter().rev().find(|&&(val, s)| val == c && s <= 15).map(|&(_, s)| s)
+                    wide_consts
+                        .iter()
+                        .rev()
+                        .find(|&&(val, s)| val == c && s <= 15)
+                        .map(|&(_, s)| s)
                 } else {
                     None
                 };
@@ -3684,28 +4675,104 @@ pub(crate) fn build_dex(
             }
             match &f.values[v as usize].op {
                 SsaOp::Invoke { .. } => {
-                    emit_invoke(f, &mut insns, alloc, v, &mut pool_fixups, &mut outs, &mut positions, line_numbers, &mut range_block_words, frame_hint)?;
+                    emit_invoke(
+                        f,
+                        &mut insns,
+                        alloc,
+                        v,
+                        &mut pool_fixups,
+                        &mut outs,
+                        &mut positions,
+                        line_numbers,
+                        &mut range_block_words,
+                        frame_hint,
+                    )?;
                 }
-                SsaOp::GetField { .. } | SsaOp::GetStatic { .. } | SsaOp::PutField { .. } | SsaOp::PutStatic { .. } => {
-                    emit_field(f, &mut insns, alloc, v, &mut pool_fixups, &mut positions, line_numbers, spill_base, frame_hint)?;
+                SsaOp::GetField { .. }
+                | SsaOp::GetStatic { .. }
+                | SsaOp::PutField { .. }
+                | SsaOp::PutStatic { .. } => {
+                    emit_field(
+                        f,
+                        &mut insns,
+                        alloc,
+                        v,
+                        &mut pool_fixups,
+                        &mut positions,
+                        line_numbers,
+                        spill_base,
+                        frame_hint,
+                    )?;
                 }
                 SsaOp::ArrayGet { .. } | SsaOp::ArrayPut { .. } | SsaOp::ArrayLength { .. } => {
-                    emit_array(f, &mut insns, alloc, v, &mut positions, line_numbers, spill_base, frame_hint)?;
+                    emit_array(
+                        f,
+                        &mut insns,
+                        alloc,
+                        v,
+                        &mut positions,
+                        line_numbers,
+                        spill_base,
+                        frame_hint,
+                    )?;
                 }
                 SsaOp::NewInstance { .. } | SsaOp::NewArray { .. } => {
-                    emit_alloc(f, &mut insns, alloc, v, &mut pool_fixups, &mut positions, line_numbers)?;
+                    emit_alloc(
+                        f,
+                        &mut insns,
+                        alloc,
+                        v,
+                        &mut pool_fixups,
+                        &mut positions,
+                        line_numbers,
+                    )?;
                 }
                 SsaOp::ConstString { .. } => {
-                    emit_const_string(f, &mut insns, alloc, v, &mut pool_fixups, &mut positions, line_numbers);
+                    emit_const_string(
+                        f,
+                        &mut insns,
+                        alloc,
+                        v,
+                        &mut pool_fixups,
+                        &mut positions,
+                        line_numbers,
+                    );
                 }
                 SsaOp::ConstClass { .. } => {
-                    emit_const_class(f, &mut insns, alloc, v, &mut pool_fixups, &mut positions, line_numbers);
+                    emit_const_class(
+                        f,
+                        &mut insns,
+                        alloc,
+                        v,
+                        &mut pool_fixups,
+                        &mut positions,
+                        line_numbers,
+                    );
                 }
                 SsaOp::CheckCast { .. } => {
-                    emit_check_cast(f, &mut insns, alloc, v, &mut pool_fixups, &mut positions, line_numbers, frame_hint)?;
+                    emit_check_cast(
+                        f,
+                        &mut insns,
+                        alloc,
+                        v,
+                        &mut pool_fixups,
+                        &mut positions,
+                        line_numbers,
+                        frame_hint,
+                    )?;
                 }
                 SsaOp::InstanceOf { .. } => {
-                    emit_instance_of(f, &mut insns, alloc, v, &mut pool_fixups, &mut positions, line_numbers, spill_base, frame_hint)?;
+                    emit_instance_of(
+                        f,
+                        &mut insns,
+                        alloc,
+                        v,
+                        &mut pool_fixups,
+                        &mut positions,
+                        line_numbers,
+                        spill_base,
+                        frame_hint,
+                    )?;
                 }
                 SsaOp::CaughtException => {
                     // `move-exception dest` (11x) — only reached when the caught value
@@ -3798,7 +4865,12 @@ pub(crate) fn build_dex(
                     fixups.push((off, *target, true));
                 }
             }
-            Terminator::If { jvm_op, operands, taken, fallthrough } => {
+            Terminator::If {
+                jvm_op,
+                operands,
+                taken,
+                fallthrough,
+            } => {
                 // A TAKEN critical edge (taken block has >1 pred) needing a φ-move routes
                 // through a trampoline block (moves + goto taken) emitted after all code;
                 // the taken branch is redirected there.
@@ -3824,15 +4896,32 @@ pub(crate) fn build_dex(
                     let (a_use, b_use) = if let Some(sb) = spill_base {
                         let na = f.num_arg_registers;
                         let est = frame_hint.unwrap_or(alloc.registers_used.max(na));
-                        let hi = |r: u16| r >= 16 || crate::regalloc::remap_register(r, na, est) >= 16;
+                        let hi =
+                            |r: u16| r >= 16 || crate::regalloc::remap_register(r, na, est) >= 16;
                         let au = if hi(a) {
-                            emit_copy(&mut insns, sb, a, false, f.values[operands[0] as usize].is_ref, na, est)?;
+                            emit_copy(
+                                &mut insns,
+                                sb,
+                                a,
+                                false,
+                                f.values[operands[0] as usize].is_ref,
+                                na,
+                                est,
+                            )?;
                             sb
                         } else {
                             a
                         };
                         let bu = if hi(b2) {
-                            emit_copy(&mut insns, sb + 1, b2, false, f.values[operands[1] as usize].is_ref, na, est)?;
+                            emit_copy(
+                                &mut insns,
+                                sb + 1,
+                                b2,
+                                false,
+                                f.values[operands[1] as usize].is_ref,
+                                na,
+                                est,
+                            )?;
                             sb + 1
                         } else {
                             b2
@@ -3855,7 +4944,14 @@ pub(crate) fn build_dex(
                 // branch to its block_unit (set AFTER these moves), so they skip them.
                 let ft_moves = phi_moves_for_edge(f, alloc, b, *fallthrough);
                 if !ft_moves.is_empty() && f.blocks[*fallthrough].preds.len() > 1 {
-                    emit_move_list(f, &mut insns, alloc, &ft_moves, &mut phi_scratch_words, frame_hint)?;
+                    emit_move_list(
+                        f,
+                        &mut insns,
+                        alloc,
+                        &ft_moves,
+                        &mut phi_scratch_words,
+                        frame_hint,
+                    )?;
                 }
             }
             Terminator::Throw { value, jvm_pc } => {
@@ -3875,7 +4971,11 @@ pub(crate) fn build_dex(
             // Switch lowered to a comparison chain: per case `const tmp,k; if-eq key,tmp,
             // case`, then `goto default`. Functional-correct (not d8's packed/sparse-
             // switch payload); reuses the if-eq/const/goto fixup machinery.
-            Terminator::Switch { value, default, cases } => {
+            Terminator::Switch {
+                value,
+                default,
+                cases,
+            } => {
                 let na = f.num_arg_registers;
                 let est = frame_hint.unwrap_or(alloc.registers_used.max(na));
                 let key = reg(*value);
@@ -3922,7 +5022,14 @@ pub(crate) fn build_dex(
     // redirected taken branch resolves to it.
     for (target, moves) in &trampolines {
         block_unit.push(insns.len());
-        emit_move_list(f, &mut insns, alloc, moves, &mut phi_scratch_words, frame_hint)?;
+        emit_move_list(
+            f,
+            &mut insns,
+            alloc,
+            moves,
+            &mut phi_scratch_words,
+            frame_hint,
+        )?;
         let off = insns.len();
         insns.push(0x28); // goto target
         fixups.push((off, *target, true));
@@ -4003,7 +5110,9 @@ pub(crate) fn build_dex(
         } else {
             let rel = tgt - (off as i32 - 1); // if offset is from the op word (off-1)
             if !(-32768..=32767).contains(&rel) {
-                bail!("ssa dexbuilder: if/branch offset {rel} needs 32-bit form (not yet supported)");
+                bail!(
+                    "ssa dexbuilder: if/branch offset {rel} needs 32-bit form (not yet supported)"
+                );
             }
             insns[off] = rel as i16 as u16;
         }
@@ -4024,7 +5133,9 @@ pub(crate) fn build_dex(
     let same = |a: &[CatchHandler], ca: Option<u32>, b: &[CatchHandler], cb: Option<u32>| {
         ca == cb
             && a.len() == b.len()
-            && a.iter().zip(b).all(|(x, y)| x.exception_type == y.exception_type && x.addr == y.addr)
+            && a.iter()
+                .zip(b)
+                .all(|(x, y)| x.exception_type == y.exception_type && x.addr == y.addr)
     };
     for &(jpc, ds, de) in &sorted_spans {
         let mut handlers: Vec<CatchHandler> = Vec::new();
@@ -4035,7 +5146,10 @@ pub(crate) fn build_dex(
             }
             let addr = block_unit[r.handler_block] as u32;
             match &r.catch_type {
-                Some(ct) => handlers.push(CatchHandler { exception_type: ct.clone(), addr }),
+                Some(ct) => handlers.push(CatchHandler {
+                    exception_type: ct.clone(),
+                    addr,
+                }),
                 None => {
                     catch_all_addr = Some(addr);
                     break; // a catch-all catches everything — later handlers are unreachable here
@@ -4046,7 +5160,12 @@ pub(crate) fn build_dex(
             continue; // this throwing instruction is not guarded by any try region
         }
         if let Some(last) = tries.last_mut() {
-            if same(&last.handlers, last.catch_all_addr, &handlers, catch_all_addr) {
+            if same(
+                &last.handlers,
+                last.catch_all_addr,
+                &handlers,
+                catch_all_addr,
+            ) {
                 last.insn_count = (de as u32 - last.start_addr) as u16;
                 continue;
             }
@@ -4087,34 +5206,43 @@ pub(crate) fn build_dex(
     //     scratch — the If terminator moves the high operand(s) down before the compare.
     if frame_hint.is_none() && registers_size > 16 {
         let na = f.num_arg_registers;
-        let high = |r: u16| r != NO_REG && crate::regalloc::remap_register(r, na, registers_size) >= 16;
+        let high =
+            |r: u16| r != NO_REG && crate::regalloc::remap_register(r, na, registers_size) >= 16;
         let field_op_high = f.values.iter().enumerate().any(|(i, val)| match &val.op {
             SsaOp::GetField { dex_op, obj, .. } if *dex_op != 0x53 => {
                 high(alloc.reg[i]) || high(alloc.reg[*obj as usize])
             }
-            SsaOp::PutField { dex_op, obj, value, .. }
-                if *dex_op != 0x5a && !f.values[*value as usize].wide =>
-            {
+            SsaOp::PutField {
+                dex_op, obj, value, ..
+            } if *dex_op != 0x5a && !f.values[*value as usize].wide => {
                 high(alloc.reg[*value as usize]) || high(alloc.reg[*obj as usize])
             }
             // array-length (0x21) / instance-of (0x20): same nibble-form spill (dest + ref operand)
-            SsaOp::ArrayLength { array, .. } => high(alloc.reg[i]) || high(alloc.reg[*array as usize]),
+            SsaOp::ArrayLength { array, .. } => {
+                high(alloc.reg[i]) || high(alloc.reg[*array as usize])
+            }
             SsaOp::InstanceOf { obj, .. } => high(alloc.reg[i]) || high(alloc.reg[*obj as usize]),
             // iget-wide (0x53) / iput-wide (0x5a): only the obj-high / wide-dest-low case is
             // spillable (the wide pair stays low; a high wide pair would need a 2-reg scratch pair).
             SsaOp::GetField { dex_op, obj, .. } if *dex_op == 0x53 => {
                 high(alloc.reg[*obj as usize]) && !high(alloc.reg[i]) && !high(alloc.reg[i] + 1)
             }
-            SsaOp::PutField { dex_op, obj, value, .. } if *dex_op == 0x5a => {
+            SsaOp::PutField {
+                dex_op, obj, value, ..
+            } if *dex_op == 0x5a => {
                 let vr = alloc.reg[*value as usize];
                 high(alloc.reg[*obj as usize]) && !high(vr) && !high(vr + 1)
             }
             _ => false,
         });
         let if_test_high = f.blocks.iter().any(|blk| match &blk.term {
-            Terminator::If { jvm_op, operands, .. } => {
-                matches!(crate::bootstrap::cond_branch_dex_op(*jvm_op), Some((_, true)))
-                    && operands.iter().any(|&o| high(alloc.reg[o as usize]))
+            Terminator::If {
+                jvm_op, operands, ..
+            } => {
+                matches!(
+                    crate::bootstrap::cond_branch_dex_op(*jvm_op),
+                    Some((_, true))
+                ) && operands.iter().any(|&o| high(alloc.reg[o as usize]))
             }
             _ => false,
         });
@@ -4162,9 +5290,25 @@ pub(crate) fn build_dex(
             let mut alloc2 = alloc.clone();
             reserve_scratch(&mut alloc2, na, k);
             // frame_hint covers the +k; all the spill emitters use it for the high test.
-            return build_dex(f, num, &alloc2, line_numbers, params, Some(na), Some(registers_size + k));
+            return build_dex(
+                f,
+                num,
+                &alloc2,
+                line_numbers,
+                params,
+                Some(na),
+                Some(registers_size + k),
+            );
         } else if move_or_invoke_high {
-            return build_dex(f, num, alloc, line_numbers, params, spill_base, Some(registers_size));
+            return build_dex(
+                f,
+                num,
+                alloc,
+                line_numbers,
+                params,
+                spill_base,
+                Some(registers_size),
+            );
         }
     }
     // Safety net: every register operand must be in allocated space [0, registers_size).
@@ -4208,7 +5352,13 @@ fn emit_invoke(
 ) -> Result<()> {
     let reg = |x: ValId| alloc.reg[x as usize];
     let (dex_op, method, args, ret, jvm_pc) = match &f.values[v as usize].op {
-        SsaOp::Invoke { dex_op, method, args, ret, jvm_pc } => (*dex_op, method, args, ret, *jvm_pc),
+        SsaOp::Invoke {
+            dex_op,
+            method,
+            args,
+            ret,
+            jvm_pc,
+        } => (*dex_op, method, args, ret, *jvm_pc),
         _ => unreachable!(),
     };
     // Expand args into registers; a wide (long/double) arg occupies a pair.
@@ -4278,11 +5428,21 @@ fn emit_invoke(
         let method_unit = insns.len();
         insns.push(0); // method-ref placeholder (word1), patched via the fixup
         insns.push(base); // CCCC = first register of the consecutive arg block (word2)
-        pool_fixups.push(Fixup { unit: method_unit, item: ItemRef::Method(method.clone()), wide: false });
+        pool_fixups.push(Fixup {
+            unit: method_unit,
+            item: ItemRef::Method(method.clone()),
+            wide: false,
+        });
         *outs = (*outs).max(nwords);
         if let Some(rk) = ret {
             let dest = reg(v);
-            let mvr: u16 = if rk.wide { 0x0b } else if rk.is_ref { 0x0c } else { 0x0a };
+            let mvr: u16 = if rk.wide {
+                0x0b
+            } else if rk.is_ref {
+                0x0c
+            } else {
+                0x0a
+            };
             insns.push(mvr | (dest << 8));
         }
         return Ok(());
@@ -4301,11 +5461,21 @@ fn emit_invoke(
         nib |= r << (4 * k);
     }
     insns.push(nib);
-    pool_fixups.push(Fixup { unit: method_unit, item: ItemRef::Method(method.clone()), wide: false });
+    pool_fixups.push(Fixup {
+        unit: method_unit,
+        item: ItemRef::Method(method.clone()),
+        wide: false,
+    });
     *outs = (*outs).max(argn);
     if let Some(rk) = ret {
         let dest = reg(v);
-        let mv: u16 = if rk.wide { 0x0b } else if rk.is_ref { 0x0c } else { 0x0a };
+        let mv: u16 = if rk.wide {
+            0x0b
+        } else if rk.is_ref {
+            0x0c
+        } else {
+            0x0a
+        };
         insns.push(mv | (dest << 8));
     }
     Ok(())
@@ -4327,10 +5497,30 @@ fn emit_field(
 ) -> Result<()> {
     let reg = |x: ValId| alloc.reg[x as usize];
     let (dex_op, field, jvm_pc) = match &f.values[v as usize].op {
-        SsaOp::GetField { dex_op, field, jvm_pc, .. }
-        | SsaOp::GetStatic { dex_op, field, jvm_pc, .. }
-        | SsaOp::PutField { dex_op, field, jvm_pc, .. }
-        | SsaOp::PutStatic { dex_op, field, jvm_pc, .. } => (*dex_op, field.clone(), *jvm_pc),
+        SsaOp::GetField {
+            dex_op,
+            field,
+            jvm_pc,
+            ..
+        }
+        | SsaOp::GetStatic {
+            dex_op,
+            field,
+            jvm_pc,
+            ..
+        }
+        | SsaOp::PutField {
+            dex_op,
+            field,
+            jvm_pc,
+            ..
+        }
+        | SsaOp::PutStatic {
+            dex_op,
+            field,
+            jvm_pc,
+            ..
+        } => (*dex_op, field.clone(), *jvm_pc),
         _ => unreachable!(),
     };
     if let Some(line) = crate::bootstrap::line_for(line_numbers, jvm_pc) {
@@ -4363,7 +5553,11 @@ fn emit_field(
                 insns.push(dex_op | nibw(dr_use, w, 8)? | nibw(or_use, w, 12)?);
                 let unit = insns.len();
                 insns.push(0);
-                pool_fixups.push(Fixup { unit, item: ItemRef::Field(field.clone()), wide: false });
+                pool_fixups.push(Fixup {
+                    unit,
+                    item: ItemRef::Field(field.clone()),
+                    wide: false,
+                });
                 if high(dr) {
                     let mv = if dex_op == 0x54 { 0x08 } else { 0x02 };
                     insns.push(mv | (dr << 8));
@@ -4398,7 +5592,11 @@ fn emit_field(
                 insns.push(dex_op | nibw(vr_use, w, 8)? | nibw(or_use, w, 12)?);
                 let unit = insns.len();
                 insns.push(0);
-                pool_fixups.push(Fixup { unit, item: ItemRef::Field(field.clone()), wide: false });
+                pool_fixups.push(Fixup {
+                    unit,
+                    item: ItemRef::Field(field.clone()),
+                    wide: false,
+                });
                 return Ok(());
             }
             // iget-wide (0x53): the dest is a WIDE pair. Only the obj-high / dest-low case spills
@@ -4414,7 +5612,11 @@ fn emit_field(
                 insns.push(0x53 | nibw(reg(v), w, 8)? | nibw(sb + 1, w, 12)?);
                 let unit = insns.len();
                 insns.push(0);
-                pool_fixups.push(Fixup { unit, item: ItemRef::Field(field.clone()), wide: false });
+                pool_fixups.push(Fixup {
+                    unit,
+                    item: ItemRef::Field(field.clone()),
+                    wide: false,
+                });
                 return Ok(());
             }
             // iput-wide (0x5a): the value is a WIDE pair; same obj-high / value-low spill.
@@ -4430,7 +5632,11 @@ fn emit_field(
                 insns.push(0x5a | nibw(reg(*value), w, 8)? | nibw(sb + 1, w, 12)?);
                 let unit = insns.len();
                 insns.push(0);
-                pool_fixups.push(Fixup { unit, item: ItemRef::Field(field.clone()), wide: false });
+                pool_fixups.push(Fixup {
+                    unit,
+                    item: ItemRef::Field(field.clone()),
+                    wide: false,
+                });
                 return Ok(());
             }
             _ => {}
@@ -4454,7 +5660,11 @@ fn emit_field(
     }
     let unit = insns.len();
     insns.push(0); // field-ref placeholder, patched via the fixup
-    pool_fixups.push(Fixup { unit, item: ItemRef::Field(field), wide: false });
+    pool_fixups.push(Fixup {
+        unit,
+        item: ItemRef::Field(field),
+        wide: false,
+    });
     Ok(())
 }
 
@@ -4472,18 +5682,31 @@ fn emit_array(
 ) -> Result<()> {
     let reg = |x: ValId| alloc.reg[x as usize];
     let jvm_pc = match &f.values[v as usize].op {
-        SsaOp::ArrayGet { jvm_pc, .. } | SsaOp::ArrayPut { jvm_pc, .. } | SsaOp::ArrayLength { jvm_pc, .. } => *jvm_pc,
+        SsaOp::ArrayGet { jvm_pc, .. }
+        | SsaOp::ArrayPut { jvm_pc, .. }
+        | SsaOp::ArrayLength { jvm_pc, .. } => *jvm_pc,
         _ => unreachable!(),
     };
     if let Some(line) = crate::bootstrap::line_for(line_numbers, jvm_pc) {
         positions.push((insns.len() as u32, line));
     }
     match &f.values[v as usize].op {
-        SsaOp::ArrayGet { dex_op, array, index, .. } => {
+        SsaOp::ArrayGet {
+            dex_op,
+            array,
+            index,
+            ..
+        } => {
             insns.push(dex_op | (reg(v) << 8));
             insns.push((reg(*array) & 0xff) | ((reg(*index) & 0xff) << 8));
         }
-        SsaOp::ArrayPut { dex_op, array, index, value, .. } => {
+        SsaOp::ArrayPut {
+            dex_op,
+            array,
+            index,
+            value,
+            ..
+        } => {
             insns.push(dex_op | (reg(*value) << 8));
             insns.push((reg(*array) & 0xff) | ((reg(*index) & 0xff) << 8));
         }
@@ -4524,9 +5747,10 @@ fn emit_alloc(
 ) -> Result<()> {
     let reg = |x: ValId| alloc.reg[x as usize];
     let (type_desc, jvm_pc) = match &f.values[v as usize].op {
-        SsaOp::NewInstance { type_desc, jvm_pc } | SsaOp::NewArray { type_desc, jvm_pc, .. } => {
-            (type_desc.clone(), *jvm_pc)
-        }
+        SsaOp::NewInstance { type_desc, jvm_pc }
+        | SsaOp::NewArray {
+            type_desc, jvm_pc, ..
+        } => (type_desc.clone(), *jvm_pc),
         _ => unreachable!(),
     };
     if let Some(line) = crate::bootstrap::line_for(line_numbers, jvm_pc) {
@@ -4544,7 +5768,11 @@ fn emit_alloc(
     }
     let unit = insns.len();
     insns.push(0); // type-ref placeholder, patched via the fixup
-    pool_fixups.push(Fixup { unit, item: ItemRef::Type(type_desc), wide: false });
+    pool_fixups.push(Fixup {
+        unit,
+        item: ItemRef::Type(type_desc),
+        wide: false,
+    });
     Ok(())
 }
 
@@ -4565,7 +5793,11 @@ fn emit_check_cast(
 ) -> Result<()> {
     let reg = |x: ValId| alloc.reg[x as usize];
     let (obj, type_desc, jvm_pc) = match &f.values[v as usize].op {
-        SsaOp::CheckCast { obj, type_desc, jvm_pc } => (*obj, type_desc.clone(), *jvm_pc),
+        SsaOp::CheckCast {
+            obj,
+            type_desc,
+            jvm_pc,
+        } => (*obj, type_desc.clone(), *jvm_pc),
         _ => unreachable!(),
     };
     let (dest, src) = (reg(v), reg(obj));
@@ -4583,7 +5815,11 @@ fn emit_check_cast(
     insns.push(0x1f | (dest << 8));
     let unit = insns.len();
     insns.push(0); // type-ref placeholder, patched via the fixup
-    pool_fixups.push(Fixup { unit, item: ItemRef::Type(type_desc), wide: false });
+    pool_fixups.push(Fixup {
+        unit,
+        item: ItemRef::Type(type_desc),
+        wide: false,
+    });
     Ok(())
 }
 
@@ -4618,7 +5854,11 @@ fn emit_instance_of(
     insns.push(0x20 | nibw(dest_use, w, 8)? | nibw(src_use, w, 12)?);
     let unit = insns.len();
     insns.push(0); // type-ref placeholder, patched via the fixup
-    pool_fixups.push(Fixup { unit, item: ItemRef::Type(type_desc), wide: false });
+    pool_fixups.push(Fixup {
+        unit,
+        item: ItemRef::Type(type_desc),
+        wide: false,
+    });
     if reload {
         let na = f.num_arg_registers;
         let est = frame_hint.unwrap_or(alloc.registers_used.max(na));
@@ -4648,7 +5888,11 @@ fn emit_const_string(
     insns.push(0x1a | (alloc.reg[v as usize] << 8));
     let unit = insns.len();
     insns.push(0); // string-ref placeholder, patched via the fixup
-    pool_fixups.push(Fixup { unit, item: ItemRef::String(value), wide: false });
+    pool_fixups.push(Fixup {
+        unit,
+        item: ItemRef::String(value),
+        wide: false,
+    });
 }
 
 /// Emits `const-class dest, type@` (0x1c, 21c) — the `X.class` literal. Throwing
@@ -4672,7 +5916,11 @@ fn emit_const_class(
     insns.push(0x1c | (alloc.reg[v as usize] << 8));
     let unit = insns.len();
     insns.push(0); // type-ref placeholder, patched via the fixup
-    pool_fixups.push(Fixup { unit, item: ItemRef::Type(type_desc), wide: false });
+    pool_fixups.push(Fixup {
+        unit,
+        item: ItemRef::Type(type_desc),
+        wide: false,
+    });
 }
 
 /// Inserts φ-resolution moves at the end of block `b` (a predecessor): for each
@@ -4728,13 +5976,25 @@ fn emit_copy(
         r > 15 || top > 15 || remap(r) > 15 || remap(top) > 15
     };
     if !hi(dst) && !hi(src) {
-        let op: u16 = if wide { 0x04 } else if isref { 0x07 } else { 0x01 };
+        let op: u16 = if wide {
+            0x04
+        } else if isref {
+            0x07
+        } else {
+            0x01
+        };
         insns.push(op | ((dst & 0xf) << 8) | ((src & 0xf) << 12));
     } else {
         if dst > 0xff {
             bail!("ssa dexbuilder: copy dst v{dst} ≥256 (8-bit /from16 AA) — needs move/16");
         }
-        let op: u16 = if wide { 0x05 } else if isref { 0x08 } else { 0x02 };
+        let op: u16 = if wide {
+            0x05
+        } else if isref {
+            0x08
+        } else {
+            0x02
+        };
         insns.push(op | (dst << 8)); // 22x: AA dst in word0 high byte (allocated; remapped later)
         insns.push(src); // BBBB src in word1 (allocated; remapped later)
     }
@@ -4811,7 +6071,12 @@ fn emit_move_list(
         if overlap(occ(dst, wide), occ(src, wide)) {
             bail!("ssa dexbuilder: φ-move self-overlapping wide registers (not yet supported)");
         }
-        pend.push(M { dst, src, wide, isref });
+        pend.push(M {
+            dst,
+            src,
+            wide,
+            isref,
+        });
     }
     let mut out: Vec<M> = Vec::new();
     // φ dests are distinct, so `n.dst != m.dst` uniquely identifies "a different move".
@@ -4847,7 +6112,12 @@ fn emit_move_list(
             bail!("ssa dexbuilder: φ-move cycle scratch register {temp} ≥256 (needs move/16)");
         }
         *scratch_words = (*scratch_words).max(w);
-        out.push(M { dst: temp, src: m0.src, wide: m0.wide, isref: m0.isref });
+        out.push(M {
+            dst: temp,
+            src: m0.src,
+            wide: m0.wide,
+            isref: m0.isref,
+        });
         let sr = occ(m0.src, m0.wide);
         for n in pend.iter_mut() {
             if overlap(sr, occ(n.src, n.wide)) {
@@ -4959,7 +6229,14 @@ fn nibw(r: u16, word: usize, shift: u16) -> Result<u16> {
 }
 
 /// Emits the instruction defining `v` (the result lands in `reg(v)`).
-fn emit_value(f: &SsaFn, insns: &mut Vec<u16>, alloc: &Allocation, v: ValId, frame_hint: Option<u16>, spill_base: Option<u16>) -> Result<()> {
+fn emit_value(
+    f: &SsaFn,
+    insns: &mut Vec<u16>,
+    alloc: &Allocation,
+    v: ValId,
+    frame_hint: Option<u16>,
+    spill_base: Option<u16>,
+) -> Result<()> {
     let reg = |x: ValId| alloc.reg[x as usize];
     let dest = reg(v);
     let num_arg = f.num_arg_registers;
@@ -4970,11 +6247,26 @@ fn emit_value(f: &SsaFn, insns: &mut Vec<u16>, alloc: &Allocation, v: ValId, fra
         SsaOp::Unop { jvm_op, a } => {
             let dop = match jvm_op {
                 // negation: neg-int/long/float/double
-                0x74 => 0x7b, 0x75 => 0x7d, 0x76 => 0x7f, 0x77 => 0x80,
+                0x74 => 0x7b,
+                0x75 => 0x7d,
+                0x76 => 0x7f,
+                0x77 => 0x80,
                 // conversions (i2l..i2s) → DEX 0x81..0x8f (12x, A=dest, B=src)
-                0x85 => 0x81, 0x86 => 0x82, 0x87 => 0x83, 0x88 => 0x84, 0x89 => 0x85,
-                0x8a => 0x86, 0x8b => 0x87, 0x8c => 0x88, 0x8d => 0x89, 0x8e => 0x8a,
-                0x8f => 0x8b, 0x90 => 0x8c, 0x91 => 0x8d, 0x92 => 0x8e, 0x93 => 0x8f,
+                0x85 => 0x81,
+                0x86 => 0x82,
+                0x87 => 0x83,
+                0x88 => 0x84,
+                0x89 => 0x85,
+                0x8a => 0x86,
+                0x8b => 0x87,
+                0x8c => 0x88,
+                0x8d => 0x89,
+                0x8e => 0x8a,
+                0x8f => 0x8b,
+                0x90 => 0x8c,
+                0x91 => 0x8d,
+                0x92 => 0x8e,
+                0x93 => 0x8f,
                 other => bail!("ssa dexbuilder: unop {other:#x} unsupported"),
             };
             // A unop/conversion (neg-*, i2l..i2s) is 12x (nibble dest+src) with NO wider form, so a
@@ -4987,7 +6279,9 @@ fn emit_value(f: &SsaFn, insns: &mut Vec<u16>, alloc: &Allocation, v: ValId, fra
             let sw = f.values[*a as usize].wide;
             let hi = |r: u16, w: bool| {
                 let top = if w { r + 1 } else { r };
-                r >= 16 || top >= 16 || crate::regalloc::remap_register(r, num_arg, est) >= 16
+                r >= 16
+                    || top >= 16
+                    || crate::regalloc::remap_register(r, num_arg, est) >= 16
                     || crate::regalloc::remap_register(top, num_arg, est) >= 16
             };
             match spill_base {
@@ -5020,7 +6314,9 @@ fn emit_value(f: &SsaFn, insns: &mut Vec<u16>, alloc: &Allocation, v: ValId, fra
             insns.push(dop | (dest << 8));
             insns.push((reg(*a) & 0xff) | ((reg(*b) & 0xff) << 8));
         }
-        SsaOp::Binop { jvm_op, a, b, .. } => emit_binop(f, insns, alloc, dest, *jvm_op, *a, *b, frame_hint)?,
+        SsaOp::Binop { jvm_op, a, b, .. } => {
+            emit_binop(f, insns, alloc, dest, *jvm_op, *a, *b, frame_hint)?
+        }
         // Invokes/field-accesses are emitted by `emit_invoke`/`emit_field` (they
         // carry extra state); the rest define no emittable instruction on their own.
         SsaOp::Phi { .. }
@@ -5047,7 +6343,16 @@ fn emit_value(f: &SsaFn, insns: &mut Vec<u16>, alloc: &Allocation, v: ValId, fra
     Ok(())
 }
 
-fn emit_binop(f: &SsaFn, insns: &mut Vec<u16>, alloc: &Allocation, dest: u16, jvm_op: u8, a: ValId, b: ValId, frame_hint: Option<u16>) -> Result<()> {
+fn emit_binop(
+    f: &SsaFn,
+    insns: &mut Vec<u16>,
+    alloc: &Allocation,
+    dest: u16,
+    jvm_op: u8,
+    a: ValId,
+    b: ValId,
+    frame_hint: Option<u16>,
+) -> Result<()> {
     let reg = |x: ValId| alloc.reg[x as usize];
     // The compact /2addr form encodes both registers in 4-bit nibbles. Emit writes ALLOCATED
     // registers and `remap_insns` later remaps them args-high — so the choice of /2addr vs the
@@ -5081,7 +6386,11 @@ fn emit_binop(f: &SsaFn, insns: &mut Vec<u16>, alloc: &Allocation, dest: u16, jv
     // has no DEX lit form, so d8 folds it as `x + (-c)` (iadd lit op, negated const).
     if is_rematerialized(f, b) {
         if let SsaOp::ConstInt(c) = f.values[b as usize].op {
-            let (fold_op, fold_c) = if jvm_op == 0x64 { (0x60u8, -c) } else { (jvm_op, c) };
+            let (fold_op, fold_c) = if jvm_op == 0x64 {
+                (0x60u8, -c)
+            } else {
+                (jvm_op, c)
+            };
             if let Some((op8, op16)) = crate::bootstrap::lit_ops(fold_op) {
                 if (-128..=127).contains(&fold_c) {
                     insns.push(op8 | (dest << 8));
@@ -5107,7 +6416,9 @@ fn emit_binop(f: &SsaFn, insns: &mut Vec<u16>, alloc: &Allocation, dest: u16, jv
     // Lit-fold a COMMUTATIVE op whose LEFT operand is the rematerialized const: d8 folds
     // `3*n` as `mul-int/lit8 n, #3` (the variable `b` is the source, the const the
     // literal). Only int commutative ops have a lit form; others fall through to 3-addr.
-    if crate::bootstrap::is_commutative(jvm_op) && !is_rematerialized(f, b) && is_rematerialized(f, a)
+    if crate::bootstrap::is_commutative(jvm_op)
+        && !is_rematerialized(f, b)
+        && is_rematerialized(f, a)
     {
         if let SsaOp::ConstInt(c) = f.values[a as usize].op {
             if let Some((op8, op16)) = crate::bootstrap::lit_ops(jvm_op) {
@@ -5153,7 +6464,12 @@ fn emit_binop(f: &SsaFn, insns: &mut Vec<u16>, alloc: &Allocation, dest: u16, jv
             insns.push(op2 | ((dest as u16) << 8) | ((rb as u16) << 12));
             return Ok(());
         }
-        if !mul_bug && crate::bootstrap::is_commutative(jvm_op) && dest == rb && fits_nibble(dest) && fits_nibble(ra) {
+        if !mul_bug
+            && crate::bootstrap::is_commutative(jvm_op)
+            && dest == rb
+            && fits_nibble(dest)
+            && fits_nibble(ra)
+        {
             insns.push(op2 | ((dest as u16) << 8) | ((ra as u16) << 12));
             return Ok(());
         }
@@ -5186,8 +6502,8 @@ fn emit_const_int(insns: &mut Vec<u16>, reg: u16, c: i32, num_arg: u16, est: u16
     // number (a const can be allocated to a dead-argument register that remaps high). A register
     // ≥16 falls to const/16 (21s, 8-bit AA), which covers the same small constants. ≤16-register
     // methods keep const/4 — byte-identical to before.
-    let fits_nibble = reg <= 15
-        && crate::regalloc::remap_register(reg, num_arg, est.max(num_arg).max(1)) <= 15;
+    let fits_nibble =
+        reg <= 15 && crate::regalloc::remap_register(reg, num_arg, est.max(num_arg).max(1)) <= 15;
     if (-8..=7).contains(&c) && fits_nibble {
         insns.push(0x12 | (((c as u16 & 0xf) << 4 | reg) << 8));
     } else if (-32768..=32767).contains(&c) {
@@ -5231,7 +6547,10 @@ mod tests {
     fn reserve_scratch_shifts_locals_keeps_args() {
         // num_arg = 2 (allocated 0,1 are args). Locals at allocated 2,3,4; a rematerialized
         // const at NO_REG. Reserve k=2: args unchanged, locals += 2, NO_REG untouched, frame +2.
-        let mut a = Allocation { reg: vec![0, 1, 2, 3, 4, NO_REG], registers_used: 5 };
+        let mut a = Allocation {
+            reg: vec![0, 1, 2, 3, 4, NO_REG],
+            registers_used: 5,
+        };
         reserve_scratch(&mut a, 2, 2);
         assert_eq!(a.reg, vec![0, 1, 4, 5, 6, NO_REG]);
         assert_eq!(a.registers_used, 7);
@@ -5240,15 +6559,18 @@ mod tests {
         assert_eq!(crate::regalloc::remap_register(2, 2, 7), 0);
         assert_eq!(crate::regalloc::remap_register(3, 2, 7), 1);
         // k=0 is the identity.
-        let mut b = Allocation { reg: vec![0, 1, 2], registers_used: 3 };
+        let mut b = Allocation {
+            reg: vec![0, 1, 2],
+            registers_used: 3,
+        };
         reserve_scratch(&mut b, 1, 0);
         assert_eq!((b.reg, b.registers_used), (vec![0, 1, 2], 3));
     }
 
     #[test]
     fn count_loop_phi() {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../skotch-dex/tests/fixtures/Loop.class");
+        let path =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../skotch-dex/tests/fixtures/Loop.class");
         let cf = skotch_classfile::parse_class_file(&path).unwrap();
         let m = cf.methods.iter().find(|m| m.name == "count").unwrap();
         let bc = &m.code.as_ref().unwrap().bytecode;
@@ -5273,8 +6595,8 @@ mod tests {
     }
 
     fn build(method: &str, params: &[&str]) -> SsaFn {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../skotch-dex/tests/fixtures/Loop.class");
+        let path =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../skotch-dex/tests/fixtures/Loop.class");
         let cf = skotch_classfile::parse_class_file(&path).unwrap();
         let m = cf.methods.iter().find(|m| m.name == method).unwrap();
         let bc = &m.code.as_ref().unwrap().bytecode;
@@ -5291,7 +6613,15 @@ mod tests {
         let m = cf.methods.iter().find(|m| m.name == method).unwrap();
         let code = m.code.as_ref().unwrap();
         let ps: Vec<String> = params.iter().map(|s| s.to_string()).collect();
-        dex_method_ssa(&cf, &code.bytecode, &ps, false, &code.line_numbers, &code.exceptions).unwrap()
+        dex_method_ssa(
+            &cf,
+            &code.bytecode,
+            &ps,
+            false,
+            &code.line_numbers,
+            &code.exceptions,
+        )
+        .unwrap()
     }
 
     #[test]
@@ -5303,7 +6633,10 @@ mod tests {
             .find(|v| matches!(v.op, SsaOp::Phi { .. }))
             .expect("a φ for the loop variable");
         if let SsaOp::Phi { operands, slot } = &phi.op {
-            eprintln!("count φ slot={slot} operands={operands:?}, {} values", f.values.len());
+            eprintln!(
+                "count φ slot={slot} operands={operands:?}, {} values",
+                f.values.len()
+            );
             // Loop header has two preds (entry + back-edge) → two φ operands.
             assert_eq!(operands.len(), 2, "loop φ should have one operand per pred");
         }
@@ -5316,13 +6649,26 @@ mod tests {
         let ivs = live_intervals(&f, &num);
         eprintln!("count block_span={:?}", num.block_span);
         for iv in &ivs {
-            eprintln!("  v{} [{},{}) {:?}", iv.value, iv.start, iv.end, f.values[iv.value as usize].op);
+            eprintln!(
+                "  v{} [{},{}) {:?}",
+                iv.value, iv.start, iv.end, f.values[iv.value as usize].op
+            );
         }
         // The loop φ for `c` is live across the loop body, so its interval must
         // extend past its own definition point (a single number).
-        let phi = f.values.iter().find(|v| matches!(v.op, SsaOp::Phi { .. })).unwrap();
-        let iv = ivs.iter().find(|i| i.value == phi.id).expect("interval for loop φ");
-        assert!(iv.end > iv.start, "loop φ interval should span the loop: {iv:?}");
+        let phi = f
+            .values
+            .iter()
+            .find(|v| matches!(v.op, SsaOp::Phi { .. }))
+            .unwrap();
+        let iv = ivs
+            .iter()
+            .find(|i| i.value == phi.id)
+            .expect("interval for loop φ");
+        assert!(
+            iv.end > iv.start,
+            "loop φ interval should span the loop: {iv:?}"
+        );
     }
 
     #[test]
@@ -5332,11 +6678,36 @@ mod tests {
         let ivs = live_intervals(&f, &num);
         let alloc = allocate(&f, &num, &ivs);
         // Identify values by op.
-        let n = f.values.iter().find(|v| matches!(v.op, SsaOp::Argument { .. })).unwrap().id;
-        let phi = f.values.iter().find(|v| matches!(v.op, SsaOp::Phi { .. })).unwrap().id;
-        let init = f.values.iter().find(|v| matches!(v.op, SsaOp::ConstInt(0))).unwrap().id;
-        let inc = f.values.iter().find(|v| matches!(v.op, SsaOp::ConstInt(1))).unwrap().id;
-        let add = f.values.iter().find(|v| matches!(v.op, SsaOp::Binop { .. })).unwrap().id;
+        let n = f
+            .values
+            .iter()
+            .find(|v| matches!(v.op, SsaOp::Argument { .. }))
+            .unwrap()
+            .id;
+        let phi = f
+            .values
+            .iter()
+            .find(|v| matches!(v.op, SsaOp::Phi { .. }))
+            .unwrap()
+            .id;
+        let init = f
+            .values
+            .iter()
+            .find(|v| matches!(v.op, SsaOp::ConstInt(0)))
+            .unwrap()
+            .id;
+        let inc = f
+            .values
+            .iter()
+            .find(|v| matches!(v.op, SsaOp::ConstInt(1)))
+            .unwrap()
+            .id;
+        let add = f
+            .values
+            .iter()
+            .find(|v| matches!(v.op, SsaOp::Binop { .. }))
+            .unwrap()
+            .id;
         eprintln!(
             "count alloc: n=v{n}->{} phi=v{phi}->{} init=v{init}->{} inc=v{inc}->{} add=v{add}->{} regs={}",
             alloc.reg[n as usize], alloc.reg[phi as usize], alloc.reg[init as usize],
@@ -5350,10 +6721,19 @@ mod tests {
         assert_eq!(alloc.reg[init as usize], c, "initial c coalesced with φ");
         assert_eq!(alloc.reg[add as usize], c, "back-edge c+1 coalesced with φ");
         assert_ne!(c, 0, "c distinct from n in allocated space");
-        assert_eq!(alloc.reg[inc as usize], NO_REG, "iinc constant rematerialized");
+        assert_eq!(
+            alloc.reg[inc as usize], NO_REG,
+            "iinc constant rematerialized"
+        );
         // After the args-high remap: c→v0 (low), n→v1 (high) — exactly d8.
-        assert_eq!(crate::regalloc::remap_register(alloc.reg[phi as usize], 1, 2), 0);
-        assert_eq!(crate::regalloc::remap_register(alloc.reg[n as usize], 1, 2), 1);
+        assert_eq!(
+            crate::regalloc::remap_register(alloc.reg[phi as usize], 1, 2),
+            0
+        );
+        assert_eq!(
+            crate::regalloc::remap_register(alloc.reg[n as usize], 1, 2),
+            1
+        );
     }
 
     #[test]
@@ -5367,7 +6747,10 @@ mod tests {
             code.insns, code.registers_size
         );
         assert_eq!(code.registers_size, 2);
-        assert_eq!(code.insns, expected, "count loop must be byte-identical to d8");
+        assert_eq!(
+            code.insns, expected,
+            "count loop must be byte-identical to d8"
+        );
     }
 
     #[test]
@@ -5378,13 +6761,24 @@ mod tests {
         // edge. That move is now emitted (entry-move / fall-through inline / taken
         // trampoline) instead of bailing. Correctness PROVEN on ART by tests/art/ArtClamp
         // (clampSum(10/3/20) → 35,3,85); here we just assert it dexes (no bail).
-        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../skotch-dex/tests/fixtures/Clamp.class");
+        let path =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../skotch-dex/tests/fixtures/Clamp.class");
         let cf = skotch_classfile::parse_class_file(&path).unwrap();
         let m = cf.methods.iter().find(|m| m.name == "clampSum").unwrap();
         let c = m.code.as_ref().unwrap();
-        let r = dex_method_ssa(&cf, &c.bytecode, &["I".to_string()], false, &c.line_numbers, &c.exceptions);
-        assert!(r.is_ok(), "clampSum should dex now (φ-move on a critical edge): {:#}", r.err().unwrap());
+        let r = dex_method_ssa(
+            &cf,
+            &c.bytecode,
+            &["I".to_string()],
+            false,
+            &c.line_numbers,
+            &c.exceptions,
+        );
+        assert!(
+            r.is_ok(),
+            "clampSum should dex now (φ-move on a critical edge): {:#}",
+            r.err().unwrap()
+        );
     }
 
     #[test]
@@ -5403,12 +6797,20 @@ mod tests {
             0xf728, // goto -9
             0x010f, // return v1
         ];
-        eprintln!("sumTwice produced: {:04x?} (regs={} outs={})", code.insns, code.registers_size, code.outs_size);
-        assert_eq!(code.insns, expected, "static call in loop must match d8 (modulo pool idx)");
+        eprintln!(
+            "sumTwice produced: {:04x?} (regs={} outs={})",
+            code.insns, code.registers_size, code.outs_size
+        );
+        assert_eq!(
+            code.insns, expected,
+            "static call in loop must match d8 (modulo pool idx)"
+        );
         assert_eq!(code.registers_size, 4);
         assert_eq!(code.outs_size, 1);
         assert_eq!(code.fixups.len(), 1, "one method-ref fixup");
-        let dbg = code.debug_info.expect("invoke is throwing → a debug position");
+        let dbg = code
+            .debug_info
+            .expect("invoke is throwing → a debug position");
         assert_eq!(dbg.line_start, 3, "position line for the call site");
     }
 
@@ -5418,27 +6820,44 @@ mod tests {
         // d8: const/4 v0,#0; const/4 v1,#0; if-ge v0,v2,+6; add-int/2addr v1,v0;
         //     add-int/lit8 v0,v0,#1; goto -5; return v1
         // (i is the counter → v0/low register; s is the accumulator → v1; n → v2).
-        let expected: Vec<u16> =
-            vec![0x0012, 0x0112, 0x2035, 0x0006, 0x01b0, 0x00d8, 0x0100, 0xfb28, 0x010f];
-        eprintln!("sumTo produced: {:04x?} (regs={})", code.insns, code.registers_size);
+        let expected: Vec<u16> = vec![
+            0x0012, 0x0112, 0x2035, 0x0006, 0x01b0, 0x00d8, 0x0100, 0xfb28, 0x010f,
+        ];
+        eprintln!(
+            "sumTo produced: {:04x?} (regs={})",
+            code.insns, code.registers_size
+        );
         assert_eq!(code.registers_size, 3);
-        assert_eq!(code.insns, expected, "two-loop-variable loop must be byte-identical to d8");
+        assert_eq!(
+            code.insns, expected,
+            "two-loop-variable loop must be byte-identical to d8"
+        );
     }
 
     fn diag(name: &str, expected: &[u16], regs: u16) -> bool {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../skotch-dex/tests/fixtures/Loops2.class");
+        let path =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../skotch-dex/tests/fixtures/Loops2.class");
         let cf = skotch_classfile::parse_class_file(&path).unwrap();
         let m = cf.methods.iter().find(|m| m.name == name).unwrap();
         let c = m.code.as_ref().unwrap();
-        let code = match dex_method_ssa(&cf, &c.bytecode, &["I".to_string()], false, &c.line_numbers, &c.exceptions) {
+        let code = match dex_method_ssa(
+            &cf,
+            &c.bytecode,
+            &["I".to_string()],
+            false,
+            &c.line_numbers,
+            &c.exceptions,
+        ) {
             Ok(c) => c,
             Err(e) => {
                 eprintln!("{name} BAILS: {e}");
                 return false;
             }
         };
-        eprintln!("{name} produced: {:04x?} (regs={})", code.insns, code.registers_size);
+        eprintln!(
+            "{name} produced: {:04x?} (regs={})",
+            code.insns, code.registers_size
+        );
         eprintln!("{name} expected: {expected:04x?} (regs={regs})");
         let ok = code.insns == expected && code.registers_size == regs;
         eprintln!("{name}: {}", if ok { "MATCH" } else { "DIVERGES" });
@@ -5449,7 +6868,9 @@ mod tests {
     fn down_dex_byte_identical() {
         // `for(i=n;i>0;i--) s+=i` — counter i coalesces with the arg n (no init
         // const), if-lez condition, s+=i (2addr), i-- (add-int/lit8 -1).
-        let expected = [0x0012, 0x013d, 0x0006, 0x10b0, 0x01d8, 0xff01, 0xfb28, 0x000f];
+        let expected = [
+            0x0012, 0x013d, 0x0006, 0x10b0, 0x01d8, 0xff01, 0xfb28, 0x000f,
+        ];
         assert!(diag("down", &expected, 2), "down must match d8");
     }
 
@@ -5457,8 +6878,9 @@ mod tests {
     fn fact_dex_byte_identical() {
         // `for(i=1;i<=n;i++) p*=i` — if-gt condition; the mul-int bug forces the
         // 3-address form, whose sources keep source order (`mul-int v1, v1, v0`).
-        let expected =
-            [0x1012, 0x1112, 0x2036, 0x0007, 0x0192, 0x0001, 0x00d8, 0x0100, 0xfa28, 0x010f];
+        let expected = [
+            0x1012, 0x1112, 0x2036, 0x0007, 0x0192, 0x0001, 0x00d8, 0x0100, 0xfa28, 0x010f,
+        ];
         assert!(diag("fact", &expected, 3), "fact must match d8");
     }
 
@@ -5470,17 +6892,29 @@ mod tests {
         // We now DEX nested loops (functional-correctness; ART-validated via ArtNested) —
         // this diagnostic just confirms the (acceptable, smaller) byte divergence from d8.
         let expected = [
-            0x0012, 0x0112, 0x0212, 0x5135, 0x000e, 0x0312, 0x5335, 0x0008, 0x0492, 0x0301,
-            0x42b0, 0x03d8, 0x0103, 0xf928, 0x01d8, 0x0101, 0xf328, 0x020f,
+            0x0012, 0x0112, 0x0212, 0x5135, 0x000e, 0x0312, 0x5335, 0x0008, 0x0492, 0x0301, 0x42b0,
+            0x03d8, 0x0103, 0xf928, 0x01d8, 0x0101, 0xf328, 0x020f,
         ];
-        assert!(!diag("grid", &expected, 6), "grid: expected (acceptable) divergence from d8's dead-const shape");
+        assert!(
+            !diag("grid", &expected, 6),
+            "grid: expected (acceptable) divergence from d8's dead-const shape"
+        );
     }
 
     #[test]
     fn sumto_ssa_structure() {
         let f = build("sumTo", &["I"]);
-        let phi_count = f.values.iter().filter(|v| matches!(v.op, SsaOp::Phi { .. })).count();
-        eprintln!("sumTo: {} φ-nodes, {} values, {} blocks", phi_count, f.values.len(), f.blocks.len());
+        let phi_count = f
+            .values
+            .iter()
+            .filter(|v| matches!(v.op, SsaOp::Phi { .. }))
+            .count();
+        eprintln!(
+            "sumTo: {} φ-nodes, {} values, {} blocks",
+            phi_count,
+            f.values.len(),
+            f.blocks.len()
+        );
         // Two loop-carried locals (i and s) → two φ-nodes at the header.
         assert_eq!(phi_count, 2, "sumTo should have φ-nodes for i and s");
         for v in &f.values {

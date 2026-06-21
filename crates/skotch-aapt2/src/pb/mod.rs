@@ -32,7 +32,10 @@ pub use crate::res::value as value_model;
 
 /// The tool fingerprint written into serialized tables.
 pub fn tool_fingerprint() -> (String, String) {
-    ("Android Asset Packaging Tool (aapt)".to_string(), format!("skotch-{}", env!("CARGO_PKG_VERSION")))
+    (
+        "Android Asset Packaging Tool (aapt)".to_string(),
+        format!("skotch-{}", env!("CARGO_PKG_VERSION")),
+    )
 }
 
 // ───────────────────────── source pool ─────────────────────────
@@ -507,7 +510,10 @@ pub fn decode_item_with_flags(data: &[u8]) -> Result<Option<ItemValue>> {
                         value = f.as_string();
                     }
                 }
-                item = Some(Item::String { value, untranslatable_sections: vec![] });
+                item = Some(Item::String {
+                    value,
+                    untranslatable_sections: vec![],
+                });
             }
             (3, WIRE_LEN) => {
                 let mut value = String::new();
@@ -527,7 +533,11 @@ pub fn decode_item_with_flags(data: &[u8]) -> Result<Option<ItemValue>> {
                     match (f.number, f.wire_type) {
                         (1, WIRE_LEN) => value = f.as_string(),
                         (2, WIRE_LEN) => {
-                            let mut span = Span { name: String::new(), first_char: 0, last_char: 0 };
+                            let mut span = Span {
+                                name: String::new(),
+                                first_char: 0,
+                                last_char: 0,
+                            };
                             let mut span_reader = Reader::new(f.data);
                             while let Some(sf) = span_reader.next_field() {
                                 match sf.number {
@@ -542,7 +552,11 @@ pub fn decode_item_with_flags(data: &[u8]) -> Result<Option<ItemValue>> {
                         _ => {}
                     }
                 }
-                item = Some(Item::StyledString { value, spans, untranslatable_sections: vec![] });
+                item = Some(Item::StyledString {
+                    value,
+                    spans,
+                    untranslatable_sections: vec![],
+                });
             }
             (5, WIRE_LEN) => {
                 let mut file = FileReference::default();
@@ -578,7 +592,10 @@ pub fn decode_item_with_flags(data: &[u8]) -> Result<Option<ItemValue>> {
         }
     }
     if has_flag {
-        meta.flag = Some(FeatureFlagAttribute { name: flag_name, negated: flag_negated });
+        meta.flag = Some(FeatureFlagAttribute {
+            name: flag_name,
+            negated: flag_negated,
+        });
     }
     Ok(item.map(|item| ItemValue { item, meta }))
 }
@@ -624,7 +641,11 @@ fn encode_value(w: &mut Writer, value: &Value, pool: Option<&mut SourcePathPool>
                                 ew.string(2, &entry.comment);
                                 ew.message(3, |rw| encode_reference(rw, &entry.key));
                                 ew.message(4, |iw| {
-                                    encode_item_with_flags(iw, &entry.value.item, Some(&entry.value.meta))
+                                    encode_item_with_flags(
+                                        iw,
+                                        &entry.value.item,
+                                        Some(&entry.value.meta),
+                                    )
                                 });
                             });
                         }
@@ -654,7 +675,11 @@ fn encode_value(w: &mut Writer, value: &Value, pool: Option<&mut SourcePathPool>
                                 ew.string(2, &item_value.meta.comment);
                                 ew.varint(3, index as u64);
                                 ew.message(4, |iw| {
-                                    encode_item_with_flags(iw, &item_value.item, Some(&item_value.meta))
+                                    encode_item_with_flags(
+                                        iw,
+                                        &item_value.item,
+                                        Some(&item_value.meta),
+                                    )
                                 });
                             });
                         }
@@ -721,7 +746,10 @@ fn decode_value(data: &[u8], pool: Option<&BinaryStringPool>) -> Result<Value> {
             _ => {}
         }
     }
-    Ok(Value { kind: kind.ok_or_else(|| anyhow!("pb.Value has no value set"))?, meta })
+    Ok(Value {
+        kind: kind.ok_or_else(|| anyhow!("pb.Value has no value set"))?,
+        meta,
+    })
 }
 
 fn decode_compound_value(
@@ -804,8 +832,8 @@ fn decode_compound_value(
                                     _ => {}
                                 }
                             }
-                            entry.value = item
-                                .ok_or_else(|| anyhow!("pb.Style.Entry has no item"))?;
+                            entry.value =
+                                item.ok_or_else(|| anyhow!("pb.Style.Entry has no item"))?;
                             style.entries.push(entry);
                         }
                         _ => {}
@@ -868,7 +896,9 @@ fn decode_compound_value(
                             match (ef.number, ef.wire_type) {
                                 (1, WIRE_LEN) => source = decode_source(ef.data, pool),
                                 (2, WIRE_LEN) => comment = ef.as_string(),
-                                (3, _) => arity = (ef.value as usize).min(crate::res::value::PLURAL_OTHER),
+                                (3, _) => {
+                                    arity = (ef.value as usize).min(crate::res::value::PLURAL_OTHER)
+                                }
                                 (4, WIRE_LEN) => item = decode_item_with_flags(ef.data)?,
                                 _ => {}
                             }
@@ -955,7 +985,10 @@ fn decode_compound_value(
         }
     }
     if has_flag {
-        meta.flag = Some(FeatureFlagAttribute { name: flag_name, negated: flag_negated });
+        meta.flag = Some(FeatureFlagAttribute {
+            name: flag_name,
+            negated: flag_negated,
+        });
     }
     kind.ok_or_else(|| anyhow!("pb.CompoundValue has no value set"))
 }
@@ -972,7 +1005,11 @@ pub struct SerializeTableOptions {
 /// Encodes a [`ResourceTable`] as a serialized `aapt.pb.ResourceTable`.
 /// Port of `SerializeTableToPb`.
 pub fn encode_table(table: &ResourceTable, options: &SerializeTableOptions) -> Vec<u8> {
-    let mut pool = if options.exclude_sources { None } else { Some(SourcePathPool::default()) };
+    let mut pool = if options.exclude_sources {
+        None
+    } else {
+        Some(SourcePathPool::default())
+    };
 
     // Encode the package list into a scratch buffer first: it fills the
     // source pool, which must be written as field 1.
@@ -1089,10 +1126,16 @@ pub fn encode_table(table: &ResourceTable, options: &SerializeTableOptions) -> V
                             }
 
                             for config_value in &entry.values {
-                                let Some(value) = &config_value.value else { continue };
+                                let Some(value) = &config_value.value else {
+                                    continue;
+                                };
                                 ew.message(6, |cw| {
                                     cw.message(1, |conf| {
-                                        encode_config(conf, &config_value.config, &config_value.product)
+                                        encode_config(
+                                            conf,
+                                            &config_value.config,
+                                            &config_value.product,
+                                        )
                                     });
                                     cw.message(2, |vw| encode_value(vw, value, pool.as_mut()));
                                 });
@@ -1105,10 +1148,16 @@ pub fn encode_table(table: &ResourceTable, options: &SerializeTableOptions) -> V
                             }
 
                             for config_value in &entry.flag_disabled_values {
-                                let Some(value) = &config_value.value else { continue };
+                                let Some(value) = &config_value.value else {
+                                    continue;
+                                };
                                 ew.message(8, |cw| {
                                     cw.message(1, |conf| {
-                                        encode_config(conf, &config_value.config, &config_value.product)
+                                        encode_config(
+                                            conf,
+                                            &config_value.config,
+                                            &config_value.product,
+                                        )
                                     });
                                     cw.message(2, |vw| encode_value(vw, value, pool.as_mut()));
                                 });
@@ -1459,7 +1508,9 @@ fn decode_entry(
         shell = shell.staged_id(staged);
     }
     if !added_anything || shell.visibility.is_some() || shell.overlayable.is_some() {
-        table.add_resource_overlay(shell).map_err(|e| anyhow!("{e}"))?;
+        table
+            .add_resource_overlay(shell)
+            .map_err(|e| anyhow!("{e}"))?;
     }
     Ok(())
 }
@@ -1563,7 +1614,8 @@ pub fn decode_compiled_file(data: &[u8]) -> Result<ResourceFile> {
                     }
                 }
                 if let Some(name) = name {
-                    file.exported_symbols.push(SourcedResourceName { name, line });
+                    file.exported_symbols
+                        .push(SourcedResourceName { name, line });
                 }
             }
             (6, _) => file.flag_status = FlagStatus::from_u32(field.value as u32),
@@ -1579,7 +1631,10 @@ pub fn decode_compiled_file(data: &[u8]) -> Result<ResourceFile> {
         }
     }
     if has_flag {
-        file.flag = Some(FeatureFlagAttribute { name: flag_name, negated: flag_negated });
+        file.flag = Some(FeatureFlagAttribute {
+            name: flag_name,
+            negated: flag_negated,
+        });
     }
     Ok(file)
 }
@@ -1611,7 +1666,11 @@ mod tests {
             "Theme",
         )));
         style.entries.push(StyleEntry {
-            key: Reference::from_name(ResourceName::new("android", ResourceType::Attr, "background")),
+            key: Reference::from_name(ResourceName::new(
+                "android",
+                ResourceType::Attr,
+                "background",
+            )),
             value: ItemValue::new(Item::BinaryPrimitive(ResValue::new(
                 res_value_type::TYPE_INT_COLOR_ARGB8,
                 0xff00ff00,
@@ -1718,7 +1777,11 @@ mod tests {
             let mut w = Writer::new();
             encode_primitive(&mut w, &ResValue::new(data_type, data));
             let decoded = decode_primitive(&w.buf).unwrap();
-            assert_eq!(decoded, ResValue::new(data_type, data), "type 0x{data_type:02x}");
+            assert_eq!(
+                decoded,
+                ResValue::new(data_type, data),
+                "type 0x{data_type:02x}"
+            );
         }
     }
 }
