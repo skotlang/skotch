@@ -24870,6 +24870,17 @@ fn method_simple_body_full(
                         }
                     }
                 }
+                // Bail on loop statements (While, For, DoWhile): these
+                // need CFG multi-block lowering via lower_loop_body_blocks,
+                // not single-slot expression lowering. Routing them
+                // through lower_rich_expr_to_slot would silently fail and
+                // produce empty MIR. Force the mini-walker to bail so the
+                // builder fallback (try_lower_function_body_via_blocks)
+                // takes over.
+                if matches!(stmt_e, KtExpr::While(_) | KtExpr::For(_) | KtExpr::DoWhile(_)) {
+                    mini_ok = false;
+                    break;
+                }
                 match stmt_e {
                     KtExpr::Return(r) => {
                         let inner = skotch_ast::children(r.syntax())
