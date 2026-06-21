@@ -3970,6 +3970,7 @@ fn try_lower_when_expression(
     w: &skotch_ast::KtWhen<'_>,
     f: skotch_ast::KtFun<'_>,
     strings: &mut Vec<String>,
+    fn_lookup: &rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)>,
     val_lookup: &rustc_hash::FxHashMap<String, Ty>,
     wrapper_class: &str,
 ) -> Option<(Vec<BasicBlock>, Vec<Ty>)> {
@@ -4240,13 +4241,10 @@ fn try_lower_when_expression(
                             .position(|p| p == n)
                             .map(|i| LocalId(i as u32))
                     };
-                    let empty_fn_lookup:
-                        rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)> =
-                        rustc_hash::FxHashMap::default();
                     lower_rich_expr_to_slot(
                         *cond_expr,
                         &lookup,
-                        &empty_fn_lookup,
+                        fn_lookup,
                         &mut next_slot,
                         &mut cmp_stmts,
                         &mut extra_locals,
@@ -4442,13 +4440,10 @@ fn try_lower_when_expression(
                     .position(|p| p == n)
                     .map(|i| LocalId(i as u32))
             };
-            let empty_fn_lookup:
-                rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)> =
-                rustc_hash::FxHashMap::default();
             lower_rich_expr_to_slot(
                 *body,
                 &lookup,
-                &empty_fn_lookup,
+                fn_lookup,
                 &mut next_slot,
                 &mut then_stmts,
                 &mut extra_locals,
@@ -22719,7 +22714,7 @@ fn lower_simple_body(
     // when (subject) { v1 -> result1; v2 -> result2; else -> default }
     // expression body. Lowers to a chain of comparison blocks.
     if let KtExpr::When(w) = &body_expr {
-        if let Some(lowered) = try_lower_when_expression(w, f, strings, val_lookup, wrapper_class) {
+        if let Some(lowered) = try_lower_when_expression(w, f, strings, fn_lookup, val_lookup, wrapper_class) {
             return lowered;
         }
     }
