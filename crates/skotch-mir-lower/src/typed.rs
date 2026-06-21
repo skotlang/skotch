@@ -16848,10 +16848,11 @@ fn lower_rich_expr_to_slot(
         // Lambda name first; we patch fields after counter assignment.
         let lambda_idx = next_lambda_idx();
         let lambda_name = format!("Lambda${}", lambda_idx);
-        for (cap_name, _) in &captures {
+        for (cap_name, cap_slot) in &captures {
+            let cap_ty = slot_ty_with_param_fallback(cap_slot.0, extra_locals);
             let field_slot = LocalId(next_slot_inv);
             next_slot_inv += 1;
-            extra_locals_inv.push(Ty::Any);
+            extra_locals_inv.push(cap_ty);
             pre_stmts_inv.push(MStmt::Assign {
                 dest: field_slot,
                 value: skotch_mir::Rvalue::GetField {
@@ -17011,8 +17012,8 @@ fn lower_rich_expr_to_slot(
         let n_captures = captures.len();
         let mut ctor_locals: Vec<Ty> = Vec::with_capacity(1 + n_captures);
         ctor_locals.push(Ty::Class(lambda_name.clone()));
-        for _ in 0..n_captures {
-            ctor_locals.push(Ty::Any);
+        for (_, cap_slot) in &captures {
+            ctor_locals.push(slot_ty_with_param_fallback(cap_slot.0, extra_locals));
         }
         let ctor_params: Vec<LocalId> =
             (0..=n_captures).map(|i| LocalId(i as u32)).collect();
@@ -17072,9 +17073,9 @@ fn lower_rich_expr_to_slot(
         };
         let capture_fields: Vec<skotch_mir::MirField> = captures
             .iter()
-            .map(|(n, _)| skotch_mir::MirField {
+            .map(|(n, cap_slot)| skotch_mir::MirField {
                 name: n.clone(),
-                ty: Ty::Any,
+                ty: slot_ty_with_param_fallback(cap_slot.0, extra_locals),
                 is_jvm_field: false,
             })
             .collect();
@@ -17308,10 +17309,11 @@ fn lower_rich_expr_to_slot(
                 .map(|(i, n)| (n.clone(), LocalId((1 + i) as u32)))
                 .collect();
             // Pre-load captures as fields at start of method body.
-            for (cap_name, _) in &captures {
+            for (cap_name, cap_slot) in &captures {
+                let cap_ty = slot_ty_with_param_fallback(cap_slot.0, extra_locals);
                 let field_slot = LocalId(next_slot_m);
                 next_slot_m += 1;
-                extra_locals_m.push(Ty::Any);
+                extra_locals_m.push(cap_ty);
                 pre_stmts_m.push(MStmt::Assign {
                     dest: field_slot,
                     value: skotch_mir::Rvalue::GetField {
@@ -17389,8 +17391,8 @@ fn lower_rich_expr_to_slot(
         let n_captures = captures.len();
         let mut ctor_locals: Vec<Ty> = Vec::with_capacity(1 + n_captures);
         ctor_locals.push(Ty::Class(obj_name.clone()));
-        for _ in 0..n_captures {
-            ctor_locals.push(Ty::Any);
+        for (_, cap_slot) in &captures {
+            ctor_locals.push(slot_ty_with_param_fallback(cap_slot.0, extra_locals));
         }
         let ctor_params: Vec<LocalId> =
             (0..=n_captures).map(|i| LocalId(i as u32)).collect();
@@ -17448,9 +17450,9 @@ fn lower_rich_expr_to_slot(
         };
         let capture_fields: Vec<skotch_mir::MirField> = captures
             .iter()
-            .map(|(n, _)| skotch_mir::MirField {
+            .map(|(n, cap_slot)| skotch_mir::MirField {
                 name: n.clone(),
-                ty: Ty::Any,
+                ty: slot_ty_with_param_fallback(cap_slot.0, extra_locals),
                 is_jvm_field: false,
             })
             .collect();
