@@ -1864,19 +1864,170 @@ pub fn lower_file(
                 Some(n) => n.to_string(),
                 None => continue,
             };
-            let static_fields: Vec<skotch_mir::MirField> = e
+            let entry_names: Vec<String> = e
                 .body()
                 .map(|body| {
                     body.enum_entries()
                         .filter_map(|entry| entry.name())
-                        .map(|entry_name| skotch_mir::MirField {
-                            name: entry_name.to_string(),
-                            ty: Ty::Class(name.clone()),
-                            is_jvm_field: false,
-                        })
+                        .map(|n| n.to_string())
                         .collect()
                 })
                 .unwrap_or_default();
+            let static_fields: Vec<skotch_mir::MirField> = entry_names
+                .iter()
+                .map(|entry_name| skotch_mir::MirField {
+                    name: entry_name.clone(),
+                    ty: Ty::Class(name.clone()),
+                    is_jvm_field: false,
+                })
+                .collect();
+            // Synthesize enum <init>(String, int) that calls
+            // super(name, ordinal) on java/lang/Enum. The shape mirrors
+            // empty_constructor_super except for the additional name+ord
+            // params threaded into the super-call args; the backend's
+            // receiver_in_args heuristic at class_writer.rs:~16584
+            // recognizes the args[0]==this pattern and emits the correct
+            // invokespecial descriptor (Ljava/lang/String;I)V.
+            let ctor_this = skotch_mir::LocalId(0);
+            let ctor_name = skotch_mir::LocalId(1);
+            let ctor_ord = skotch_mir::LocalId(2);
+            let constructor = MirFunction {
+                id: FuncId(0),
+                name: "<init>".to_string(),
+                params: vec![ctor_this, ctor_name, ctor_ord],
+                locals: vec![Ty::Class(name.clone()), Ty::String, Ty::Int],
+                blocks: vec![BasicBlock {
+                    stmts: vec![skotch_mir::Stmt::Assign {
+                        dest: ctor_this,
+                        value: skotch_mir::Rvalue::Call {
+                            kind: skotch_mir::CallKind::Constructor(
+                                "java/lang/Enum".to_string(),
+                            ),
+                            args: vec![ctor_this, ctor_name, ctor_ord],
+                        },
+                    }],
+                    terminator: Terminator::Return,
+                }],
+                return_ty: Ty::Unit,
+                required_params: 2,
+                param_names: vec!["name".to_string(), "ordinal".to_string()],
+                param_receiver_types: Vec::new(),
+                param_defaults: Vec::new(),
+                is_abstract: false,
+                vararg_index: None,
+                exception_handlers: Vec::new(),
+                is_suspend: false,
+                is_inline: false,
+                has_type_params: false,
+                suspend_original_return_ty: None,
+                suspend_state_machine: None,
+                annotations: Vec::new(),
+                named_locals: Vec::new(),
+                is_private: false,
+                is_static: false,
+                default_call_masks: Vec::new(),
+                needs_leading_nop: false,
+                local_generic_args: rustc_hash::FxHashMap::default(),
+            };
+            // Synthesize <clinit>: for each entry, build
+            //   new EnumClass; dup; ldc "NAME"; iconst_<ord>;
+            //   invokespecial EnumClass.<init>(String,I)V;
+            //   putstatic EnumClass.NAME L<EnumClass>;
+            // The Backend's NewInstance handler does the new+dup pair;
+            // our Constructor call invokespecial-s it; PutStaticField
+            // stores the result into the static field.
+            let mut clinit_stmts: Vec<skotch_mir::Stmt> = Vec::new();
+            let mut clinit_locals: Vec<Ty> = Vec::new();
+            let mut next_slot: u32 = 0;
+            let descriptor = format!("L{};", name);
+            for (ord, entry_name) in entry_names.iter().enumerate() {
+                let obj_slot = skotch_mir::LocalId(next_slot);
+                next_slot += 1;
+                clinit_locals.push(Ty::Class(name.clone()));
+                let name_slot = skotch_mir::LocalId(next_slot);
+                next_slot += 1;
+                clinit_locals.push(Ty::String);
+                let ord_slot = skotch_mir::LocalId(next_slot);
+                next_slot += 1;
+                clinit_locals.push(Ty::Int);
+                let unused = skotch_mir::LocalId(next_slot);
+                next_slot += 1;
+                clinit_locals.push(Ty::Unit);
+                let name_str_id = match module.strings.iter().position(|s| s == entry_name) {
+                    Some(i) => skotch_mir::StringId(i as u32),
+                    None => {
+                        let id = skotch_mir::StringId(module.strings.len() as u32);
+                        module.strings.push(entry_name.clone());
+                        id
+                    }
+                };
+                clinit_stmts.push(skotch_mir::Stmt::Assign {
+                    dest: obj_slot,
+                    value: skotch_mir::Rvalue::NewInstance(name.clone()),
+                });
+                clinit_stmts.push(skotch_mir::Stmt::Assign {
+                    dest: name_slot,
+                    value: skotch_mir::Rvalue::Const(
+                        skotch_mir::MirConst::String(name_str_id),
+                    ),
+                });
+                clinit_stmts.push(skotch_mir::Stmt::Assign {
+                    dest: ord_slot,
+                    value: skotch_mir::Rvalue::Const(
+                        skotch_mir::MirConst::Int(ord as i32),
+                    ),
+                });
+                clinit_stmts.push(skotch_mir::Stmt::Assign {
+                    dest: obj_slot,
+                    value: skotch_mir::Rvalue::Call {
+                        kind: skotch_mir::CallKind::Constructor(name.clone()),
+                        args: vec![name_slot, ord_slot],
+                    },
+                });
+                clinit_stmts.push(skotch_mir::Stmt::Assign {
+                    dest: unused,
+                    value: skotch_mir::Rvalue::PutStaticField {
+                        class_name: name.clone(),
+                        field_name: entry_name.clone(),
+                        descriptor: descriptor.clone(),
+                        value: obj_slot,
+                    },
+                });
+            }
+            let clinit_fn = if entry_names.is_empty() {
+                None
+            } else {
+                Some(MirFunction {
+                    id: FuncId(0),
+                    name: "<clinit>".to_string(),
+                    params: Vec::new(),
+                    locals: clinit_locals,
+                    blocks: vec![BasicBlock {
+                        stmts: clinit_stmts,
+                        terminator: Terminator::Return,
+                    }],
+                    return_ty: Ty::Unit,
+                    required_params: 0,
+                    param_names: Vec::new(),
+                    param_receiver_types: Vec::new(),
+                    param_defaults: Vec::new(),
+                    is_abstract: false,
+                    vararg_index: None,
+                    exception_handlers: Vec::new(),
+                    is_suspend: false,
+                    is_inline: false,
+                    has_type_params: false,
+                    suspend_original_return_ty: None,
+                    suspend_state_machine: None,
+                    annotations: Vec::new(),
+                    named_locals: Vec::new(),
+                    is_private: false,
+                    is_static: true,
+                    default_call_masks: Vec::new(),
+                    needs_leading_nop: false,
+                    local_generic_args: rustc_hash::FxHashMap::default(),
+                })
+            };
             let mir_class = skotch_mir::MirClass {
                 name: name.clone(),
                 super_class: Some("java/lang/Enum".to_string()),
@@ -1886,7 +2037,7 @@ pub fn lower_file(
                 interfaces: Vec::new(),
                 fields: Vec::new(),
                 methods: Vec::new(),
-                constructor: empty_constructor_super(&name, "java/lang/Enum"),
+                constructor,
                 secondary_constructors: Vec::new(),
                 is_suspend_lambda: false,
                 is_lambda: false,
@@ -1896,7 +2047,7 @@ pub fn lower_file(
                 is_object_singleton: false,
                 companion_class_name: None,
                 static_fields,
-                clinit: None,
+                clinit: clinit_fn,
             };
             module.push_class(mir_class);
             module.enum_names.insert(name);
