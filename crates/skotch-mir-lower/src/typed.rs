@@ -17499,6 +17499,95 @@ fn lower_rich_expr_to_slot(
             _ => return None,
         }
     }
+    // Postfix `name++` / `name--` for a local var OR an implicit-this
+    // field. Without this arm, class-method bodies like `fun bump():
+    // Int { n++; return n }` bailed in the mini-walker (which lowers
+    // each statement via `lower_rich_expr_to_slot`), the whole method
+    // emitted empty MIR, and `c.bump()` became a no-op at runtime.
+    // Returns the OLD value slot (kotlinc Postfix semantics); stmt-pos
+    // callers discard it.
+    if let KtExpr::Postfix(p) = &e {
+        let op_text = skotch_ast::children(p.syntax())
+            .iter()
+            .find_map(|c| {
+                (c.kind == skotch_syntax::SyntaxKind::OPERATION_REFERENCE)
+                    .then(|| skotch_ast::KtOperationReference::cast(c).map(|o| o.text()))
+                    .flatten()
+            })
+            .unwrap_or_default();
+        let mir_op = match op_text.as_str() {
+            "++" => Some(skotch_mir::BinOp::AddI),
+            "--" => Some(skotch_mir::BinOp::SubI),
+            _ => None,
+        };
+        let inner = skotch_ast::children(p.syntax())
+            .iter()
+            .find_map(KtExpr::cast)
+            .map(unwrap_parens);
+        if let (Some(mir_op), Some(KtExpr::Reference(rr))) = (mir_op, inner) {
+            if let Some(name) = rr.name() {
+                let mut alloc = |ty: Ty, v: skotch_mir::Rvalue| -> LocalId {
+                    let s = LocalId(*next_slot);
+                    *next_slot += 1;
+                    extra_locals.push(ty);
+                    pre_stmts.push(MStmt::Assign { dest: s, value: v });
+                    s
+                };
+                if let Some(slot) = lookup_name(name) {
+                    // Local var: snapshot → increment slot in place.
+                    let old = alloc(Ty::Int, skotch_mir::Rvalue::Local(slot));
+                    let one = alloc(
+                        Ty::Int,
+                        skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(1)),
+                    );
+                    pre_stmts.push(MStmt::Assign {
+                        dest: slot,
+                        value: skotch_mir::Rvalue::BinOp {
+                            op: mir_op,
+                            lhs: slot,
+                            rhs: one,
+                        },
+                    });
+                    return Some(old);
+                }
+                if let Some((cname, fname, fty)) = class_field_lookup(name) {
+                    // Implicit-this field: GetField → bump → PutField.
+                    let this = LocalId(0);
+                    let old = alloc(
+                        fty.clone(),
+                        skotch_mir::Rvalue::GetField {
+                            receiver: this,
+                            class_name: cname.clone(),
+                            field_name: fname.clone(),
+                        },
+                    );
+                    let one = alloc(
+                        Ty::Int,
+                        skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(1)),
+                    );
+                    let new = alloc(
+                        fty,
+                        skotch_mir::Rvalue::BinOp {
+                            op: mir_op,
+                            lhs: old,
+                            rhs: one,
+                        },
+                    );
+                    let _ = alloc(
+                        Ty::Unit,
+                        skotch_mir::Rvalue::PutField {
+                            receiver: this,
+                            class_name: cname,
+                            field_name: fname,
+                            value: new,
+                        },
+                    );
+                    return Some(old);
+                }
+            }
+        }
+        return None;
+    }
     // Boolean `&&` / `||` short-circuit. lower_rich is single-slot
     // rvalue style and can't emit a branch terminator, so we approximate
     // short-circuit with bitwise `iand` / `ior` on the lhs/rhs Bool
