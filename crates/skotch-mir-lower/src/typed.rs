@@ -290,6 +290,57 @@ thread_local! {
     static VAL_LOOKUP_FALLBACK:
         std::cell::RefCell<(rustc_hash::FxHashMap<String, Ty>, String)> =
         std::cell::RefCell::new((rustc_hash::FxHashMap::default(), String::new()));
+
+    /// Function-scoped side table mapping local slot id → element Ty
+    /// for `List<T>` / `MutableList<T>` / `Set<T>` slots. Populated by
+    /// val/var handlers that see an explicit `: List<X>` annotation —
+    /// the slot itself stores `Ty::Class("java/util/List")` (Ty::Generic
+    /// is not yet plumbed through mir-lower) so we keep the element Ty
+    /// here so for-loop element binding can promote `Ty::Any` to the
+    /// declared element type. Without this, `for (s in shapes)` over a
+    /// `List<Shape>` would bind `s: Ty::Any` and DotQualified method
+    /// dispatch (`s.area()`) would fall through to the ambiguous
+    /// unique_class_owning_method path. Cleared per body lowering.
+    static LIST_ELEMENT_TY: std::cell::RefCell<rustc_hash::FxHashMap<u32, Ty>> =
+        std::cell::RefCell::new(rustc_hash::FxHashMap::default());
+}
+
+fn record_list_element_ty(slot: u32, ty: Ty) {
+    LIST_ELEMENT_TY.with(|c| {
+        c.borrow_mut().insert(slot, ty);
+    });
+}
+
+fn lookup_list_element_ty(slot: u32) -> Option<Ty> {
+    LIST_ELEMENT_TY.with(|c| c.borrow().get(&slot).cloned())
+}
+
+/// Extract the element Ty from a `KtProperty`'s explicit type annotation
+/// if it's a collection-like type with a single type argument.
+/// Returns Some(ElemTy) for `List<T>`, `MutableList<T>`, `Iterable<T>`,
+/// `Set<T>`, `MutableSet<T>`, `Collection<T>`, `MutableCollection<T>`;
+/// None otherwise. Element Ty itself is resolved via `resolve_type_ref`.
+fn prop_collection_element_ty(prop: skotch_ast::KtProperty<'_>) -> Option<Ty> {
+    let tr = prop.type_reference()?;
+    let user = tr.user_type()?;
+    let name = user.name()?;
+    if !matches!(
+        name,
+        "List"
+            | "MutableList"
+            | "Iterable"
+            | "Set"
+            | "MutableSet"
+            | "Collection"
+            | "MutableCollection"
+            | "ArrayList"
+    ) {
+        return None;
+    }
+    let args = user.type_argument_list()?;
+    let first = args.arguments().next()?;
+    let elem_tr = first.type_reference()?;
+    Some(resolve_type_ref(elem_tr))
 }
 
 struct ValLookupScope {
@@ -6024,7 +6075,7 @@ fn lower_loop_body(
                 // matches kotlinc's slot-reuse pattern when the
                 // initializer is a pure reference, so we keep that
                 // behavior for val.
-                if prop.is_var() {
+                let final_slot = if prop.is_var() {
                     // Resolve the rhs slot's Ty via the param-fallback
                     // helper — for a Reference init like `var k = q`
                     // (q a param), the param fallback returns Int,
@@ -6041,8 +6092,18 @@ fn lower_loop_body(
                         value: skotch_mir::Rvalue::Local(rhs_slot),
                     });
                     name_to_local.push((pname.to_string(), new_slot));
+                    new_slot
                 } else {
                     name_to_local.push((pname.to_string(), rhs_slot));
+                    rhs_slot
+                };
+                // Record element-Ty side info when the val/var has an
+                // explicit `: List<X>` (etc.) annotation. Lets the
+                // for-loop element binder promote `Ty::Any` to the
+                // declared element type — fixes DotQualified bails on
+                // `for (s in shapes) s.area()` over `List<Shape>`.
+                if let Some(elem_ty) = prop_collection_element_ty(prop) {
+                    record_list_element_ty(final_slot.0, elem_ty);
                 }
                 continue;
             }
@@ -8300,10 +8361,19 @@ fn lower_loop_body_blocks(
                 // so the body can resolve loop_var → elem_slot. The
                 // elem-load block is emitted between cond and body and
                 // sets `elem_slot = list.get(i)`.
-                let elem_slot_opt: Option<LocalId> = if list_recv.is_some() {
+                //
+                // When the range slot has a recorded element Ty (set by
+                // the val handler from an explicit `: List<X>`
+                // annotation), use that as the elem-slot Ty instead of
+                // Ty::Any. This lets DotQualified method dispatch
+                // (`s.area()`) resolve through `Ty::Class("X")` instead
+                // of falling through to the ambiguous Any-receiver
+                // path.
+                let elem_slot_opt: Option<LocalId> = if let Some(recv) = list_recv {
                     let s = LocalId(*next_slot);
                     *next_slot += 1;
-                    local_tys.push(Ty::Any);
+                    let elem_ty = lookup_list_element_ty(recv.0).unwrap_or(Ty::Any);
+                    local_tys.push(elem_ty);
                     Some(s)
                 } else {
                     None
@@ -8352,18 +8422,54 @@ fn lower_loop_body_blocks(
                 // For List for-in: prepend `elem_slot = list.get(i)` to
                 // the first body block so the loop variable is bound
                 // to the per-iteration element before user stmts run.
+                //
+                // When an element-Ty is known (recorded by the val
+                // handler from `: List<X>`), emit the load into a
+                // temp and follow with a CheckCast into elem_slot so
+                // the JVM stackmap sees the strongly-typed element
+                // value instead of Object — required for downstream
+                // virtual dispatch like `elem.area()`.
                 if let (Some(recv), Some(elem)) = (list_recv, elem_slot_opt) {
                     if let Some(first_body) = inner_body_blocks.first_mut() {
-                        let mut prepend: Vec<MStmt> = vec![MStmt::Assign {
-                            dest: elem,
-                            value: skotch_mir::Rvalue::Call {
-                                kind: skotch_mir::CallKind::Virtual {
-                                    class_name: "java/util/List".to_string(),
-                                    method_name: "get".to_string(),
+                        let elem_ty = local_tys.get(elem.0 as usize).cloned().unwrap_or(Ty::Any);
+                        let target_class = match &elem_ty {
+                            Ty::Class(c) if c != "java/lang/Object" => Some(c.clone()),
+                            _ => None,
+                        };
+                        let mut prepend: Vec<MStmt> = Vec::new();
+                        if let Some(target_class) = target_class {
+                            let raw = LocalId(*next_slot);
+                            *next_slot += 1;
+                            local_tys.push(Ty::Any);
+                            prepend.push(MStmt::Assign {
+                                dest: raw,
+                                value: skotch_mir::Rvalue::Call {
+                                    kind: skotch_mir::CallKind::Virtual {
+                                        class_name: "java/util/List".to_string(),
+                                        method_name: "get".to_string(),
+                                    },
+                                    args: vec![recv, i_slot],
                                 },
-                                args: vec![recv, i_slot],
-                            },
-                        }];
+                            });
+                            prepend.push(MStmt::Assign {
+                                dest: elem,
+                                value: skotch_mir::Rvalue::CheckCast {
+                                    obj: raw,
+                                    target_class,
+                                },
+                            });
+                        } else {
+                            prepend.push(MStmt::Assign {
+                                dest: elem,
+                                value: skotch_mir::Rvalue::Call {
+                                    kind: skotch_mir::CallKind::Virtual {
+                                        class_name: "java/util/List".to_string(),
+                                        method_name: "get".to_string(),
+                                    },
+                                    args: vec![recv, i_slot],
+                                },
+                            });
+                        }
                         prepend.append(&mut first_body.stmts);
                         first_body.stmts = prepend;
                     }
@@ -10952,7 +11058,7 @@ fn try_lower_multi_stmt_block_with_offset(
                     // trailing `return x`. The `val` case is fine
                     // with the alias because there are no
                     // reassignments.
-                    if prop.is_var() {
+                    let final_slot = if prop.is_var() {
                         let rhs_ty = slot_ty_with_param_fallback(slot.0, &local_tys);
                         let new_slot = LocalId(next_slot);
                         next_slot += 1;
@@ -10962,8 +11068,17 @@ fn try_lower_multi_stmt_block_with_offset(
                             value: skotch_mir::Rvalue::Local(slot),
                         });
                         name_to_local.push((name.to_string(), new_slot));
+                        new_slot
                     } else {
                         name_to_local.push((name.to_string(), slot));
+                        slot
+                    };
+                    // Record element-Ty side info when the val/var has
+                    // an explicit `: List<X>` annotation, so a downstream
+                    // `for (x in name)` can bind the element with the
+                    // declared type.
+                    if let Some(elem_ty) = prop_collection_element_ty(prop) {
+                        record_list_element_ty(final_slot.0, elem_ty);
                     }
                     continue;
                 }
@@ -21753,6 +21868,10 @@ fn lower_simple_body(
     // the current function's Special::TryStmt arms register will
     // accumulate here and we drain at function end.
     reset_exception_handlers();
+    // Slot-keyed LIST_ELEMENT_TY entries are local to one function's
+    // slot numbering — clear so function A's slot 5 doesn't leak into
+    // function B's lookup.
+    LIST_ELEMENT_TY.with(|c| c.borrow_mut().clear());
 
     // Install cross-file val lookup so lower_rich's Reference
     // fallback can emit GetStaticField for bare references to
