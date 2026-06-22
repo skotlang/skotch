@@ -25011,6 +25011,30 @@ fn constructor_from_primary_impl(
                 });
                 continue;
             }
+            // 3a-bis. Bare Reference init naming a primary-ctor param:
+            //   class Machine(start: Light) { var current: Light = start }
+            // kotlinc emits `aload_0; aload_<param>; putfield current`. The
+            // initializer is the param slot itself (positions 1..=N), no
+            // intermediate temp needed.
+            if let skotch_ast::KtExpr::Reference(r) = &init {
+                if let Some(ref_name) = r.name() {
+                    if let Some(param_idx) =
+                        params_iter.iter().position(|p| p.name() == Some(ref_name))
+                    {
+                        let param_slot = skotch_mir::LocalId((param_idx + 1) as u32);
+                        stmts.push(skotch_mir::Stmt::Assign {
+                            dest: this_slot,
+                            value: skotch_mir::Rvalue::PutField {
+                                receiver: this_slot,
+                                class_name: class_name.to_string(),
+                                field_name: field_name.to_string(),
+                                value: param_slot,
+                            },
+                        });
+                        continue;
+                    }
+                }
+            }
             // 3b. Zero-arg top-level fn call init.
             if let skotch_ast::KtExpr::Call(call) = &init {
                 if let Some(skotch_ast::KtExpr::Reference(r)) = call.callee() {
