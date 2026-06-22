@@ -32021,8 +32021,13 @@ mod tests {
         let module = lower("class P { fun add(a: Int, b: Int): Int = a + b }", "TestKt");
         let p = module.classes.iter().find(|c| c.name == "P").unwrap();
         let m = p.methods.iter().find(|m| m.name == "add").unwrap();
-        // locals: this (Any), a (Any), b (Any), result (Int)
-        assert_eq!(m.locals, vec![Ty::Any, Ty::Any, Ty::Any, Ty::Int]);
+        // locals: this (Class("P")), a (Int), b (Int), result (Int)
+        // (typed pipeline now tracks real param/receiver types — was Ty::Any
+        // when this test was written.)
+        assert_eq!(
+            m.locals,
+            vec![Ty::Class("P".to_string()), Ty::Int, Ty::Int, Ty::Int]
+        );
         let block = &m.blocks[0];
         assert_eq!(block.stmts.len(), 1);
         match &block.stmts[0] {
@@ -32065,8 +32070,9 @@ mod tests {
             .iter()
             .find(|m| m.name == "answer")
             .expect("answer");
-        // local 0: this, local 1: result (Int) — answer() has 0 params.
-        assert_eq!(m.locals, vec![Ty::Any, Ty::Int]);
+        // local 0: this (Class("P")), local 1: result (Int) — answer()
+        // has 0 params. (typed pipeline now tracks receiver type.)
+        assert_eq!(m.locals, vec![Ty::Class("P".to_string()), Ty::Int]);
         assert_eq!(m.blocks.len(), 1);
         let block = &m.blocks[0];
         assert_eq!(block.stmts.len(), 1);
@@ -32114,7 +32120,16 @@ mod tests {
             .iter()
             .map(|m| (m.name.as_str(), &m.return_ty))
             .collect();
-        assert_eq!(methods, vec![("double", &Ty::Int), ("greet", &Ty::String)],);
+        // `val x: Int` synthesizes a getX(): Int getter — typed pipeline
+        // now emits this automatically; the test was written before that.
+        assert_eq!(
+            methods,
+            vec![
+                ("double", &Ty::Int),
+                ("greet", &Ty::String),
+                ("getX", &Ty::Int),
+            ],
+        );
     }
 
     #[test]
