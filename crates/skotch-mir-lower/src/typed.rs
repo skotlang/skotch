@@ -215,6 +215,32 @@ impl Drop for ClassSuperScope {
 }
 
 thread_local! {
+    /// Module-scoped class-fields table mirroring CLASS_METHODS: drives
+    /// data-class `.copy(name = expr)` reorder + omitted-positional
+    /// `GetField(this, field_i)` fill.
+    static CLASS_FIELDS: std::cell::RefCell<rustc_hash::FxHashMap<String, Vec<(String, Ty)>>> =
+        std::cell::RefCell::new(rustc_hash::FxHashMap::default());
+}
+fn lookup_class_fields(class_name: &str) -> Option<Vec<(String, Ty)>> {
+    CLASS_FIELDS.with(|c| c.borrow().get(class_name).cloned())
+}
+struct ClassFieldsScope {
+    prev: rustc_hash::FxHashMap<String, Vec<(String, Ty)>>,
+}
+impl ClassFieldsScope {
+    fn new(table: rustc_hash::FxHashMap<String, Vec<(String, Ty)>>) -> Self {
+        let prev = CLASS_FIELDS.with(|c| std::mem::take(&mut *c.borrow_mut()));
+        CLASS_FIELDS.with(|c| *c.borrow_mut() = table);
+        ClassFieldsScope { prev }
+    }
+}
+impl Drop for ClassFieldsScope {
+    fn drop(&mut self) {
+        CLASS_FIELDS.with(|c| *c.borrow_mut() = std::mem::take(&mut self.prev));
+    }
+}
+
+thread_local! {
     /// File-scoped type-alias map: `Name → resolved Ty`. Populated in
     /// `lower_file` BEFORE class processing so resolve_type_ref can
     /// substitute `Predicate` → `Ty::Class("kotlin/jvm/functions/Function1")`
@@ -2792,6 +2818,14 @@ pub fn lower_file(
                 for m in decl.methods.iter() {
                     methods.insert(m.name.clone(), m.return_ty.clone());
                 }
+                // Cross-file data-class `copy()` return Ty so the
+                // DotQualified Virtual call-site picks `L<Name>;` not
+                // `Ljava/lang/Object;` (resolver omits synthesized methods).
+                if matches!(decl.kind, skotch_resolve::ExternalClassKind::DataClass) {
+                    methods
+                        .entry("copy".to_string())
+                        .or_insert_with(|| Ty::Class(simple_name.clone()));
+                }
                 table
                     .entry(simple_name.clone())
                     .and_modify(|m| {
@@ -2853,6 +2887,26 @@ pub fn lower_file(
         t
     };
     let _class_super_scope = ClassSuperScope::new(class_super_table);
+
+    // Build CLASS_FIELDS table; cross-file seed first then local-file
+    // overrides (matches resolver precedence).
+    let mut class_fields_resolved: rustc_hash::FxHashMap<String, Vec<(String, Ty)>> =
+        rustc_hash::FxHashMap::default();
+    if let Some(tbl) = package_symbols {
+        for (simple_name, decl) in tbl.classes.iter() {
+            if !decl.fields.is_empty() {
+                class_fields_resolved.insert(simple_name.clone(), decl.fields.clone());
+            }
+        }
+    }
+    for (c, fs) in class_fields.iter() {
+        let v: Vec<(String, Ty)> = fs
+            .iter()
+            .map(|(fname, tn)| (fname.clone(), resolve_user_ty(tn)))
+            .collect();
+        class_fields_resolved.insert(c.clone(), v);
+    }
+    let _class_fields_scope = ClassFieldsScope::new(class_fields_resolved);
 
     // Register synthesized forwarder methods (by-delegation, data-class
     // copy(), data-class hashCode/equals/toString, etc.) into
@@ -21776,31 +21830,92 @@ fn lower_rich_expr_to_slot(
                                     }
                                     let mut arg_slots: Vec<LocalId> = vec![slot];
                                     if let Some(arg_list) = call.value_argument_list() {
-                                        // Bail on named arguments: Virtual
-                                        // dispatch can't map names to positions
-                                        // without target-method introspection.
-                                        // Named-arg calls like `p.copy(y=10)`
-                                        // need the `name$default` shim path,
-                                        // not plain Virtual.
-                                        if arg_list.arguments().any(|arg| arg.name().is_some()) {
+                                        // Data-class `.copy(...)` reorder by
+                                        // name + fill omitted positions via
+                                        // `GetField(this, field_i)`. Matches
+                                        // kotlinc's copy$default shim observably.
+                                        let has_named =
+                                            arg_list.arguments().any(|a| a.name().is_some());
+                                        let fields_for_copy = if method_n == "copy" {
+                                            lookup_class_fields(&cname)
+                                        } else {
+                                            None
+                                        };
+                                        let arg_count = arg_list.arguments().count();
+                                        let use_copy_path = method_n == "copy"
+                                            && fields_for_copy.is_some()
+                                            && (has_named
+                                                || arg_count
+                                                    < fields_for_copy.as_ref().unwrap().len());
+                                        if has_named && !use_copy_path {
                                             trace_bail!(
                                                 "DotQualified Virtual fallback bails on named args (method={}, class={})",
                                                 method_n, cname
                                             );
                                             return None;
                                         }
-                                        for arg in arg_list.arguments() {
-                                            let arg_e = arg.expression()?;
-                                            let s = lower_rich_expr_to_slot(
-                                                arg_e,
-                                                lookup_name,
-                                                fn_lookup,
-                                                next_slot,
-                                                pre_stmts,
-                                                extra_locals,
-                                                strings,
-                                            )?;
-                                            arg_slots.push(s);
+                                        if use_copy_path {
+                                            let fields = fields_for_copy.unwrap();
+                                            let mut named_map: rustc_hash::FxHashMap<
+                                                String,
+                                                KtExpr<'_>,
+                                            > = rustc_hash::FxHashMap::default();
+                                            let mut positional: Vec<KtExpr<'_>> = Vec::new();
+                                            for a in arg_list.arguments() {
+                                                let Some(ae) = a.expression() else {
+                                                    return None;
+                                                };
+                                                if let Some(n) = a.name() {
+                                                    named_map.insert(n.to_string(), ae);
+                                                } else {
+                                                    positional.push(ae);
+                                                }
+                                            }
+                                            for (i, (fname, fty)) in fields.iter().enumerate() {
+                                                let arg_e_opt = named_map
+                                                    .get(fname)
+                                                    .copied()
+                                                    .or_else(|| positional.get(i).copied());
+                                                let s = if let Some(arg_e) = arg_e_opt {
+                                                    lower_rich_expr_to_slot(
+                                                        arg_e,
+                                                        lookup_name,
+                                                        fn_lookup,
+                                                        next_slot,
+                                                        pre_stmts,
+                                                        extra_locals,
+                                                        strings,
+                                                    )?
+                                                } else {
+                                                    let gf_slot = LocalId(*next_slot);
+                                                    *next_slot += 1;
+                                                    extra_locals.push(fty.clone());
+                                                    pre_stmts.push(MStmt::Assign {
+                                                        dest: gf_slot,
+                                                        value: skotch_mir::Rvalue::GetField {
+                                                            receiver: slot,
+                                                            class_name: cname.clone(),
+                                                            field_name: fname.clone(),
+                                                        },
+                                                    });
+                                                    gf_slot
+                                                };
+                                                arg_slots.push(s);
+                                            }
+                                        } else {
+                                            for arg in arg_list.arguments() {
+                                                let arg_e = arg.expression()?;
+                                                let s = lower_rich_expr_to_slot(
+                                                    arg_e,
+                                                    lookup_name,
+                                                    fn_lookup,
+                                                    next_slot,
+                                                    pre_stmts,
+                                                    extra_locals,
+                                                    strings,
+                                                )?;
+                                                arg_slots.push(s);
+                                            }
                                         }
                                     }
                                     let result_slot = LocalId(*next_slot);
