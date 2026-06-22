@@ -1,0 +1,7 @@
+n=0 loop=0 whole=0 loopHi=1000
+n=1 loop=1 whole=1 loopHi=1100
+n=2 loop=3 whole=2 loopHi=1101
+n=3 loop=103 whole=5 loopHi=1103
+n=4 loop=107 whole=9 loopHi=1106
+n=5 loop=112 whole=14 loopHi=1110
+n=6 loop=118 whole=20 loopHi=1115

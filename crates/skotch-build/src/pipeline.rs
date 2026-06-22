@@ -18,10 +18,8 @@ use rayon::prelude::*;
 use skotch_buildscript::{parse_buildfile_with_catalog, parse_settings, BuildTarget, ProjectModel};
 use skotch_diagnostics::{render, Diagnostics};
 use skotch_intern::Interner;
-use skotch_lexer::lex;
 use skotch_mir::MirModule;
-use skotch_parser::parse_file;
-use skotch_resolve::gather_declarations;
+use skotch_resolve::typed::gather_declarations;
 use skotch_span::SourceMap;
 use std::path::{Path, PathBuf};
 
@@ -436,9 +434,11 @@ fn build_android(
     skotch_apk::write_unsigned_apk(&unsigned_path, &contents)
         .with_context(|| format!("writing {}", unsigned_path.display()))?;
 
-    // 6. Sign the APK (debug signing with v2 scheme).
+    // 6. Sign the APK in-process with the debug keystore (v1+v2+v3). No
+    //    external `apksigner` invocation — `skotch-apksig` does the signing.
     let signed_path = build_dir.join("app-debug.apk");
-    skotch_sign::sign_apk_debug(&unsigned_path, &signed_path).with_context(|| "signing APK")?;
+    skotch_apksig::debug::sign_debug_apk_file(&unsigned_path, &signed_path)
+        .with_context(|| "signing APK")?;
 
     eprintln!("BUILD SUCCESS: {}", signed_path.display());
 
@@ -2096,20 +2096,23 @@ fn compile_multi_module_classes(
         let mut mod_interner = skotch_intern::Interner::new();
         let mut mod_diags = skotch_diagnostics::Diagnostics::new();
         let mut mod_sm = skotch_span::SourceMap::new();
-        let mut parsed: Vec<(skotch_span::FileId, skotch_syntax::KtFile, String)> = Vec::new();
+        let mut parsed: Vec<(skotch_ast::ParsedFile, String)> = Vec::new();
 
         for path in &src_files {
             let text = std::fs::read_to_string(path).unwrap_or_default();
-            let file_id = mod_sm.add(path.clone(), text.clone());
-            let lexed = lex(file_id, &text, &mut mod_diags);
-            let ast = parse_file(&lexed, &mut mod_interner, &mut mod_diags);
+            let _file_id = mod_sm.add(path.clone(), text.clone());
+            let file_name = path
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or("input.kt");
+            let parsed_file = skotch_ast::parse(file_name, &text);
             let wrapper = wrapper_class_for(path);
-            parsed.push((file_id, ast, wrapper));
+            parsed.push((parsed_file, wrapper));
         }
 
-        let refs: Vec<(skotch_span::FileId, &skotch_syntax::KtFile, &str)> = parsed
+        let refs: Vec<(skotch_ast::KtFile<'_>, &str)> = parsed
             .iter()
-            .map(|(fid, ast, wc)| (*fid, ast, wc.as_str()))
+            .map(|(pf, wc)| (pf.file(), wc.as_str()))
             .collect();
         let own_symbols = gather_declarations(&refs, &mod_interner);
 
@@ -2131,9 +2134,9 @@ fn compile_multi_module_classes(
         }
 
         let mut classes: Vec<(String, Vec<u8>)> = Vec::new();
-        for (_fid, ast, wrapper) in &parsed {
-            let mut mir = skotch_driver::compile_ast(
-                ast,
+        for (pf, wrapper) in &parsed {
+            let mut mir = skotch_driver::typed::compile_ast(
+                pf.file(),
                 wrapper,
                 &mut mod_interner,
                 &mut mod_diags,
@@ -2164,22 +2167,24 @@ fn compile_multi_module_classes(
 
         // Store symbols for downstream modules.
         {
-            let mut tmp_interner = skotch_intern::Interner::new();
-            let mut tmp_diags = skotch_diagnostics::Diagnostics::new();
+            let tmp_interner = skotch_intern::Interner::new();
+            let _tmp_diags = skotch_diagnostics::Diagnostics::new();
             let mut tmp_sm = skotch_span::SourceMap::new();
-            let mut re_parsed: Vec<(skotch_span::FileId, skotch_syntax::KtFile, String)> =
-                Vec::new();
+            let mut re_parsed: Vec<(skotch_ast::ParsedFile, String)> = Vec::new();
             for path in &src_files {
                 let text = std::fs::read_to_string(path).unwrap_or_default();
-                let fid = tmp_sm.add(path.clone(), text.clone());
-                let lexed = lex(fid, &text, &mut tmp_diags);
-                let ast = parse_file(&lexed, &mut tmp_interner, &mut tmp_diags);
+                let _fid = tmp_sm.add(path.clone(), text.clone());
+                let file_name = path
+                    .file_name()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("input.kt");
+                let parsed_file = skotch_ast::parse(file_name, &text);
                 let wrapper = wrapper_class_for(path);
-                re_parsed.push((fid, ast, wrapper));
+                re_parsed.push((parsed_file, wrapper));
             }
-            let refs: Vec<_> = re_parsed
+            let refs: Vec<(skotch_ast::KtFile<'_>, &str)> = re_parsed
                 .iter()
-                .map(|(fid, ast, wc)| (*fid, ast, wc.as_str()))
+                .map(|(pf, wc)| (pf.file(), wc.as_str()))
                 .collect();
             module_symbols[idx] = gather_declarations(&refs, &tmp_interner);
         }
@@ -2972,21 +2977,23 @@ fn build_multi_module(
                 let mut mod_interner = skotch_intern::Interner::new();
                 let mut mod_diags = skotch_diagnostics::Diagnostics::new();
                 let mut mod_sm = skotch_span::SourceMap::new();
-                let mut parsed: Vec<(skotch_span::FileId, skotch_syntax::KtFile, String)> =
-                    Vec::new();
+                let mut parsed: Vec<(skotch_ast::ParsedFile, String)> = Vec::new();
 
                 for path in &src_files {
                     let text = std::fs::read_to_string(path).unwrap_or_default();
-                    let file_id = mod_sm.add(path.clone(), text.clone());
-                    let lexed = lex(file_id, &text, &mut mod_diags);
-                    let ast = parse_file(&lexed, &mut mod_interner, &mut mod_diags);
+                    let _file_id = mod_sm.add(path.clone(), text.clone());
+                    let file_name = path
+                        .file_name()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("input.kt");
+                    let parsed_file = skotch_ast::parse(file_name, &text);
                     let wrapper = wrapper_class_for(path);
-                    parsed.push((file_id, ast, wrapper));
+                    parsed.push((parsed_file, wrapper));
                 }
 
-                let refs: Vec<(skotch_span::FileId, &skotch_syntax::KtFile, &str)> = parsed
+                let refs: Vec<(skotch_ast::KtFile<'_>, &str)> = parsed
                     .iter()
-                    .map(|(fid, ast, wc)| (*fid, ast, wc.as_str()))
+                    .map(|(pf, wc)| (pf.file(), wc.as_str()))
                     .collect();
                 let own_symbols = gather_declarations(&refs, &mod_interner);
 
@@ -3011,10 +3018,10 @@ fn build_multi_module(
                 // Compile each file with the combined symbol table.
                 let mut classes: Vec<(String, Vec<u8>)> = Vec::new();
                 let mut mir_modules: Vec<MirModule> = Vec::new();
-                for (fid_idx, (_fid, ast, wrapper)) in parsed.iter().enumerate() {
+                for (fid_idx, (pf, wrapper)) in parsed.iter().enumerate() {
                     let pre_errors = mod_diags.len();
-                    let mut mir = skotch_driver::compile_ast(
-                        ast,
+                    let mut mir = skotch_driver::typed::compile_ast(
+                        pf.file(),
                         wrapper,
                         &mut mod_interner,
                         &mut mod_diags,
@@ -3090,22 +3097,25 @@ fn build_multi_module(
                 src_files.extend(discover_sources(&module.dir.join(subdir)).unwrap_or_default());
             }
             if !src_files.is_empty() {
-                let mut tmp_interner = skotch_intern::Interner::new();
-                let mut tmp_diags = skotch_diagnostics::Diagnostics::new();
+                let tmp_interner = skotch_intern::Interner::new();
+                let tmp_diags = skotch_diagnostics::Diagnostics::new();
                 let mut tmp_sm = skotch_span::SourceMap::new();
-                let mut parsed: Vec<(skotch_span::FileId, skotch_syntax::KtFile, String)> =
-                    Vec::new();
+                let mut parsed: Vec<(skotch_ast::ParsedFile, String)> = Vec::new();
                 for path in &src_files {
                     let text = std::fs::read_to_string(path).unwrap_or_default();
-                    let fid = tmp_sm.add(path.clone(), text.clone());
-                    let lexed = lex(fid, &text, &mut tmp_diags);
-                    let ast = parse_file(&lexed, &mut tmp_interner, &mut tmp_diags);
+                    let _fid = tmp_sm.add(path.clone(), text.clone());
+                    let file_name = path
+                        .file_name()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("input.kt");
+                    let parsed_file = skotch_ast::parse(file_name, &text);
                     let wrapper = wrapper_class_for(path);
-                    parsed.push((fid, ast, wrapper));
+                    parsed.push((parsed_file, wrapper));
+                    let _ = tmp_diags;
                 }
-                let refs: Vec<_> = parsed
+                let refs: Vec<(skotch_ast::KtFile<'_>, &str)> = parsed
                     .iter()
-                    .map(|(fid, ast, wc)| (*fid, ast, wc.as_str()))
+                    .map(|(pf, wc)| (pf.file(), wc.as_str()))
                     .collect();
                 module_symbols[idx] = gather_declarations(&refs, &tmp_interner);
             }
@@ -3670,9 +3680,9 @@ fn build_multi_module(
         };
         let apk_path = build_dir.join("app-debug.apk");
         skotch_apk::write_unsigned_apk(&apk_path, &contents)?;
-        // Sign the APK.
+        // Sign the APK in-process with the debug keystore (no external tool).
         let signed_path = build_dir.join("app-debug-signed.apk");
-        skotch_sign::sign_apk_debug(&apk_path, &signed_path)?;
+        skotch_apksig::debug::sign_debug_apk_file(&apk_path, &signed_path)?;
 
         eprintln!("BUILD SUCCESS: {}", signed_path.display());
 

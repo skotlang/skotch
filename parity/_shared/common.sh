@@ -184,7 +184,17 @@ compile_with_kotlinc() {
     if coroutines=$(find_kotlinx_coroutines); then
         cp_args=(-classpath "$coroutines")
     fi
-    time_cmd "$kotlinc" "${cp_args[@]}" "${kt_args[@]}" -d "$out_dir"
+    # Wrap compile with a wall-clock timeout (default 120s) so a hung
+    # compiler can't wedge the bench. kotlinc rarely hangs but we apply
+    # the same guard for symmetry with skotch.
+    local cc_to="${PARITY_COMPILE_TIMEOUT:-120}"
+    if command -v timeout >/dev/null 2>&1; then
+        time_cmd timeout --foreground "${cc_to}" "$kotlinc" "${cp_args[@]}" "${kt_args[@]}" -d "$out_dir"
+    elif command -v gtimeout >/dev/null 2>&1; then
+        time_cmd gtimeout --foreground "${cc_to}" "$kotlinc" "${cp_args[@]}" "${kt_args[@]}" -d "$out_dir"
+    else
+        time_cmd "$kotlinc" "${cp_args[@]}" "${kt_args[@]}" -d "$out_dir"
+    fi
     local rc=$?
     LAST_KOTLINC_MS=$TIMED_MS
     return $rc
@@ -209,7 +219,19 @@ compile_with_skotch() {
     while IFS= read -r line; do
         kt_args+=("$line")
     done < <(list_kt_files "$dir")
-    time_cmd "$SKOTCH_BIN" kotlinc -d "$out_dir" "${kt_args[@]}"
+    # Wall-clock timeout (default 120s) — skotch's typed mir-lower can
+    # in principle infinite-loop on a pathological fixture (e.g.
+    # body-walker that fails to make progress on an unhandled shape).
+    # Without this guard, a single hung fixture wedges the bench until
+    # the CI job's 6-hour overall timeout fires.
+    local cc_to="${PARITY_COMPILE_TIMEOUT:-120}"
+    if command -v timeout >/dev/null 2>&1; then
+        time_cmd timeout --foreground "${cc_to}" "$SKOTCH_BIN" kotlinc -d "$out_dir" "${kt_args[@]}"
+    elif command -v gtimeout >/dev/null 2>&1; then
+        time_cmd gtimeout --foreground "${cc_to}" "$SKOTCH_BIN" kotlinc -d "$out_dir" "${kt_args[@]}"
+    else
+        time_cmd "$SKOTCH_BIN" kotlinc -d "$out_dir" "${kt_args[@]}"
+    fi
     local rc=$?
     LAST_SKOTCH_MS=$TIMED_MS
     return $rc
@@ -219,7 +241,24 @@ run_main() {
     local out_dir="$1"
     local cp
     cp=$(runtime_classpath "$out_dir")
-    java -cp "$cp" MainKt
+    # Wrap the java run with a wall-clock timeout (default 60s, override
+    # via PARITY_RUN_TIMEOUT). Without this, a fixture whose compiled
+    # bytecode infinite-loops at runtime (e.g. 21-calculator-parser's
+    # cursor-threading bug) wedges the parity bench until the CI job's
+    # 6-hour overall timeout fires. With it, the run exits non-zero
+    # (timeout's exit code is 124) and the bench records fail-skotch or
+    # fail-kotlinc and moves on.
+    local run_to="${PARITY_RUN_TIMEOUT:-60}"
+    if command -v timeout >/dev/null 2>&1; then
+        timeout --foreground "${run_to}" java -cp "$cp" MainKt
+    elif command -v gtimeout >/dev/null 2>&1; then
+        gtimeout --foreground "${run_to}" java -cp "$cp" MainKt
+    else
+        # No timeout binary available — fall back to plain java. macOS
+        # without coreutils hits this; we accept the hang risk there since
+        # the bench typically runs in CI (Linux, has GNU coreutils).
+        java -cp "$cp" MainKt
+    fi
 }
 
 # --- bytecode similarity ------------------------------------------------

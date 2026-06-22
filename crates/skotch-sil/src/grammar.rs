@@ -35,6 +35,17 @@ use skotch_parser_core::{CompletedMarker, Parser};
 use skotch_syntax::SyntaxKind as S;
 use skotch_syntax::SyntaxKind;
 
+thread_local! {
+    /// When set, `parse_postfix`'s `LBRACE` arm bails instead of
+    /// consuming the brace as a trailing lambda. Used by callers that
+    /// know an open brace is starting the surrounding construct's body
+    /// (currently `parse_super_type_entry`'s by-delegation arm —
+    /// `class Foo : Bar by inner { ... }` would otherwise consume
+    /// the class body as `inner { ... }` lambda call).
+    static SUPPRESS_TRAILING_LAMBDA: std::cell::Cell<bool> =
+        const { std::cell::Cell::new(false) };
+}
+
 pub fn parse_file_root(p: &mut Parser<'_, '_>) {
     let file = p.start();
     // Leading trivia at the very top of the file sits under FILE.
@@ -992,7 +1003,12 @@ fn parse_super_type_entry(p: &mut Parser<'_, '_>) {
             p.bump();
         }
         skip_trivia(p);
+        // Don't let `by inner { ... }` consume the class body's
+        // open brace as a trailing-lambda call. Toggle the suppression
+        // flag for the duration of this expression parse.
+        SUPPRESS_TRAILING_LAMBDA.with(|f| f.set(true));
         parse_expression(p);
+        SUPPRESS_TRAILING_LAMBDA.with(|f| f.set(false));
         m.complete(p, S::DELEGATED_SUPER_TYPE_ENTRY);
     } else {
         m.complete(p, S::SUPER_TYPE_ENTRY);
@@ -1110,11 +1126,29 @@ fn parse_class_body_impl(p: &mut Parser<'_, '_>, enum_entries: bool) {
             // No entries (e.g. enum body containing only methods).
             entries_done = true;
         }
+        // Don't enter parse_class_member if the only thing left
+        // before `}` is trivia (comments + whitespace) — otherwise
+        // parse_class_member's "absorb leading comments" branch eats
+        // the comment and its default arm then consumes the `}` as
+        // an ERROR_ELEMENT, dropping us into the OUTER body. Trailing
+        // trivia belongs to the surrounding CLASS_BODY.
+        if next_non_trivia(p, 0) == S::RBRACE {
+            break;
+        }
         parse_class_member(p);
         // Between members: only WS at CLASS_BODY level.
         while p.at(S::WHITE_SPACE) {
             p.bump();
         }
+    }
+    // Consume any trailing trivia (line comments, block comments, WS,
+    // NL) so it ends up under CLASS_BODY rather than escaping to the
+    // outer scope.
+    while matches!(
+        p.current(),
+        S::WHITE_SPACE | S::NEWLINE | S::LINE_COMMENT | S::BLOCK_COMMENT
+    ) {
+        p.bump();
     }
     if p.at(S::RBRACE) {
         p.bump();
@@ -1792,8 +1826,13 @@ fn parse_property_body(p: &mut Parser<'_, '_>) {
         d.complete(p, S::DESTRUCTURING_DECLARATION);
     } else if has_receiver_prefix(p) {
         parse_receiver_then_name(p);
-    } else if p.at(S::IDENTIFIER) || is_soft_keyword(p.current()) {
+    } else if p.at(S::IDENTIFIER) {
         p.bump();
+    } else if is_soft_keyword(p.current()) {
+        // Reclassify the soft keyword as IDENTIFIER so KtProperty::name
+        // (which looks for an IDENTIFIER child) finds the var name.
+        // Kotlin permits `val inline = ...`, `val data = ...`, etc.
+        p.bump_as(S::IDENTIFIER);
     }
     skip_trivia(p);
     if p.at(S::COLON) {
@@ -2961,7 +3000,8 @@ fn parse_postfix(p: &mut Parser<'_, '_>) -> CompletedMarker {
                 // Optional trailing lambda. Only swallow WS if a `{`
                 // actually follows; otherwise the trailing WS belongs
                 // to the OUTER composite.
-                if next_non_trivia(p, 0) == S::LBRACE {
+                if next_non_trivia(p, 0) == S::LBRACE && !SUPPRESS_TRAILING_LAMBDA.with(|f| f.get())
+                {
                     skip_ws(p);
                     let la = p.start();
                     parse_lambda_expression(p);
@@ -2970,6 +3010,9 @@ fn parse_postfix(p: &mut Parser<'_, '_>) -> CompletedMarker {
                 lhs = m.complete(p, S::CALL_EXPRESSION);
             }
             S::LBRACE => {
+                if SUPPRESS_TRAILING_LAMBDA.with(|f| f.get()) {
+                    return lhs;
+                }
                 // Trailing lambda only (no preceding arg list).
                 let m = lhs.precede(p);
                 let la = p.start();

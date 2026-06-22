@@ -929,12 +929,21 @@ impl<'a> KtBinaryExpression<'a> {
 
 impl<'a> KtOperationReference<'a> {
     pub fn text(self) -> String {
+        // Collect tokens recursively so infix function operations
+        // (e.g. `until`, `downTo`) — which SIL emits as
+        // OPERATION_REFERENCE → REFERENCE_EXPRESSION → IDENTIFIER —
+        // are surfaced as their identifier text instead of empty.
         let mut s = String::new();
-        for c in children(self.syntax()) {
-            if let SilData::Token { text } = &c.data {
+        fn walk(n: &SilNode, s: &mut String) {
+            if let SilData::Token { text } = &n.data {
                 s.push_str(text);
+                return;
+            }
+            for c in children(n) {
+                walk(c, s);
             }
         }
+        walk(self.syntax(), &mut s);
         s
     }
 }

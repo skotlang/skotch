@@ -1,0 +1,17 @@
+[package]
+name = "skotch-dexcore"
+description = "part of the skotch d8 native dexer"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+version.workspace = true
+repository.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+byteorder.workspace = true
+skotch-dex = { workspace = true }
+skotch-classfile = { workspace = true }
+
+[lints]
+workspace = true

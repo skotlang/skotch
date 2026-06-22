@@ -12,3 +12,6 @@ skotch-intern      = { workspace = true }
 skotch-diagnostics = { workspace = true }
 skotch-syntax      = { workspace = true }
 skotch-lexer       = { workspace = true }
+
+[lints]
+workspace = true

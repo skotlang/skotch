@@ -7,3 +7,6 @@ description = "String interner producing cheap Symbol handles"
 
 [dependencies]
 lasso = { workspace = true }
+
+[lints]
+workspace = true

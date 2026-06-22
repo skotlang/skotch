@@ -802,7 +802,7 @@ impl<'a> BlockWalker<'a> {
             }
             Rvalue::Call { kind, args } => match kind {
                 CallKind::Println | CallKind::Print => self.lower_println(args),
-                CallKind::PrintlnConcat => self.lower_println_concat(args),
+                CallKind::PrintlnConcat | CallKind::PrintConcat => self.lower_println_concat(args),
                 CallKind::Static(target_id) => self.lower_static_call(*target_id, args, dest),
                 CallKind::StaticJava { .. }
                 | CallKind::Constructor(_)
@@ -881,7 +881,7 @@ impl<'a> BlockWalker<'a> {
         };
         match kind {
             CallKind::Println | CallKind::Print => self.lower_println(args),
-            CallKind::PrintlnConcat => self.lower_println_concat(args),
+            CallKind::PrintlnConcat | CallKind::PrintConcat => self.lower_println_concat(args),
             CallKind::Static(target_id) => self.lower_static_call(*target_id, args, dest),
             CallKind::StaticJava { .. }
             | CallKind::Constructor(_)
@@ -1124,21 +1124,23 @@ fn escape_c_string(s: &str) -> String {
 mod tests {
     use super::*;
     use skotch_intern::Interner;
-    use skotch_lexer::lex;
-    use skotch_mir_lower::lower_file;
-    use skotch_parser::parse_file;
-    use skotch_resolve::resolve_file;
-    use skotch_span::FileId;
-    use skotch_typeck::type_check;
 
     fn build(src: &str) -> String {
         let mut interner = Interner::new();
         let mut diags = skotch_diagnostics::Diagnostics::new();
-        let lf = lex(FileId(0), src, &mut diags);
-        let ast = parse_file(&lf, &mut interner, &mut diags);
-        let r = resolve_file(&ast, &mut interner, &mut diags, None);
-        let t = type_check(&ast, &r, &mut interner, &mut diags, None);
-        let m = lower_file(&ast, &r, &t, &mut interner, &mut diags, "InputKt", None);
+        let parsed = skotch_ast::parse("input.kt", src);
+        let file = parsed.file();
+        let r = skotch_resolve::typed::resolve_file(file, &mut interner, None);
+        let t = skotch_typeck::typed::type_check(file, &r, &mut interner, &mut diags, None);
+        let m = skotch_mir_lower::typed::lower_file(
+            file,
+            &r,
+            &t,
+            &mut interner,
+            &mut diags,
+            "InputKt",
+            None,
+        );
         assert!(!diags.has_errors(), "{:?}", diags);
         compile_module(&m)
     }
@@ -1186,15 +1188,20 @@ mod tests {
     fn klib_round_trip_via_compile_klib() {
         let mut interner = Interner::new();
         let mut diags = skotch_diagnostics::Diagnostics::new();
-        let lf = lex(
-            FileId(0),
-            r#"fun main() { println("Hello, world!") }"#,
+        let src = r#"fun main() { println("Hello, world!") }"#;
+        let parsed = skotch_ast::parse("input.kt", src);
+        let file = parsed.file();
+        let r = skotch_resolve::typed::resolve_file(file, &mut interner, None);
+        let t = skotch_typeck::typed::type_check(file, &r, &mut interner, &mut diags, None);
+        let m = skotch_mir_lower::typed::lower_file(
+            file,
+            &r,
+            &t,
+            &mut interner,
             &mut diags,
+            "InputKt",
+            None,
         );
-        let ast = parse_file(&lf, &mut interner, &mut diags);
-        let r = resolve_file(&ast, &mut interner, &mut diags, None);
-        let t = type_check(&ast, &r, &mut interner, &mut diags, None);
-        let m = lower_file(&ast, &r, &t, &mut interner, &mut diags, "InputKt", None);
         let klib =
             skotch_backend_klib::write_klib(&m, skotch_backend_klib::DEFAULT_TARGET).unwrap();
         let ll = compile_klib(&klib).unwrap();

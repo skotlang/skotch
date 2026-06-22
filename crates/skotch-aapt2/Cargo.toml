@@ -1,0 +1,21 @@
+[package]
+name        = "skotch-aapt2"
+version     = { workspace = true }
+edition     = { workspace = true }
+license     = { workspace = true }
+repository  = { workspace = true }
+description = "Native reimplementation of the Android Asset Packaging Tool (aapt2) — resource compile/link/dump/optimize/convert with a library API for the skotch build pipeline"
+
+[dependencies]
+anyhow     = { workspace = true }
+byteorder  = { workspace = true }
+zip        = { workspace = true }
+flate2     = { workspace = true }
+roxmltree  = { workspace = true }
+rustc-hash = { workspace = true }
+
+[dev-dependencies]
+similar = { workspace = true }
+
+[lints]
+workspace = true

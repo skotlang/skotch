@@ -5,6 +5,12 @@
 //! Kept narrow on purpose — they're hot-paths in the composable +
 //! call-site padding code, and the regex/parser combos in other Kotlin
 //! tooling would be overkill.
+//!
+//! `#[allow(dead_code)]` on the whole module: all the helpers were
+//! consumed by the legacy `lib.rs` that was deleted in the typed-AST
+//! cutover. They're retained here because the typed mir-lower is
+//! expected to reach call-site shapes that need them as it grows.
+#![allow(dead_code)]
 
 use skotch_types::Ty;
 

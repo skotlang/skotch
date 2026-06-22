@@ -12,3 +12,6 @@ which        = { workspace = true }
 serde        = { workspace = true }
 serde_json   = { workspace = true }
 skotch-types = { workspace = true }
+
+[lints]
+workspace = true

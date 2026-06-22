@@ -13,3 +13,6 @@ pkcs8        = { workspace = true }
 der          = { workspace = true }
 byteorder    = { workspace = true }
 anyhow       = { workspace = true }
+
+[lints]
+workspace = true

@@ -8,3 +8,6 @@ description = "Token kinds and AST node types for skotch"
 [dependencies]
 skotch-span   = { workspace = true }
 skotch-intern = { workspace = true }
+
+[lints]
+workspace = true

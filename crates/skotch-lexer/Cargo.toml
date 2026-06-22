@@ -10,3 +10,6 @@ skotch-span        = { workspace = true }
 skotch-intern      = { workspace = true }
 skotch-syntax      = { workspace = true }
 skotch-diagnostics = { workspace = true }
+
+[lints]
+workspace = true

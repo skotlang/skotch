@@ -39,3 +39,6 @@ skotch-dex-norm     = { workspace = true }
 skotch-llvm-norm    = { workspace = true }
 skotch-backend-klib = { workspace = true }
 skotch-backend-llvm = { workspace = true }
+
+[lints]
+workspace = true

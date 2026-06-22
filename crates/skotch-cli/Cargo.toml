@@ -20,6 +20,7 @@ skotch-bsp          = { workspace = true }
 skotch-intern       = { workspace = true }
 skotch-diagnostics  = { workspace = true }
 skotch-span         = { workspace = true }
+skotch-ast          = { workspace = true }
 skotch-syntax       = { workspace = true }
 skotch-lexer        = { workspace = true }
 skotch-parser       = { workspace = true }
@@ -28,6 +29,14 @@ skotch-resolve      = { workspace = true }
 skotch-backend-jvm  = { workspace = true }
 skotch-compose      = { workspace = true }
 skotch-mir-lower    = { workspace = true }
+skotch-apksig       = { workspace = true }
+skotch-aapt2        = { workspace = true }
+skotch-d8           = { workspace = true }
 clap                = { workspace = true }
 anyhow              = { workspace = true }
 tokio               = { workspace = true }
+sha1                = { workspace = true }
+sha2                = { workspace = true }
+
+[lints]
+workspace = true

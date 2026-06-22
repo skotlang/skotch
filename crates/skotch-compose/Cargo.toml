@@ -10,3 +10,6 @@ version.workspace      = true
 skotch-mir       = { workspace = true }
 skotch-types     = { workspace = true }
 skotch-classinfo = { workspace = true }
+
+[lints]
+workspace = true

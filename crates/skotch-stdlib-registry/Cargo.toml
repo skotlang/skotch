@@ -8,3 +8,6 @@ version.workspace      = true
 
 [dependencies]
 skotch-types = { workspace = true }
+
+[lints]
+workspace = true

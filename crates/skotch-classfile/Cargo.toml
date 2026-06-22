@@ -1,0 +1,16 @@
+[package]
+name = "skotch-classfile"
+description = "part of the skotch d8 native dexer"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+version.workspace = true
+repository.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+byteorder.workspace = true
+flate2.workspace = true
+
+[lints]
+workspace = true

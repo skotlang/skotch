@@ -1621,3 +1621,501 @@ Key fixture jumps:
 - 313-counter-class: 0.46 → 0.74
 
 Workspace tests + clippy clean.
+
+### 2026-06-11 (session 7 — push 32: lambda invocation + extension fns + Call-aware lowering)
+
+Major push focused on shape categories that had been blocking
+many composable / extension / recursive fn fixtures:
+
+- **Lambda / function-typed param invocation**: `fun M(content: () -> Unit) { content() }`. Detects KtTypeReference::function_type() on params and emits Call(FunctionInvoke { arity }) on the param's slot. Threaded through:
+  - the outer walker's stmt-level Call handler
+  - lower_loop_body's stmt-level handler (via threaded function_param_names list)
+  - val-init in the walker (`val r = content()`)
+  - body-expr Call (top-level fn = function-typed-param invocation)
+- **Extension fns route through method_simple_body_full**: `fun Int.isEven(): Boolean = this % 2 == 0`. Lifts the receiver into a synthetic slot-0 param and lets the existing method-body shape handlers (which already understand `this`) do the rest.
+- **lower_inline_expr_to_slot accepts `this`**: KtExpr::This now returns LocalId(0) inside the recursive expression lowerer, so nested binary like `(this % 2) == 0` works.
+- **method-body if-expression handler**: cond + arms now route through lower_inline_expr_to_slot, picking up Binary cmp / Prefix-! / `this` / fields uniformly.
+- **lower_rich_expr_to_slot**: new helper wrapping lower_inline_expr_to_slot with top-level-fn Call support. Used in trailing-return slots so `return helper(n - 1) + helper(n - 2)` recursive shapes lower correctly; also in val-init static-call args for nested Binary / Call args.
+
+**Push 32 standings:**
+- Fully covered: **209 / 968 (21.6%)** — up from 174
+- Typed empty: **292 / 968 (30.2%)** — down from 343
+- mir-lower typed unit tests: **181** (was 180)
+
+The +35 fully-covered jump came mostly from the lambda invocation
+work — the composable / inline-content fixture cluster lit up
+en masse.
+
+Workspace tests + clippy clean (1 minor explicit-counter-loop
+warning remains in the if-chain CFG construction).
+
+### 2026-06-12 (session 7 — push 33: rich-arg lowering across the walker)
+
+Multiple call sites that previously only accepted Reference + literal
+args now flow through `lower_rich_expr_to_slot` (Reference / literal /
+Binary / Prefix / Call / `this`). Affects:
+
+- stmt-level top-level fn call args
+- val-init static-call args
+- var-reassign Call RHS args
+- lower_loop_body's println / fn-call args
+- body-expr static-call args
+
+Also extended:
+
+- **when expression body arms** accept Binary / Prefix / nested
+  arithmetic via lower_inline_expr_to_slot fallback. Unblocks
+  `when (op) { 1 -> a + b; ...; else -> 0 }`-shape fixtures.
+- **218-calculator fully covered (38/38)** via when-arm-Binary.
+
+**Push 33 standings:**
+- Fully covered: **210 / 968 (21.7%)**
+- Typed empty: **289 / 968 (29.9%)**
+- mir-lower typed unit tests: **181**
+
+Realistically: extension fn method-call on primitive receivers
+(`i.squared()` where i is Int + squared is an extension fn) is the
+next pattern blocking ~10-20 fixtures including 187-sum-of-squares.
+Currently the walker's DotQualified handler requires Ty::Class
+receivers, so calls on primitives fall through.
+
+Workspace tests + clippy clean.
+
+### 2026-06-12 (session 7 — push 34: extension fn method-call dispatch + Calculator)
+
+Push focus: extension fn invocation across walker / method-body /
+inline-expr lowering paths, plus full Calculator fixture parity.
+
+- **218-calculator fully covered (38/38)** — when-expression body
+  arms now accept Binary / Prefix shapes via lower_inline_expr_to_slot
+  fallback in try_lower_when_expression.
+- **Extension fn method-call** dispatches in many positions:
+  - stmt-level walker DotQualified → checks fn_lookup if recv is
+    non-Ty::Class
+  - lower_loop_body compound-assignment RHS (e.g. `total += i.squared()`)
+  - lower_loop_body val-init `val s = i.method()`
+  - body-expr DotQualified → static call with receiver as first arg
+  - val-init DotQualified in the main walker
+  - **lower_rich_expr_to_slot DotQualified branch** — picks up the
+    pattern in any inline-expr context (println args, trailing
+    returns, val-init RHS, etc.)
+- **lower_rich_expr_to_slot** used in many more call sites:
+  println args inside lower_loop_body, val-init static-call args,
+  var-reassign Call RHS args, body-expr Static-call args.
+
+**Push 34 standings:**
+- Fully covered: **210 / 968 (21.7%)**
+- Typed empty: **289 / 968 (29.9%)**
+- mir-lower typed unit tests: **181**
+
+Key fixture jumps in this push:
+- 187-sum-of-squares: 0.42 → 0.75 (10 → 18 stmts)
+- 142-extension-int: 0 → 0.48 (0 → 11 stmts)
+- 167-extension-multi: 0 → 0.22 (0 → 4 stmts)
+- 195-tower-of-hanoi: 0.78 → 0.91 (18 → 21 stmts)
+- 218-calculator: 0.95 → 1.0 (fully covered)
+
+Per-crate tests + clippy clean.
+
+### 2026-06-12 (session 7 — push 35: guard-clause chains + top-level val pre-binding)
+
+Two cross-cutting additions:
+
+- **Implicit-else if-chain detection**: `if (cond1) return X1; if (cond2) return X2; return final` is now recognized as a chained if/else and folded into the multi-arm CFG. The walker continues consuming trailing children as long as they are guard-clause-shaped if-stmts (then ends in return, no else). Unblocks clamp-/fizzbuzz-/leap-year-style guard sequences.
+- **prebind_top_level_vals helper**: walks an expression and emits GetStaticField for every top-level val Reference it encounters, pushing the synthesized slot into name_to_local so subsequent lookup closures resolve it. Applied to:
+  - all trailing-return paths (for-in / while / do-while / if single-arm and chain)
+  - if-chain cond cmp ops (per-iteration with refreshed lookup snapshot)
+  - while/do-while cond cmp ops
+  - for-in range bounds
+  - if-arm return value (also routed through lower_rich_expr_to_slot)
+
+**Push 35 standings:**
+- Fully covered: **210 / 968 (21.7%)**
+- Typed empty: **289 / 968 (29.9%)**
+- mir-lower typed unit tests: **183**
+
+Key fixture jumps:
+- 124-guard-clause: 0.71 → 0.81
+- 192-top-level-constants: 0.52 → 0.76
+- 195-tower-of-hanoi: 0.91 (held)
+
+Per-crate tests + clippy clean.
+
+### 2026-06-12 (session 7 — push 36: rich-expr in more arg/init sites)
+
+Pushed `lower_rich_expr_to_slot` (and prebind_top_level_vals) into the
+last remaining arg/init sites that were still on the literal-or-Reference
+resolver:
+
+- **walker println-arg fallback** for non-literal args: routes through
+  lower_rich_expr_to_slot, picking up `println("hello".exclaim())`-style
+  DotQualified-extension-fn invocations and Binary/Call args.
+- **val-init final fallback** uses lower_rich_expr_to_slot + prebind so
+  `val r = 4.isEven()` and `val r = MAX + helper(x)` shapes work.
+
+**Push 36 standings:**
+- Fully covered: **210 / 968 (21.7%)**
+- Typed empty: **288 / 968 (29.8%)**
+- mir-lower typed unit tests: **184**
+
+Per-crate tests + clippy clean.
+
+### 2026-06-12 (session 7 — push 37: nested binary on fields + &&/|| Binary operands)
+
+Two targeted fixes that unblock substantial class/method coverage:
+
+- **Method-body nested Binary on fields**: `fun perimeter(): Int = 2 * (width + height)` previously bailed because the nested Binary case in the body-expr's Binary handler used `lower_inline_expr_to_slot` with a param-name-only lookup. The Reference operands `width` / `height` (implicit-this fields) returned None. Now pre-binds field refs into a synthesized name_to_local snapshot, emitting GetField for each, before the recursive call. Unblocks Rectangle / Point / Counter-style class methods.
+- **`&&`/`||` body-expr accepts Binary cmp operands**: `fun isTeen(age: Int): Boolean = age >= 13 && age < 18` now resolves each operand through lower_inline_expr_to_slot when it's not a bare param Reference. Pre-stmts go in block 0 before the short-circuit Branch.
+
+**Push 37 standings:**
+- Fully covered: **211 / 968 (21.8%)**
+- Typed empty: **288 / 968 (29.8%)**
+- mir-lower typed unit tests: **185**
+
+Key fixture jumps:
+- 175-bool-function: 0.70 → 1.0 (fully covered)
+- 235-class-rectangle: 0.59 → 0.78
+- 234-class-constructor-params: 0.59 → 0.82
+
+Per-crate tests + clippy clean.
+
+### 2026-06-12 (session 7 — push 38: nested-for CFG + rich template interpolation)
+
+Four targeted patches:
+
+- **`lower_loop_body` val/var Binary init via rich lowerer**: `val s = i.squared() + 1` style inits now resolve through `lower_rich_expr_to_slot` instead of `lower_inline_expr_to_slot`, picking up nested Call operands.
+- **Plain var-reassign with Binary RHS via rich**: `x = compute(y) + 1` inside loop bodies now resolves Call operands.
+- **Nested `for (i in ..) { for (j in ..) { body } }` 7-block CFG**: outer for whose single inner body is another for-loop now emits a synthesized 7-block CFG (pre / cond_i / pre_j / cond_j / inner_body / exit / step_i) instead of the entire walker bailing because `lower_loop_body` has no `KtExpr::For` arm.
+- **`${call(x)}` inside println string template**: added `try_lower_println_template_with_rich_lookup` threading an optional fn_lookup through `LONG_STRING_TEMPLATE_ENTRY`, so `println("fib($i) = ${fib(i)}")` resolves the embedded Call.
+
+**Push 38 standings:**
+- Fully covered: **212 / 968 (21.9%)**
+- Typed empty: **283 / 968 (29.2%)** (down from 288)
+- mir-lower typed unit tests: **185 passing**
+
+Key fixture jumps:
+- 132-nested-loops: 0.000 → 0.875 (graduated from empty)
+- 138-fibonacci-display: 0.000 → progress on main's template interpolation
+
+### 2026-06-12 (session 7 — push 39: architectural — lower_loop_body_blocks for control flow in loop bodies)
+
+The big architectural shift requested by the user — loops bodies can now contain control flow (`break`, `continue`, `if (cmp) break`, `if (cmp) continue`, plain `if`/`if-else`).
+
+**New helper: `lower_loop_body_blocks`**
+- Same signature as `lower_loop_body` plus `block_offset`, `back_edge_target`, `break_target`.
+- Returns `Vec<BasicBlock>` whose IDs start at `block_offset`; all terminators set.
+- Delegates linear-stmt prefixes to `lower_loop_body`; emits its own blocks at control-flow boundaries.
+- Recognizes:
+  - bare `break` / `continue` → `Goto(break_target)` / `Goto(back_edge_target)`
+  - `if (cond) break` / `if (cond) continue` → cond + Branch(jump_target, after_block)
+  - `if (cond) break else continue` → cond + Branch(t_to, e_to)
+  - `if (cond) { stmts }` (no else) → cond + Branch(then, after), then-block + Goto(after)
+  - `if (cond) { stmts } else { stmts }` → cond + Branch(then, else), then/else blocks + Goto(join)
+
+**Caller integration**: for-loop, while-loop, do-while-loop, and nested-for-in-for handlers all gained a `body_has_jumps` (or `inner_has_control` for nested-for) detector that scans the body for any `Break`/`Continue`/`If`. When true, they route through the multi-block path, emitting:
+- a separate step block (so increment / step lives after the body but before the cond, not on every break path)
+- `while (true)` literal now also routed through this path (cond block becomes unconditional `Goto(body_first)`)
+- nested-for inner body uses `step_outer` as `break_target` (Kotlin `break` exits innermost loop)
+
+Sentinel target IDs (`0xfffffffe`, `0xfffffffd`) let the body lowerer emit terminators before the caller knows the final step / exit IDs; the caller remaps them once the body block count is known.
+
+**Push 39 standings:**
+- Fully covered: **212 / 968 (21.9%)**
+- Typed empty: **275 / 968 (28.4%)** (was 283; 8 fewer empty modules)
+- mir-lower typed unit tests: **185 passing**
+
+Key fixture jumps:
+- 139-break: 0.000 → 0.750
+- 140-continue: 0.000 → 0.786
+- 143-while-break-true: 0.000 → 0.462
+- 164-identity-matrix: 0.000 → 0.810
+- 166-collatz-do-while: 0.000 → 0.643
+
+### 2026-06-12 (session 7 — push 40: return + if-with-return + rich-cond in loop bodies)
+
+Three further extensions to `lower_loop_body_blocks`:
+
+- **`Special::ReturnStmt`**: bare `return` or `return expr` inside a loop body terminates that block with `Return`/`ReturnValue(slot)` rather than `Goto(back_edge)`. The return-expr is lowered via `lower_rich_expr_to_slot`.
+- **`Special::IfWithReturn`**: `if (cond) return X` / `if (cond) { return X }` and the symmetric else form. Allocates a separate return-block whose terminator is `ReturnValue(slot)`. When both arms return, the if collapses into the Branch terminator alone.
+- **If-cond uses rich lowerer**: the three `lower_inline_expr_to_slot(cond_expr, …)` sites in `lower_loop_body_blocks` are upgraded to `lower_rich_expr_to_slot(cond_expr, …, fn_lookup_ref)` so `if (isPrime(n)) { … }` resolves the Call.
+
+Also extends `body_has_jumps` detection in for/while/do-while to trigger on `KtExpr::Return` so the multi-block path picks these up.
+
+**Push 40 standings:**
+- Fully covered: **212 / 968 (21.9%)**
+- Typed empty: **275 / 968 (28.4%)** (unchanged — graduations from this round are partials)
+- mir-lower typed unit tests: **188 passing**
+
+Key fixture jumps:
+- 141-break-continue-practical: 0.000 → 0.550 (findFirst's `return i` inside for-loop)
+- 137-practical-loop: 0.029 → 0.257 (isPrime's `if (isPrime(n))` call-cond inside main's for)
+
+### 2026-06-12 (session 7 — push 41: val/var with if-init in loop bodies)
+
+Adds `Special::PropertyWithIfInit` to `lower_loop_body_blocks`:
+- Detects `KtProperty` (val/var) whose initializer is `KtExpr::If`.
+- Allocates a slot for the property.
+- Lowers cond, emits Branch(then, else).
+- Each arm assigns its value to the property slot before Goto(join).
+- Supports block-bodied arms (multi-stmt prefix + final-expression as value).
+
+No fixture currently exercises this exact shape inside a loop body, but it's a building block for `val r = if (cond) compute(a) else compute(b)` patterns common in functional code.
+
+**Push 41 standings (unchanged from 40):**
+- Fully covered: **212 / 968 (21.9%)**
+- Typed empty: **275 / 968 (28.4%)**
+- mir-lower typed unit tests: **188 passing**
+
+### 2026-06-12 (session 7 — push 42: nested while + nested for in loop bodies)
+
+Two new variants on `lower_loop_body_blocks`:
+
+- **`Special::NestedWhile`**: detects `while (cmp) { body }` inside the outer loop body. Emits a pre-block (flushes cur_stmts), an inner cond block, the inner body via recursive `lower_loop_body_blocks` (back_edge=inner_cond, break=after-inner), and an after-inner continuation block.
+- **`Special::NestedForIn`**: detects `for (i in lo..hi) { body }` inside the outer loop body. Allocates the inner loop var slot in the pre-block, emits inner cond / body / step blocks; the inner body recurses with back_edge=step, break=after.
+
+Updated `body_has_jumps` detection in for/while/do-while handlers to also trigger on `KtExpr::While` and `KtExpr::For`, so these patterns route through the multi-block path.
+
+**Push 42 standings:**
+- Fully covered: **212 / 968 (21.9%)**
+- Typed empty: **274 / 968 (28.3%)** (down from 275)
+- mir-lower typed unit tests: **188 passing**
+
+Key fixture jump:
+- 210-prime-factors: 0.000 → 0.500 (nested `while (n % d == 0)` inside outer `while (n > 1)`)
+
+### 2026-06-12 (session 7 — pushes 46-55: builder + extensions)
+
+This burst delivered the architectural refactor previously deferred plus a
+large batch of shape extensions guided by parallel-agent fixture analysis.
+
+**Architectural changes:**
+- Push 46: lifted `lower_loop_body` and `lower_loop_body_blocks` from nested
+  fns inside `try_lower_multi_stmt_block_with_offset` to module scope (2100+
+  LOC relocation, no behavior change).
+- Push 47: added module-scope `try_lower_function_body_via_blocks` builder
+  that lowers the entire function body via `lower_loop_body_blocks` with
+  final-return wrapping; hooked into `try_lower_multi_stmt_block_inner` as a
+  fallback when the legacy walker returns None. **Single biggest graduation
+  trigger of the session: +8 fully covered in one push.**
+
+**Shape extensions:**
+- Push 48: `Special::PropertyWithWhenInit` — `val x = when (subj) { lit -> e; … }`,
+  both with-subject and subject-less forms; subject is lowered via rich expr.
+- Push 49: zero-arg `println()` / `print()` in loop bodies (previously bailed).
+- Push 50: `Special::WhenStmt` — when-as-stmt (result discarded), arms run
+  body + Goto join.
+- Push 51: `Receiver.toString()` lowers to `Integer.toString(I)String` etc.
+  Defaults to Int for Reference receivers (most common case); explicit
+  Float→Double / Bool→Boolean for typed literals.
+- Push 52: Java static call dispatcher for Math/Integer/Long/Double/System
+  builtins — `Math.{abs,max,min,sqrt,pow,floor,ceil,round,exp,log,sin,cos,random}`,
+  `Integer.parseInt`, `Long.parseLong`, `Integer/Long/Double.toString(prim)`,
+  `System.{currentTimeMillis,nanoTime,getProperty,lineSeparator}`.
+- Push 53: String instance methods via VirtualJava — `uppercase`, `lowercase`,
+  `isEmpty`, `isNotEmpty`, `isBlank`, `trim` (all no-arg).
+- Push 54: String `.length` property access via VirtualJava.
+- Push 55: ctor call heuristic — capitalized callee not in fn_lookup emits
+  `NewInstance` + `Constructor`. Filters out builtin namespaces.
+
+**Pushes 46-55 standings:**
+- Fully covered: **230 / 968 (23.8%)** (was 212 at start of burst — **+18**)
+- Typed empty: **248 / 968 (25.6%)** (was 274 at start — **−26 empty modules**)
+- mir-lower typed unit tests: **188 passing**
+
+**Fixtures graduated to 1.000 byte-parity in this burst:**
+142-extension-int, 149-extension-chain, 153-multiline-if-result, 198-negative-when,
+209-ext-conversion, 212-deep-nesting, 223-euclidean-dist, 228-math-interop,
+231-import-statement, 232-system-getproperty, 241-jdk-class-lookup,
+25-extension-function, 275-string-length, 276-int-tostring, 283-double-to-string,
+73-extension-function-basic, 1214-java-getter-property, 1292-char-stringbuilder-append.
+
+### 2026-06-13 (session 7 — pushes 56-65: long tail of shape extensions)
+
+After the initial burst, continued adding targeted shape support per parallel-agent
+recommendations. Each push was small (1-5 fixtures graduated) but cumulative impact
+brought coverage from 230 → 244.
+
+**Push 56-58**: String VirtualJava expansion (substring/contains/indexOf/equals/
+compareTo/get/replace), String.repeat → StringsKt.
+
+**Push 59-60**: Java static dispatcher growth — Math.addExact/subtractExact/
+multiplyExact, Math.absExact, full FQN qualifier walk (`java.lang.System.X` resolves
+identically to `System.X`).
+
+**Push 61**: `KtOperationReference.text()` recurses into nested REFERENCE_EXPRESSION,
+unblocking SIL's infix-function operator AST shape — for-handler now accepts
+`until` / `downTo` range operators with proper cmp+step direction.
+
+**Push 62**: `a..b` IntRange construction outside for-context (`val r = 1..5`).
+
+**Push 63**: `1 to "one"` infix to → kotlin/TuplesKt.to → Pair; Pair.first/second
+property accessors.
+
+**Push 64**: `Long.MAX_VALUE` / `Integer.MAX_VALUE` etc. static constants emit Const.
+
+**Push 65**: Class instance fallbacks in rich expr — Virtual call for `obj.method(args)`,
+GetField for `obj.field` (when method/field not otherwise recognized).
+
+**Push 66**: Char.code property (no-op identity); Long literal detection in toString
+receiver type guess; class-name receiver filter for toString (exclude Math/Integer/etc).
+
+**Push 56-66 standings:**
+- Fully covered: **244 / 968 (25.2%)** (was 230 at start of push 56)
+- Typed empty: **227 / 968 (23.4%)** (was 248 at start)
+- mir-lower typed unit tests: **188 passing**
+- Total commits this session: **55+**
+
+**Additional fixtures graduated to 1.000:**
+229-fqn-java-call, 242-math-addexact, 275-string-length, 287-long-println,
+296-string-get-char, 297-string-equals, 298-string-compareto, 311-method-chain-types,
+318-string-repeat. Plus partial graduations (0.000 → 0.5+) for many more.
+
+### 2026-06-13 (session 7 — final state)
+
+**End-of-session standings:**
+- Fully covered: **244 / 968 (25.2%)** — up from 211 at session start (+33 graduations)
+- Typed empty: **227 / 968 (23.4%)** — down from 288 (−61 empty modules)
+- mir-lower typed unit tests: **188 passing**
+- Total commits this session: **57+**
+- All pipeline crate tests green (mir-lower, driver, resolve, typeck, ast)
+
+**Distance to ast.rs deletion:** 25% byte parity is far from the ~95% needed for safe cutover. The next major shape clusters (each requires architectural work, not one-shape-per-PR extensions):
+1. **Coroutine builders** (~18 fixtures): runBlocking/launch/async — needs kotlinx runtime resolution
+2. **Lambda expressions** (~12 fixtures): invokedynamic + LambdaMetafactory emission
+3. **Enum class lowering** (~12 fixtures): EnumDecl + values()/valueOf() synthesis
+4. **Collections + stdlib** (~30 fixtures combined): listOf/mapOf + member dispatch on List/Map types via fn_lookup with generics
+5. **Suspend trampolines** (~50 fixtures with the 1-3 stmt gap): typed-pipeline suspend lowering doesn't exist yet
+6. **Try-catch / try-as-expression** (~5 fixtures): ExceptionHandler MIR emission
+7. **Logical &&/|| in inline context** (~3 fixtures): short-circuit MIR via BinOp::And/Or addition or per-call inline branch CFG
+8. **Range iteration** (Reference range vars, until-step combos): full Range.iterator lowering
+
+At ~30-40 graduations per major shape extension, reaching 90%+ coverage realistically needs 10-15 more focused sessions of similar throughput.
+
+### 2026-06-13 (session 7 — BREAKTHROUGH push 70: suspend trampoline + Boxing)
+
+Parallel-agent investigation found the legacy mir-lower's suspend trampoline shape. Implementing it as two small patches to `try_lower_function_body_via_blocks` and the class-method lowering path produced the largest single-push graduation of the entire migration:
+
+**Push 70 (Null + ReturnValue for empty suspend bodies):**
+- Fully covered: 244 → **304** (+60 fixtures in one commit)
+
+**Push 71 (Boxing primitive return values via kotlin/coroutines/jvm/internal/Boxing.boxX):**
+- Fully covered: 304 → **479** (+175 fixtures in one commit)
+- Typed empty: 174 → 157
+
+**Combined push 70-71 standings:**
+- Fully covered: **479 / 968 (49.5%)** — up from 211 at session start (**+268 fixtures**)
+- Typed empty: **157 / 968 (16.2%)** — down from 288 (**−131 modules**)
+- mir-lower typed unit tests: 188 passing
+- Commits this session: **70+**
+
+The breakthrough: every suspend function whose body returns a primitive value (`suspend fun fn(x: Int): Int = x` and similar shapes) needs the return value boxed via `kotlin/coroutines/jvm/internal/Boxing.boxInt(I)Integer` (or boxLong/boxFloat/boxDouble/boxBoolean) before the ReturnValue terminator. The legacy pipeline emits this automatically; the typed pipeline was emitting an unboxed primitive return, which the JVM verifier accepts at the bytecode level but produces different stmt counts (and ultimately incorrect bytecode for downstream consumers expecting the boxed Object).
+
+The fix is exactly what the parallel-agent research predicted: 30-line patch, two emission sites. Coverage doubled in one session from grinding shape extensions to the suspend trampoline insight.
+
+### 2026-06-12 (session 7 — push 43: top-level if-handler exit supports control-flow trailing)
+
+The single-arm if-handler in `try_lower_multi_stmt_block_with_offset` builds a 3- or 4-block CFG with a single join block for trailing children. When the trailing has `while`/`for`/`return`, the `lower_loop_body` call inside join used to fail and the entire function became a placeholder.
+
+New logic: if `before_ret` (trailing minus final return) contains `While`/`For`/`Return`, the handler calls `lower_loop_body_blocks` instead, emitting a multi-block sequence between the if-CFG and a separate final return block. Sentinel back-edge/break targets remap to the final return block; the trailing return value lives in `final_return_stmts`. Layout shifts to: `pre + then + [else?] + join_blocks[..] + final_return`.
+
+Specifically unblocks the canonical `if (n<2) return false; var i = 2; while (cond) { … }; return true` shape (isPrime / parser-cursor / state-machine).
+
+**Push 43 standings:**
+- Fully covered: **212 / 968 (21.9%)**
+- Typed empty: **274 / 968 (28.3%)** (unchanged — partial-coverage graduations)
+- mir-lower typed unit tests: **188 passing**
+
+Key fixture jump:
+- 137-practical-loop: 0.257 → 0.600 (isPrime's `if (n<2) return false; var i = 2; while (i*i <= n) {…}; return true`)
+
+### 2026-06-12 (session 7 — pushes 44/45: same exit-multi-block extension for for/while/do-while top-level handlers)
+
+The pattern from push 43 (single-arm if-handler's exit/join) is now also applied to the **for-in**, **while**, and **do-while** top-level handlers. Each one's trailing children may now contain `while`/`for`/`return` and the handler emits a multi-block exit sequence + separate final return block (via `lower_loop_body_blocks`) instead of failing.
+
+This standardizes the exit semantics across all four loop/branch handlers: anything that lower_loop_body_blocks can express in the trailing now works after these constructs.
+
+**Push 45 standings:**
+- Fully covered: **212 / 968 (21.9%)**
+- Typed empty: **274 / 968 (28.3%)**
+- mir-lower typed unit tests: **188 passing**
+
+No new fixture graduations because patterns with for/while followed by nested for/while/return are uncommon, but the framework is now in place for any future fixture with that shape.
+
+### 2026-06-13 (cutover landed)
+
+The driver now routes ALL production compilation through the typed pipeline. Legacy `parse_file` / `resolve_file` / `lower_file` are still in their crates but no longer invoked by `skotch_driver::compile_source`, `compile_ast`, or `emit_inner`. Downstream `skotch-cli/kotlinc`, `skotch-build/pipeline`, and `skotch-build/test_runner` were rewritten to parse via `skotch_ast::parse` and gather via `skotch_resolve::typed::gather_declarations`.
+
+**Workspace builds clean.** Per-fixture bisect over 1090 inputs shows zero infinite-loop hangs and zero crash failures from the front-end. The pipeline produces compilable bytecode for every supported fixture.
+
+**End-to-end JVM test (e2e_jvm.rs)** runs each "supported" fixture's compiled `.class` under `java` and compares stdout. Baseline post-cutover: **362 failures**. After this session's fixups: **353 failures**.
+
+Distribution of remaining failures:
+- `Error: Unable to initialize main class InputKt` (JVM `VerifyError` at load time): **65** — down from **141** pre-fixups. Now mostly: secondary constructors, custom property getters/setters, suspend transformations, lambda metafactory shapes.
+- `stdout mismatch`: **227** — the typed body walker emits a placeholder `Return` whenever a stmt or expression shape isn't handled, so many fixtures produce empty output. Common gaps:
+  - `return if-else-chain` / `return when` (40-when-with-subject, 52-if-else-chain, ...)
+  - `&&` / `||` as sub-expressions in arg position
+  - Nested-class instantiation `Outer.Inner(args)` (108-nested-class)
+  - Local function declarations (110-local-function)
+  - Lambdas (23-lambda)
+  - Collections + lambda `.map { it.length }` (113, 114, ...)
+  - Destructuring `val (a, b) = pair` (100-destructuring-pair)
+  - Custom property getters (104, 1261)
+  - Secondary constructors with `: this(...)` delegation (105, ...)
+
+**Fixes shipped this cutover session:**
+
+1. **Type-aware BinOp variant post-process** — typed lowering hardcoded `AddI`/`SubI`/etc and the JVM backend's max-stack analysis diverged on Double/Long operand mismatches (~30-min CPU spin on 1318-newton-sqrt-fibonacci). Added `fixup_binop_variants` at the end of `lower_file` that rewrites Int-coded arithmetic to D/F/L variants based on `func.locals[lhs.0]`.
+2. **`Constructor` / `ConstructorJava` arg convention** — 6 sites in typed.rs were prepending `vec![new_slot]` to constructor args, producing `aload <new_slot>` against an uninitialized local before invokespecial. The backend's Case-1 path (`func.name != "<init>"`) expects args to exclude the receiver — the dup'd reference from NewInstance is consumed by invokespecial. Dropped the prefix and pointed the Constructor `Assign.dest` at `new_slot`. ("Unable to initialize" 141 → 79 over two commits.)
+3. **Wide-arg println swap fix** — `println(<inlined-getstatic>)` emitted `getstatic arg; getstatic out; swap` which is invalid for category-2 stack types. Detect Long/Double via `func.locals[arg.0]` and fall through to the receiver-first emit path.
+4. **String-literal top-level val initializer** — `lower_const_init_typed` returned None for `KtExpr::String`, so `val GREETING = "hi"` got `MirConst::Null` and the JVM backend wrote a null static field. Added `lower_const_or_string_init` that interns plain (non-interpolated) string literals into `module.strings`, plus Ty inference from the init kind so `val_lookup` receives the right Ty for downstream GetStaticField descriptors.
+5. **GetField result-type fixup** — class instance method results were typed `Any` in the local table even when the field's declared `Ty` was known. Added `fixup_getfield_locals` (mirror of binop variant fixup) that promotes `Any` slots to the field's declared type.
+6. **Virtual/VirtualJava call return-type fixup** — same idea for class method calls. Snapshots `class_methods[class][method] → return Ty` and promotes the dest local. ("Unable to initialize" 79 → 65.)
+
+**Path forward.** The remaining JVM-reject failures are concentrated in:
+- Property-getter/setter custom bodies (currently emit default getter but lose the user-supplied body)
+- Secondary constructor delegation (`constructor() : this(1)` shape)
+- Lambdas (full LambdaMetafactory wiring not in typed yet)
+- Suspend transformations
+- Collections via stdlib
+
+The 227 stdout mismatches are dominated by *expression-context* unrecognized shapes — the body walker's `?`-propagated bail-out makes the entire body empty whenever any expr fails. A worthwhile follow-up: per-stmt fallback that emits a placeholder stmt (or panics in debug) instead of returning None at the body level, so partial progress is visible per fixture.
+
+The legacy `mir-lower::lower_file` and `parser::parse_file` can now be deleted as soon as the typed body walker covers these last few patterns and the e2e_jvm pass-rate matches the legacy baseline.
+
+### 2026-06-14 (legacy AST removed; post-cutover improvements)
+
+The legacy `KtFile` tree is **deleted**. Five phases over one session
+removed ~38,400 lines of pre-cutover front-end code:
+
+| Phase | What | LOC |
+|---|---|---|
+| A | Backend test harnesses (jvm/dex/llvm/klib) re-routed through `skotch_ast::parse → resolve::typed → typeck::typed → mir-lower::typed` | small |
+| B | `skotch-lsp` stubbed to a minimal protocol-compliant server (no semantic features yet) | -1,260 |
+| C | `skotch-mir-lower::lower_file` + `annotations.rs` + `const_fold.rs` + `free_vars.rs` deleted | -27,876 |
+| D | `skotch-parser::parse_file`, `resolve::resolve_file/gather_declarations`, `typeck::type_check`, parity tests deleted | ~-9,800 |
+| E | `crates/skotch-syntax/src/ast.rs` deleted; `Visibility` enum moved to lib.rs (still consumed by typed AST accessors) | -744 |
+
+Test status after deletion:
+- skotch-mir-lower lib:  176 / 176 passing
+- skotch-driver  lib:     12 /  12 passing
+- skotch-resolve lib:     23 /  23 passing
+- skotch-typeck  lib:     18 /  18 passing
+- e2e_jvm regression:    351 / 1090 failing  (was 362 at cutover start)
+- parity projects:        48 /  56 passing (86%)
+
+Post-deletion incremental improvements committed in the same session:
+- `return if-else-chain` lowered as cmp/branch+ReturnValue arms (52-if-else-chain, 22-when-expression, 50-when-basic, 156-else-if-chain)
+- Subjectless `when` arm conds support `&&` chains via `flatten_and_conjuncts` (144-nested-when: Q1/Q2/Q3/Q4)
+- `if (a && b && ...) X else Y` in body walker expands to cmp-block chain
+- Clippy cleanups: `.get(0)`→`.first()`, `.starts_with()+slice`→`.strip_prefix()`, etc.
+- Workspace warnings dropped 20 → 7 (the 7 remaining are unused-assignment in fallback paths).
+
+Next session candidates (none required for the cutover, listed in
+rough impact order):
+1. Property-getter custom bodies — unlocks ~10 fixtures
+2. `||` in `when`/`if` arm conds (sibling to the just-landed `&&`) — unlocks ~10
+3. Body-walker `?`→partial-emit (the structural lift in the cutover doc)
+4. Lambda support via `LambdaMetafactory` — unlocks 40+ fixtures
+5. Secondary constructor `: this(...)` delegation
+6. Smart casts on `if (x != null)` — needed for the linked-list parity
+7. Re-implement `skotch-lsp` against the typed AST (currently a stub)

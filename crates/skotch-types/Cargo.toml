@@ -8,3 +8,6 @@ description = "Type lattice (no inference engine) for skotch"
 [dependencies]
 skotch-intern = { workspace = true }
 serde       = { workspace = true }
+
+[lints]
+workspace = true

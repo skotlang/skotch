@@ -69,21 +69,24 @@ pub fn compile_module(module: &MirModule) -> Vec<u8> {
 mod tests {
     use super::*;
     use skotch_intern::Interner;
-    use skotch_lexer::lex;
-    use skotch_mir_lower::lower_file;
-    use skotch_parser::parse_file;
-    use skotch_resolve::resolve_file;
-    use skotch_span::FileId;
-    use skotch_typeck::type_check;
 
     fn compile(src: &str) -> Vec<u8> {
         let mut interner = Interner::new();
         let mut diags = skotch_diagnostics::Diagnostics::new();
-        let lf = lex(FileId(0), src, &mut diags);
-        let ast = parse_file(&lf, &mut interner, &mut diags);
-        let r = resolve_file(&ast, &mut interner, &mut diags, None);
-        let t = type_check(&ast, &r, &mut interner, &mut diags, None);
-        let m = lower_file(&ast, &r, &t, &mut interner, &mut diags, "InputKt", None);
+        let parsed = skotch_ast::parse("input.kt", src);
+        let file = parsed.file();
+        let resolved = skotch_resolve::typed::resolve_file(file, &mut interner, None);
+        let typed =
+            skotch_typeck::typed::type_check(file, &resolved, &mut interner, &mut diags, None);
+        let m = skotch_mir_lower::typed::lower_file(
+            file,
+            &resolved,
+            &typed,
+            &mut interner,
+            &mut diags,
+            "InputKt",
+            None,
+        );
         assert!(!diags.has_errors(), "diagnostics: {:?}", diags);
         compile_module(&m)
     }

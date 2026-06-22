@@ -180,6 +180,8 @@ pub fn kotlin_to_jvm_class(simple_name: &str) -> Option<&'static str> {
         "Iterator" | "MutableIterator" => "java/util/Iterator",
         "ListIterator" | "MutableListIterator" => "java/util/ListIterator",
         "Sequence" => "kotlin/sequences/Sequence",
+        "StringBuilder" => "java/lang/StringBuilder",
+        "StringBuffer" => "java/lang/StringBuffer",
         // Exception/error names are delegated to the single exception
         // table (§7) so they're enumerated in exactly one place.
         _ => return kotlin_exception_class(simple_name),

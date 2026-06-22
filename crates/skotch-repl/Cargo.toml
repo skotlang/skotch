@@ -26,3 +26,6 @@ skotch-tape        = { workspace = true }
 
 [dev-dependencies]
 similar = { workspace = true }
+
+[lints]
+workspace = true

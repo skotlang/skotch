@@ -10,3 +10,6 @@ version.workspace      = true
 skotch-axml = { workspace = true }
 zip         = { workspace = true }
 byteorder   = { workspace = true }
+
+[lints]
+workspace = true

@@ -72,17 +72,25 @@ pub fn gather_exports<'db>(db: &'db dyn salsa::Database, file: SourceFile) -> Fi
     let wrapper = file.wrapper_class(db);
     let path = file.path(db);
 
-    let mut interner = skotch_intern::Interner::new();
+    let interner = skotch_intern::Interner::new();
     let mut diags = skotch_diagnostics::Diagnostics::new();
     let mut sm = skotch_span::SourceMap::new();
     let file_id = sm.add(std::path::PathBuf::from(path), text.to_string());
 
-    let lexed = skotch_lexer::lex(file_id, text, &mut diags);
-    let ast = skotch_parser::parse_file(&lexed, &mut interner, &mut diags);
+    let _ = skotch_lexer::lex(file_id, text, &mut diags);
+    let parsed = skotch_ast::parse(
+        std::path::Path::new(path)
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or("input.kt"),
+        text,
+    );
 
-    // Use gather_declarations with a single file to extract exports.
-    let refs = vec![(file_id, &ast, wrapper.as_str())];
-    let table = skotch_resolve::gather_declarations(&refs, &interner);
+    // Use the typed gather_declarations with a single file to extract
+    // exports.
+    let file = parsed.file();
+    let refs = vec![(file, wrapper.as_str())];
+    let table = skotch_resolve::typed::gather_declarations(&refs, &interner);
 
     // Serialize to JSON for Salsa-compatible storage.
     let exports_json = serde_json::to_string(&table).unwrap_or_default();

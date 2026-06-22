@@ -10,3 +10,6 @@ skotch-span  = { workspace = true }
 skotch-types = { workspace = true }
 serde        = { workspace = true }
 rustc-hash   = { workspace = true }
+
+[lints]
+workspace = true

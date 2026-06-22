@@ -600,6 +600,47 @@ fn gather_class_recursive(
         .map(|m| ext_method_from_fun(*m, imports, aliases))
         .collect();
     methods.extend(property_getters);
+    // Synthesize getters for primary-ctor `val`/`var` params.
+    // `class Circle(val radius: Double)` declares `radius` as both a
+    // ctor param AND a property — kotlinc emits a private backing
+    // field plus a public `getRadius()` (and `setRadius` for var).
+    // Cross-file call sites need the getter signature to dispatch
+    // `circle.radius` reads as `invokevirtual getRadius()D` instead
+    // of falling back to an erased `()Object` shape.
+    if let Some(pc) = c.primary_constructor() {
+        if let Some(plist) = pc.value_parameter_list() {
+            for p in plist.parameters() {
+                if !p.is_val() && !p.is_var() {
+                    continue;
+                }
+                let Some(pname) = p.name() else { continue };
+                let mut chars = pname.chars();
+                let Some(first_ch) = chars.next() else {
+                    continue;
+                };
+                let getter_name = format!(
+                    "get{}{}",
+                    first_ch.to_uppercase().collect::<String>(),
+                    chars.as_str()
+                );
+                let ret = p
+                    .type_reference()
+                    .map(|tr| type_ref_to_ty(tr, imports, aliases))
+                    .unwrap_or(Ty::Any);
+                methods.push(ExternalMethod {
+                    name: getter_name,
+                    params: Vec::new(),
+                    return_ty: ret,
+                    is_suspend: false,
+                    is_inline: false,
+                    is_abstract: false,
+                    is_open: false,
+                    receiver_ty: None,
+                    annotations: Vec::new(),
+                });
+            }
+        }
+    }
 
     let (comp_methods, comp_props, has_companion) = companion_members(c.body());
     let comp_property_getters: Vec<ExternalMethod> = comp_props

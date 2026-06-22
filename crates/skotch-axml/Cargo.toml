@@ -8,3 +8,6 @@ version.workspace      = true
 
 [dependencies]
 byteorder = { workspace = true }
+
+[lints]
+workspace = true
