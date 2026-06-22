@@ -21925,6 +21925,356 @@ fn literal_to_const(
 ///   Return value local N
 /// Block-bodied functions and non-literal expression bodies fall
 /// back to an empty Return placeholder.
+///
+/// Helper for the expression-body shape
+///   fun greet(name: String, age: Int): String = """
+///       Hello, $name!
+///       ${if (age >= 18) "adult" else "minor"}
+///   """.trimIndent()
+/// which `lower_rich_expr_to_slot` can't handle (its `pre_stmts`
+/// list is linear, can't fit a branch). We pattern-match the body
+/// against `DotQualified(StringTemplate-with-If-arm, Call(method))`,
+/// require the If's two arms to be String literals, the cond to be
+/// a simple Binary comparison on a param, and the chained `method`
+/// to be a 0-arg `StringsKt` extension (trimIndent / trimMargin).
+/// On match, emit a 4-block CFG:
+///   block 0: param refs + cond ; Branch(then=1, else=2)
+///   block 1: if_slot = then-literal ; Goto(3)
+///   block 2: if_slot = else-literal ; Goto(3)
+///   block 3: MakeConcatWithConstants(parts..., if_slot) ;
+///            StaticJava(StringsKt.method, result) ; ReturnValue
+fn try_lower_template_with_if_chained(
+    body_expr: skotch_ast::KtExpr<'_>,
+    f: skotch_ast::KtFun<'_>,
+    strings: &mut Vec<String>,
+) -> Option<(Vec<BasicBlock>, Vec<Ty>)> {
+    use skotch_ast::KtExpr;
+    use skotch_mir::{LocalId, MirConst, Rvalue, Stmt as MStmt, StringId};
+    use skotch_syntax::SyntaxKind as S;
+
+    // Outer DotQualified must be `<template>.<method>()`.
+    let KtExpr::DotQualified(dq) = body_expr else {
+        return None;
+    };
+    let dq_exprs: Vec<KtExpr<'_>> = skotch_ast::children(dq.syntax())
+        .iter()
+        .filter_map(KtExpr::cast)
+        .collect();
+    if dq_exprs.len() != 2 {
+        return None;
+    }
+    let template = unwrap_parens(dq_exprs[0]);
+    let KtExpr::String(_) = &template else {
+        return None;
+    };
+    let KtExpr::Call(call) = &dq_exprs[1] else {
+        return None;
+    };
+    let method_name = match call.callee() {
+        Some(KtExpr::Reference(r)) => r.name()?,
+        _ => return None,
+    };
+    // Only 0-arg StringsKt extension methods, mirroring the same
+    // table in lower_rich_expr_to_slot's string-method dispatch.
+    let (method_descriptor, method_jvm) = match method_name {
+        "trimIndent" => ("(Ljava/lang/String;)Ljava/lang/String;", "trimIndent"),
+        "trimMargin" => ("(Ljava/lang/String;)Ljava/lang/String;", "trimMargin"),
+        _ => return None,
+    };
+    if let Some(args) = call.value_argument_list() {
+        if args.arguments().next().is_some() {
+            return None;
+        }
+    }
+
+    // Collect param info for ref lookup + descriptor synthesis.
+    let param_names: Vec<String> = f
+        .value_parameter_list()
+        .map(|pl| {
+            pl.parameters()
+                .map(|p| p.name().unwrap_or("").to_string())
+                .collect()
+        })
+        .unwrap_or_default();
+    let param_tys: Vec<Ty> = f
+        .value_parameter_list()
+        .map(|pl| {
+            pl.parameters()
+                .map(|p| p.type_reference().map(resolve_type_ref).unwrap_or(Ty::Any))
+                .collect()
+        })
+        .unwrap_or_default();
+    let param_count = param_names.len() as u32;
+
+    // Walk template entries. Need exactly one LONG entry whose inner
+    // is `If(cond, "lit", "lit")`. Other entries must be LITERAL or
+    // SHORT(param ref). Build per-entry descriptors as we go, and
+    // remember the position of the LONG entry so the recipe slot
+    // ordering matches.
+    let mut recipe = String::new();
+    let mut arg_descs: Vec<String> = Vec::new();
+    let mut arg_slots_pre: Vec<LocalId> = Vec::new();
+    let mut if_arms: Option<(skotch_ast::KtExpr<'_>, String, String)> = None;
+    for child in skotch_ast::children(template.syntax()) {
+        match child.kind {
+            S::LITERAL_STRING_TEMPLATE_ENTRY => {
+                for cc in skotch_ast::children(child) {
+                    if cc.kind == S::STRING_CHUNK {
+                        if let skotch_sil::SilData::Token { text } = &cc.data {
+                            recipe.push_str(text);
+                        }
+                    }
+                }
+            }
+            S::ESCAPE_STRING_TEMPLATE_ENTRY => {
+                for cc in skotch_ast::children(child) {
+                    if let skotch_sil::SilData::Token { text } = &cc.data {
+                        let raw = text.as_str();
+                        if let Some(stripped) = raw.strip_prefix('\\') {
+                            match stripped.chars().next() {
+                                Some('n') => recipe.push('\n'),
+                                Some('t') => recipe.push('\t'),
+                                Some('r') => recipe.push('\r'),
+                                Some('\\') => recipe.push('\\'),
+                                Some('"') => recipe.push('"'),
+                                Some('\'') => recipe.push('\''),
+                                Some('$') => recipe.push('$'),
+                                Some(other) => recipe.push(other),
+                                None => {}
+                            }
+                        } else {
+                            recipe.push_str(raw);
+                        }
+                    }
+                }
+            }
+            S::SHORT_STRING_TEMPLATE_ENTRY => {
+                let id_name = skotch_ast::children(child).iter().find_map(|c| {
+                    if c.kind == S::REFERENCE_EXPRESSION {
+                        for cc in skotch_ast::children(c) {
+                            if cc.kind == S::IDENTIFIER {
+                                if let skotch_sil::SilData::Token { text } = &cc.data {
+                                    return Some(text.as_str().to_string());
+                                }
+                            }
+                        }
+                    }
+                    None
+                })?;
+                let idx = param_names.iter().position(|p| p == &id_name)?;
+                arg_descs.push(ty_to_descriptor(&param_tys[idx]));
+                arg_slots_pre.push(LocalId(idx as u32));
+                recipe.push('\u{1}');
+            }
+            S::LONG_STRING_TEMPLATE_ENTRY => {
+                // Allow only ONE LONG entry; must be an If.
+                if if_arms.is_some() {
+                    return None;
+                }
+                let inner = skotch_ast::children(child)
+                    .iter()
+                    .find_map(KtExpr::cast)
+                    .map(unwrap_parens)?;
+                let KtExpr::If(if_e) = inner else {
+                    return None;
+                };
+                let then_expr = if_e
+                    .then_branch()
+                    .and_then(|t| t.expression())
+                    .map(unwrap_parens)?;
+                let else_expr = if_e
+                    .else_branch()
+                    .and_then(|e| e.expression())
+                    .map(unwrap_parens)?;
+                // Each arm must be a String literal with no
+                // interpolation entries (just LITERAL chunks).
+                let arm_to_string = |arm: KtExpr<'_>| -> Option<String> {
+                    let KtExpr::String(_) = arm else { return None };
+                    let mut buf = String::new();
+                    for cc in skotch_ast::children(arm.syntax()) {
+                        match cc.kind {
+                            S::LITERAL_STRING_TEMPLATE_ENTRY => {
+                                for ccc in skotch_ast::children(cc) {
+                                    if ccc.kind == S::STRING_CHUNK {
+                                        if let skotch_sil::SilData::Token { text } = &ccc.data {
+                                            buf.push_str(text);
+                                        }
+                                    }
+                                }
+                            }
+                            S::STRING_START | S::STRING_END | S::WHITE_SPACE => {}
+                            _ => return None,
+                        }
+                    }
+                    Some(buf)
+                };
+                let then_s = arm_to_string(then_expr)?;
+                let else_s = arm_to_string(else_expr)?;
+                if_arms = Some((
+                    if_e.condition().and_then(|c| c.expression())?,
+                    then_s,
+                    else_s,
+                ));
+                // Reserve a slot in the descriptor + recipe; the
+                // actual LocalId is computed below once we know
+                // next_slot.
+                arg_descs.push("Ljava/lang/String;".to_string());
+                arg_slots_pre.push(LocalId(u32::MAX)); // placeholder
+                recipe.push('\u{1}');
+            }
+            S::STRING_START | S::STRING_END | S::WHITE_SPACE => {}
+            _ => return None,
+        }
+    }
+    let (cond_expr, then_str, else_str) = if_arms?;
+    let cond_expr = unwrap_parens(cond_expr);
+
+    // Condition must be `Binary(ref-or-lit cmpOp ref-or-lit)`.
+    let KtExpr::Binary(b) = cond_expr else {
+        return None;
+    };
+    let op_text = b.operation().map(|o| o.text()).unwrap_or_default();
+    let cmp_op = match op_text.as_str() {
+        "==" => skotch_mir::BinOp::CmpEq,
+        "!=" => skotch_mir::BinOp::CmpNe,
+        "<" => skotch_mir::BinOp::CmpLt,
+        ">" => skotch_mir::BinOp::CmpGt,
+        "<=" => skotch_mir::BinOp::CmpLe,
+        ">=" => skotch_mir::BinOp::CmpGe,
+        _ => return None,
+    };
+
+    let mut next_slot: u32 = param_count;
+    let mut extra_locals: Vec<Ty> = Vec::new();
+    let mut b0_stmts: Vec<MStmt> = Vec::new();
+    let mut resolve_operand = |e: skotch_ast::KtExpr<'_>,
+                               next_slot: &mut u32,
+                               pre_stmts: &mut Vec<MStmt>,
+                               extra_locals: &mut Vec<Ty>|
+     -> Option<LocalId> {
+        let e = unwrap_parens(e);
+        match e {
+            KtExpr::Reference(r) => {
+                let n = r.name()?;
+                let idx = param_names.iter().position(|p| p == n)?;
+                Some(LocalId(idx as u32))
+            }
+            other => {
+                let (k, ty) = literal_to_const(&other, strings)?;
+                let slot = LocalId(*next_slot);
+                *next_slot += 1;
+                extra_locals.push(ty);
+                pre_stmts.push(MStmt::Assign {
+                    dest: slot,
+                    value: Rvalue::Const(k),
+                });
+                Some(slot)
+            }
+        }
+    };
+    let lhs_slot = resolve_operand(b.lhs()?, &mut next_slot, &mut b0_stmts, &mut extra_locals)?;
+    let rhs_slot = resolve_operand(b.rhs()?, &mut next_slot, &mut b0_stmts, &mut extra_locals)?;
+    let cond_slot = LocalId(next_slot);
+    next_slot += 1;
+    extra_locals.push(Ty::Bool);
+    b0_stmts.push(MStmt::Assign {
+        dest: cond_slot,
+        value: Rvalue::BinOp {
+            op: cmp_op,
+            lhs: lhs_slot,
+            rhs: rhs_slot,
+        },
+    });
+
+    // Allocate the If-result slot (will be assigned in blocks 1 and 2).
+    let if_slot = LocalId(next_slot);
+    next_slot += 1;
+    extra_locals.push(Ty::String);
+
+    // Intern then/else strings.
+    let intern = |s: &str, strings: &mut Vec<String>| -> StringId {
+        if let Some(i) = strings.iter().position(|x| x == s) {
+            StringId(i as u32)
+        } else {
+            let id = StringId(strings.len() as u32);
+            strings.push(s.to_string());
+            id
+        }
+    };
+    let then_sid = intern(&then_str, strings);
+    let else_sid = intern(&else_str, strings);
+
+    let b1_stmts = vec![MStmt::Assign {
+        dest: if_slot,
+        value: Rvalue::Const(MirConst::String(then_sid)),
+    }];
+    let b2_stmts = vec![MStmt::Assign {
+        dest: if_slot,
+        value: Rvalue::Const(MirConst::String(else_sid)),
+    }];
+
+    // Patch the placeholder slot in arg_slots_pre with if_slot.
+    let mut arg_slots: Vec<LocalId> = arg_slots_pre
+        .into_iter()
+        .map(|s| if s.0 == u32::MAX { if_slot } else { s })
+        .collect();
+    // Build block 3: MakeConcatWithConstants(arg_slots) → concat_slot,
+    //                StringsKt.method(concat_slot) → result_slot,
+    //                ReturnValue(result_slot).
+    let descriptor = format!("({})Ljava/lang/String;", arg_descs.join(""));
+    let concat_slot = LocalId(next_slot);
+    next_slot += 1;
+    extra_locals.push(Ty::String);
+    let mut b3_stmts: Vec<MStmt> = Vec::new();
+    b3_stmts.push(MStmt::Assign {
+        dest: concat_slot,
+        value: Rvalue::Call {
+            kind: skotch_mir::CallKind::MakeConcatWithConstants {
+                recipe: recipe.clone(),
+                descriptor,
+            },
+            args: std::mem::take(&mut arg_slots),
+        },
+    });
+    let result_slot = LocalId(next_slot);
+    extra_locals.push(Ty::String);
+    b3_stmts.push(MStmt::Assign {
+        dest: result_slot,
+        value: Rvalue::Call {
+            kind: skotch_mir::CallKind::StaticJava {
+                class_name: "kotlin/text/StringsKt".to_string(),
+                method_name: method_jvm.to_string(),
+                descriptor: method_descriptor.to_string(),
+            },
+            args: vec![concat_slot],
+        },
+    });
+
+    let blocks = vec![
+        BasicBlock {
+            stmts: b0_stmts,
+            terminator: Terminator::Branch {
+                cond: cond_slot,
+                then_block: 1,
+                else_block: 2,
+            },
+        },
+        BasicBlock {
+            stmts: b1_stmts,
+            terminator: Terminator::Goto(3),
+        },
+        BasicBlock {
+            stmts: b2_stmts,
+            terminator: Terminator::Goto(3),
+        },
+        BasicBlock {
+            stmts: b3_stmts,
+            terminator: Terminator::ReturnValue(result_slot),
+        },
+    ];
+    Some((blocks, extra_locals))
+}
+
 #[allow(clippy::too_many_arguments)]
 fn lower_simple_body(
     f: skotch_ast::KtFun<'_>,
@@ -22112,6 +22462,14 @@ fn lower_simple_body(
                 }
             }
         }
+    }
+
+    // Expression-body `"""...${if (...) "A" else "B"}...""".trimIndent()`
+    // shape. `lower_rich_expr_to_slot`'s linear `pre_stmts` can't
+    // contain a branch, so the inner `If` would bail every lower path
+    // below; route it through a hand-built 4-block CFG instead.
+    if let Some(lowered) = try_lower_template_with_if_chained(body_expr, f, strings) {
+        return lowered;
     }
 
     // Field access chain on a class-typed param: `b.x` or `b.a.v`.
