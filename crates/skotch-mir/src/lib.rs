@@ -916,7 +916,7 @@ pub struct MirModule {
     /// special case, but every call-site lowering checks this map first and
     /// inlines a `GetStaticField` rvalue instead, and the JVM backend skips
     /// these FuncIds entirely.
-    #[serde(skip)]
+    #[serde(default, skip_serializing_if = "rustc_hash::FxHashMap::is_empty")]
     pub enum_entry_funcs: rustc_hash::FxHashMap<u32, (String, String)>,
     /// Maps a cross-file fn stub FuncId →
     /// `(owner_class, method_name, descriptor)`. mir-lower registers a
@@ -927,7 +927,7 @@ pub struct MirModule {
     /// FuncIds and reroutes the `invokestatic` to the recorded owner
     /// class + name + descriptor at call sites. Mirrors the
     /// [`enum_entry_funcs`](Self::enum_entry_funcs) pattern.
-    #[serde(skip)]
+    #[serde(default, skip_serializing_if = "rustc_hash::FxHashMap::is_empty")]
     pub cross_file_fn_stubs: rustc_hash::FxHashMap<u32, (String, String, String)>,
     /// Transient: while a Companion class's method bodies are being
     /// lowered, this holds `(companion_class_name, method_names)` so
