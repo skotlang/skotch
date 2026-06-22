@@ -216,13 +216,12 @@ pub fn extract_resource_path_data(
 
     let mut flag_name = String::new();
     parts.retain(|part| {
-        if part.starts_with("flag(") && part.ends_with(')')
-            && flag_name.is_empty() {
-                flag_name = part[5..part.len() - 1].to_string();
-                return false;
-            }
-            // A second flag directory is an error, detected below by
-            // leaving the marker in place.
+        if part.starts_with("flag(") && part.ends_with(')') && flag_name.is_empty() {
+            flag_name = part[5..part.len() - 1].to_string();
+            return false;
+        }
+        // A second flag directory is an error, detected below by
+        // leaving the marker in place.
         true
     });
     if parts

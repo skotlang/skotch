@@ -1245,7 +1245,10 @@ pub(crate) fn build_ssa(
     let mut caught: Vec<Option<ValId>> = vec![None; n];
     if !exceptions.is_empty() {
         for e in exceptions {
-            let catch_type = e.catch_type.as_ref().map(|c| skotch_classfile::constant_pool::internal_to_descriptor(c));
+            let catch_type = e
+                .catch_type
+                .as_ref()
+                .map(|c| skotch_classfile::constant_pool::internal_to_descriptor(c));
             let hb = cfg
                 .blocks
                 .iter()

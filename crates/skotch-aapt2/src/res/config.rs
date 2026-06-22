@@ -902,34 +902,37 @@ impl ConfigDescription {
         }
 
         if (self.grammatical_inflection != 0 || o.grammatical_inflection != 0)
-            && self.grammatical_inflection != o.grammatical_inflection {
-                if self.grammatical_inflection == 0 {
-                    return false;
-                }
-                if o.grammatical_inflection == 0 {
-                    return true;
-                }
+            && self.grammatical_inflection != o.grammatical_inflection
+        {
+            if self.grammatical_inflection == 0 {
+                return false;
             }
+            if o.grammatical_inflection == 0 {
+                return true;
+            }
+        }
 
         if (self.screen_layout != 0 || o.screen_layout != 0)
-            && ((self.screen_layout ^ o.screen_layout) & Self::MASK_LAYOUTDIR) != 0 {
-                if (self.screen_layout & Self::MASK_LAYOUTDIR) == 0 {
-                    return false;
-                }
-                if (o.screen_layout & Self::MASK_LAYOUTDIR) == 0 {
-                    return true;
-                }
+            && ((self.screen_layout ^ o.screen_layout) & Self::MASK_LAYOUTDIR) != 0
+        {
+            if (self.screen_layout & Self::MASK_LAYOUTDIR) == 0 {
+                return false;
             }
+            if (o.screen_layout & Self::MASK_LAYOUTDIR) == 0 {
+                return true;
+            }
+        }
 
         if (self.smallest_screen_width_dp != 0 || o.smallest_screen_width_dp != 0)
-            && self.smallest_screen_width_dp != o.smallest_screen_width_dp {
-                if self.smallest_screen_width_dp == 0 {
-                    return false;
-                }
-                if o.smallest_screen_width_dp == 0 {
-                    return true;
-                }
+            && self.smallest_screen_width_dp != o.smallest_screen_width_dp
+        {
+            if self.smallest_screen_width_dp == 0 {
+                return false;
             }
+            if o.smallest_screen_width_dp == 0 {
+                return true;
+            }
+        }
 
         if self.screen_size_dp_u32() != 0 || o.screen_size_dp_u32() != 0 {
             if self.screen_width_dp != o.screen_width_dp {
@@ -970,14 +973,15 @@ impl ConfigDescription {
         }
 
         if (self.screen_layout2 != 0 || o.screen_layout2 != 0)
-            && ((self.screen_layout2 ^ o.screen_layout2) & Self::MASK_SCREENROUND) != 0 {
-                if (self.screen_layout2 & Self::MASK_SCREENROUND) == 0 {
-                    return false;
-                }
-                if (o.screen_layout2 & Self::MASK_SCREENROUND) == 0 {
-                    return true;
-                }
+            && ((self.screen_layout2 ^ o.screen_layout2) & Self::MASK_SCREENROUND) != 0
+        {
+            if (self.screen_layout2 & Self::MASK_SCREENROUND) == 0 {
+                return false;
             }
+            if (o.screen_layout2 & Self::MASK_SCREENROUND) == 0 {
+                return true;
+            }
+        }
 
         if self.color_mode != 0 || o.color_mode != 0 {
             if ((self.color_mode ^ o.color_mode) & Self::MASK_HDR) != 0 {
@@ -1246,19 +1250,19 @@ impl ConfigDescription {
 
         if (self.grammatical_inflection != 0 || o.grammatical_inflection != 0)
             && self.grammatical_inflection != o.grammatical_inflection
-                && req.grammatical_inflection != 0
-            {
-                return self.grammatical_inflection != 0;
-            }
+            && req.grammatical_inflection != 0
+        {
+            return self.grammatical_inflection != 0;
+        }
 
         if (self.screen_layout != 0 || o.screen_layout != 0)
             && ((self.screen_layout ^ o.screen_layout) & Self::MASK_LAYOUTDIR) != 0
-                && (req.screen_layout & Self::MASK_LAYOUTDIR) != 0
-            {
-                let my_layout_dir = self.screen_layout & Self::MASK_LAYOUTDIR;
-                let o_layout_dir = o.screen_layout & Self::MASK_LAYOUTDIR;
-                return my_layout_dir > o_layout_dir;
-            }
+            && (req.screen_layout & Self::MASK_LAYOUTDIR) != 0
+        {
+            let my_layout_dir = self.screen_layout & Self::MASK_LAYOUTDIR;
+            let o_layout_dir = o.screen_layout & Self::MASK_LAYOUTDIR;
+            return my_layout_dir > o_layout_dir;
+        }
 
         if self.smallest_screen_width_dp != 0 || o.smallest_screen_width_dp != 0 {
             // The configuration closest to the actual size is best. We
@@ -1326,10 +1330,10 @@ impl ConfigDescription {
 
         if (self.screen_layout2 != 0 || o.screen_layout2 != 0)
             && ((self.screen_layout2 ^ o.screen_layout2) & Self::MASK_SCREENROUND) != 0
-                && (req.screen_layout2 & Self::MASK_SCREENROUND) != 0
-            {
-                return (self.screen_layout2 & Self::MASK_SCREENROUND) != 0;
-            }
+            && (req.screen_layout2 & Self::MASK_SCREENROUND) != 0
+        {
+            return (self.screen_layout2 & Self::MASK_SCREENROUND) != 0;
+        }
 
         if self.color_mode != 0 || o.color_mode != 0 {
             if ((self.color_mode ^ o.color_mode) & Self::MASK_WIDE_COLOR_GAMUT) != 0
@@ -3649,11 +3653,13 @@ mod tests {
 
     #[test]
     fn compare_ordering() {
-        let mut configs = [parse("mcc310"),
+        let mut configs = [
+            parse("mcc310"),
             parse("en-rUS"),
             parse("v21"),
             parse(""),
-            parse("en")];
+            parse("en"),
+        ];
         configs.sort();
         let strings: Vec<String> = configs.iter().map(|c| c.to_string()).collect();
         assert_eq!(strings, vec!["", "v21", "en", "en-rUS", "mcc310"]);

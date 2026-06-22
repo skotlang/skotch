@@ -2078,8 +2078,7 @@ impl<'a> Emitter<'a> {
                         let src = self.materialize(&b)?;
                         self.release(&b);
                         let dest = self.alloc_result(src, false)?;
-                        self.insns
-                            .push(0xd1 | (dest << 8) | (src << 12));
+                        self.insns.push(0xd1 | (dest << 8) | (src << 12));
                         self.insns.push(c as u16);
                         return Ok(Val::Reg(dest, false));
                     }
@@ -2119,8 +2118,7 @@ impl<'a> Emitter<'a> {
                     if div_rem {
                         self.record_position();
                     }
-                    self.insns
-                        .push(op16 | (dest << 8) | (src << 12));
+                    self.insns.push(op16 | (dest << 8) | (src << 12));
                     self.insns.push(c as u16);
                     return Ok(Val::Reg(dest, false));
                 }
@@ -2195,8 +2193,7 @@ impl<'a> Emitter<'a> {
         let mul2addr_bug = self.min_api < 23 && is_mul_op(jvm_op);
         if let (Some(src), Some(op2)) = (src_for_2addr, binop_2addr_op(jvm_op)) {
             if !mul2addr_bug {
-                self.insns
-                    .push(op2 | (dest << 8) | (src << 12));
+                self.insns.push(op2 | (dest << 8) | (src << 12));
                 return Ok(Val::Reg(dest, wide));
             }
         }

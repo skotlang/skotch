@@ -1337,9 +1337,10 @@ impl<'a> ManifestExtractor<'a> {
                         && host_apdu_action)
                         || (meta.name == "android.nfc.cardemulation.off_host_apdu_service"
                             && offhost_apdu_action))
-                        && !meta.resource.is_empty() {
-                            resources_to_check.push(meta.resource.clone());
-                        }
+                        && !meta.resource.is_empty()
+                    {
+                        resources_to_check.push(meta.resource.clone());
+                    }
                 }
             });
             'outer: for resource in resources_to_check {
@@ -1943,12 +1944,11 @@ impl<'a> ManifestExtractor<'a> {
                             }
                             Data::Provider {
                                 has_required_saf_attributes,
+                            } if action == "android.content.action.DOCUMENTS_PROVIDER"
+                                && *has_required_saf_attributes =>
+                            {
+                                component = "document-provider".to_string();
                             }
-                                if action == "android.content.action.DOCUMENTS_PROVIDER"
-                                    && *has_required_saf_attributes
-                                => {
-                                    component = "document-provider".to_string();
-                                }
                             _ => {}
                         }
                     }
