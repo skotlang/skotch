@@ -16070,6 +16070,45 @@ fn lower_inline_expr_to_slot(
         KtExpr::Binary(b) => {
             let op_text = b.operation().map(|o| o.text()).unwrap_or_default();
             let is_cmp_op = matches!(op_text.as_str(), "==" | "!=" | "<" | ">" | "<=" | ">=");
+            // For symbolic arithmetic operators (`+`, `-`, `*`, `/`, `%`,
+            // `..`), bail out if either operand is a user `Ty::Class`
+            // whose corresponding `operator fun` is registered. This
+            // lets the operator-overload arm in `lower_rich_expr_to_slot`
+            // dispatch `a + b` (with `a: Ty::Class("C")`) to
+            // `C.plus(C): C` instead of falling through to plain
+            // integer arithmetic — which would mistype `c`'s slot as
+            // `Ty::Int` and break downstream `c.show()` dispatch.
+            let overloadable: Option<&'static str> = if is_cmp_op {
+                None
+            } else {
+                match op_text.as_str() {
+                    "+" => Some("plus"),
+                    "-" => Some("minus"),
+                    "*" => Some("times"),
+                    "/" => Some("div"),
+                    "%" => Some("rem"),
+                    ".." => Some("rangeTo"),
+                    _ => None,
+                }
+            };
+            if let Some(method_name) = overloadable {
+                // Peek the lhs operand type without committing slot
+                // allocations. Only a bare Reference (resolved via
+                // lookup_name) can be inspected cheaply; otherwise let
+                // the regular path run.
+                if let KtExpr::Reference(lref) = unwrap_parens(b.lhs()?) {
+                    if let Some(lname) = lref.name() {
+                        if let Some(lslot) = lookup_name(lname) {
+                            let lty = slot_ty_with_param_fallback(lslot.0, extra_locals);
+                            if let Ty::Class(cname) = &lty {
+                                if class_method_return_ty(cname, method_name).is_some() {
+                                    return None;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             let lhs = lower_inline_expr_to_slot(
                 b.lhs()?,
                 lookup_name,
