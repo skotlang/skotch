@@ -2326,17 +2326,77 @@ pub fn lower_file(
                 table.insert(iname.to_string(), methods);
             }
         }
+        // Resolve a `KtTypeReference` to a `Ty`, mirroring
+        // `resolve_ret_ty` above. Used to register synthesized
+        // property-getter return types so chained access like
+        // `obj.keys.size` keeps the `MutableList`/`java/util/List`
+        // typing instead of erasing to Ty::Any on the first hop.
+        let ty_from_type_ref = |tr_opt: Option<skotch_ast::KtTypeReference<'_>>| -> Ty {
+            let name_opt: Option<&str> =
+                tr_opt.and_then(|tr| tr.user_type()).and_then(|u| u.name());
+            match name_opt {
+                Some(n) => skotch_types::ty_from_name(n).unwrap_or_else(|| {
+                    let fq = skotch_types::intrinsics::kotlin_to_jvm_class(n)
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| n.to_string());
+                    Ty::Class(fq)
+                }),
+                None => Ty::Any,
+            }
+        };
+        // Synthesize a `getX` entry in `methods` for a primary-ctor
+        // val/var or body property with declared type `tr`. Only
+        // registers when the slot is unoccupied so an explicit custom
+        // getter (registered via the KtDecl::Fun arm above) wins.
+        let register_prop_getter =
+            |methods: &mut rustc_hash::FxHashMap<String, Ty>,
+             pname: &str,
+             tr: Option<skotch_ast::KtTypeReference<'_>>| {
+                let mut chars = pname.chars();
+                let getter_name = match chars.next() {
+                    Some(c) => format!(
+                        "get{}{}",
+                        c.to_uppercase().collect::<String>(),
+                        chars.as_str()
+                    ),
+                    None => return,
+                };
+                methods
+                    .entry(getter_name)
+                    .or_insert_with(|| ty_from_type_ref(tr));
+            };
         // Local classes.
         for decl in file.decls() {
             if let KtDecl::Class(c) = decl {
                 let Some(cname) = c.name() else { continue };
                 let mut methods: rustc_hash::FxHashMap<String, Ty> =
                     rustc_hash::FxHashMap::default();
+                // Primary-ctor val/var → synthesized `getX` getter.
+                if let Some(pc) = c.primary_constructor() {
+                    if let Some(plist) = pc.value_parameter_list() {
+                        for p in plist.parameters() {
+                            if !p.is_val() && !p.is_var() {
+                                continue;
+                            }
+                            if let Some(pname) = p.name() {
+                                register_prop_getter(&mut methods, pname, p.type_reference());
+                            }
+                        }
+                    }
+                }
                 if let Some(body) = c.body() {
                     for d in body.declarations() {
                         if let KtDecl::Fun(f) = d {
                             if let Some(mname) = f.name() {
                                 methods.insert(mname.to_string(), resolve_ret_ty(&f));
+                            }
+                        }
+                        // Body-declared property → synthesized `getX`
+                        // getter. The explicit-Fun loop above wins for
+                        // custom getter shapes via `or_insert_with`.
+                        if let KtDecl::Property(p) = d {
+                            if let Some(pname) = p.name() {
+                                register_prop_getter(&mut methods, pname, p.type_reference());
                             }
                         }
                     }
@@ -19284,9 +19344,25 @@ fn lower_rich_expr_to_slot(
                                     ),
                                     None => "get".to_string(),
                                 };
+                                // Promote the result slot's Ty from
+                                // Any to the property's declared type
+                                // when CLASS_METHODS knows it. Without
+                                // this, chained access like
+                                // `obj.keys.size` falls through:
+                                // `obj.keys` returns Ty::Any, then the
+                                // outer `.size` Java-collection guard
+                                // (which keys on
+                                // `Ty::Class("java/util/List")`) fails
+                                // to fire and the whole expression
+                                // bails. Synthesized `getX` getter
+                                // entries are registered in CLASS_METHODS
+                                // alongside user-declared methods so
+                                // this lookup hits for every property.
+                                let result_ty =
+                                    class_method_return_ty(cname, &getter_name).unwrap_or(Ty::Any);
                                 let result_slot = LocalId(*next_slot);
                                 *next_slot += 1;
-                                extra_locals.push(Ty::Any);
+                                extra_locals.push(result_ty);
                                 pre_stmts.push(MStmt::Assign {
                                     dest: result_slot,
                                     value: skotch_mir::Rvalue::Call {
