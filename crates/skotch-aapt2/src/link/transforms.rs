@@ -38,7 +38,7 @@ pub fn remove_no_default_resources(table: &mut ResourceTable, diag: &Diagnostics
                 // Keep entries whose configs are all version-qualified
                 // or density-qualified variants of one another.
                 let keep = entry.values.iter().all(|cv| {
-                    let mut without_version = cv.config.clone();
+                    let mut without_version = cv.config;
                     without_version.sdk_version = 0;
                     without_version.density = 0;
                     without_version.is_default()
@@ -214,7 +214,7 @@ pub fn auto_version(table: &mut ResourceTable) -> Result<()> {
                     {
                         // Only add when no value already exists for the
                         // versioned config.
-                        let mut versioned_config = config_value.config.clone();
+                        let mut versioned_config = config_value.config;
                         versioned_config.sdk_version = needed_sdk;
                         if entry
                             .find_value(&versioned_config, &config_value.product)
@@ -304,7 +304,7 @@ pub fn collapse_versions(table: &mut ResourceTable, min_sdk: i32) -> Result<()> 
                     Vec<crate::res::table::ResourceConfigValue>,
                 )> = Vec::new();
                 for value in values {
-                    let mut key = value.config.clone();
+                    let mut key = value.config;
                     key.sdk_version = 0;
                     match groups.iter_mut().find(|(k, _)| *k == key) {
                         Some((_, group)) => group.push(value),

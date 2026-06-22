@@ -19,3 +19,6 @@ rustc-hash       = { workspace = true }
 [dev-dependencies]
 skotch-lexer  = { workspace = true }
 skotch-parser = { workspace = true }
+
+[lints]
+workspace = true

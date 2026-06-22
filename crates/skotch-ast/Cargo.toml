@@ -9,3 +9,6 @@ description = "Typed AST wrappers over the lossless SIL syntax tree, modeled aft
 skotch-span        = { workspace = true }
 skotch-syntax      = { workspace = true }
 skotch-sil         = { workspace = true }
+
+[lints]
+workspace = true

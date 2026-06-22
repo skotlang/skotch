@@ -157,7 +157,7 @@ pub fn merge_compiled_file(
     let name =
         ResourceName::with_named_type(compilation_package, file.name.ty.clone(), &file.name.entry);
     let new_resource = NewResource::with_name(name.clone())
-        .config(file.config.clone())
+        .config(file.config)
         .value(value)
         .allow_mangled(true);
     let result = if overlay {

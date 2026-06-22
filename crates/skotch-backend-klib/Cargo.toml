@@ -20,3 +20,6 @@ skotch-resolve   = { workspace = true }
 skotch-typeck    = { workspace = true }
 skotch-mir-lower = { workspace = true }
 skotch-diagnostics = { workspace = true }
+
+[lints]
+workspace = true

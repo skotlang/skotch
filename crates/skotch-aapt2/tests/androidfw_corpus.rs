@@ -60,7 +60,7 @@ fn find<'t>(
         .unwrap_or_else(|| panic!("{package}:{ty}/{entry} not found"))
 }
 
-fn default_item<'e>(entry: &'e skotch_aapt2::res::table::ResourceEntry) -> &'e Item {
+fn default_item(entry: &skotch_aapt2::res::table::ResourceEntry) -> &Item {
     let value = entry
         .values
         .iter()

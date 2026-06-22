@@ -116,7 +116,7 @@ fn default_config() -> ConfigDescription {
 // ───────────────────── attribute lookup + resolution ─────────────────────
 
 /// `FindAttribute(el, resource_id)`.
-fn find_attr_by_id<'e>(el: &'e XmlElement, res_id: u32) -> Option<&'e XmlAttribute> {
+fn find_attr_by_id(el: &XmlElement, res_id: u32) -> Option<&XmlAttribute> {
     el.attributes.iter().find(|a| {
         a.compiled_attribute
             .as_ref()
@@ -260,10 +260,7 @@ fn get_attr_integer(
     let compiled = attr.compiled_value.as_ref()?;
     let item: &Item = match compiled {
         Item::Reference(reference) => {
-            match resolve_reference(&apk.table, reference, config).and_then(|v| v.as_item()) {
-                Some(item) => item,
-                None => return None,
-            }
+            resolve_reference(&apk.table, reference, config).and_then(|v| v.as_item())?
         }
         item if is_undefined_null(item) => return None,
         item => item,
@@ -1336,15 +1333,13 @@ impl<'a> ManifestExtractor<'a> {
             let mut resources_to_check = Vec::new();
             self.for_each_child(service, &mut |idx| {
                 if let Data::MetaData(meta) = &self.arena[idx].data {
-                    if (meta.name == "android.nfc.cardemulation.host_apdu_service"
+                    if ((meta.name == "android.nfc.cardemulation.host_apdu_service"
                         && host_apdu_action)
                         || (meta.name == "android.nfc.cardemulation.off_host_apdu_service"
-                            && offhost_apdu_action)
-                    {
-                        if !meta.resource.is_empty() {
+                            && offhost_apdu_action))
+                        && !meta.resource.is_empty() {
                             resources_to_check.push(meta.resource.clone());
                         }
-                    }
                 }
             });
             'outer: for resource in resources_to_check {
@@ -1948,13 +1943,12 @@ impl<'a> ManifestExtractor<'a> {
                             }
                             Data::Provider {
                                 has_required_saf_attributes,
-                            } => {
+                            }
                                 if action == "android.content.action.DOCUMENTS_PROVIDER"
                                     && *has_required_saf_attributes
-                                {
+                                => {
                                     component = "document-provider".to_string();
                                 }
-                            }
                             _ => {}
                         }
                     }

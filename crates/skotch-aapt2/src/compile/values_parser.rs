@@ -231,7 +231,7 @@ impl<'a> ResourceParser<'a> {
                     let pushed = push_decls(ns_stack, el);
 
                     let mut parsed = ParsedResource {
-                        config: self.config.clone(),
+                        config: self.config,
                         source: self.source_at(el),
                         comment: el.comment.clone(),
                         ..Default::default()
@@ -264,7 +264,7 @@ impl<'a> ResourceParser<'a> {
 
         if !res.name.entry.is_empty() {
             let mut new_res = NewResource::with_name(res.name.clone())
-                .config(res.config.clone())
+                .config(res.config)
                 .product(res.product.clone());
 
             if res.visibility_level != VisibilityLevel::Undefined {
@@ -807,7 +807,7 @@ impl<'a> ResourceParser<'a> {
         }
         if !out.config.is_default() {
             let source = out.source.clone();
-            let config = out.config.clone();
+            let config = out.config;
             self.warn(
                 &source,
                 &format!("ignoring configuration '{config}' for <public> tag"),
@@ -862,7 +862,7 @@ impl<'a> ResourceParser<'a> {
     ) -> bool {
         if !out.config.is_default() {
             let source = out.source.clone();
-            let config = out.config.clone();
+            let config = out.config;
             self.warn(
                 &source,
                 &format!("ignoring configuration '{config}' for <{tag_name}> tag"),
@@ -1026,7 +1026,7 @@ impl<'a> ResourceParser<'a> {
         }
         if !out.config.is_default() {
             let source = out.source.clone();
-            let config = out.config.clone();
+            let config = out.config;
             self.warn(
                 &source,
                 &format!("ignoring configuration '{config}' for <{}> tag", el.name),
@@ -1055,7 +1055,7 @@ impl<'a> ResourceParser<'a> {
     fn parse_overlayable(&mut self, el: &Element, out: &mut ParsedResource) -> bool {
         if !out.config.is_default() {
             let source = out.source.clone();
-            let config = out.config.clone();
+            let config = out.config;
             self.warn(
                 &source,
                 &format!("ignoring configuration '{config}' for <overlayable> tag"),
@@ -1224,7 +1224,7 @@ impl<'a> ResourceParser<'a> {
         // Attributes only end up in default configuration.
         if !out.config.is_default() {
             let source = out.source.clone();
-            let config = out.config.clone();
+            let config = out.config;
             let name = out.name.clone();
             self.warn(
                 &source,
@@ -1547,7 +1547,7 @@ impl<'a> ResourceParser<'a> {
         // Declare-styleable only ends up in default config.
         if !out.config.is_default() {
             let source = out.source.clone();
-            let config = out.config.clone();
+            let config = out.config;
             let entry = out.name.entry.clone();
             self.warn(
                 &source,
@@ -3710,7 +3710,7 @@ This being <b><xliff:g>human</xliff:g></b> is a guest house.</macro>";
         parse_with(
             &mut table,
             input,
-            watch_config.clone(),
+            watch_config,
             ResourceParserOptions::default(),
         )
         .unwrap();

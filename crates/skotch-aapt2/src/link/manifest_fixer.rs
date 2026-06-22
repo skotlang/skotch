@@ -201,14 +201,13 @@ pub fn fix_manifest(
     }
     if let Some(target) = &options.rename_instrumentation_target_package {
         for child in manifest.child_elements_mut() {
-            if child.name == "instrumentation" && child.namespace_uri.is_empty() {
-                if child
+            if child.name == "instrumentation" && child.namespace_uri.is_empty()
+                && child
                     .find_attribute(SCHEMA_ANDROID, "targetPackage")
                     .is_some()
                 {
                     child.set_attribute(SCHEMA_ANDROID, "targetPackage", target);
                 }
-            }
         }
     }
     if let Some(target) = &options.rename_overlay_target_package {

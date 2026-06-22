@@ -103,7 +103,7 @@ impl Parser {
             bail!("corrupt ResTable_header chunk");
         }
         let mut children = chunk.children();
-        while let Some(child) = children.next() {
+        for child in children.by_ref() {
             match child.type_id {
                 RES_STRING_POOL_TYPE => {
                     if self.value_pool.is_none() {
@@ -144,7 +144,7 @@ impl Parser {
         let mut key_pool: Option<BinaryStringPool> = None;
 
         let mut children = chunk.children();
-        while let Some(child) = children.next() {
+        for child in children.by_ref() {
             match child.type_id {
                 RES_STRING_POOL_TYPE => {
                     if type_pool.is_none() {
@@ -295,7 +295,7 @@ impl Parser {
 
             let mut res = NewResource::with_name(name.clone())
                 .value(value)
-                .config(config.clone())
+                .config(config)
                 .id_with_conflict(res_id, OnIdConflict::CreateEntry)
                 .allow_mangled(true);
 
@@ -554,8 +554,8 @@ impl Parser {
         self.table.overlayables.push(overlayable);
         let overlayable_index = self.table.overlayables.len() - 1;
 
-        let mut children = chunk.children();
-        while let Some(child) = children.next() {
+        let children = chunk.children();
+        for child in children {
             if child.type_id != RES_TABLE_OVERLAYABLE_POLICY_TYPE {
                 continue;
             }

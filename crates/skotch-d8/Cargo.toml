@@ -12,3 +12,6 @@ anyhow.workspace = true
 skotch-dex = { workspace = true }
 skotch-classfile = { workspace = true }
 skotch-dexcore = { workspace = true }
+
+[lints]
+workspace = true

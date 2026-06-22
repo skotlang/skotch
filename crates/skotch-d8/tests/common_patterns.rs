@@ -378,11 +378,11 @@ fn loop_header_is_entry_now_dexes_via_preheader() {
 }
 
 /// >16-register support: a binop whose register doesn't fit the compact 4-bit `/2addr` nibble
-/// form now emits the 3-address form (8-bit fields) instead, where both the allocated and the
-/// remapped register fit. `ArtManyRegs.combine` has 20 live locals; its add chain previously
-/// TRUNCATED `add-int/2addr v0, v16` into `add v0, v0` at emit time (the 1500-vs-1430 miscompile)
-/// and so had to bail. It now DEXES correctly via widening. Real-device correctness is proven by
-/// `tests/art/ArtWideArith`; ArtManyRegs itself was verified on ART (combine(0)=1430, combine(3)=2300).
+/// > form now emits the 3-address form (8-bit fields) instead, where both the allocated and the
+/// > remapped register fit. `ArtManyRegs.combine` has 20 live locals; its add chain previously
+/// > TRUNCATED `add-int/2addr v0, v16` into `add v0, v0` at emit time (the 1500-vs-1430 miscompile)
+/// > and so had to bail. It now DEXES correctly via widening. Real-device correctness is proven by
+/// > `tests/art/ArtWideArith`; ArtManyRegs itself was verified on ART (combine(0)=1430, combine(3)=2300).
 #[test]
 fn over_16_registers_arith_now_dexes_via_widening() {
     let cf = skotch_classfile::parse_class_file(&fixtures().join("ArtManyRegs.class")).unwrap();
@@ -467,12 +467,12 @@ fn invoke_arg_pushed_high_by_scratch_uses_range_via_frame_hint() {
 }
 
 /// >16-register φ-moves / check-cast moves / binops / const-ints now widen their nibble forms to
-/// the wider encodings (move→move/from16, move-object→move-object/from16, /2addr→3addr,
-/// const/4→const/16) based on the FINAL args-high register — closing the same `registers_used`-vs-
-/// `registers_size` frame gap as the field/invoke retries (an argument or dead-arg-slot value
-/// pushed ≥16 by scratch). ArtPhiWideMove (102/53/7, runtime-proven) holds loop-carried φs
-/// initialized from arguments in a frame inflated past 16 by a 13-arg range invoke, so the φ-moves
-/// `acc←seed` / `z←n` must use move/from16. Here: dexes + self-validates.
+/// > the wider encodings (move→move/from16, move-object→move-object/from16, /2addr→3addr,
+/// > const/4→const/16) based on the FINAL args-high register — closing the same `registers_used`-vs-
+/// > `registers_size` frame gap as the field/invoke retries (an argument or dead-arg-slot value
+/// > pushed ≥16 by scratch). ArtPhiWideMove (102/53/7, runtime-proven) holds loop-carried φs
+/// > initialized from arguments in a frame inflated past 16 by a 13-arg range invoke, so the φ-moves
+/// > `acc←seed` / `z←n` must use move/from16. Here: dexes + self-validates.
 #[test]
 fn over_16_phi_and_const_widen_via_frame_hint() {
     let cf = skotch_classfile::parse_class_file(
@@ -1089,18 +1089,18 @@ fn baload_bastore_via_checkcast_array_resolves_byte_vs_boolean() {
 }
 
 /// >16-register `iget`/`iput` (22c, nibble-only register fields) now DEX rather than bail: the
-/// dexbuilder reserves 2 low scratch registers and routes any operand whose FINAL register is ≥16
-/// through them via `move(-object)/from16`. The object operand always moves with
-/// move-object/from16 (0x08) — never move/from16 (0x02), which ART rejects as `copy1 …
+/// > dexbuilder reserves 2 low scratch registers and routes any operand whose FINAL register is ≥16
+/// > through them via `move(-object)/from16`. The object operand always moves with
+/// > move-object/from16 (0x08) — never move/from16 (0x02), which ART rejects as `copy1 …
 /// type=Reference`. Runtime correctness on a REAL device is proven by `tests/art/ArtSpill*`
-/// (ArtSpillThis 2153/338/105 int iget+dest reload; ArtSpillObj 158/240/126 iget-object dest
-/// reload via 0x08; ArtSpillPut 153/238/119 iput obj-high; ArtSpillLoop 3153/388/98 iget in a
-/// loop, spill inserted across the back-edge with offsets intact). ArtSpillArg 1000/50/-7 covers
-/// the SCRATCH-AWARE retry: a 16-arg range invoke inflates `registers_size` beyond
-/// `alloc.registers_used`, pushing `this` (an argument) to a real register ≥16, so its iget AND
-/// iput must spill even though the pre-emit decision (which uses `registers_used`) saw it as low —
-/// `build_dex` re-emits with the true frame once the range-block scratch is known. Here: each
-/// dexes + self-validates.
+/// > (ArtSpillThis 2153/338/105 int iget+dest reload; ArtSpillObj 158/240/126 iget-object dest
+/// > reload via 0x08; ArtSpillPut 153/238/119 iput obj-high; ArtSpillLoop 3153/388/98 iget in a
+/// > loop, spill inserted across the back-edge with offsets intact). ArtSpillArg 1000/50/-7 covers
+/// > the SCRATCH-AWARE retry: a 16-arg range invoke inflates `registers_size` beyond
+/// > `alloc.registers_used`, pushing `this` (an argument) to a real register ≥16, so its iget AND
+/// > iput must spill even though the pre-emit decision (which uses `registers_used`) saw it as low —
+/// > `build_dex` re-emits with the true frame once the range-block scratch is known. Here: each
+/// > dexes + self-validates.
 #[test]
 fn over_16_registers_iget_iput_now_spill_through_scratch() {
     let art = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/art");
@@ -1283,9 +1283,9 @@ fn lambda_return_boxing_now_dexes() {
 /// captures in fields and the SAM `iget`s them then forwards via the instance invoke
 /// (`invoke-virtual {f$0(this), f$1.., args}`) — generalizing the bound-method-reference path to
 /// >1 capture. This also exercises the fix that classifies a `lambda$` instance method (relaxed
-/// from private to package-private so the synthetic class can call it) as VIRTUAL, not direct.
-/// ArtCaptureThis covers a this+local capture returning int and a this+String capture returning
-/// String. Proven on a REAL device by `tests/art/ArtCaptureThis`; here: dexes + self-validates.
+/// > from private to package-private so the synthetic class can call it) as VIRTUAL, not direct.
+/// > ArtCaptureThis covers a this+local capture returning int and a this+String capture returning
+/// > String. Proven on a REAL device by `tests/art/ArtCaptureThis`; here: dexes + self-validates.
 #[test]
 fn lambda_instance_impl_capturing_this_now_dexes() {
     let cf = skotch_classfile::parse_class_file(

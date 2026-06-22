@@ -12,3 +12,6 @@ anyhow.workspace = true
 byteorder.workspace = true
 adler.workspace = true
 sha1.workspace = true
+
+[lints]
+workspace = true

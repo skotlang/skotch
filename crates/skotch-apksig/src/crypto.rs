@@ -164,7 +164,7 @@ impl PrivateKey {
 fn dsa_p_bits(k: &dsa::SigningKey) -> usize {
     use dsa::Components;
     let _ = <Components>::p; // keep the trait/method path explicit
-    k.verifying_key().components().p().bits() as usize
+    k.verifying_key().components().p().bits()
 }
 
 fn parse_ec_pkcs8(der: &[u8], pki: pkcs8::PrivateKeyInfo) -> Result<PrivateKeyInner> {

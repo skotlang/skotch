@@ -12,3 +12,6 @@ anyhow.workspace = true
 byteorder.workspace = true
 skotch-dex = { workspace = true }
 skotch-classfile = { workspace = true }
+
+[lints]
+workspace = true

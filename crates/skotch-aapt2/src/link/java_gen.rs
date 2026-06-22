@@ -127,7 +127,7 @@ pub fn generate_r_java(
             out.push_str("  }\n");
         }
     }
-    out.push_str("}");
+    out.push('}');
     out.push('\n');
     out
 }

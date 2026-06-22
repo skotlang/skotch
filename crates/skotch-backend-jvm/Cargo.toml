@@ -22,3 +22,6 @@ skotch-resolve   = { workspace = true }
 skotch-typeck    = { workspace = true }
 skotch-mir-lower = { workspace = true }
 skotch-span      = { workspace = true }
+
+[lints]
+workspace = true

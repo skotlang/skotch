@@ -1245,14 +1245,7 @@ pub(crate) fn build_ssa(
     let mut caught: Vec<Option<ValId>> = vec![None; n];
     if !exceptions.is_empty() {
         for e in exceptions {
-            let catch_type = match &e.catch_type {
-                Some(c) => Some(skotch_classfile::constant_pool::internal_to_descriptor(c)),
-                // catch-all (finally / synchronized exception path): carried as None →
-                // the DEX try_item's catch_all_addr at emission. The handler block is
-                // modeled like a typed one (CaughtException → move-exception); the rethrow
-                // now emits move-exception (the `used` set counts terminator operands).
-                None => None,
-            };
+            let catch_type = e.catch_type.as_ref().map(|c| skotch_classfile::constant_pool::internal_to_descriptor(c));
             let hb = cfg
                 .blocks
                 .iter()
@@ -1953,7 +1946,7 @@ fn rename(
                 pc += 1;
             }
             // ireturn/lreturn/freturn/dreturn/areturn → return / return-wide / return-object
-            0xac | 0xad | 0xae | 0xaf | 0xb0 => {
+            0xac..=0xb0 => {
                 let rop = match op {
                     0xad | 0xaf => 0x10,
                     0xb0 => 0x11,
@@ -1975,7 +1968,7 @@ fn rename(
                 pc += 1;
             }
             // method calls: invokevirtual/special/static/interface
-            0xb6 | 0xb7 | 0xb8 | 0xb9 => {
+            0xb6..=0xb9 => {
                 let idx = u16::from_be_bytes([bc[pc + 1], bc[pc + 2]]);
                 let (class, name, desc) = cf.constant_pool.member_ref(idx)?;
                 let (mparams, ret) = crate::bootstrap::parse_descriptor(&desc)?;
@@ -2295,7 +2288,7 @@ fn rename(
                 pc += 5;
             }
             // field access: getstatic/putstatic/getfield/putfield
-            0xb2 | 0xb3 | 0xb4 | 0xb5 => {
+            0xb2..=0xb5 => {
                 let idx = u16::from_be_bytes([bc[pc + 1], bc[pc + 2]]);
                 let (class, name, desc) = cf.constant_pool.member_ref(idx)?;
                 let field = FieldRef {
@@ -3709,7 +3702,7 @@ pub(crate) fn dex_method_ssa(
                 f.values.iter().any(|v| {
                     ssa_op_can_throw(&v.op)
                         && op_jvm_pc(&v.op)
-                            .map_or(false, |pc| (r.start_pc..r.end_pc).contains(&(pc as usize)))
+                            .is_some_and(|pc| (r.start_pc..r.end_pc).contains(&(pc as usize)))
                 })
             })
             .collect();
@@ -6461,7 +6454,7 @@ fn emit_binop(
     // methods every register is <16, so /2addr is still chosen — byte-identical to before.
     if let Some(op2) = crate::bootstrap::binop_2addr_op(jvm_op) {
         if !mul_bug && dest == ra && fits_nibble(dest) && fits_nibble(rb) {
-            insns.push(op2 | ((dest as u16) << 8) | ((rb as u16) << 12));
+            insns.push(op2 | (dest << 8) | (rb << 12));
             return Ok(());
         }
         if !mul_bug
@@ -6470,7 +6463,7 @@ fn emit_binop(
             && fits_nibble(dest)
             && fits_nibble(ra)
         {
-            insns.push(op2 | ((dest as u16) << 8) | ((ra as u16) << 12));
+            insns.push(op2 | (dest << 8) | (ra << 12));
             return Ok(());
         }
     }
@@ -6536,6 +6529,35 @@ fn emit_const_long(insns: &mut Vec<u16>, reg: u16, c: i64) {
             insns.push((c >> (16 * k)) as u16);
         }
     }
+}
+
+/// Blocks needing a φ for each local slot (iterated dominance frontier of its
+/// def-sites). Argument slots also count as defined at the entry block.
+pub(crate) fn phi_blocks(
+    df: &[BTreeSet<usize>],
+    def_sites: &BTreeMap<u16, BTreeSet<usize>>,
+    arg_slots: &[u16],
+) -> BTreeMap<u16, BTreeSet<usize>> {
+    let mut result: BTreeMap<u16, BTreeSet<usize>> = BTreeMap::new();
+    for (&slot, sites) in def_sites {
+        let mut work: Vec<usize> = sites.iter().copied().collect();
+        if arg_slots.contains(&slot) {
+            work.push(0);
+        }
+        let mut has_phi: BTreeSet<usize> = BTreeSet::new();
+        let mut in_work: BTreeSet<usize> = work.iter().copied().collect();
+        while let Some(x) = work.pop() {
+            for &y in &df[x] {
+                if has_phi.insert(y) {
+                    result.entry(slot).or_default().insert(y);
+                    if in_work.insert(y) {
+                        work.push(y);
+                    }
+                }
+            }
+        }
+    }
+    result
 }
 
 #[cfg(test)]
@@ -6923,33 +6945,4 @@ mod tests {
             }
         }
     }
-}
-
-/// Blocks needing a φ for each local slot (iterated dominance frontier of its
-/// def-sites). Argument slots also count as defined at the entry block.
-pub(crate) fn phi_blocks(
-    df: &[BTreeSet<usize>],
-    def_sites: &BTreeMap<u16, BTreeSet<usize>>,
-    arg_slots: &[u16],
-) -> BTreeMap<u16, BTreeSet<usize>> {
-    let mut result: BTreeMap<u16, BTreeSet<usize>> = BTreeMap::new();
-    for (&slot, sites) in def_sites {
-        let mut work: Vec<usize> = sites.iter().copied().collect();
-        if arg_slots.contains(&slot) {
-            work.push(0);
-        }
-        let mut has_phi: BTreeSet<usize> = BTreeSet::new();
-        let mut in_work: BTreeSet<usize> = work.iter().copied().collect();
-        while let Some(x) = work.pop() {
-            for &y in &df[x] {
-                if has_phi.insert(y) {
-                    result.entry(slot).or_default().insert(y);
-                    if in_work.insert(y) {
-                        work.push(y);
-                    }
-                }
-            }
-        }
-    }
-    result
 }

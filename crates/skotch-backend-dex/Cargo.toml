@@ -21,3 +21,6 @@ skotch-typeck    = { workspace = true }
 skotch-mir-lower = { workspace = true }
 skotch-span      = { workspace = true }
 skotch-diagnostics = { workspace = true }
+
+[lints]
+workspace = true

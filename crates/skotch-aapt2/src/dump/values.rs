@@ -36,7 +36,7 @@ fn printf_g(value: f32) -> String {
         .split_once('e')
         .and_then(|(_, e)| e.parse().ok())
         .unwrap_or(0);
-    let formatted = if exp < -4 || exp >= 6 {
+    let formatted = if !(-4..6).contains(&exp) {
         let with_exp = printf_e(v, 5);
         let (mantissa, exp_part) = with_exp.split_once('e').unwrap();
         let mantissa = strip_trailing_zeros(mantissa);

@@ -446,7 +446,7 @@ fn dump_container(
     let mut error = false;
     let mut pos = 12usize;
     for _ in 0..entry_count {
-        if pos % 4 != 0 {
+        if !pos.is_multiple_of(4) {
             pos += 4 - pos % 4;
         }
         if pos + 12 > data.len() {

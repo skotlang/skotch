@@ -8,3 +8,6 @@ description = "Sugar-free typed IR for skotch (placeholder for PR #1)"
 [dependencies]
 skotch-types  = { workspace = true }
 skotch-intern = { workspace = true }
+
+[lints]
+workspace = true

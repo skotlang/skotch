@@ -53,7 +53,7 @@ fn for_each_chunk(data: &[u8], mut f: impl FnMut(&[u8], &[u8]) -> Result<()>) ->
         if chunk_type == CHUNK_IEND {
             return Ok(());
         }
-        offset = offset + total;
+        offset += total;
     }
     bail!("PNG is missing IEND chunk");
 }
@@ -188,14 +188,14 @@ pub fn decode_png(data: &[u8]) -> Result<Image> {
     }
 
     let bits_per_pixel = channels * bit_depth as usize;
-    let stride = (width * bits_per_pixel + 7) / 8;
+    let stride = (width * bits_per_pixel).div_ceil(8);
     let expected = (stride + 1) * height;
     if raw.len() < expected {
         bail!("PNG pixel data is truncated ({} < {expected})", raw.len());
     }
 
     // Undo per-row filters.
-    let bpp = ((bits_per_pixel + 7) / 8).max(1);
+    let bpp = bits_per_pixel.div_ceil(8).max(1);
     let mut rows: Vec<Vec<u8>> = Vec::with_capacity(height);
     for y in 0..height {
         let row_start = y * (stride + 1);

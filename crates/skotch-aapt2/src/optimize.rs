@@ -126,7 +126,7 @@ fn strip_densities(table: &mut crate::res::table::ResourceTable, targets: &[u16]
                 let mut groups: Vec<(Vec<u8>, Vec<crate::res::table::ResourceConfigValue>)> =
                     Vec::new();
                 for value in values {
-                    let mut key_config = value.config.clone();
+                    let mut key_config = value.config;
                     key_config.density = 0;
                     let key = key_config.to_bytes();
                     match groups.iter_mut().find(|(k, _)| *k == key) {

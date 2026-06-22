@@ -70,7 +70,7 @@ impl ContainerWriter {
     }
 
     fn align4(&mut self) {
-        while self.buf.len() % 4 != 0 {
+        while !self.buf.len().is_multiple_of(4) {
             self.buf.push(0);
         }
     }
@@ -139,7 +139,7 @@ pub fn read_container(data: &[u8]) -> anyhow::Result<Vec<ContainerEntry>> {
     for _ in 0..entry_count {
         // Entries are aligned on 4-byte boundaries.
         let pos = cursor.position();
-        if pos % 4 != 0 {
+        if !pos.is_multiple_of(4) {
             cursor.set_position(pos + (4 - pos % 4));
         }
         if cursor.position() as usize >= data.len() {

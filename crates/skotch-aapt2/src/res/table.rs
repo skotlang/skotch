@@ -171,7 +171,7 @@ impl ResourceEntry {
             Ok(i) => i,
             Err(i) => {
                 self.values
-                    .insert(i, ResourceConfigValue::new(config.clone(), product));
+                    .insert(i, ResourceConfigValue::new(*config, product));
                 i
             }
         };
@@ -203,7 +203,7 @@ impl ResourceEntry {
             Some(i) => &mut self.flag_disabled_values[i],
             None => {
                 self.flag_disabled_values
-                    .push(ResourceConfigValue::new(config.clone(), product));
+                    .push(ResourceConfigValue::new(*config, product));
                 self.flag_disabled_values.last_mut().unwrap()
             }
         }

@@ -97,7 +97,7 @@ fn normalize(m: &str) -> String {
         return format!("{path:9} opcode {op}");
     }
     // Otherwise keep the leading clause (up to first " in " or "(").
-    let head = m.splitn(2, " in ").next().unwrap_or(m);
-    let head = head.splitn(2, " (").next().unwrap_or(head);
+    let head = m.split(" in ").next().unwrap_or(m);
+    let head = head.split(" (").next().unwrap_or(head);
     format!("{path:9} {head}")
 }

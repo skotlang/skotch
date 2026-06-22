@@ -627,7 +627,7 @@ impl<'a> PackageFlattener<'a> {
                         continue;
                     };
                     config_to_entries
-                        .entry(config_value.config.clone())
+                        .entry(config_value.config)
                         .or_default()
                         .push(FlatEntry {
                             entry,

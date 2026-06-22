@@ -9,3 +9,6 @@ description = "Diagnostic types and ariadne renderer wrapper for skotch"
 skotch-span = { workspace = true }
 ariadne   = { workspace = true }
 thiserror = { workspace = true }
+
+[lints]
+workspace = true

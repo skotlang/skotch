@@ -42,3 +42,6 @@ pbkdf2.workspace = true
 flate2.workspace = true
 
 [dev-dependencies]
+
+[lints]
+workspace = true

@@ -764,7 +764,7 @@ fn translate_code(
             0xb4 => { let o = stack.pop().unwrap(); stack.push(e.getfield(cf, u16::from_be_bytes([bc[pc + 1], bc[pc + 2]]), o)?); pc += 3; }
             0xb5 => { let v = stack.pop().unwrap(); let o = stack.pop().unwrap(); e.putfield(cf, u16::from_be_bytes([bc[pc + 1], bc[pc + 2]]), o, v)?; pc += 3; }
             // invokes
-            0xb6 | 0xb7 | 0xb8 | 0xb9 => {
+            0xb6..=0xb9 => {
                 let idx = u16::from_be_bytes([bc[pc + 1], bc[pc + 2]]);
                 let advance = if op == 0xb9 { 5 } else { 3 };
                 let next_op = bc.get(pc + advance).copied();
@@ -808,7 +808,7 @@ fn translate_code(
             }
             0xbc => { let s = stack.pop().unwrap(); stack.push(e.new_array(s, newarray_desc(bc[pc + 1]).to_string())?); pc += 2; }
             // negation (int/long/float/double)
-            0x74 | 0x75 | 0x76 | 0x77 => { let v = stack.pop().unwrap(); stack.push(e.negate(op, v)?); pc += 1; }
+            0x74..=0x77 => { let v = stack.pop().unwrap(); stack.push(e.negate(op, v)?); pc += 1; }
             // checkcast / instanceof
             0xc0 => { let o = stack.pop().unwrap(); stack.push(e.check_cast(cf, u16::from_be_bytes([bc[pc + 1], bc[pc + 2]]), o)?); pc += 3; }
             0xc1 => { let o = stack.pop().unwrap(); stack.push(e.instance_of(cf, u16::from_be_bytes([bc[pc + 1], bc[pc + 2]]), o)?); pc += 3; }
@@ -822,7 +822,7 @@ fn translate_code(
             }
             // returns
             0xb1 => { e.return_void(); pc += 1; }
-            0xac | 0xad | 0xae | 0xaf | 0xb0 => {
+            0xac..=0xb0 => {
                 let v = stack.pop().unwrap();
                 e.return_value(v, jvm_return_dex_op(op))?;
                 pc += 1;
@@ -1027,7 +1027,7 @@ fn method_has_stores(bc: &[u8]) -> bool {
 fn method_has_goto(bc: &[u8]) -> bool {
     let mut pc = 0;
     while pc < bc.len() {
-        if matches!(bc[pc], 0xa7 | 0xa8 | 0xa9) {
+        if matches!(bc[pc], 0xa7..=0xa9) {
             return true;
         }
         pc += jvm_step_len(bc, pc);
@@ -1574,7 +1574,7 @@ fn emit_cfg<'a>(
                     fixups.push((off_unit, tb));
                     pc += 3;
                 }
-                0xac | 0xad | 0xae | 0xaf | 0xb0 => {
+                0xac..=0xb0 => {
                     let v = stack.pop().unwrap();
                     let r = cfg_materialize(&mut e, &mut used, &mut max_reg, &v)?;
                     ret_reg[bi] = Some(r);
@@ -2079,7 +2079,7 @@ impl<'a> Emitter<'a> {
                         self.release(&b);
                         let dest = self.alloc_result(src, false)?;
                         self.insns
-                            .push(0xd1 | ((dest as u16) << 8) | ((src as u16) << 12));
+                            .push(0xd1 | (dest << 8) | (src << 12));
                         self.insns.push(c as u16);
                         return Ok(Val::Reg(dest, false));
                     }
@@ -2120,7 +2120,7 @@ impl<'a> Emitter<'a> {
                         self.record_position();
                     }
                     self.insns
-                        .push(op16 | ((dest as u16) << 8) | ((src as u16) << 12));
+                        .push(op16 | (dest << 8) | (src << 12));
                     self.insns.push(c as u16);
                     return Ok(Val::Reg(dest, false));
                 }
@@ -2196,7 +2196,7 @@ impl<'a> Emitter<'a> {
         if let (Some(src), Some(op2)) = (src_for_2addr, binop_2addr_op(jvm_op)) {
             if !mul2addr_bug {
                 self.insns
-                    .push(op2 | ((dest as u16) << 8) | ((src as u16) << 12));
+                    .push(op2 | (dest << 8) | (src << 12));
                 return Ok(Val::Reg(dest, wide));
             }
         }
@@ -2674,7 +2674,7 @@ impl<'a> Emitter<'a> {
                 let is_fresh_move_result = self
                     .insns
                     .last()
-                    .map(|&w| matches!(w & 0xff, 0x0a | 0x0b | 0x0c) && ((w >> 8) & 0xff) == r)
+                    .map(|&w| matches!(w & 0xff, 0x0a..=0x0c) && ((w >> 8) & 0xff) == r)
                     .unwrap_or(false);
                 if is_fresh_move_result {
                     self.insns.pop();
@@ -2833,7 +2833,7 @@ fn bind_store(
                 let is_move_result = e
                     .insns
                     .last()
-                    .map(|&x| matches!(x & 0xff, 0x0a | 0x0b | 0x0c) && ((x >> 8) & 0xff) == r)
+                    .map(|&x| matches!(x & 0xff, 0x0a..=0x0c) && ((x >> 8) & 0xff) == r)
                     .unwrap_or(false);
                 if is_move_result {
                     e.insns.pop();
@@ -2877,7 +2877,7 @@ fn count_local_loads(bc: &[u8], max_locals: usize) -> Result<LocalUses> {
             0x22..=0x25 => (Some((op - 0x22) as usize), 1),
             0x26..=0x29 => (Some((op - 0x26) as usize), 1),
             0x2a..=0x2d => (Some((op - 0x2a) as usize), 1),
-            0x15 | 0x16 | 0x17 | 0x18 | 0x19 => (Some(bc[pc + 1] as usize), 2),
+            0x15..=0x19 => (Some(bc[pc + 1] as usize), 2),
             _ => (None, instr_len(bc, pc)),
         };
         if let Some(i) = idx {
@@ -3213,32 +3213,12 @@ pub(crate) fn iput_op(desc: &str) -> u16 {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::path::Path;
-
-    #[test]
-    fn report_battery_per_method() {
-        let path =
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("../skotch-dex/tests/fixtures/B.class");
-        let cf = skotch_classfile::parse_class_file(&path).unwrap();
-        for m in &cf.methods {
-            let r = dex_method(&cf, m, 1, true);
-            match r {
-                Ok(_) => eprintln!("OK   {}{}", m.name, m.descriptor),
-                Err(e) => eprintln!("FAIL {}{} :: {:#}", m.name, m.descriptor, e),
-            }
-        }
-    }
-}
-
 const DBG_FIRST_SPECIAL: i64 = 0x0a;
 const DBG_LINE_BASE: i64 = -4;
 const DBG_LINE_RANGE: i64 = 15;
 
 fn emit_position(events: &mut Vec<DebugEvent>, mut addr_diff: i64, mut line_diff: i64) {
-    if line_diff < DBG_LINE_BASE || line_diff > DBG_LINE_BASE + DBG_LINE_RANGE - 1 {
+    if !(DBG_LINE_BASE..=DBG_LINE_BASE + DBG_LINE_RANGE - 1).contains(&line_diff) {
         events.push(DebugEvent::AdvanceLine {
             line_diff: line_diff as i32,
         });
@@ -3300,4 +3280,24 @@ fn parse_type(b: &[u8], mut i: usize) -> Result<(String, usize)> {
         other => bail!("bad type char {} in descriptor", other as char),
     }
     Ok((String::from_utf8_lossy(&b[start..i]).into_owned(), i))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn report_battery_per_method() {
+        let path =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../skotch-dex/tests/fixtures/B.class");
+        let cf = skotch_classfile::parse_class_file(&path).unwrap();
+        for m in &cf.methods {
+            let r = dex_method(&cf, m, 1, true);
+            match r {
+                Ok(_) => eprintln!("OK   {}{}", m.name, m.descriptor),
+                Err(e) => eprintln!("FAIL {}{} :: {:#}", m.name, m.descriptor, e),
+            }
+        }
+    }
 }

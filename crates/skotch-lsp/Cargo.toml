@@ -10,3 +10,6 @@ description = "Language Server Protocol implementation for skotch"
 # LSP framework
 tower-lsp  = { workspace = true }
 tokio      = { workspace = true }
+
+[lints]
+workspace = true

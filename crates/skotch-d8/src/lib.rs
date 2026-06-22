@@ -81,7 +81,7 @@ pub fn dex_classes(classes: &[ClassFile], opts: &D8Options) -> Result<Vec<u8>> {
     // d8 orders class_defs so a superclass precedes its subclasses; for the
     // bootstrap (independent classes) sort by type descriptor.
     let mut sorted: Vec<&ClassFile> = classes.iter().collect();
-    sorted.sort_by(|a, b| a.descriptor().cmp(&b.descriptor()));
+    sorted.sort_by_key(|a| a.descriptor());
     // Discard any synthetic lambda classes left pending by a prior bailed dexing.
     let _ = skotch_dexcore::take_pending_synthetic_classes();
     for cf in sorted {

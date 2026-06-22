@@ -227,7 +227,7 @@ pub fn push_u32(buf: &mut Vec<u8>, value: u32) {
 
 /// Pads `buf` with zeros to a 4-byte boundary (`BigBuffer::Align4`).
 pub fn align4(buf: &mut Vec<u8>) {
-    while buf.len() % 4 != 0 {
+    while !buf.len().is_multiple_of(4) {
         buf.push(0);
     }
 }

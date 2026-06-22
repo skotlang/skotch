@@ -216,14 +216,13 @@ pub fn extract_resource_path_data(
 
     let mut flag_name = String::new();
     parts.retain(|part| {
-        if part.starts_with("flag(") && part.ends_with(')') {
-            if flag_name.is_empty() {
+        if part.starts_with("flag(") && part.ends_with(')')
+            && flag_name.is_empty() {
                 flag_name = part[5..part.len() - 1].to_string();
                 return false;
             }
             // A second flag directory is an error, detected below by
             // leaving the marker in place.
-        }
         true
     });
     if parts
@@ -393,7 +392,7 @@ fn compile_table(
     let mut parser = values_parser::ResourceParser::new(
         &mut table,
         path_data.source.clone(),
-        path_data.config.clone(),
+        path_data.config,
         parser_options,
     );
     if let Err(errors) = parser.parse(&doc) {
@@ -534,7 +533,7 @@ fn compile_xml(
     let mut xmlres = CompiledXml {
         file: ResourceFile {
             name: ResourceName::new("", ty, &path_data.name),
-            config: path_data.config.clone(),
+            config: path_data.config,
             file_type: FileType::ProtoXml,
             source: path_data.source.clone(),
             exported_symbols: Vec::new(),
@@ -639,7 +638,7 @@ fn compile_png(
                 .ok_or_else(|| anyhow!("invalid resource type '{}'", path_data.resource_dir))?,
             &path_data.name,
         ),
-        config: path_data.config.clone(),
+        config: path_data.config,
         file_type: FileType::Png,
         source: path_data.source.clone(),
         exported_symbols: Vec::new(),
@@ -680,7 +679,7 @@ fn compile_file(
         .ok_or_else(|| anyhow!("invalid file path '{}'", path_data.source))?;
     let file = ResourceFile {
         name: ResourceName::new("", ty, &path_data.name),
-        config: path_data.config.clone(),
+        config: path_data.config,
         file_type: FileType::Unknown,
         source: path_data.source.clone(),
         exported_symbols: Vec::new(),

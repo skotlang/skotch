@@ -574,7 +574,7 @@ fn describe_expr_shape(e: &skotch_ast::KtExpr<'_>, depth: u8) -> String {
         }
         DotQualified(dq) => skotch_ast::children(dq.syntax())
             .iter()
-            .filter_map(|n| skotch_ast::KtExpr::cast(n))
+            .filter_map(skotch_ast::KtExpr::cast)
             .map(|inner| describe_expr_shape(&inner, depth - 1))
             .collect(),
         Binary(b) => {
@@ -589,7 +589,7 @@ fn describe_expr_shape(e: &skotch_ast::KtExpr<'_>, depth: u8) -> String {
         }
         Parenthesized(p) => skotch_ast::children(p.syntax())
             .iter()
-            .filter_map(|n| skotch_ast::KtExpr::cast(n))
+            .filter_map(skotch_ast::KtExpr::cast)
             .map(|inner| describe_expr_shape(&inner, depth - 1))
             .collect(),
         If(i) => {
@@ -607,12 +607,12 @@ fn describe_expr_shape(e: &skotch_ast::KtExpr<'_>, depth: u8) -> String {
         }
         Return(r) => skotch_ast::children(r.syntax())
             .iter()
-            .filter_map(|n| skotch_ast::KtExpr::cast(n))
+            .filter_map(skotch_ast::KtExpr::cast)
             .map(|inner| describe_expr_shape(&inner, depth - 1))
             .collect(),
         ArrayAccess(aa) => skotch_ast::children(aa.syntax())
             .iter()
-            .filter_map(|n| skotch_ast::KtExpr::cast(n))
+            .filter_map(skotch_ast::KtExpr::cast)
             .map(|inner| describe_expr_shape(&inner, depth - 1))
             .collect(),
         _ => Vec::new(),
@@ -3913,7 +3913,7 @@ fn try_lower_when_subjectless(
     let mut else_stmts: Vec<MStmt> = Vec::new();
     let (k, ety) = literal_to_const(&else_body, strings)?;
     let else_tmp = LocalId(next_slot);
-        // next_slot increment dropped (dead store)
+    // next_slot increment dropped (dead store)
     extra_locals.push(ety);
     else_stmts.push(MStmt::Assign {
         dest: else_tmp,
@@ -6477,7 +6477,7 @@ fn lower_loop_body(
                             skotch_ast::children(aa.syntax()).iter().collect();
                         let array_expr_opt = arr_children
                             .iter()
-                            .find_map(|c| KtExpr::cast(*c))
+                            .find_map(|c| KtExpr::cast(c))
                             .map(unwrap_parens);
                         // Collect ALL index expressions inside INDICES.
                         // `m[i, j]` has two index exprs and desugars to
@@ -6491,7 +6491,7 @@ fn lower_loop_body(
                                     Some(
                                         skotch_ast::children(c)
                                             .iter()
-                                            .filter_map(|cc| KtExpr::cast(cc))
+                                            .filter_map(KtExpr::cast)
                                             .map(unwrap_parens)
                                             .collect::<Vec<_>>(),
                                     )
@@ -9137,7 +9137,7 @@ fn lower_loop_body_blocks(
                 let then_tail_jump: Option<u32> = {
                     let mut found: Option<(usize, u32)> = None;
                     for (idx, n) in then_children.iter().enumerate().rev() {
-                        if let Some(e) = KtExpr::cast(*n) {
+                        if let Some(e) = KtExpr::cast(n) {
                             if let Some(t) = classify_jump(&e, back_edge_target, break_target) {
                                 found = Some((idx, t));
                             }
@@ -9158,7 +9158,7 @@ fn lower_loop_body_blocks(
                 let then_tail_return: bool = {
                     let mut found: Option<usize> = None;
                     for (idx, n) in then_children.iter().enumerate().rev() {
-                        if let Some(e) = KtExpr::cast(*n) {
+                        if let Some(e) = KtExpr::cast(n) {
                             if matches!(e, KtExpr::Return(_)) {
                                 // Only the bare `return` form (no
                                 // value expression) is supported here;
@@ -9257,7 +9257,7 @@ fn lower_loop_body_blocks(
                     let etj: Option<u32> = {
                         let mut found: Option<(usize, u32)> = None;
                         for (idx, n) in else_children.iter().enumerate().rev() {
-                            if let Some(e) = KtExpr::cast(*n) {
+                            if let Some(e) = KtExpr::cast(n) {
                                 if let Some(t) = classify_jump(&e, back_edge_target, break_target) {
                                     found = Some((idx, t));
                                 }
@@ -10489,7 +10489,7 @@ fn try_lower_multi_stmt_block_with_offset(
                                 if let Some(la) = call.lambda_argument() {
                                     if let Some(le) = skotch_ast::children(la.syntax())
                                         .iter()
-                                        .find_map(|c| KtExpr::cast(c))
+                                        .find_map(KtExpr::cast)
                                     {
                                         let snap = name_to_local.clone();
                                         let lookup = |n: &str| -> Option<LocalId> {
@@ -12574,7 +12574,7 @@ fn try_lower_multi_stmt_block_with_offset(
                                         name_to_local.pop(); // inner
                                         name_to_local.pop(); // outer
                                         let one_i = LocalId(next_slot);
-        // next_slot increment dropped (dead store)
+                                        // next_slot increment dropped (dead store)
                                         local_tys.push(Ty::Int);
                                         let step_outer_stmts = vec![
                                             MStmt::Assign {
@@ -12664,7 +12664,7 @@ fn try_lower_multi_stmt_block_with_offset(
                                     name_to_local.pop(); // inner loop var
                                     name_to_local.pop(); // outer loop var
                                     let one_i = LocalId(next_slot);
-        // next_slot increment dropped (dead store)
+                                    // next_slot increment dropped (dead store)
                                     local_tys.push(Ty::Int);
                                     let mut step1_stmts: Vec<MStmt> = Vec::new();
                                     step1_stmts.push(MStmt::Assign {
@@ -13138,7 +13138,7 @@ fn try_lower_multi_stmt_block_with_offset(
                         },
                     ];
                     let cmp_slot = LocalId(next_slot);
-        // next_slot increment dropped (dead store)
+                    // next_slot increment dropped (dead store)
                     local_tys.push(Ty::Bool);
                     let cond_stmt = MStmt::Assign {
                         dest: cmp_slot,
@@ -14261,7 +14261,7 @@ fn try_lower_multi_stmt_block_with_offset(
                         next_slot += 1;
                         local_tys.push(Ty::Any);
                         let phantom_slot = LocalId(next_slot);
-        // next_slot increment dropped (dead store)
+                        // next_slot increment dropped (dead store)
                         local_tys.push(Ty::Any);
                         all.push(BasicBlock {
                             stmts: vec![
@@ -14323,7 +14323,7 @@ fn try_lower_multi_stmt_block_with_offset(
                         next_slot += 1;
                         local_tys.push(Ty::Any);
                         let phantom_slot = LocalId(next_slot);
-        // next_slot increment dropped (dead store)
+                        // next_slot increment dropped (dead store)
                         local_tys.push(Ty::Any);
                         let pre_block = BasicBlock {
                             stmts: pre_block_stmts,
@@ -16605,7 +16605,7 @@ fn lower_rich_expr_to_slot(
                     // (`.foo`) is a member access, not a free ref.
                     let child_exprs: Vec<KtExpr<'_>> = skotch_ast::children(dq.syntax())
                         .iter()
-                        .filter_map(|c| KtExpr::cast(c))
+                        .filter_map(KtExpr::cast)
                         .collect();
                     if let Some(recv) = child_exprs.first().cloned() {
                         collect_free_refs(recv, params, out);
@@ -17019,7 +17019,7 @@ fn lower_rich_expr_to_slot(
                 KtExpr::DotQualified(dq) => {
                     let child_exprs: Vec<KtExpr<'_>> = skotch_ast::children(dq.syntax())
                         .iter()
-                        .filter_map(|c| KtExpr::cast(c))
+                        .filter_map(KtExpr::cast)
                         .collect();
                     if let Some(recv) = child_exprs.first().cloned() {
                         collect_refs(recv, params, out);
@@ -18294,7 +18294,7 @@ fn lower_rich_expr_to_slot(
             skotch_ast::children(aa.syntax()).iter().collect();
         let array_expr_opt = children
             .iter()
-            .find_map(|c| KtExpr::cast(*c))
+            .find_map(|c| KtExpr::cast(c))
             .map(unwrap_parens);
         let index_expr_opt = children.iter().find_map(|c| {
             if c.kind == skotch_syntax::SyntaxKind::INDICES {
@@ -18757,7 +18757,7 @@ fn lower_rich_expr_to_slot(
                     if let Some(la) = call.lambda_argument() {
                         if let Some(le) = skotch_ast::children(la.syntax())
                             .iter()
-                            .find_map(|c| KtExpr::cast(c))
+                            .find_map(KtExpr::cast)
                         {
                             let slot = lower_rich_expr_to_slot(
                                 le,
@@ -19196,7 +19196,7 @@ fn lower_rich_expr_to_slot(
                                 skotch_ast::children(aa.syntax()).iter().collect();
                             let arr_ref = arr_children
                                 .iter()
-                                .find_map(|c| KtExpr::cast(*c))
+                                .find_map(|c| KtExpr::cast(c))
                                 .map(unwrap_parens);
                             match arr_ref {
                                 Some(KtExpr::Reference(r)) => r
@@ -20415,7 +20415,7 @@ fn lower_rich_expr_to_slot(
                                             if let Some(la) = call.lambda_argument() {
                                                 if let Some(le) = skotch_ast::children(la.syntax())
                                                     .iter()
-                                                    .find_map(|c| KtExpr::cast(c))
+                                                    .find_map(KtExpr::cast)
                                                 {
                                                     if let Some(s) = lower_rich_expr_to_slot(
                                                         le,
@@ -24609,7 +24609,7 @@ fn method_simple_body_full(
             // decl) and KtExpr (regular stmts) — block.statements()
             // only surfaces expressions.
             let body_children_inner: Vec<&skotch_sil::SilNode> =
-                skotch_ast::children(block.syntax()).into_iter().collect();
+                skotch_ast::children(block.syntax()).iter().collect();
             for child in &body_children_inner {
                 if let Some(prop) = skotch_ast::KtProperty::cast(child) {
                     let Some(pname) = prop.name() else {
@@ -24877,7 +24877,10 @@ fn method_simple_body_full(
                 // produce empty MIR. Force the mini-walker to bail so the
                 // builder fallback (try_lower_function_body_via_blocks)
                 // takes over.
-                if matches!(stmt_e, KtExpr::While(_) | KtExpr::For(_) | KtExpr::DoWhile(_)) {
+                if matches!(
+                    stmt_e,
+                    KtExpr::While(_) | KtExpr::For(_) | KtExpr::DoWhile(_)
+                ) {
                     mini_ok = false;
                     break;
                 }
@@ -25453,7 +25456,7 @@ fn method_simple_body_full(
                     had_interp = true;
                     let inner_expr = skotch_ast::children(child)
                         .iter()
-                        .find_map(|cc| skotch_ast::KtExpr::cast(cc))
+                        .find_map(skotch_ast::KtExpr::cast)
                         .map(unwrap_parens);
                     let Some(inner) = inner_expr else {
                         ok = false;
