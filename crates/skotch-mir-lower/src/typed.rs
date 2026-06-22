@@ -10651,13 +10651,68 @@ fn try_lower_multi_stmt_block_with_offset(
                         _ => false,
                     }
                 }
+                // Operator-overload guard: when the lhs operand reaches
+                // a user-class-typed local whose CLASS_METHODS table
+                // advertises the corresponding operator method (`plus`
+                // / `minus` / `times` / etc.), DON'T pick AddI/etc. —
+                // defer to the lower_rich fallback below, which lowers
+                // `a + b` to a Virtual call on `a.plus(b)` returning
+                // the correct Ty::Class. Without this guard, `val c = a
+                // + b` on `class C operator fun plus(): C` produced an
+                // integer add with the receiver's slot as `lhs`,
+                // making c's slot Ty::Int and breaking later
+                // `c.someMethod()` dispatch.
+                fn lhs_has_class_operator(
+                    e: KtExpr<'_>,
+                    name_to_local: &[(String, LocalId)],
+                    local_tys: &[Ty],
+                    method_name: &str,
+                ) -> bool {
+                    let inner = unwrap_parens(e);
+                    let cname: Option<String> = (|| match inner {
+                        KtExpr::Reference(rr) => {
+                            let n = rr.name()?;
+                            let slot = name_to_local
+                                .iter()
+                                .rev()
+                                .find(|(nm, _)| nm == n)
+                                .map(|(_, l)| *l)?;
+                            match local_tys.get(slot.0 as usize) {
+                                Some(Ty::Class(c)) => Some(c.clone()),
+                                _ => None,
+                            }
+                        }
+                        _ => None,
+                    })();
+                    let Some(c) = cname else { return false };
+                    class_method_return_ty(&c, method_name).is_some()
+                }
+                let operator_overload_name: Option<&'static str> = match op_text.as_str() {
+                    "+" => Some("plus"),
+                    "-" => Some("minus"),
+                    "*" => Some("times"),
+                    "/" => Some("div"),
+                    "%" => Some("rem"),
+                    _ => None,
+                };
+                let lhs_has_class_op = operator_overload_name
+                    .map(|mn| {
+                        b.lhs().is_some_and(|l| {
+                            lhs_has_class_operator(l, &name_to_local, &local_tys, mn)
+                        })
+                    })
+                    .unwrap_or(false);
                 let is_str_concat = op_text == "+"
                     && (b.lhs().is_some_and(|l| {
                         operand_reaches_string(l, &name_to_local, &local_tys, val_lookup)
                     }) || b.rhs().is_some_and(|r| {
                         operand_reaches_string(r, &name_to_local, &local_tys, val_lookup)
                     }));
-                let mir_op = if is_str_concat {
+                let mir_op = if lhs_has_class_op {
+                    // Skip this handler entirely; fall through to
+                    // lower_rich which dispatches the operator method.
+                    None
+                } else if is_str_concat {
                     Some(skotch_mir::BinOp::ConcatStr)
                 } else {
                     match op_text.as_str() {
@@ -10844,7 +10899,16 @@ fn try_lower_multi_stmt_block_with_offset(
             {
                 let init_now = init;
                 let mut probe_stmts: Vec<MStmt> = Vec::new();
-                let mut probe_locals: Vec<Ty> = Vec::new();
+                // Seed probe_locals with the function-scope local_tys so
+                // lower_rich's `slot_ty_with_param_fallback(lhs_slot,
+                // probe_locals)` can resolve the Ty of pre-existing
+                // slots (e.g. `a` in `val c = a + b` where `a` is a
+                // user-class typed local from an earlier val). Without
+                // this seed, lookup_name returns the right slot but the
+                // Ty appears as Ty::Any → operator overload fails to
+                // dispatch.
+                let probe_locals_base_len = local_tys.len();
+                let mut probe_locals: Vec<Ty> = local_tys.clone();
                 let mut probe_slot = next_slot;
                 let mut snap_locals = name_to_local.clone();
                 prebind_top_level_vals(
@@ -10873,7 +10937,10 @@ fn try_lower_multi_stmt_block_with_offset(
                     strings,
                 ) {
                     next_slot = probe_slot;
-                    local_tys.extend(probe_locals);
+                    // Only the entries pushed during the probe are
+                    // additions; the prefix is the seeded copy of
+                    // local_tys, which is already in local_tys.
+                    local_tys.extend(probe_locals.drain(probe_locals_base_len..));
                     stmts.extend(probe_stmts);
                     name_to_local = snap_locals;
                     // For `var`, allocate a fresh mutable slot and
@@ -16070,6 +16137,40 @@ fn lower_inline_expr_to_slot(
         KtExpr::Binary(b) => {
             let op_text = b.operation().map(|o| o.text()).unwrap_or_default();
             let is_cmp_op = matches!(op_text.as_str(), "==" | "!=" | "<" | ">" | "<=" | ">=");
+            // Operator-overload deferral: if `+`/`-`/`*`/`/`/`%` and
+            // the lhs resolves to a Ty::Class whose CLASS_METHODS
+            // table has the corresponding operator method (`plus`
+            // etc.), bail so lower_rich's operator-overload arm
+            // dispatches the Virtual call instead of erroneously
+            // picking integer arithmetic. Without this, `a + b` on
+            // user-class operands returned an Int slot, masking the
+            // class type from downstream `.method()` dispatch.
+            let symbol_op_method: Option<&'static str> = match op_text.as_str() {
+                "+" => Some("plus"),
+                "-" => Some("minus"),
+                "*" => Some("times"),
+                "/" => Some("div"),
+                "%" => Some("rem"),
+                _ => None,
+            };
+            if let Some(mname) = symbol_op_method {
+                // Peek at lhs WITHOUT committing — if it resolves to
+                // a Ty::Class with the operator method, return None
+                // so lower_rich's arm can handle it.
+                let lhs_inner = unwrap_parens(b.lhs()?);
+                if let KtExpr::Reference(rr) = lhs_inner {
+                    if let Some(n) = rr.name() {
+                        if let Some(slot) = lookup_name(n) {
+                            let lhs_ty = slot_ty_with_param_fallback(slot.0, extra_locals);
+                            if let Ty::Class(cname) = &lhs_ty {
+                                if class_method_return_ty(cname, mname).is_some() {
+                                    return None;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             let lhs = lower_inline_expr_to_slot(
                 b.lhs()?,
                 lookup_name,
@@ -21007,14 +21108,16 @@ fn lower_rich_expr_to_slot(
             extra_locals,
             strings,
         )?;
-        let lhs_ty = extra_locals
-            .get(lhs_slot.0 as usize)
-            .cloned()
-            .unwrap_or(Ty::Int);
-        let rhs_ty = extra_locals
-            .get(rhs_slot.0 as usize)
-            .cloned()
-            .unwrap_or(Ty::Int);
+        // Use slot_ty_with_param_fallback rather than direct
+        // `extra_locals[slot]` so the body-local-shifted indexing
+        // (extra_locals[i] = slot id param_count + i) AND the
+        // PARAM_TY_FALLBACK for param slots both resolve correctly.
+        // Direct indexing was off-by-param_count inside class method
+        // bodies, picking Ty::Int for Double-typed inner-Binary
+        // results — outer `-`/`+` then emitted isub/iadd against
+        // Double operands → VerifyError.
+        let lhs_ty = slot_ty_with_param_fallback(lhs_slot.0, extra_locals);
+        let rhs_ty = slot_ty_with_param_fallback(rhs_slot.0, extra_locals);
         let is_long = matches!(lhs_ty, Ty::Long) || matches!(rhs_ty, Ty::Long);
         let is_double = matches!(lhs_ty, Ty::Double) || matches!(rhs_ty, Ty::Double);
         let mir_op = if is_cmp_op {
