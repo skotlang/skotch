@@ -156,6 +156,65 @@ impl Drop for ClassMethodsScope {
 }
 
 thread_local! {
+    /// `user class → super class (JVM internal)`. Walked by
+    /// `class_extends_throwable` so `.message` on a user exception
+    /// subclass routes through `getMessage()Ljava/lang/String;` rather
+    /// than the Ty::Any getter heuristic.
+    static CLASS_SUPER: std::cell::RefCell<rustc_hash::FxHashMap<String, String>> =
+        std::cell::RefCell::new(rustc_hash::FxHashMap::default());
+}
+
+fn class_extends_throwable(class_name: &str) -> bool {
+    let throwables: &[&str] = &[
+        "java/lang/Throwable",
+        "java/lang/Exception",
+        "java/lang/RuntimeException",
+        "java/lang/Error",
+        "java/lang/ArithmeticException",
+        "java/lang/IllegalArgumentException",
+        "java/lang/IllegalStateException",
+        "java/lang/IndexOutOfBoundsException",
+        "java/lang/NullPointerException",
+        "java/lang/NumberFormatException",
+        "java/lang/ClassCastException",
+        "java/lang/UnsupportedOperationException",
+    ];
+    if throwables.contains(&class_name) {
+        return true;
+    }
+    CLASS_SUPER.with(|c| {
+        let table = c.borrow();
+        let mut cur = class_name.to_string();
+        for _ in 0..32 {
+            let Some(parent) = table.get(&cur).cloned() else {
+                return false;
+            };
+            if throwables.contains(&parent.as_str()) {
+                return true;
+            }
+            cur = parent;
+        }
+        false
+    })
+}
+
+struct ClassSuperScope {
+    prev: rustc_hash::FxHashMap<String, String>,
+}
+impl ClassSuperScope {
+    fn new(table: rustc_hash::FxHashMap<String, String>) -> Self {
+        let prev = CLASS_SUPER.with(|c| std::mem::take(&mut *c.borrow_mut()));
+        CLASS_SUPER.with(|c| *c.borrow_mut() = table);
+        Self { prev }
+    }
+}
+impl Drop for ClassSuperScope {
+    fn drop(&mut self) {
+        CLASS_SUPER.with(|c| *c.borrow_mut() = std::mem::take(&mut self.prev));
+    }
+}
+
+thread_local! {
     /// File-scoped type-alias map: `Name → resolved Ty`. Populated in
     /// `lower_file` BEFORE class processing so resolve_type_ref can
     /// substitute `Predicate` → `Ty::Class("kotlin/jvm/functions/Function1")`
@@ -1264,7 +1323,14 @@ pub fn lower_file(
             let companion_class_name = if let Some(o) = companion {
                 let comp_simple = o.name().unwrap_or("Companion").to_string();
                 let comp_qname = format!("{}${}", name, comp_simple);
-                let comp_methods = collect_object_methods(o, &mut module.strings);
+                let comp_methods = collect_object_methods_with_class(
+                    o,
+                    &mut module.strings,
+                    Some(&comp_qname),
+                    &fn_lookup,
+                    &val_lookup,
+                    &module.wrapper_class,
+                );
                 let comp_class = skotch_mir::MirClass {
                     name: comp_qname.clone(),
                     super_class: None,
@@ -1877,7 +1943,14 @@ pub fn lower_file(
                 None => continue,
             };
             let (super_class, interfaces) = collect_class_super_iface(o.super_type_list());
-            let methods = collect_object_methods(o, &mut module.strings);
+            let methods = collect_object_methods_with_class(
+                o,
+                &mut module.strings,
+                Some(&name),
+                &fn_lookup,
+                &val_lookup,
+                &module.wrapper_class,
+            );
             // Object singletons need a real `<init>` body that chains
             // to `Object.<init>` — the JVM verifier rejects a `<init>`
             // that returns without invoking a super constructor.
@@ -2470,6 +2543,33 @@ pub fn lower_file(
         table
     };
     let _class_methods_scope = ClassMethodsScope::new(class_method_returns);
+
+    // CLASS_SUPER: user class → super class (JVM internal). Cross-file
+    // `super_class` is the simple name, so FQ it like the local path does.
+    let class_super_table: rustc_hash::FxHashMap<String, String> = {
+        let mut t: rustc_hash::FxHashMap<String, String> = rustc_hash::FxHashMap::default();
+        for decl in file.decls() {
+            if let KtDecl::Class(c) = decl {
+                let Some(cname) = c.name() else { continue };
+                let (super_class, _) = collect_class_super_iface(c.super_type_list());
+                if let Some(sc) = super_class {
+                    t.insert(cname.to_string(), sc);
+                }
+            }
+        }
+        if let Some(tbl) = package_symbols {
+            for (simple_name, decl) in tbl.classes.iter() {
+                if let Some(sc) = decl.super_class.as_ref() {
+                    let fq = skotch_types::intrinsics::kotlin_to_jvm_class(sc)
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| sc.clone());
+                    t.entry(simple_name.clone()).or_insert(fq);
+                }
+            }
+        }
+        t
+    };
+    let _class_super_scope = ClassSuperScope::new(class_super_table);
 
     // Register synthesized forwarder methods (by-delegation, data-class
     // copy(), data-class hashCode/equals/toString, etc.) into
@@ -19264,23 +19364,13 @@ fn lower_rich_expr_to_slot(
                                     | "kotlin/Triple"
                                     | "kotlin/ranges/IntRange"
                             ) {
-                                // Throwable/Exception family: `.message`
-                                // maps to `getMessage()Ljava/lang/String;`
-                                // — emit with explicit VirtualJava
-                                // descriptor since backend has no
-                                // classinfo for these JDK classes.
-                                let is_throwable_like = matches!(
-                                    cname.as_str(),
-                                    "java/lang/Throwable"
-                                        | "java/lang/Exception"
-                                        | "java/lang/RuntimeException"
-                                        | "java/lang/ArithmeticException"
-                                        | "java/lang/IllegalArgumentException"
-                                        | "java/lang/IllegalStateException"
-                                        | "java/lang/IndexOutOfBoundsException"
-                                        | "java/lang/NullPointerException"
-                                        | "java/lang/NumberFormatException"
-                                );
+                                // Throwable family (incl. user subclasses
+                                // via CLASS_SUPER walk): `.message` →
+                                // `getMessage()Ljava/lang/String;`. Without
+                                // this the generic getter emits
+                                // `getMessage()Object` and `${ex.message}`
+                                // raises NoSuchMethodError at runtime.
+                                let is_throwable_like = class_extends_throwable(cname);
                                 if is_throwable_like && prop_name == "message" {
                                     let result_slot = LocalId(*next_slot);
                                     *next_slot += 1;
@@ -24804,28 +24894,59 @@ fn constructor_from_primary_impl(
     // non-existent method and the JVM rejects the class. Default
     // to `java/lang/Object` when there's no explicit super-class
     // ctor entry.
-    let super_class = c
-        .super_type_list()
-        .and_then(|stl| {
-            stl.entries().find_map(|e| match e {
-                skotch_ast::SuperTypeEntry::Call(_) => e
-                    .type_reference()
-                    .and_then(|tr| tr.user_type())
-                    .and_then(|u| u.name())
-                    .map(|n| {
-                        skotch_types::intrinsics::kotlin_to_jvm_class(n)
-                            .map(|s| s.to_string())
-                            .unwrap_or_else(|| n.to_string())
-                    }),
-                _ => None,
-            })
+    let super_call_entry = c.super_type_list().and_then(|stl| {
+        stl.entries().find_map(|e| match e {
+            skotch_ast::SuperTypeEntry::Call(call) => Some(call),
+            _ => None,
+        })
+    });
+    let super_class = super_call_entry
+        .and_then(|call| call.callee_type())
+        .and_then(|tr| tr.user_type())
+        .and_then(|u| u.name())
+        .map(|n| {
+            skotch_types::intrinsics::kotlin_to_jvm_class(n)
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| n.to_string())
         })
         .unwrap_or_else(|| "java/lang/Object".to_string());
+    // Forward `: Super(arg, …)` value-args (Reference-to-primary-ctor-
+    // param shape only) into the super `<init>` call — without this,
+    // `class CalcError(m: String) : RuntimeException(m)` dropped m and
+    // `getMessage()` returned null at runtime.
+    let mut super_args: Vec<skotch_mir::LocalId> = vec![this_slot];
+    if let Some(arg_list) = super_call_entry.and_then(|c| c.value_argument_list()) {
+        let mut ok = true;
+        let mut extra: Vec<skotch_mir::LocalId> = Vec::new();
+        for arg in arg_list.arguments() {
+            let Some(arg_e) = arg.expression() else {
+                ok = false;
+                break;
+            };
+            let skotch_ast::KtExpr::Reference(rr) = unwrap_parens(arg_e) else {
+                ok = false;
+                break;
+            };
+            let Some(name) = rr.name() else {
+                ok = false;
+                break;
+            };
+            let Some(idx) = user_param_names.iter().position(|n| n == name) else {
+                ok = false;
+                break;
+            };
+            extra.push(skotch_mir::LocalId((idx + 1) as u32));
+        }
+        if ok {
+            super_args.extend(extra);
+        }
+    }
+    let _ = fn_lookup;
     stmts.push(skotch_mir::Stmt::Assign {
         dest: this_slot,
         value: skotch_mir::Rvalue::Call {
             kind: skotch_mir::CallKind::Constructor(super_class),
-            args: vec![this_slot],
+            args: super_args,
         },
     });
 
@@ -25214,16 +25335,37 @@ fn collect_interface_methods(
 }
 
 /// Same-shape helper for object singletons.
-fn collect_object_methods(
+/// Routes object-singleton method bodies through
+/// `method_from_fun_with_class` so they can resolve top-level fn calls
+/// via the file-level `fn_lookup` (otherwise `applyOp(...)` inside
+/// `object Calculator.evaluate` bailed `kind=Call` and left the body as
+/// `iconst_0 ireturn`).
+#[allow(clippy::too_many_arguments)]
+fn collect_object_methods_with_class(
     o: skotch_ast::KtObjectDeclaration<'_>,
     strings: &mut Vec<String>,
+    class_name: Option<&str>,
+    fn_lookup: &rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)>,
+    val_lookup: &rustc_hash::FxHashMap<String, Ty>,
+    wrapper_class: &str,
 ) -> Vec<MirFunction> {
     let mut methods = Vec::new();
     let Some(body) = o.body() else { return methods };
     let mut method_idx = 0u32;
     for d in body.declarations() {
         if let KtDecl::Fun(f) = d {
-            methods.push(method_from_fun(f, method_idx, false, strings));
+            methods.push(method_from_fun_with_class(
+                f,
+                method_idx,
+                false,
+                strings,
+                class_name,
+                &[],
+                fn_lookup,
+                val_lookup,
+                wrapper_class,
+                &[],
+            ));
             method_idx += 1;
         }
     }
@@ -32920,7 +33062,11 @@ mod tests {
         let module = lower("object S { fun greet(): String = \"hi\" }", "TestKt");
         let s = module.classes.iter().find(|c| c.name == "S").expect("S");
         let m = &s.methods[0];
-        assert_eq!(m.locals, vec![Ty::Any, Ty::String]);
+        // `this` slot is now Class("S") (previously Ty::Any) because
+        // object methods route through `method_from_fun_with_class` so
+        // they can resolve top-level fn calls in the body — the class
+        // name comes along for free and gives `this` an accurate Ty.
+        assert_eq!(m.locals, vec![Ty::Class("S".to_string()), Ty::String]);
         assert!(matches!(m.blocks[0].terminator, Terminator::ReturnValue(_)));
     }
 
