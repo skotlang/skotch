@@ -25230,6 +25230,38 @@ fn method_simple_body_full(
                                 .map(unwrap_parens)
                         }
                         let ret_expr_opt = extract_return(then_arm);
+                        // Same shape as extract_return but for `throw`:
+                        // recognize `if (cond) throw X` and `if (cond) {
+                        // throw X }` so the then-arm can terminate the
+                        // block with Terminator::Throw instead of being
+                        // forced through lower_rich_expr_to_slot (which
+                        // has no Throw arm and would bail).
+                        fn extract_throw(
+                            e: skotch_ast::KtExpr<'_>,
+                        ) -> Option<skotch_ast::KtExpr<'_>> {
+                            use skotch_ast::KtExpr;
+                            let e = unwrap_parens(e);
+                            let t = match e {
+                                KtExpr::Throw(t) => t,
+                                KtExpr::Block(b) => {
+                                    let s: Vec<KtExpr<'_>> = b.statements().collect();
+                                    if s.len() != 1 {
+                                        return None;
+                                    }
+                                    if let KtExpr::Throw(t) = s[0] {
+                                        t
+                                    } else {
+                                        return None;
+                                    }
+                                }
+                                _ => return None,
+                            };
+                            skotch_ast::children(t.syntax())
+                                .iter()
+                                .find_map(KtExpr::cast)
+                                .map(unwrap_parens)
+                        }
+                        let throw_expr_opt = extract_throw(then_arm);
                         // Lower cond → cond_slot via lower_rich.
                         let snap = snap_locals.clone();
                         let lookup = |n: &str| -> Option<skotch_mir::LocalId> {
@@ -25247,6 +25279,45 @@ fn method_simple_body_full(
                             mini_ok = false;
                             break;
                         };
+                        if let Some(throw_expr) = throw_expr_opt {
+                            // Lower the throw-expression value (typically
+                            // a constructor call like `MyEx("msg")`) into
+                            // a fresh stmts vec that becomes the throw-block.
+                            let mut throw_stmts: Vec<skotch_mir::Stmt> = Vec::new();
+                            let Some(throw_slot) = lower_rich_expr_to_slot(
+                                throw_expr,
+                                &lookup,
+                                fn_lookup,
+                                &mut next_slot_inner,
+                                &mut throw_stmts,
+                                &mut extra_locals_inner,
+                                strings,
+                            ) else {
+                                mini_ok = false;
+                                break;
+                            };
+                            // Block layout (mirror of the return-block
+                            // shape above):
+                            //   pre-block: Branch(then=N+1 throw, else=N+2 fall-through)
+                            //   N+1: throw_stmts + Throw(throw_slot)
+                            //   N+2: fall-through
+                            let n = mini_extra_blocks.len();
+                            let pre_block = BasicBlock {
+                                stmts: std::mem::take(&mut pre_stmts_inner),
+                                terminator: Terminator::Branch {
+                                    cond: cond_slot,
+                                    then_block: (n + 1) as u32,
+                                    else_block: (n + 2) as u32,
+                                },
+                            };
+                            let throw_block = BasicBlock {
+                                stmts: throw_stmts,
+                                terminator: Terminator::Throw(throw_slot),
+                            };
+                            mini_extra_blocks.push(pre_block);
+                            mini_extra_blocks.push(throw_block);
+                            continue;
+                        }
                         if let Some(ret_expr) = ret_expr_opt {
                             // Lower the return value via lower_rich into a
                             // fresh stmts vec — that becomes the return-block.
