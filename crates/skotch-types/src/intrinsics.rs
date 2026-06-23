@@ -182,6 +182,12 @@ pub fn kotlin_to_jvm_class(simple_name: &str) -> Option<&'static str> {
         "Sequence" => "kotlin/sequences/Sequence",
         "StringBuilder" => "java/lang/StringBuilder",
         "StringBuffer" => "java/lang/StringBuffer",
+        // Kotlin stdlib tuple classes. Both compile to a real
+        // kotlin.* JVM class (not Java equivalents like Map.Entry),
+        // so the FQ form must appear at every Ty::Class boundary
+        // that reaches descriptor emission.
+        "Pair" => "kotlin/Pair",
+        "Triple" => "kotlin/Triple",
         // Exception/error names are delegated to the single exception
         // table (§7) so they're enumerated in exactly one place.
         _ => return kotlin_exception_class(simple_name),

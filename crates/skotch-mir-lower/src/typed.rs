@@ -20169,6 +20169,68 @@ fn lower_rich_expr_to_slot(
             }
         }
     }
+    // `Pair(a, b)` / `Triple(a, b, c)` — kotlin stdlib tuple classes.
+    // Constructors take Object,Object[,Object] regardless of arg
+    // types, so we cannot fall through to the generic constructor
+    // heuristic below (which builds the descriptor from arg slot
+    // types and would emit `(LLight;LEvent;)V`). Route to
+    // ConstructorJava with the explicit Object-Object descriptor.
+    if let KtExpr::Call(call) = e {
+        if let Some(KtExpr::Reference(rc)) = call.callee() {
+            if let Some(name) = rc.name() {
+                let pair_arity = match name {
+                    "Pair" => Some(2u32),
+                    "Triple" => Some(3u32),
+                    _ => None,
+                };
+                if let Some(arity) = pair_arity {
+                    let arg_list = call.value_argument_list()?;
+                    let args_vec: Vec<_> = arg_list.arguments().collect();
+                    if args_vec.len() == arity as usize {
+                        let mut arg_slots: Vec<LocalId> = Vec::new();
+                        for arg in args_vec.iter() {
+                            let arg_e = arg.expression()?;
+                            let slot = lower_rich_expr_to_slot(
+                                arg_e,
+                                lookup_name,
+                                fn_lookup,
+                                next_slot,
+                                pre_stmts,
+                                extra_locals,
+                                strings,
+                            )?;
+                            arg_slots.push(slot);
+                        }
+                        let fq = if name == "Pair" {
+                            "kotlin/Pair"
+                        } else {
+                            "kotlin/Triple"
+                        };
+                        let new_slot = LocalId(*next_slot);
+                        *next_slot += 1;
+                        extra_locals.push(Ty::Class(fq.to_string()));
+                        pre_stmts.push(MStmt::Assign {
+                            dest: new_slot,
+                            value: skotch_mir::Rvalue::NewInstance(fq.to_string()),
+                        });
+                        let descriptor =
+                            format!("({})V", "Ljava/lang/Object;".repeat(arity as usize));
+                        pre_stmts.push(MStmt::Assign {
+                            dest: new_slot,
+                            value: skotch_mir::Rvalue::Call {
+                                kind: skotch_mir::CallKind::ConstructorJava {
+                                    class_name: fq.to_string(),
+                                    descriptor,
+                                },
+                                args: arg_slots,
+                            },
+                        });
+                        return Some(new_slot);
+                    }
+                }
+            }
+        }
+    }
     // Constructor call heuristic: capitalized name not in fn_lookup
     // treated as ctor invocation.
     if let KtExpr::Call(call) = e {
