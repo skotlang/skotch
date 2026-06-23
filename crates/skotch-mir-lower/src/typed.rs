@@ -63,7 +63,9 @@ fn current_class_name() -> Option<String> {
 }
 
 fn class_field_lookup(name: &str) -> Option<(String, String, Ty)> {
-    CLASS_METHOD_CTX.with(|cell| {
+    // First check the class-method context's own field list (covers the
+    // current class's primary-ctor val/var params + body properties).
+    let own = CLASS_METHOD_CTX.with(|cell| {
         let borrow = cell.borrow();
         let Some((class_name, fields)) = borrow.as_ref() else {
             return None;
@@ -72,6 +74,27 @@ fn class_field_lookup(name: &str) -> Option<(String, String, Ty)> {
             .iter()
             .find(|(n, _)| n == name)
             .map(|(n, t)| (class_name.clone(), n.clone(), t.clone()))
+    });
+    if own.is_some() {
+        return own;
+    }
+    // Inherited fields: walk the per-file `INHERITED_CLASS_FIELDS`
+    // table (populated by `lower_file` BEFORE method collection so the
+    // info is reachable here even though CLASS_SUPER / CLASS_FIELDS
+    // scopes go live later). Returns the DEFINING class as the receiver
+    // class so the emitted `getfield` / `putfield` field reference
+    // points at the class that actually declares the field. The JVM
+    // verifier accepts a subclass as the receiver Ty against a
+    // parent-class field reference (Container's `this` satisfies the
+    // `Tag.children` field ref).
+    let current = current_class_name()?;
+    INHERITED_CLASS_FIELDS.with(|cell| {
+        let borrow = cell.borrow();
+        let entries = borrow.get(&current)?;
+        entries
+            .iter()
+            .find(|(_, fname, _)| fname == name)
+            .map(|(parent, fname, ty)| (parent.clone(), fname.clone(), ty.clone()))
     })
 }
 
@@ -220,6 +243,46 @@ thread_local! {
     /// `GetField(this, field_i)` fill.
     static CLASS_FIELDS: std::cell::RefCell<rustc_hash::FxHashMap<String, Vec<(String, Ty)>>> =
         std::cell::RefCell::new(rustc_hash::FxHashMap::default());
+}
+
+thread_local! {
+    /// Per-file map: `class_name -> Vec<(parent_class, field_name, Ty)>`
+    /// of inherited fields reachable from the class via its super chain.
+    /// Used at body-lowering time so `field_names.iter().find()` preload
+    /// sites in `lower_loop_body` and the mini-walker can resolve a
+    /// parent-class field as an implicit-this receiver. Populated by
+    /// `lower_file` BEFORE class methods are collected (CLASS_SUPER /
+    /// CLASS_FIELDS scopes are installed too late — they go live AFTER
+    /// the per-class methods loop).
+    ///
+    /// Parent-class is stored alongside the (name, Ty) pair so PutField
+    /// / GetField at the use-site can be emitted against the DEFINING
+    /// class (JVM verifier accepts a child-class receiver against a
+    /// parent-class field reference).
+    static INHERITED_CLASS_FIELDS: std::cell::RefCell<rustc_hash::FxHashMap<String, Vec<(String, String, Ty)>>> =
+        std::cell::RefCell::new(rustc_hash::FxHashMap::default());
+}
+
+fn lookup_inherited_class_fields(class_name: &str) -> Vec<(String, String, Ty)> {
+    INHERITED_CLASS_FIELDS
+        .with(|c| c.borrow().get(class_name).cloned())
+        .unwrap_or_default()
+}
+
+struct InheritedClassFieldsScope {
+    prev: rustc_hash::FxHashMap<String, Vec<(String, String, Ty)>>,
+}
+impl InheritedClassFieldsScope {
+    fn new(table: rustc_hash::FxHashMap<String, Vec<(String, String, Ty)>>) -> Self {
+        let prev = INHERITED_CLASS_FIELDS.with(|c| std::mem::take(&mut *c.borrow_mut()));
+        INHERITED_CLASS_FIELDS.with(|c| *c.borrow_mut() = table);
+        Self { prev }
+    }
+}
+impl Drop for InheritedClassFieldsScope {
+    fn drop(&mut self) {
+        INHERITED_CLASS_FIELDS.with(|c| *c.borrow_mut() = std::mem::take(&mut self.prev));
+    }
 }
 fn lookup_class_fields(class_name: &str) -> Option<Vec<(String, Ty)>> {
     CLASS_FIELDS.with(|c| c.borrow().get(class_name).cloned())
@@ -2206,6 +2269,88 @@ pub fn lower_file(
         table
     };
     let _class_methods_scope_early = ClassMethodsScope::new(class_method_returns_early);
+
+    // Per-file inherited-fields table: each user class maps to the
+    // (defining-parent-class, field_name, field_ty) triples reachable
+    // through its super chain. Built BEFORE the class methods loop so
+    // `collect_class_methods` can splice parent fields into the
+    // current class's `field_names` list. The downstream
+    // CLASS_SUPER / CLASS_FIELDS scopes are installed AFTER the
+    // methods loop (so they can include resolved Tys), making them
+    // unreachable from `class_field_lookup` during method-body
+    // lowering — hence this dedicated pre-pass.
+    let inherited_class_fields_table: rustc_hash::FxHashMap<String, Vec<(String, String, Ty)>> = {
+        // Step 1: own-fields per class via collect_class_fields, plus
+        // cross-file own-fields from package_symbols.
+        let mut own: rustc_hash::FxHashMap<String, Vec<(String, Ty)>> =
+            rustc_hash::FxHashMap::default();
+        for decl in file.decls() {
+            if let KtDecl::Class(c) = decl {
+                let Some(cname) = c.name() else { continue };
+                let fields: Vec<(String, Ty)> = collect_class_fields(c)
+                    .into_iter()
+                    .map(|f| (f.name, f.ty))
+                    .collect();
+                own.insert(cname.to_string(), fields);
+            }
+        }
+        if let Some(tbl) = package_symbols {
+            for (simple_name, decl) in tbl.classes.iter() {
+                if !decl.fields.is_empty() {
+                    own.entry(simple_name.clone())
+                        .or_insert_with(|| decl.fields.clone());
+                }
+            }
+        }
+        // Step 2: super-class map per user class.
+        let mut supers: rustc_hash::FxHashMap<String, String> = rustc_hash::FxHashMap::default();
+        for decl in file.decls() {
+            if let KtDecl::Class(c) = decl {
+                let Some(cname) = c.name() else { continue };
+                let (super_class, _) = collect_class_super_iface(c.super_type_list());
+                if let Some(sc) = super_class {
+                    supers.insert(cname.to_string(), sc);
+                }
+            }
+        }
+        if let Some(tbl) = package_symbols {
+            for (simple_name, decl) in tbl.classes.iter() {
+                if let Some(sc) = decl.super_class.as_ref() {
+                    let fq = skotch_types::intrinsics::kotlin_to_jvm_class(sc)
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| sc.clone());
+                    supers.entry(simple_name.clone()).or_insert(fq);
+                }
+            }
+        }
+        // Step 3: walk the chain for each class to build the
+        // inherited-fields list.
+        let mut out: rustc_hash::FxHashMap<String, Vec<(String, String, Ty)>> =
+            rustc_hash::FxHashMap::default();
+        for cname in own.keys() {
+            let mut chain: Vec<(String, String, Ty)> = Vec::new();
+            let mut cur = cname.clone();
+            for _ in 0..32 {
+                let Some(parent) = supers.get(&cur).cloned() else {
+                    break;
+                };
+                if let Some(parent_fields) = own.get(&parent) {
+                    for (n, t) in parent_fields {
+                        if !chain.iter().any(|(_, name, _)| name == n) {
+                            chain.push((parent.clone(), n.clone(), t.clone()));
+                        }
+                    }
+                }
+                cur = parent;
+            }
+            if !chain.is_empty() {
+                out.insert(cname.clone(), chain);
+            }
+        }
+        out
+    };
+    let _inherited_class_fields_scope =
+        InheritedClassFieldsScope::new(inherited_class_fields_table);
 
     // Top-level classes — emit minimal MirClass entries. Body
     // method shapes (empty Return bodies) populated below; method
@@ -35802,6 +35947,26 @@ fn collect_class_methods(
                         }
                     }
                 }
+            }
+        }
+        // Splice in fields inherited from the super-class chain so a
+        // body that references `children` resolves it as a parent-class
+        // GetField (Container extends Tag; `Tag.children` is reachable
+        // as implicit-this from any Container method). Without this,
+        // every preload site (`field_names.iter().find()` in lower_
+        // loop_body and the mini-walker) misses the inherited name and
+        // the surrounding DotQualified call bails kind=DotQualified.
+        //
+        // The `INHERITED_CLASS_FIELDS` thread-local is populated by
+        // `lower_file` BEFORE class-method collection (CLASS_SUPER /
+        // CLASS_FIELDS scopes go live AFTER the per-class methods
+        // loop, so they aren't reachable here). Owned fields keep
+        // priority — if Container redeclares `name`, the local entry
+        // already in `field_names` shadows the parent.
+        let inherited = lookup_inherited_class_fields(class_name);
+        for (_parent, n, t) in inherited {
+            if !field_names.iter().any(|(nm, _)| nm == &n) {
+                field_names.push((n, erase_tp(t)));
             }
         }
         for (method_idx, f) in body
