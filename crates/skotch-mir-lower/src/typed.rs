@@ -4952,6 +4952,14 @@ fn try_lower_when_expression(
     let else_block_idx = next_block;
     let join_block_idx = else_block_idx + 1;
 
+    // Extra blocks appended after join for arms whose final expression
+    // is an `if`. Each Block-with-final-If arm consumes 2 entries here
+    // (the if-then result block and the if-else result block). They
+    // come AFTER the join so the arm's then-block can Branch into them
+    // by index and each end with Goto(join_block_idx).
+    let mut extra_arm_blocks: Vec<BasicBlock> = Vec::new();
+    let mut next_extra_block_idx: u32 = join_block_idx + 1;
+
     for (i, (cond, body)) in arms.iter().enumerate() {
         let arm_start = arm_block_starts[i];
         let next_arm_start = if i + 1 < n_arms {
@@ -5171,8 +5179,187 @@ fn try_lower_when_expression(
                 });
                 s
             } else {
-                return None;
+                // Unrecognized name — route through lower_rich_expr_to_slot
+                // which handles object singletons (`Idle` → getstatic
+                // INSTANCE), other rich shapes, etc.
+                let outer_param_names_owned: Vec<String> = outer_param_names.clone();
+                let subject_name_owned = subject_source_name.clone();
+                let narrowed = narrowed_subject_slot;
+                let lookup = move |n: &str| -> Option<LocalId> {
+                    if n == subject_name_owned {
+                        return Some(narrowed.unwrap_or(subject_param_slot));
+                    }
+                    outer_param_names_owned
+                        .iter()
+                        .position(|p| p == n)
+                        .map(|i| LocalId(i as u32))
+                };
+                lower_rich_expr_to_slot(
+                    *body,
+                    &lookup,
+                    fn_lookup,
+                    &mut next_slot,
+                    &mut then_stmts,
+                    &mut extra_locals,
+                    strings,
+                )?
             }
+        } else if let KtExpr::Block(bl) = body {
+            // Block-shaped arm body: `is X -> { val y = e; <last> }` or
+            // `1 -> { val y = e; <last> }`. Split into prefix stmts +
+            // a final expression that produces the arm's result. Pre-
+            // stmts walk through `lower_loop_body` (val decls etc.);
+            // the final expression goes through the rich-expr lowerer
+            // with `name_to_local` carrying any val decls so the
+            // expression can reference them. When the final expression
+            // is an `if (cond) thenE else elseE`, lower the cond into
+            // then_stmts, route the arm's then-block to Branch into two
+            // appended result blocks (each writes result_slot + gotos
+            // join), and skip the normal Goto-to-join push below.
+            let kids: Vec<&skotch_sil::SilNode> =
+                skotch_ast::children(bl.syntax()).iter().collect();
+            let last_expr_idx = kids
+                .iter()
+                .enumerate()
+                .rev()
+                .find_map(|(i, c)| KtExpr::cast(c).map(|e| (i, e)))?;
+            // Seed name_to_local with outer params + the narrowed
+            // subject slot (the latter overrides the subject name so
+            // `s.field` in the arm body uses the cast slot).
+            let mut name_to_local: Vec<(String, LocalId)> = outer_param_names
+                .iter()
+                .enumerate()
+                .map(|(i, n)| (n.clone(), LocalId(i as u32)))
+                .collect();
+            if let Some(narrowed) = narrowed_subject_slot {
+                name_to_local.push((subject_source_name.clone(), narrowed));
+            }
+            let pre = &kids[..last_expr_idx.0];
+            if !pre.is_empty() {
+                let pre_stmts = lower_loop_body(
+                    pre,
+                    &mut name_to_local,
+                    &mut next_slot,
+                    &mut extra_locals,
+                    strings,
+                    fn_lookup,
+                    &outer_param_names,
+                )?;
+                then_stmts.extend(pre_stmts);
+            }
+            let snap = name_to_local.clone();
+            let outer_param_names_owned: Vec<String> = outer_param_names.clone();
+            let subject_name_owned = subject_source_name.clone();
+            let narrowed = narrowed_subject_slot;
+            let make_lookup = || {
+                let snap = snap.clone();
+                let outer_param_names_owned = outer_param_names_owned.clone();
+                let subject_name_owned = subject_name_owned.clone();
+                move |n: &str| -> Option<LocalId> {
+                    if let Some((_, l)) = snap.iter().rev().find(|(name, _)| name == n) {
+                        return Some(*l);
+                    }
+                    if n == subject_name_owned {
+                        return Some(narrowed.unwrap_or(subject_param_slot));
+                    }
+                    outer_param_names_owned
+                        .iter()
+                        .position(|p| p == n)
+                        .map(|i| LocalId(i as u32))
+                }
+            };
+            if let KtExpr::If(if_e) = last_expr_idx.1 {
+                // Block-with-If: condition into then_stmts, two extra
+                // blocks at end of layout for the if-then and if-else
+                // result computations.
+                let cond_expr = if_e
+                    .condition()
+                    .and_then(|c| c.expression())
+                    .map(unwrap_parens)?;
+                let then_expr = if_e
+                    .then_branch()
+                    .and_then(|t| t.expression())
+                    .map(unwrap_parens)?;
+                let else_expr = if_e
+                    .else_branch()
+                    .and_then(|e| e.expression())
+                    .map(unwrap_parens)?;
+                let lookup = make_lookup();
+                let cond_slot = lower_rich_expr_to_slot(
+                    cond_expr,
+                    &lookup,
+                    fn_lookup,
+                    &mut next_slot,
+                    &mut then_stmts,
+                    &mut extra_locals,
+                    strings,
+                )?;
+                // Build if-then block: result_slot = thenE result.
+                let if_then_idx = next_extra_block_idx;
+                let if_else_idx = next_extra_block_idx + 1;
+                next_extra_block_idx += 2;
+                let mut then_arm_stmts: Vec<MStmt> = Vec::new();
+                let lookup_t = make_lookup();
+                let then_val = lower_rich_expr_to_slot(
+                    then_expr,
+                    &lookup_t,
+                    fn_lookup,
+                    &mut next_slot,
+                    &mut then_arm_stmts,
+                    &mut extra_locals,
+                    strings,
+                )?;
+                then_arm_stmts.push(MStmt::Assign {
+                    dest: result_slot,
+                    value: Rvalue::Local(then_val),
+                });
+                extra_arm_blocks.push(BasicBlock {
+                    stmts: then_arm_stmts,
+                    terminator: Terminator::Goto(join_block_idx),
+                });
+                let mut else_arm_stmts: Vec<MStmt> = Vec::new();
+                let lookup_e = make_lookup();
+                let else_val = lower_rich_expr_to_slot(
+                    else_expr,
+                    &lookup_e,
+                    fn_lookup,
+                    &mut next_slot,
+                    &mut else_arm_stmts,
+                    &mut extra_locals,
+                    strings,
+                )?;
+                else_arm_stmts.push(MStmt::Assign {
+                    dest: result_slot,
+                    value: Rvalue::Local(else_val),
+                });
+                extra_arm_blocks.push(BasicBlock {
+                    stmts: else_arm_stmts,
+                    terminator: Terminator::Goto(join_block_idx),
+                });
+                // Push the arm's "then-block" with a Branch
+                // terminator into the two extra blocks. Skip the
+                // standard `result_slot = body_slot; goto join` push
+                // below.
+                blocks.push(BasicBlock {
+                    stmts: then_stmts,
+                    terminator: Terminator::Branch {
+                        cond: cond_slot,
+                        then_block: if_then_idx,
+                        else_block: if_else_idx,
+                    },
+                });
+                continue;
+            }
+            let lookup = make_lookup();
+            lower_rich_expr_to_slot(
+                last_expr_idx.1,
+                &lookup,
+                fn_lookup,
+                &mut next_slot,
+                &mut then_stmts,
+                &mut extra_locals,
+                strings,
+            )?
         } else {
             // General fallback: route through `lower_rich_expr_to_slot`
             // which handles DotQualified field/method access, String
@@ -5262,14 +5449,64 @@ fn try_lower_when_expression(
                     extra_locals,
                 ));
             }
-            let idx = outer_param_names.iter().position(|p| p == n)?;
-            let param_slot = LocalId(idx as u32);
-            vec![MStmt::Assign {
-                dest: result_slot,
-                value: Rvalue::Local(param_slot),
-            }]
+            if let Some(idx) = outer_param_names.iter().position(|p| p == n) {
+                let param_slot = LocalId(idx as u32);
+                vec![MStmt::Assign {
+                    dest: result_slot,
+                    value: Rvalue::Local(param_slot),
+                }]
+            } else {
+                // Fall through to the general lower_rich path
+                // below — handles object singletons (`Idle`) etc.
+                let outer_param_names_owned: Vec<String> = outer_param_names.clone();
+                let lookup = move |n: &str| -> Option<LocalId> {
+                    outer_param_names_owned
+                        .iter()
+                        .position(|p| p == n)
+                        .map(|i| LocalId(i as u32))
+                };
+                let mut stmts: Vec<MStmt> = Vec::new();
+                let val_slot = lower_rich_expr_to_slot(
+                    else_body,
+                    &lookup,
+                    fn_lookup,
+                    &mut next_slot,
+                    &mut stmts,
+                    &mut extra_locals,
+                    strings,
+                )?;
+                stmts.push(MStmt::Assign {
+                    dest: result_slot,
+                    value: Rvalue::Local(val_slot),
+                });
+                stmts
+            }
         } else {
-            return None;
+            // Non-literal / non-Reference else-body: route through
+            // lower_rich_expr_to_slot. Covers Call expressions
+            // (`else -> R(0)`), DotQualified, etc.
+            let outer_param_names_owned: Vec<String> = outer_param_names.clone();
+            let lookup = move |n: &str| -> Option<LocalId> {
+                outer_param_names_owned
+                    .iter()
+                    .position(|p| p == n)
+                    .map(|i| LocalId(i as u32))
+            };
+            let mut stmts: Vec<MStmt> = Vec::new();
+            let val_slot = lower_rich_expr_to_slot(
+                else_body,
+                &lookup,
+                fn_lookup,
+                &mut next_slot,
+                &mut stmts,
+                &mut extra_locals,
+                strings,
+            )?;
+            stmts.push(MStmt::Assign {
+                dest: result_slot,
+                value: Rvalue::Local(val_slot),
+            });
+            stmts
         }
     } else {
         // Sealed `when` with no else: synthesize an unreachable
@@ -5301,6 +5538,12 @@ fn try_lower_when_expression(
         stmts: Vec::new(),
         terminator: Terminator::ReturnValue(result_slot),
     });
+
+    // Block-with-final-If arms append their two result blocks after
+    // the join. Each goto-s join_block_idx so control returns through
+    // the standard exit; they're unreachable except via the arm's
+    // Branch terminator above.
+    blocks.extend(extra_arm_blocks);
 
     Some((blocks, extra_locals))
 }
