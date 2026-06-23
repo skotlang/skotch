@@ -959,11 +959,7 @@ fn emit_instance_property_getter(
     code_attr_name_idx: u16,
 ) -> Vec<u8> {
     let access = ACC_PUBLIC | ACC_FINAL;
-    let getter_name = format!(
-        "get{}{}",
-        field_name.chars().next().unwrap_or('?').to_uppercase(),
-        &field_name[field_name.chars().next().map(|c| c.len_utf8()).unwrap_or(0)..]
-    );
+    let getter_name = synthesize_getter_name(field_name);
     let name_idx = cp.utf8(&getter_name);
     let desc = jvm_param_type_string(ty);
     let descriptor = format!("(){desc}");
@@ -1080,8 +1076,17 @@ fn emit_instance_property_setter(
 /// `@org.jetbrains.annotations.NotNull` attribute kotlinc adds.
 /// Build the synthetic getter name kotlinc uses for a Kotlin property:
 /// `name` → `getName`, `count` → `getCount`, `GREETING` → `getGREETING`.
-/// First character is uppercased; the rest is preserved verbatim.
-fn synthesize_getter_name(field_name: &str) -> String {
+/// Names beginning with `is` followed by a non-lowercase-letter
+/// character keep the source name verbatim per Kotlin/JVM
+/// convention (`isOk` → `isOk`, NOT `getIsOk`).
+pub(crate) fn synthesize_getter_name(field_name: &str) -> String {
+    if let Some(rest) = field_name.strip_prefix("is") {
+        if let Some(first_after) = rest.chars().next() {
+            if !first_after.is_lowercase() {
+                return field_name.to_string();
+            }
+        }
+    }
     format!(
         "get{}{}",
         field_name.chars().next().unwrap_or('?').to_uppercase(),
@@ -2053,11 +2058,7 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
             if field.is_jvm_field {
                 continue;
             }
-            let getter_name = format!(
-                "get{}{}",
-                field.name.chars().next().unwrap_or('?').to_uppercase(),
-                &field.name[field.name.chars().next().map(|c| c.len_utf8()).unwrap_or(0)..]
-            );
+            let getter_name = synthesize_getter_name(&field.name);
             if existing_method_names.contains(&getter_name) {
                 continue;
             }

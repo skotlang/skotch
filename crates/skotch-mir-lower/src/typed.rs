@@ -3588,15 +3588,7 @@ pub fn lower_file(
             |methods: &mut rustc_hash::FxHashMap<String, Ty>,
              pname: &str,
              tr: Option<skotch_ast::KtTypeReference<'_>>| {
-                let mut chars = pname.chars();
-                let getter_name = match chars.next() {
-                    Some(c) => format!(
-                        "get{}{}",
-                        c.to_uppercase().collect::<String>(),
-                        chars.as_str()
-                    ),
-                    None => return,
-                };
+                let getter_name = property_getter_name(pname);
                 methods
                     .entry(getter_name)
                     .or_insert_with(|| ty_from_type_ref(tr));
@@ -21835,6 +21827,31 @@ fn prebind_class_fields(
     }
 }
 
+/// Compute the JVM accessor name for a Kotlin property. Most names
+/// capitalize ("count" → "getCount"); names beginning with "is"
+/// followed by a non-lowercase-letter character keep their source
+/// name verbatim per Kotlin/JVM convention ("isOk" → "isOk",
+/// "isData" → "isData", "is_x" → "is_x"; but "isready" → "getIsready"
+/// because the char after "is" is lowercase).
+fn property_getter_name(pname: &str) -> String {
+    if let Some(rest) = pname.strip_prefix("is") {
+        if let Some(first_after) = rest.chars().next() {
+            if !first_after.is_lowercase() {
+                return pname.to_string();
+            }
+        }
+    }
+    let mut chars = pname.chars();
+    match chars.next() {
+        Some(c) => format!(
+            "get{}{}",
+            c.to_uppercase().collect::<String>(),
+            chars.as_str()
+        ),
+        None => "get".to_string(),
+    }
+}
+
 /// Emit a call to `CollectionsKt.joinToString$default` honoring the
 /// 9-arg `$default` overload's wire format. Returns `None` (without
 /// emitting anything) if any provided expression fails to lower.
@@ -25488,15 +25505,11 @@ fn lower_rich_expr_to_slot(
                                 }
                                 // Capitalize the first char of the
                                 // property name: `count` → `getCount`.
-                                let mut chars = prop_name.chars();
-                                let getter_name = match chars.next() {
-                                    Some(c) => format!(
-                                        "get{}{}",
-                                        c.to_uppercase().collect::<String>(),
-                                        chars.as_str()
-                                    ),
-                                    None => "get".to_string(),
-                                };
+                                // `is`-prefixed boolean-style names
+                                // keep their source name verbatim per
+                                // Kotlin/JVM convention (`isOk` →
+                                // `isOk`, not `getIsOk`).
+                                let getter_name = property_getter_name(prop_name);
                                 // Promote the result slot's Ty from
                                 // Any to the property's declared type
                                 // when CLASS_METHODS knows it. Without
@@ -35777,15 +35790,7 @@ fn collect_class_methods(
                     continue;
                 }
                 let Some(pname) = p.name() else { continue };
-                let mut chars = pname.chars();
-                let Some(first_ch) = chars.next() else {
-                    continue;
-                };
-                let getter_name = format!(
-                    "get{}{}",
-                    first_ch.to_uppercase().collect::<String>(),
-                    chars.as_str()
-                );
+                let getter_name = property_getter_name(pname);
                 // Skip if the user already declared this getter.
                 if methods.iter().any(|m| m.name == getter_name) {
                     continue;
@@ -35868,13 +35873,19 @@ fn collect_class_methods(
             }
         }
     }
-    // Synthesize MirFunctions for body-property custom getters of the
-    // form `val x: T get() = <backingField>`. Kotlin elides the
-    // backing field for `x` in this shape; the getter loads the named
-    // backing field directly. `collect_class_fields` already skips
-    // emitting a field for `x`, so without this synthesized
-    // `getX()` the accessor either disappears (NoSuchMethodError) or
-    // collapses to `aconst_null; areturn` via the empty-body fallback.
+    // Synthesize MirFunctions for body-property custom getters. The
+    // simplest shape (`val x: T get() = <backingField>`, a bare
+    // Reference) maps to a single GetField + areturn. Richer shapes
+    // (`get() = inlineValue as V`, `get() = inner is String`,
+    // `get() = (cast).other`, `get() = when { ... }`, etc.) are
+    // lowered through the standard `lower_rich_expr_to_slot` pipeline
+    // by preloading the field_names into snap_locals so that bare
+    // identifiers in the body resolve to `this.field` getfield
+    // preloads. Without this, the synthesized `getX()` would
+    // collapse to `aconst_null; areturn` (since the body falls
+    // through every existing arm) and the accessor would return
+    // null at runtime — surfaced by `result.value`, `result.isOk`,
+    // etc. in the kotlin-result library.
     if let Some(body) = c.body() {
         for d in body.declarations() {
             let KtDecl::Property(p) = d else { continue };
@@ -35885,48 +35896,58 @@ fn collect_class_methods(
             let Some(acc) = p.property_accessors().find(|a| a.is_getter()) else {
                 continue;
             };
-            // Only the `get() = <backingFieldName>` shape is modeled.
             let Some(body_expr) = acc.body_expression() else {
                 continue;
             };
             let body_expr = unwrap_parens(body_expr);
-            let skotch_ast::KtExpr::Reference(rref) = body_expr else {
-                continue;
-            };
-            let Some(referenced_field) = rref.name() else {
-                continue;
-            };
-            let mut chars = pname.chars();
-            let Some(first_ch) = chars.next() else {
-                continue;
-            };
-            let getter_name = format!(
-                "get{}{}",
-                first_ch.to_uppercase().collect::<String>(),
-                chars.as_str()
-            );
+            let getter_name = property_getter_name(pname);
             if methods.iter().any(|m| m.name == getter_name) {
                 continue;
             }
             let ret_ty = erase_tp(p.type_reference().map(resolve_type_ref).unwrap_or(Ty::Any));
+
+            // Install ClassMethodScope so any class_field_lookup
+            // calls in the nested lowering see this class's fields.
+            // The Reference arm of `lower_rich_expr_to_slot` already
+            // falls back to `class_field_lookup` when the bare-name
+            // lookup misses, so we don't need to preload fields
+            // manually; the lookup closure below only binds `this`.
+            let _scope = ClassMethodScope::new(Some(class_name), &field_names);
+
             let this_slot = skotch_mir::LocalId(0);
-            let field_slot = skotch_mir::LocalId(1);
-            let body_stmts = vec![skotch_mir::Stmt::Assign {
-                dest: field_slot,
-                value: skotch_mir::Rvalue::GetField {
-                    receiver: this_slot,
-                    class_name: class_name.to_string(),
-                    field_name: referenced_field.to_string(),
-                },
-            }];
+            let mut next_slot: u32 = 1;
+            let mut pre_stmts: Vec<skotch_mir::Stmt> = Vec::new();
+            let mut extra_locals: Vec<Ty> = Vec::new();
+            let lookup = |n: &str| -> Option<skotch_mir::LocalId> {
+                if n == "this" {
+                    Some(this_slot)
+                } else {
+                    None
+                }
+            };
+            let result_slot = lower_rich_expr_to_slot(
+                body_expr,
+                &lookup,
+                fn_lookup,
+                &mut next_slot,
+                &mut pre_stmts,
+                &mut extra_locals,
+                strings,
+            );
+            let Some(result_slot) = result_slot else {
+                continue;
+            };
+            let mut locals: Vec<Ty> = Vec::with_capacity(1 + extra_locals.len());
+            locals.push(Ty::Class(class_name.to_string()));
+            locals.extend(extra_locals);
             methods.push(MirFunction {
                 id: FuncId(0),
                 name: getter_name,
                 params: vec![this_slot],
-                locals: vec![Ty::Class(class_name.to_string()), ret_ty.clone()],
+                locals,
                 blocks: vec![BasicBlock {
-                    stmts: body_stmts,
-                    terminator: Terminator::ReturnValue(field_slot),
+                    stmts: pre_stmts,
+                    terminator: Terminator::ReturnValue(result_slot),
                 }],
                 return_ty: ret_ty,
                 required_params: 0,

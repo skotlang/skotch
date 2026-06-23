@@ -476,6 +476,29 @@ fn infer_body_return_ty(f: KtFun<'_>) -> Ty {
     }
 }
 
+/// Compute the JVM accessor name for a Kotlin property. Most names
+/// capitalize ("count" → "getCount"); names beginning with "is"
+/// followed by a non-lowercase-letter character keep their source
+/// name verbatim per Kotlin/JVM convention.
+pub(crate) fn property_getter_name(pname: &str) -> String {
+    if let Some(rest) = pname.strip_prefix("is") {
+        if let Some(first_after) = rest.chars().next() {
+            if !first_after.is_lowercase() {
+                return pname.to_string();
+            }
+        }
+    }
+    let mut chars = pname.chars();
+    match chars.next() {
+        Some(c) => format!(
+            "get{}{}",
+            c.to_uppercase().collect::<String>(),
+            chars.as_str()
+        ),
+        None => "get".to_string(),
+    }
+}
+
 fn property_getter_method(
     p: KtProperty<'_>,
     imports: &FxHashMap<String, String>,
@@ -487,12 +510,7 @@ fn property_getter_method(
         return None;
     }
     let pname = p.name()?;
-    let mut chars = pname.chars();
-    let getter_name = format!(
-        "get{}{}",
-        chars.next()?.to_uppercase().collect::<String>(),
-        chars.as_str()
-    );
+    let getter_name = property_getter_name(pname);
     let ret = p
         .type_reference()
         .map(|tr| type_ref_to_ty(tr, imports, aliases))
@@ -690,15 +708,7 @@ fn gather_class_recursive(
                     continue;
                 }
                 let Some(pname) = p.name() else { continue };
-                let mut chars = pname.chars();
-                let Some(first_ch) = chars.next() else {
-                    continue;
-                };
-                let getter_name = format!(
-                    "get{}{}",
-                    first_ch.to_uppercase().collect::<String>(),
-                    chars.as_str()
-                );
+                let getter_name = property_getter_name(pname);
                 let ret = p
                     .type_reference()
                     .map(|tr| type_ref_to_ty(tr, imports, aliases))
