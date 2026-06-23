@@ -124,6 +124,39 @@ fn class_method_return_ty(class_name: &str, method_name: &str) -> Option<Ty> {
     })
 }
 
+/// JDK / Kotlin-stdlib method return-Ty lookup. Used as a fallback by
+/// the DotQualified+Call dispatch paths so chained calls
+/// (`sb.append("x").append("y")`) can determine the receiver Ty of the
+/// outer call from the inner call's return descriptor.
+///
+/// Two layers:
+///   1. Fluent-self hardcode for known builder-style methods whose
+///      classinfo descriptor advertises a wider supertype than the
+///      runtime overload actually returns. `StringBuilder.append`
+///      classinfo says `Appendable`, but every append overload returns
+///      `StringBuilder` at runtime — matching the backend's
+///      `fluent_self_ret` peephole (class_writer.rs ~17458).
+///   2. classinfo lookup → jvm_descriptor_to_ty mapping for everything
+///      else. Returns None when the return descriptor maps to
+///      `Ljava/lang/Object;` so callers preserve Ty::Any.
+///
+/// `arity` is the source-side arg count (no receiver), matching what
+/// `lookup_method_descriptor` expects.
+fn jdk_method_return_ty(class_name: &str, method_name: &str, arity: usize) -> Option<Ty> {
+    // Fluent-self builder methods.
+    let fluent_self = matches!(
+        class_name,
+        "java/lang/StringBuilder" | "java/lang/StringBuffer"
+    ) && method_name == "append";
+    if fluent_self {
+        return Some(Ty::Class(class_name.to_string()));
+    }
+    // Defer to classinfo lookup for everything else.
+    let desc = skotch_classinfo::lookup_method_descriptor(class_name, method_name, arity)?;
+    let ret = desc.rsplit_once(')').map(|(_, r)| r)?;
+    jvm_descriptor_to_ty(ret)
+}
+
 /// Search CLASS_METHODS for classes owning a method by that name.
 /// Returns Some((class_name, return_ty)) iff EXACTLY one class
 /// declares the method — ambiguous matches return None so callers
@@ -26965,14 +26998,25 @@ fn lower_rich_expr_to_slot(
                                                 | Some("toString")
                                         );
                                         // Try CLASS_METHODS first when the
-                                        // receiver is a known user class.
+                                        // receiver is a known user class,
+                                        // then JDK/classinfo (so chained
+                                        // builder calls like
+                                        // `sb.append(x).append(y)` know
+                                        // the inner result is StringBuilder
+                                        // and dispatch the outer correctly).
                                         // Fall through (rather than short-
                                         // circuiting on None) to the
                                         // String-returning fallback above.
                                         let from_class_methods =
                                             match (recv_ty.as_ref(), method_n.as_deref()) {
                                                 (Some(Ty::Class(cls)), Some(m)) => {
-                                                    class_method_return_ty(cls, m)
+                                                    let inner_arity = c
+                                                        .value_argument_list()
+                                                        .map(|al| al.arguments().count())
+                                                        .unwrap_or(0);
+                                                    class_method_return_ty(cls, m).or_else(|| {
+                                                        jdk_method_return_ty(cls, m, inner_arity)
+                                                    })
                                                 }
                                                 _ => None,
                                             };
@@ -28584,10 +28628,24 @@ fn lower_rich_expr_to_slot(
                                 // receiver is a generic collection
                                 // element or a lost-type local).
                                 let dispatch: Option<(String, Ty)> = match &recv_ty {
-                                    Ty::Class(c) => Some((
-                                        c.clone(),
-                                        class_method_return_ty(c, method_n).unwrap_or(Ty::Any),
-                                    )),
+                                    Ty::Class(c) => {
+                                        // Prefer user-class return Ty, then
+                                        // fall back to JDK / classinfo so
+                                        // chained `sb.append(...).append(...)`
+                                        // chains type the inner result as
+                                        // StringBuilder rather than Ty::Any
+                                        // (the outer DotQualified dispatch
+                                        // needs the receiver Ty to pick the
+                                        // Class(cname) arm).
+                                        let arity = call
+                                            .value_argument_list()
+                                            .map(|al| al.arguments().count())
+                                            .unwrap_or(0);
+                                        let ret_ty = class_method_return_ty(c, method_n)
+                                            .or_else(|| jdk_method_return_ty(c, method_n, arity))
+                                            .unwrap_or(Ty::Any);
+                                        Some((c.clone(), ret_ty))
+                                    }
                                     Ty::Any => unique_class_owning_method(method_n),
                                     _ => None,
                                 };
@@ -28946,8 +29004,16 @@ fn lower_rich_expr_to_slot(
                                 if all_args_ok {
                                     let result_slot = LocalId(*next_slot);
                                     *next_slot += 1;
-                                    let result_ty =
-                                        class_method_return_ty(&cname, method_n).unwrap_or(Ty::Any);
+                                    // Same JDK-fallback chain as the
+                                    // Reference receiver Virtual fallback
+                                    // — keeps chained builder calls
+                                    // (`(sb.append(a)).append(b).append(c)`)
+                                    // typed instead of erasing to Ty::Any
+                                    // after the second hop.
+                                    let arity = arg_slots.len().saturating_sub(1);
+                                    let result_ty = class_method_return_ty(&cname, method_n)
+                                        .or_else(|| jdk_method_return_ty(&cname, method_n, arity))
+                                        .unwrap_or(Ty::Any);
                                     extra_locals.push(result_ty);
                                     pre_stmts.push(MStmt::Assign {
                                         dest: result_slot,
