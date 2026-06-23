@@ -9129,7 +9129,16 @@ fn lower_loop_body_blocks(
                 let else_arm = if_e.else_branch().and_then(|e| e.expression());
                 let then_target = extract_arm_jump(then_arm, back_edge_target, break_target);
                 let else_target = extract_arm_jump(else_arm, back_edge_target, break_target);
-                if then_target.is_some() || else_target.is_some() {
+                // IfWithJump's handler only implements two shapes downstream:
+                // (1) both arms are jumps and (2) then is jump with no else.
+                // The remaining "only else is jump" shape — e.g.
+                // `if (cond) { body } else { break }` — falls back to
+                // IfNonJump, which already peels a trailing break/continue/
+                // return off arm bodies and routes them to the loop's
+                // break_target / back_edge_target.
+                let if_with_jump_ok = (then_target.is_some() && else_target.is_some())
+                    || (then_target.is_some() && else_arm.is_none());
+                if if_with_jump_ok {
                     special_at = Some((
                         j,
                         Special::IfWithJump {
