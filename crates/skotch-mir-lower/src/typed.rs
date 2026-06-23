@@ -651,6 +651,23 @@ thread_local! {
     static CLASS_FIELD_ELEMENT_TY:
         std::cell::RefCell<rustc_hash::FxHashMap<(String, String), Ty>> =
         std::cell::RefCell::new(rustc_hash::FxHashMap::default());
+
+    /// Slot-keyed Map-value-Ty table. Parallels LIST_ELEMENT_TY but
+    /// captures the V in `Map<K, V>` / `MutableMap<K, V>` so that
+    /// `m.get(k)` dispatch can emit a CheckCast to V. Without this,
+    /// `MutableMap<V, MutableList<V>>` fields would have `.get(k)`
+    /// return Ty::Any and the subsequent `!!.add(...)` chain would
+    /// bail in the DotQualified dispatch arm (no recv_ty=Ty::Class).
+    /// Cleared per body lowering like LIST_ELEMENT_TY.
+    static MAP_VALUE_TY: std::cell::RefCell<rustc_hash::FxHashMap<u32, Ty>> =
+        std::cell::RefCell::new(rustc_hash::FxHashMap::default());
+
+    /// Cross-function side table mapping `(class_name, field_name)` to
+    /// the Map value Ty for `MutableMap<K,V>` / `Map<K,V>` / `HashMap<K,V>`
+    /// fields. Mirrors CLASS_FIELD_ELEMENT_TY for the Map.value side.
+    static CLASS_FIELD_MAP_VALUE_TY:
+        std::cell::RefCell<rustc_hash::FxHashMap<(String, String), Ty>> =
+        std::cell::RefCell::new(rustc_hash::FxHashMap::default());
 }
 
 fn record_list_element_ty(slot: u32, ty: Ty) {
@@ -676,6 +693,55 @@ fn lookup_class_field_element_ty(class_name: &str, field_name: &str) -> Option<T
             .get(&(class_name.to_string(), field_name.to_string()))
             .cloned()
     })
+}
+
+fn record_map_value_ty(slot: u32, ty: Ty) {
+    MAP_VALUE_TY.with(|c| {
+        c.borrow_mut().insert(slot, ty);
+    });
+}
+
+fn lookup_map_value_ty(slot: u32) -> Option<Ty> {
+    MAP_VALUE_TY.with(|c| c.borrow().get(&slot).cloned())
+}
+
+fn record_class_field_map_value_ty(class_name: &str, field_name: &str, ty: Ty) {
+    CLASS_FIELD_MAP_VALUE_TY.with(|c| {
+        c.borrow_mut()
+            .insert((class_name.to_string(), field_name.to_string()), ty);
+    });
+}
+
+fn lookup_class_field_map_value_ty(class_name: &str, field_name: &str) -> Option<Ty> {
+    CLASS_FIELD_MAP_VALUE_TY.with(|c| {
+        c.borrow()
+            .get(&(class_name.to_string(), field_name.to_string()))
+            .cloned()
+    })
+}
+
+/// Returns Some(ValueTy) for a KtTypeReference shaped like `Map<K,V>` /
+/// `MutableMap<K,V>` / `HashMap<K,V>` / `LinkedHashMap<K,V>`; None
+/// otherwise. Map.get(K) returns Ty::Any at the JDK level — this
+/// helper recovers the user-declared V so call sites can CheckCast and
+/// downstream `.member()` dispatch resolves the receiver class.
+fn tref_map_value_ty(tr: skotch_ast::KtTypeReference<'_>) -> Option<Ty> {
+    let user = tr.user_type()?;
+    let name = user.name()?;
+    if !matches!(name, "Map" | "MutableMap" | "HashMap" | "LinkedHashMap") {
+        return None;
+    }
+    let args = user.type_argument_list()?;
+    // Map<K,V> — skip K, take V.
+    let mut iter = args.arguments();
+    let _k = iter.next()?;
+    let v_arg = iter.next()?;
+    let v_tr = v_arg.type_reference()?;
+    Some(resolve_type_ref(v_tr))
+}
+
+fn prop_map_value_ty(prop: skotch_ast::KtProperty<'_>) -> Option<Ty> {
+    tref_map_value_ty(prop.type_reference()?)
 }
 
 /// Extract the element Ty from a `KtProperty`'s explicit type annotation
@@ -4611,7 +4677,16 @@ fn fixup_call_return_locals(
             // `if (history.isEmpty()) ...`. Only consult classinfo when
             // the class is NOT a known user class (else we'd clobber
             // a richer user-Ty with the classinfo erased Object form).
-            if return_ty.is_none() {
+            // VirtualJava carries the call-site's exact descriptor.
+            // SKIP the classinfo fallback entirely for this case —
+            // classinfo's overload resolution picks by param count and
+            // on JDK collection classes (`List.remove(int)Object` vs
+            // `List.remove(Object)boolean` both have 1 param) it
+            // returns the wrong overload, clobbering the slot's
+            // Ty::Any with Ty::Bool and breaking
+            // `val node = q.removeAt(0)` and similar patterns.
+            let has_explicit_descriptor = matches!(kind, CallKind::VirtualJava { .. });
+            if return_ty.is_none() && !has_explicit_descriptor {
                 let (cn, mn) = match kind {
                     CallKind::Virtual {
                         class_name,
@@ -9900,10 +9975,16 @@ fn lower_loop_body(
                         dest: slot,
                         value: skotch_mir::Rvalue::GetField {
                             receiver: LocalId(0),
-                            class_name: cname,
-                            field_name: fname,
+                            class_name: cname.clone(),
+                            field_name: fname.clone(),
                         },
                     });
+                    if let Some(elem_ty) = lookup_class_field_element_ty(&cname, &fname) {
+                        record_list_element_ty(slot.0, elem_ty);
+                    }
+                    if let Some(val_ty) = lookup_class_field_map_value_ty(&cname, &fname) {
+                        record_map_value_ty(slot.0, val_ty);
+                    }
                     name_to_local.push((n, slot));
                 }
             }
@@ -20748,6 +20829,9 @@ fn lower_inline_expr_to_slot(
                 if let Some(elem_ty) = lookup_class_field_element_ty(&class_name, &field_name) {
                     record_list_element_ty(slot.0, elem_ty);
                 }
+                if let Some(val_ty) = lookup_class_field_map_value_ty(&class_name, &field_name) {
+                    record_map_value_ty(slot.0, val_ty);
+                }
                 return Some(slot);
             }
             None
@@ -21151,6 +21235,9 @@ fn prebind_class_fields(
                     // indexed-access checkcast picks the element class.
                     if let Some(elem_ty) = lookup_class_field_element_ty(cname, fname) {
                         record_list_element_ty(slot.0, elem_ty);
+                    }
+                    if let Some(val_ty) = lookup_class_field_map_value_ty(cname, fname) {
+                        record_map_value_ty(slot.0, val_ty);
                     }
                     name_to_local.push((n.to_string(), slot));
                 }
@@ -23720,6 +23807,68 @@ fn lower_rich_expr_to_slot(
             }
         }
     }
+    // `mutableMapOf<K,V>()` / `mutableSetOf<T>()` — zero-arg builder
+    // shapes that kotlinc lowers to a direct JDK constructor (NEW +
+    // <init>) rather than a `CollectionsKt.mutableMapOf(...)` static
+    // call (the no-arg overloads are private in stdlib 2.3 — calling
+    // them throws IllegalAccessError at runtime). The class-field-init
+    // path at the bottom of this file already inlines the same shape;
+    // duplicate it here for `val x = mutableSetOf<T>()` in function
+    // bodies so the val handler doesn't bail and cascade the whole
+    // body to empty MIR. Receivers are typed as the concrete JDK class
+    // so subsequent `.add` / `.put` dispatch finds Set/Map members.
+    if let KtExpr::Call(call) = e {
+        if let Some(KtExpr::Reference(rc)) = call.callee() {
+            if let Some(name) = rc.name() {
+                let arg_count = call
+                    .value_argument_list()
+                    .map(|a| a.arguments().count())
+                    .unwrap_or(0);
+                let pair: Option<(&str, &str)> = match (name, arg_count) {
+                    ("mutableMapOf", 0) => Some(("java/util/LinkedHashMap", "java/util/Map")),
+                    ("mutableSetOf", 0) => Some(("java/util/LinkedHashSet", "java/util/Set")),
+                    _ => None,
+                };
+                if let Some((jdk_class, iface)) = pair {
+                    let new_slot = LocalId(*next_slot);
+                    *next_slot += 1;
+                    extra_locals.push(Ty::Class(jdk_class.to_string()));
+                    pre_stmts.push(MStmt::Assign {
+                        dest: new_slot,
+                        value: skotch_mir::Rvalue::NewInstance(jdk_class.to_string()),
+                    });
+                    pre_stmts.push(MStmt::Assign {
+                        dest: new_slot,
+                        value: skotch_mir::Rvalue::Call {
+                            kind: skotch_mir::CallKind::ConstructorJava {
+                                class_name: jdk_class.to_string(),
+                                descriptor: "()V".to_string(),
+                            },
+                            args: vec![],
+                        },
+                    });
+                    // CheckCast to the Set/Map interface so subsequent
+                    // .add / .put dispatch uses invokeinterface (matching
+                    // kotlinc). Otherwise `LinkedHashSet.add` resolves
+                    // to a virtual call against a method that doesn't
+                    // exist in the public LinkedHashSet API at the
+                    // declared erased return type and the JVM throws
+                    // NoSuchMethodError at link time.
+                    let cast_slot = LocalId(*next_slot);
+                    *next_slot += 1;
+                    extra_locals.push(Ty::Class(iface.to_string()));
+                    pre_stmts.push(MStmt::Assign {
+                        dest: cast_slot,
+                        value: skotch_mir::Rvalue::CheckCast {
+                            obj: new_slot,
+                            target_class: iface.to_string(),
+                        },
+                    });
+                    return Some(cast_slot);
+                }
+            }
+        }
+    }
     // Kotlin stdlib top-level functions that route to Java statics:
     // maxOf/minOf (Int) → Math.max/min.
     //
@@ -26063,6 +26212,17 @@ fn lower_rich_expr_to_slot(
                                             } else {
                                                 method_n
                                             };
+                                            // Dispatch on the receiver's actual
+                                            // JDK interface class — Set.contains
+                                            // and List.contains are different
+                                            // interface methods; hardcoding
+                                            // `java/util/List` here would
+                                            // IncompatibleClassChangeError on a
+                                            // Set receiver.
+                                            let dispatch_class = match &recv_ty {
+                                                Ty::Class(c) => c.clone(),
+                                                _ => "java/util/List".to_string(),
+                                            };
                                             let result_slot = LocalId(*next_slot);
                                             *next_slot += 1;
                                             extra_locals.push(ret_ty);
@@ -26070,7 +26230,7 @@ fn lower_rich_expr_to_slot(
                                                 dest: result_slot,
                                                 value: skotch_mir::Rvalue::Call {
                                                     kind: skotch_mir::CallKind::VirtualJava {
-                                                        class_name: "java/util/List".to_string(),
+                                                        class_name: dispatch_class,
                                                         method_name: jvm_method.to_string(),
                                                         descriptor: desc.to_string(),
                                                     },
@@ -26097,6 +26257,55 @@ fn lower_rich_expr_to_slot(
                                         ) {
                                             return Some(rs);
                                         }
+                                    }
+                                    // isEmpty/isNotEmpty are special: the
+                                    // CollectionsKt facade entries for these
+                                    // are PRIVATE in the JVM bytecode (Kotlin
+                                    // treats them as inline extensions),
+                                    // so calling CollectionsKt.isNotEmpty
+                                    // throws NoSuchMethodError at link
+                                    // time. Emit the JDK direct shape:
+                                    // Collection.isEmpty():Z, negated for
+                                    // isNotEmpty via CmpEq(raw, 0).
+                                    if matches!(method_n, "isEmpty" | "isNotEmpty") {
+                                        let raw_slot = LocalId(*next_slot);
+                                        *next_slot += 1;
+                                        extra_locals.push(Ty::Bool);
+                                        pre_stmts.push(MStmt::Assign {
+                                            dest: raw_slot,
+                                            value: skotch_mir::Rvalue::Call {
+                                                kind: skotch_mir::CallKind::VirtualJava {
+                                                    class_name: "java/util/Collection".to_string(),
+                                                    method_name: "isEmpty".to_string(),
+                                                    descriptor: "()Z".to_string(),
+                                                },
+                                                args: vec![slot],
+                                            },
+                                        });
+                                        if method_n == "isEmpty" {
+                                            return Some(raw_slot);
+                                        }
+                                        let zero_slot = LocalId(*next_slot);
+                                        *next_slot += 1;
+                                        extra_locals.push(Ty::Int);
+                                        pre_stmts.push(MStmt::Assign {
+                                            dest: zero_slot,
+                                            value: skotch_mir::Rvalue::Const(
+                                                skotch_mir::MirConst::Int(0),
+                                            ),
+                                        });
+                                        let neg_slot = LocalId(*next_slot);
+                                        *next_slot += 1;
+                                        extra_locals.push(Ty::Bool);
+                                        pre_stmts.push(MStmt::Assign {
+                                            dest: neg_slot,
+                                            value: skotch_mir::Rvalue::BinOp {
+                                                op: skotch_mir::BinOp::CmpEq,
+                                                lhs: raw_slot,
+                                                rhs: zero_slot,
+                                            },
+                                        });
+                                        return Some(neg_slot);
                                     }
                                     // (jvm-class, jvm-method, descriptor, ret_ty)
                                     let mapped: Option<(&str, &str, &str, Ty)> = match method_n {
@@ -26485,10 +26694,18 @@ fn lower_rich_expr_to_slot(
                                     dest: s,
                                     value: skotch_mir::Rvalue::GetField {
                                         receiver: LocalId(0),
-                                        class_name,
-                                        field_name,
+                                        class_name: class_name.clone(),
+                                        field_name: field_name.clone(),
                                     },
                                 });
+                                // Forward MAP_VALUE_TY so subsequent
+                                // `field.get(k)` dispatch can CheckCast
+                                // the result to the declared V class.
+                                if let Some(val_ty) =
+                                    lookup_class_field_map_value_ty(&class_name, &field_name)
+                                {
+                                    record_map_value_ty(s.0, val_ty);
+                                }
                                 Some(s)
                             });
                             if let Some(slot) = resolved_slot {
@@ -26617,6 +26834,12 @@ fn lower_rich_expr_to_slot(
                                     let result_slot = LocalId(*next_slot);
                                     *next_slot += 1;
                                     extra_locals.push(result_ty);
+                                    let is_map_class = matches!(
+                                        cname.as_str(),
+                                        "java/util/Map"
+                                            | "java/util/HashMap"
+                                            | "java/util/LinkedHashMap"
+                                    );
                                     pre_stmts.push(MStmt::Assign {
                                         dest: result_slot,
                                         value: skotch_mir::Rvalue::Call {
@@ -26627,6 +26850,32 @@ fn lower_rich_expr_to_slot(
                                             args: arg_slots,
                                         },
                                     });
+                                    // Map.get returns Object — when the
+                                    // receiver carried a recorded
+                                    // MAP_VALUE_TY (the V of Map<K,V>),
+                                    // emit a CheckCast so the result
+                                    // slot carries the user-declared V
+                                    // class. Without this, downstream
+                                    // `m.get(k)!!.member(...)` falls
+                                    // through to the Ty::Any receiver
+                                    // arm and bails.
+                                    if is_map_class && method_n == "get" {
+                                        if let Some(val_ty) = lookup_map_value_ty(slot.0) {
+                                            if let Ty::Class(target) = &val_ty {
+                                                let cast_slot = LocalId(*next_slot);
+                                                *next_slot += 1;
+                                                extra_locals.push(val_ty.clone());
+                                                pre_stmts.push(MStmt::Assign {
+                                                    dest: cast_slot,
+                                                    value: skotch_mir::Rvalue::CheckCast {
+                                                        obj: result_slot,
+                                                        target_class: target.clone(),
+                                                    },
+                                                });
+                                                return Some(cast_slot);
+                                            }
+                                        }
+                                    }
                                     return Some(result_slot);
                                 }
                             }
@@ -26748,18 +26997,6 @@ fn lower_rich_expr_to_slot(
                                         "last",
                                         "(Ljava/lang/Iterable;)Ljava/lang/Object;",
                                         Ty::Any,
-                                    )),
-                                    "isEmpty" => Some((
-                                        "kotlin/collections/CollectionsKt",
-                                        "isEmpty",
-                                        "(Ljava/lang/Iterable;)Z",
-                                        Ty::Bool,
-                                    )),
-                                    "isNotEmpty" => Some((
-                                        "kotlin/collections/CollectionsKt",
-                                        "isNotEmpty",
-                                        "(Ljava/lang/Iterable;)Z",
-                                        Ty::Bool,
                                     )),
                                     "toList" => Some((
                                         "kotlin/collections/CollectionsKt",
@@ -27107,6 +27344,9 @@ fn lower_rich_expr_to_slot(
                 // `prebind_class_fields` for the prebound path.
                 if let Some(elem_ty) = lookup_class_field_element_ty(&class_name, &field_name) {
                     record_list_element_ty(slot.0, elem_ty);
+                }
+                if let Some(val_ty) = lookup_class_field_map_value_ty(&class_name, &field_name) {
+                    record_map_value_ty(slot.0, val_ty);
                 }
                 return Some(slot);
             }
@@ -28137,6 +28377,7 @@ fn lower_simple_body(
     // slot numbering — clear so function A's slot 5 doesn't leak into
     // function B's lookup.
     LIST_ELEMENT_TY.with(|c| c.borrow_mut().clear());
+    MAP_VALUE_TY.with(|c| c.borrow_mut().clear());
 
     // Install cross-file val lookup so lower_rich's Reference
     // fallback can emit GetStaticField for bare references to
@@ -34806,6 +35047,16 @@ fn collect_class_methods(
                         let elem_ty = erase_tp(elem_ty);
                         if !matches!(elem_ty, Ty::Any) {
                             record_class_field_element_ty(class_name, n, elem_ty);
+                        }
+                    }
+                    // Map<K,V> value-type tracking. Mirrors the
+                    // element-Ty registration above so that
+                    // `m.get(k)!!.member(...)` dispatch in any method
+                    // body can recover V's class.
+                    if let Some(val_ty) = prop_map_value_ty(p) {
+                        let val_ty = erase_tp(val_ty);
+                        if !matches!(val_ty, Ty::Any) {
+                            record_class_field_map_value_ty(class_name, n, val_ty);
                         }
                     }
                 }

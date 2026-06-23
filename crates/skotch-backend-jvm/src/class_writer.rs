@@ -17097,25 +17097,30 @@ fn walk_block(
                     // known collection-iface erased-arg methods, the JDK
                     // descriptor is `(Object)<ret>` so a primitive arg
                     // on the stack must be boxed before the call.
-                    let force_object_args_load = matches!(
-                        class_name.as_str(),
-                        "java/util/List"
-                            | "java/util/Set"
-                            | "java/util/Map"
-                            | "java/util/Collection"
-                            | "java/util/Iterator"
-                            | "java/lang/Iterable"
-                            | "java/util/ArrayList"
-                            | "java/util/HashMap"
-                            | "java/util/HashSet"
-                            | "java/util/LinkedList"
-                            | "java/util/LinkedHashMap"
-                            | "java/util/LinkedHashSet"
-                    ) && matches!(
-                        method_name.as_str(),
-                        "add" | "contains" | "containsKey" | "containsValue" | "put"
-                    ) && !is_function_invoke
-                        && module.find_class(class_name).is_none();
+                    let force_object_args_load =
+                        (matches!(
+                            class_name.as_str(),
+                            "java/util/List"
+                                | "java/util/Set"
+                                | "java/util/Map"
+                                | "java/util/Collection"
+                                | "java/util/Iterator"
+                                | "java/lang/Iterable"
+                                | "java/util/ArrayList"
+                                | "java/util/HashMap"
+                                | "java/util/HashSet"
+                                | "java/util/LinkedList"
+                                | "java/util/LinkedHashMap"
+                                | "java/util/LinkedHashSet"
+                        ) && matches!(
+                            method_name.as_str(),
+                            "add" | "contains" | "containsKey" | "containsValue" | "put"
+                        ) || matches!(
+                            class_name.as_str(),
+                            "java/util/Map" | "java/util/HashMap" | "java/util/LinkedHashMap"
+                        ) && matches!(method_name.as_str(), "get" | "remove"))
+                            && !is_function_invoke
+                            && module.find_class(class_name).is_none();
                     // Load receiver (first arg) then remaining args.
                     // For FunctionN.invoke, box primitive args inline
                     // so the descriptor matches `(Object^N)Object`
@@ -17386,10 +17391,22 @@ fn walk_block(
                         method_name.as_str(),
                         "add" | "contains" | "containsKey" | "containsValue" | "put"
                     );
-                    let force_object_args = collection_iface
+                    // Map-only erased-arg methods. `Map.get` / `Map.remove`
+                    // take `Object` per JDK signature, but `List.get` /
+                    // `List.remove` take `int` (positional) — so we can't
+                    // add `get`/`remove` to the general `erased_arg_method`
+                    // list above without breaking the positional overloads.
+                    let is_map_class = matches!(
+                        class_name.as_str(),
+                        "java/util/Map" | "java/util/HashMap" | "java/util/LinkedHashMap"
+                    );
+                    let map_erased_arg_method =
+                        is_map_class && matches!(method_name.as_str(), "get" | "remove");
+                    let force_object_args = (collection_iface
                         && erased_arg_method
                         && !is_function_invoke
-                        && target_method_sig.is_none();
+                        && target_method_sig.is_none())
+                        || (map_erased_arg_method && target_method_sig.is_none());
                     let mut descriptor = String::from("(");
                     // Skip first arg (receiver) in descriptor
                     for (i, a) in args.iter().skip(1).enumerate() {
