@@ -9890,19 +9890,64 @@ fn lower_loop_body_blocks(
                             KtExpr::Block(bl) => skotch_ast::children(bl.syntax()).iter().collect(),
                             other => vec![other.syntax()],
                         };
-                        let else_stmts = lower_loop_body(
-                            &else_children,
-                            name_to_local,
-                            next_slot,
-                            local_tys,
-                            strings,
-                            fn_lookup_ref,
-                            function_param_names,
-                        )?;
-                        blocks.push(BasicBlock {
-                            stmts: else_stmts,
-                            terminator: Terminator::Goto(after_block_id),
-                        });
+                        // If the else arm contains a Throw (or other
+                        // control-flow stmt), `lower_loop_body` silently
+                        // drops it. Detect single-stmt Throw arms and
+                        // emit the block with a Throw terminator
+                        // directly. This unblocks the
+                        // `else if ... return X; else throw …` chain
+                        // shape that recursive-descent parsers use.
+                        let castable_exprs: Vec<KtExpr<'_>> = else_children
+                            .iter()
+                            .filter_map(|c| KtExpr::cast(c))
+                            .collect();
+                        let only_throw_arm = castable_exprs.len() == 1
+                            && matches!(castable_exprs[0], KtExpr::Throw(_));
+                        if only_throw_arm {
+                            let KtExpr::Throw(throw_e) = castable_exprs[0] else {
+                                return None;
+                            };
+                            let throw_inner = skotch_ast::children(throw_e.syntax())
+                                .iter()
+                                .find_map(KtExpr::cast)
+                                .map(unwrap_parens)?;
+                            let snap_t = name_to_local.clone();
+                            let lookup_t = |n: &str| -> Option<LocalId> {
+                                snap_t
+                                    .iter()
+                                    .rev()
+                                    .find(|(name, _)| name == n)
+                                    .map(|(_, l)| *l)
+                            };
+                            let mut throw_stmts: Vec<MStmt> = Vec::new();
+                            let throw_slot = lower_rich_expr_to_slot(
+                                throw_inner,
+                                &lookup_t,
+                                fn_lookup_ref,
+                                next_slot,
+                                &mut throw_stmts,
+                                local_tys,
+                                strings,
+                            )?;
+                            blocks.push(BasicBlock {
+                                stmts: throw_stmts,
+                                terminator: Terminator::Throw(throw_slot),
+                            });
+                        } else {
+                            let else_stmts = lower_loop_body(
+                                &else_children,
+                                name_to_local,
+                                next_slot,
+                                local_tys,
+                                strings,
+                                fn_lookup_ref,
+                                function_param_names,
+                            )?;
+                            blocks.push(BasicBlock {
+                                stmts: else_stmts,
+                                terminator: Terminator::Goto(after_block_id),
+                            });
+                        }
                     }
                 } else if needs_synthetic_unit_join {
                     // kotlinc shape: `Const(Null) → tmp; phantom_slot = Local(tmp)`.
@@ -11630,10 +11675,26 @@ fn lower_loop_body_blocks(
                     .as_ref()
                     .map(|v| v.len() as u32)
                     .unwrap_or(1);
-                let (else_stmts_opt, else_block_id_opt, else_tail_jump): (
+                // Detect whether else_children contain control flow —
+                // mirror of the then_has_control check. When the else
+                // arm is itself a nested `if (...) {...} else if/throw`
+                // or any other non-linear shape, the flat
+                // `lower_loop_body` walker silently drops it; we route
+                // through `lower_loop_body_blocks` instead so the
+                // nested control flow becomes proper basic blocks with
+                // Branch / Return / Throw terminators.
+                let (
+                    else_stmts_opt,
+                    else_block_id_opt,
+                    else_tail_jump,
+                    else_multi_blocks,
+                    else_block_count,
+                ): (
                     Option<Vec<MStmt>>,
                     Option<u32>,
                     Option<u32>,
+                    Option<Vec<BasicBlock>>,
+                    u32,
                 ) = if has_else {
                     let else_expr_v = else_expr?;
                     let mut else_children: Vec<&skotch_sil::SilNode> = match else_expr_v {
@@ -11657,25 +11718,56 @@ fn lower_loop_body_blocks(
                             None
                         }
                     };
-                    let else_stmts = lower_loop_body(
-                        &else_children,
-                        name_to_local,
-                        next_slot,
-                        local_tys,
-                        strings,
-                        fn_lookup_ref,
-                        function_param_names,
-                    )?;
-                    (
-                        Some(else_stmts),
-                        Some(then_block_id + then_block_count),
-                        etj,
-                    )
+                    let else_has_control = else_children.iter().any(|c| {
+                        if let Some(e) = KtExpr::cast(c) {
+                            matches!(
+                                e,
+                                KtExpr::While(_)
+                                    | KtExpr::For(_)
+                                    | KtExpr::Return(_)
+                                    | KtExpr::If(_)
+                                    | KtExpr::Throw(_)
+                                    | KtExpr::Try(_)
+                            )
+                        } else {
+                            false
+                        }
+                    });
+                    let else_first_id = then_block_id + then_block_count;
+                    if else_has_control {
+                        const SENT_BACK: u32 = 0xfffffffe;
+                        const SENT_BREAK: u32 = 0xfffffffd;
+                        let arm_blocks_v = lower_loop_body_blocks(
+                            &else_children,
+                            name_to_local,
+                            next_slot,
+                            local_tys,
+                            strings,
+                            fn_lookup_ref,
+                            function_param_names,
+                            else_first_id,
+                            SENT_BACK,
+                            SENT_BREAK,
+                        )?;
+                        let count = arm_blocks_v.len() as u32;
+                        (None, Some(else_first_id), etj, Some(arm_blocks_v), count)
+                    } else {
+                        let else_stmts = lower_loop_body(
+                            &else_children,
+                            name_to_local,
+                            next_slot,
+                            local_tys,
+                            strings,
+                            fn_lookup_ref,
+                            function_param_names,
+                        )?;
+                        (Some(else_stmts), Some(else_first_id), etj, None, 1)
+                    }
                 } else {
-                    (None, None, None)
+                    (None, None, None, None, 0)
                 };
                 let join_block_id = match else_block_id_opt {
-                    Some(eid) => eid + 1,
+                    Some(eid) => eid + else_block_count,
                     None => then_block_id + then_block_count,
                 };
                 let false_target = else_block_id_opt.unwrap_or(join_block_id);
@@ -11796,6 +11888,45 @@ fn lower_loop_body_blocks(
                         stmts: else_stmts,
                         terminator: Terminator::Goto(else_tail_jump.unwrap_or(join_block_id)),
                     });
+                } else if let Some(mut multi) = else_multi_blocks {
+                    // Multi-block else arm: same sentinel-remap +
+                    // join-fallthrough handling as the then arm.
+                    const SENT_BACK: u32 = 0xfffffffe;
+                    const SENT_BREAK: u32 = 0xfffffffd;
+                    let last = multi.len().saturating_sub(1);
+                    for (idx, blk) in multi.iter_mut().enumerate() {
+                        let remap = |t: u32| -> u32 {
+                            if t == SENT_BACK {
+                                back_edge_target
+                            } else if t == SENT_BREAK {
+                                break_target
+                            } else {
+                                t
+                            }
+                        };
+                        match &mut blk.terminator {
+                            Terminator::Goto(t) => {
+                                let r = remap(*t);
+                                if r == back_edge_target && back_edge_target == 0xfffffffe {
+                                    *t = join_block_id;
+                                } else if idx == last && r == back_edge_target {
+                                    *t = join_block_id;
+                                } else {
+                                    *t = r;
+                                }
+                            }
+                            Terminator::Branch {
+                                then_block,
+                                else_block,
+                                ..
+                            } => {
+                                *then_block = remap(*then_block);
+                                *else_block = remap(*else_block);
+                            }
+                            _ => {}
+                        }
+                    }
+                    blocks.extend(multi);
                 }
                 // join block becomes the new cur_block —
                 // we accumulate subsequent stmts into
