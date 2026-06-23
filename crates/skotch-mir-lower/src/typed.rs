@@ -18166,6 +18166,12 @@ fn lower_rich_expr_to_slot(
         // box-call into a fresh Object slot and rewrite the
         // terminator to return that slot. Matches the boxing pass
         // for declared-primitive-return user functions.
+        //
+        // Special case Ty::Unit: kotlinc lowers a Unit-bodied lambda
+        // (e.g. `{ println("x") }`) to `getstatic kotlin/Unit.INSTANCE
+        // : Lkotlin/Unit; areturn`. The body's last stmt left a Unit
+        // slot whose value is meaningless — replace it with the
+        // INSTANCE singleton load.
         let mut invoke_blocks = invoke_blocks;
         for block in &mut invoke_blocks {
             if let Terminator::ReturnValue(slot) = &block.terminator {
@@ -18194,6 +18200,21 @@ fn lower_rich_expr_to_slot(
                         },
                     });
                     block.terminator = Terminator::ReturnValue(boxed_slot);
+                } else if matches!(slot_ty, Ty::Unit) {
+                    // Replace the Unit slot return with the
+                    // kotlin/Unit.INSTANCE singleton — match kotlinc's
+                    // shape for a Unit-bodied lambda.
+                    let unit_slot = LocalId(invoke_locals.len() as u32);
+                    invoke_locals.push(Ty::Class("kotlin/Unit".to_string()));
+                    block.stmts.push(MStmt::Assign {
+                        dest: unit_slot,
+                        value: skotch_mir::Rvalue::GetStaticField {
+                            class_name: "kotlin/Unit".to_string(),
+                            field_name: "INSTANCE".to_string(),
+                            descriptor: "Lkotlin/Unit;".to_string(),
+                        },
+                    });
+                    block.terminator = Terminator::ReturnValue(unit_slot);
                 }
             }
         }
@@ -19616,6 +19637,126 @@ fn lower_rich_expr_to_slot(
                     });
                     return Some(result_slot);
                 }
+            }
+        }
+    }
+    // `println(...)` / `print(...)` intrinsic. Lambda bodies and
+    // other rich-expression positions can contain a bare call to
+    // println; the lower_loop_body walker handles statement-level
+    // println on its own, but when println appears as the
+    // value-producing body of a lambda or rich-expr context, the
+    // recursive lower_rich_expr_to_slot needs its own arm or the
+    // entire enclosing call/lambda bails. Returns a Unit slot.
+    //
+    // Three shapes supported here (matching the loop-body walker):
+    //   1. `println(<string-literal>)` → CallKind::Println, 1 arg
+    //   2. `println("a${x}b")` template → PrintlnConcat, N parts
+    //   3. `println(<rich-expr>)` non-literal arg → Println, 1 arg
+    if let KtExpr::Call(call) = e {
+        let callee_name = match call.callee() {
+            Some(KtExpr::Reference(r)) => r.name(),
+            _ => None,
+        };
+        if matches!(callee_name, Some("println") | Some("print")) {
+            let is_println = callee_name == Some("println");
+            // Try template (with interpolations) first.
+            if let Some((concat_kind, parts)) = try_lower_println_template_with_rich_lookup(
+                &call,
+                strings,
+                next_slot,
+                pre_stmts,
+                extra_locals,
+                lookup_name,
+                Some(fn_lookup),
+            ) {
+                let result_slot = LocalId(*next_slot);
+                *next_slot += 1;
+                extra_locals.push(Ty::Unit);
+                pre_stmts.push(MStmt::Assign {
+                    dest: result_slot,
+                    value: skotch_mir::Rvalue::Call {
+                        kind: concat_kind,
+                        args: parts,
+                    },
+                });
+                return Some(result_slot);
+            }
+            // Single-arg fallback: lower the arg via lower_rich and
+            // emit a plain Println/Print intrinsic. The intrinsic
+            // accepts a single value arg and prints via the
+            // backend's println-of-Any wrapper.
+            if let Some(arg_list) = call.value_argument_list() {
+                let arg_exprs: Vec<KtExpr<'_>> = arg_list
+                    .arguments()
+                    .filter_map(|a| a.expression())
+                    .collect();
+                if arg_exprs.len() == 1 {
+                    if let Some(arg_slot) = lower_rich_expr_to_slot(
+                        arg_exprs[0],
+                        lookup_name,
+                        fn_lookup,
+                        next_slot,
+                        pre_stmts,
+                        extra_locals,
+                        strings,
+                    ) {
+                        let kind = if is_println {
+                            skotch_mir::CallKind::Println
+                        } else {
+                            skotch_mir::CallKind::Print
+                        };
+                        let result_slot = LocalId(*next_slot);
+                        *next_slot += 1;
+                        extra_locals.push(Ty::Unit);
+                        pre_stmts.push(MStmt::Assign {
+                            dest: result_slot,
+                            value: skotch_mir::Rvalue::Call {
+                                kind,
+                                args: vec![arg_slot],
+                            },
+                        });
+                        return Some(result_slot);
+                    }
+                }
+            }
+            // No-arg `println()` → Println with empty-string literal.
+            if call
+                .value_argument_list()
+                .map(|al| al.arguments().count())
+                .unwrap_or(0)
+                == 0
+            {
+                let sid = match strings.iter().position(|s| s.is_empty()) {
+                    Some(i) => skotch_mir::StringId(i as u32),
+                    None => {
+                        let id = skotch_mir::StringId(strings.len() as u32);
+                        strings.push(String::new());
+                        id
+                    }
+                };
+                let s_slot = LocalId(*next_slot);
+                *next_slot += 1;
+                extra_locals.push(Ty::String);
+                pre_stmts.push(MStmt::Assign {
+                    dest: s_slot,
+                    value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::String(sid)),
+                });
+                let kind = if is_println {
+                    skotch_mir::CallKind::Println
+                } else {
+                    skotch_mir::CallKind::Print
+                };
+                let result_slot = LocalId(*next_slot);
+                *next_slot += 1;
+                extra_locals.push(Ty::Unit);
+                pre_stmts.push(MStmt::Assign {
+                    dest: result_slot,
+                    value: skotch_mir::Rvalue::Call {
+                        kind,
+                        args: vec![s_slot],
+                    },
+                });
+                return Some(result_slot);
             }
         }
     }
