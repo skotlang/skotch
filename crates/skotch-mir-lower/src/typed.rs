@@ -7937,22 +7937,33 @@ fn lower_loop_body(
             };
             let lname = lref.name()?;
             // Try local first; if not found, fall back to a class
-            // field write (this.field = expr) via PutField. Only
-            // applies inside class methods (the CLASS_METHOD_CTX
-            // scope is active).
+            // field write (this.field = expr) via PutField.
+            //
+            // For plain `field = expr` (no compound op), ALSO emit
+            // PutField when the lhs is a known class field even if
+            // it's already prebound as a local cache. Without this,
+            // a `pos = pos + 1` inside a while-loop body whose cond
+            // re-reads `pos` from the field (via prebind in cond)
+            // would loop forever (parity 40 WordIterator). Compound
+            // ops (+=) keep the legacy local-only path since none
+            // of the fixtures hit that shape against a cached field
+            // yet, and the iload/iadd/istore form is what kotlinc
+            // emits there anyway.
             let lhs_local = name_to_local
                 .iter()
                 .rev()
                 .find(|(n, _)| n == lname)
                 .map(|(_, l)| *l);
-            let lhs_field = if lhs_local.is_none() {
-                class_field_lookup(lname)
-            } else {
+            let lhs_field = if compound_op.is_some() && lhs_local.is_some() {
                 None
+            } else {
+                class_field_lookup(lname)
             };
             if let Some((class_name, field_name, _field_ty)) = lhs_field {
                 // Lower the rhs to a slot, then emit a PutField on
-                // `this` (slot 0).
+                // `this` (slot 0). When a local cache exists, also
+                // sync it so subsequent reads in the same iteration
+                // observe the new value.
                 let snap = name_to_local.clone();
                 let lookup = |n: &str| -> Option<LocalId> {
                     snap.iter()
@@ -7982,6 +7993,12 @@ fn lower_loop_body(
                         value: value_slot,
                     },
                 });
+                if let Some(local_slot) = lhs_local {
+                    body_mstmts.push(MStmt::Assign {
+                        dest: local_slot,
+                        value: skotch_mir::Rvalue::Local(value_slot),
+                    });
+                }
                 continue;
             }
             let lhs_slot = lhs_local?;
@@ -13765,6 +13782,310 @@ fn try_lower_multi_stmt_block_with_offset(
                         .any(|c| c.kind == skotch_syntax::SyntaxKind::KW_TRUE),
                     _ => false,
                 };
+                // `while (a && b)` / `while (a || b)` at the trailing-
+                // statement position. The fixed 4-block (pre, cond,
+                // body, exit) layout below can't carry a multi-operand
+                // cond, so generate N cond blocks (one per operand) and
+                // wire them per CondShape — matching the NestedWhile
+                // handler's structure. Without this branch, methods
+                // whose driving loop is `while (pos < n && text[pos]
+                // != ' ')` (parity 40 WordIterator) fall through to the
+                // single-Binary `else { return None }` below and stub
+                // the entire method body. Plain-body shape only here;
+                // jump-body (`break`/`continue`) routes through the
+                // existing body_has_jumps path which already handles
+                // multi-cond via lower_loop_body_blocks's NestedWhile.
+                if !is_while_true {
+                    let (sc_shape, sc_operands) = classify_cond_chain(cond_expr);
+                    if matches!(sc_shape, CondShape::AllAnd | CondShape::AnyOr)
+                        && sc_operands.len() >= 2
+                    {
+                        let sc_body_opt = w.body().and_then(|b| b.expression());
+                        let sc_body_children: Vec<&skotch_sil::SilNode> = match sc_body_opt {
+                            Some(KtExpr::Block(bl)) => {
+                                skotch_ast::children(bl.syntax()).iter().collect()
+                            }
+                            Some(other) => vec![other.syntax()],
+                            None => vec![],
+                        };
+                        // Reject body shapes that contain control flow —
+                        // those need the multi-block body path which
+                        // isn't wired through this short-circuit shim.
+                        let sc_body_has_control = sc_body_children.iter().any(|c| {
+                            if let Some(e) = KtExpr::cast(c) {
+                                matches!(
+                                    e,
+                                    KtExpr::Break(_)
+                                        | KtExpr::Continue(_)
+                                        | KtExpr::Return(_)
+                                        | KtExpr::While(_)
+                                        | KtExpr::For(_)
+                                        | KtExpr::If(_)
+                                )
+                            } else {
+                                false
+                            }
+                        });
+                        if !sc_body_has_control {
+                            // Prebind any class-field reads referenced
+                            // by the cond chain — the cmp emit below
+                            // uses lookup_name which only sees locals.
+                            for operand in &sc_operands {
+                                prebind_class_fields(
+                                    *operand,
+                                    &mut name_to_local,
+                                    &mut next_slot,
+                                    &mut stmts,
+                                    &mut local_tys,
+                                    class_name,
+                                    field_names,
+                                );
+                                prebind_top_level_vals(
+                                    *operand,
+                                    &mut name_to_local,
+                                    &mut next_slot,
+                                    &mut stmts,
+                                    &mut local_tys,
+                                    val_lookup,
+                                    wrapper_class,
+                                );
+                            }
+                            let sc_snap = name_to_local.clone();
+                            let sc_lookup = |n: &str| -> Option<LocalId> {
+                                sc_snap
+                                    .iter()
+                                    .rev()
+                                    .find(|(name, _)| name == n)
+                                    .map(|(_, l)| *l)
+                            };
+                            // Layout: pre=0, cond_0=1..1+N-1, body=1+N,
+                            // exit=2+N. cond_k branches on true to
+                            // cond_{k+1} (AllAnd) or body (AnyOr); on
+                            // false to exit (AllAnd) or cond_{k+1}
+                            // (AnyOr). Last cond branches to body|exit.
+                            let n_ops = sc_operands.len() as u32;
+                            let cond_first = 1u32;
+                            let body_id = cond_first + n_ops;
+                            let exit_id = body_id + 1;
+                            let mut cond_blocks: Vec<BasicBlock> = Vec::new();
+                            for (k, operand) in sc_operands.iter().enumerate() {
+                                let mut cmp_stmts: Vec<MStmt> = Vec::new();
+                                let cmp_slot = lower_rich_expr_to_slot(
+                                    *operand,
+                                    &sc_lookup,
+                                    fn_lookup,
+                                    &mut next_slot,
+                                    &mut cmp_stmts,
+                                    &mut local_tys,
+                                    strings,
+                                )?;
+                                let is_last = (k as u32 + 1) >= n_ops;
+                                let next_cond = cond_first + (k as u32 + 1);
+                                let (on_true, on_false) = match sc_shape {
+                                    CondShape::AllAnd => {
+                                        let t = if is_last { body_id } else { next_cond };
+                                        (t, exit_id)
+                                    }
+                                    CondShape::AnyOr => {
+                                        let f = if is_last { exit_id } else { next_cond };
+                                        (body_id, f)
+                                    }
+                                    CondShape::Single => (body_id, exit_id),
+                                };
+                                cond_blocks.push(BasicBlock {
+                                    stmts: cmp_stmts,
+                                    terminator: Terminator::Branch {
+                                        cond: cmp_slot,
+                                        then_block: on_true,
+                                        else_block: on_false,
+                                    },
+                                });
+                            }
+                            let sc_body_mstmts = lower_loop_body(
+                                &sc_body_children,
+                                &mut name_to_local,
+                                &mut next_slot,
+                                &mut local_tys,
+                                strings,
+                                fn_lookup,
+                                &function_param_names,
+                            )?;
+                            let pre_block = BasicBlock {
+                                stmts: std::mem::take(&mut stmts),
+                                terminator: Terminator::Goto(cond_first),
+                            };
+                            let body_blk = BasicBlock {
+                                stmts: sc_body_mstmts,
+                                terminator: Terminator::Goto(cond_first),
+                            };
+                            // Trailing return / pre-return stmts after
+                            // the while. Mirror the plain-cond exit
+                            // logic; if before_ret contains control
+                            // flow (a trailing `if (pos < n) pos++`
+                            // for the WordIterator case) route through
+                            // lower_loop_body_blocks to materialize a
+                            // multi-block exit.
+                            let sc_before_ret: Vec<&skotch_sil::SilNode> = {
+                                let mut ret_idx: Option<usize> = None;
+                                for (i, c) in trailing_children.iter().enumerate().rev() {
+                                    if let Some(KtExpr::Return(_)) = KtExpr::cast(c) {
+                                        ret_idx = Some(i);
+                                        break;
+                                    }
+                                    if KtExpr::cast(c).is_some() {
+                                        break;
+                                    }
+                                }
+                                match ret_idx {
+                                    Some(idx) => trailing_children[..idx].to_vec(),
+                                    None => trailing_children.to_vec(),
+                                }
+                            };
+                            let sc_before_ret_has_control = sc_before_ret.iter().any(|c| {
+                                if let Some(e) = KtExpr::cast(c) {
+                                    matches!(
+                                        e,
+                                        KtExpr::If(_)
+                                            | KtExpr::While(_)
+                                            | KtExpr::For(_)
+                                            | KtExpr::Return(_)
+                                    )
+                                } else {
+                                    false
+                                }
+                            });
+                            let mut sc_exit_stmts: Vec<MStmt> = Vec::new();
+                            let mut sc_multi_exit: Option<Vec<BasicBlock>> = None;
+                            if sc_before_ret_has_control {
+                                const SC_SENT_BACK: u32 = 0xfffffffe;
+                                const SC_SENT_BREAK: u32 = 0xfffffffd;
+                                let blocks_v = lower_loop_body_blocks(
+                                    &sc_before_ret,
+                                    &mut name_to_local,
+                                    &mut next_slot,
+                                    &mut local_tys,
+                                    strings,
+                                    fn_lookup,
+                                    &function_param_names,
+                                    exit_id,
+                                    SC_SENT_BACK,
+                                    SC_SENT_BREAK,
+                                )?;
+                                sc_multi_exit = Some(blocks_v);
+                            } else if !sc_before_ret.is_empty() {
+                                sc_exit_stmts = lower_loop_body(
+                                    &sc_before_ret,
+                                    &mut name_to_local,
+                                    &mut next_slot,
+                                    &mut local_tys,
+                                    strings,
+                                    fn_lookup,
+                                    &function_param_names,
+                                )?;
+                            }
+                            let mut sc_ret_slot: Option<LocalId> = None;
+                            let mut sc_final_ret_stmts: Vec<MStmt> = Vec::new();
+                            {
+                                let mut ret_expr_inner: Option<KtExpr<'_>> = None;
+                                for c in trailing_children.iter().rev() {
+                                    if let Some(KtExpr::Return(r)) = KtExpr::cast(c) {
+                                        ret_expr_inner = skotch_ast::children(r.syntax())
+                                            .iter()
+                                            .find_map(KtExpr::cast)
+                                            .map(unwrap_parens);
+                                        break;
+                                    }
+                                    if KtExpr::cast(c).is_some() {
+                                        break;
+                                    }
+                                }
+                                if let Some(re) = ret_expr_inner {
+                                    let target = if sc_multi_exit.is_some() {
+                                        &mut sc_final_ret_stmts
+                                    } else {
+                                        &mut sc_exit_stmts
+                                    };
+                                    prebind_top_level_vals(
+                                        re,
+                                        &mut name_to_local,
+                                        &mut next_slot,
+                                        target,
+                                        &mut local_tys,
+                                        val_lookup,
+                                        wrapper_class,
+                                    );
+                                    let rsnap = name_to_local.clone();
+                                    let rlookup = |n: &str| -> Option<LocalId> {
+                                        rsnap
+                                            .iter()
+                                            .rev()
+                                            .find(|(name, _)| name == n)
+                                            .map(|(_, l)| *l)
+                                    };
+                                    let slot = lower_rich_expr_to_slot(
+                                        re,
+                                        &rlookup,
+                                        fn_lookup,
+                                        &mut next_slot,
+                                        target,
+                                        &mut local_tys,
+                                        strings,
+                                    )?;
+                                    sc_ret_slot = Some(slot);
+                                }
+                            }
+                            let exit_term = match sc_ret_slot {
+                                Some(s) => Terminator::ReturnValue(s),
+                                None => Terminator::Return,
+                            };
+                            if let Some(mut exit_blocks) = sc_multi_exit {
+                                const SC_SENT_BACK: u32 = 0xfffffffe;
+                                const SC_SENT_BREAK: u32 = 0xfffffffd;
+                                let n_exit = exit_blocks.len() as u32;
+                                let final_id = exit_id + n_exit;
+                                for blk in &mut exit_blocks {
+                                    let remap = |t: u32| -> u32 {
+                                        if t == SC_SENT_BACK || t == SC_SENT_BREAK {
+                                            final_id
+                                        } else {
+                                            t
+                                        }
+                                    };
+                                    match &mut blk.terminator {
+                                        Terminator::Goto(t) => *t = remap(*t),
+                                        Terminator::Branch {
+                                            then_block,
+                                            else_block,
+                                            ..
+                                        } => {
+                                            *then_block = remap(*then_block);
+                                            *else_block = remap(*else_block);
+                                        }
+                                        _ => {}
+                                    }
+                                }
+                                let mut all = vec![pre_block];
+                                all.extend(cond_blocks);
+                                all.push(body_blk);
+                                all.extend(exit_blocks);
+                                all.push(BasicBlock {
+                                    stmts: sc_final_ret_stmts,
+                                    terminator: exit_term,
+                                });
+                                return Some((all, local_tys));
+                            }
+                            let exit_block = BasicBlock {
+                                stmts: sc_exit_stmts,
+                                terminator: exit_term,
+                            };
+                            let mut all = vec![pre_block];
+                            all.extend(cond_blocks);
+                            all.push(body_blk);
+                            all.push(exit_block);
+                            return Some((all, local_tys));
+                        }
+                    }
+                }
                 let (cmp_b_opt, cmp_mir_opt) = if is_while_true {
                     (None, None)
                 } else {
