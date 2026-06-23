@@ -595,6 +595,39 @@ fn resolve_type_ref(tr: skotch_ast::KtTypeReference<'_>) -> Ty {
     // Extension-fn receivers add 1 to arity since the receiver is
     // the first JVM-level param of the resulting FunctionN class.
     if let Some(ft) = tr.function_type() {
+        // Parser-quirk guard: a real Kotlin function type always has
+        // an arrow + return type. A USER_TYPE that ends up wrapped in
+        // FUNCTION_TYPE → FUNCTION_TYPE_RECEIVER → USER_TYPE without
+        // any ARROW token (e.g. parser saw `name: String,` and over-
+        // matched the receiver-style production) is really a plain
+        // user-type reference. Fall back to the receiver's inner type
+        // so `name: String` doesn't get typed as Function1.
+        let has_arrow = ft.return_type().is_some();
+        if !has_arrow {
+            // Try TYPE_REFERENCE-wrapped inner first, then bare USER_TYPE
+            // child — the SIL parser sometimes places the user type
+            // directly under FUNCTION_TYPE_RECEIVER without an
+            // intermediate TYPE_REFERENCE wrapper.
+            let inner_name = ft
+                .receiver()
+                .and_then(|r| {
+                    r.type_reference()
+                        .and_then(|tr| tr.user_type())
+                        .or_else(|| {
+                            skotch_ast::first_typed_child::<skotch_ast::KtUserType<'_>>(r.syntax())
+                        })
+                })
+                .and_then(|u| u.name());
+            if let Some(name) = inner_name {
+                if let Some(alias_ty) = resolve_typealias(name) {
+                    return alias_ty;
+                }
+                return resolve_user_ty(name);
+            }
+            // No usable inner — fall through to Ty::Any rather than
+            // claiming a bogus FunctionN.
+            return Ty::Any;
+        }
         let receiver_count = if ft.receiver().is_some() { 1 } else { 0 };
         let arity = ft
             .parameter_list()
@@ -19185,7 +19218,29 @@ fn lower_rich_expr_to_slot(
         // path) OR a multi-block CFG when the body is If/When and
         // requires branches. Both shapes get the same final
         // ReturnValue terminator on the join block.
-        let invoke_blocks: Vec<BasicBlock> = if body_stmts.len() == 1 {
+        // Empty lambda body (`{ }`) — synthesize a Unit-returning
+        // invoke. The Companion-factory / scope-fn shape commonly
+        // passes an effectively empty initializer just to satisfy the
+        // signature (e.g. `Tree.of("root") { /* defer to defaults */ }`)
+        // and bailing here forces the whole DotQualified call to fall
+        // through to the singleton-INSTANCE path → bogus `Tree.INSTANCE`
+        // load + NoSuchMethodError at runtime.
+        let invoke_blocks: Vec<BasicBlock> = if body_stmts.is_empty() {
+            let unit_slot = LocalId(next_slot_inv);
+            #[allow(unused_assignments)]
+            {
+                next_slot_inv += 1;
+            }
+            extra_locals_inv.push(Ty::Unit);
+            pre_stmts_inv.push(MStmt::Assign {
+                dest: unit_slot,
+                value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Unit),
+            });
+            vec![BasicBlock {
+                stmts: pre_stmts_inv,
+                terminator: Terminator::ReturnValue(unit_slot),
+            }]
+        } else if body_stmts.len() == 1 {
             if let KtExpr::If(if_e) = body_stmts[0] {
                 // Build 4-block CFG: cond ; then-arm ; else-arm ; join.
                 let cond_expr = if_e
@@ -19278,7 +19333,56 @@ fn lower_rich_expr_to_slot(
                 }]
             }
         } else {
-            return None;
+            // Multi-statement lambda body: lower each statement as a
+            // side-effect; the LAST stmt becomes the returned value
+            // (or Unit if it doesn't yield a slot). If any stmt fails
+            // to lower, bail — partial lowering would leave the body
+            // half-emitted and break stack-map verification.
+            let mut last_slot: Option<LocalId> = None;
+            let mut all_ok = true;
+            for stmt in &body_stmts {
+                if let Some(s) = lower_rich_expr_to_slot(
+                    *stmt,
+                    &lookup,
+                    fn_lookup,
+                    &mut next_slot_inv,
+                    &mut pre_stmts_inv,
+                    &mut extra_locals_inv,
+                    strings,
+                ) {
+                    last_slot = Some(s);
+                } else {
+                    all_ok = false;
+                    break;
+                }
+            }
+            if !all_ok {
+                return None;
+            }
+            let ret_slot = if let Some(s) = last_slot {
+                // If the last statement's slot is a Unit-typed value,
+                // synthesize a fresh Unit.INSTANCE-shaped slot so the
+                // post-process box pass routes through the kotlin/Unit
+                // singleton (matching kotlinc). Otherwise pass the
+                // slot through unchanged.
+                s
+            } else {
+                let unit_slot = LocalId(next_slot_inv);
+                #[allow(unused_assignments)]
+                {
+                    next_slot_inv += 1;
+                }
+                extra_locals_inv.push(Ty::Unit);
+                pre_stmts_inv.push(MStmt::Assign {
+                    dest: unit_slot,
+                    value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Unit),
+                });
+                unit_slot
+            };
+            vec![BasicBlock {
+                stmts: pre_stmts_inv,
+                terminator: Terminator::ReturnValue(ret_slot),
+            }]
         };
         let _ = lambda_idx;
         let func_class = format!("kotlin/jvm/functions/Function{}", arity);
@@ -22139,6 +22243,35 @@ fn lower_rich_expr_to_slot(
                                                 break;
                                             };
                                             arg_slots.push(s);
+                                        }
+                                    }
+                                    // Trailing-lambda arg: `Tree.of("root") { ... }`
+                                    // puts the lambda in `call.lambda_argument()`,
+                                    // separate from value_argument_list. Without
+                                    // pulling it in, the invokevirtual's descriptor
+                                    // expects N+1 args while the stack only holds
+                                    // N, and a NoSuchMethodError fires at runtime
+                                    // resolving against the wrong arity.
+                                    if all_ok {
+                                        if let Some(la) = call.lambda_argument() {
+                                            if let Some(le) = skotch_ast::children(la.syntax())
+                                                .iter()
+                                                .find_map(KtExpr::cast)
+                                            {
+                                                if let Some(s) = lower_rich_expr_to_slot(
+                                                    le,
+                                                    lookup_name,
+                                                    fn_lookup,
+                                                    next_slot,
+                                                    pre_stmts,
+                                                    extra_locals,
+                                                    strings,
+                                                ) {
+                                                    arg_slots.push(s);
+                                                } else {
+                                                    all_ok = false;
+                                                }
+                                            }
                                         }
                                     }
                                     if all_ok {
