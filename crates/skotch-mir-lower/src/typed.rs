@@ -11812,7 +11812,22 @@ fn try_lower_multi_stmt_block_with_offset(
                                 .find(|(n, _)| n == recv_name)
                                 .map(|(_, l)| *l)
                             {
-                                let recv_ty = local_tys.get(recv_slot.0 as usize).cloned();
+                                // Use slot_ty_with_param_fallback (NOT
+                                // `local_tys.get(recv_slot.0)`) so a recv
+                                // slot whose index falls in the param
+                                // range or is body-local-index `slot -
+                                // param_count` is resolved correctly.
+                                // The naive lookup mis-resolves a recv
+                                // when local_tys has been pushed by an
+                                // earlier val init: e.g. `val v =
+                                // p.parseValue()` pushes Class("JV")
+                                // into local_tys[1], and a subsequent
+                                // `p.skipWs()` would read local_tys[1]
+                                // (= JV) as p's class and dispatch
+                                // `JV.skipWs` instead of `P.skipWs`,
+                                // producing a VerifyError at runtime.
+                                let recv_ty =
+                                    Some(slot_ty_with_param_fallback(recv_slot.0, &local_tys));
                                 if let Some(Ty::Class(cname)) = recv_ty {
                                     let mut arg_slots: Vec<LocalId> = vec![recv_slot];
                                     let mut ok = true;
