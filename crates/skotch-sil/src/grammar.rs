@@ -2481,8 +2481,13 @@ fn parse_value_parameter(p: &mut Parser<'_, '_>) {
         p.bump();
         skip_trivia(p);
     }
-    if p.at(S::IDENTIFIER) || is_soft_keyword(p.current()) {
+    // Param name: reclassify soft-keyword name tokens (e.g. `init`,
+    // `data`, `value`) as IDENTIFIER so the SIL shape matches kotlinc
+    // PSI and downstream `KtValueParameter::name()` finds them.
+    if p.at(S::IDENTIFIER) {
         p.bump();
+    } else if is_soft_keyword(p.current()) {
+        p.bump_as(S::IDENTIFIER);
     }
     skip_trivia(p);
     if p.at(S::COLON) {
