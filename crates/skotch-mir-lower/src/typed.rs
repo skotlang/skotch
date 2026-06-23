@@ -8059,7 +8059,7 @@ fn lower_loop_body(
             } else {
                 class_field_lookup(lname)
             };
-            if let Some((class_name, field_name, _field_ty)) = lhs_field {
+            if let Some((class_name, field_name, field_ty)) = lhs_field {
                 // Lower the rhs to a slot, then emit a PutField on
                 // `this` (slot 0). When a local cache exists, also
                 // sync it so subsequent reads in the same iteration
@@ -8071,7 +8071,7 @@ fn lower_loop_body(
                         .find(|(name, _)| name == n)
                         .map(|(_, l)| *l)
                 };
-                let value_slot = lower_rich_expr_to_slot(
+                let rhs_slot = lower_rich_expr_to_slot(
                     rhs,
                     &lookup,
                     fn_lookup_ref,
@@ -8080,7 +8080,40 @@ fn lower_loop_body(
                     local_tys,
                     strings,
                 )?;
+                // Compound assignment on a class field: load the
+                // current field value, BinOp with the rhs slot to
+                // compute `field op rhs`, then PutField the result.
+                // Without this, `_hits += 1` previously emitted
+                // `putfield _hits = 1` (overwriting with the literal
+                // RHS each time) instead of `_hits = _hits + 1`.
                 let this_slot = LocalId(0);
+                let value_slot = if let Some(op) = compound_op {
+                    let cur_slot = LocalId(*next_slot);
+                    *next_slot += 1;
+                    local_tys.push(field_ty.clone());
+                    body_mstmts.push(MStmt::Assign {
+                        dest: cur_slot,
+                        value: skotch_mir::Rvalue::GetField {
+                            receiver: this_slot,
+                            class_name: class_name.clone(),
+                            field_name: field_name.clone(),
+                        },
+                    });
+                    let combined = LocalId(*next_slot);
+                    *next_slot += 1;
+                    local_tys.push(field_ty.clone());
+                    body_mstmts.push(MStmt::Assign {
+                        dest: combined,
+                        value: skotch_mir::Rvalue::BinOp {
+                            op,
+                            lhs: cur_slot,
+                            rhs: rhs_slot,
+                        },
+                    });
+                    combined
+                } else {
+                    rhs_slot
+                };
                 let unused = LocalId(*next_slot);
                 *next_slot += 1;
                 local_tys.push(Ty::Unit);
@@ -16166,14 +16199,42 @@ fn try_lower_multi_stmt_block_with_offset(
                         cmp_slot
                     } else {
                         // Boolean Reference or similar — use directly.
-                        lower_inline_expr_to_slot(
+                        let s = lower_inline_expr_to_slot(
                             *cond_expr,
                             &if_cond_lookup,
                             &mut next_slot,
                             &mut c_stmts,
                             &mut local_tys,
                             strings,
-                        )?
+                        )?;
+                        // If the cond slot ended up Object-typed (e.g.
+                        // `val ok = pred(n)` where pred is Function1 and
+                        // its return slot was registered Ty::Any), unbox
+                        // to a primitive Bool before the Branch picks
+                        // ifeq/ifne. Without this, the backend's Branch
+                        // emitter falls into the `is_ref` arm and emits
+                        // ifnull/ifnonnull, which always-takes the
+                        // then-branch for a non-null boxed Boolean.
+                        let s_ty = slot_ty_with_param_fallback(s.0, &local_tys);
+                        if matches!(s_ty, Ty::Any | Ty::Nullable(_)) {
+                            let unboxed = LocalId(next_slot);
+                            next_slot += 1;
+                            local_tys.push(Ty::Bool);
+                            c_stmts.push(MStmt::Assign {
+                                dest: unboxed,
+                                value: skotch_mir::Rvalue::Call {
+                                    kind: skotch_mir::CallKind::VirtualJava {
+                                        class_name: "java/lang/Boolean".to_string(),
+                                        method_name: "booleanValue".to_string(),
+                                        descriptor: "()Z".to_string(),
+                                    },
+                                    args: vec![s],
+                                },
+                            });
+                            unboxed
+                        } else {
+                            s
+                        }
                     };
                     cmp_block_stmts.push(c_stmts);
                     cmp_slots.push(cmp_slot);
@@ -19037,6 +19098,20 @@ fn prebind_class_fields(
             }
         }
         KtExpr::Call(call) => {
+            // Walk callee too: `pred(n)` where `pred` is a class-field
+            // of Function type needs `pred` preloaded as a snap_locals
+            // slot so the Function<N>.invoke arm in lower_rich finds it.
+            if let Some(ce) = call.callee() {
+                prebind_class_fields(
+                    ce,
+                    name_to_local,
+                    next_slot,
+                    pre_stmts,
+                    extra_locals,
+                    class_name,
+                    field_names,
+                );
+            }
             if let Some(arg_list) = call.value_argument_list() {
                 for arg in arg_list.arguments() {
                     if let Some(arg_e) = arg.expression() {
@@ -21856,8 +21931,44 @@ fn lower_rich_expr_to_slot(
     if let KtExpr::Call(call) = e {
         if let Some(KtExpr::Reference(rc)) = call.callee() {
             if let Some(name) = rc.name() {
-                if let Some(slot) = lookup_name(name) {
-                    let recv_ty = slot_ty_with_param_fallback(slot.0, extra_locals);
+                // Resolve receiver slot: prefer a local snap_locals
+                // binding, else fall back to a class-field GetField off
+                // `this`. Without the field fallback, `pred(n)` inside
+                // a class method where `pred` is a `(Int) -> Boolean`
+                // field bails — the method body becomes a stub.
+                let local_slot = lookup_name(name);
+                let field_lookup = if local_slot.is_none() {
+                    class_field_lookup(name)
+                } else {
+                    None
+                };
+                let resolved_slot = if let Some(s) = local_slot {
+                    Some((s, slot_ty_with_param_fallback(s.0, extra_locals)))
+                } else if let Some((cn, fn_, fty)) = field_lookup.as_ref() {
+                    // Verify the field's Ty is a Function<N> BEFORE
+                    // emitting the GetField — otherwise we'd preload
+                    // unrelated fields when later arms could match.
+                    if matches!(fty, Ty::Class(c) if c.starts_with("kotlin/jvm/functions/Function"))
+                    {
+                        let s = LocalId(*next_slot);
+                        *next_slot += 1;
+                        extra_locals.push(fty.clone());
+                        pre_stmts.push(MStmt::Assign {
+                            dest: s,
+                            value: skotch_mir::Rvalue::GetField {
+                                receiver: LocalId(0),
+                                class_name: cn.clone(),
+                                field_name: fn_.clone(),
+                            },
+                        });
+                        Some((s, fty.clone()))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+                if let Some((slot, recv_ty)) = resolved_slot {
                     let arity = match &recv_ty {
                         Ty::Class(c) if c.starts_with("kotlin/jvm/functions/Function") => c
                             .trim_start_matches("kotlin/jvm/functions/Function")
@@ -28625,6 +28736,14 @@ fn method_simple_body_full(
                                     }
                                 }
                                 KtExpr::Call(call) => {
+                                    // Walk callee too: `pred(n)` where
+                                    // `pred` is a class-field of Function
+                                    // type needs `pred` preloaded as a
+                                    // snap_locals slot so the Function<N>
+                                    // .invoke arm in lower_rich finds it.
+                                    if let Some(ce) = call.callee() {
+                                        collect_refs(ce, out);
+                                    }
                                     if let Some(arg_list) = call.value_argument_list() {
                                         for arg in arg_list.arguments() {
                                             if let Some(ae) = arg.expression() {
@@ -31773,12 +31892,16 @@ fn collect_class_methods(
             for p in plist.parameters() {
                 if p.is_val() || p.is_var() {
                     if let Some(n) = p.name() {
-                        let ty = p
-                            .type_reference()
-                            .and_then(|tr| tr.user_type())
-                            .and_then(|u| u.name())
-                            .map(resolve_user_ty)
-                            .unwrap_or(Ty::Any);
+                        // Use `resolve_type_ref` so function-type annotations
+                        // (`val pred: (Int) -> Boolean`) and typealias targets
+                        // (`val pred: Predicate` where Predicate = (Int)->Bool)
+                        // lower to `Ty::Class("kotlin/jvm/functions/FunctionN")`.
+                        // The prior `.user_type().and_then(name).map(resolve_user_ty)`
+                        // path returned `None` for function-type annotations and
+                        // erased the field to `Ty::Any`, defeating the
+                        // Function<N>.invoke arm in lower_rich when `pred(n)` was
+                        // called inside a class method body.
+                        let ty = p.type_reference().map(resolve_type_ref).unwrap_or(Ty::Any);
                         field_names.push((n.to_string(), erase_tp(ty)));
                     }
                 }
@@ -31791,12 +31914,7 @@ fn collect_class_methods(
         for d in body.declarations() {
             if let KtDecl::Property(p) = d {
                 if let Some(n) = p.name() {
-                    let ty = p
-                        .type_reference()
-                        .and_then(|tr| tr.user_type())
-                        .and_then(|u| u.name())
-                        .map(resolve_user_ty)
-                        .unwrap_or(Ty::Any);
+                    let ty = p.type_reference().map(resolve_type_ref).unwrap_or(Ty::Any);
                     field_names.push((n.to_string(), erase_tp(ty)));
                     // Record collection-element Ty for body properties
                     // with an explicit `: MutableList<Listener>` (etc.)

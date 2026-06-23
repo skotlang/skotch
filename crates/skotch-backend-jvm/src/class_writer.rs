@@ -4132,6 +4132,20 @@ fn emit_method_body(
                             code.push(0xB6); // invokevirtual
                             code.write_u16::<BigEndian>(m).unwrap();
                         }
+                        Ty::Bool => {
+                            // Unbox: checkcast Boolean; booleanValue(). Bool
+                            // doesn't share the Number parent, so kotlinc
+                            // casts to the concrete `java/lang/Boolean`.
+                            // Mirrors the Function<N>.invoke()→Boolean
+                            // shape kotlinc emits for typealias
+                            // `Predicate = (Int) -> Boolean` callbacks.
+                            let ci = cp.class("java/lang/Boolean");
+                            code.push(0xC0); // checkcast
+                            code.write_u16::<BigEndian>(ci).unwrap();
+                            let m = cp.methodref("java/lang/Boolean", "booleanValue", "()Z");
+                            code.push(0xB6); // invokevirtual
+                            code.write_u16::<BigEndian>(m).unwrap();
+                        }
                         Ty::Long => {
                             let ci = cp.class("java/lang/Number");
                             code.push(0xC0);
