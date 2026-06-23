@@ -493,6 +493,61 @@ impl Drop for FnLambdaParamTysScope {
 }
 
 thread_local! {
+    /// `(fn_name, param_idx) → receiver_class_name` for top-level
+    /// fn parameters typed `T.() -> R` (extension function type).
+    /// Lets a top-level-fn call site (`html { ... }`) install a
+    /// `LambdaReceiverHintScope` so bare member calls inside the
+    /// trailing lambda body (`add("a")`) dispatch as
+    /// `recv.method(...)` rather than failing implicit-this lookup.
+    /// Populated in `lower_file` alongside `FN_LAMBDA_PARAM_TYS`.
+    static FN_LAMBDA_RECEIVER_CLASS:
+        std::cell::RefCell<rustc_hash::FxHashMap<(String, usize), String>> =
+        std::cell::RefCell::new(rustc_hash::FxHashMap::default());
+}
+
+/// Extract the receiver class name from `f`'s parameter at `param_idx`
+/// when it's typed `T.() -> R` (extension function type). None for
+/// plain function types `(A, B) -> R` and non-function types.
+fn fn_param_lambda_receiver_class(f: skotch_ast::KtFun<'_>, param_idx: usize) -> Option<String> {
+    let plist = f.value_parameter_list()?;
+    let target = plist.parameters().nth(param_idx)?;
+    let ft = target.type_reference()?.function_type()?;
+    ft.return_type()?;
+    let recv = ft.receiver()?;
+    recv.type_reference()
+        .and_then(|rtr| rtr.user_type())
+        .or_else(|| skotch_ast::first_typed_child::<skotch_ast::KtUserType<'_>>(recv.syntax()))
+        .and_then(|u| u.name())
+        .map(String::from)
+}
+
+fn record_fn_lambda_receiver_class(name: &str, param_idx: usize, recv_class: String) {
+    FN_LAMBDA_RECEIVER_CLASS.with(|c| {
+        c.borrow_mut()
+            .insert((name.to_string(), param_idx), recv_class);
+    });
+}
+
+fn lookup_fn_lambda_receiver_class(name: &str, param_idx: usize) -> Option<String> {
+    FN_LAMBDA_RECEIVER_CLASS.with(|c| c.borrow().get(&(name.to_string(), param_idx)).cloned())
+}
+
+struct FnLambdaReceiverClassScope {
+    prev: rustc_hash::FxHashMap<(String, usize), String>,
+}
+impl FnLambdaReceiverClassScope {
+    fn new() -> Self {
+        let prev = FN_LAMBDA_RECEIVER_CLASS.with(|c| std::mem::take(&mut *c.borrow_mut()));
+        Self { prev }
+    }
+}
+impl Drop for FnLambdaReceiverClassScope {
+    fn drop(&mut self) {
+        FN_LAMBDA_RECEIVER_CLASS.with(|c| *c.borrow_mut() = std::mem::take(&mut self.prev));
+    }
+}
+
+thread_local! {
     /// File-scoped side table mapping a lifted local-fn name to the
     /// ordered list of captured outer-scope names. Populated in
     /// `lower_file` BEFORE function bodies are lowered, so call sites
@@ -1255,6 +1310,7 @@ pub fn lower_file(
     // Populate per-file fn-lambda-param hints from the source decls
     // BEFORE bodies lower so call sites can look them up.
     let _fn_lambda_param_tys_scope = FnLambdaParamTysScope::new();
+    let _fn_lambda_receiver_class_scope = FnLambdaReceiverClassScope::new();
     for decl in file.decls() {
         if let KtDecl::Fun(f) = decl {
             if let Some(name) = f.name() {
@@ -1263,11 +1319,20 @@ pub fn lower_file(
                         if let Some(tys) = fn_param_lambda_tys_from_decl(f, i) {
                             record_fn_lambda_param_tys(name, i, tys);
                         }
+                        if let Some(rc) = fn_param_lambda_receiver_class(f, i) {
+                            record_fn_lambda_receiver_class(name, i, rc);
+                        }
                     }
                 }
             }
         }
     }
+    // (Cross-file top-level fns: `ExternalFunDecl` does not currently
+    // carry per-param receiver_class metadata — only `ExternalParam`
+    // on methods/ctors does. Cross-file `T.() -> R` callee dispatch
+    // would need a side channel through resolve; out of scope for this
+    // focused fix. The in-file case above is what graduates the
+    // common shape.)
 
     // Pre-pass: collect top-level fn name → (FuncId, ret Ty). Built
     // before classes/funs are processed so class method bodies can
@@ -14714,7 +14779,14 @@ fn try_lower_multi_stmt_block_with_offset(
                                             callee_name,
                                             arg_slots.len(),
                                         );
+                                        let recv_class_hint = lookup_fn_lambda_receiver_class(
+                                            callee_name,
+                                            arg_slots.len(),
+                                        );
                                         let _hint_scope = LambdaParamTyHintScope::new(hint);
+                                        let _recv_hint = recv_class_hint.as_ref().map(|rc| {
+                                            LambdaReceiverHintScope::new(Some(rc.clone()))
+                                        });
                                         let slot = lower_rich_expr_to_slot(
                                             le,
                                             &lookup,
@@ -19871,6 +19943,25 @@ fn try_lower_multi_stmt_block_with_offset(
                                             .find(|(name, _)| name == n)
                                             .map(|(_, l)| *l)
                                     };
+                                    // For a top-level fn whose trailing
+                                    // lambda param is typed `T.() -> R`,
+                                    // install LambdaReceiverHintScope so
+                                    // bare member calls inside the lambda
+                                    // body dispatch as `recv.method(...)`.
+                                    // The trailing lambda's param_idx is
+                                    // `arg_slots.len()` — only positional
+                                    // value args were pushed so far.
+                                    let lambda_param_idx = arg_slots.len();
+                                    let recv_class_hint =
+                                        lookup_fn_lambda_receiver_class(name, lambda_param_idx);
+                                    let _ty_hint = recv_class_hint.as_ref().map(|rc| {
+                                        LambdaParamTyHintScope::new(Some(vec![Ty::Class(
+                                            rc.clone(),
+                                        )]))
+                                    });
+                                    let _recv_hint = recv_class_hint
+                                        .as_ref()
+                                        .map(|rc| LambdaReceiverHintScope::new(Some(rc.clone())));
                                     let s = lower_rich_expr_to_slot(
                                         le,
                                         &lookup,
