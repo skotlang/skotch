@@ -1091,6 +1091,7 @@ pub fn lower_file(
                 exception_handlers: Vec::new(),
                 is_suspend: decl.is_suspend,
                 is_inline: decl.is_inline,
+                is_tailrec: false,
                 has_type_params: false,
                 suspend_original_return_ty: None,
                 suspend_state_machine: None,
@@ -1330,6 +1331,7 @@ pub fn lower_file(
                         exception_handlers: Vec::new(),
                         is_suspend: m.is_suspend,
                         is_inline: m.is_inline,
+                        is_tailrec: false,
                         has_type_params: false,
                         suspend_original_return_ty: None,
                         suspend_state_machine: None,
@@ -1408,6 +1410,7 @@ pub fn lower_file(
                             exception_handlers: Vec::new(),
                             is_suspend: m.is_suspend,
                             is_inline: m.is_inline,
+                            is_tailrec: false,
                             has_type_params: false,
                             suspend_original_return_ty: None,
                             suspend_state_machine: None,
@@ -1449,6 +1452,7 @@ pub fn lower_file(
                 exception_handlers: Vec::new(),
                 is_suspend: false,
                 is_inline: false,
+                is_tailrec: false,
                 has_type_params: false,
                 suspend_original_return_ty: None,
                 suspend_state_machine: None,
@@ -1861,6 +1865,7 @@ pub fn lower_file(
                         exception_handlers: Vec::new(),
                         is_suspend: false,
                         is_inline: false,
+                        is_tailrec: false,
                         has_type_params: false,
                         suspend_original_return_ty: None,
                         suspend_state_machine: None,
@@ -2061,6 +2066,7 @@ pub fn lower_file(
                                 exception_handlers: Vec::new(),
                                 is_suspend: false,
                                 is_inline: false,
+                                is_tailrec: false,
                                 has_type_params: false,
                                 suspend_original_return_ty: None,
                                 suspend_state_machine: None,
@@ -2165,6 +2171,7 @@ pub fn lower_file(
                         exception_handlers: Vec::new(),
                         is_suspend: false,
                         is_inline: false,
+                        is_tailrec: false,
                         has_type_params: false,
                         suspend_original_return_ty: None,
                         suspend_state_machine: None,
@@ -2228,6 +2235,7 @@ pub fn lower_file(
                         exception_handlers: Vec::new(),
                         is_suspend: false,
                         is_inline: false,
+                        is_tailrec: false,
                         has_type_params: false,
                         suspend_original_return_ty: None,
                         suspend_state_machine: None,
@@ -2437,6 +2445,7 @@ pub fn lower_file(
                         exception_handlers: Vec::new(),
                         is_suspend: false,
                         is_inline: false,
+                        is_tailrec: false,
                         has_type_params: false,
                         suspend_original_return_ty: None,
                         suspend_state_machine: None,
@@ -2618,6 +2627,7 @@ pub fn lower_file(
                 exception_handlers: Vec::new(),
                 is_suspend: false,
                 is_inline: false,
+                is_tailrec: false,
                 has_type_params: false,
                 suspend_original_return_ty: None,
                 suspend_state_machine: None,
@@ -2717,6 +2727,7 @@ pub fn lower_file(
                 exception_handlers: Vec::new(),
                 is_suspend: false,
                 is_inline: false,
+                is_tailrec: false,
                 has_type_params: false,
                 suspend_original_return_ty: None,
                 suspend_state_machine: None,
@@ -2811,6 +2822,7 @@ pub fn lower_file(
                     exception_handlers: Vec::new(),
                     is_suspend: false,
                     is_inline: false,
+                    is_tailrec: false,
                     has_type_params: false,
                     suspend_original_return_ty: None,
                     suspend_state_machine: None,
@@ -3595,6 +3607,59 @@ pub fn lower_file(
                     }
                 }
             }
+            // Tailrec TCO: rewrite each self-recursive tail call (a block
+            // ending with `Assign(t, Call(Static(self_id), args)); ReturnValue(t)`)
+            // into `<param_i := arg_i, ...>; Goto(block 0)`. kotlinc emits
+            // the same `store args; goto 0` loop for `tailrec` functions —
+            // without this rewrite, deep recursion (e.g. `sumTo(100_000)`)
+            // blows the JVM stack even though the source is byte-identical
+            // to a tail call.
+            //
+            // Safety guard: we skip TCO when an arg is itself a parameter
+            // (e.g. `f(b, a)` swap). Param-to-param aliasing would lose data
+            // because the sequential stores would clobber earlier values.
+            // The MIR's BinOp/Sub/Add etc results live in fresh temps,
+            // so the typical `f(n - 1, acc + n)` pattern is safe.
+            if f.is_tailrec() {
+                use skotch_mir::{CallKind, Rvalue, Stmt as MStmt};
+                let self_fid = FuncId(local_fn_id_base + fn_id);
+                let param_set: rustc_hash::FxHashSet<u32> = params.iter().map(|p| p.0).collect();
+                for block in blocks.iter_mut() {
+                    // Pattern: last stmt is self-call into `dest`,
+                    // terminator returns that same `dest`, and call args
+                    // contain no params (safety guard above).
+                    let pattern = match (block.stmts.last(), &block.terminator) {
+                        (
+                            Some(MStmt::Assign {
+                                dest,
+                                value:
+                                    Rvalue::Call {
+                                        kind: CallKind::Static(callee),
+                                        args,
+                                    },
+                            }),
+                            Terminator::ReturnValue(ret),
+                        ) if *callee == self_fid
+                            && *ret == *dest
+                            && args.len() == params.len()
+                            && !args.iter().any(|a| param_set.contains(&a.0)) =>
+                        {
+                            Some(args.clone())
+                        }
+                        _ => None,
+                    };
+                    if let Some(arg_locals) = pattern {
+                        block.stmts.pop();
+                        for (i, arg_local) in arg_locals.iter().enumerate() {
+                            block.stmts.push(MStmt::Assign {
+                                dest: params[i],
+                                value: Rvalue::Local(*arg_local),
+                            });
+                        }
+                        block.terminator = Terminator::Goto(0);
+                    }
+                }
+            }
             module.functions.push(MirFunction {
                 // Re-base local fn_id by the number of cross-file
                 // stubs already in `module.functions` so the FuncId
@@ -3615,6 +3680,7 @@ pub fn lower_file(
                 exception_handlers,
                 is_suspend,
                 is_inline: f.is_inline(),
+                is_tailrec: f.is_tailrec(),
                 has_type_params: f
                     .type_parameter_list()
                     .map(|tpl| tpl.parameters().next().is_some())
@@ -11423,6 +11489,7 @@ fn lower_local_helper_body(
         exception_handlers: Vec::new(),
         is_suspend: false,
         is_inline: false,
+        is_tailrec: false,
         has_type_params: false,
         suspend_original_return_ty: None,
         suspend_state_machine: None,
@@ -11495,6 +11562,7 @@ fn build_helper_stub(spec: &LocalHelperSpec<'_>) -> MirFunction {
         exception_handlers: Vec::new(),
         is_suspend: false,
         is_inline: false,
+        is_tailrec: false,
         has_type_params: false,
         suspend_original_return_ty: None,
         suspend_state_machine: None,
@@ -19515,6 +19583,7 @@ fn lower_rich_expr_to_slot(
             exception_handlers: Vec::new(),
             is_suspend: false,
             is_inline: false,
+            is_tailrec: false,
             has_type_params: false,
             suspend_original_return_ty: None,
             suspend_state_machine: None,
@@ -19584,6 +19653,7 @@ fn lower_rich_expr_to_slot(
             exception_handlers: Vec::new(),
             is_suspend: false,
             is_inline: false,
+            is_tailrec: false,
             has_type_params: false,
             suspend_original_return_ty: None,
             suspend_state_machine: None,
@@ -19900,6 +19970,7 @@ fn lower_rich_expr_to_slot(
                 exception_handlers: Vec::new(),
                 is_suspend: false,
                 is_inline: false,
+                is_tailrec: false,
                 has_type_params: false,
                 suspend_original_return_ty: None,
                 suspend_state_machine: None,
@@ -19960,6 +20031,7 @@ fn lower_rich_expr_to_slot(
             exception_handlers: Vec::new(),
             is_suspend: false,
             is_inline: false,
+            is_tailrec: false,
             has_type_params: false,
             suspend_original_return_ty: None,
             suspend_state_machine: None,
@@ -28166,6 +28238,7 @@ fn constructor_from_primary_impl(
         exception_handlers: Vec::new(),
         is_suspend: false,
         is_inline: false,
+        is_tailrec: false,
         has_type_params: false,
         suspend_original_return_ty: None,
         suspend_state_machine: None,
@@ -28312,6 +28385,7 @@ fn collect_secondary_ctors(c: skotch_ast::KtClass<'_>) -> Vec<MirFunction> {
             exception_handlers: Vec::new(),
             is_suspend: false,
             is_inline: false,
+            is_tailrec: false,
             has_type_params: false,
             suspend_original_return_ty: None,
             suspend_state_machine: None,
@@ -31550,6 +31624,7 @@ fn method_from_fun_with_class(
         exception_handlers: Vec::new(),
         is_suspend,
         is_inline: f.is_inline(),
+        is_tailrec: f.is_tailrec(),
         has_type_params: f
             .type_parameter_list()
             .map(|tpl| tpl.parameters().next().is_some())
@@ -31765,6 +31840,7 @@ fn collect_class_methods(
                     exception_handlers: Vec::new(),
                     is_suspend: false,
                     is_inline: false,
+                    is_tailrec: false,
                     has_type_params: false,
                     suspend_original_return_ty: None,
                     suspend_state_machine: None,
@@ -31849,6 +31925,7 @@ fn collect_class_methods(
                 exception_handlers: Vec::new(),
                 is_suspend: false,
                 is_inline: false,
+                is_tailrec: false,
                 has_type_params: false,
                 suspend_original_return_ty: None,
                 suspend_state_machine: None,
@@ -31937,6 +32014,7 @@ fn empty_constructor_super(class_name: &str, super_class: &str) -> MirFunction {
         exception_handlers: Vec::new(),
         is_suspend: false,
         is_inline: false,
+        is_tailrec: false,
         has_type_params: false,
         suspend_original_return_ty: None,
         suspend_state_machine: None,

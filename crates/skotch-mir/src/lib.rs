@@ -441,6 +441,13 @@ pub struct MirFunction {
     /// inlined at call sites rather than emitted as a separate method.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub is_inline: bool,
+    /// True for `tailrec fun` declarations. The JVM backend rewrites
+    /// self-recursive tail calls (`return f(...)`) into a goto-to-entry
+    /// loop. Without this, `tailrec fun sumTo(n: Int, acc: Long)`-style
+    /// deep recursion blows the JVM stack at runtime even though kotlinc
+    /// compiles it to a constant-stack loop.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub is_tailrec: bool,
     /// True when the source declaration had type parameters
     /// (`fun <T> identity(x: T): T`). Generic type variables erase to
     /// `Ty::Any` on the JVM but kotlinc skips

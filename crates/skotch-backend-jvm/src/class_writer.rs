@@ -5458,16 +5458,36 @@ fn emit_method_body(
                     break;
                 }
             }
-            if !has_pred && bi == 0 {
-                // Block 0 with no predecessors: the initial-live JVM slots
-                // are the function's parameter slots. Use the WIDE-AWARE
-                // count — `func.params.len()` undercounts when any param
-                // is Double/Long (each takes 2 slots), which silently
-                // dropped later params from the live set and produced a
-                // `Bad local variable type` VerifyError at the first
-                // SMT frame that needs them.
-                for (s, val) in inherited.iter_mut().enumerate() {
-                    *val = s < (initial_param_slots as usize);
+            if bi == 0 {
+                // Block 0's live-IN always includes the function's
+                // parameter slots (the JVM seeds them before the first
+                // instruction). When block 0 has no predecessors, this
+                // IS the entire live-IN set. When it has back-edge
+                // predecessors (e.g. a tailrec function with
+                // `Terminator::Goto(0)`), we intersect the back-edge's
+                // live_at_end with the param slots — args are always
+                // re-stored before the goto, so the params stay live.
+                // Use the WIDE-AWARE param-slot count — `func.params.len()`
+                // undercounts when any param is Double/Long (each takes 2
+                // slots), silently dropping later params from the live
+                // set and producing a `Bad local variable type`
+                // VerifyError at the first SMT frame that needs them.
+                if !has_pred {
+                    for (s, val) in inherited.iter_mut().enumerate() {
+                        *val = s < (initial_param_slots as usize);
+                    }
+                } else {
+                    // Force param slots to live regardless of what the
+                    // back-edge says (params are seeded by the JVM).
+                    for s in 0..(initial_param_slots as usize).min(inherited.len()) {
+                        inherited[s] = true;
+                    }
+                    // Slots beyond the params are NOT live at function entry,
+                    // regardless of what the back-edge claims (the JVM doesn't
+                    // initialize them on first entry to offset 0).
+                    for s in (initial_param_slots as usize)..inherited.len() {
+                        inherited[s] = false;
+                    }
                 }
             } else if !has_pred {
                 inherited = vec![false; max_slots];
@@ -5856,6 +5876,22 @@ fn emit_method_body(
                 }
                 if !any_pred {
                     merged = vec![false; max_slots];
+                }
+
+                // Back-edge to method entry (tailrec `goto 0`): the JVM's
+                // initial frame at offset 0 only has the function's
+                // parameter slots. Temps that were live at the END of
+                // the back-edge predecessor are NOT live at offset 0 —
+                // restrict the merged set to the param slots so the
+                // SMT frame at offset 0 matches the JVM's initial frame.
+                // Without this, the StackMapTable claims temp slots are
+                // live at method entry and the verifier rejects with
+                // "Bad type array size" or "Instruction type does not
+                // match stack map".
+                if *target_bi == 0 {
+                    for s in 0..merged.len() {
+                        merged[s] = s < (initial_param_slots as usize);
+                    }
                 }
 
                 let num_locals = merged
