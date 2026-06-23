@@ -9288,6 +9288,13 @@ fn lower_loop_body_blocks(
     // Recognize a `return` arm in an if/else and produce
     // an index pointing into the if-arm's source location
     // so we can re-extract its expr later.
+    //
+    // IMPORTANT: `bl.statements()` filters by KtExpr so it SKIPS
+    // KtProperty (val/var declarations). A naive 1-statement check
+    // mis-classifies `{ val x = …; return Y }` as a return-only arm
+    // and silently drops the val. Count ACTUAL statements via the
+    // block's SilNode children, filtering for KtExpr OR KtProperty,
+    // and only accept blocks whose sole statement is the Return.
     fn extract_arm_return(arm: Option<KtExpr<'_>>) -> bool {
         let Some(arm) = arm.map(unwrap_parens) else {
             return false;
@@ -9296,10 +9303,18 @@ fn lower_loop_body_blocks(
             return true;
         }
         if let KtExpr::Block(bl) = arm {
-            let s: Vec<KtExpr<'_>> = bl.statements().collect();
-            if s.len() == 1 {
-                return matches!(s[0], KtExpr::Return(_));
+            let mut stmt_count = 0usize;
+            let mut last_is_return = false;
+            for c in skotch_ast::children(bl.syntax()) {
+                if let Some(e) = KtExpr::cast(c) {
+                    stmt_count += 1;
+                    last_is_return = matches!(e, KtExpr::Return(_));
+                } else if skotch_ast::KtProperty::cast(c).is_some() {
+                    stmt_count += 1;
+                    last_is_return = false;
+                }
             }
+            return stmt_count == 1 && last_is_return;
         }
         false
     }
