@@ -894,6 +894,195 @@ fn lookup_class_field_map_value_ty(class_name: &str, field_name: &str) -> Option
     })
 }
 
+thread_local! {
+    /// Slots that hold a `kotlin/jvm/internal/Ref$ObjectRef` box wrapping
+    /// a local var captured-and-mutated by a lambda. Reads of these slots
+    /// emit `getfield element`; writes emit `putfield element`. The
+    /// boxing is necessary because lambda captures are by-value in JVM,
+    /// and a Java-side write to a captured primitive/object slot would
+    /// only update the lambda's local copy. kotlinc applies this same
+    /// transformation when an `inline fun` body's lambda escapes (e.g.
+    /// Runnable) and writes back to an outer `var`.
+    static OBJECT_REF_SLOTS: std::cell::RefCell<rustc_hash::FxHashSet<u32>> =
+        std::cell::RefCell::new(rustc_hash::FxHashSet::default());
+}
+
+fn record_object_ref_slot(slot: u32) {
+    OBJECT_REF_SLOTS.with(|c| {
+        c.borrow_mut().insert(slot);
+    });
+}
+
+fn is_object_ref_slot(slot: u32) -> bool {
+    OBJECT_REF_SLOTS.with(|c| c.borrow().contains(&slot))
+}
+
+/// JVM internal name for `kotlin.jvm.internal.Ref.ObjectRef`.
+const REF_OBJECT_REF_CLASS: &str = "kotlin/jvm/internal/Ref$ObjectRef";
+/// Field name on Ref$ObjectRef holding the boxed value.
+const REF_OBJECT_REF_ELEMENT: &str = "element";
+
+/// Emit `box.element = value` for a Ref$ObjectRef-typed `box_slot`.
+/// Stages the value into a `Ty::Any` slot first so the PutField
+/// descriptor matches the declared `element:Ljava/lang/Object;` rather
+/// than the value's narrower Ty (which would otherwise reach the
+/// backend's value-Ty fallback for stdlib classes not in MIR).
+fn emit_object_ref_putfield(
+    box_slot: skotch_mir::LocalId,
+    value_slot: skotch_mir::LocalId,
+    next_slot: &mut u32,
+    stmts: &mut Vec<skotch_mir::Stmt>,
+    local_tys: &mut Vec<Ty>,
+) {
+    use skotch_mir::{LocalId, Stmt as MStmt};
+    let any_slot = LocalId(*next_slot);
+    *next_slot += 1;
+    local_tys.push(Ty::Any);
+    stmts.push(MStmt::Assign {
+        dest: any_slot,
+        value: skotch_mir::Rvalue::Local(value_slot),
+    });
+    let unused = LocalId(*next_slot);
+    *next_slot += 1;
+    local_tys.push(Ty::Unit);
+    stmts.push(MStmt::Assign {
+        dest: unused,
+        value: skotch_mir::Rvalue::PutField {
+            receiver: box_slot,
+            class_name: REF_OBJECT_REF_CLASS.to_string(),
+            field_name: REF_OBJECT_REF_ELEMENT.to_string(),
+            value: any_slot,
+        },
+    });
+}
+
+/// Emit `box.element` load into a fresh `Ty::Any` slot; returns the
+/// new slot id. Counterpart of `emit_object_ref_putfield`.
+fn emit_object_ref_getfield(
+    box_slot: skotch_mir::LocalId,
+    next_slot: &mut u32,
+    stmts: &mut Vec<skotch_mir::Stmt>,
+    local_tys: &mut Vec<Ty>,
+) -> skotch_mir::LocalId {
+    use skotch_mir::{LocalId, Stmt as MStmt};
+    let unboxed = LocalId(*next_slot);
+    *next_slot += 1;
+    local_tys.push(Ty::Any);
+    stmts.push(MStmt::Assign {
+        dest: unboxed,
+        value: skotch_mir::Rvalue::GetField {
+            receiver: box_slot,
+            class_name: REF_OBJECT_REF_CLASS.to_string(),
+            field_name: REF_OBJECT_REF_ELEMENT.to_string(),
+        },
+    });
+    unboxed
+}
+
+/// If `stmt` is `name = expr` and `name` resolves to a Ref$ObjectRef
+/// box slot, emit `box.element = expr` and return true. Used by the
+/// lambda body lowering paths so an assignment-as-stmt (which Kotlin
+/// types as Unit but `lower_rich_expr_to_slot` can't model) succeeds.
+fn try_emit_object_ref_assign(
+    stmt: skotch_ast::KtExpr<'_>,
+    lookup: &dyn Fn(&str) -> Option<skotch_mir::LocalId>,
+    fn_lookup: &rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)>,
+    next_slot: &mut u32,
+    stmts: &mut Vec<skotch_mir::Stmt>,
+    local_tys: &mut Vec<Ty>,
+    strings: &mut Vec<String>,
+) -> bool {
+    use skotch_ast::KtExpr;
+    let KtExpr::Binary(b) = stmt else {
+        return false;
+    };
+    if b.operation().map(|o| o.text()).as_deref() != Some("=") {
+        return false;
+    }
+    let Some(KtExpr::Reference(lref)) = b.lhs().map(unwrap_parens) else {
+        return false;
+    };
+    let Some(lname) = lref.name() else {
+        return false;
+    };
+    let Some(lhs_slot) = lookup(lname) else {
+        return false;
+    };
+    if !is_object_ref_slot(lhs_slot.0) {
+        return false;
+    }
+    let Some(rhs) = b.rhs().map(unwrap_parens) else {
+        return false;
+    };
+    let Some(rhs_slot) =
+        lower_rich_expr_to_slot(rhs, lookup, fn_lookup, next_slot, stmts, local_tys, strings)
+    else {
+        return false;
+    };
+    emit_object_ref_putfield(lhs_slot, rhs_slot, next_slot, stmts, local_tys);
+    true
+}
+
+/// Pre-scan a body's statements to find `var` names that are mutated
+/// inside a trailing-lambda body (`var x = …; later { x = … }`). Those
+/// vars must be boxed in `Ref$ObjectRef` so the lambda's writeback is
+/// visible to the enclosing scope after the lambda runs. Narrow scope:
+/// trailing-lambda arg only, direct top-level `name = …` writes inside
+/// the lambda body.
+fn collect_vars_mutated_by_trailing_lambdas(
+    body_children: &[&skotch_sil::SilNode],
+) -> rustc_hash::FxHashSet<String> {
+    use skotch_ast::KtExpr;
+    let mut var_names: rustc_hash::FxHashSet<String> = rustc_hash::FxHashSet::default();
+    for bn in body_children {
+        if let Some(prop) = skotch_ast::KtProperty::cast(bn) {
+            if prop.is_var() {
+                if let Some(n) = prop.name() {
+                    var_names.insert(n.to_string());
+                }
+            }
+        }
+    }
+    let mut targets: rustc_hash::FxHashSet<String> = rustc_hash::FxHashSet::default();
+    if var_names.is_empty() {
+        return targets;
+    }
+    for bn in body_children {
+        let Some(KtExpr::Call(call)) = KtExpr::cast(bn).map(unwrap_parens) else {
+            continue;
+        };
+        let Some(la) = call.lambda_argument() else {
+            continue;
+        };
+        let Some(KtExpr::Lambda(lambda)) = skotch_ast::children(la.syntax())
+            .iter()
+            .find_map(KtExpr::cast)
+        else {
+            continue;
+        };
+        let Some(body) = lambda.function_literal().and_then(|fl| fl.body()) else {
+            continue;
+        };
+        for stmt in body.statements() {
+            let KtExpr::Binary(b) = unwrap_parens(stmt) else {
+                continue;
+            };
+            if b.operation().map(|o| o.text()).as_deref() != Some("=") {
+                continue;
+            }
+            let Some(KtExpr::Reference(lref)) = b.lhs().map(unwrap_parens) else {
+                continue;
+            };
+            if let Some(n) = lref.name() {
+                if var_names.contains(n) {
+                    targets.insert(n.to_string());
+                }
+            }
+        }
+    }
+    targets
+}
+
 /// Returns Some(ValueTy) for a KtTypeReference shaped like `Map<K,V>` /
 /// `MutableMap<K,V>` / `HashMap<K,V>` / `LinkedHashMap<K,V>`; None
 /// otherwise. Map.get(K) returns Ty::Any at the JDK level — this
@@ -1470,6 +1659,24 @@ pub fn lower_file(
                         if let Some(rc) = fn_param_lambda_receiver_class(f, i) {
                             record_fn_lambda_receiver_class(name, i, rc);
                         }
+                    }
+                }
+            }
+        }
+    }
+    // Cross-file top-level fns: register their lambda-typed params so
+    // call sites in this file can resolve the lambda arity (Function0
+    // vs Function1) when invoking a `crossinline body: () -> Unit`-
+    // shaped fn defined in another file. Without this, the synthesized
+    // Lambda$N defaults to Function1 (the implicit-`it` shape), and
+    // the cross-file `body()` dispatch crashes with
+    // IncompatibleClassChangeError.
+    if let Some(syms) = package_symbols {
+        for (fname, overloads) in &syms.functions {
+            for f in overloads {
+                for (i, p) in f.param_tys.iter().enumerate() {
+                    if let Ty::Function { params, .. } = p {
+                        record_fn_lambda_param_tys(fname, i, params.clone());
                     }
                 }
             }
@@ -8870,6 +9077,11 @@ fn lower_loop_body(
         }
         pending.clear();
     }
+    // Pre-scan for `var` names captured-and-mutated by trailing lambdas.
+    // Each such name will be boxed in a `Ref$ObjectRef` so the lambda's
+    // writeback is visible after the call returns (kotlinc's shape for
+    // an `inline fun` whose lambda escapes via Runnable, Callable, etc.).
+    let must_box_vars = collect_vars_mutated_by_trailing_lambdas(body_children);
     for bn in body_children {
         let bn: &skotch_sil::SilNode = bn;
         // Pre-flush: if this iteration is NOT a `val name = launch{...}`
@@ -8909,6 +9121,54 @@ fn lower_loop_body(
                 // For `val x = LITERAL` the slot directly holds the
                 // const (no temp). Distinguish by KW_VAR.
                 if prop.is_var() {
+                    // Captured-and-mutated by a trailing lambda? Box
+                    // into a `Ref$ObjectRef` so the lambda's writeback
+                    // is observable post-call.
+                    if must_box_vars.contains(pname) {
+                        // Allocate the box: `new Ref$ObjectRef();`
+                        // The Constructor call takes NO args (the
+                        // backend implicitly threads `dest` as the
+                        // uninitialized receiver from the prior
+                        // NewInstance — passing `[box_slot]` here would
+                        // be parsed as a user arg and yield a bogus
+                        // `(Ref$ObjectRef;)V` descriptor).
+                        let box_slot = LocalId(*next_slot);
+                        *next_slot += 1;
+                        local_tys.push(Ty::Class(REF_OBJECT_REF_CLASS.to_string()));
+                        body_mstmts.push(MStmt::Assign {
+                            dest: box_slot,
+                            value: skotch_mir::Rvalue::NewInstance(
+                                REF_OBJECT_REF_CLASS.to_string(),
+                            ),
+                        });
+                        body_mstmts.push(MStmt::Assign {
+                            dest: box_slot,
+                            value: skotch_mir::Rvalue::Call {
+                                kind: skotch_mir::CallKind::Constructor(
+                                    REF_OBJECT_REF_CLASS.to_string(),
+                                ),
+                                args: vec![],
+                            },
+                        });
+                        // Stage the initial literal into a temp.
+                        let init_slot = LocalId(*next_slot);
+                        *next_slot += 1;
+                        local_tys.push(ty);
+                        body_mstmts.push(MStmt::Assign {
+                            dest: init_slot,
+                            value: skotch_mir::Rvalue::Const(k),
+                        });
+                        emit_object_ref_putfield(
+                            box_slot,
+                            init_slot,
+                            next_slot,
+                            &mut body_mstmts,
+                            local_tys,
+                        );
+                        record_object_ref_slot(box_slot.0);
+                        name_to_local.push((pname.to_string(), box_slot));
+                        continue;
+                    }
                     let tmp = LocalId(*next_slot);
                     *next_slot += 1;
                     local_tys.push(ty.clone());
@@ -9347,11 +9607,20 @@ fn lower_loop_body(
                 }
                 let arg_slot_opt: Option<LocalId> = match &arg_exprs[0] {
                     KtExpr::Reference(rr) => rr.name().and_then(|an| {
-                        name_to_local
+                        let raw = name_to_local
                             .iter()
                             .rev()
                             .find(|(name, _)| name == an)
-                            .map(|(_, l)| *l)
+                            .map(|(_, l)| *l)?;
+                        if is_object_ref_slot(raw.0) {
+                            return Some(emit_object_ref_getfield(
+                                raw,
+                                next_slot,
+                                &mut body_mstmts,
+                                local_tys,
+                            ));
+                        }
+                        Some(raw)
                     }),
                     other => {
                         if let Some((k, ty)) = literal_to_const(other, strings) {
@@ -10063,6 +10332,38 @@ fn lower_loop_body(
                 continue;
             }
             let lhs_slot = lhs_local?;
+            // Boxed `var` write-back: when the lhs slot is a
+            // `Ref$ObjectRef` (allocated by the var-decl path when the
+            // var is captured-and-mutated by a lambda), the assignment
+            // becomes `box.element = rhs` via PutField. Compound ops
+            // (+=, -=, etc.) load the current element, BinOp, then
+            // PutField — same shape as the class-field handler above.
+            if op_text == "=" && compound_op.is_none() && is_object_ref_slot(lhs_slot.0) {
+                let snap = name_to_local.clone();
+                let lookup = |n: &str| -> Option<LocalId> {
+                    snap.iter()
+                        .rev()
+                        .find(|(name, _)| name == n)
+                        .map(|(_, l)| *l)
+                };
+                let rhs_slot = lower_rich_expr_to_slot(
+                    rhs,
+                    &lookup,
+                    fn_lookup_ref,
+                    next_slot,
+                    &mut body_mstmts,
+                    local_tys,
+                    strings,
+                )?;
+                emit_object_ref_putfield(
+                    lhs_slot,
+                    rhs_slot,
+                    next_slot,
+                    &mut body_mstmts,
+                    local_tys,
+                );
+                continue;
+            }
             let resolve = |e: KtExpr<'_>,
                            next_slot: &mut u32,
                            local_tys: &mut Vec<Ty>,
@@ -21690,6 +21991,15 @@ fn lower_inline_expr_to_slot(
         KtExpr::Reference(r) => {
             let n = r.name()?;
             if let Some(slot) = lookup_name(n) {
+                // Boxed `var` capture: emit `getfield element` to unbox.
+                if is_object_ref_slot(slot.0) {
+                    return Some(emit_object_ref_getfield(
+                        slot,
+                        next_slot,
+                        pre_stmts,
+                        extra_locals,
+                    ));
+                }
                 return Some(slot);
             }
             // Implicit `this.field` fallback for class-method bodies:
@@ -22682,6 +22992,14 @@ fn lower_rich_expr_to_slot(
                     field_name: cap_name.clone(),
                 },
             });
+            // Propagate Ref$ObjectRef boxing into the lambda invoke
+            // scope: the capture field IS a Ref$ObjectRef (kotlinc's
+            // shape for var-captured-by-escaping-lambda), so reads of
+            // `cap_name` inside the body unbox via getfield element,
+            // and writes (`cap_name = …`) putfield element back.
+            if matches!(cap_ty, Ty::Class(c) if c == REF_OBJECT_REF_CLASS) {
+                record_object_ref_slot(field_slot.0);
+            }
             snap_locals.push((cap_name.clone(), field_slot));
         }
         // Unbox prologue: scan the body for primitive arithmetic use
@@ -22910,6 +23228,31 @@ fn lower_rich_expr_to_slot(
                         terminator: Terminator::ReturnValue(result_slot),
                     },
                 ]
+            } else if try_emit_object_ref_assign(
+                body_stmts[0],
+                &lookup,
+                fn_lookup,
+                &mut next_slot_inv,
+                &mut pre_stmts_inv,
+                &mut extra_locals_inv,
+                strings,
+            ) {
+                // Single-stmt lambda body that just writes to a
+                // captured `Ref$ObjectRef` — synthesize a Unit return.
+                let unit_slot = LocalId(next_slot_inv);
+                #[allow(unused_assignments)]
+                {
+                    next_slot_inv += 1;
+                }
+                extra_locals_inv.push(Ty::Unit);
+                pre_stmts_inv.push(MStmt::Assign {
+                    dest: unit_slot,
+                    value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Unit),
+                });
+                vec![BasicBlock {
+                    stmts: pre_stmts_inv,
+                    terminator: Terminator::ReturnValue(unit_slot),
+                }]
             } else {
                 let result_slot = lower_rich_expr_to_slot(
                     body_stmts[0],
@@ -22934,6 +23277,21 @@ fn lower_rich_expr_to_slot(
             let mut last_slot: Option<LocalId> = None;
             let mut all_ok = true;
             for stmt in &body_stmts {
+                // Special-case assignment to a captured `Ref$ObjectRef`
+                // — `lower_rich_expr_to_slot` doesn't model assignment-
+                // as-expression so without this the whole body bails.
+                if try_emit_object_ref_assign(
+                    *stmt,
+                    &lookup,
+                    fn_lookup,
+                    &mut next_slot_inv,
+                    &mut pre_stmts_inv,
+                    &mut extra_locals_inv,
+                    strings,
+                ) {
+                    last_slot = None;
+                    continue;
+                }
                 if let Some(s) = lower_rich_expr_to_slot(
                     *stmt,
                     &lookup,
@@ -29549,6 +29907,7 @@ fn lower_simple_body(
     // function B's lookup.
     LIST_ELEMENT_TY.with(|c| c.borrow_mut().clear());
     MAP_VALUE_TY.with(|c| c.borrow_mut().clear());
+    OBJECT_REF_SLOTS.with(|c| c.borrow_mut().clear());
 
     // Install cross-file val lookup so lower_rich's Reference
     // fallback can emit GetStaticField for bare references to
