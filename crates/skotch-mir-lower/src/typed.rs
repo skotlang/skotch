@@ -6615,7 +6615,19 @@ fn lower_loop_body(
                     };
                     let mut probe_slot = *next_slot;
                     let mut probe_stmts: Vec<MStmt> = Vec::new();
-                    let mut probe_extra: Vec<Ty> = Vec::new();
+                    // Seed probe_extra with the body walker's current
+                    // `local_tys` so the inner lower_rich_expr_to_slot
+                    // can resolve `Ty::Class(...)` on locals already
+                    // stored (e.g. `val pairs = nums.zip(nums)` →
+                    // slot N has Ty::Class("java/util/List")). Without
+                    // this seed, `slot_ty_with_param_fallback(N, &[])`
+                    // returns Ty::Any, the Reference-receiver
+                    // collection-method arm rejects the dispatch, and
+                    // the entire template lowering bails — leaving the
+                    // outer fallback to emit invalid bytecode for the
+                    // ${recv.method(...)} expression.
+                    let prefix_len = local_tys.len();
+                    let mut probe_extra: Vec<Ty> = local_tys.clone();
                     if let Some((concat_kind, parts)) = try_lower_println_template_with_rich_lookup(
                         &call,
                         strings,
@@ -6626,7 +6638,10 @@ fn lower_loop_body(
                         Some(fn_lookup_ref),
                     ) {
                         *next_slot = probe_slot;
-                        local_tys.extend(probe_extra);
+                        // Append only the new Tys (slots allocated
+                        // inside the probe), not the seeded prefix
+                        // which was already in local_tys.
+                        local_tys.extend(probe_extra.drain(prefix_len..));
                         body_mstmts.extend(probe_stmts);
                         let result_slot = LocalId(*next_slot);
                         *next_slot += 1;
@@ -19599,12 +19614,22 @@ fn lower_rich_expr_to_slot(
                         let result_slot = LocalId(*next_slot);
                         *next_slot += 1;
                         extra_locals.push(Ty::Any);
+                        // Use VirtualJava with an explicit Object-typed
+                        // descriptor — Map.get's JDK signature is
+                        // `(Ljava/lang/Object;)Ljava/lang/Object;`. The
+                        // Virtual variant would derive the descriptor
+                        // from the arg slot's Ty, producing e.g.
+                        // `(Ljava/lang/String;)Ljava/lang/Object;`
+                        // when the key is a String literal — NoSuchMethod
+                        // at link time.
                         pre_stmts.push(MStmt::Assign {
                             dest: result_slot,
                             value: skotch_mir::Rvalue::Call {
-                                kind: skotch_mir::CallKind::Virtual {
+                                kind: skotch_mir::CallKind::VirtualJava {
                                     class_name: "java/util/Map".to_string(),
                                     method_name: "get".to_string(),
+                                    descriptor: "(Ljava/lang/Object;)Ljava/lang/Object;"
+                                        .to_string(),
                                 },
                                 args: vec![array_slot, boxed_idx],
                             },
