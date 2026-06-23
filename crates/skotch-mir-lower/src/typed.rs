@@ -30370,7 +30370,7 @@ fn constructor_from_primary_impl(
     // String-literal initializers were silently dropped.
     let mut scratch_strings: Vec<String> = Vec::new();
     let has_shared_strings = module_strings.is_some();
-    let mut strings: &mut Vec<String> = match module_strings {
+    let strings: &mut Vec<String> = match module_strings {
         Some(s) => s,
         None => &mut scratch_strings,
     };
@@ -30644,7 +30644,7 @@ fn constructor_from_primary_impl(
                 &mut next_slot,
                 &mut stmts,
                 &mut locals,
-                &mut strings,
+                strings,
             );
             if let Some(val_slot) = maybe_slot {
                 // Reject if any string interning occurred — the
@@ -31764,8 +31764,7 @@ fn method_simple_body_full(
                                     let KtExpr::Return(r) = last else {
                                         return None;
                                     };
-                                    let pre: Vec<KtExpr<'a>> =
-                                        s[..s.len() - 1].iter().copied().collect();
+                                    let pre: Vec<KtExpr<'a>> = s[..s.len() - 1].to_vec();
                                     (pre, r)
                                 }
                                 _ => return None,
