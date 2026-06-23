@@ -10219,15 +10219,29 @@ fn lower_loop_body_blocks(
                         .find(|(name, _)| name == n)
                         .map(|(_, l)| *l)
                 };
-                let cmp_slot = lower_rich_expr_to_slot(
-                    cond_expr,
-                    &lookup,
-                    fn_lookup_ref,
-                    next_slot,
-                    &mut cur_stmts,
-                    local_tys,
-                    strings,
-                )?;
+                // Detect top-level `&&` / `||` short-circuit. Without this,
+                // `lower_rich_expr_to_slot` collapses the operands into a
+                // single MulI/AddI slot — semantically wrong when an rhs
+                // operand has side effects or can crash (e.g.
+                // `i < n && s[i] == '*'` reads `s[i]` even when `i >= n`).
+                let (cond_shape, cond_operands) = classify_cond_chain(cond_expr);
+                let multi_cond = cond_operands.len() > 1
+                    && matches!(cond_shape, CondShape::AllAnd | CondShape::AnyOr);
+                let cmp_slot = if multi_cond {
+                    // Defer lowering — operand-per-block emission happens
+                    // below after we've reserved block IDs for the chain.
+                    LocalId(0)
+                } else {
+                    lower_rich_expr_to_slot(
+                        cond_expr,
+                        &lookup,
+                        fn_lookup_ref,
+                        next_slot,
+                        &mut cur_stmts,
+                        local_tys,
+                        strings,
+                    )?
+                };
                 // Build a "return block" for each
                 // return-arm; the other arm is either a
                 // jump-back (Goto join) or a non-return.
@@ -10280,7 +10294,14 @@ fn lower_loop_body_blocks(
                     })
                 };
                 let cond_block_id = block_offset + blocks.len() as u32;
-                let then_block_id = cond_block_id + 1;
+                // When `&&` / `||` short-circuit is in play, each conjunct
+                // gets its own cond block; reserve (N - 1) extra IDs.
+                let n_cond = if multi_cond {
+                    cond_operands.len() as u32
+                } else {
+                    1
+                };
+                let then_block_id = cond_block_id + n_cond;
                 // kotlinc materializes an `if (..) return ..` as a
                 // value-producing expression: the false branch falls
                 // through into a synthetic Unit-assignment block before
@@ -10299,14 +10320,56 @@ fn lower_loop_body_blocks(
                 } else {
                     (None, then_block_id + 1)
                 };
-                blocks.push(BasicBlock {
-                    stmts: std::mem::take(&mut cur_stmts),
-                    terminator: Terminator::Branch {
-                        cond: cmp_slot,
-                        then_block: then_block_id,
-                        else_block: else_block_id.unwrap_or(after_block_id),
-                    },
-                });
+                if multi_cond {
+                    // Emit one cond block per conjunct/disjunct. The first
+                    // absorbs the accumulated `cur_stmts` prefix; the rest
+                    // contain only their own cmp emit.
+                    let true_target = then_block_id;
+                    let false_target = else_block_id.unwrap_or(after_block_id);
+                    let mut prefix_stmts = std::mem::take(&mut cur_stmts);
+                    for (k, operand) in cond_operands.iter().enumerate() {
+                        let is_last = (k as u32 + 1) >= n_cond;
+                        let next_cmp_id = cond_block_id + (k as u32 + 1);
+                        let (on_true, on_false) = match cond_shape {
+                            CondShape::AllAnd => {
+                                let t = if is_last { true_target } else { next_cmp_id };
+                                (t, false_target)
+                            }
+                            CondShape::AnyOr => {
+                                let f = if is_last { false_target } else { next_cmp_id };
+                                (true_target, f)
+                            }
+                            CondShape::Single => unreachable!(),
+                        };
+                        let mut cmp_stmts: Vec<MStmt> = std::mem::take(&mut prefix_stmts);
+                        let cmp_slot_k = lower_rich_expr_to_slot(
+                            *operand,
+                            &lookup,
+                            fn_lookup_ref,
+                            next_slot,
+                            &mut cmp_stmts,
+                            local_tys,
+                            strings,
+                        )?;
+                        blocks.push(BasicBlock {
+                            stmts: cmp_stmts,
+                            terminator: Terminator::Branch {
+                                cond: cmp_slot_k,
+                                then_block: on_true,
+                                else_block: on_false,
+                            },
+                        });
+                    }
+                } else {
+                    blocks.push(BasicBlock {
+                        stmts: std::mem::take(&mut cur_stmts),
+                        terminator: Terminator::Branch {
+                            cond: cmp_slot,
+                            then_block: then_block_id,
+                            else_block: else_block_id.unwrap_or(after_block_id),
+                        },
+                    });
+                }
                 // Then-block:
                 if then_is_return {
                     let then_re = extract_inner_return(then_arm);
