@@ -28838,6 +28838,52 @@ fn lower_simple_body(
     // Parenthesized passthrough: `(literal)` or `(a + b)`.
     let body_expr = unwrap_parens(body_expr);
 
+    // Trailing-lambda coroutine builder used as an expression body:
+    // `fun main() = runBlocking { ... }`. The runBlocking call itself
+    // would otherwise bail through `lower_rich_expr_to_slot` (kind=Call
+    // with a Lambda arg), leaving the whole function empty. Since the
+    // lambda body runs sequentially in the caller's thread for
+    // `runBlocking`, treat the lambda body as if it were the function
+    // body and route it through the block-body lowering paths. This
+    // produces partial coverage even when nested suspend / launch /
+    // async calls in the body individually bail — the surviving stmts
+    // (println, val with simple init, etc.) still emit bytecode rather
+    // than disappearing along with the whole function.
+    if let KtExpr::Call(call) = &body_expr {
+        if let Some(KtExpr::Reference(callee_ref)) = call.callee() {
+            if let Some(name) = callee_ref.name() {
+                if skotch_types::intrinsics::is_coroutine_builder(name) {
+                    if let Some(lambda_arg) = call.lambda_argument() {
+                        if let Some(lambda_expr) = skotch_ast::children(lambda_arg.syntax())
+                            .iter()
+                            .find_map(KtExpr::cast)
+                        {
+                            if let KtExpr::Lambda(lambda) = lambda_expr {
+                                if let Some(func_lit) = lambda.function_literal() {
+                                    if let Some(lambda_body) = func_lit.body() {
+                                        if let Some((blocks, locals)) =
+                                            try_lower_multi_stmt_block_inner(
+                                                lambda_body,
+                                                f,
+                                                strings,
+                                                fn_lookup,
+                                                val_lookup,
+                                                class_lookup,
+                                                wrapper_class,
+                                            )
+                                        {
+                                            return (blocks, locals);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // Array length access: `fun len(arr: IntArray): Int = arr.size`.
     // Emits Rvalue::ArrayLength on the array param slot.
     if let KtExpr::DotQualified(dq) = &body_expr {
