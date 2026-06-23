@@ -2051,13 +2051,24 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
                 continue;
             }
             // Skip fields that look like synthetic compose/coroutine
-            // internals (label, $stable, captured vars `$capture$N`).
-            // These aren't source-level properties.
-            if field.name == "label"
-                || field.name == "$stable"
-                || field.name.starts_with('$')
-                || field.name.starts_with("$capture")
+            // internals (`label`, `$stable`, captured vars `$capture$N`,
+            // `$`-prefixed slots). These appear only on lambda /
+            // suspend-lambda classes — gating on those flags keeps the
+            // skip from swallowing user properties that happen to be
+            // named `label` (fixture 50-modifiers-and-delegation:
+            // `var label: String by Observable(...)`).
+            let is_internal_class = class.is_lambda || class.is_suspend_lambda;
+            if is_internal_class
+                && (field.name == "label"
+                    || field.name == "$stable"
+                    || field.name.starts_with('$')
+                    || field.name.starts_with("$capture"))
             {
+                continue;
+            }
+            // `$stable` is a Compose-generated marker on user classes too —
+            // never expose a getter for it regardless of class kind.
+            if !is_internal_class && field.name == "$stable" {
                 continue;
             }
             method_blobs2.push(emit_instance_property_getter(
@@ -11148,11 +11159,13 @@ fn emit_mir_segment(
                             }
                             // Auto-synthesized getter for a non-@JvmField,
                             // non-synthetic field. Mirror the gating in
-                            // `compile_user_class` (line ~1960).
+                            // `compile_user_class` (line ~1960). `c` is
+                            // a non-lambda user class here (we returned
+                            // early above for lambda classes), so user
+                            // properties named `label` DO get getters.
                             c.fields.iter().any(|f| {
                                 f.name == *field_name
                                     && !f.is_jvm_field
-                                    && f.name != "label"
                                     && f.name != "$stable"
                                     && !f.name.starts_with('$')
                             })
@@ -15324,10 +15337,11 @@ fn walk_block(
                             if module.is_lambda_class(field_class) {
                                 return false;
                             }
+                            // `c` is a non-lambda user class; user
+                            // properties named `label` DO get getters.
                             c.fields.iter().any(|f| {
                                 f.name == *field_name
                                     && !f.is_jvm_field
-                                    && f.name != "label"
                                     && f.name != "$stable"
                                     && !f.name.starts_with('$')
                             })

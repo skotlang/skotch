@@ -767,6 +767,25 @@ impl<'a> KtProperty<'a> {
         None
     }
 
+    /// Expression after the `by` keyword: `var n by Observable(0)` →
+    /// the `Observable(0)` Call expression. Returns `None` when the
+    /// property is not delegated.
+    pub fn delegate_expression(self) -> Option<KtExpr<'a>> {
+        let mut after_by = false;
+        for c in children(self.syntax()) {
+            if c.kind == SyntaxKind::KW_BY {
+                after_by = true;
+                continue;
+            }
+            if after_by {
+                if let Some(e) = KtExpr::cast(c) {
+                    return Some(e);
+                }
+            }
+        }
+        None
+    }
+
     pub fn destructuring(self) -> Option<KtDestructuringDeclaration<'a>> {
         first_typed_child(self.syntax())
     }

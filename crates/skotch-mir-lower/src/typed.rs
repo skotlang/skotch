@@ -1699,7 +1699,8 @@ pub fn lower_file(
                 &val_lookup,
                 &module.wrapper_class,
             );
-            let constructor = constructor_from_primary_with_fn_lookup(c, &name, &fn_lookup);
+            let constructor =
+                constructor_from_primary_with_fn_lookup(c, &name, &fn_lookup, &mut module.strings);
             // Companion object handling: if the class body has a
             // `companion object [Name] { ... }`, emit a sibling
             // MirClass `<Outer>$<Companion>` and point the outer's
@@ -27504,18 +27505,20 @@ fn constructor_from_primary_with_fn_lookup(
     c: skotch_ast::KtClass<'_>,
     class_name: &str,
     fn_lookup: &rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)>,
+    module_strings: &mut Vec<String>,
 ) -> MirFunction {
-    constructor_from_primary_impl(c, class_name, fn_lookup)
+    constructor_from_primary_impl(c, class_name, fn_lookup, Some(module_strings))
 }
 
 fn constructor_from_primary(c: skotch_ast::KtClass<'_>, class_name: &str) -> MirFunction {
-    constructor_from_primary_impl(c, class_name, &rustc_hash::FxHashMap::default())
+    constructor_from_primary_impl(c, class_name, &rustc_hash::FxHashMap::default(), None)
 }
 
 fn constructor_from_primary_impl(
     c: skotch_ast::KtClass<'_>,
     class_name: &str,
     fn_lookup: &rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)>,
+    module_strings: Option<&mut Vec<String>>,
 ) -> MirFunction {
     let params_iter: Vec<_> = c
         .primary_constructor()
@@ -27648,23 +27651,67 @@ fn constructor_from_primary_impl(
     //      - zero-arg top-level fn call: `val y = compute()` →
     //        Call(Static) + PutField
     let mut next_slot = (1 + user_param_count) as u32;
-    let mut strings: Vec<String> = Vec::new();
+    // When called from the top-level lowering pass, route through the
+    // module's shared strings table so String literal initializers
+    // (`val s: String = "hello"`) get a valid StringId that the JVM
+    // backend's constant-pool emitter resolves to the actual text.
+    // Without `module_strings`, the prior scratch Vec collided IDs and
+    // String-literal initializers were silently dropped.
+    let mut scratch_strings: Vec<String> = Vec::new();
+    let has_shared_strings = module_strings.is_some();
+    let strings: &mut Vec<String> = match module_strings {
+        Some(s) => s,
+        None => &mut scratch_strings,
+    };
     if let Some(body) = c.body() {
         for d in body.declarations() {
             let KtDecl::Property(prop) = d else { continue };
             let Some(field_name) = prop.name() else {
                 continue;
             };
-            let Some(init) = prop.initializer() else {
-                continue;
+            // Recognize the `by <ClassName>(<literal>)` delegate
+            // shape and extract the literal as the effective field
+            // initializer. This is a narrow pattern match (no
+            // delegate-pattern semantics emitted) — it just keeps the
+            // backing field initialized so subsequent reads observe
+            // the right value (fixture 50-modifiers-and-delegation:
+            // `var n: Int by Observable(0)` should yield `c.n == 0`).
+            // Property writes/reads then go through normal field +
+            // synthesized getter/setter, bypassing the delegate
+            // object's `getValue`/`setValue` ops — those semantic
+            // hooks aren't modeled yet.
+            let init = match prop.initializer() {
+                Some(i) => unwrap_parens(i),
+                None => {
+                    let Some(de) = prop.delegate_expression() else {
+                        continue;
+                    };
+                    let de = unwrap_parens(de);
+                    let skotch_ast::KtExpr::Call(call) = &de else {
+                        continue;
+                    };
+                    let Some(arg_list) = call.value_argument_list() else {
+                        continue;
+                    };
+                    let mut args = arg_list.arguments();
+                    let Some(arg0) = args.next() else { continue };
+                    if args.next().is_some() {
+                        continue;
+                    }
+                    let Some(arg_expr) = arg0.expression() else {
+                        continue;
+                    };
+                    unwrap_parens(arg_expr)
+                }
             };
-            let init = unwrap_parens(init);
             // 3a. Literal init.
-            if let Some((const_val, ty)) = literal_to_const(&init, &mut strings) {
-                // String literal initializers aren't supported until we plumb
-                // a shared strings table into class lowering — interned IDs
-                // would collide with the module's table.
-                if matches!(const_val, skotch_mir::MirConst::String(_)) {
+            if let Some((const_val, ty)) = literal_to_const(&init, strings) {
+                // String literal initializers require a shared strings
+                // table. When called from a nested-class context that
+                // hasn't been wired through `module.strings`, the
+                // collected IDs would collide with the module's table —
+                // drop them on the floor in that case (same as before).
+                if matches!(const_val, skotch_mir::MirConst::String(_)) && !has_shared_strings {
                     continue;
                 }
                 let val_slot = skotch_mir::LocalId(next_slot);
