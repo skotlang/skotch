@@ -3394,6 +3394,30 @@ pub fn lower_file(
                 let Some(cname) = c.name() else { continue };
                 let mut methods: rustc_hash::FxHashMap<String, Ty> =
                     rustc_hash::FxHashMap::default();
+                // Class type-param erasure: methods whose declared
+                // return type is a class type parameter (e.g.
+                // `fun peek(): T` in `class MinHeap<T>`) must register
+                // as Ty::Any rather than Ty::Class("T"), or downstream
+                // primitive-context use (`v > heap.peek()`) produces
+                // `int, Class("T")` on the operand stack and the
+                // verifier rejects the comparison. Mirrors the field
+                // erase at collect_class_methods.
+                let tp_names: std::collections::HashSet<String> = c
+                    .type_parameter_list()
+                    .map(|tpl| {
+                        tpl.parameters()
+                            .filter_map(|tp| tp.name().map(String::from))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let erase_tp = |ty: Ty| -> Ty {
+                    if let Ty::Class(n) = &ty {
+                        if tp_names.contains(n) {
+                            return Ty::Any;
+                        }
+                    }
+                    ty
+                };
                 // Primary-ctor val/var → synthesized `getX` getter.
                 if let Some(pc) = c.primary_constructor() {
                     if let Some(plist) = pc.value_parameter_list() {
@@ -3411,7 +3435,7 @@ pub fn lower_file(
                     for d in body.declarations() {
                         if let KtDecl::Fun(f) = d {
                             if let Some(mname) = f.name() {
-                                methods.insert(mname.to_string(), resolve_ret_ty(&f));
+                                methods.insert(mname.to_string(), erase_tp(resolve_ret_ty(&f)));
                             }
                         }
                         // Body-declared property → synthesized `getX`
@@ -4181,6 +4205,17 @@ pub fn lower_file(
         fixup_call_return_locals(&mut c.constructor, &class_methods, &fn_returns);
     }
 
+    // Unbox-on-primitive-context fixup: see fixup_cmp_unbox below.
+    for f in &mut module.functions {
+        fixup_cmp_unbox(f);
+    }
+    for c in &mut module.classes {
+        for m in &mut c.methods {
+            fixup_cmp_unbox(m);
+        }
+        fixup_cmp_unbox(&mut c.constructor);
+    }
+
     // Optional MIR dump for debugging. Gated on `SKOTCH_DUMP_MIR` env
     // var (one or more `Wrapper.method` patterns, comma-separated).
     // Same shape as the post-compose dump in skotch-compose; useful
@@ -4189,6 +4224,119 @@ pub fn lower_file(
     skotch_mir::dump::maybe_dump_module(&module, "post-mir-lower");
 
     module
+}
+
+/// Insert CHECKCAST java/lang/Number + INVOKEVIRTUAL <T>Value() before
+/// any BinOp Cmp or ArrayStore where one operand is primitive numeric
+/// and the other (or the value) is a reference type — covers generic
+/// methods returning their type-parameter (erased to Ty::Any).
+fn fixup_cmp_unbox(f: &mut MirFunction) {
+    use skotch_mir::{BinOp, LocalId, Rvalue, Stmt};
+    let is_prim = |t: &Ty| {
+        matches!(
+            t,
+            Ty::Int
+                | Ty::Long
+                | Ty::Float
+                | Ty::Double
+                | Ty::Bool
+                | Ty::Byte
+                | Ty::Short
+                | Ty::Char
+        )
+    };
+    let is_ref = |t: &Ty| matches!(t, Ty::Any | Ty::Class(_) | Ty::Nullable(_));
+    let unbox_md = |t: &Ty| match t {
+        Ty::Long => ("longValue", "()J"),
+        Ty::Float => ("floatValue", "()F"),
+        Ty::Double => ("doubleValue", "()D"),
+        _ => ("intValue", "()I"),
+    };
+    let emit_unbox =
+        |src: LocalId, prim_ty: &Ty, locals: &mut Vec<Ty>, out: &mut Vec<Stmt>| -> LocalId {
+            let cast = LocalId(locals.len() as u32);
+            locals.push(Ty::Class("java/lang/Number".to_string()));
+            out.push(Stmt::Assign {
+                dest: cast,
+                value: Rvalue::CheckCast {
+                    obj: src,
+                    target_class: "java/lang/Number".to_string(),
+                },
+            });
+            let unboxed = LocalId(locals.len() as u32);
+            locals.push(prim_ty.clone());
+            let (mn, md) = unbox_md(prim_ty);
+            out.push(Stmt::Assign {
+                dest: unboxed,
+                value: Rvalue::Call {
+                    kind: skotch_mir::CallKind::VirtualJava {
+                        class_name: "java/lang/Number".to_string(),
+                        method_name: mn.to_string(),
+                        descriptor: md.to_string(),
+                    },
+                    args: vec![cast],
+                },
+            });
+            unboxed
+        };
+    for blk in f.blocks.iter_mut() {
+        let mut new_stmts: Vec<Stmt> = Vec::with_capacity(blk.stmts.len());
+        for stmt in std::mem::take(&mut blk.stmts) {
+            let Stmt::Assign { dest, value } = stmt;
+            match value {
+                Rvalue::BinOp { op, lhs, rhs }
+                    if matches!(
+                        op,
+                        BinOp::CmpLt | BinOp::CmpGt | BinOp::CmpLe | BinOp::CmpGe
+                    ) =>
+                {
+                    let lt = f.locals.get(lhs.0 as usize).cloned().unwrap_or(Ty::Any);
+                    let rt = f.locals.get(rhs.0 as usize).cloned().unwrap_or(Ty::Any);
+                    let (mut nl, mut nr) = (lhs, rhs);
+                    if is_prim(&lt) && is_ref(&rt) {
+                        nr = emit_unbox(rhs, &lt, &mut f.locals, &mut new_stmts);
+                    } else if is_prim(&rt) && is_ref(&lt) {
+                        nl = emit_unbox(lhs, &rt, &mut f.locals, &mut new_stmts);
+                    }
+                    new_stmts.push(Stmt::Assign {
+                        dest,
+                        value: Rvalue::BinOp {
+                            op,
+                            lhs: nl,
+                            rhs: nr,
+                        },
+                    });
+                }
+                Rvalue::ArrayStore {
+                    array,
+                    index,
+                    value: val,
+                } => {
+                    let at = f.locals.get(array.0 as usize).cloned().unwrap_or(Ty::Any);
+                    let vt = f.locals.get(val.0 as usize).cloned().unwrap_or(Ty::Any);
+                    let nv = match (&at, is_ref(&vt)) {
+                        (Ty::IntArray, true) => {
+                            emit_unbox(val, &Ty::Int, &mut f.locals, &mut new_stmts)
+                        }
+                        (Ty::LongArray, true) => {
+                            emit_unbox(val, &Ty::Long, &mut f.locals, &mut new_stmts)
+                        }
+                        _ => val,
+                    };
+                    new_stmts.push(Stmt::Assign {
+                        dest,
+                        value: Rvalue::ArrayStore {
+                            array,
+                            index,
+                            value: nv,
+                        },
+                    });
+                }
+                other => new_stmts.push(Stmt::Assign { dest, value: other }),
+            }
+        }
+        blk.stmts = new_stmts;
+    }
 }
 
 fn fixup_call_return_locals(
