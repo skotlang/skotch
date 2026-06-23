@@ -808,6 +808,35 @@ fn prop_collection_element_ty(prop: skotch_ast::KtProperty<'_>) -> Option<Ty> {
     tref_collection_element_ty(prop.type_reference()?)
 }
 
+/// When a class-body property has no explicit type annotation, peek at
+/// its initializer and infer a tighter Ty from common stdlib collection
+/// factory calls (`mutableListOf<T>()`, `mutableMapOf()`, etc.). Without
+/// this, the field type collapses to `Ty::Any`, downstream class-method
+/// bodies preload the field as a local with Ty::Any, and `items.add(x)`
+/// dispatch falls through every `Ty::Class(_)` guard in lower_rich. The
+/// inference here only covers the case where the user wrote no
+/// annotation — explicit annotations always win.
+fn infer_collection_factory_ty(init: &skotch_ast::KtExpr<'_>) -> Option<Ty> {
+    use skotch_ast::KtExpr;
+    if let KtExpr::Call(call) = init {
+        if let Some(KtExpr::Reference(r)) = call.callee() {
+            let n = r.name()?;
+            let cls: Option<&str> = match n {
+                "listOf" | "mutableListOf" | "listOfNotNull" | "emptyList" | "arrayListOf" => {
+                    Some("java/util/List")
+                }
+                "setOf" | "mutableSetOf" | "hashSetOf" | "linkedSetOf" | "sortedSetOf"
+                | "emptySet" => Some("java/util/Set"),
+                "mapOf" | "mutableMapOf" | "hashMapOf" | "linkedMapOf" | "sortedMapOf"
+                | "emptyMap" => Some("java/util/Map"),
+                _ => None,
+            };
+            return cls.map(|c| Ty::Class(c.to_string()));
+        }
+    }
+    None
+}
+
 /// Returns Some(ElemTy) for a KtTypeReference shaped like `List<T>` /
 /// `MutableList<T>` / `Iterable<T>` / `Set<T>` / `MutableSet<T>` /
 /// `Collection<T>` / `MutableCollection<T>` / `ArrayList<T>`; None
@@ -32078,12 +32107,18 @@ fn collect_class_fields(c: skotch_ast::KtClass<'_>) -> Vec<skotch_mir::MirField>
                         Some(tr) => resolve_type_ref(tr),
                         // No explicit type annotation: peek at the
                         // initializer literal to infer Int/Long/
-                        // Double/Bool/String. Falls back to Ty::Any
-                        // when the init isn't a simple literal.
+                        // Double/Bool/String, OR at a stdlib
+                        // collection factory call shorthand
+                        // (`val items = mutableListOf<T>()`) to infer
+                        // the resulting Java collection class. Falls
+                        // back to Ty::Any when neither matches.
                         None => p
                             .initializer()
                             .map(unwrap_parens)
                             .and_then(|init| {
+                                if let Some(t) = infer_collection_factory_ty(&init) {
+                                    return Some(t);
+                                }
                                 let mut strings_scratch: Vec<String> = Vec::new();
                                 literal_to_const(&init, &mut strings_scratch).map(|(_, t)| t)
                             })
@@ -35710,7 +35745,23 @@ fn collect_class_methods(
         for d in body.declarations() {
             if let KtDecl::Property(p) = d {
                 if let Some(n) = p.name() {
-                    let ty = p.type_reference().map(resolve_type_ref).unwrap_or(Ty::Any);
+                    // Mirror the field-Ty inference in
+                    // collect_class_fields: when no explicit annotation,
+                    // peek at the initializer for a stdlib collection
+                    // factory shorthand (`val items = mutableListOf()`)
+                    // so the class-method-scope field_names carry a
+                    // tight Ty::Class("java/util/List") rather than
+                    // Ty::Any. Required for `items.add(x)` DotQualified
+                    // dispatch inside method bodies to satisfy the
+                    // `Ty::Class(_)` recv-Ty guard in lower_rich.
+                    let ty = match p.type_reference() {
+                        Some(tr) => resolve_type_ref(tr),
+                        None => p
+                            .initializer()
+                            .map(unwrap_parens)
+                            .and_then(|init| infer_collection_factory_ty(&init))
+                            .unwrap_or(Ty::Any),
+                    };
                     field_names.push((n.to_string(), erase_tp(ty)));
                     // Record collection-element Ty for body properties
                     // with an explicit `: MutableList<Listener>` (etc.)
