@@ -14426,7 +14426,7 @@ fn lower_loop_body_blocks(
                     } else {
                         Vec::new()
                     };
-                    let cmp_slot = lower_rich_expr_to_slot(
+                    let raw_slot = lower_rich_expr_to_slot(
                         *operand,
                         &lookup,
                         fn_lookup_ref,
@@ -14435,6 +14435,34 @@ fn lower_loop_body_blocks(
                         local_tys,
                         strings,
                     )?;
+                    // Unbox to a primitive Bool when the operand returned
+                    // a boxed reference. Without this, the backend's
+                    // Branch emitter falls into the `is_ref` arm and emits
+                    // ifnull/ifnonnull, which always-takes the
+                    // then-branch for a non-null boxed Boolean (the
+                    // Function1.invoke return shape for predicate
+                    // lambdas in `Iterable<T>.countWhere {...}`-style
+                    // extension fns).
+                    let raw_ty = slot_ty_with_param_fallback(raw_slot.0, local_tys);
+                    let cmp_slot = if matches!(raw_ty, Ty::Any | Ty::Nullable(_)) {
+                        let unboxed = skotch_mir::LocalId(*next_slot);
+                        *next_slot += 1;
+                        local_tys.push(Ty::Bool);
+                        block_stmts.push(MStmt::Assign {
+                            dest: unboxed,
+                            value: skotch_mir::Rvalue::Call {
+                                kind: skotch_mir::CallKind::VirtualJava {
+                                    class_name: "java/lang/Boolean".to_string(),
+                                    method_name: "booleanValue".to_string(),
+                                    descriptor: "()Z".to_string(),
+                                },
+                                args: vec![raw_slot],
+                            },
+                        });
+                        unboxed
+                    } else {
+                        raw_slot
+                    };
                     let is_last = (k as u32 + 1) >= n_operands;
                     let next_operand_id = cond_block_id + (k as u32 + 1);
                     let (on_true, on_false) = match cond_shape {
@@ -14654,9 +14682,32 @@ fn try_lower_function_body_via_blocks(
     for _ in 0..slot_offset {
         param_fallback_tys.push(Ty::Any);
     }
+    // Collect this fn's own type-parameter names (e.g. `T`, `R` on
+    // `fun <T, R> Iterable<T>.foldMap(initial: R, ...)`). A param
+    // annotated `R` would otherwise resolve to `Ty::Class("R")` here,
+    // which downstream val-init / var-reassign sites push into
+    // `local_tys` and the backend's `Rvalue::Local` Smart-cast then
+    // emits a `checkcast R` against a literal class named "R"
+    // (NoClassDefFoundError at runtime — there's no class R, type
+    // params are erased to Object).
+    let fn_type_param_names: std::collections::HashSet<String> = f
+        .type_parameter_list()
+        .map(|tpl| {
+            tpl.parameters()
+                .filter_map(|tp| tp.name().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
     if let Some(pl) = f.value_parameter_list() {
         for p in pl.parameters() {
-            let ty = p.type_reference().map(resolve_type_ref).unwrap_or(Ty::Any);
+            let mut ty = p.type_reference().map(resolve_type_ref).unwrap_or(Ty::Any);
+            if !fn_type_param_names.is_empty() {
+                if let Ty::Class(n) = &ty {
+                    if fn_type_param_names.contains(n) {
+                        ty = Ty::Any;
+                    }
+                }
+            }
             param_fallback_tys.push(ty);
         }
     }
