@@ -20065,10 +20065,22 @@ fn lower_inline_expr_to_slot(
                     dest: slot,
                     value: skotch_mir::Rvalue::GetField {
                         receiver: LocalId(0),
-                        class_name,
-                        field_name,
+                        class_name: class_name.clone(),
+                        field_name: field_name.clone(),
                     },
                 });
+                // Forward the field's collection-element Ty onto this
+                // fresh slot so a subsequent `history[i]` ArrayAccess
+                // can recover the element class (e.g. `kotlin/Pair`)
+                // and dispatch `.first`/`.second` via the prop_dispatch
+                // arm. Without this, val-init paths like
+                // `val foo = history[0].first` bail because the array
+                // slot's Ty stays Ty::Any and the Pair element guard
+                // doesn't fire. Mirrors the same registration in
+                // `prebind_class_fields` for the prebound path.
+                if let Some(elem_ty) = lookup_class_field_element_ty(&class_name, &field_name) {
+                    record_list_element_ty(slot.0, elem_ty);
+                }
                 return Some(slot);
             }
             None
@@ -26220,10 +26232,22 @@ fn lower_rich_expr_to_slot(
                     dest: slot,
                     value: skotch_mir::Rvalue::GetField {
                         receiver: LocalId(0),
-                        class_name,
-                        field_name,
+                        class_name: class_name.clone(),
+                        field_name: field_name.clone(),
                     },
                 });
+                // Forward the field's collection-element Ty onto this
+                // fresh slot so a subsequent `history[i]` ArrayAccess
+                // can recover the element class (e.g. `kotlin/Pair`)
+                // and dispatch `.first`/`.second` via the prop_dispatch
+                // arm. Without this, val-init paths like
+                // `val foo = history[0].first` bail because the array
+                // slot's Ty stays Ty::Any and the Pair element guard
+                // doesn't fire. Mirrors the same registration in
+                // `prebind_class_fields` for the prebound path.
+                if let Some(elem_ty) = lookup_class_field_element_ty(&class_name, &field_name) {
+                    record_list_element_ty(slot.0, elem_ty);
+                }
                 return Some(slot);
             }
             // Capitalized name with no local match → likely an
