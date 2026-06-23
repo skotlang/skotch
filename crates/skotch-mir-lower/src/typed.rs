@@ -24048,6 +24048,29 @@ fn lower_rich_expr_to_slot(
                             arg_slots.push(slot);
                         }
                     }
+                    // Trailing lambda: `MinHeap { a, b -> a - b }` (with
+                    // or without parens) places the lambda in
+                    // `call.lambda_argument()`, not in value_argument_list.
+                    // Without consuming it here, the ctor invokes with
+                    // `aconst_null` for the FunctionN param and the JVM's
+                    // checkNotNullParameter intrinsic NPEs at runtime.
+                    if let Some(la) = call.lambda_argument() {
+                        if let Some(le) = skotch_ast::children(la.syntax())
+                            .iter()
+                            .find_map(KtExpr::cast)
+                        {
+                            let slot = lower_rich_expr_to_slot(
+                                le,
+                                lookup_name,
+                                fn_lookup,
+                                next_slot,
+                                pre_stmts,
+                                extra_locals,
+                                strings,
+                            )?;
+                            arg_slots.push(slot);
+                        }
+                    }
                     let new_slot = LocalId(*next_slot);
                     *next_slot += 1;
                     // Map well-known kotlin/* class simple names
@@ -34384,7 +34407,16 @@ fn collect_class_methods(
                     // `xs[i].method(...)` dispatch resolves the
                     // receiver to its real class.
                     if let Some(elem_ty) = prop_collection_element_ty(p) {
-                        record_class_field_element_ty(class_name, n, elem_ty);
+                        // Erase class type params: `items: MutableList<T>`
+                        // gives Ty::Class("T"), which would otherwise drive a
+                        // `checkcast T` at `items[i]` use sites and crash
+                        // with NoClassDefFoundError at runtime. Erased
+                        // (Ty::Any) entries are dropped — the checkcast
+                        // emitter only fires on Ty::Class anyway.
+                        let elem_ty = erase_tp(elem_ty);
+                        if !matches!(elem_ty, Ty::Any) {
+                            record_class_field_element_ty(class_name, n, elem_ty);
+                        }
                     }
                 }
             }
