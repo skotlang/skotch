@@ -8463,6 +8463,41 @@ fn lower_loop_body(
                                     local_tys,
                                     strings,
                                 )?;
+                                // Detect MutableList receivers: when the
+                                // array slot's Ty is a List/MutableList,
+                                // dispatch to `List.set(idx, value)` rather
+                                // than emitting `aastore` (which is for
+                                // primitive Java arrays only — the verifier
+                                // rejects `aastore` against a Ljava/util/List;
+                                // receiver). Covers `items[i] = items[parent]`
+                                // shapes inside while-loop bodies like
+                                // MinHeap.siftUp / siftDown.
+                                let arr_ty = slot_ty_with_param_fallback(array_slot.0, local_tys);
+                                let is_list_recv = matches!(
+                                    &arr_ty,
+                                    Ty::Class(c) if matches!(
+                                        c.as_str(),
+                                        "java/util/List"
+                                            | "java/util/Collection"
+                                            | "kotlin/collections/MutableList"
+                                    )
+                                );
+                                if is_list_recv {
+                                    let unused = LocalId(*next_slot);
+                                    *next_slot += 1;
+                                    local_tys.push(Ty::Any);
+                                    body_mstmts.push(MStmt::Assign {
+                                        dest: unused,
+                                        value: skotch_mir::Rvalue::Call {
+                                            kind: skotch_mir::CallKind::Virtual {
+                                                class_name: "java/util/List".to_string(),
+                                                method_name: "set".to_string(),
+                                            },
+                                            args: vec![array_slot, index_slot, value_slot],
+                                        },
+                                    });
+                                    continue;
+                                }
                                 let unused = LocalId(*next_slot);
                                 *next_slot += 1;
                                 local_tys.push(Ty::Unit);
@@ -24357,6 +24392,13 @@ fn lower_rich_expr_to_slot(
                                             }
                                         }
                                         "remove" => Some(("(Ljava/lang/Object;)Z", Ty::Bool, true)),
+                                        // `MutableList.removeAt(Int)` is a Kotlin
+                                        // extension; the JVM-level call is
+                                        // `java.util.List.remove(I)Object`.
+                                        // Emit `remove(int)` (kotlinc shape):
+                                        // mapping the method name lets the
+                                        // dispatch site below select the right
+                                        // JDK signature.
                                         "removeAt" => {
                                             Some(("(I)Ljava/lang/Object;", Ty::Any, false))
                                         }
@@ -24460,6 +24502,19 @@ fn lower_rich_expr_to_slot(
                                             }
                                         }
                                         if all_ok {
+                                            // Kotlin `removeAt(Int)` →
+                                            // JVM `java.util.List.remove(I)Object`.
+                                            // The source identifier is `removeAt`
+                                            // but `java.util.List` only declares
+                                            // `remove(int)` — emitting the source
+                                            // name caused a NoSuchMethodError at
+                                            // run time. Other source identifiers
+                                            // pass through unchanged.
+                                            let jvm_method = if method_n == "removeAt" {
+                                                "remove"
+                                            } else {
+                                                method_n
+                                            };
                                             let result_slot = LocalId(*next_slot);
                                             *next_slot += 1;
                                             extra_locals.push(ret_ty);
@@ -24468,7 +24523,7 @@ fn lower_rich_expr_to_slot(
                                                 value: skotch_mir::Rvalue::Call {
                                                     kind: skotch_mir::CallKind::VirtualJava {
                                                         class_name: "java/util/List".to_string(),
-                                                        method_name: method_n.to_string(),
+                                                        method_name: jvm_method.to_string(),
                                                         descriptor: desc.to_string(),
                                                     },
                                                     args: arg_slots,
@@ -30113,6 +30168,60 @@ fn method_simple_body_full(
                                     if let (Some(a), Some(i), Some(v)) =
                                         (arr_slot, idx_slot, val_slot)
                                     {
+                                        // Detect MutableList receivers: when
+                                        // `array_expr` is a Reference to a
+                                        // class field whose declared type is
+                                        // a List/MutableList, dispatch to
+                                        // `List.set(idx, value)` instead of
+                                        // emitting `aastore` (which is for
+                                        // primitive Java arrays only — the
+                                        // verifier rejects `aastore` against
+                                        // a `Ljava/util/List;` receiver).
+                                        // Covers `items[i] = items[parent]`
+                                        // shapes inside class methods like
+                                        // MinHeap.siftUp / siftDown / pop.
+                                        let is_list_field = if let KtExpr::Reference(r) = array_expr
+                                        {
+                                            r.name().and_then(|n| {
+                                                field_names
+                                                    .iter()
+                                                    .find(|(nm, _)| nm == n)
+                                                    .map(|(_, ty)| {
+                                                        matches!(
+                                                            ty,
+                                                            Ty::Class(c) if matches!(
+                                                                c.as_str(),
+                                                                "java/util/List"
+                                                                    | "java/util/Collection"
+                                                                    | "kotlin/collections/MutableList"
+                                                            )
+                                                        )
+                                                    })
+                                            }).unwrap_or(false)
+                                        } else {
+                                            false
+                                        };
+                                        if is_list_field {
+                                            // List.set returns Object (the
+                                            // previous element). We don't
+                                            // need the result — push it into
+                                            // a throwaway slot the backend
+                                            // already drops.
+                                            let unused = skotch_mir::LocalId(next_slot_inner);
+                                            next_slot_inner += 1;
+                                            extra_locals_inner.push(Ty::Any);
+                                            pre_stmts_inner.push(skotch_mir::Stmt::Assign {
+                                                dest: unused,
+                                                value: skotch_mir::Rvalue::Call {
+                                                    kind: skotch_mir::CallKind::Virtual {
+                                                        class_name: "java/util/List".to_string(),
+                                                        method_name: "set".to_string(),
+                                                    },
+                                                    args: vec![a, i, v],
+                                                },
+                                            });
+                                            continue;
+                                        }
                                         let unused = skotch_mir::LocalId(next_slot_inner);
                                         next_slot_inner += 1;
                                         extra_locals_inner.push(Ty::Unit);

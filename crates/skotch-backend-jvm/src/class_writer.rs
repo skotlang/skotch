@@ -14675,7 +14675,37 @@ fn walk_block(
                 // fixed up to AddL. Without conversion, the bytecode
                 // emits `iload n; ladd` and the verifier rejects it
                 // because ladd requires two longs (4 stack slots).
-                let lhs_ty = func.locals.get(lhs.0 as usize).cloned().unwrap_or(Ty::Any);
+                let mut lhs_ty = func.locals.get(lhs.0 as usize).cloned().unwrap_or(Ty::Any);
+                // Ordered comparison against an int-ish primitive when the
+                // lhs is a Ty::Any reference (typically a boxed Integer from
+                // Function<N>.invoke whose declared return type is Int —
+                // e.g. `compare(items[i], items[j]) < 0` in MinHeap.kt).
+                // Unbox the lhs to int now so the downstream comparison
+                // path emits `if_icmp<COND>` instead of `if_acmp<COND>`,
+                // which the verifier rejects ("Type integer is not
+                // assignable to reference type").
+                if matches!(lhs_ty, Ty::Any)
+                    && matches!(
+                        op,
+                        MBinOp::CmpLt | MBinOp::CmpLe | MBinOp::CmpGt | MBinOp::CmpGe
+                    )
+                    && matches!(
+                        func.locals.get(rhs.0 as usize),
+                        Some(Ty::Int | Ty::Bool | Ty::Byte | Ty::Short | Ty::Char)
+                    )
+                {
+                    // checkcast java/lang/Number; invokevirtual intValue()I
+                    let ci = cp.class("java/lang/Number");
+                    code.push(0xC0); // checkcast
+                    code.write_u16::<BigEndian>(ci).unwrap();
+                    let m = cp.methodref("java/lang/Number", "intValue", "()I");
+                    code.push(0xB6); // invokevirtual
+                    code.write_u16::<BigEndian>(m).unwrap();
+                    // Stack net change: 0 (Object popped, int pushed; both
+                    // are 1 slot). The effective type for downstream
+                    // comparison emission is now Int.
+                    lhs_ty = Ty::Int;
+                }
                 let wide_promo_opcode: Option<u8> = match (&op, &lhs_ty) {
                     (
                         MBinOp::AddL | MBinOp::SubL | MBinOp::MulL | MBinOp::DivL | MBinOp::ModL,
@@ -14841,7 +14871,11 @@ fn walk_block(
                     | MBinOp::CmpLe
                     | MBinOp::CmpGe => {
                         // Check if we're comparing reference types (String).
-                        let lhs_ty = &func.locals[lhs.0 as usize];
+                        // Use the outer `lhs_ty` (which may have been
+                        // overridden to `Ty::Int` by the unbox-after-load
+                        // pass above when the slot's declared type was
+                        // `Ty::Any` but the stack now holds an int).
+                        let lhs_ty = &lhs_ty;
                         if matches!(lhs_ty, Ty::String)
                             && matches!(op, MBinOp::CmpEq | MBinOp::CmpNe)
                         {
