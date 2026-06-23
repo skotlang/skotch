@@ -26407,24 +26407,47 @@ fn constructor_from_primary_impl(
                             .unwrap_or(0);
                         let intrinsic: Option<(&str, &str, &str, Ty)> =
                             match (callee_name, arg_count) {
-                                // mutableListOf() inlines to `new ArrayList<>()`
-                                // — kotlinc emits it as a direct ArrayList
-                                // constructor rather than a CollectionsKt call.
-                                ("mutableListOf", 0) => {
+                                // mutableListOf() / mutableMapOf() /
+                                // mutableSetOf() inline to direct JDK
+                                // constructors: new ArrayList<>() /
+                                // LinkedHashMap<>() / LinkedHashSet<>().
+                                // kotlinc emits these as the JDK
+                                // constructors directly because the
+                                // no-arg overloads in CollectionsKt /
+                                // MapsKt / SetsKt are PRIVATE in stdlib
+                                // 2.3.0 (only the vararg overloads are
+                                // public). Calling
+                                // MapsKt.mutableMapOf() crashes at
+                                // runtime with IllegalAccessError.
+                                ("mutableListOf", 0)
+                                | ("mutableMapOf", 0)
+                                | ("mutableSetOf", 0) => {
+                                    let (jdk_class, ret_class) = match callee_name {
+                                        "mutableListOf" => {
+                                            ("java/util/ArrayList", "java/util/ArrayList")
+                                        }
+                                        "mutableMapOf" => {
+                                            ("java/util/LinkedHashMap", "java/util/LinkedHashMap")
+                                        }
+                                        "mutableSetOf" => {
+                                            ("java/util/LinkedHashSet", "java/util/LinkedHashSet")
+                                        }
+                                        _ => unreachable!(),
+                                    };
                                     let val_slot = skotch_mir::LocalId(next_slot);
                                     next_slot += 1;
-                                    locals.push(Ty::Class("java/util/ArrayList".to_string()));
+                                    locals.push(Ty::Class(ret_class.to_string()));
                                     stmts.push(skotch_mir::Stmt::Assign {
                                         dest: val_slot,
                                         value: skotch_mir::Rvalue::NewInstance(
-                                            "java/util/ArrayList".to_string(),
+                                            jdk_class.to_string(),
                                         ),
                                     });
                                     stmts.push(skotch_mir::Stmt::Assign {
                                         dest: val_slot,
                                         value: skotch_mir::Rvalue::Call {
                                             kind: skotch_mir::CallKind::ConstructorJava {
-                                                class_name: "java/util/ArrayList".to_string(),
+                                                class_name: jdk_class.to_string(),
                                                 descriptor: "()V".to_string(),
                                             },
                                             args: vec![],
@@ -26441,35 +26464,17 @@ fn constructor_from_primary_impl(
                                     });
                                     continue;
                                 }
-                                ("dummy_unused", 0) => Some((
-                                    "kotlin/collections/CollectionsKt",
-                                    "mutableListOf",
-                                    "()Ljava/util/List;",
-                                    Ty::Class("java/util/List".to_string()),
-                                )),
                                 ("emptyList", 0) => Some((
                                     "kotlin/collections/CollectionsKt",
                                     "emptyList",
                                     "()Ljava/util/List;",
                                     Ty::Class("java/util/List".to_string()),
                                 )),
-                                ("mutableMapOf", 0) => Some((
-                                    "kotlin/collections/MapsKt",
-                                    "mutableMapOf",
-                                    "()Ljava/util/Map;",
-                                    Ty::Class("java/util/Map".to_string()),
-                                )),
                                 ("emptyMap", 0) => Some((
                                     "kotlin/collections/MapsKt",
                                     "emptyMap",
                                     "()Ljava/util/Map;",
                                     Ty::Class("java/util/Map".to_string()),
-                                )),
-                                ("mutableSetOf", 0) => Some((
-                                    "kotlin/collections/SetsKt",
-                                    "mutableSetOf",
-                                    "()Ljava/util/Set;",
-                                    Ty::Class("java/util/Set".to_string()),
                                 )),
                                 ("emptySet", 0) => Some((
                                     "kotlin/collections/SetsKt",
