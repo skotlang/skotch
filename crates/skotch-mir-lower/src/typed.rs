@@ -4307,6 +4307,92 @@ fn fixup_cmp_unbox(f: &mut MirFunction) {
                         },
                     });
                 }
+                // Arithmetic on generic-erased Object slots (e.g. the result
+                // of a `T pop()` returning `Any` getting fed straight into
+                // `iadd` / `imul` / etc.) needs the same CHECKCAST + intValue
+                // unbox the comparison arm applies. Without this fixup,
+                // parity/20-priority-queue-heap's `packed / 3` after
+                // `val packed = heap.pop()` emitted `idiv` against a raw
+                // Object slot → VerifyError "Type 'java/lang/Object' is not
+                // assignable to integer".
+                //
+                // Heuristic: when the BinOp's mnemonic implies a primitive
+                // numeric, unbox any operand whose recorded Ty is still a
+                // reference type. The primitive width is implied by the op
+                // (I/L/F/D suffix).
+                Rvalue::BinOp { op, lhs, rhs }
+                    if matches!(
+                        op,
+                        BinOp::AddI
+                            | BinOp::SubI
+                            | BinOp::MulI
+                            | BinOp::DivI
+                            | BinOp::ModI
+                            | BinOp::AddL
+                            | BinOp::SubL
+                            | BinOp::MulL
+                            | BinOp::DivL
+                            | BinOp::ModL
+                            | BinOp::AddF
+                            | BinOp::SubF
+                            | BinOp::MulF
+                            | BinOp::DivF
+                            | BinOp::AddD
+                            | BinOp::SubD
+                            | BinOp::MulD
+                            | BinOp::DivD
+                            | BinOp::CmpEq
+                            | BinOp::CmpNe
+                    ) =>
+                {
+                    let prim_ty = match op {
+                        BinOp::AddI | BinOp::SubI | BinOp::MulI | BinOp::DivI | BinOp::ModI => {
+                            Ty::Int
+                        }
+                        BinOp::AddL | BinOp::SubL | BinOp::MulL | BinOp::DivL | BinOp::ModL => {
+                            Ty::Long
+                        }
+                        BinOp::AddF | BinOp::SubF | BinOp::MulF | BinOp::DivF => Ty::Float,
+                        BinOp::AddD | BinOp::SubD | BinOp::MulD | BinOp::DivD => Ty::Double,
+                        // CmpEq/CmpNe — width inferred from the other operand
+                        // when one is primitive; defaults to Int for the
+                        // generic-Object case.
+                        _ => Ty::Int,
+                    };
+                    let lt = f.locals.get(lhs.0 as usize).cloned().unwrap_or(Ty::Any);
+                    let rt = f.locals.get(rhs.0 as usize).cloned().unwrap_or(Ty::Any);
+                    // For CmpEq/CmpNe, leave reference-vs-reference comparisons
+                    // alone (acmp), and only unbox the genuine prim-vs-ref
+                    // shape. For arithmetic ops, ANY reference operand is a
+                    // VerifyError waiting to happen, so unbox both sides if
+                    // they're still typed as references.
+                    let is_arith = !matches!(op, BinOp::CmpEq | BinOp::CmpNe);
+                    let (mut nl, mut nr) = (lhs, rhs);
+                    if is_arith {
+                        if is_ref(&lt) {
+                            nl = emit_unbox(lhs, &prim_ty, &mut f.locals, &mut new_stmts);
+                        }
+                        if is_ref(&rt) {
+                            nr = emit_unbox(rhs, &prim_ty, &mut f.locals, &mut new_stmts);
+                        }
+                    } else {
+                        // CmpEq / CmpNe: only unbox when one side is a real
+                        // primitive — the other side becomes the cast target.
+                        if is_prim(&lt) && is_ref(&rt) {
+                            nr = emit_unbox(rhs, &lt, &mut f.locals, &mut new_stmts);
+                        } else if is_prim(&rt) && is_ref(&lt) {
+                            nl = emit_unbox(lhs, &rt, &mut f.locals, &mut new_stmts);
+                        }
+                    }
+                    new_stmts.push(Stmt::Assign {
+                        dest,
+                        value: Rvalue::BinOp {
+                            op,
+                            lhs: nl,
+                            rhs: nr,
+                        },
+                    });
+                }
                 Rvalue::ArrayStore {
                     array,
                     index,
@@ -12150,6 +12236,20 @@ fn lower_loop_body_blocks(
                 let cond_block_id = block_offset + blocks.len() as u32;
                 let n_operands = cond_operands.len() as u32;
                 let then_block_id = cond_block_id + n_operands;
+                // Snapshot name_to_local size BEFORE the arm bodies lower so we
+                // can drop any field-preload bindings the arm appended. Without
+                // this, a `this.field` preload inserted inside the then-arm
+                // (via `class_field_lookup` in `lower_loop_body` / `lower_rich_expr_to_slot`)
+                // remains visible in name_to_local after the arm closes. When a
+                // sibling join block later references the same field, the name
+                // lookup short-circuits to the slot defined ONLY in the arm
+                // block, so the join block's bytecode reads an uninitialized
+                // slot. Reverting the binding here forces the join to emit its
+                // own GetField at its own slot, keeping per-block dataflow
+                // sound. Repro: parity/20-priority-queue-heap MinHeap.pop —
+                // `items.removeAt(...)` inside the then-arm + the same field
+                // call after the if were collapsing to one shared slot.
+                let snap_names_len_pre_arms = name_to_local.len();
                 let then_multi_blocks: Option<Vec<BasicBlock>> = if then_has_control {
                     const SENT_BACK: u32 = 0xfffffffe;
                     const SENT_BREAK: u32 = 0xfffffffd;
@@ -12182,6 +12282,10 @@ fn lower_loop_body_blocks(
                 } else {
                     Vec::new()
                 };
+                // Drop any name bindings the then-arm appended. They reference
+                // GetField slots emitted only inside the arm's block(s) — see
+                // the snapshot comment above.
+                name_to_local.truncate(snap_names_len_pre_arms);
                 // The arm spans `then_block_count` blocks. Default is
                 // 1 (single block from lower_loop_body); for multi-
                 // block arms it's the length of `then_multi_blocks`.
@@ -12248,7 +12352,7 @@ fn lower_loop_body_blocks(
                         }
                     });
                     let else_first_id = then_block_id + then_block_count;
-                    if else_has_control {
+                    let r = if else_has_control {
                         const SENT_BACK: u32 = 0xfffffffe;
                         const SENT_BREAK: u32 = 0xfffffffd;
                         let arm_blocks_v = lower_loop_body_blocks(
@@ -12276,7 +12380,13 @@ fn lower_loop_body_blocks(
                             function_param_names,
                         )?;
                         (Some(else_stmts), Some(else_first_id), etj, None, 1)
-                    }
+                    };
+                    // Same per-arm preload invalidation as the then-arm: drop
+                    // bindings appended during the else-arm so the join block
+                    // re-emits its own GetField loads instead of reading a slot
+                    // defined only inside the else block(s).
+                    name_to_local.truncate(snap_names_len_pre_arms);
+                    r
                 } else {
                     (None, None, None, None, 0)
                 };
