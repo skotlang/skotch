@@ -1831,8 +1831,24 @@ pub fn lower_file(
     // flag) so the toggle reaches mir-lower without re-plumbing every
     // call site through the workspace.
     let strict = std::env::var_os("SKOTCH_STRICT").is_some();
+    // Apply package prefix to the wrapper-class JVM internal name so
+    // `package com.foo.bar` in `Hello.kt` produces `com/foo/bar/HelloKt`
+    // (matches kotlinc). With no package directive, this is a no-op
+    // and the wrapper remains the simple name.
+    let pkg_prefix = file
+        .package_directive()
+        .map(|p| {
+            let name = p.name();
+            if name.is_empty() {
+                String::new()
+            } else {
+                format!("{}/", name.replace('.', "/"))
+            }
+        })
+        .unwrap_or_default();
+    let fq_wrapper_class = format!("{pkg_prefix}{wrapper_class}");
     let mut module = MirModule {
-        wrapper_class: wrapper_class.to_string(),
+        wrapper_class: fq_wrapper_class.clone(),
         ..MirModule::default()
     };
 
@@ -2866,7 +2882,7 @@ pub fn lower_file(
     for decl in file.decls() {
         if let KtDecl::Class(c) = decl {
             let name = match c.name() {
-                Some(n) => n.to_string(),
+                Some(n) => format!("{pkg_prefix}{n}"),
                 None => continue,
             };
             let (super_class, interfaces) = collect_class_super_iface(c.super_type_list());
@@ -3707,7 +3723,7 @@ pub fn lower_file(
     for decl in file.decls() {
         if let KtDecl::Interface(i) = decl {
             let name = match i.name() {
-                Some(n) => n.to_string(),
+                Some(n) => format!("{pkg_prefix}{n}"),
                 None => continue,
             };
             let (_, interfaces) = collect_class_super_iface(i.super_type_list());
@@ -3744,7 +3760,7 @@ pub fn lower_file(
     for decl in file.decls() {
         if let KtDecl::Object(o) = decl {
             let name = match o.name() {
-                Some(n) => n.to_string(),
+                Some(n) => format!("{pkg_prefix}{n}"),
                 None => continue,
             };
             let (super_class, interfaces) = collect_class_super_iface(o.super_type_list());
@@ -3835,7 +3851,7 @@ pub fn lower_file(
     for decl in file.decls() {
         if let KtDecl::EnumClass(e) = decl {
             let name = match e.name() {
-                Some(n) => n.to_string(),
+                Some(n) => format!("{pkg_prefix}{n}"),
                 None => continue,
             };
             let entry_names: Vec<String> = e

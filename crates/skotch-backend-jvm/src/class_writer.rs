@@ -1413,10 +1413,14 @@ fn compile_class(class_name: &str, module: &MirModule) -> Vec<u8> {
     // each attribute name and patch them once the real Utf8 entries are
     // interned. See `patch_attribute_name_placeholders`.
     let code_attr_name_idx = ATTR_PLACEHOLDER_CODE;
-    let source_simple = class_name
+    // SourceFile uses only the simple class name (no package). With a
+    // packaged class like `com/foo/bar/HelloKt`, kotlinc still emits
+    // `SourceFile: "Hello.kt"` — strip the package directory prefix.
+    let simple_name = class_name.rsplit('/').next().unwrap_or(class_name);
+    let source_simple = simple_name
         .strip_suffix("Kt")
         .map(|s| format!("{s}.kt"))
-        .unwrap_or_else(|| format!("{class_name}.kt"));
+        .unwrap_or_else(|| format!("{simple_name}.kt"));
     // SourceFile entries are added LATE — kotlinc registers them after
     // the method-specific entries, so deferring matches its CP layout
     // and keeps invokedynamic/InvokeDynamic CP indices in sync.
@@ -1706,7 +1710,8 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
     let super_class_idx = cp.class(super_name);
     let code_attr_name_idx = cp.utf8("Code");
     let _source_file_attr_name_idx = cp.utf8("SourceFile");
-    let _source_file_value_idx = cp.utf8(&format!("{}.kt", class.name));
+    let _source_file_simple = class.name.rsplit('/').next().unwrap_or(&class.name);
+    let _source_file_value_idx = cp.utf8(&format!("{}.kt", _source_file_simple));
 
     // Pre-register interface entries in constant pool.
     let iface_indices: Vec<u16> = class.interfaces.iter().map(|name| cp.class(name)).collect();
@@ -1882,7 +1887,8 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
     let super2 = cp2.class(super_name);
     let code2 = cp2.utf8("Code");
     let sf_name2 = cp2.utf8("SourceFile");
-    let sf_val2 = cp2.utf8(&format!("{}.kt", class.name));
+    let sf_simple = class.name.rsplit('/').next().unwrap_or(&class.name);
+    let sf_val2 = cp2.utf8(&format!("{}.kt", sf_simple));
     // Pre-register field entries. Each tuple is (name_idx, desc_idx,
     // access_flags).
     let mut field_infos: Vec<(u16, u16, u16)> = Vec::new();
