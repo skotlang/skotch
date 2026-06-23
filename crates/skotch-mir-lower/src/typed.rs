@@ -28314,30 +28314,44 @@ fn method_simple_body_full(
                             mini_ok = false;
                             break;
                         }
-                        fn extract_return(
-                            e: skotch_ast::KtExpr<'_>,
-                        ) -> Option<skotch_ast::KtExpr<'_>> {
+                        // Returns (prefix-stmts, return-value-expr) for a
+                        // then-arm that ends in a `return X` — where the
+                        // prefix-stmts are the (possibly empty) side-effect
+                        // statements that precede the return. Covers:
+                        //   `if (c) return X`           → ([], X)
+                        //   `if (c) { return X }`       → ([], X)
+                        //   `if (c) { e1; e2; return X }` → ([e1, e2], X)
+                        // The prefix-stmts run unconditionally before the
+                        // ReturnValue is emitted, matching kotlinc's shape
+                        // for early-return-with-cleanup bodies.
+                        fn extract_return<'a>(
+                            e: skotch_ast::KtExpr<'a>,
+                        ) -> Option<(Vec<skotch_ast::KtExpr<'a>>, skotch_ast::KtExpr<'a>)>
+                        {
                             use skotch_ast::KtExpr;
                             let e = unwrap_parens(e);
-                            let r = match e {
-                                KtExpr::Return(r) => r,
+                            let (prefix, r) = match e {
+                                KtExpr::Return(r) => (Vec::new(), r),
                                 KtExpr::Block(b) => {
-                                    let s: Vec<KtExpr<'_>> = b.statements().collect();
-                                    if s.len() != 1 {
+                                    let s: Vec<KtExpr<'a>> = b.statements().collect();
+                                    if s.is_empty() {
                                         return None;
                                     }
-                                    if let KtExpr::Return(r) = s[0] {
-                                        r
-                                    } else {
+                                    let last = s[s.len() - 1];
+                                    let KtExpr::Return(r) = last else {
                                         return None;
-                                    }
+                                    };
+                                    let pre: Vec<KtExpr<'a>> =
+                                        s[..s.len() - 1].iter().copied().collect();
+                                    (pre, r)
                                 }
                                 _ => return None,
                             };
-                            skotch_ast::children(r.syntax())
+                            let ret_val = skotch_ast::children(r.syntax())
                                 .iter()
                                 .find_map(KtExpr::cast)
-                                .map(unwrap_parens)
+                                .map(unwrap_parens)?;
+                            Some((prefix, ret_val))
                         }
                         let ret_expr_opt = extract_return(then_arm);
                         // Same shape as extract_return but for `throw`:
@@ -28428,13 +28442,70 @@ fn method_simple_body_full(
                             mini_extra_blocks.push(throw_block);
                             continue;
                         }
-                        if let Some(ret_expr) = ret_expr_opt {
-                            // Lower the return value via lower_rich into a
-                            // fresh stmts vec — that becomes the return-block.
+                        if let Some((prefix_stmts, ret_expr)) = ret_expr_opt {
+                            // Lower any prefix side-effect stmts first
+                            // (e.g. `items.removeAt(0)` before `return top`),
+                            // then the return value, all into a fresh
+                            // stmts vec that becomes the return-block.
+                            // Preload class-field references that appear
+                            // in the prefix stmts or the return expr so
+                            // bare-identifier `items.foo()` resolves to a
+                            // GetField slot rather than failing lookup.
+                            if let Some(cname) = class_name {
+                                for pe in &prefix_stmts {
+                                    prebind_class_fields(
+                                        *pe,
+                                        &mut snap_locals,
+                                        &mut next_slot_inner,
+                                        &mut pre_stmts_inner,
+                                        &mut extra_locals_inner,
+                                        Some(cname),
+                                        field_names,
+                                    );
+                                }
+                                prebind_class_fields(
+                                    ret_expr,
+                                    &mut snap_locals,
+                                    &mut next_slot_inner,
+                                    &mut pre_stmts_inner,
+                                    &mut extra_locals_inner,
+                                    Some(cname),
+                                    field_names,
+                                );
+                            }
+                            let snap_ret = snap_locals.clone();
+                            let lookup_ret = |n: &str| -> Option<skotch_mir::LocalId> {
+                                snap_ret
+                                    .iter()
+                                    .rev()
+                                    .find(|(nm, _)| nm == n)
+                                    .map(|(_, l)| *l)
+                            };
                             let mut ret_stmts: Vec<skotch_mir::Stmt> = Vec::new();
+                            let mut prefix_ok = true;
+                            for pe in &prefix_stmts {
+                                if lower_rich_expr_to_slot(
+                                    *pe,
+                                    &lookup_ret,
+                                    fn_lookup,
+                                    &mut next_slot_inner,
+                                    &mut ret_stmts,
+                                    &mut extra_locals_inner,
+                                    strings,
+                                )
+                                .is_none()
+                                {
+                                    prefix_ok = false;
+                                    break;
+                                }
+                            }
+                            if !prefix_ok {
+                                mini_ok = false;
+                                break;
+                            }
                             let Some(ret_slot) = lower_rich_expr_to_slot(
                                 ret_expr,
-                                &lookup,
+                                &lookup_ret,
                                 fn_lookup,
                                 &mut next_slot_inner,
                                 &mut ret_stmts,
