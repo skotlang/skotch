@@ -4024,9 +4024,19 @@ pub fn lower_file(
                 .and_then(|tr| tr.user_type())
                 .and_then(|u| u.name())
                 .map(String::from);
-            let receiver_ty: Option<Ty> = receiver_type_name
-                .as_deref()
-                .and_then(skotch_types::ty_from_name);
+            // Map the receiver's source-level type name to its JVM-side Ty.
+            // Built-in primitive names (`Int`, `Double`, …) reach Ty via
+            // `ty_from_name`. Anything else — including stdlib container
+            // interfaces like `Iterable`, `List`, `Map`, etc., and
+            // user-defined classes — flows through `resolve_user_ty`,
+            // which applies `kotlin_to_jvm_class` so that
+            // `fun <T> Iterable<T>.foo()` lands receiver Ty
+            // `Ty::Class("java/lang/Iterable")` (descriptor
+            // `Ljava/lang/Iterable;`) instead of dropping silently to
+            // `Ty::Any` and emitting `Ljava/lang/Object;`. Type-parameter
+            // receivers (e.g. `fun <T> T.foo()`) still erase to
+            // `Ty::Any` via the generic-erasure pass below.
+            let receiver_ty: Option<Ty> = receiver_type_name.as_deref().map(resolve_user_ty);
             let is_extension = receiver_type_name.is_some();
             // Pull param/return Ty from the TypedFile pass-1 output if
             // the indices line up.
