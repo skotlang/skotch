@@ -279,6 +279,70 @@ fn reset_lambda_counter() {
 }
 
 thread_local! {
+    /// File-scoped side table mapping a lifted local-fn name to the
+    /// ordered list of captured outer-scope names. Populated in
+    /// `lower_file` BEFORE function bodies are lowered, so call sites
+    /// inside the outer fn and inside the helper itself can resolve
+    /// `helper(args)` by looking up the capture names via the body
+    /// walker's `lookup_name`, prepending them to the user args, and
+    /// dispatching as a normal Static call to the synthesized helper.
+    ///
+    /// Cleared at module-end via `LocalHelperCapturesScope` so the map
+    /// doesn't leak across files.
+    static LOCAL_HELPER_CAPTURES:
+        std::cell::RefCell<rustc_hash::FxHashMap<String, Vec<String>>> =
+        std::cell::RefCell::new(rustc_hash::FxHashMap::default());
+}
+
+fn local_helper_captures(name: &str) -> Option<Vec<String>> {
+    LOCAL_HELPER_CAPTURES.with(|c| c.borrow().get(name).cloned())
+}
+
+fn register_local_helper_captures(name: &str, captures: Vec<String>) {
+    LOCAL_HELPER_CAPTURES.with(|c| {
+        c.borrow_mut().insert(name.to_string(), captures);
+    });
+}
+
+fn clear_local_helper_captures() {
+    LOCAL_HELPER_CAPTURES.with(|c| c.borrow_mut().clear());
+}
+
+/// Pre-pass spec for a lifted local function. Built by `lower_file`
+/// before the outer-fn lowering loop so call sites can resolve to a
+/// reserved FuncId; consumed AFTER the outer loop to actually lower
+/// the helper body into a MirFunction pushed at `fid`.
+struct LocalHelperSpec<'a> {
+    fid: FuncId,
+    qualified_name: String,
+    captures: Vec<(String, Ty)>,
+    user_params: Vec<(String, Ty)>,
+    return_ty: Ty,
+    body: skotch_ast::KtBlock<'a>,
+}
+
+/// Recursively walk a SIL subtree and collect every IDENTIFIER token
+/// that appears as a direct child of a `REFERENCE_EXPRESSION`. Used by
+/// the local-fn capture extractor — anything in the helper body that
+/// reads a name will surface here.
+fn collect_reference_names(node: &skotch_sil::SilNode, out: &mut rustc_hash::FxHashSet<String>) {
+    use skotch_syntax::SyntaxKind;
+    if node.kind == SyntaxKind::REFERENCE_EXPRESSION {
+        for child in skotch_ast::children(node) {
+            if child.kind == SyntaxKind::IDENTIFIER {
+                if let skotch_sil::SilData::Token { text } = &child.data {
+                    out.insert(text.to_string());
+                }
+            }
+        }
+        return;
+    }
+    for child in skotch_ast::children(node) {
+        collect_reference_names(child, out);
+    }
+}
+
+thread_local! {
     /// Function-scoped exception handler registry. Special::TryStmt
     /// arms push entries here as they build try/catch CFGs. The
     /// function-body assembly layer drains it after `lower_loop_body_blocks`
@@ -951,6 +1015,148 @@ pub fn lower_file(
     for (name, per_file_idx) in &local_fn_order {
         if let Some(slot) = fn_lookup.get_mut(name) {
             slot.0 = FuncId(local_fn_id_base + per_file_idx);
+        }
+    }
+
+    // Pre-pass for LOCAL FUNCTIONS (`fun helper(...) {...}` declared
+    // inside another fn body). Each helper gets lifted to a top-level
+    // private static fn whose signature is `(captures..., user_params)`
+    // — matching the kotlinc `<outer>$<helper>(captured-types,
+    // user-types)` shape. Call sites in the outer fn (and recursive
+    // self-calls inside the helper) resolve `helper(args)` via
+    // fn_lookup and prepend the captured slot loads gathered from the
+    // body walker's `lookup_name`.
+    //
+    // Scope: only handles local fns directly inside a top-level KtFun
+    // (one nesting level). Collision on helper name across outer fns
+    // is rejected so the global fn_lookup stays unambiguous.
+    clear_local_helper_captures();
+    let mut local_helper_specs: Vec<LocalHelperSpec<'_>> = Vec::new();
+    let mut seen_helper_names: rustc_hash::FxHashSet<String> = rustc_hash::FxHashSet::default();
+    {
+        let n_outer = local_fn_order.len() as u32;
+        let helper_fid_base = local_fn_id_base + n_outer;
+        for decl in file.decls() {
+            let KtDecl::Fun(outer_fn) = decl else {
+                continue;
+            };
+            let Some(outer_block) = outer_fn.body_block() else {
+                continue;
+            };
+            // Collect outer-scope names visible to nested fns: outer
+            // fn's user params + any `val`/`var` declared as a direct
+            // child of the outer block. The capture extractor compares
+            // helper-body references against this set.
+            let mut outer_scope: Vec<(String, Ty)> = Vec::new();
+            if let Some(pl) = outer_fn.value_parameter_list() {
+                for p in pl.parameters() {
+                    let n = p.name().unwrap_or("").to_string();
+                    let ty = p.type_reference().map(resolve_type_ref).unwrap_or(Ty::Any);
+                    outer_scope.push((n, ty));
+                }
+            }
+            for c in skotch_ast::children(outer_block.syntax()) {
+                if let Some(prop) = skotch_ast::KtProperty::cast(c) {
+                    if let Some(n) = prop.name() {
+                        let mut ty = prop
+                            .type_reference()
+                            .map(resolve_type_ref)
+                            .unwrap_or(Ty::Any);
+                        // Init-based fallback: `val builder =
+                        // StringBuilder()` has no type annotation, so
+                        // peek the initializer Call's callee name and
+                        // resolve through `resolve_user_ty` (handles
+                        // `StringBuilder` → java/lang/StringBuilder
+                        // and other intrinsic class mappings).
+                        if matches!(ty, Ty::Any) {
+                            if let Some(init) = prop.initializer() {
+                                let init = unwrap_parens(init);
+                                if let skotch_ast::KtExpr::Call(call) = &init {
+                                    if let Some(skotch_ast::KtExpr::Reference(r)) = call.callee() {
+                                        if let Some(name) = r.name() {
+                                            ty = resolve_user_ty(name);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        outer_scope.push((n.to_string(), ty));
+                    }
+                }
+            }
+            // Find nested KtFun decls directly inside the outer block.
+            for c in skotch_ast::children(outer_block.syntax()) {
+                let Some(helper_fn) = skotch_ast::KtFun::cast(c) else {
+                    continue;
+                };
+                let Some(helper_name) = helper_fn.name() else {
+                    continue;
+                };
+                if seen_helper_names.contains(helper_name) || fn_lookup.contains_key(helper_name) {
+                    trace_bail!(
+                        "local helper `{}` name collides with existing top-level/helper — skipping",
+                        helper_name
+                    );
+                    continue;
+                }
+                let Some(helper_block) = helper_fn.body_block() else {
+                    continue;
+                };
+                // User params + their Tys.
+                let user_params: Vec<(String, Ty)> = helper_fn
+                    .value_parameter_list()
+                    .map(|pl| {
+                        pl.parameters()
+                            .map(|p| {
+                                let n = p.name().unwrap_or("").to_string();
+                                let ty =
+                                    p.type_reference().map(resolve_type_ref).unwrap_or(Ty::Any);
+                                (n, ty)
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                // Collect bare-Reference names in the helper body.
+                let mut refs: rustc_hash::FxHashSet<String> = rustc_hash::FxHashSet::default();
+                collect_reference_names(helper_block.syntax(), &mut refs);
+                // Filter: keep only names that match the outer-scope
+                // list, excluding the helper's own user params and the
+                // helper's own name.
+                let user_param_names: rustc_hash::FxHashSet<&str> =
+                    user_params.iter().map(|(n, _)| n.as_str()).collect();
+                let mut captures: Vec<(String, Ty)> = Vec::new();
+                let mut captured_names: Vec<String> = Vec::new();
+                for (name, ty) in &outer_scope {
+                    if !refs.contains(name) {
+                        continue;
+                    }
+                    if user_param_names.contains(name.as_str()) {
+                        continue;
+                    }
+                    if name == helper_name {
+                        continue;
+                    }
+                    captures.push((name.clone(), ty.clone()));
+                    captured_names.push(name.clone());
+                }
+                let return_ty = helper_fn
+                    .return_type()
+                    .map(resolve_type_ref)
+                    .unwrap_or(Ty::Unit);
+                let fid = FuncId(helper_fid_base + local_helper_specs.len() as u32);
+                fn_lookup.insert(helper_name.to_string(), (fid, return_ty.clone()));
+                register_local_helper_captures(helper_name, captured_names);
+                seen_helper_names.insert(helper_name.to_string());
+                let outer_name = outer_fn.name().unwrap_or("<anon>").to_string();
+                local_helper_specs.push(LocalHelperSpec {
+                    fid,
+                    qualified_name: format!("{}${}", outer_name, helper_name),
+                    captures,
+                    user_params,
+                    return_ty,
+                    body: helper_block,
+                });
+            }
         }
     }
 
@@ -2859,6 +3065,34 @@ pub fn lower_file(
             });
             fn_id += 1;
         }
+    }
+
+    // Lower each lifted local helper into a MirFunction and push it
+    // at the reserved FuncId. On body-lowering failure, fall back to
+    // an empty stub matching the signature so the FuncIds stay aligned
+    // and already-emitted call sites don't reach an unrelated fn.
+    for spec in local_helper_specs.drain(..) {
+        if module.functions.len() as u32 != spec.fid.0 {
+            trace_bail!(
+                "local helper `{}` reserved FuncId {} != push index {}",
+                spec.qualified_name,
+                spec.fid.0,
+                module.functions.len()
+            );
+            continue;
+        }
+        let helper_fn = lower_local_helper_body(
+            spec.fid,
+            &spec.qualified_name,
+            &spec.captures,
+            &spec.user_params,
+            spec.return_ty.clone(),
+            spec.body,
+            &mut module.strings,
+            &fn_lookup,
+        )
+        .unwrap_or_else(|| build_helper_stub(&spec));
+        module.functions.push(helper_fn);
     }
 
     // Post-process pass: many lowering sites hard-code `BinOp::AddI`
@@ -6526,6 +6760,26 @@ fn lower_loop_body(
                     if let Some((fid, ret_ty)) = fn_lookup_ref.get(callee_n) {
                         let mut arg_slots: Vec<LocalId> = Vec::new();
                         let mut ok = true;
+                        // Lifted local helper: prepend captured outer-
+                        // scope slot loads (resolved against the body
+                        // walker's name_to_local) so the call matches
+                        // the helper's synthesized `(captures...,
+                        // user_args...)` signature.
+                        if let Some(cap_names) = local_helper_captures(callee_n) {
+                            for cn in &cap_names {
+                                if let Some(s) = name_to_local
+                                    .iter()
+                                    .rev()
+                                    .find(|(n, _)| n == cn)
+                                    .map(|(_, l)| *l)
+                                {
+                                    arg_slots.push(s);
+                                } else {
+                                    ok = false;
+                                    break;
+                                }
+                            }
+                        }
                         if let Some(arg_list) = call.value_argument_list() {
                             for arg in arg_list.arguments() {
                                 let Some(arg_e) = arg.expression() else {
@@ -9831,6 +10085,195 @@ fn try_lower_function_body_via_blocks(
     });
     let body_extras: Vec<Ty> = local_tys.split_off(initial_locals_len);
     Some((blocks, body_extras))
+}
+
+/// Lower a lifted local-function body into a complete MirFunction.
+///
+/// `captures` come first in the param list (matching the kotlinc
+/// `<outer>$<helper>(captures, user-params)` shape) so call sites in
+/// the outer fn can prepend captured slot loads to the user args. The
+/// helper's body is lowered through the standard `lower_loop_body_blocks`
+/// with `name_to_local` pre-populated so capture names resolve to the
+/// helper's first N param slots and user-param names resolve to slots
+/// N..N+U-1.
+///
+/// Returns None when the body fails to lower; the caller emits an
+/// empty stub to keep FuncId alignment intact.
+#[allow(clippy::too_many_arguments)]
+fn lower_local_helper_body(
+    fid: FuncId,
+    qualified_name: &str,
+    captures: &[(String, Ty)],
+    user_params: &[(String, Ty)],
+    return_ty: Ty,
+    body: skotch_ast::KtBlock<'_>,
+    strings: &mut Vec<String>,
+    fn_lookup: &rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)>,
+) -> Option<MirFunction> {
+    use skotch_mir::LocalId;
+    let total_params = captures.len() + user_params.len();
+    let params: Vec<LocalId> = (0..total_params).map(|i| LocalId(i as u32)).collect();
+    let mut name_to_local: Vec<(String, LocalId)> = Vec::with_capacity(total_params);
+    let mut param_tys: Vec<Ty> = Vec::with_capacity(total_params);
+    for (idx, (n, ty)) in captures.iter().chain(user_params.iter()).enumerate() {
+        name_to_local.push((n.clone(), LocalId(idx as u32)));
+        param_tys.push(ty.clone());
+    }
+    let _param_scope = ParamTyScope::new(param_tys.clone());
+    let mut local_tys: Vec<Ty> = Vec::new();
+    let mut next_slot: u32 = total_params as u32;
+    let block_children: Vec<&skotch_sil::SilNode> =
+        skotch_ast::children(body.syntax()).iter().collect();
+
+    const SENT: u32 = 0xfffffffe;
+    let saved_strings_len = strings.len();
+    // Empty `function_param_names` — local helpers don't expose
+    // function-typed user params in this minimal scope.
+    let function_param_names: Vec<String> = Vec::new();
+    let mut blocks = lower_loop_body_blocks(
+        &block_children,
+        &mut name_to_local,
+        &mut next_slot,
+        &mut local_tys,
+        strings,
+        fn_lookup,
+        &function_param_names,
+        0,
+        SENT,
+        SENT,
+    )?;
+    let total_stmts: usize = blocks.iter().map(|b| b.stmts.len()).sum();
+    if total_stmts == 0 {
+        strings.truncate(saved_strings_len);
+        return None;
+    }
+    let n = blocks.len() as u32;
+    let final_id = n;
+    for blk in &mut blocks {
+        let remap = |t: u32| if t == SENT { final_id } else { t };
+        match &mut blk.terminator {
+            Terminator::Goto(t) => *t = remap(*t),
+            Terminator::Branch {
+                then_block,
+                else_block,
+                ..
+            } => {
+                *then_block = remap(*then_block);
+                *else_block = remap(*else_block);
+            }
+            _ => {}
+        }
+    }
+    blocks.push(BasicBlock {
+        stmts: Vec::new(),
+        terminator: Terminator::Return,
+    });
+    let mut locals = param_tys;
+    locals.extend(local_tys);
+    let required_params = total_params;
+    Some(MirFunction {
+        id: fid,
+        name: qualified_name.to_string(),
+        params,
+        locals,
+        blocks,
+        return_ty,
+        required_params,
+        param_names: captures
+            .iter()
+            .chain(user_params.iter())
+            .map(|(n, _)| n.clone())
+            .collect(),
+        param_receiver_types: Vec::new(),
+        param_defaults: Vec::new(),
+        is_abstract: false,
+        vararg_index: None,
+        exception_handlers: Vec::new(),
+        is_suspend: false,
+        is_inline: false,
+        has_type_params: false,
+        suspend_original_return_ty: None,
+        suspend_state_machine: None,
+        annotations: Vec::new(),
+        named_locals: Vec::new(),
+        // kotlinc emits `private static final` for lifted local fns.
+        is_private: true,
+        is_static: false,
+        default_call_masks: Vec::new(),
+        needs_leading_nop: false,
+        local_generic_args: rustc_hash::FxHashMap::default(),
+    })
+}
+
+/// Build an empty-body stub MirFunction matching the helper's
+/// `(captures..., user_params...)` signature and declared return Ty.
+/// Used when `lower_local_helper_body` can't lower the body — call
+/// sites at the outer fn have already been emitted with arg shapes
+/// computed from the declared signature, so the stub MUST preserve
+/// that signature (and return a default value of the right Ty) or
+/// the caller's stack-frame will VerifyError.
+fn build_helper_stub(spec: &LocalHelperSpec<'_>) -> MirFunction {
+    use skotch_mir::{LocalId, MirConst, Rvalue, Stmt as MStmt};
+    let total = spec.captures.len() + spec.user_params.len();
+    let mut locals: Vec<Ty> = spec
+        .captures
+        .iter()
+        .chain(spec.user_params.iter())
+        .map(|(_, t)| t.clone())
+        .collect();
+    let (stmts, terminator): (Vec<MStmt>, Terminator) = match &spec.return_ty {
+        Ty::Unit => (Vec::new(), Terminator::Return),
+        other => {
+            let k = match other {
+                Ty::Int | Ty::Bool | Ty::Char | Ty::Byte | Ty::Short => MirConst::Int(0),
+                Ty::Long => MirConst::Long(0),
+                Ty::Float => MirConst::Float(0.0),
+                Ty::Double => MirConst::Double(0.0),
+                _ => MirConst::Null,
+            };
+            let slot = LocalId(total as u32);
+            locals.push(spec.return_ty.clone());
+            (
+                vec![MStmt::Assign {
+                    dest: slot,
+                    value: Rvalue::Const(k),
+                }],
+                Terminator::ReturnValue(slot),
+            )
+        }
+    };
+    MirFunction {
+        id: spec.fid,
+        name: spec.qualified_name.clone(),
+        params: (0..total).map(|i| LocalId(i as u32)).collect(),
+        locals,
+        blocks: vec![BasicBlock { stmts, terminator }],
+        return_ty: spec.return_ty.clone(),
+        required_params: total,
+        param_names: spec
+            .captures
+            .iter()
+            .chain(spec.user_params.iter())
+            .map(|(n, _)| n.clone())
+            .collect(),
+        param_receiver_types: Vec::new(),
+        param_defaults: Vec::new(),
+        is_abstract: false,
+        vararg_index: None,
+        exception_handlers: Vec::new(),
+        is_suspend: false,
+        is_inline: false,
+        has_type_params: false,
+        suspend_original_return_ty: None,
+        suspend_state_machine: None,
+        annotations: Vec::new(),
+        named_locals: Vec::new(),
+        is_private: true,
+        is_static: false,
+        default_call_masks: Vec::new(),
+        needs_leading_nop: false,
+        local_generic_args: rustc_hash::FxHashMap::default(),
+    }
 }
 
 /// Like try_lower_multi_stmt_block_inner but parameters can start at a
@@ -14765,6 +15208,21 @@ fn try_lower_multi_stmt_block_with_offset(
                         let callee_name = callee_name?;
                         let (fid, ret_ty) = fn_lookup.get(callee_name)?;
                         let mut arg_slots: Vec<LocalId> = Vec::new();
+                        // Lifted local helper: prepend captured outer-
+                        // scope slot loads (resolved against the body
+                        // walker's name_to_local) to match the helper's
+                        // synthesized `(captures..., user_args...)`
+                        // signature.
+                        if let Some(cap_names) = local_helper_captures(callee_name) {
+                            for cn in &cap_names {
+                                let slot = name_to_local
+                                    .iter()
+                                    .rev()
+                                    .find(|(name, _)| name == cn)
+                                    .map(|(_, l)| *l)?;
+                                arg_slots.push(slot);
+                            }
+                        }
                         if let Some(arg_list) = call.value_argument_list() {
                             for arg in arg_list.arguments() {
                                 let arg_expr = arg.expression()?;
@@ -19201,6 +19659,29 @@ fn lower_rich_expr_to_slot(
             if let Some(name) = rc.name() {
                 if let Some((fid, ret_ty)) = fn_lookup.get(name) {
                     let mut arg_slots: Vec<LocalId> = Vec::new();
+                    // Lifted local helper: prepend the captured outer-
+                    // scope slot loads so the call matches the helper's
+                    // synthesized `(captures..., user_args...)`
+                    // signature. Each capture name is resolved via the
+                    // body walker's `lookup_name`. If a capture name
+                    // doesn't resolve in the current scope, the call
+                    // can't be wired correctly — skip this arm so the
+                    // caller bails (rather than dispatching a partial
+                    // arg list that would VerifyError).
+                    if let Some(cap_names) = local_helper_captures(name) {
+                        let mut ok = true;
+                        for cn in &cap_names {
+                            if let Some(s) = lookup_name(cn) {
+                                arg_slots.push(s);
+                            } else {
+                                ok = false;
+                                break;
+                            }
+                        }
+                        if !ok {
+                            return None;
+                        }
+                    }
                     if let Some(arg_list) = call.value_argument_list() {
                         for arg in arg_list.arguments() {
                             let arg_e = arg.expression()?;
@@ -19684,6 +20165,23 @@ fn lower_rich_expr_to_slot(
                                 _ => None,
                             }
                         }
+                        // Parenthesized expression: peek through to the
+                        // inner shape. Common case is `(k % 10).toLong()`
+                        // where the inner Binary returns Int.
+                        KtExpr::Parenthesized(_) => match unwrap_parens(dq_exprs[0]) {
+                            KtExpr::Binary(_) => Some(Ty::Int),
+                            KtExpr::Reference(r) => r
+                                .name()
+                                .and_then(lookup_name)
+                                .map(|s| slot_ty_with_param_fallback(s.0, extra_locals)),
+                            _ => None,
+                        },
+                        // Binary arithmetic on Int operands returns Int.
+                        // Conservative — only fires when both operands
+                        // are clearly Int-typed (the prim_conv table
+                        // below requires Int recv anyway, so a false
+                        // positive returns None and re-bails harmlessly).
+                        KtExpr::Binary(_) => Some(Ty::Int),
                         _ => None,
                     };
                     // Primitive numeric conversions on Int / Long / Double /
@@ -24002,6 +24500,34 @@ fn lower_simple_body(
                     let mut extra_locals: Vec<Ty> = Vec::new();
                     let mut arg_slots: Vec<skotch_mir::LocalId> = Vec::new();
                     let mut ok = true;
+                    // Lifted local helper: prepend captured outer-scope
+                    // slot loads to match the helper's `(captures...,
+                    // user_args...)` synthesized signature. Captures
+                    // resolve against the outer fn's params first, then
+                    // top-level vals via GetStaticField.
+                    if let Some(cap_names) = local_helper_captures(name) {
+                        for cn in &cap_names {
+                            if let Some(idx) = outer_param_names.iter().position(|p| p == cn) {
+                                arg_slots.push(skotch_mir::LocalId(idx as u32));
+                            } else if let Some(val_ty) = val_lookup.get(cn) {
+                                let slot = skotch_mir::LocalId(next_slot);
+                                next_slot += 1;
+                                extra_locals.push(val_ty.clone());
+                                pre_stmts.push(skotch_mir::Stmt::Assign {
+                                    dest: slot,
+                                    value: skotch_mir::Rvalue::GetStaticField {
+                                        class_name: wrapper_class.to_string(),
+                                        field_name: cn.to_string(),
+                                        descriptor: ty_to_descriptor(val_ty),
+                                    },
+                                });
+                                arg_slots.push(slot);
+                            } else {
+                                ok = false;
+                                break;
+                            }
+                        }
+                    }
                     if let Some(arg_list) = call.value_argument_list() {
                         for arg in arg_list.arguments() {
                             let Some(arg_expr) = arg.expression() else {
