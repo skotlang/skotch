@@ -5878,6 +5878,154 @@ fn try_lower_when_expression(
                     strings,
                 )?
             }
+        } else if let KtExpr::When(inner_w) = body {
+            // Nested when as arm body. Each inner arm becomes an extra
+            // (cmp, then) block pair after the outer join; a trailing
+            // inner-else block handles the no-match path. The outer
+            // arm's then-block ends with Goto to the first inner cmp.
+            // Restricted to Eq conds + slot-lowerable bodies — richer
+            // shapes (block bodies, ranges, `is X`) bail.
+            let inner_subject = inner_w.subject().map(unwrap_parens)?;
+            let outer_param_names_owned: Vec<String> = outer_param_names.clone();
+            let subject_name_owned = subject_source_name.clone();
+            let narrowed = narrowed_subject_slot;
+            let offset = param_slot_offset;
+            let arm_lookup = move |n: &str| -> Option<LocalId> {
+                if n == subject_name_owned {
+                    return Some(narrowed.unwrap_or(subject_param_slot));
+                }
+                outer_param_names_owned
+                    .iter()
+                    .position(|p| p == n)
+                    .map(|i| LocalId(i as u32 + offset))
+            };
+            let mut inner_arms: Vec<(KtExpr<'_>, KtExpr<'_>)> = Vec::new();
+            let mut inner_else: Option<KtExpr<'_>> = None;
+            for ie in inner_w.entries() {
+                if ie.is_else() {
+                    inner_else = Some(unwrap_parens(ie.body()?));
+                    continue;
+                }
+                let inner_body = ie.body().map(unwrap_parens)?;
+                for c in ie.conditions() {
+                    if c.kind != skotch_syntax::SyntaxKind::WHEN_CONDITION_WITH_EXPRESSION {
+                        return None;
+                    }
+                    let ce = skotch_ast::children(c)
+                        .iter()
+                        .find_map(KtExpr::cast)
+                        .map(unwrap_parens)?;
+                    inner_arms.push((ce, inner_body));
+                }
+            }
+            if inner_arms.is_empty() {
+                return None;
+            }
+            // Const fast-path then lower_rich fallback.
+            let mut emit_to_slot = |e: KtExpr<'_>,
+                                    out: &mut Vec<MStmt>,
+                                    ns: &mut u32,
+                                    el: &mut Vec<Ty>|
+             -> Option<LocalId> {
+                if let Some((k, ty)) = literal_to_const(&e, strings) {
+                    let s = LocalId(*ns);
+                    *ns += 1;
+                    el.push(ty);
+                    out.push(MStmt::Assign {
+                        dest: s,
+                        value: Rvalue::Const(k),
+                    });
+                    return Some(s);
+                }
+                lower_rich_expr_to_slot(e, &arm_lookup, fn_lookup, ns, out, el, strings)
+            };
+            let inner_subject_slot = emit_to_slot(
+                inner_subject,
+                &mut then_stmts,
+                &mut next_slot,
+                &mut extra_locals,
+            )?;
+            let n_inner = inner_arms.len();
+            let inner_cmp_base = next_extra_block_idx;
+            next_extra_block_idx += (n_inner as u32) * 2 + 1;
+            let inner_else_idx = inner_cmp_base + (n_inner as u32) * 2;
+            blocks.push(BasicBlock {
+                stmts: then_stmts,
+                terminator: Terminator::Goto(inner_cmp_base),
+            });
+            for (i, (cond_expr, inner_body)) in inner_arms.iter().enumerate() {
+                let cmp_idx = inner_cmp_base + (i as u32) * 2;
+                let then_idx = cmp_idx + 1;
+                let next_cmp_idx = if i + 1 < n_inner {
+                    cmp_idx + 2
+                } else {
+                    inner_else_idx
+                };
+                let mut cmp_stmts: Vec<MStmt> = Vec::new();
+                let cond_slot = emit_to_slot(
+                    *cond_expr,
+                    &mut cmp_stmts,
+                    &mut next_slot,
+                    &mut extra_locals,
+                )?;
+                let cmp_slot = LocalId(next_slot);
+                next_slot += 1;
+                extra_locals.push(Ty::Bool);
+                cmp_stmts.push(MStmt::Assign {
+                    dest: cmp_slot,
+                    value: Rvalue::BinOp {
+                        op: skotch_mir::BinOp::CmpEq,
+                        lhs: inner_subject_slot,
+                        rhs: cond_slot,
+                    },
+                });
+                extra_arm_blocks.push(BasicBlock {
+                    stmts: cmp_stmts,
+                    terminator: Terminator::Branch {
+                        cond: cmp_slot,
+                        then_block: then_idx,
+                        else_block: next_cmp_idx,
+                    },
+                });
+                let mut body_stmts: Vec<MStmt> = Vec::new();
+                let body_val = emit_to_slot(
+                    *inner_body,
+                    &mut body_stmts,
+                    &mut next_slot,
+                    &mut extra_locals,
+                )?;
+                body_stmts.push(MStmt::Assign {
+                    dest: result_slot,
+                    value: Rvalue::Local(body_val),
+                });
+                extra_arm_blocks.push(BasicBlock {
+                    stmts: body_stmts,
+                    terminator: Terminator::Goto(join_block_idx),
+                });
+            }
+            let mut else_stmts_inner: Vec<MStmt> = Vec::new();
+            let else_val = if let Some(eb) = inner_else {
+                emit_to_slot(eb, &mut else_stmts_inner, &mut next_slot, &mut extra_locals)?
+            } else {
+                // Exhaustive enum-subject without else: synthesize Null.
+                let s = LocalId(next_slot);
+                next_slot += 1;
+                extra_locals.push(Ty::Any);
+                else_stmts_inner.push(MStmt::Assign {
+                    dest: s,
+                    value: Rvalue::Const(skotch_mir::MirConst::Null),
+                });
+                s
+            };
+            else_stmts_inner.push(MStmt::Assign {
+                dest: result_slot,
+                value: Rvalue::Local(else_val),
+            });
+            extra_arm_blocks.push(BasicBlock {
+                stmts: else_stmts_inner,
+                terminator: Terminator::Goto(join_block_idx),
+            });
+            continue;
         } else if let KtExpr::Block(bl) = body {
             // Block-shaped arm body: `is X -> { val y = e; <last> }` or
             // `1 -> { val y = e; <last> }`. Split into prefix stmts +
