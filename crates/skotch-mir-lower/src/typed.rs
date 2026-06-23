@@ -4151,9 +4151,36 @@ pub fn lower_file(
                 for d in body.declarations() {
                     if let KtDecl::Property(p) = d {
                         if let Some(fname) = p.name() {
+                            // Prefer an explicit `: T` annotation; fall
+                            // back to a stdlib collection-factory
+                            // initializer shorthand (`val items =
+                            // mutableListOf<String>()` → "MutableList")
+                            // before defaulting to "Any". Mirrors the
+                            // per-method field-Ty inference in
+                            // `collect_class_methods` so the
+                            // CLASS_FIELDS table sees the same tighter
+                            // type as the methods do. Without this, an
+                            // implicit-receiver lambda-body field load
+                            // gets Ty::Any and the downstream
+                            // `items.add(...)` dispatch can't pick the
+                            // List arm.
                             let type_name = p
                                 .type_reference()
                                 .and_then(tref_user_name)
+                                .or_else(|| {
+                                    let init = p.initializer().map(unwrap_parens)?;
+                                    let inferred = infer_collection_factory_ty(&init)?;
+                                    if let Ty::Class(c) = inferred {
+                                        match c.as_str() {
+                                            "java/util/List" => Some("MutableList".to_string()),
+                                            "java/util/Set" => Some("MutableSet".to_string()),
+                                            "java/util/Map" => Some("MutableMap".to_string()),
+                                            _ => None,
+                                        }
+                                    } else {
+                                        None
+                                    }
+                                })
                                 .unwrap_or_else(|| "Any".to_string());
                             fields.push((fname.to_string(), type_name));
                         }
@@ -26507,11 +26534,23 @@ fn lower_rich_expr_to_slot(
                             // param index matches the source-side
                             // declaration.
                             let cap_n = local_helper_captures(name).map(|v| v.len()).unwrap_or(0);
-                            let hint = lookup_fn_lambda_param_tys(
-                                name,
-                                arg_slots.len().saturating_sub(cap_n),
-                            );
+                            let param_idx = arg_slots.len().saturating_sub(cap_n);
+                            let hint = lookup_fn_lambda_param_tys(name, param_idx);
+                            // Plumb the receiver-class hint too for
+                            // `T.() -> R` builder-style params (DSL
+                            // shape): `html { body { ... } }` where
+                            // `html`'s lambda param is typed
+                            // `HTML.() -> Unit`. Without this, bare
+                            // member calls inside the lambda body
+                            // can't dispatch via the implicit
+                            // receiver (no current_implicit_receiver
+                            // is installed) and the lambda body
+                            // bails to empty MIR.
+                            let recv_class_hint = lookup_fn_lambda_receiver_class(name, param_idx);
                             let _hint_scope = LambdaParamTyHintScope::new(hint);
+                            let _recv_hint = recv_class_hint
+                                .as_ref()
+                                .map(|rc| LambdaReceiverHintScope::new(Some(rc.clone())));
                             let slot = lower_rich_expr_to_slot(
                                 le,
                                 lookup_name,
@@ -28535,29 +28574,94 @@ fn lower_rich_expr_to_slot(
                     // for bare Reference (line ~19423).
                     if let KtExpr::Reference(rcv_ref) = &dq_exprs[0] {
                         if let Some(rn) = rcv_ref.name() {
-                            let resolved_slot: Option<LocalId> = lookup_name(rn).or_else(|| {
-                                let (class_name, field_name, field_ty) = class_field_lookup(rn)?;
-                                let s = LocalId(*next_slot);
-                                *next_slot += 1;
-                                extra_locals.push(field_ty);
-                                pre_stmts.push(MStmt::Assign {
-                                    dest: s,
-                                    value: skotch_mir::Rvalue::GetField {
-                                        receiver: LocalId(0),
-                                        class_name: class_name.clone(),
-                                        field_name: field_name.clone(),
-                                    },
+                            let resolved_slot: Option<LocalId> = lookup_name(rn)
+                                .or_else(|| {
+                                    let (class_name, field_name, field_ty) =
+                                        class_field_lookup(rn)?;
+                                    let s = LocalId(*next_slot);
+                                    *next_slot += 1;
+                                    extra_locals.push(field_ty);
+                                    pre_stmts.push(MStmt::Assign {
+                                        dest: s,
+                                        value: skotch_mir::Rvalue::GetField {
+                                            receiver: LocalId(0),
+                                            class_name: class_name.clone(),
+                                            field_name: field_name.clone(),
+                                        },
+                                    });
+                                    // Forward MAP_VALUE_TY so subsequent
+                                    // `field.get(k)` dispatch can CheckCast
+                                    // the result to the declared V class.
+                                    if let Some(val_ty) =
+                                        lookup_class_field_map_value_ty(&class_name, &field_name)
+                                    {
+                                        record_map_value_ty(s.0, val_ty);
+                                    }
+                                    if let Some(elem_ty) =
+                                        lookup_class_field_element_ty(&class_name, &field_name)
+                                    {
+                                        record_list_element_ty(s.0, elem_ty);
+                                    }
+                                    Some(s)
+                                })
+                                .or_else(|| {
+                                    // Implicit-receiver field lookup for a
+                                    // receiver-typed lambda body
+                                    // (`T.() -> R` DSL builder shape). When
+                                    // the bare ident is not a local and not
+                                    // an enclosing-class field, fall back to
+                                    // the receiver class installed by the
+                                    // lambda synthesizer
+                                    // (current_implicit_receiver). Resolves
+                                    // shapes like
+                                    //   build { items.add("hi") }
+                                    // where `items` is a field of the
+                                    // receiver class `Box`.
+                                    let (recv_slot_id, recv_class) = current_implicit_receiver()?;
+                                    let fields = lookup_class_fields(&recv_class)?;
+                                    let (fname, fty) =
+                                        fields.iter().find(|(n, _)| n == rn).cloned()?;
+                                    let elem_ty =
+                                        lookup_class_field_element_ty(&recv_class, &fname);
+                                    let val_ty =
+                                        lookup_class_field_map_value_ty(&recv_class, &fname);
+                                    // Promote Ty::Any to the JDK collection
+                                    // class when the field has registered
+                                    // collection-element or map-value
+                                    // metadata. Without this the slot's Ty
+                                    // stays Any and the downstream method
+                                    // dispatch can't find `add` / `put` /
+                                    // `get` etc. on a Ty::Any receiver.
+                                    let slot_ty = if matches!(fty, Ty::Any) {
+                                        if val_ty.is_some() {
+                                            Ty::Class("java/util/Map".to_string())
+                                        } else if elem_ty.is_some() {
+                                            Ty::Class("java/util/List".to_string())
+                                        } else {
+                                            fty
+                                        }
+                                    } else {
+                                        fty
+                                    };
+                                    let s = LocalId(*next_slot);
+                                    *next_slot += 1;
+                                    extra_locals.push(slot_ty);
+                                    pre_stmts.push(MStmt::Assign {
+                                        dest: s,
+                                        value: skotch_mir::Rvalue::GetField {
+                                            receiver: recv_slot_id,
+                                            class_name: recv_class.clone(),
+                                            field_name: fname.clone(),
+                                        },
+                                    });
+                                    if let Some(val_ty) = val_ty {
+                                        record_map_value_ty(s.0, val_ty);
+                                    }
+                                    if let Some(elem_ty) = elem_ty {
+                                        record_list_element_ty(s.0, elem_ty);
+                                    }
+                                    Some(s)
                                 });
-                                // Forward MAP_VALUE_TY so subsequent
-                                // `field.get(k)` dispatch can CheckCast
-                                // the result to the declared V class.
-                                if let Some(val_ty) =
-                                    lookup_class_field_map_value_ty(&class_name, &field_name)
-                                {
-                                    record_map_value_ty(s.0, val_ty);
-                                }
-                                Some(s)
-                            });
                             if let Some(slot) = resolved_slot {
                                 let recv_ty = slot_ty_with_param_fallback(slot.0, extra_locals);
                                 // Cross-file user-defined extension fn dispatch.
@@ -29330,6 +29434,55 @@ fn lower_rich_expr_to_slot(
                     record_map_value_ty(slot.0, val_ty);
                 }
                 return Some(slot);
+            }
+            // Implicit-receiver field for receiver-typed lambda bodies
+            // (`T.() -> R` DSL builder shape). When the bare ident isn't
+            // a local AND isn't a field of the enclosing class method
+            // context (class_field_lookup above), try the
+            // current_implicit_receiver — the receiver slot the lambda
+            // synthesizer installed when the call site advertised a
+            // `T.() -> R` lambda param. Resolves a HTML-DSL pattern like
+            //   build { items.add("hi") }
+            // where `items` is a field on the receiver class `Box`.
+            if let Some((recv_slot_id, recv_class)) = current_implicit_receiver() {
+                if let Some(fields) = lookup_class_fields(&recv_class) {
+                    if let Some((fname, fty)) = fields.iter().find(|(n, _)| n == name) {
+                        let elem_ty = lookup_class_field_element_ty(&recv_class, fname);
+                        let val_ty = lookup_class_field_map_value_ty(&recv_class, fname);
+                        // Promote Ty::Any to the JDK collection class
+                        // when registered metadata says so — same shape
+                        // as the DotQualified bare-Reference fallback.
+                        let slot_ty = if matches!(fty, Ty::Any) {
+                            if val_ty.is_some() {
+                                Ty::Class("java/util/Map".to_string())
+                            } else if elem_ty.is_some() {
+                                Ty::Class("java/util/List".to_string())
+                            } else {
+                                fty.clone()
+                            }
+                        } else {
+                            fty.clone()
+                        };
+                        let slot = LocalId(*next_slot);
+                        *next_slot += 1;
+                        extra_locals.push(slot_ty);
+                        pre_stmts.push(MStmt::Assign {
+                            dest: slot,
+                            value: skotch_mir::Rvalue::GetField {
+                                receiver: recv_slot_id,
+                                class_name: recv_class.clone(),
+                                field_name: fname.clone(),
+                            },
+                        });
+                        if let Some(elem_ty) = elem_ty {
+                            record_list_element_ty(slot.0, elem_ty);
+                        }
+                        if let Some(val_ty) = val_ty {
+                            record_map_value_ty(slot.0, val_ty);
+                        }
+                        return Some(slot);
+                    }
+                }
             }
             // Capitalized name with no local match → likely an
             // object-singleton reference (`val current = Idle`).
