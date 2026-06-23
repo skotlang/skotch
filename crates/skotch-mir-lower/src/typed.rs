@@ -19202,6 +19202,24 @@ fn lower_rich_expr_to_slot(
                 return b.lhs().map(|l| param_used_as_int(l, name)).unwrap_or(false)
                     || b.rhs().map(|r| param_used_as_int(r, name)).unwrap_or(false);
             }
+            if let KtExpr::If(if_e) = e {
+                if let Some(c) = if_e.condition().and_then(|c| c.expression()) {
+                    if param_used_as_int(c, name) {
+                        return true;
+                    }
+                }
+                if let Some(t) = if_e.then_branch().and_then(|t| t.expression()) {
+                    if param_used_as_int(t, name) {
+                        return true;
+                    }
+                }
+                if let Some(el) = if_e.else_branch().and_then(|el| el.expression()) {
+                    if param_used_as_int(el, name) {
+                        return true;
+                    }
+                }
+                return false;
+            }
             false
         }
         for (i, p_name) in param_names.iter().enumerate() {
