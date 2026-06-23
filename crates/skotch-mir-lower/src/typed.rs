@@ -10322,6 +10322,13 @@ fn lower_loop_body_blocks(
         },
         PropertyWithIfInit,
         PropertyWithWhenInit,
+        /// `val name = <lhs> ?: return [RET_EXPR]`. The Elvis operator's
+        /// RHS is itself a `return` expression — a control-flow shape that
+        /// `lower_rich_expr_to_slot` cannot represent (the requireNonNullElse
+        /// path eagerly evaluates both sides). Lower as a null check that
+        /// either branches to a ReturnValue terminator or falls through with
+        /// the name bound to the (now non-null) lhs slot.
+        PropertyWithElvisReturn,
         NestedWhile,
         NestedForIn,
         RepeatStmt,
@@ -10345,6 +10352,18 @@ fn lower_loop_body_blocks(
                         }
                         KtExpr::When(_) => {
                             special_at = Some((j, Special::PropertyWithWhenInit));
+                            break;
+                        }
+                        // Elvis-then-return: `val h = lhs ?: return [RET]`.
+                        // The Elvis RHS is a Return expression — control
+                        // flow that lower_rich_expr_to_slot can't express.
+                        KtExpr::Binary(b)
+                            if b.operation().map(|o| o.text()).as_deref() == Some("?:")
+                                && b.rhs()
+                                    .map(|r| matches!(unwrap_parens(r), KtExpr::Return(_)))
+                                    .unwrap_or(false) =>
+                        {
+                            special_at = Some((j, Special::PropertyWithElvisReturn));
                             break;
                         }
                         _ => {}
@@ -12235,6 +12254,116 @@ fn lower_loop_body_blocks(
                     terminator: Terminator::Goto(join_block_id),
                 });
                 name_to_local.push((pname.to_string(), prop_slot));
+                i = j + 1;
+                continue;
+            }
+            Some((j, Special::PropertyWithElvisReturn)) => {
+                // `val name = <lhs> ?: return [RET_EXPR]`.
+                // Block layout:
+                //   cond:   cur_stmts; eval lhs -> lhs_slot; null cmp -> cmp;
+                //           Branch(cmp, ret_block, cont_block)
+                //   ret:    [eval RET_EXPR -> ret_slot]; Return / ReturnValue
+                //   cont:   bind name -> lhs_slot; fall through
+                let prop_node = body_children[j];
+                let prop = skotch_ast::KtProperty::cast(prop_node)?;
+                let pname = prop.name()?;
+                let init = prop.initializer().map(unwrap_parens)?;
+                let KtExpr::Binary(b) = init else {
+                    return None;
+                };
+                let lhs_expr = b.lhs().map(unwrap_parens)?;
+                let rhs_expr = b.rhs().map(unwrap_parens)?;
+                let KtExpr::Return(ret_e) = rhs_expr else {
+                    return None;
+                };
+                let ret_inner = skotch_ast::children(ret_e.syntax())
+                    .iter()
+                    .find_map(KtExpr::cast)
+                    .map(unwrap_parens);
+                let snap = name_to_local.clone();
+                let lookup = |n: &str| -> Option<LocalId> {
+                    snap.iter()
+                        .rev()
+                        .find(|(name, _)| name == n)
+                        .map(|(_, l)| *l)
+                };
+                let lhs_slot = lower_rich_expr_to_slot(
+                    lhs_expr,
+                    &lookup,
+                    fn_lookup_ref,
+                    next_slot,
+                    &mut cur_stmts,
+                    local_tys,
+                    strings,
+                )?;
+                // null cmp: cmp_slot = lhs_slot == null
+                let null_slot = LocalId(*next_slot);
+                *next_slot += 1;
+                local_tys.push(Ty::Nullable(Box::new(Ty::Any)));
+                cur_stmts.push(MStmt::Assign {
+                    dest: null_slot,
+                    value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Null),
+                });
+                let cmp_slot = LocalId(*next_slot);
+                *next_slot += 1;
+                local_tys.push(Ty::Bool);
+                cur_stmts.push(MStmt::Assign {
+                    dest: cmp_slot,
+                    value: skotch_mir::Rvalue::BinOp {
+                        op: skotch_mir::BinOp::CmpEq,
+                        lhs: lhs_slot,
+                        rhs: null_slot,
+                    },
+                });
+                let cond_block_id = block_offset + blocks.len() as u32;
+                let ret_block_id = cond_block_id + 1;
+                let cont_block_id = ret_block_id + 1;
+                blocks.push(BasicBlock {
+                    stmts: std::mem::take(&mut cur_stmts),
+                    terminator: Terminator::Branch {
+                        cond: cmp_slot,
+                        then_block: ret_block_id,
+                        else_block: cont_block_id,
+                    },
+                });
+                // Return block: evaluate RET_EXPR (if any), terminate.
+                let mut ret_stmts: Vec<MStmt> = Vec::new();
+                let ret_term = match ret_inner {
+                    None => Terminator::Return,
+                    Some(re) => {
+                        let snap2 = name_to_local.clone();
+                        let lookup2 = |n: &str| -> Option<LocalId> {
+                            snap2
+                                .iter()
+                                .rev()
+                                .find(|(name, _)| name == n)
+                                .map(|(_, l)| *l)
+                        };
+                        let s = lower_rich_expr_to_slot(
+                            re,
+                            &lookup2,
+                            fn_lookup_ref,
+                            next_slot,
+                            &mut ret_stmts,
+                            local_tys,
+                            strings,
+                        )?;
+                        Terminator::ReturnValue(s)
+                    }
+                };
+                blocks.push(BasicBlock {
+                    stmts: ret_stmts,
+                    terminator: ret_term,
+                });
+                // Continue block: the cond block's else_block points to
+                // `cont_block_id == block_offset + blocks.len()`, which is
+                // where the next block produced by this iteration will
+                // land (either from accumulated `cur_stmts` flushed by the
+                // next special, or from the final fallthrough block). Bind
+                // name -> lhs_slot so subsequent stmts see the (non-null)
+                // value. No empty block is needed.
+                let _ = cont_block_id;
+                name_to_local.push((pname.to_string(), lhs_slot));
                 i = j + 1;
                 continue;
             }
