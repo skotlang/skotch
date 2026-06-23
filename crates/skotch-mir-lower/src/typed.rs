@@ -496,7 +496,17 @@ fn lookup_class_field_element_ty(class_name: &str, field_name: &str) -> Option<T
 /// `Set<T>`, `MutableSet<T>`, `Collection<T>`, `MutableCollection<T>`;
 /// None otherwise. Element Ty itself is resolved via `resolve_type_ref`.
 fn prop_collection_element_ty(prop: skotch_ast::KtProperty<'_>) -> Option<Ty> {
-    let tr = prop.type_reference()?;
+    tref_collection_element_ty(prop.type_reference()?)
+}
+
+/// Returns Some(ElemTy) for a KtTypeReference shaped like `List<T>` /
+/// `MutableList<T>` / `Iterable<T>` / `Set<T>` / `MutableSet<T>` /
+/// `Collection<T>` / `MutableCollection<T>` / `ArrayList<T>`; None
+/// otherwise. This is the type-ref-level counterpart to
+/// `prop_collection_element_ty` so the same element-Ty extraction can
+/// be reused on function-parameter TypeReferences (which don't go
+/// through KtProperty).
+fn tref_collection_element_ty(tr: skotch_ast::KtTypeReference<'_>) -> Option<Ty> {
     let user = tr.user_type()?;
     let name = user.name()?;
     if !matches!(
@@ -10343,6 +10353,19 @@ fn try_lower_function_body_via_blocks(
         }
     }
     let _param_scope = ParamTyScope::new(param_fallback_tys);
+    // Seed LIST_ELEMENT_TY for `List<T>` / `MutableList<T>` /
+    // `Iterable<T>` / `Set<T>` params so indexed-access inside the
+    // body recovers the declared element class. Without this, a
+    // param `steps: List<Step>` would erase to `Ty::Class("java/util/List")`
+    // with no slot-keyed element Ty, so `steps[i]` returns Ty::Any
+    // and downstream `step.method(...)` dispatch falls through.
+    if let Some(pl) = f.value_parameter_list() {
+        for (i, p) in pl.parameters().enumerate() {
+            if let Some(elem_ty) = p.type_reference().and_then(tref_collection_element_ty) {
+                record_list_element_ty(i as u32 + slot_offset, elem_ty);
+            }
+        }
+    }
     let mut local_tys: Vec<Ty> = Vec::new();
     let initial_locals_len = local_tys.len();
     let mut next_slot: u32 = param_count as u32 + slot_offset;
