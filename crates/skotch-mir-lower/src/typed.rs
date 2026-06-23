@@ -11450,26 +11450,70 @@ fn try_lower_multi_stmt_block_with_offset(
                             }
                             if ok {
                                 // Commit staged arg work, then emit
-                                // NewInstance + Constructor.
+                                // NewInstance + Constructor. Trailing
+                                // lambda (`MinHeap { a, b -> a - b }`)
+                                // lives in call.lambda_argument()
+                                // separately from value_argument_list;
+                                // lower it via lower_rich_expr_to_slot
+                                // (Lambda arm) and append to arg_slots
+                                // so the constructor descriptor's
+                                // FunctionN param is satisfied.
                                 next_slot = staged_next_slot;
                                 local_tys.extend(staged_local_tys);
                                 stmts.extend(staged_stmts);
-                                let new_slot = LocalId(next_slot);
-                                next_slot += 1;
-                                local_tys.push(Ty::Class(cname.to_string()));
-                                stmts.push(MStmt::Assign {
-                                    dest: new_slot,
-                                    value: skotch_mir::Rvalue::NewInstance(cname.to_string()),
-                                });
-                                stmts.push(MStmt::Assign {
-                                    dest: new_slot,
-                                    value: skotch_mir::Rvalue::Call {
-                                        kind: skotch_mir::CallKind::Constructor(cname.to_string()),
-                                        args: arg_slots,
-                                    },
-                                });
-                                name_to_local.push((name.to_string(), new_slot));
-                                continue;
+                                let mut lambda_ok = true;
+                                if let Some(la) = call.lambda_argument() {
+                                    if let Some(le) = skotch_ast::children(la.syntax())
+                                        .iter()
+                                        .find_map(KtExpr::cast)
+                                    {
+                                        let snap = name_to_local.clone();
+                                        let lookup = |n: &str| -> Option<LocalId> {
+                                            snap.iter()
+                                                .rev()
+                                                .find(|(name, _)| name == n)
+                                                .map(|(_, l)| *l)
+                                        };
+                                        let lslot = lower_rich_expr_to_slot(
+                                            le,
+                                            &lookup,
+                                            fn_lookup,
+                                            &mut next_slot,
+                                            &mut stmts,
+                                            &mut local_tys,
+                                            strings,
+                                        );
+                                        if let Some(s) = lslot {
+                                            arg_slots.push(s);
+                                        } else {
+                                            lambda_ok = false;
+                                        }
+                                    }
+                                }
+                                if !lambda_ok {
+                                    // Fall through to later handlers so
+                                    // they can attempt the construction
+                                    // (e.g. captures lambda path).
+                                } else {
+                                    let new_slot = LocalId(next_slot);
+                                    next_slot += 1;
+                                    local_tys.push(Ty::Class(cname.to_string()));
+                                    stmts.push(MStmt::Assign {
+                                        dest: new_slot,
+                                        value: skotch_mir::Rvalue::NewInstance(cname.to_string()),
+                                    });
+                                    stmts.push(MStmt::Assign {
+                                        dest: new_slot,
+                                        value: skotch_mir::Rvalue::Call {
+                                            kind: skotch_mir::CallKind::Constructor(
+                                                cname.to_string(),
+                                            ),
+                                            args: arg_slots,
+                                        },
+                                    });
+                                    name_to_local.push((name.to_string(), new_slot));
+                                    continue;
+                                }
                             }
                         }
                     }
