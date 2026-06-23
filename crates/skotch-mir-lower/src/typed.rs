@@ -12162,7 +12162,66 @@ fn try_lower_multi_stmt_block_with_offset(
                                         // which routes through the CollectionsKt static-dispatch
                                         // path (handles fold/map/filter/etc. with proper
                                         // lambda+Function2 wiring).
-                                        if call.lambda_argument().is_some() {
+                                        // JDK-collection receivers (List/Set/Map/Iterable):
+                                        // a method call like `xs.joinToString(...)` /
+                                        // `xs.filter(...)` / `xs.sorted()` is a Kotlin
+                                        // stdlib EXTENSION (CollectionsKt.joinToString
+                                        // etc.), NOT a JDK interface method. The fast
+                                        // path below would emit `CallKind::Virtual
+                                        // java/util/List.joinToString(...)` which the
+                                        // JVM rejects at runtime with NoSuchMethodError.
+                                        // Bail to lower_rich which handles the proper
+                                        // static-dispatch on CollectionsKt. The narrow
+                                        // set of JDK-direct collection methods
+                                        // (`get/set/add/remove/contains/clear/indexOf/
+                                        // size/isEmpty`) is kept on the fast path
+                                        // because those DO exist on the JDK interface.
+                                        let is_jdk_collection_recv = matches!(
+                                            local_tys.get(recv_slot.0 as usize),
+                                            Some(Ty::Class(c)) if matches!(
+                                                c.as_str(),
+                                                "java/util/List"
+                                                    | "java/util/Set"
+                                                    | "java/util/Map"
+                                                    | "java/util/Collection"
+                                                    | "java/lang/Iterable"
+                                                    | "java/util/ArrayList"
+                                                    | "java/util/HashMap"
+                                                    | "java/util/HashSet"
+                                            )
+                                        );
+                                        let is_jdk_direct_method = matches!(
+                                            method_n,
+                                            "get"
+                                                | "set"
+                                                | "add"
+                                                | "remove"
+                                                | "removeAt"
+                                                | "contains"
+                                                | "containsKey"
+                                                | "containsValue"
+                                                | "clear"
+                                                | "indexOf"
+                                                | "size"
+                                                | "isEmpty"
+                                                | "put"
+                                                | "putAll"
+                                                | "keys"
+                                                | "values"
+                                                | "entries"
+                                                | "iterator"
+                                                | "hasNext"
+                                                | "next"
+                                                | "addAll"
+                                                | "removeAll"
+                                                | "retainAll"
+                                                | "lastIndexOf"
+                                                | "toArray"
+                                                | "subList"
+                                        );
+                                        let bail_to_lower_rich =
+                                            is_jdk_collection_recv && !is_jdk_direct_method;
+                                        if call.lambda_argument().is_some() || bail_to_lower_rich {
                                             // skip this Reference+Call arm; fall through to
                                             // the `_ => {}` arm and onward to the lower_rich
                                             // final fallback at the bottom of the property
@@ -19163,6 +19222,203 @@ fn prebind_class_fields(
     }
 }
 
+/// Emit a call to `CollectionsKt.joinToString$default` honoring the
+/// 9-arg `$default` overload's wire format. Returns `None` (without
+/// emitting anything) if any provided expression fails to lower.
+///
+/// kotlinc lowers `xs.joinToString(separator=, prefix=, postfix=,
+/// limit=, truncated=, transform=)` to `joinToString$default(Iterable,
+/// CharSequence, CharSequence, CharSequence, int, CharSequence,
+/// Function1, int bitmask, Object marker)` where `bit i` of `bitmask`
+/// is set iff the i-th optional param was omitted at the source call
+/// site. Defaults are encoded as `null` (object slots) or `0` (the int
+/// limit). `marker` is always `null`.
+#[allow(clippy::too_many_arguments)]
+fn emit_join_to_string_default(
+    recv_slot: skotch_mir::LocalId,
+    call: &skotch_ast::KtCallExpression<'_>,
+    lookup_name: &dyn Fn(&str) -> Option<skotch_mir::LocalId>,
+    fn_lookup: &rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)>,
+    next_slot: &mut u32,
+    pre_stmts: &mut Vec<skotch_mir::Stmt>,
+    extra_locals: &mut Vec<Ty>,
+    strings: &mut Vec<String>,
+) -> Option<skotch_mir::LocalId> {
+    use skotch_mir::{LocalId, MirConst, Stmt as MStmt};
+    const NAMES: [&str; 6] = [
+        "separator",
+        "prefix",
+        "postfix",
+        "limit",
+        "truncated",
+        "transform",
+    ];
+    let mut provided: [Option<skotch_ast::KtExpr<'_>>; 6] = [None, None, None, None, None, None];
+    let mut positional_idx = 0usize;
+    if let Some(arg_list) = call.value_argument_list() {
+        for arg in arg_list.arguments() {
+            let ae = arg.expression()?;
+            if let Some(name) = arg.name() {
+                let idx = NAMES.iter().position(|n| *n == name)?;
+                provided[idx] = Some(ae);
+            } else {
+                if positional_idx >= 6 {
+                    return None;
+                }
+                provided[positional_idx] = Some(ae);
+                positional_idx += 1;
+            }
+        }
+    }
+    let mut arg_slots: Vec<LocalId> = vec![recv_slot];
+    // Helper closure for "null of class X" or "0 (int)" defaults.
+    let push_null = |arg_slots: &mut Vec<LocalId>,
+                     extra_locals: &mut Vec<Ty>,
+                     pre_stmts: &mut Vec<MStmt>,
+                     next_slot: &mut u32,
+                     cls: &str| {
+        let s = LocalId(*next_slot);
+        *next_slot += 1;
+        extra_locals.push(Ty::Class(cls.to_string()));
+        pre_stmts.push(MStmt::Assign {
+            dest: s,
+            value: skotch_mir::Rvalue::Const(MirConst::Null),
+        });
+        arg_slots.push(s);
+    };
+    let push_zero_int = |arg_slots: &mut Vec<LocalId>,
+                         extra_locals: &mut Vec<Ty>,
+                         pre_stmts: &mut Vec<MStmt>,
+                         next_slot: &mut u32| {
+        let s = LocalId(*next_slot);
+        *next_slot += 1;
+        extra_locals.push(Ty::Int);
+        pre_stmts.push(MStmt::Assign {
+            dest: s,
+            value: skotch_mir::Rvalue::Const(MirConst::Int(0)),
+        });
+        arg_slots.push(s);
+    };
+    // separator / prefix / postfix (CharSequence)
+    for i in 0..3 {
+        if let Some(ae) = provided[i] {
+            let s = lower_rich_expr_to_slot(
+                ae,
+                lookup_name,
+                fn_lookup,
+                next_slot,
+                pre_stmts,
+                extra_locals,
+                strings,
+            )?;
+            arg_slots.push(s);
+        } else {
+            push_null(
+                &mut arg_slots,
+                extra_locals,
+                pre_stmts,
+                next_slot,
+                "java/lang/CharSequence",
+            );
+        }
+    }
+    // limit (int)
+    if let Some(ae) = provided[3] {
+        let s = lower_rich_expr_to_slot(
+            ae,
+            lookup_name,
+            fn_lookup,
+            next_slot,
+            pre_stmts,
+            extra_locals,
+            strings,
+        )?;
+        arg_slots.push(s);
+    } else {
+        push_zero_int(&mut arg_slots, extra_locals, pre_stmts, next_slot);
+    }
+    // truncated (CharSequence)
+    if let Some(ae) = provided[4] {
+        let s = lower_rich_expr_to_slot(
+            ae,
+            lookup_name,
+            fn_lookup,
+            next_slot,
+            pre_stmts,
+            extra_locals,
+            strings,
+        )?;
+        arg_slots.push(s);
+    } else {
+        push_null(
+            &mut arg_slots,
+            extra_locals,
+            pre_stmts,
+            next_slot,
+            "java/lang/CharSequence",
+        );
+    }
+    // transform (Function1)
+    if let Some(ae) = provided[5] {
+        let s = lower_rich_expr_to_slot(
+            ae,
+            lookup_name,
+            fn_lookup,
+            next_slot,
+            pre_stmts,
+            extra_locals,
+            strings,
+        )?;
+        arg_slots.push(s);
+    } else {
+        push_null(
+            &mut arg_slots,
+            extra_locals,
+            pre_stmts,
+            next_slot,
+            "kotlin/jvm/functions/Function1",
+        );
+    }
+    // bitmask (int) — bit i set ⇔ i-th optional was omitted.
+    let mut mask: i32 = 0;
+    for i in 0..6 {
+        if provided[i].is_none() {
+            mask |= 1 << i;
+        }
+    }
+    let mask_slot = LocalId(*next_slot);
+    *next_slot += 1;
+    extra_locals.push(Ty::Int);
+    pre_stmts.push(MStmt::Assign {
+        dest: mask_slot,
+        value: skotch_mir::Rvalue::Const(MirConst::Int(mask)),
+    });
+    arg_slots.push(mask_slot);
+    // marker (Object) — always null.
+    push_null(
+        &mut arg_slots,
+        extra_locals,
+        pre_stmts,
+        next_slot,
+        "java/lang/Object",
+    );
+    let result_slot = LocalId(*next_slot);
+    *next_slot += 1;
+    extra_locals.push(Ty::String);
+    pre_stmts.push(MStmt::Assign {
+        dest: result_slot,
+        value: skotch_mir::Rvalue::Call {
+            kind: skotch_mir::CallKind::StaticJava {
+                class_name: "kotlin/collections/CollectionsKt".to_string(),
+                method_name: "joinToString$default".to_string(),
+                descriptor: "(Ljava/lang/Iterable;Ljava/lang/CharSequence;Ljava/lang/CharSequence;Ljava/lang/CharSequence;ILjava/lang/CharSequence;Lkotlin/jvm/functions/Function1;ILjava/lang/Object;)Ljava/lang/String;".to_string(),
+            },
+            args: arg_slots,
+        },
+    });
+    Some(result_slot)
+}
+
 fn lower_rich_expr_to_slot(
     e: skotch_ast::KtExpr<'_>,
     lookup_name: &dyn Fn(&str) -> Option<skotch_mir::LocalId>,
@@ -23505,6 +23761,24 @@ fn lower_rich_expr_to_slot(
                                             return Some(result_slot);
                                         }
                                     }
+                                    // `joinToString` routes through the dedicated
+                                    // $default emitter — see emit_join_to_string_default.
+                                    if method_n == "joinToString"
+                                        && call.lambda_argument().is_none()
+                                    {
+                                        if let Some(rs) = emit_join_to_string_default(
+                                            slot,
+                                            call,
+                                            lookup_name,
+                                            fn_lookup,
+                                            next_slot,
+                                            pre_stmts,
+                                            extra_locals,
+                                            strings,
+                                        ) {
+                                            return Some(rs);
+                                        }
+                                    }
                                     // (jvm-class, jvm-method, descriptor, ret_ty)
                                     let mapped: Option<(&str, &str, &str, Ty)> = match method_n {
                                         "filter" => Some((
@@ -23657,12 +23931,10 @@ fn lower_rich_expr_to_slot(
                                             "(Ljava/lang/Iterable;)Ljava/util/Set;",
                                             Ty::Class("java/util/Set".to_string()),
                                         )),
-                                        "joinToString" => Some((
-                                            "kotlin/collections/CollectionsKt",
-                                            "joinToString",
-                                            "(Ljava/lang/Iterable;Ljava/lang/CharSequence;)Ljava/lang/String;",
-                                            Ty::String,
-                                        )),
+                                        // `joinToString` is handled by the special
+                                        // `joinToString$default` arm above this match —
+                                        // the JDK signature (Iterable, CharSequence)String
+                                        // doesn't exist, only the $default overload does.
                                         _ => None,
                                     };
                                     if let Some((cls, method, desc, ret_ty)) = mapped {
@@ -24050,6 +24322,26 @@ fn lower_rich_expr_to_slot(
                                         | "java/lang/Iterable"
                                 )
                             );
+                            // Chained-receiver `joinToString` — same
+                            // $default shape as the Reference-receiver
+                            // arm above. See emit_join_to_string_default.
+                            if recv_is_collection
+                                && method_n == "joinToString"
+                                && call.lambda_argument().is_none()
+                            {
+                                if let Some(rs) = emit_join_to_string_default(
+                                    recv_slot,
+                                    call,
+                                    lookup_name,
+                                    fn_lookup,
+                                    next_slot,
+                                    pre_stmts,
+                                    extra_locals,
+                                    strings,
+                                ) {
+                                    return Some(rs);
+                                }
+                            }
                             if recv_is_collection {
                                 let mapped: Option<(&str, &str, &str, Ty)> = match method_n {
                                     "sorted" => Some((
