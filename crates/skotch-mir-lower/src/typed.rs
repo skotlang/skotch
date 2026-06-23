@@ -5082,6 +5082,7 @@ fn try_lower_when_subjectless(
     strings: &mut Vec<String>,
     val_lookup: &rustc_hash::FxHashMap<String, Ty>,
     wrapper_class: &str,
+    param_slot_offset: u32,
 ) -> Option<(Vec<BasicBlock>, Vec<Ty>)> {
     use skotch_ast::KtExpr;
     use skotch_mir::{LocalId, Stmt as MStmt};
@@ -5114,7 +5115,7 @@ fn try_lower_when_subjectless(
     }
     let else_body = else_arm.map(unwrap_parens)?;
 
-    let mut next_slot = param_count as u32;
+    let mut next_slot = param_count as u32 + param_slot_offset;
     let mut extra_locals: Vec<Ty> = Vec::new();
     // kotlinc lowers `when { c1 -> v1; ... }` as `when (true) { c1 -> v1; ... }`,
     // so it allocates a "phantom subject = true" local in a pre-block
@@ -5171,7 +5172,7 @@ fn try_lower_when_subjectless(
         outer_param_names
             .iter()
             .position(|p| p == n)
-            .map(|i| LocalId(i as u32))
+            .map(|i| LocalId(i as u32 + param_slot_offset))
     };
 
     for (i, (shape, conds, body)) in arms.iter().enumerate() {
@@ -5284,6 +5285,7 @@ fn try_lower_when_expression(
     fn_lookup: &rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)>,
     val_lookup: &rustc_hash::FxHashMap<String, Ty>,
     wrapper_class: &str,
+    param_slot_offset: u32,
 ) -> Option<(Vec<BasicBlock>, Vec<Ty>)> {
     use skotch_ast::KtExpr;
     use skotch_mir::{LocalId, Rvalue, Stmt as MStmt};
@@ -5308,14 +5310,21 @@ fn try_lower_when_expression(
     // in expression-bodied functions) — sealed-class smart-cast then
     // sees the receiver as Ty::Any instead of Ty::Class(narrowed) and
     // bails on `s.radius`-shaped DotQualified arm bodies.
-    let param_fallback_tys: Vec<Ty> = f
-        .value_parameter_list()
-        .map(|pl| {
-            pl.parameters()
-                .map(|p| p.type_reference().map(resolve_type_ref).unwrap_or(Ty::Any))
-                .collect()
-        })
-        .unwrap_or_default();
+    let mut param_fallback_tys: Vec<Ty> = Vec::new();
+    // Prepend a placeholder for each slot reserved before the user
+    // params (slot 0 = `this` in class methods). The body lowerers
+    // look up param Ty by slot index, so the leading slot must be
+    // present even though its Ty isn't material for the subject /
+    // arm bodies (they only read user-param slots).
+    for _ in 0..param_slot_offset {
+        param_fallback_tys.push(Ty::Any);
+    }
+    if let Some(pl) = f.value_parameter_list() {
+        for p in pl.parameters() {
+            let pty = p.type_reference().map(resolve_type_ref).unwrap_or(Ty::Any);
+            param_fallback_tys.push(pty);
+        }
+    }
     let _param_scope = ParamTyScope::new(param_fallback_tys);
 
     // Subject-less when: route to dedicated handler. When { cond -> body ; ... }
@@ -5330,6 +5339,7 @@ fn try_lower_when_expression(
                 strings,
                 val_lookup,
                 wrapper_class,
+                param_slot_offset,
             );
         }
     };
@@ -5339,7 +5349,7 @@ fn try_lower_when_expression(
         KtExpr::Reference(r) => {
             let n = r.name()?;
             let idx = outer_param_names.iter().position(|p| p == n)?;
-            (LocalId(idx as u32), n.to_string())
+            (LocalId(idx as u32 + param_slot_offset), n.to_string())
         }
         _ => return None,
     };
@@ -5450,7 +5460,7 @@ fn try_lower_when_expression(
         )
     };
 
-    let mut next_slot = param_count as u32;
+    let mut next_slot = param_count as u32 + param_slot_offset;
     let mut extra_locals: Vec<Ty> = Vec::new();
     let subject_capture_slot = if subject_is_ref {
         let s = LocalId(next_slot);
@@ -5560,7 +5570,7 @@ fn try_lower_when_expression(
                         outer_param_names_owned
                             .iter()
                             .position(|p| p == n)
-                            .map(|i| LocalId(i as u32))
+                            .map(|i| LocalId(i as u32 + param_slot_offset))
                     };
                     lower_rich_expr_to_slot(
                         *cond_expr,
@@ -5726,7 +5736,7 @@ fn try_lower_when_expression(
                 // subject param itself.
                 narrowed_subject_slot.unwrap_or(subject_param_slot)
             } else if let Some(idx) = outer_param_names.iter().position(|p| p == n) {
-                LocalId(idx as u32)
+                LocalId(idx as u32 + param_slot_offset)
             } else if let Some(val_ty) = val_lookup.get(n) {
                 let s = LocalId(next_slot);
                 next_slot += 1;
@@ -5747,6 +5757,7 @@ fn try_lower_when_expression(
                 let outer_param_names_owned: Vec<String> = outer_param_names.clone();
                 let subject_name_owned = subject_source_name.clone();
                 let narrowed = narrowed_subject_slot;
+                let offset = param_slot_offset;
                 let lookup = move |n: &str| -> Option<LocalId> {
                     if n == subject_name_owned {
                         return Some(narrowed.unwrap_or(subject_param_slot));
@@ -5754,7 +5765,7 @@ fn try_lower_when_expression(
                     outer_param_names_owned
                         .iter()
                         .position(|p| p == n)
-                        .map(|i| LocalId(i as u32))
+                        .map(|i| LocalId(i as u32 + offset))
                 };
                 lower_rich_expr_to_slot(
                     *body,
@@ -5791,7 +5802,7 @@ fn try_lower_when_expression(
             let mut name_to_local: Vec<(String, LocalId)> = outer_param_names
                 .iter()
                 .enumerate()
-                .map(|(i, n)| (n.clone(), LocalId(i as u32)))
+                .map(|(i, n)| (n.clone(), LocalId(i as u32 + param_slot_offset)))
                 .collect();
             if let Some(narrowed) = narrowed_subject_slot {
                 name_to_local.push((subject_source_name.clone(), narrowed));
@@ -5813,6 +5824,7 @@ fn try_lower_when_expression(
             let outer_param_names_owned: Vec<String> = outer_param_names.clone();
             let subject_name_owned = subject_source_name.clone();
             let narrowed = narrowed_subject_slot;
+            let offset = param_slot_offset;
             let make_lookup = || {
                 let snap = snap.clone();
                 let outer_param_names_owned = outer_param_names_owned.clone();
@@ -5827,7 +5839,7 @@ fn try_lower_when_expression(
                     outer_param_names_owned
                         .iter()
                         .position(|p| p == n)
-                        .map(|i| LocalId(i as u32))
+                        .map(|i| LocalId(i as u32 + offset))
                 }
             };
             if let KtExpr::If(if_e) = last_expr_idx.1 {
@@ -5931,6 +5943,7 @@ fn try_lower_when_expression(
             let outer_param_names_owned: Vec<String> = outer_param_names.clone();
             let subject_name_owned = subject_source_name.clone();
             let narrowed = narrowed_subject_slot;
+            let offset = param_slot_offset;
             let lookup = move |n: &str| -> Option<LocalId> {
                 if n == subject_name_owned {
                     return Some(narrowed.unwrap_or(subject_param_slot));
@@ -5938,7 +5951,7 @@ fn try_lower_when_expression(
                 outer_param_names_owned
                     .iter()
                     .position(|p| p == n)
-                    .map(|i| LocalId(i as u32))
+                    .map(|i| LocalId(i as u32 + offset))
             };
             lower_rich_expr_to_slot(
                 *body,
@@ -6012,7 +6025,7 @@ fn try_lower_when_expression(
                 ));
             }
             if let Some(idx) = outer_param_names.iter().position(|p| p == n) {
-                let param_slot = LocalId(idx as u32);
+                let param_slot = LocalId(idx as u32 + param_slot_offset);
                 vec![MStmt::Assign {
                     dest: result_slot,
                     value: Rvalue::Local(param_slot),
@@ -6021,11 +6034,12 @@ fn try_lower_when_expression(
                 // Fall through to the general lower_rich path
                 // below — handles object singletons (`Idle`) etc.
                 let outer_param_names_owned: Vec<String> = outer_param_names.clone();
+                let offset = param_slot_offset;
                 let lookup = move |n: &str| -> Option<LocalId> {
                     outer_param_names_owned
                         .iter()
                         .position(|p| p == n)
-                        .map(|i| LocalId(i as u32))
+                        .map(|i| LocalId(i as u32 + offset))
                 };
                 let mut stmts: Vec<MStmt> = Vec::new();
                 let val_slot = lower_rich_expr_to_slot(
@@ -6048,11 +6062,12 @@ fn try_lower_when_expression(
             // lower_rich_expr_to_slot. Covers Call expressions
             // (`else -> R(0)`), DotQualified, etc.
             let outer_param_names_owned: Vec<String> = outer_param_names.clone();
+            let offset = param_slot_offset;
             let lookup = move |n: &str| -> Option<LocalId> {
                 outer_param_names_owned
                     .iter()
                     .position(|p| p == n)
-                    .map(|i| LocalId(i as u32))
+                    .map(|i| LocalId(i as u32 + offset))
             };
             let mut stmts: Vec<MStmt> = Vec::new();
             let val_slot = lower_rich_expr_to_slot(
@@ -26999,7 +27014,7 @@ fn lower_simple_body(
     // expression body. Lowers to a chain of comparison blocks.
     if let KtExpr::When(w) = &body_expr {
         if let Some(lowered) =
-            try_lower_when_expression(w, f, strings, fn_lookup, val_lookup, wrapper_class)
+            try_lower_when_expression(w, f, strings, fn_lookup, val_lookup, wrapper_class, 0)
         {
             return lowered;
         }
@@ -31388,6 +31403,21 @@ fn method_simple_body_full(
                     return (blocks, vec![Ty::Any, Ty::Bool]);
                 }
             }
+        }
+    }
+
+    // `when (subject) { ... }` expression body in a class method.
+    // Routes through `try_lower_when_expression` with slot offset 1
+    // (slot 0 = `this`, slot 1+ = value params). Without this, a
+    // class-method `= when(event) { Event.X -> Light.Y; ... }` falls
+    // all the way through to lower_rich_expr_to_slot which has no
+    // When arm, prints `[skotch bail] kind=When`, and produces an
+    // empty body that returns null.
+    if let KtExpr::When(w) = &body_expr {
+        if let Some(lowered) =
+            try_lower_when_expression(w, f, strings, fn_lookup, val_lookup, wrapper_class, 1)
+        {
+            return lowered;
         }
     }
 
