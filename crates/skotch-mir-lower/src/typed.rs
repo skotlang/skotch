@@ -18123,39 +18123,53 @@ fn try_lower_multi_stmt_block_with_offset(
                     if let (Some(KtExpr::Reference(lref)), Some(rhs_expr)) = (lhs, rhs) {
                         let lname = lref.name()?;
                         // Implicit-this field PutField: `count = ...` where
-                        // count is a field on the enclosing class (not a
-                        // local). Emits PutField on this (slot 0).
-                        if !name_to_local.iter().any(|(n, _)| n == lname) {
-                            if let (Some(cname), Some((fname, _fty))) =
-                                (class_name, field_names.iter().find(|(n, _)| n == lname))
+                        // count is a field on the enclosing class. Take
+                        // this path even when `lname` is ALSO in
+                        // `name_to_local` — earlier `prebind_class_fields`
+                        // may have cached the field into a local slot for
+                        // a read, but a subsequent write must go to the
+                        // field (otherwise next iteration / next method
+                        // call sees a stale field). After PutField, sync
+                        // any cached local so subsequent reads in the same
+                        // body observe the new value.
+                        if let (Some(cname), Some((fname, _fty))) =
+                            (class_name, field_names.iter().find(|(n, _)| n == lname))
+                        {
+                            let snap = name_to_local.clone();
+                            let lookup = |n: &str| -> Option<LocalId> {
+                                snap.iter()
+                                    .rev()
+                                    .find(|(name, _)| name == n)
+                                    .map(|(_, l)| *l)
+                            };
+                            let value_slot = lower_inline_expr_to_slot(
+                                rhs_expr,
+                                &lookup,
+                                &mut next_slot,
+                                &mut stmts,
+                                &mut local_tys,
+                                strings,
+                            )?;
+                            let this_slot = LocalId(0);
+                            stmts.push(MStmt::Assign {
+                                dest: this_slot,
+                                value: skotch_mir::Rvalue::PutField {
+                                    receiver: this_slot,
+                                    class_name: cname.to_string(),
+                                    field_name: fname.clone(),
+                                    value: value_slot,
+                                },
+                            });
+                            // Sync any prebound local cache so a later
+                            // bare `Reference(lname)` read in the same
+                            // body sees the just-written value instead
+                            // of the stale prebind.
+                            if let Some(entry) =
+                                name_to_local.iter_mut().rev().find(|(n, _)| n == lname)
                             {
-                                let snap = name_to_local.clone();
-                                let lookup = |n: &str| -> Option<LocalId> {
-                                    snap.iter()
-                                        .rev()
-                                        .find(|(name, _)| name == n)
-                                        .map(|(_, l)| *l)
-                                };
-                                let value_slot = lower_inline_expr_to_slot(
-                                    rhs_expr,
-                                    &lookup,
-                                    &mut next_slot,
-                                    &mut stmts,
-                                    &mut local_tys,
-                                    strings,
-                                )?;
-                                let this_slot = LocalId(0);
-                                stmts.push(MStmt::Assign {
-                                    dest: this_slot,
-                                    value: skotch_mir::Rvalue::PutField {
-                                        receiver: this_slot,
-                                        class_name: cname.to_string(),
-                                        field_name: fname.clone(),
-                                        value: value_slot,
-                                    },
-                                });
-                                continue;
+                                entry.1 = value_slot;
                             }
+                            continue;
                         }
                         let lhs_slot = name_to_local
                             .iter()
@@ -26074,6 +26088,9 @@ fn lower_rich_expr_to_slot(
         "lower_rich_expr_to_slot fell through all arms: kind={}",
         kt_expr_kind(&e)
     );
+    if std::env::var("SKOTCH_BAIL_TRACE_STACK").is_ok() {
+        eprintln!("[bail-stack] kind={} backtrace=", kt_expr_kind(&e));
+    }
     None
 }
 
@@ -30126,35 +30143,52 @@ fn method_simple_body_full(
                         let rhs = b.rhs().map(unwrap_parens);
                         if let (Some(KtExpr::Reference(rcv)), Some(rhs_e)) = (lhs, rhs) {
                             if let Some(name) = rcv.name() {
+                                // Path B (preferred when name is a class
+                                // field): implicit-this class field. Emit
+                                // PutField for the assignment. Checked
+                                // BEFORE local-snap_locals because a
+                                // prior `prebind_class_fields` for a
+                                // READ may have cached the field into a
+                                // local — but a WRITE must persist to
+                                // the field.
+                                let is_class_field = class_name.is_some()
+                                    && field_names.iter().any(|(nm, _)| nm == name);
                                 // Path A: local snap_locals binding (var
                                 // declared earlier in body, or param).
-                                if let Some(slot) = snap_locals
-                                    .iter()
-                                    .rev()
-                                    .find(|(nm, _)| nm == name)
-                                    .map(|(_, l)| *l)
-                                {
-                                    let snap = snap_locals.clone();
-                                    let lookup = |n: &str| -> Option<skotch_mir::LocalId> {
-                                        snap.iter().rev().find(|(nm, _)| nm == n).map(|(_, l)| *l)
-                                    };
-                                    if let Some(rhs_slot) = lower_rich_expr_to_slot(
-                                        rhs_e,
-                                        &lookup,
-                                        fn_lookup,
-                                        &mut next_slot_inner,
-                                        &mut pre_stmts_inner,
-                                        &mut extra_locals_inner,
-                                        strings,
-                                    ) {
-                                        pre_stmts_inner.push(skotch_mir::Stmt::Assign {
-                                            dest: slot,
-                                            value: skotch_mir::Rvalue::Local(rhs_slot),
-                                        });
-                                        continue;
-                                    } else {
-                                        mini_ok = false;
-                                        break;
+                                // Skip for class-field writes so PutField
+                                // path runs.
+                                if !is_class_field {
+                                    if let Some(slot) = snap_locals
+                                        .iter()
+                                        .rev()
+                                        .find(|(nm, _)| nm == name)
+                                        .map(|(_, l)| *l)
+                                    {
+                                        let snap = snap_locals.clone();
+                                        let lookup = |n: &str| -> Option<skotch_mir::LocalId> {
+                                            snap.iter()
+                                                .rev()
+                                                .find(|(nm, _)| nm == n)
+                                                .map(|(_, l)| *l)
+                                        };
+                                        if let Some(rhs_slot) = lower_rich_expr_to_slot(
+                                            rhs_e,
+                                            &lookup,
+                                            fn_lookup,
+                                            &mut next_slot_inner,
+                                            &mut pre_stmts_inner,
+                                            &mut extra_locals_inner,
+                                            strings,
+                                        ) {
+                                            pre_stmts_inner.push(skotch_mir::Stmt::Assign {
+                                                dest: slot,
+                                                value: skotch_mir::Rvalue::Local(rhs_slot),
+                                            });
+                                            continue;
+                                        } else {
+                                            mini_ok = false;
+                                            break;
+                                        }
                                     }
                                 }
                                 // Path B: implicit-this class field. Emit
