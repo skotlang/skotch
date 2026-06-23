@@ -29972,6 +29972,24 @@ fn method_simple_body_full(
             ) {
                 return (blocks, locals);
             }
+            // Class-aware builder fallback. `try_lower_function_body_via_blocks`
+            // with `slot_offset=1` reserves slot 0 for `this`; param slots
+            // shift to 1..=N. The thread-local `ClassMethodScope` installed
+            // by the caller (line ~32880) lets bare-identifier reads inside
+            // the body resolve to `this.field` via `class_field_lookup`, and
+            // `class_method_return_ty` lets `this.method()` chains type
+            // properly. Without this, `while(true) { ... return X }` shapes
+            // inside class methods (parseObject/parseArray/parseStringLit in
+            // 17-json-parser-printer) fell through to the mini-walker, which
+            // bails on While stmts and produced empty MIR (parseStringLit
+            // returned null, NPE-ing describe()).
+            if class_name.is_some() {
+                if let Some((blocks, locals)) =
+                    try_lower_function_body_via_blocks(block, f, strings, fn_lookup, 1)
+                {
+                    return (blocks, locals);
+                }
+            }
             // Mini-walker fallback for the common shape
             //   val x1 = expr1
             //   val x2 = expr2

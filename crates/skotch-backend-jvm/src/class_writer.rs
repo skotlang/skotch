@@ -17039,6 +17039,30 @@ fn walk_block(
                                     .collect::<Vec<_>>()
                             })
                     };
+                    // Pre-compute whether to force-erase args to Object
+                    // descriptor (mirrors `force_object_args` below). For
+                    // known collection-iface erased-arg methods, the JDK
+                    // descriptor is `(Object)<ret>` so a primitive arg
+                    // on the stack must be boxed before the call.
+                    let force_object_args_load = matches!(
+                        class_name.as_str(),
+                        "java/util/List"
+                            | "java/util/Set"
+                            | "java/util/Map"
+                            | "java/util/Collection"
+                            | "java/util/Iterator"
+                            | "java/lang/Iterable"
+                            | "java/util/ArrayList"
+                            | "java/util/HashMap"
+                            | "java/util/HashSet"
+                            | "java/util/LinkedList"
+                            | "java/util/LinkedHashMap"
+                            | "java/util/LinkedHashSet"
+                    ) && matches!(
+                        method_name.as_str(),
+                        "add" | "contains" | "containsKey" | "containsValue" | "put"
+                    ) && !is_function_invoke
+                        && module.find_class(class_name).is_none();
                     // Load receiver (first arg) then remaining args.
                     // For FunctionN.invoke, box primitive args inline
                     // so the descriptor matches `(Object^N)Object`
@@ -17048,6 +17072,32 @@ fn walk_block(
                     // receiver/arg load order).
                     for (i, a) in args.iter().enumerate() {
                         load_local(code, stack, max_stack, slots, *a, &func.locals);
+                        // Autobox primitive arg → wrapper when the
+                        // descriptor forces Object (collection erased
+                        // methods).
+                        if i > 0 && force_object_args_load {
+                            let arg_ty = &func.locals[a.0 as usize];
+                            let box_info: Option<(&str, &str)> = match arg_ty {
+                                Ty::Int | Ty::Byte | Ty::Short => {
+                                    Some(("java/lang/Integer", "(I)Ljava/lang/Integer;"))
+                                }
+                                Ty::Char => {
+                                    Some(("java/lang/Character", "(C)Ljava/lang/Character;"))
+                                }
+                                Ty::Bool => Some(("java/lang/Boolean", "(Z)Ljava/lang/Boolean;")),
+                                Ty::Long => Some(("java/lang/Long", "(J)Ljava/lang/Long;")),
+                                Ty::Float => Some(("java/lang/Float", "(F)Ljava/lang/Float;")),
+                                Ty::Double => Some(("java/lang/Double", "(D)Ljava/lang/Double;")),
+                                _ => None,
+                            };
+                            if let Some((box_class, box_desc)) = box_info {
+                                let mref = cp.methodref(box_class, "valueOf", box_desc);
+                                code.push(0xB8); // invokestatic
+                                code.write_u16::<BigEndian>(mref).unwrap();
+                                let is_wide = matches!(arg_ty, Ty::Long | Ty::Double);
+                                bump(stack, max_stack, if is_wide { -1 } else { 0 });
+                            }
+                        }
                         // Reference-widening checkcast for user args
                         // (skip receiver, skip Function-invoke since that
                         // path forces Object descriptors anyway).
@@ -17252,6 +17302,41 @@ fn walk_block(
                                 (ptys, m.return_ty.clone())
                             })
                     };
+                    // For Java collection interfaces whose user-facing
+                    // generics erase to `Object`, force the param
+                    // descriptor to `Ljava/lang/Object;`. Without this,
+                    // `keys.add(key)` on `MutableList<String>` used the
+                    // arg's local Ty (`Ljava/lang/String;`) and the JVM
+                    // resolver failed with NoSuchMethodError — the JDK
+                    // signature is `add(Object):boolean`. We restrict to
+                    // the small set of well-known erased-arg methods to
+                    // avoid disturbing overloaded methods like
+                    // `StringBuilder.append(C)` / `(CharSequence)`,
+                    // whose existing fluent-self-ret logic picks the
+                    // right overload from the call-site arg Ty.
+                    let collection_iface = matches!(
+                        class_name.as_str(),
+                        "java/util/List"
+                            | "java/util/Set"
+                            | "java/util/Map"
+                            | "java/util/Collection"
+                            | "java/util/Iterator"
+                            | "java/lang/Iterable"
+                            | "java/util/ArrayList"
+                            | "java/util/HashMap"
+                            | "java/util/HashSet"
+                            | "java/util/LinkedList"
+                            | "java/util/LinkedHashMap"
+                            | "java/util/LinkedHashSet"
+                    );
+                    let erased_arg_method = matches!(
+                        method_name.as_str(),
+                        "add" | "contains" | "containsKey" | "containsValue" | "put"
+                    );
+                    let force_object_args = collection_iface
+                        && erased_arg_method
+                        && !is_function_invoke
+                        && target_method_sig.is_none();
                     let mut descriptor = String::from("(");
                     // Skip first arg (receiver) in descriptor
                     for (i, a) in args.iter().skip(1).enumerate() {
@@ -17269,6 +17354,8 @@ fn walk_block(
                                 let ty = &func.locals[a.0 as usize];
                                 descriptor.push_str(&jvm_param_type_string(ty));
                             }
+                        } else if force_object_args {
+                            descriptor.push_str("Ljava/lang/Object;");
                         } else {
                             let ty = &func.locals[a.0 as usize];
                             descriptor.push_str(&jvm_param_type_string(ty));
