@@ -4077,10 +4077,11 @@ fn fixup_call_return_locals(
     for blk in &f.blocks.clone() {
         for stmt in &blk.stmts {
             let Stmt::Assign { dest, value } = stmt;
-            let Rvalue::Call { kind, .. } = value else {
+            let Rvalue::Call { kind, args } = value else {
                 continue;
             };
-            let return_ty = match kind {
+            // First try the user-class method table.
+            let mut return_ty: Option<Ty> = match kind {
                 CallKind::Virtual {
                     class_name,
                     method_name,
@@ -4104,6 +4105,43 @@ fn fixup_call_return_locals(
                 }),
                 _ => None,
             };
+            // Fallback: external JDK/Kotlin classes (e.g. java/util/List,
+            // java/util/Map, kotlin/Pair) aren't in `class_methods`, but
+            // their method signatures live in classinfo. Without this
+            // fallback `list.isEmpty()` lands a Ty::Any result slot and
+            // the if-cond uses ifnull instead of ifeq — fixture 15
+            // (state-machine-and-history) hit this on
+            // `if (history.isEmpty()) ...`. Only consult classinfo when
+            // the class is NOT a known user class (else we'd clobber
+            // a richer user-Ty with the classinfo erased Object form).
+            if return_ty.is_none() {
+                let (cn, mn) = match kind {
+                    CallKind::Virtual {
+                        class_name,
+                        method_name,
+                    }
+                    | CallKind::VirtualJava {
+                        class_name,
+                        method_name,
+                        ..
+                    } => (Some(class_name.as_str()), Some(method_name.as_str())),
+                    _ => (None, None),
+                };
+                if let (Some(class_name), Some(method_name)) = (cn, mn) {
+                    if !class_methods.contains_key(class_name) {
+                        let user_arity = args.len().saturating_sub(1);
+                        if let Some(desc) = skotch_classinfo::lookup_method_descriptor(
+                            class_name,
+                            method_name,
+                            user_arity,
+                        ) {
+                            if let Some(ret) = desc.rsplit_once(')').map(|(_, r)| r) {
+                                return_ty = jvm_descriptor_to_ty(ret);
+                            }
+                        }
+                    }
+                }
+            }
             let _ = fn_returns;
             let Some(ty) = return_ty else { continue };
             let idx = dest.0 as usize;
@@ -4113,6 +4151,37 @@ fn fixup_call_return_locals(
                 }
             }
         }
+    }
+}
+
+/// Map a JVM return descriptor like `"Z"`, `"I"`, `"Ljava/lang/String;"`
+/// to the matching Ty. Returns None for descriptors we don't model
+/// (array shapes, `V`-void at this call site etc.) so callers keep the
+/// slot's existing Ty rather than collapsing it to a wrong type.
+///
+/// `Ljava/lang/Object;` deliberately maps to None so the result slot
+/// stays Ty::Any — the backend's autobox/unbox logic at param-load
+/// time (class_writer.rs line ~17167) fires on `Ty::Any | Nullable(_)`
+/// and would otherwise miss the implicit unbox at e.g.
+/// `m.matches(list.get(i))` where `list.get` returns Object but the
+/// param wants `Int`.
+fn jvm_descriptor_to_ty(ret: &str) -> Option<Ty> {
+    match ret {
+        "Z" => Some(Ty::Bool),
+        "B" => Some(Ty::Byte),
+        "S" => Some(Ty::Short),
+        "C" => Some(Ty::Char),
+        "I" => Some(Ty::Int),
+        "J" => Some(Ty::Long),
+        "F" => Some(Ty::Float),
+        "D" => Some(Ty::Double),
+        "Ljava/lang/String;" => Some(Ty::String),
+        "V" => None,
+        "Ljava/lang/Object;" => None,
+        s if s.starts_with('L') && s.ends_with(';') => {
+            Some(Ty::Class(s[1..s.len() - 1].to_string()))
+        }
+        _ => None,
     }
 }
 

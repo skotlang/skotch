@@ -16896,6 +16896,24 @@ fn walk_block(
                                         code.write_u16::<BigEndian>(ci).unwrap();
                                     }
                                 }
+                                // Ty::Any → typed param: insert checkcast.
+                                // Generic-collection results (`List.get` →
+                                // Object, `Pair.first` → Object) flow into
+                                // typed constructors like
+                                // `new Machine(history[0].first as Light)`
+                                // where the arg slot is Ty::Any but the
+                                // ctor declares the param as `Light`. Without
+                                // this, invokespecial sees `Object` on the
+                                // stack where `Light` is required and the
+                                // verifier rejects. kotlinc emits the same
+                                // checkcast at the call site.
+                                if matches!(arg_ty, Ty::Any | Ty::Nullable(_)) {
+                                    if let Ty::Class(target) = param_ty {
+                                        let ci = cp.class(target);
+                                        code.push(0xC0); // checkcast
+                                        code.write_u16::<BigEndian>(ci).unwrap();
+                                    }
+                                }
                                 descriptor.push_str(&jvm_param_type_string(param_ty));
                             } else {
                                 descriptor.push_str(&jvm_param_type_string(arg_ty));
