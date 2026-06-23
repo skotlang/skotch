@@ -11927,22 +11927,37 @@ fn lower_loop_body_blocks(
                 let (else_stmts, else_value_slot) =
                     lower_arm(else_arm, next_slot, local_tys, strings)?;
                 // Refine prop_slot's Ty when both arms produced the
-                // same primitive type. Falls back to Ty::Any (object
-                // store/load) when the arms disagree or either is a
-                // reference type, preserving prior behavior.
+                // same type. Without this the slot stays Ty::Any, the
+                // backend emits the StackMapTable frame as Object, and
+                // a later use that requires the actual type (e.g.
+                // `BinOp(String, Expr, Expr)` constructor invocation)
+                // fails verification: stack[N] is Object, not assignable
+                // to String. Refining to the agreed-on Ty makes the
+                // stackmap declare the slot correctly.
                 let then_ty = slot_ty_with_param_fallback(then_value_slot.0, local_tys);
                 let else_ty = slot_ty_with_param_fallback(else_value_slot.0, local_tys);
-                if then_ty == else_ty
+                let refined: Option<Ty> = if then_ty == else_ty
                     && matches!(
                         then_ty,
-                        Ty::Int | Ty::Bool | Ty::Long | Ty::Float | Ty::Double | Ty::Char
-                    )
-                {
+                        Ty::Int
+                            | Ty::Bool
+                            | Ty::Long
+                            | Ty::Float
+                            | Ty::Double
+                            | Ty::Char
+                            | Ty::String
+                            | Ty::Class(_)
+                    ) {
+                    Some(then_ty)
+                } else {
+                    None
+                };
+                if let Some(refined_ty) = refined {
                     let prop_idx = prop_slot.0 as usize;
                     let param_count = PARAM_TY_FALLBACK.with(|c| c.borrow().len());
                     let local_idx = prop_idx.saturating_sub(param_count);
                     if local_idx < local_tys.len() {
-                        local_tys[local_idx] = then_ty;
+                        local_tys[local_idx] = refined_ty;
                     }
                 }
                 let cond_block_id = block_offset + blocks.len() as u32;
