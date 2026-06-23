@@ -17490,6 +17490,9 @@ fn walk_block(
                                 | "java/util/Collection"
                                 | "java/lang/Iterable"
                                 | "java/lang/Comparable"
+                                | "java/lang/Runnable"
+                                | "java/util/concurrent/Callable"
+                                | "java/util/Comparator"
                         );
                     if is_iface {
                         let imref = cp.interface_methodref(class_name, method_name, &descriptor);
@@ -17503,7 +17506,17 @@ fn walk_block(
                         code.write_u16::<BigEndian>(mref).unwrap();
                     }
                     let is_object_return = ret_desc.contains("Object");
-                    let return_push = if matches!(dest_ty, Ty::Long | Ty::Double) {
+                    // When the actual emitted descriptor is `()V` (e.g.
+                    // `java/lang/Runnable.run()V`), the JVM resolver
+                    // returns nothing — overriding any earlier
+                    // assumption made from `ret_desc` (which mirrored
+                    // dest_ty). Without this, an Any-typed dest slot
+                    // sees `is_object_return=true` and an extra `pop`
+                    // is emitted after a void call → stack underflow.
+                    let descriptor_is_void = descriptor.ends_with(")V");
+                    let return_push = if descriptor_is_void {
+                        0
+                    } else if matches!(dest_ty, Ty::Long | Ty::Double) {
                         2
                     } else if is_object_return || *dest_ty != Ty::Unit {
                         1
@@ -17526,7 +17539,10 @@ fn walk_block(
                         .sum();
                     let net = -arg_pop + return_push;
                     bump(stack, max_stack, net);
-                    if *dest_ty != Ty::Unit {
+                    if descriptor_is_void {
+                        // Nothing on stack to pop or store — `()V`
+                        // return.
+                    } else if *dest_ty != Ty::Unit {
                         if is_unused_local(*dest) {
                             // Discard unused call result. Wide returns
                             // (Long/Double) need pop2; everything else

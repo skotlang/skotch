@@ -508,6 +508,62 @@ impl Drop for LambdaParamTyHintScope {
     }
 }
 
+/// SAM (Single-Abstract-Method) interface hint for the Lambda
+/// synthesizer. When the call site is `Runnable { ... }` /
+/// `Callable { ... }` / `Comparator { ... }`, the synthesizer needs
+/// to: (a) implement the named interface rather than Function0/N,
+/// (b) name the method `run`/`call`/`compare` rather than `invoke`,
+/// (c) match the SAM's return Ty (void/Object/int). One Lambda$N
+/// class still backs the construction; only its shape differs.
+#[derive(Clone)]
+struct SamHint {
+    /// JVM-internal name of the SAM interface (e.g. `java/lang/Runnable`).
+    interface: String,
+    /// SAM method name (e.g. `run`, `call`, `compare`).
+    method_name: String,
+    /// SAM method return Ty.
+    method_return_ty: Ty,
+}
+
+thread_local! {
+    static SAM_HINT: std::cell::RefCell<Option<SamHint>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+fn take_sam_hint() -> Option<SamHint> {
+    SAM_HINT.with(|c| c.borrow_mut().take())
+}
+
+struct SamHintScope {
+    prev: Option<SamHint>,
+}
+impl SamHintScope {
+    fn new(hint: Option<SamHint>) -> Self {
+        let prev = SAM_HINT.with(|c| c.borrow_mut().take());
+        SAM_HINT.with(|c| *c.borrow_mut() = hint);
+        Self { prev }
+    }
+}
+impl Drop for SamHintScope {
+    fn drop(&mut self) {
+        SAM_HINT.with(|c| *c.borrow_mut() = self.prev.take());
+    }
+}
+
+/// Recognized SAM (Single-Abstract-Method) interface constructors.
+/// Returns the JVM internal name, SAM method name, and method return
+/// Ty when the source-level callee name matches a known SAM.
+fn sam_lookup(name: &str) -> Option<SamHint> {
+    match name {
+        "Runnable" => Some(SamHint {
+            interface: "java/lang/Runnable".to_string(),
+            method_name: "run".to_string(),
+            method_return_ty: Ty::Unit,
+        }),
+        _ => None,
+    }
+}
+
 /// Extract per-param Tys from `f`'s parameter at `param_idx` when it's
 /// a `(A, B, ...) -> R` function type. None for plain types.
 fn fn_param_lambda_tys_from_decl(f: skotch_ast::KtFun<'_>, param_idx: usize) -> Option<Vec<Ty>> {
@@ -9439,6 +9495,26 @@ fn lower_loop_body(
                                             .find(|(name, _)| name == n)
                                             .map(|(_, l)| *l)
                                     };
+                                    // Plumb the callee's lambda-param Tys
+                                    // to the Lambda$N synthesizer so an
+                                    // unparam'd `later { ... }` whose
+                                    // declared param is `() -> Unit`
+                                    // gets arity-0 (Function0) rather
+                                    // than defaulting to Function1's
+                                    // implicit `it`. Without this the
+                                    // synthesized Lambda$N implements
+                                    // Function1 and later's `body()`
+                                    // dispatch fails with
+                                    // IncompatibleClassChangeError at
+                                    // runtime.
+                                    let cap_n = local_helper_captures(callee_n)
+                                        .map(|v| v.len())
+                                        .unwrap_or(0);
+                                    let hint = lookup_fn_lambda_param_tys(
+                                        callee_n,
+                                        arg_slots.len().saturating_sub(cap_n),
+                                    );
+                                    let _hint_scope = LambdaParamTyHintScope::new(hint);
                                     let s = lower_rich_expr_to_slot(
                                         le,
                                         &lookup,
@@ -20402,11 +20478,25 @@ fn try_lower_multi_stmt_block_with_offset(
                                     let lambda_param_idx = arg_slots.len();
                                     let recv_class_hint =
                                         lookup_fn_lambda_receiver_class(name, lambda_param_idx);
-                                    let _ty_hint = recv_class_hint.as_ref().map(|rc| {
-                                        LambdaParamTyHintScope::new(Some(vec![Ty::Class(
-                                            rc.clone(),
-                                        )]))
-                                    });
+                                    // Pre-resolved per-param Tys (from the
+                                    // top-level decl walker) when the
+                                    // declared lambda param is `(A, B) ->
+                                    // R` — including the arity-0
+                                    // `() -> R` shape which graduates
+                                    // `later { ... }` / `Runnable { … }`
+                                    // call sites whose lambda would
+                                    // otherwise default to Function1.
+                                    let param_ty_hint =
+                                        lookup_fn_lambda_param_tys(name, lambda_param_idx);
+                                    // Receiver-typed lambda (`T.() -> R`)
+                                    // wins for the param Ty hint —
+                                    // matching the prior single-source-of-
+                                    // truth shape.
+                                    let final_hint = recv_class_hint
+                                        .as_ref()
+                                        .map(|rc| vec![Ty::Class(rc.clone())])
+                                        .or(param_ty_hint);
+                                    let _ty_hint = LambdaParamTyHintScope::new(final_hint);
                                     let _recv_hint = recv_class_hint
                                         .as_ref()
                                         .map(|rc| LambdaReceiverHintScope::new(Some(rc.clone())));
@@ -22268,6 +22358,11 @@ fn lower_rich_expr_to_slot(
         // an implicit receiver to LocalId(1) (the first lambda param)
         // for bare member dispatch (`greet()` → `recv.greet()`).
         let lambda_receiver_hint: Option<String> = take_lambda_receiver_hint();
+        // Consume caller's SAM hint. When set, the synthesized
+        // Lambda$N class implements the named interface (e.g.
+        // `java/lang/Runnable`) with the SAM method name
+        // (`run`/`call`/`compare`) instead of `Function<arity>.invoke`.
+        let sam_hint: Option<SamHint> = take_sam_hint();
         // Param names: explicit value_parameter_list OR implicit `it`
         // if the body uses `it` as a Reference.
         let explicit_params: Vec<String> = func_lit
@@ -22286,7 +22381,35 @@ fn lower_rich_expr_to_slot(
             // have explicit_params=[] too — assume arity 1 either
             // way; an unused `it` slot is a 1-slot waste but the
             // function still type-checks against Function1.
-            vec!["it".to_string()]
+            //
+            // SAM-hint exception: when the call site is a SAM
+            // constructor whose abstract method takes 0 args
+            // (Runnable.run, etc.), force arity=0 so the synthesized
+            // class implements the interface's true signature. Without
+            // this, `Runnable.run(Object)` is emitted and Java's
+            // verifier rejects the resulting `r.run()` call because
+            // the synthesized method doesn't override Runnable.run.
+            //
+            // Param-ty-hint exception: when the call site declared a
+            // `() -> R` param (hint is `Some(vec![])`), force arity=0
+            // so the lambda gets a Function0 invoke signature. The
+            // existing arity-mismatch fallback would otherwise emit
+            // a Function1 lambda for an unparam'd `{ ... }` and the
+            // call site's `body()` invocation would crash with
+            // `IncompatibleClassChangeError`.
+            let zero_arg_sam = matches!(
+                &sam_hint,
+                Some(h) if h.interface == "java/lang/Runnable"
+            );
+            let zero_arg_hint = matches!(
+                &lambda_param_ty_hint,
+                Some(tys) if tys.is_empty()
+            );
+            if zero_arg_sam || zero_arg_hint {
+                Vec::new()
+            } else {
+                vec!["it".to_string()]
+            }
         } else {
             explicit_params
         };
@@ -22349,6 +22472,15 @@ fn lower_rich_expr_to_slot(
                     }
                 }
                 KtExpr::Call(call) => {
+                    // The callee can be a free Reference (e.g.
+                    // `body()` inside a lambda where `body` is an
+                    // outer Function0 param). Without this, the
+                    // capture pass misses it and the lambda body's
+                    // FunctionN.invoke dispatch fails to resolve
+                    // `body` → field-slot at lowering time.
+                    if let Some(callee) = call.callee() {
+                        collect_free_refs(callee, params, out);
+                    }
                     if let Some(al) = call.value_argument_list() {
                         for arg in al.arguments() {
                             if let Some(ae) = arg.expression() {
@@ -22388,11 +22520,22 @@ fn lower_rich_expr_to_slot(
         // Lambda name first; we patch fields after counter assignment.
         let lambda_idx = next_lambda_idx();
         let lambda_name = format!("Lambda${}", lambda_idx);
-        for (cap_name, cap_slot) in &captures {
-            let cap_ty = slot_ty_with_param_fallback(cap_slot.0, extra_locals);
+        // Resolve each capture's Ty BEFORE we install the lambda's
+        // ParamTyScope. After the lambda scope is in effect,
+        // `slot_ty_with_param_fallback(cap_slot, …)` would consult the
+        // LAMBDA's param fallback (which is empty / `[Class(lambda)]`)
+        // instead of the outer fn's — and a `body: Function0` capture
+        // would erase to `Class(Lambda$N)`. The ctor descriptor then
+        // becomes `(LLambda$N;)V` and the JVM verifier rejects the
+        // call site.
+        let capture_tys: Vec<Ty> = captures
+            .iter()
+            .map(|(_, cap_slot)| slot_ty_with_param_fallback(cap_slot.0, extra_locals))
+            .collect();
+        for ((cap_name, _), cap_ty) in captures.iter().zip(capture_tys.iter()) {
             let field_slot = LocalId(next_slot_inv);
             next_slot_inv += 1;
-            extra_locals_inv.push(cap_ty);
+            extra_locals_inv.push(cap_ty.clone());
             pre_stmts_inv.push(MStmt::Assign {
                 dest: field_slot,
                 value: skotch_mir::Rvalue::GetField {
@@ -22697,7 +22840,14 @@ fn lower_rich_expr_to_slot(
             }]
         };
         let _ = lambda_idx;
-        let func_class = format!("kotlin/jvm/functions/Function{}", arity);
+        // When SAM hint is set, the lambda implements the named SAM
+        // interface instead of Function<arity>. Pre-compute the
+        // interface name once; downstream code paths (interfaces list,
+        // result Ty, invoke method shape) consult it.
+        let func_class = match &sam_hint {
+            Some(h) => h.interface.clone(),
+            None => format!("kotlin/jvm/functions/Function{}", arity),
+        };
         // invoke locals: [Class(lambda), <lambda_param_tys>] + body
         // extras. Tys only affect downstream dispatch (DotQualified
         // receiver lookup) — JVM slot shape stays reference-typed.
@@ -22721,8 +22871,21 @@ fn lower_rich_expr_to_slot(
         // slot whose value is meaningless — replace it with the
         // INSTANCE singleton load.
         let mut invoke_blocks = invoke_blocks;
+        // SAM-with-Unit-return (e.g. `Runnable.run(): V`) needs a
+        // bare `return` terminator, not `areturn Unit.INSTANCE`.
+        // Other SAMs (Callable.call returns Object, Comparator.compare
+        // returns int) fall through to the existing box/Unit rewrite.
+        let sam_is_void = matches!(
+            &sam_hint,
+            Some(h) if matches!(h.method_return_ty, Ty::Unit)
+        );
         for block in &mut invoke_blocks {
             if let Terminator::ReturnValue(slot) = &block.terminator {
+                if sam_is_void {
+                    // Drop any value the body produced; SAM return is V.
+                    block.terminator = Terminator::Return;
+                    continue;
+                }
                 let s = *slot;
                 let slot_ty = invoke_locals.get(s.0 as usize).cloned().unwrap_or(Ty::Any);
                 let (box_method, box_desc): (Option<&str>, &str) = match slot_ty {
@@ -22767,13 +22930,19 @@ fn lower_rich_expr_to_slot(
             }
         }
         let invoke_params: Vec<LocalId> = (0..=arity).map(|i| LocalId(i as u32)).collect();
+        // SAM hint overrides method name + return Ty so the backend
+        // emits e.g. `public final void run()V` for Runnable.
+        let (invoke_name, invoke_return_ty) = match &sam_hint {
+            Some(h) => (h.method_name.clone(), h.method_return_ty.clone()),
+            None => ("invoke".to_string(), Ty::Any),
+        };
         let invoke_method = MirFunction {
             id: FuncId(0),
-            name: "invoke".to_string(),
+            name: invoke_name,
             params: invoke_params,
             locals: invoke_locals,
             blocks: invoke_blocks,
-            return_ty: Ty::Any,
+            return_ty: invoke_return_ty,
             required_params: arity,
             param_names: param_names.clone(),
             param_receiver_types: Vec::new(),
@@ -22801,8 +22970,11 @@ fn lower_rich_expr_to_slot(
         let n_captures = captures.len();
         let mut ctor_locals: Vec<Ty> = Vec::with_capacity(1 + n_captures);
         ctor_locals.push(Ty::Class(lambda_name.clone()));
-        for (_, cap_slot) in &captures {
-            ctor_locals.push(slot_ty_with_param_fallback(cap_slot.0, extra_locals));
+        // Use the pre-resolved capture Tys so the ctor descriptor
+        // reflects the outer scope's declared types, not whatever
+        // the lambda's ParamTyScope happens to be installing.
+        for cap_ty in &capture_tys {
+            ctor_locals.push(cap_ty.clone());
         }
         let ctor_params: Vec<LocalId> = (0..=n_captures).map(|i| LocalId(i as u32)).collect();
         let mut ctor_stmts: Vec<MStmt> = Vec::new();
@@ -22867,9 +23039,10 @@ fn lower_rich_expr_to_slot(
         };
         let capture_fields: Vec<skotch_mir::MirField> = captures
             .iter()
-            .map(|(n, cap_slot)| skotch_mir::MirField {
+            .zip(capture_tys.iter())
+            .map(|((n, _), cap_ty)| skotch_mir::MirField {
                 name: n.clone(),
-                ty: slot_ty_with_param_fallback(cap_slot.0, extra_locals),
+                ty: cap_ty.clone(),
                 is_jvm_field: false,
             })
             .collect();
@@ -22909,7 +23082,11 @@ fn lower_rich_expr_to_slot(
         // see no change.
         let result = LocalId(*next_slot);
         *next_slot += 1;
-        let result_ty = if lambda_receiver_hint.is_some() {
+        // SAM construction widens the slot Ty to the SAM interface so
+        // a subsequent `r.run()` / `c.call()` / `cmp.compare(a,b)`
+        // dispatch picks up the interface method, not a method on the
+        // synthesized Lambda$N (which doesn't have it under that name).
+        let result_ty = if sam_hint.is_some() || lambda_receiver_hint.is_some() {
             Ty::Class(func_class.clone())
         } else {
             Ty::Class(lambda_name.clone())
@@ -22928,6 +23105,47 @@ fn lower_rich_expr_to_slot(
             },
         });
         return Some(result);
+    }
+    // SAM (Single-Abstract-Method) constructor: `Runnable { ... }`,
+    // `Callable { ... }`, `Comparator { a, b -> ... }`, etc. The
+    // source-level callee is a Reference whose name names a known SAM
+    // interface, and the only arg is a trailing lambda. kotlinc lowers
+    // this to a synthesized class implementing the SAM interface with
+    // the SAM method holding the lambda body (no `invoke` indirection).
+    // We mirror that here by installing a SamHint and recursing on
+    // the lambda — the Lambda arm above consumes the hint and emits
+    // the synthesized class with the right method name + interface.
+    if let KtExpr::Call(call) = &e {
+        if let Some(KtExpr::Reference(callee_ref)) = call.callee() {
+            if let Some(name) = callee_ref.name() {
+                if let Some(hint) = sam_lookup(name) {
+                    if let Some(la) = call.lambda_argument() {
+                        // KtLambdaArgument wraps the KtLambda as a
+                        // child; the same extraction shape used by
+                        // the coroutine-builder body walker.
+                        let lambda_expr = skotch_ast::children(la.syntax())
+                            .iter()
+                            .find_map(KtExpr::cast)
+                            .and_then(|e| match e {
+                                KtExpr::Lambda(l) => Some(l),
+                                _ => None,
+                            });
+                        if let Some(l) = lambda_expr {
+                            let _scope = SamHintScope::new(Some(hint));
+                            return lower_rich_expr_to_slot(
+                                skotch_ast::KtExpr::Lambda(l),
+                                lookup_name,
+                                fn_lookup,
+                                next_slot,
+                                pre_stmts,
+                                extra_locals,
+                                strings,
+                            );
+                        }
+                    }
+                }
+            }
+        }
     }
     // Object literal: `object : Interface { override fun ... }` —
     // synthesizes an anonymous class implementing the named interface
