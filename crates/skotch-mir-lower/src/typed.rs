@@ -27659,7 +27659,7 @@ fn constructor_from_primary_impl(
     // String-literal initializers were silently dropped.
     let mut scratch_strings: Vec<String> = Vec::new();
     let has_shared_strings = module_strings.is_some();
-    let strings: &mut Vec<String> = match module_strings {
+    let mut strings: &mut Vec<String> = match module_strings {
         Some(s) => s,
         None => &mut scratch_strings,
     };
