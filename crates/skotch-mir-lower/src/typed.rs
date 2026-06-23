@@ -4121,6 +4121,259 @@ fn lower_return_if_chain<'a>(
     Some(out)
 }
 
+/// `return when (subj) { lit -> e1; is X -> e2; else -> e3 }` —
+/// counterpart of [`lower_return_if_chain`] for `when` expressions.
+/// Each arm becomes a cmp+body block pair terminating in
+/// `ReturnValue(arm_slot)`. Subjectless when (`when { cond -> ... }`)
+/// uses each arm's expr as a Bool cmp directly. Returns None if any
+/// cond/body shape isn't representable through
+/// `lower_rich_expr_to_slot`.
+#[allow(clippy::too_many_arguments)]
+fn lower_return_when_chain<'a>(
+    w: skotch_ast::KtWhen<'a>,
+    pre_blocks: Vec<BasicBlock>,
+    mut cur_stmts: Vec<skotch_mir::Stmt>,
+    name_to_local: &mut Vec<(String, skotch_mir::LocalId)>,
+    next_slot: &mut u32,
+    local_tys: &mut Vec<Ty>,
+    strings: &mut Vec<String>,
+    fn_lookup: &rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)>,
+    _function_param_names: &[String],
+    block_offset: u32,
+) -> Option<Vec<BasicBlock>> {
+    use skotch_ast::KtExpr;
+    use skotch_mir::{LocalId, Rvalue, Stmt as MStmt};
+
+    let lookup_in = |snap: &[(String, LocalId)]| {
+        let snap: Vec<_> = snap.to_vec();
+        move |n: &str| -> Option<LocalId> {
+            snap.iter()
+                .rev()
+                .find(|(name, _)| name == n)
+                .map(|(_, l)| *l)
+        }
+    };
+
+    let subject_opt = w.subject().map(unwrap_parens);
+    let subj_source_name: Option<String> = match &subject_opt {
+        Some(KtExpr::Reference(rsub)) => rsub.name().map(String::from),
+        _ => None,
+    };
+    let subject_slot: Option<LocalId> = match subject_opt {
+        Some(KtExpr::Reference(rsub)) => {
+            let n = rsub.name()?;
+            Some(
+                name_to_local
+                    .iter()
+                    .rev()
+                    .find(|(nm, _)| nm == n)
+                    .map(|(_, l)| *l)?,
+            )
+        }
+        Some(subj) => Some(lower_rich_expr_to_slot(
+            subj,
+            &lookup_in(name_to_local),
+            fn_lookup,
+            next_slot,
+            &mut cur_stmts,
+            local_tys,
+            strings,
+        )?),
+        None => None,
+    };
+
+    #[derive(Clone)]
+    enum ArmCondR<'a> {
+        Eq(KtExpr<'a>),
+        IsClass(String),
+        Bool(KtExpr<'a>),
+    }
+    let mut arms: Vec<(ArmCondR<'_>, KtExpr<'_>)> = Vec::new();
+    let mut else_body: Option<KtExpr<'_>> = None;
+    for entry in w.entries() {
+        if entry.is_else() {
+            else_body = Some(entry.body().map(unwrap_parens)?);
+            continue;
+        }
+        let conds = entry.conditions();
+        if conds.is_empty() {
+            return None;
+        }
+        let body = entry.body().map(unwrap_parens)?;
+        for c in conds {
+            match c.kind {
+                skotch_syntax::SyntaxKind::WHEN_CONDITION_WITH_EXPRESSION => {
+                    let ce = skotch_ast::children(c)
+                        .iter()
+                        .find_map(KtExpr::cast)
+                        .map(unwrap_parens)?;
+                    arms.push((
+                        if subject_slot.is_some() {
+                            ArmCondR::Eq(ce)
+                        } else {
+                            ArmCondR::Bool(ce)
+                        },
+                        body,
+                    ));
+                }
+                skotch_syntax::SyntaxKind::WHEN_CONDITION_IS_PATTERN => {
+                    let tname = skotch_ast::children(c).iter().find_map(|cc| {
+                        if cc.kind == skotch_syntax::SyntaxKind::TYPE_REFERENCE {
+                            skotch_ast::KtTypeReference::cast(cc)
+                                .and_then(|tr| tr.user_type())
+                                .and_then(|u| u.name())
+                                .map(String::from)
+                        } else {
+                            None
+                        }
+                    })?;
+                    arms.push((ArmCondR::IsClass(tname), body));
+                }
+                _ => return None,
+            }
+        }
+    }
+    // when-as-expression must be exhaustive — require an else arm.
+    let else_body = else_body?;
+
+    let mut out: Vec<BasicBlock> = pre_blocks;
+    let base = block_offset + out.len() as u32;
+
+    for (i_arm, (cond_arm, arm_body)) in arms.iter().enumerate() {
+        let mut cmp_stmts: Vec<MStmt> = Vec::new();
+        let target_buf: &mut Vec<MStmt> = if i_arm == 0 {
+            &mut cur_stmts
+        } else {
+            &mut cmp_stmts
+        };
+        let cmp_slot = match cond_arm {
+            ArmCondR::IsClass(class_name) => {
+                let s = LocalId(*next_slot);
+                *next_slot += 1;
+                local_tys.push(Ty::Bool);
+                target_buf.push(MStmt::Assign {
+                    dest: s,
+                    value: Rvalue::InstanceOf {
+                        obj: subject_slot?,
+                        type_descriptor: class_name.clone(),
+                    },
+                });
+                s
+            }
+            ArmCondR::Eq(cond_expr) => {
+                let rhs_slot = if let Some((k, ty)) = literal_to_const(cond_expr, strings) {
+                    let lit_slot = LocalId(*next_slot);
+                    *next_slot += 1;
+                    local_tys.push(ty);
+                    target_buf.push(MStmt::Assign {
+                        dest: lit_slot,
+                        value: Rvalue::Const(k),
+                    });
+                    lit_slot
+                } else {
+                    lower_rich_expr_to_slot(
+                        *cond_expr,
+                        &lookup_in(name_to_local),
+                        fn_lookup,
+                        next_slot,
+                        target_buf,
+                        local_tys,
+                        strings,
+                    )?
+                };
+                let s = LocalId(*next_slot);
+                *next_slot += 1;
+                local_tys.push(Ty::Bool);
+                target_buf.push(MStmt::Assign {
+                    dest: s,
+                    value: Rvalue::BinOp {
+                        op: skotch_mir::BinOp::CmpEq,
+                        lhs: subject_slot?,
+                        rhs: rhs_slot,
+                    },
+                });
+                s
+            }
+            ArmCondR::Bool(cond_expr) => lower_rich_expr_to_slot(
+                *cond_expr,
+                &lookup_in(name_to_local),
+                fn_lookup,
+                next_slot,
+                target_buf,
+                local_tys,
+                strings,
+            )?,
+        };
+        let then_id = base + 2 * i_arm as u32 + 1;
+        let next_id = base + 2 * (i_arm as u32 + 1);
+        let cmp_block_stmts = if i_arm == 0 {
+            std::mem::take(&mut cur_stmts)
+        } else {
+            cmp_stmts
+        };
+        out.push(BasicBlock {
+            stmts: cmp_block_stmts,
+            terminator: Terminator::Branch {
+                cond: cmp_slot,
+                then_block: then_id,
+                else_block: next_id,
+            },
+        });
+        // Arm body block. For `is X ->` over a Reference subject:
+        // CheckCast and rebind the subject name to the narrowed slot
+        // for the duration of arm-body lowering.
+        let mut arm_stmts: Vec<MStmt> = Vec::new();
+        let pushed = match (cond_arm, subject_slot, subj_source_name.as_ref()) {
+            (ArmCondR::IsClass(class_name), Some(ss), Some(src_name)) => {
+                let cast_slot = LocalId(*next_slot);
+                *next_slot += 1;
+                local_tys.push(Ty::Class(class_name.clone()));
+                arm_stmts.push(MStmt::Assign {
+                    dest: cast_slot,
+                    value: Rvalue::CheckCast {
+                        obj: ss,
+                        target_class: class_name.clone(),
+                    },
+                });
+                name_to_local.push((src_name.clone(), cast_slot));
+                true
+            }
+            _ => false,
+        };
+        let arm_slot = lower_rich_expr_to_slot(
+            *arm_body,
+            &lookup_in(name_to_local),
+            fn_lookup,
+            next_slot,
+            &mut arm_stmts,
+            local_tys,
+            strings,
+        );
+        if pushed {
+            name_to_local.pop();
+        }
+        out.push(BasicBlock {
+            stmts: arm_stmts,
+            terminator: Terminator::ReturnValue(arm_slot?),
+        });
+    }
+    let mut else_stmts: Vec<MStmt> = Vec::new();
+    let else_slot = lower_rich_expr_to_slot(
+        else_body,
+        &lookup_in(name_to_local),
+        fn_lookup,
+        next_slot,
+        &mut else_stmts,
+        local_tys,
+        strings,
+    )?;
+    out.push(BasicBlock {
+        stmts: else_stmts,
+        terminator: Terminator::ReturnValue(else_slot),
+    });
+    Some(out)
+}
+
 fn fixup_getfield_locals(
     f: &mut MirFunction,
     class_fields: &rustc_hash::FxHashMap<String, rustc_hash::FxHashMap<String, Ty>>,
@@ -8948,6 +9201,28 @@ fn lower_loop_body_blocks(
                 if let Some(KtExpr::If(if_e)) = ret_expr_inner {
                     if let Some(out) = lower_return_if_chain(
                         if_e,
+                        std::mem::take(&mut blocks),
+                        std::mem::take(&mut cur_stmts),
+                        name_to_local,
+                        next_slot,
+                        local_tys,
+                        strings,
+                        fn_lookup_ref,
+                        function_param_names,
+                        block_offset,
+                    ) {
+                        return Some(out);
+                    }
+                    return None;
+                }
+                // `return when (...) { ... }` — parallel to the if-
+                // chain rewrite above. lower_rich_expr_to_slot can't
+                // express the per-arm control flow, so we emit each
+                // arm as a cmp/body block pair terminating in
+                // ReturnValue.
+                if let Some(KtExpr::When(w)) = ret_expr_inner {
+                    if let Some(out) = lower_return_when_chain(
+                        w,
                         std::mem::take(&mut blocks),
                         std::mem::take(&mut cur_stmts),
                         name_to_local,
@@ -29442,6 +29717,37 @@ fn method_simple_body_full(
                             return_slot = Some(skotch_mir::LocalId(0));
                             break;
                         };
+                        // `return when (...) { ... }` in a class
+                        // method body. lower_rich_expr_to_slot can't
+                        // express the per-arm control flow, so emit
+                        // the When as a sequence of cmp/arm blocks
+                        // terminating in ReturnValue and return the
+                        // assembled blocks early. Parallel to the
+                        // top-level fn path via lower_return_when_chain.
+                        if let KtExpr::When(w) = re {
+                            // Snapshot the current snap_locals as the
+                            // name_to_local lookup for the chain. The
+                            // chain mutates this for `is X ->` arm
+                            // bindings, then restores on exit, so
+                            // pass an owned clone we can throw away.
+                            let mut chain_name_to_local = snap_locals.clone();
+                            if let Some(chain_blocks) = lower_return_when_chain(
+                                w,
+                                std::mem::take(&mut mini_extra_blocks),
+                                std::mem::take(&mut pre_stmts_inner),
+                                &mut chain_name_to_local,
+                                &mut next_slot_inner,
+                                &mut extra_locals_inner,
+                                strings,
+                                fn_lookup,
+                                &[],
+                                0,
+                            ) {
+                                return (chain_blocks, extra_locals_inner);
+                            }
+                            mini_ok = false;
+                            break;
+                        }
                         // Same preload pass as for val init.
                         if let Some(cname) = class_name {
                             fn collect_refs<'a>(e: skotch_ast::KtExpr<'a>, out: &mut Vec<String>) {
