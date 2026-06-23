@@ -8792,6 +8792,11 @@ fn lower_loop_body_blocks(
                 // set to the receiver slot so the body-preamble can emit
                 // `elem_slot = list.get(i)`; remains None for IntRange.
                 let mut list_recv: Option<LocalId> = None;
+                // When set, the for-in dispatches via the user-iterator
+                // protocol: `iter = recv.iterator()`, cond uses
+                // `iter.hasNext()`, body prepends `elem = iter.next()`.
+                // Carries (iter_slot, iter_class_name, elem_ty).
+                let mut user_iter: Option<(LocalId, String, Ty)> = None;
                 let (lo_slot, hi_slot, inner_cmp_op, inner_step): (
                     LocalId,
                     LocalId,
@@ -8907,28 +8912,96 @@ fn lower_loop_body_blocks(
                         local_tys,
                         strings,
                     )?;
-                    list_recv = Some(range_slot);
-                    let lo = LocalId(*next_slot);
-                    *next_slot += 1;
-                    local_tys.push(Ty::Int);
-                    cur_stmts.push(MStmt::Assign {
-                        dest: lo,
-                        value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(0)),
-                    });
-                    let hi = LocalId(*next_slot);
-                    *next_slot += 1;
-                    local_tys.push(Ty::Int);
-                    cur_stmts.push(MStmt::Assign {
-                        dest: hi,
-                        value: skotch_mir::Rvalue::Call {
-                            kind: skotch_mir::CallKind::Virtual {
-                                class_name: "java/util/List".to_string(),
-                                method_name: "size".to_string(),
+                    // User-iterator protocol detection. If the range
+                    // expression's slot Ty is a user class with a
+                    // registered `iterator()` method whose return is
+                    // another user class with `hasNext()` and `next()`,
+                    // emit Kotlin's duck-typed for-in desugaring:
+                    //   val iter = recv.iterator()
+                    //   while (iter.hasNext()) { val x = iter.next(); body }
+                    // Pre-fix, every non-Binary, non-IntRange receiver
+                    // was unconditionally treated as java/util/List, so
+                    // `for (i in Range2(1, 5))` emitted invokeinterface
+                    // java/util/List.size()/get(I) against a Range2
+                    // instance and crashed with IncompatibleClassChangeError
+                    // (or VerifyError when next()'s Object result was
+                    // used with iadd).
+                    let range_ty = slot_ty_with_param_fallback(range_slot.0, local_tys);
+                    let user_iter_detected: Option<(String, Ty)> = if let Ty::Class(recv_cls) =
+                        &range_ty
+                    {
+                        match class_method_return_ty(recv_cls, "iterator") {
+                            Some(Ty::Class(iter_cls))
+                                if class_method_return_ty(&iter_cls, "hasNext").is_some() =>
+                            {
+                                class_method_return_ty(&iter_cls, "next").map(|nrt| (iter_cls, nrt))
+                            }
+                            _ => None,
+                        }
+                    } else {
+                        None
+                    };
+                    if let (Ty::Class(recv_cls), Some((iter_cls, next_ret_ty))) =
+                        (&range_ty, user_iter_detected)
+                    {
+                        // iter_slot = range.iterator()
+                        let iter_slot = LocalId(*next_slot);
+                        *next_slot += 1;
+                        local_tys.push(Ty::Class(iter_cls.clone()));
+                        cur_stmts.push(MStmt::Assign {
+                            dest: iter_slot,
+                            value: skotch_mir::Rvalue::Call {
+                                kind: skotch_mir::CallKind::Virtual {
+                                    class_name: recv_cls.clone(),
+                                    method_name: "iterator".to_string(),
+                                },
+                                args: vec![range_slot],
                             },
-                            args: vec![range_slot],
-                        },
-                    });
-                    (lo, hi, skotch_mir::BinOp::CmpLt, 1)
+                        });
+                        user_iter = Some((iter_slot, iter_cls, next_ret_ty));
+                        // Placeholder bound slots — cond_stmt + body
+                        // prepend below override the cmp + elem load
+                        // when user_iter is set.
+                        let lo = LocalId(*next_slot);
+                        *next_slot += 1;
+                        local_tys.push(Ty::Int);
+                        cur_stmts.push(MStmt::Assign {
+                            dest: lo,
+                            value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(0)),
+                        });
+                        let hi = LocalId(*next_slot);
+                        *next_slot += 1;
+                        local_tys.push(Ty::Int);
+                        cur_stmts.push(MStmt::Assign {
+                            dest: hi,
+                            value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(0)),
+                        });
+                        list_recv = Some(range_slot); // forces elem_slot path
+                        (lo, hi, skotch_mir::BinOp::CmpLt, 1)
+                    } else {
+                        list_recv = Some(range_slot);
+                        let lo = LocalId(*next_slot);
+                        *next_slot += 1;
+                        local_tys.push(Ty::Int);
+                        cur_stmts.push(MStmt::Assign {
+                            dest: lo,
+                            value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(0)),
+                        });
+                        let hi = LocalId(*next_slot);
+                        *next_slot += 1;
+                        local_tys.push(Ty::Int);
+                        cur_stmts.push(MStmt::Assign {
+                            dest: hi,
+                            value: skotch_mir::Rvalue::Call {
+                                kind: skotch_mir::CallKind::Virtual {
+                                    class_name: "java/util/List".to_string(),
+                                    method_name: "size".to_string(),
+                                },
+                                args: vec![range_slot],
+                            },
+                        });
+                        (lo, hi, skotch_mir::BinOp::CmpLt, 1)
+                    }
                 };
                 let i_slot = LocalId(*next_slot);
                 *next_slot += 1;
@@ -8952,7 +9025,17 @@ fn lower_loop_body_blocks(
                 let elem_slot_opt: Option<LocalId> = if let Some(recv) = list_recv {
                     let s = LocalId(*next_slot);
                     *next_slot += 1;
-                    let elem_ty = lookup_list_element_ty(recv.0).unwrap_or(Ty::Any);
+                    // User-iterator: elem-slot Ty comes from the
+                    // iterator class's `next()` return Ty (e.g. `Int`
+                    // for Range2Iter, `String` for WordIterator). This
+                    // lets primitive next() return values (Int/Double)
+                    // skip the boxing path that the List default
+                    // takes via Ty::Any.
+                    let elem_ty = if let Some((_, _, ref next_ty)) = user_iter {
+                        next_ty.clone()
+                    } else {
+                        lookup_list_element_ty(recv.0).unwrap_or(Ty::Any)
+                    };
                     local_tys.push(elem_ty);
                     Some(s)
                 } else {
@@ -8971,13 +9054,27 @@ fn lower_loop_body_blocks(
                 let cmp_slot = LocalId(*next_slot);
                 *next_slot += 1;
                 local_tys.push(Ty::Bool);
-                let cond_stmt = MStmt::Assign {
-                    dest: cmp_slot,
-                    value: skotch_mir::Rvalue::BinOp {
-                        op: inner_cmp_op,
-                        lhs: i_slot,
-                        rhs: hi_slot,
-                    },
+                let cond_stmt = if let Some((iter_slot, iter_cls, _)) = &user_iter {
+                    // Custom-iterator cond: cmp = iter.hasNext()
+                    MStmt::Assign {
+                        dest: cmp_slot,
+                        value: skotch_mir::Rvalue::Call {
+                            kind: skotch_mir::CallKind::Virtual {
+                                class_name: iter_cls.clone(),
+                                method_name: "hasNext".to_string(),
+                            },
+                            args: vec![*iter_slot],
+                        },
+                    }
+                } else {
+                    MStmt::Assign {
+                        dest: cmp_slot,
+                        value: skotch_mir::Rvalue::BinOp {
+                            op: inner_cmp_op,
+                            lhs: i_slot,
+                            rhs: hi_slot,
+                        },
+                    }
                 };
                 let body_block_opt = for_e.body().and_then(|b| b.expression());
                 let inner_body_children: Vec<&skotch_sil::SilNode> = match body_block_opt {
@@ -9009,7 +9106,30 @@ fn lower_loop_body_blocks(
                 // the JVM stackmap sees the strongly-typed element
                 // value instead of Object — required for downstream
                 // virtual dispatch like `elem.area()`.
-                if let (Some(recv), Some(elem)) = (list_recv, elem_slot_opt) {
+                if let Some((iter_slot, iter_cls, _)) = &user_iter {
+                    // Custom-iterator body prepend: elem = iter.next().
+                    // The elem_slot Ty (set above from class_method_return_ty)
+                    // drives JVM descriptor inference, so `next(): Int`
+                    // emits `()I` and `next(): String` emits
+                    // `()Ljava/lang/String;`. No CheckCast — the backend
+                    // already knows the return type.
+                    if let Some(elem) = elem_slot_opt {
+                        if let Some(first_body) = inner_body_blocks.first_mut() {
+                            let mut prepend: Vec<MStmt> = vec![MStmt::Assign {
+                                dest: elem,
+                                value: skotch_mir::Rvalue::Call {
+                                    kind: skotch_mir::CallKind::Virtual {
+                                        class_name: iter_cls.clone(),
+                                        method_name: "next".to_string(),
+                                    },
+                                    args: vec![*iter_slot],
+                                },
+                            }];
+                            prepend.append(&mut first_body.stmts);
+                            first_body.stmts = prepend;
+                        }
+                    }
+                } else if let (Some(recv), Some(elem)) = (list_recv, elem_slot_opt) {
                     if let Some(first_body) = inner_body_blocks.first_mut() {
                         let elem_ty = local_tys.get(elem.0 as usize).cloned().unwrap_or(Ty::Any);
                         let target_class = match &elem_ty {
@@ -26799,6 +26919,25 @@ fn method_simple_body_full(
                                                 value: rhs_slot,
                                             },
                                         });
+                                        // Var-field cache invalidation:
+                                        // RHS-prebind preloaded `current`
+                                        // into a slot reused by later
+                                        // reads (`return current - 1`).
+                                        // After PutField, the prebound
+                                        // slot is stale; rebind the name
+                                        // to the new value slot so the
+                                        // next statement reads the
+                                        // updated value. Mirrors what
+                                        // local-var reassignment does
+                                        // implicitly (same slot reused
+                                        // with new value).
+                                        if let Some(entry) =
+                                            snap_locals.iter_mut().rev().find(|(nm, _)| nm == name)
+                                        {
+                                            entry.1 = rhs_slot;
+                                        } else {
+                                            snap_locals.push((name.to_string(), rhs_slot));
+                                        }
                                         continue;
                                     } else {
                                         mini_ok = false;
