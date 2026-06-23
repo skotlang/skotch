@@ -426,6 +426,17 @@ thread_local! {
     /// unique_class_owning_method path. Cleared per body lowering.
     static LIST_ELEMENT_TY: std::cell::RefCell<rustc_hash::FxHashMap<u32, Ty>> =
         std::cell::RefCell::new(rustc_hash::FxHashMap::default());
+
+    /// Cross-function side table mapping `(class_name, field_name)` to
+    /// the collection element Ty for `List<T>` / `MutableList<T>` /
+    /// `Set<T>` fields. Populated when `collect_class_methods` walks
+    /// the body properties — keyed by field rather than slot so that
+    /// every `getfield observers` prebind in any method body can pick
+    /// up the element Ty for downstream `observers[i].method(...)`
+    /// dispatch.
+    static CLASS_FIELD_ELEMENT_TY:
+        std::cell::RefCell<rustc_hash::FxHashMap<(String, String), Ty>> =
+        std::cell::RefCell::new(rustc_hash::FxHashMap::default());
 }
 
 fn record_list_element_ty(slot: u32, ty: Ty) {
@@ -436,6 +447,21 @@ fn record_list_element_ty(slot: u32, ty: Ty) {
 
 fn lookup_list_element_ty(slot: u32) -> Option<Ty> {
     LIST_ELEMENT_TY.with(|c| c.borrow().get(&slot).cloned())
+}
+
+fn record_class_field_element_ty(class_name: &str, field_name: &str, ty: Ty) {
+    CLASS_FIELD_ELEMENT_TY.with(|c| {
+        c.borrow_mut()
+            .insert((class_name.to_string(), field_name.to_string()), ty);
+    });
+}
+
+fn lookup_class_field_element_ty(class_name: &str, field_name: &str) -> Option<Ty> {
+    CLASS_FIELD_ELEMENT_TY.with(|c| {
+        c.borrow()
+            .get(&(class_name.to_string(), field_name.to_string()))
+            .cloned()
+    })
 }
 
 /// Extract the element Ty from a `KtProperty`'s explicit type annotation
@@ -1421,6 +1447,27 @@ pub fn lower_file(
         };
         let mut table: rustc_hash::FxHashMap<String, rustc_hash::FxHashMap<String, Ty>> =
             rustc_hash::FxHashMap::default();
+        // Interface methods have no body; an absent return type means
+        // Ty::Unit (Kotlin's default), not Ty::Any. Without this, a
+        // callsite like `observers[i].onChange(_count)` sees CLASS_METHODS
+        // report Ty::Any, the Virtual call's dest slot becomes Any, and
+        // backend descriptor inference emits `(I)Ljava/lang/Object;`
+        // against the actual `(I)V` interface method → NoSuchMethodError.
+        let resolve_ret_ty_iface = |f: &skotch_ast::KtFun<'_>| -> Ty {
+            let name_opt: Option<&str> = f
+                .return_type()
+                .and_then(|tr| tr.user_type())
+                .and_then(|u| u.name());
+            match name_opt {
+                Some(n) => skotch_types::ty_from_name(n).unwrap_or_else(|| {
+                    let fq = skotch_types::intrinsics::kotlin_to_jvm_class(n)
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| n.to_string());
+                    Ty::Class(fq)
+                }),
+                None => Ty::Unit,
+            }
+        };
         for decl in file.decls() {
             if let KtDecl::Interface(i) = decl {
                 let Some(iname) = i.name() else { continue };
@@ -1430,7 +1477,7 @@ pub fn lower_file(
                     for d in body.declarations() {
                         if let KtDecl::Fun(f) = d {
                             if let Some(mname) = f.name() {
-                                methods.insert(mname.to_string(), resolve_ret_ty(&f));
+                                methods.insert(mname.to_string(), resolve_ret_ty_iface(&f));
                             }
                         }
                     }
@@ -2579,6 +2626,26 @@ pub fn lower_file(
                 }
             }
         };
+        // Interface methods are abstract by definition and follow
+        // Kotlin's "no declared return → Unit" rule. Defaulting to
+        // Ty::Any caused callsites against interface-typed receivers
+        // to emit `()Ljava/lang/Object;` descriptors against the real
+        // `()V` interface method → NoSuchMethodError at runtime.
+        let resolve_ret_ty_iface = |f: &skotch_ast::KtFun<'_>| -> Ty {
+            let name_opt: Option<&str> = f
+                .return_type()
+                .and_then(|tr| tr.user_type())
+                .and_then(|u| u.name());
+            match name_opt {
+                Some(n) => skotch_types::ty_from_name(n).unwrap_or_else(|| {
+                    let fq = skotch_types::intrinsics::kotlin_to_jvm_class(n)
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| n.to_string());
+                    Ty::Class(fq)
+                }),
+                None => Ty::Unit,
+            }
+        };
         let mut table: rustc_hash::FxHashMap<String, rustc_hash::FxHashMap<String, Ty>> =
             rustc_hash::FxHashMap::default();
         // Local interfaces — register their method returns so
@@ -2597,7 +2664,7 @@ pub fn lower_file(
                     for d in body.declarations() {
                         if let KtDecl::Fun(f) = d {
                             if let Some(mname) = f.name() {
-                                methods.insert(mname.to_string(), resolve_ret_ty(&f));
+                                methods.insert(mname.to_string(), resolve_ret_ty_iface(&f));
                             }
                         }
                     }
@@ -17289,6 +17356,13 @@ fn prebind_class_fields(
                             field_name: fname.clone(),
                         },
                     });
+                    // Forward the field's collection-element Ty (set
+                    // when the field was declared as `MutableList<X>`
+                    // etc.) onto this fresh local slot so later
+                    // indexed-access checkcast picks the element class.
+                    if let Some(elem_ty) = lookup_class_field_element_ty(cname, fname) {
+                        record_list_element_ty(slot.0, elem_ty);
+                    }
                     name_to_local.push((n.to_string(), slot));
                 }
             }
@@ -18806,11 +18880,33 @@ fn lower_rich_expr_to_slot(
                         ok = false;
                         break;
                     };
-                    let Some(slot) = lookup_name(&id_name) else {
+                    // Resolve via name_to_local first; otherwise fall
+                    // back to a class-field `getfield this.<name>`.
+                    // Without the fallback, `"[$name] count is now
+                    // $value"` inside a `Logger.onChange` method body
+                    // bailed on `name` (the class field) even though
+                    // `value` (the method param) was visible — and the
+                    // whole println got dropped.
+                    let (slot, ty) = if let Some(s) = lookup_name(&id_name) {
+                        let t = slot_ty_with_param_fallback(s.0, extra_locals);
+                        (s, t)
+                    } else if let Some((cname, fname, fty)) = class_field_lookup(&id_name) {
+                        let fresh = LocalId(*next_slot);
+                        *next_slot += 1;
+                        extra_locals.push(fty.clone());
+                        pre_stmts.push(MStmt::Assign {
+                            dest: fresh,
+                            value: skotch_mir::Rvalue::GetField {
+                                receiver: LocalId(0),
+                                class_name: cname,
+                                field_name: fname,
+                            },
+                        });
+                        (fresh, fty)
+                    } else {
                         ok = false;
                         break;
                     };
-                    let ty = slot_ty_with_param_fallback(slot.0, extra_locals);
                     recipe.push('\u{1}');
                     desc.push_str(&ty_to_descriptor(&ty));
                     dyn_args.push(slot);
@@ -19417,11 +19513,11 @@ fn lower_rich_expr_to_slot(
                             "java/util/List" | "java/util/ArrayList"
                         )
                     ) {
-                        let result_slot = LocalId(*next_slot);
+                        let raw_slot = LocalId(*next_slot);
                         *next_slot += 1;
                         extra_locals.push(Ty::Any);
                         pre_stmts.push(MStmt::Assign {
-                            dest: result_slot,
+                            dest: raw_slot,
                             value: skotch_mir::Rvalue::Call {
                                 kind: skotch_mir::CallKind::Virtual {
                                     class_name: "java/util/List".to_string(),
@@ -19430,7 +19526,31 @@ fn lower_rich_expr_to_slot(
                                 args: vec![array_slot, index_slot],
                             },
                         });
-                        return Some(result_slot);
+                        // When the source list slot has a known element
+                        // type recorded (e.g. `MutableList<Listener>`
+                        // via `LIST_ELEMENT_TY`), emit a checkcast and
+                        // type the result slot with the element class
+                        // so downstream `xs[i].method(...)` dispatch
+                        // resolves the receiver's class. Without this,
+                        // the receiver Ty stays Ty::Any and the
+                        // DotQualified arm bails on calls like
+                        // `observers[i].onChange(_count)`.
+                        if let Some(elem_ty) = lookup_list_element_ty(array_slot.0) {
+                            if let Ty::Class(cls) = &elem_ty {
+                                let cast_slot = LocalId(*next_slot);
+                                *next_slot += 1;
+                                extra_locals.push(elem_ty.clone());
+                                pre_stmts.push(MStmt::Assign {
+                                    dest: cast_slot,
+                                    value: skotch_mir::Rvalue::CheckCast {
+                                        obj: raw_slot,
+                                        target_class: cls.clone(),
+                                    },
+                                });
+                                return Some(cast_slot);
+                            }
+                        }
+                        return Some(raw_slot);
                     }
                     // Map indexing: `m[key]` → `Map.get(Object)Object` via
                     // invokeinterface on java/util/Map. Required for
@@ -25913,6 +26033,19 @@ fn collect_class_fields(c: skotch_ast::KtClass<'_>) -> Vec<skotch_mir::MirField>
         for d in body.declarations() {
             if let KtDecl::Property(p) = d {
                 if let Some(n) = p.name() {
+                    // Custom-getter properties without an initializer
+                    // don't get a backing field in Kotlin (unless the
+                    // getter body references `field` — not modeled
+                    // here). Skip the field emit so accessor calls
+                    // resolve to our synthesized getter that returns
+                    // the referenced backing field directly. Without
+                    // this, `val n: Int get() = _n` would emit a
+                    // synthesized `n:I` backing field that is never
+                    // written; `getN()` would read the zero default
+                    // instead of `_n`.
+                    if p.initializer().is_none() && p.property_accessors().any(|a| a.is_getter()) {
+                        continue;
+                    }
                     let ty = match p
                         .type_reference()
                         .and_then(|tr| tr.user_type())
@@ -29082,6 +29215,15 @@ fn collect_class_methods(
                         .map(resolve_user_ty)
                         .unwrap_or(Ty::Any);
                     field_names.push((n.to_string(), erase_tp(ty)));
+                    // Record collection-element Ty for body properties
+                    // with an explicit `: MutableList<Listener>` (etc.)
+                    // annotation so `prebind_class_fields` can stamp
+                    // the element Ty onto the prebound field slot and
+                    // `xs[i].method(...)` dispatch resolves the
+                    // receiver to its real class.
+                    if let Some(elem_ty) = prop_collection_element_ty(p) {
+                        record_class_field_element_ty(class_name, n, elem_ty);
+                    }
                 }
             }
         }
@@ -29220,6 +29362,89 @@ fn collect_class_methods(
                     local_generic_args: rustc_hash::FxHashMap::default(),
                 });
             }
+        }
+    }
+    // Synthesize MirFunctions for body-property custom getters of the
+    // form `val x: T get() = <backingField>`. Kotlin elides the
+    // backing field for `x` in this shape; the getter loads the named
+    // backing field directly. `collect_class_fields` already skips
+    // emitting a field for `x`, so without this synthesized
+    // `getX()` the accessor either disappears (NoSuchMethodError) or
+    // collapses to `aconst_null; areturn` via the empty-body fallback.
+    if let Some(body) = c.body() {
+        for d in body.declarations() {
+            let KtDecl::Property(p) = d else { continue };
+            let Some(pname) = p.name() else { continue };
+            if p.initializer().is_some() {
+                continue;
+            }
+            let Some(acc) = p.property_accessors().find(|a| a.is_getter()) else {
+                continue;
+            };
+            // Only the `get() = <backingFieldName>` shape is modeled.
+            let Some(body_expr) = acc.body_expression() else {
+                continue;
+            };
+            let body_expr = unwrap_parens(body_expr);
+            let skotch_ast::KtExpr::Reference(rref) = body_expr else {
+                continue;
+            };
+            let Some(referenced_field) = rref.name() else {
+                continue;
+            };
+            let mut chars = pname.chars();
+            let Some(first_ch) = chars.next() else {
+                continue;
+            };
+            let getter_name = format!(
+                "get{}{}",
+                first_ch.to_uppercase().collect::<String>(),
+                chars.as_str()
+            );
+            if methods.iter().any(|m| m.name == getter_name) {
+                continue;
+            }
+            let ret_ty = erase_tp(p.type_reference().map(resolve_type_ref).unwrap_or(Ty::Any));
+            let this_slot = skotch_mir::LocalId(0);
+            let field_slot = skotch_mir::LocalId(1);
+            let body_stmts = vec![skotch_mir::Stmt::Assign {
+                dest: field_slot,
+                value: skotch_mir::Rvalue::GetField {
+                    receiver: this_slot,
+                    class_name: class_name.to_string(),
+                    field_name: referenced_field.to_string(),
+                },
+            }];
+            methods.push(MirFunction {
+                id: FuncId(0),
+                name: getter_name,
+                params: vec![this_slot],
+                locals: vec![Ty::Class(class_name.to_string()), ret_ty.clone()],
+                blocks: vec![BasicBlock {
+                    stmts: body_stmts,
+                    terminator: Terminator::ReturnValue(field_slot),
+                }],
+                return_ty: ret_ty,
+                required_params: 0,
+                param_names: Vec::new(),
+                param_receiver_types: Vec::new(),
+                param_defaults: Vec::new(),
+                is_abstract: false,
+                vararg_index: None,
+                exception_handlers: Vec::new(),
+                is_suspend: false,
+                is_inline: false,
+                has_type_params: false,
+                suspend_original_return_ty: None,
+                suspend_state_machine: None,
+                annotations: Vec::new(),
+                named_locals: Vec::new(),
+                is_private: false,
+                is_static: false,
+                default_call_masks: Vec::new(),
+                needs_leading_nop: false,
+                local_generic_args: rustc_hash::FxHashMap::default(),
+            });
         }
     }
     methods

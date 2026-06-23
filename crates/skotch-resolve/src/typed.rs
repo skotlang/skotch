@@ -364,8 +364,21 @@ fn infer_body_return_ty(f: KtFun<'_>) -> Ty {
     let block = match f.body_block() {
         Some(b) => b,
         None => {
-            // Expression-body — typed-AST body inference will follow.
-            return Ty::Any;
+            // No body and no expression body either → abstract/
+            // interface method. Kotlin defaults the return type to
+            // Unit, not Any. Returning Any here caused cross-file
+            // callsites against interface methods to emit
+            // `()Ljava/lang/Object;` descriptors against the real
+            // `()V` interface method → NoSuchMethodError at runtime.
+            // Expression-body inference is still TODO; if a real
+            // expression-body is later detected, it can fall through
+            // to a smarter inference. Today, the only consumers of
+            // this path are abstract iface/class methods, so Unit is
+            // strictly more correct than Any.
+            if f.body_expression().is_some() {
+                return Ty::Any;
+            }
+            return Ty::Unit;
         }
     };
     // Scan statements in reverse for a `return value` expression.
