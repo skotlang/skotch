@@ -26769,6 +26769,18 @@ fn peephole_swap_pattern(
                     continue;
                 }
             };
+            // The push must NOT read from `store_slot`. The rewrite drops
+            // the istore and prepends an extra load of <push> before the
+            // swap; if <push> itself loads `store_slot`, the rewritten
+            // body reads an uninitialized slot. The original shape this
+            // bug surfaced from is `<rhs invoke>; istore N; iload N;
+            // iload N; <op>` produced when a single primitive temp is
+            // used as both BinOp operands (e.g. lambda `{ it * it }`'s
+            // unboxed `it`).
+            if instr_reads_slot(code, push_start, store_slot) {
+                i += instruction_len(code, i);
+                continue;
+            }
             let load_start = push_start + push_len;
             // Match a matching load of the same slot.
             let load_len = match decode_aload_of_slot(code, load_start, store_slot, is_int) {
@@ -26869,6 +26881,13 @@ fn peephole_swap_pattern_with_branches(
                     continue;
                 }
             };
+            // The push must NOT read from `store_slot` (mirror of the
+            // guard in `peephole_swap_pattern`; see the comment there
+            // for the failure mode).
+            if instr_reads_slot(code, push_start, store_slot) {
+                i += instruction_len(code, i);
+                continue;
+            }
             let load_start = push_start + push_len;
             let load_len = match decode_aload_of_slot(code, load_start, store_slot, is_int) {
                 Some(n) => n,
@@ -27107,6 +27126,38 @@ fn pure_push_len(code: &[u8], pos: usize) -> Option<usize> {
         0xBB => Some(3),
         _ => None,
     }
+}
+
+/// True iff the instruction at `pos` is a load of local `slot`. Used by the
+/// swap-pattern peephole to reject `istore N; iload N; iload N; <op>`-style
+/// shapes: the "push" between the store and the matching load reads the
+/// same slot we just stored to, so eliding the store leaves the first
+/// `iload N` reading an uninitialized slot. The peephole's correctness
+/// requires the push to be independent of the stored slot.
+fn instr_reads_slot(code: &[u8], pos: usize, slot: u8) -> bool {
+    if pos >= code.len() {
+        return false;
+    }
+    let op = code[pos];
+    // Compact loads for slot 0..3 across i/l/f/d/a.
+    if slot <= 3
+        && (op == 0x1A + slot
+            || op == 0x1E + slot
+            || op == 0x22 + slot
+            || op == 0x26 + slot
+            || op == 0x2A + slot)
+    {
+        return true;
+    }
+    // Generic 2-byte loads (iload/lload/fload/dload/aload).
+    if (0x15..=0x19).contains(&op) && pos + 1 < code.len() && code[pos + 1] == slot {
+        return true;
+    }
+    // iinc reads-then-writes the slot.
+    if op == 0x84 && pos + 1 < code.len() && code[pos + 1] == slot {
+        return true;
+    }
+    false
 }
 
 /// Try to decode a store instruction at `pos` and check if the next instruction
