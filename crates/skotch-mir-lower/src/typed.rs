@@ -1264,7 +1264,7 @@ pub fn lower_file(
             // Tys so the backend's `target_method_sig` lookup finds
             // them. Bodies are empty — the backend skips emitting
             // them via `is_cross_file_stub`.
-            let stub_methods: Vec<MirFunction> = ext
+            let mut stub_methods: Vec<MirFunction> = ext
                 .methods
                 .iter()
                 .map(|m| {
@@ -1310,6 +1310,85 @@ pub fn lower_file(
                     }
                 })
                 .collect();
+            // Inherited-iface method stubs. A cross-file class that
+            // declares `: Iface by inner` (or just `: Iface` without
+            // explicitly overriding every iface method) does NOT
+            // surface the forwarder methods in `ext.methods` — the
+            // resolve crate walks the source AST, and the forwarders
+            // are synthesized later in mir-lower of the owning file.
+            // Without stub entries for these forwarders, a caller in
+            // a sibling file (e.g. Main.kt) emits the call against a
+            // descriptor built from the caller's dest-slot Ty (which
+            // erases to Ljava/lang/Object; when CLASS_METHODS hasn't
+            // promoted it), producing a methodref like
+            // `LoudGreeter.farewell:()Ljava/lang/Object;` against the
+            // actual `()Ljava/lang/String;` forwarder method →
+            // NoSuchMethodError at runtime.
+            //
+            // Synthesize a stub for every iface method NOT already
+            // declared on the class so the backend's
+            // `target_method_sig` lookup finds the real return Ty
+            // (and param Tys) from the iface decl.
+            {
+                let existing: std::collections::HashSet<String> =
+                    stub_methods.iter().map(|m| m.name.clone()).collect();
+                for iface_simple in &ext.interfaces {
+                    // ext.interfaces are FQ JVM names — try both forms.
+                    let iface_decl_opt = table.classes.get(iface_simple).or_else(|| {
+                        iface_simple
+                            .rsplit('/')
+                            .next()
+                            .and_then(|s| table.classes.get(s))
+                    });
+                    let Some(iface_decl) = iface_decl_opt else {
+                        continue;
+                    };
+                    for m in iface_decl.methods.iter() {
+                        if existing.contains(&m.name) {
+                            continue;
+                        }
+                        let mut locals: Vec<Ty> = Vec::with_capacity(1 + m.params.len());
+                        locals.push(Ty::Class(ext.jvm_name.clone()));
+                        for p in &m.params {
+                            locals.push(p.ty.clone());
+                        }
+                        let params: Vec<skotch_mir::LocalId> = (0..=m.params.len())
+                            .map(|i| skotch_mir::LocalId(i as u32))
+                            .collect();
+                        let n_params = m.params.len();
+                        stub_methods.push(MirFunction {
+                            id: FuncId(0),
+                            name: m.name.clone(),
+                            params,
+                            locals,
+                            blocks: vec![BasicBlock {
+                                stmts: Vec::new(),
+                                terminator: Terminator::Return,
+                            }],
+                            return_ty: m.return_ty.clone(),
+                            required_params: n_params,
+                            param_names: m.params.iter().map(|p| p.name.clone()).collect(),
+                            param_receiver_types: Vec::new(),
+                            param_defaults: Vec::new(),
+                            is_abstract: m.is_abstract,
+                            vararg_index: None,
+                            exception_handlers: Vec::new(),
+                            is_suspend: m.is_suspend,
+                            is_inline: m.is_inline,
+                            has_type_params: false,
+                            suspend_original_return_ty: None,
+                            suspend_state_machine: None,
+                            annotations: Vec::new(),
+                            named_locals: Vec::new(),
+                            is_private: false,
+                            is_static: false,
+                            default_call_masks: Vec::new(),
+                            needs_leading_nop: false,
+                            local_generic_args: rustc_hash::FxHashMap::default(),
+                        });
+                    }
+                }
+            }
             // Constructor stub: ctor_params + `this` slot.
             let ctor_locals: Vec<Ty> = std::iter::once(Ty::Class(ext.jvm_name.clone()))
                 .chain(ext.ctor_params.iter().map(|p| p.ty.clone()))
@@ -2878,6 +2957,97 @@ pub fn lower_file(
                         .or_insert(comp_methods);
                 }
             }
+        }
+        // Inherited-iface method return Tys. For each class with a
+        // super-type list naming one or more interfaces (including
+        // `Iface by inner` delegated entries), copy each iface
+        // method's return Ty into the class's table unless the class
+        // already advertises the method via an explicit override (or
+        // a previously-registered override via cross-file resolve).
+        // Required so call sites like `loud.farewell()` where `loud:
+        // LoudGreeter` is narrowed from `Greeter` find a return Ty
+        // for `farewell` and emit the correct descriptor
+        // `()Ljava/lang/String;` against the synthesized forwarder
+        // method, rather than falling back to `()Ljava/lang/Object;`.
+        //
+        // Walks both local and cross-file ifaces: the iface itself
+        // may live in any file (e.g. `Iface.kt`) while the
+        // implementing class lives in another (`Greeters.kt` or
+        // `Main.kt`), so we consult both the in-table local ifaces
+        // and `package_symbols.classes`.
+        let lookup_iface_methods =
+            |iface_simple: &str,
+             tbl: &rustc_hash::FxHashMap<String, rustc_hash::FxHashMap<String, Ty>>|
+             -> Option<rustc_hash::FxHashMap<String, Ty>> {
+                if let Some(m) = tbl.get(iface_simple) {
+                    return Some(m.clone());
+                }
+                if let Some(ps) = package_symbols {
+                    if let Some(decl) = ps.classes.get(iface_simple) {
+                        let mut out: rustc_hash::FxHashMap<String, Ty> =
+                            rustc_hash::FxHashMap::default();
+                        for m in decl.methods.iter() {
+                            out.insert(m.name.clone(), m.return_ty.clone());
+                        }
+                        return Some(out);
+                    }
+                }
+                None
+            };
+        // Snapshot the (class → ifaces) pairs we need to process.
+        // We do this in two phases — snapshot then mutate — to avoid
+        // borrowing `table` immutably (for lookup_iface_methods) and
+        // mutably at the same time.
+        let mut pending_iface_inherit: Vec<(String, Vec<String>)> = Vec::new();
+        for decl in file.decls() {
+            if let KtDecl::Class(c) = decl {
+                let Some(cname) = c.name() else { continue };
+                let (_, ifaces) = collect_class_super_iface(c.super_type_list());
+                if !ifaces.is_empty() {
+                    pending_iface_inherit.push((cname.to_string(), ifaces));
+                }
+            }
+        }
+        if let Some(ps) = package_symbols {
+            for (simple_name, decl) in ps.classes.iter() {
+                if !decl.interfaces.is_empty() {
+                    pending_iface_inherit.push((simple_name.clone(), decl.interfaces.clone()));
+                }
+            }
+        }
+        for (cname, ifaces) in pending_iface_inherit {
+            // Collect all (method, ret_ty) contributions before
+            // mutating the table entry for `cname`.
+            let mut inherited: Vec<(String, Ty)> = Vec::new();
+            for iface in ifaces {
+                // `collect_class_super_iface` returns FQ JVM names
+                // (e.g. `Greeter` stays `Greeter`, `Iterable` becomes
+                // `java/lang/Iterable`). The CLASS_METHODS table
+                // keys on simple names, so try both forms.
+                let candidates = [
+                    iface.as_str(),
+                    iface.rsplit('/').next().unwrap_or(iface.as_str()),
+                ];
+                for cand in candidates.iter() {
+                    if let Some(m) = lookup_iface_methods(cand, &table) {
+                        for (k, v) in m {
+                            inherited.push((k, v));
+                        }
+                        break;
+                    }
+                }
+            }
+            if inherited.is_empty() {
+                continue;
+            }
+            table
+                .entry(cname)
+                .and_modify(|m| {
+                    for (k, v) in &inherited {
+                        m.entry(k.clone()).or_insert_with(|| v.clone());
+                    }
+                })
+                .or_insert_with(|| inherited.into_iter().collect());
         }
         table
     };
