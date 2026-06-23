@@ -25276,24 +25276,40 @@ fn lower_rich_expr_to_slot(
                                         let recv_ty = rcv.name().and_then(lookup_name).map(|s| {
                                             slot_ty_with_param_fallback(s.0, extra_locals)
                                         });
-                                        match (recv_ty, method_n.as_deref()) {
-                                            (Some(Ty::Class(cls)), Some(m)) => {
-                                                class_method_return_ty(&cls, m)
-                                            }
-                                            // Legacy: a String-returning
-                                            // inner call where we can't
-                                            // resolve via CLASS_METHODS
-                                            // (e.g. recv is a top-level
-                                            // val or unresolved) — assume
-                                            // String to preserve the
-                                            // `s.trim().uppercase()` path.
-                                            (_, Some("trim"))
-                                            | (_, Some("uppercase"))
-                                            | (_, Some("lowercase"))
-                                            | (_, Some("substring"))
-                                            | (_, Some("replace"))
-                                            | (_, Some("toString")) => Some(Ty::String),
-                                            _ => None,
+                                        // Legacy: a String-returning inner
+                                        // call where CLASS_METHODS has no
+                                        // entry (e.g. recv is a top-level
+                                        // val, unresolved, or a JDK class
+                                        // like StringBuilder). Assume String
+                                        // so chains like `s.trim().uppercase()`
+                                        // and `sb.toString().toInt()` resolve
+                                        // their outer call against the right
+                                        // recv Ty.
+                                        let string_returning = matches!(
+                                            method_n.as_deref(),
+                                            Some("trim")
+                                                | Some("uppercase")
+                                                | Some("lowercase")
+                                                | Some("substring")
+                                                | Some("replace")
+                                                | Some("toString")
+                                        );
+                                        // Try CLASS_METHODS first when the
+                                        // receiver is a known user class.
+                                        // Fall through (rather than short-
+                                        // circuiting on None) to the
+                                        // String-returning fallback above.
+                                        let from_class_methods =
+                                            match (recv_ty.as_ref(), method_n.as_deref()) {
+                                                (Some(Ty::Class(cls)), Some(m)) => {
+                                                    class_method_return_ty(cls, m)
+                                                }
+                                                _ => None,
+                                            };
+                                        match (from_class_methods, string_returning) {
+                                            (Some(ty), _) => Some(ty),
+                                            (None, true) => Some(Ty::String),
+                                            (None, false) => None,
                                         }
                                     }
                                     _ => None,
