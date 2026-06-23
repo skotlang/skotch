@@ -319,6 +319,67 @@ thread_local! {
     static FN_LAMBDA_PARAM_TYS:
         std::cell::RefCell<rustc_hash::FxHashMap<(String, usize), Vec<Ty>>> =
         std::cell::RefCell::new(rustc_hash::FxHashMap::default());
+
+    /// Call-site hint for a lambda's implicit receiver class. Set by
+    /// the caller before lowering a trailing-lambda arg for a
+    /// `T.() -> R` (extension function type) param; consumed by the
+    /// Lambda synthesizer to install an `ImplicitReceiverScope` for
+    /// the body so bare member-method calls (`greet()` inside
+    /// `c.run { greet() }`) dispatch on the receiver slot rather than
+    /// failing the implicit-this lookup.
+    static LAMBDA_RECEIVER_HINT: std::cell::RefCell<Option<String>> =
+        const { std::cell::RefCell::new(None) };
+
+    /// Active implicit receiver: `(slot, class_name)`. Inside a
+    /// `T.() -> R` lambda body the receiver is the lambda's first
+    /// param (LocalId(1)) and its class is the call-site receiver Ty.
+    /// The bare `Call(Reference)` arm in `lower_rich_expr_to_slot`
+    /// consults this thread-local in addition to `current_class_name`
+    /// so member dispatch (`greet()` → `recv.greet()`) routes through
+    /// the right slot. Stays None outside receiver-lambda bodies.
+    static IMPLICIT_RECEIVER:
+        std::cell::RefCell<Option<(skotch_mir::LocalId, String)>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+fn take_lambda_receiver_hint() -> Option<String> {
+    LAMBDA_RECEIVER_HINT.with(|c| c.borrow_mut().take())
+}
+
+struct LambdaReceiverHintScope {
+    prev: Option<String>,
+}
+impl LambdaReceiverHintScope {
+    fn new(recv: Option<String>) -> Self {
+        let prev = LAMBDA_RECEIVER_HINT.with(|c| c.borrow_mut().take());
+        LAMBDA_RECEIVER_HINT.with(|c| *c.borrow_mut() = recv);
+        Self { prev }
+    }
+}
+impl Drop for LambdaReceiverHintScope {
+    fn drop(&mut self) {
+        LAMBDA_RECEIVER_HINT.with(|c| *c.borrow_mut() = self.prev.take());
+    }
+}
+
+fn current_implicit_receiver() -> Option<(skotch_mir::LocalId, String)> {
+    IMPLICIT_RECEIVER.with(|c| c.borrow().clone())
+}
+
+struct ImplicitReceiverScope {
+    prev: Option<(skotch_mir::LocalId, String)>,
+}
+impl ImplicitReceiverScope {
+    fn new(recv: Option<(skotch_mir::LocalId, String)>) -> Self {
+        let prev = IMPLICIT_RECEIVER.with(|c| c.borrow_mut().take());
+        IMPLICIT_RECEIVER.with(|c| *c.borrow_mut() = recv);
+        Self { prev }
+    }
+}
+impl Drop for ImplicitReceiverScope {
+    fn drop(&mut self) {
+        IMPLICIT_RECEIVER.with(|c| *c.borrow_mut() = self.prev.take());
+    }
 }
 
 fn take_lambda_param_ty_hint() -> Option<Vec<Ty>> {
@@ -14097,6 +14158,49 @@ fn try_lower_multi_stmt_block_with_offset(
                                             }
                                         }
                                     }
+                                    // Trailing-lambda arg for the Kotlin DSL
+                                    // builder pattern (`c.run { greet() }`).
+                                    // Pass the receiver class as both the
+                                    // lambda's first-param Ty hint AND the
+                                    // implicit-receiver hint so bare member
+                                    // dispatch resolves inside the body.
+                                    if ok {
+                                        if let Some(la) = call.lambda_argument() {
+                                            if let Some(le) = skotch_ast::children(la.syntax())
+                                                .iter()
+                                                .find_map(KtExpr::cast)
+                                            {
+                                                let inner_snap = name_to_local.clone();
+                                                let inner_lookup = |n: &str| -> Option<LocalId> {
+                                                    inner_snap
+                                                        .iter()
+                                                        .rev()
+                                                        .find(|(name, _)| name == n)
+                                                        .map(|(_, l)| *l)
+                                                };
+                                                let _ty_hint =
+                                                    LambdaParamTyHintScope::new(Some(vec![
+                                                        Ty::Class(cname.clone()),
+                                                    ]));
+                                                let _recv_hint = LambdaReceiverHintScope::new(
+                                                    Some(cname.clone()),
+                                                );
+                                                if let Some(s) = lower_rich_expr_to_slot(
+                                                    le,
+                                                    &inner_lookup,
+                                                    fn_lookup,
+                                                    &mut next_slot,
+                                                    &mut stmts,
+                                                    &mut local_tys,
+                                                    strings,
+                                                ) {
+                                                    arg_slots.push(s);
+                                                } else {
+                                                    ok = false;
+                                                }
+                                            }
+                                        }
+                                    }
                                     if ok {
                                         let result_slot = LocalId(next_slot);
                                         next_slot += 1;
@@ -18465,12 +18569,38 @@ fn try_lower_multi_stmt_block_with_offset(
                                     })
                                 })
                                 .unwrap_or(false);
+                            // Extension-function-type (`T.() -> R`) param:
+                            // the receiver consumes one of the Function<N>
+                            // invoke arg slots, so `block()` (zero source
+                            // args) dispatches to `Function1.invoke(this)`
+                            // rather than `Function0.invoke()`. Detect via
+                            // the param's `function_type().receiver()`
+                            // child and pass `this` (slot 0) as the
+                            // implicit first invoke arg.
+                            let is_receiver_fn = f
+                                .value_parameter_list()
+                                .and_then(|pl| {
+                                    pl.parameters().nth(param_idx).and_then(|p| {
+                                        p.type_reference().and_then(|tr| {
+                                            tr.function_type().map(|ft| ft.receiver().is_some())
+                                        })
+                                    })
+                                })
+                                .unwrap_or(false);
                             if is_function_typed {
-                                let arity = call
-                                    .value_argument_list()
-                                    .map(|al| al.arguments().count())
-                                    .unwrap_or(0) as u8;
+                                let user_arity =
+                                    call.value_argument_list()
+                                        .map(|al| al.arguments().count())
+                                        .unwrap_or(0) as u8;
+                                let arity = if is_receiver_fn {
+                                    user_arity + 1
+                                } else {
+                                    user_arity
+                                };
                                 let mut invoke_args: Vec<LocalId> = vec![slot];
+                                if is_receiver_fn {
+                                    invoke_args.push(LocalId(0));
+                                }
                                 let mut ok = true;
                                 if let Some(arg_list) = call.value_argument_list() {
                                     for arg in arg_list.arguments() {
@@ -20186,6 +20316,12 @@ fn lower_rich_expr_to_slot(
         // Consume caller's per-param Ty hint BEFORE any nested lambda
         // could overwrite it; None falls back to Ty::Any per param.
         let lambda_param_ty_hint: Option<Vec<Ty>> = take_lambda_param_ty_hint();
+        // Consume caller's receiver-lambda hint. For a `T.() -> R`
+        // param (Kotlin DSL builder shape) the call site installs the
+        // receiver class name here so the body lowering knows to bind
+        // an implicit receiver to LocalId(1) (the first lambda param)
+        // for bare member dispatch (`greet()` → `recv.greet()`).
+        let lambda_receiver_hint: Option<String> = take_lambda_receiver_hint();
         // Param names: explicit value_parameter_list OR implicit `it`
         // if the body uses `it` as a Reference.
         let explicit_params: Vec<String> = func_lit
@@ -20410,6 +20546,38 @@ fn lower_rich_expr_to_slot(
         lambda_param_fallback.push(Ty::Class(lambda_name.clone()));
         lambda_param_fallback.extend(lambda_param_tys.iter().cloned());
         let _lambda_param_scope = ParamTyScope::new(lambda_param_fallback);
+        // Receiver-lambda CheckCast prologue. The Function1 invoke
+        // signature is `(Object) Object`, so the JVM-level param slot
+        // holds `Object` even though we know the source-level class.
+        // Before dispatch, emit `CHECKCAST <recv_class>` on LocalId(1)
+        // into a fresh narrowed slot so subsequent invokevirtual calls
+        // pass the receiver-type check. Mirrors the int-unbox prologue
+        // shape above.
+        let recv_cast_slot: Option<LocalId> = if let Some(cls) = &lambda_receiver_hint {
+            let cs = LocalId(next_slot_inv);
+            next_slot_inv += 1;
+            extra_locals_inv.push(Ty::Class(cls.clone()));
+            pre_stmts_inv.push(MStmt::Assign {
+                dest: cs,
+                value: skotch_mir::Rvalue::CheckCast {
+                    obj: LocalId(1),
+                    target_class: cls.clone(),
+                },
+            });
+            Some(cs)
+        } else {
+            None
+        };
+        // Install IMPLICIT_RECEIVER for the body lowering when the
+        // call-site supplied a receiver-lambda hint (`T.() -> R`).
+        // Pairs the narrowed receiver slot (after CHECKCAST) with the
+        // receiver class so the bare `Call(Reference)` arm in
+        // lower_rich dispatches member calls via `recv.method(...)`
+        // instead of failing to resolve.
+        let _lambda_implicit_recv = match (&lambda_receiver_hint, recv_cast_slot) {
+            (Some(cls), Some(cs)) => Some(ImplicitReceiverScope::new(Some((cs, cls.clone())))),
+            _ => None,
+        };
         // The body block: single-statement expression body is the
         // common case (`{ it % 2 == 0 }`).
         // Body lowering can produce either a single block (rvalue
@@ -20782,9 +20950,25 @@ fn lower_rich_expr_to_slot(
         };
         register_lambda_class(lambda_class);
         // Allocation site: emit NewInstance + Constructor with capture slots.
+        //
+        // When the call site supplied a receiver-lambda hint, widen
+        // the slot's Ty to the `Function<arity>` interface so the
+        // call-site Virtual descriptor synthesis emits
+        // `Lkotlin/jvm/functions/Function1;` (matching the declared
+        // param), rather than the concrete `LLambda$N;` class that
+        // would yield a NoSuchMethodError. Outside the receiver-
+        // lambda path the existing behavior — preserving the
+        // synthesized class Ty — is retained so other lambda
+        // consumers (capture field reads, scope-fn dispatches, etc.)
+        // see no change.
         let result = LocalId(*next_slot);
         *next_slot += 1;
-        extra_locals.push(Ty::Class(lambda_name.clone()));
+        let result_ty = if lambda_receiver_hint.is_some() {
+            Ty::Class(func_class.clone())
+        } else {
+            Ty::Class(lambda_name.clone())
+        };
+        extra_locals.push(result_ty);
         pre_stmts.push(MStmt::Assign {
             dest: result,
             value: skotch_mir::Rvalue::NewInstance(lambda_name.clone()),
@@ -23503,12 +23687,28 @@ fn lower_rich_expr_to_slot(
                                     // expects N+1 args while the stack only holds
                                     // N, and a NoSuchMethodError fires at runtime
                                     // resolving against the wrong arity.
+                                    //
+                                    // For a `T.() -> R` receiver-lambda param,
+                                    // pass the call-site class as the lambda's
+                                    // first-param Ty hint AND set the implicit-
+                                    // receiver hint so bare member calls inside
+                                    // the lambda body resolve via
+                                    // `recv.method(...)`. The receiver class is
+                                    // the same `cls_name` we're dispatching
+                                    // through (Companion's enclosing class).
                                     if all_ok {
                                         if let Some(la) = call.lambda_argument() {
                                             if let Some(le) = skotch_ast::children(la.syntax())
                                                 .iter()
                                                 .find_map(KtExpr::cast)
                                             {
+                                                let _ty_hint =
+                                                    LambdaParamTyHintScope::new(Some(vec![
+                                                        Ty::Class(cls_name.to_string()),
+                                                    ]));
+                                                let _recv_hint = LambdaReceiverHintScope::new(
+                                                    Some(cls_name.to_string()),
+                                                );
                                                 if let Some(s) = lower_rich_expr_to_slot(
                                                     le,
                                                     lookup_name,
@@ -25665,7 +25865,11 @@ fn lower_rich_expr_to_slot(
     // `foo(args)` whose callee doesn't resolve as a top-level fn or
     // intrinsic may be a method on the current class. Look up the
     // method in CLASS_METHODS and emit a Virtual call on slot 0
-    // (`this`).
+    // (`this`). Inside a `T.() -> R` lambda body (the "receiver
+    // lambda" shape used by Kotlin DSL builders), `current_class_name`
+    // returns None but `current_implicit_receiver` carries the receiver
+    // slot + class — dispatch on that instead so `c.run { greet() }`
+    // resolves `greet()` to `recv.greet()`.
     if let KtExpr::Call(call) = e {
         if let Some(KtExpr::Reference(rc)) = call.callee() {
             if let Some(method_name) = rc.name() {
@@ -25673,11 +25877,17 @@ fn lower_rich_expr_to_slot(
                 // constructor call (e.g. `Box(second, first)`), not a
                 // same-class method dispatch. The constructor heuristic
                 // earlier in this function handles those.
-                if method_name.starts_with(char::is_uppercase) {
-                    // fall through to next arm
-                } else if let Some(class_name) = current_class_name() {
+                let dispatch_target: Option<(LocalId, String)> =
+                    if method_name.starts_with(char::is_uppercase) {
+                        None
+                    } else if let Some(class_name) = current_class_name() {
+                        Some((LocalId(0), class_name))
+                    } else {
+                        current_implicit_receiver()
+                    };
+                if let Some((recv_slot, class_name)) = dispatch_target {
                     if let Some(ret_ty) = class_method_return_ty(&class_name, method_name) {
-                        let mut arg_slots: Vec<LocalId> = vec![LocalId(0)];
+                        let mut arg_slots: Vec<LocalId> = vec![recv_slot];
                         let mut all_ok = true;
                         if let Some(arg_list) = call.value_argument_list() {
                             for arg in arg_list.arguments() {
