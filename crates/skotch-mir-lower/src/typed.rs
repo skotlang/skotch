@@ -17539,6 +17539,67 @@ fn lower_rich_expr_to_slot(
             });
             snap_locals.push((cap_name.clone(), field_slot));
         }
+        // Unbox prologue: scan the body for primitive arithmetic use
+        // of each lambda param (e.g. `n % 2` where the JVM-level
+        // param is Object). For each detected primitive-int param,
+        // emit `CHECKCAST Number; INVOKEVIRTUAL intValue()I` so the
+        // body's Binary ops see an int-typed slot. Mirrors the
+        // bridge LambdaMetafactory inserts in kotlinc's shape.
+        fn param_used_as_int(e: skotch_ast::KtExpr<'_>, name: &str) -> bool {
+            use skotch_ast::KtExpr;
+            let e = unwrap_parens(e);
+            let is_named = |e: KtExpr<'_>| -> bool {
+                matches!(unwrap_parens(e), KtExpr::Reference(r) if r.name() == Some(name))
+            };
+            if let KtExpr::Binary(b) = e {
+                let op = b.operation().map(|o| o.text()).unwrap_or_default();
+                let arith = matches!(
+                    op.as_str(),
+                    "+" | "-" | "*" | "/" | "%" | "<" | ">" | "<=" | ">="
+                );
+                if arith
+                    && (b.lhs().map(is_named).unwrap_or(false)
+                        || b.rhs().map(is_named).unwrap_or(false))
+                {
+                    return true;
+                }
+                return b.lhs().map(|l| param_used_as_int(l, name)).unwrap_or(false)
+                    || b.rhs().map(|r| param_used_as_int(r, name)).unwrap_or(false);
+            }
+            false
+        }
+        for (i, p_name) in param_names.iter().enumerate() {
+            if !body_stmts.iter().any(|s| param_used_as_int(*s, p_name)) {
+                continue;
+            }
+            let param_slot = LocalId((1 + i) as u32);
+            let cast_slot = LocalId(next_slot_inv);
+            next_slot_inv += 1;
+            extra_locals_inv.push(Ty::Class("java/lang/Number".to_string()));
+            pre_stmts_inv.push(MStmt::Assign {
+                dest: cast_slot,
+                value: skotch_mir::Rvalue::CheckCast {
+                    obj: param_slot,
+                    target_class: "java/lang/Number".to_string(),
+                },
+            });
+            let int_slot = LocalId(next_slot_inv);
+            next_slot_inv += 1;
+            extra_locals_inv.push(Ty::Int);
+            pre_stmts_inv.push(MStmt::Assign {
+                dest: int_slot,
+                value: skotch_mir::Rvalue::Call {
+                    kind: skotch_mir::CallKind::VirtualJava {
+                        class_name: "java/lang/Number".to_string(),
+                        method_name: "intValue".to_string(),
+                        descriptor: "()I".to_string(),
+                    },
+                    args: vec![cast_slot],
+                },
+            });
+            snap_locals.retain(|(n, _)| n != p_name);
+            snap_locals.push((p_name.clone(), int_slot));
+        }
         let snap = snap_locals.clone();
         let lookup = |n: &str| -> Option<LocalId> {
             snap.iter().rev().find(|(nm, _)| nm == n).map(|(_, l)| *l)
@@ -17653,6 +17714,44 @@ fn lower_rich_expr_to_slot(
             invoke_locals.push(Ty::Any);
         }
         invoke_locals.extend(extra_locals_inv);
+        // Post-process invoke_blocks: invoke()Object, so any
+        // primitive-typed ReturnValue slot must be boxed before
+        // `areturn`. Walk each block's terminator; if it returns a
+        // slot whose Ty is Int/Long/Float/Double/Bool, prepend a
+        // box-call into a fresh Object slot and rewrite the
+        // terminator to return that slot. Matches the boxing pass
+        // for declared-primitive-return user functions.
+        let mut invoke_blocks = invoke_blocks;
+        for block in &mut invoke_blocks {
+            if let Terminator::ReturnValue(slot) = &block.terminator {
+                let s = *slot;
+                let slot_ty = invoke_locals.get(s.0 as usize).cloned().unwrap_or(Ty::Any);
+                let (box_method, box_desc): (Option<&str>, &str) = match slot_ty {
+                    Ty::Int => (Some("boxInt"), "(I)Ljava/lang/Integer;"),
+                    Ty::Long => (Some("boxLong"), "(J)Ljava/lang/Long;"),
+                    Ty::Float => (Some("boxFloat"), "(F)Ljava/lang/Float;"),
+                    Ty::Double => (Some("boxDouble"), "(D)Ljava/lang/Double;"),
+                    Ty::Bool => (Some("boxBoolean"), "(Z)Ljava/lang/Boolean;"),
+                    _ => (None, ""),
+                };
+                if let Some(method) = box_method {
+                    let boxed_slot = LocalId(invoke_locals.len() as u32);
+                    invoke_locals.push(Ty::Any);
+                    block.stmts.push(MStmt::Assign {
+                        dest: boxed_slot,
+                        value: skotch_mir::Rvalue::Call {
+                            kind: skotch_mir::CallKind::StaticJava {
+                                class_name: "kotlin/coroutines/jvm/internal/Boxing".to_string(),
+                                method_name: method.to_string(),
+                                descriptor: box_desc.to_string(),
+                            },
+                            args: vec![s],
+                        },
+                    });
+                    block.terminator = Terminator::ReturnValue(boxed_slot);
+                }
+            }
+        }
         let invoke_params: Vec<LocalId> = (0..=arity).map(|i| LocalId(i as u32)).collect();
         let invoke_method = MirFunction {
             id: FuncId(0),
@@ -17693,10 +17792,17 @@ fn lower_rich_expr_to_slot(
         let ctor_params: Vec<LocalId> = (0..=n_captures).map(|i| LocalId(i as u32)).collect();
         let mut ctor_stmts: Vec<MStmt> = Vec::new();
         // Super-ctor call first.
+        //
+        // The synthesized Lambda$N class extends `java/lang/Object`
+        // rather than `kotlin/jvm/internal/Lambda` so the no-arg
+        // super-init shape works against any stdlib version (the
+        // stdlib `Lambda` ctor takes an `(I)V` arity argument and
+        // `()V` does not exist there). Matches the existing
+        // higher-order-function fixture shape.
         ctor_stmts.push(MStmt::Assign {
             dest: ctor_this,
             value: skotch_mir::Rvalue::Call {
-                kind: skotch_mir::CallKind::Constructor("kotlin/jvm/internal/Lambda".to_string()),
+                kind: skotch_mir::CallKind::Constructor("java/lang/Object".to_string()),
                 args: vec![ctor_this],
             },
         });
@@ -17753,7 +17859,7 @@ fn lower_rich_expr_to_slot(
             .collect();
         let lambda_class = skotch_mir::MirClass {
             name: lambda_name.clone(),
-            super_class: Some("kotlin/jvm/internal/Lambda".to_string()),
+            super_class: Some("java/lang/Object".to_string()),
             is_open: false,
             is_abstract: false,
             is_interface: false,
@@ -25784,12 +25890,13 @@ fn collect_class_fields(c: skotch_ast::KtClass<'_>) -> Vec<skotch_mir::MirField>
             for p in plist.parameters() {
                 if p.is_val() || p.is_var() {
                     if let Some(n) = p.name() {
-                        let ty = match p
-                            .type_reference()
-                            .and_then(|tr| tr.user_type())
-                            .and_then(|u| u.name())
-                        {
-                            Some(name) => resolve_user_ty(name),
+                        // Use resolve_type_ref so function-type and
+                        // typealias annotations (`Predicate = (Int) -> Boolean`)
+                        // lower to the resolved Function<N> class
+                        // descriptor instead of `LPredicate;` which
+                        // produces NoClassDefFoundError at link time.
+                        let ty = match p.type_reference() {
+                            Some(tr) => resolve_type_ref(tr),
                             None => Ty::Any,
                         };
                         fields.push(skotch_mir::MirField {
@@ -29053,15 +29160,17 @@ fn collect_class_methods(
                             .collect()
                     })
                     .unwrap_or_default();
+                // Use resolve_type_ref so typealias / function-type
+                // annotations (`Predicate = (Int) -> Boolean`) lower to
+                // the resolved Function<N> descriptor. The
+                // name-based path that follows is still needed to
+                // honor generic-param erasure (Ty::Any).
                 let ret_ty = match ret_ty_name.as_deref() {
                     Some(n) if class_tp_set.contains(n) => Ty::Any,
-                    Some(n) => skotch_types::ty_from_name(n).unwrap_or_else(|| {
-                        let fq = skotch_types::intrinsics::kotlin_to_jvm_class(n)
-                            .map(|s| s.to_string())
-                            .unwrap_or_else(|| n.to_string());
-                        Ty::Class(fq)
-                    }),
-                    None => Ty::Any,
+                    _ => match p.type_reference() {
+                        Some(tr) => resolve_type_ref(tr),
+                        None => Ty::Any,
+                    },
                 };
                 // Body: `aload_0; getfield <field>; areturn` —
                 // earlier this was an empty body (Return void), which
