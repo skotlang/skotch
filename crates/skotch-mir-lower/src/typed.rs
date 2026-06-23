@@ -5920,6 +5920,7 @@ fn flatten_or_disjuncts<'a>(e: skotch_ast::KtExpr<'a>) -> Vec<skotch_ast::KtExpr
 fn try_lower_when_subjectless(
     w: &skotch_ast::KtWhen<'_>,
     outer_param_names: &[String],
+    outer_param_tys: &[Ty],
     param_count: usize,
     strings: &mut Vec<String>,
     val_lookup: &rustc_hash::FxHashMap<String, Ty>,
@@ -5927,7 +5928,27 @@ fn try_lower_when_subjectless(
     param_slot_offset: u32,
 ) -> Option<(Vec<BasicBlock>, Vec<Ty>)> {
     use skotch_ast::KtExpr;
-    use skotch_mir::{LocalId, Stmt as MStmt};
+    use skotch_mir::{LocalId, Rvalue, Stmt as MStmt};
+
+    // Resolve an arm body to an Rvalue + Ty. Accepts either a
+    // const-foldable literal (delegates to literal_to_const) or a
+    // Reference to an outer parameter (emits Rvalue::Local on the
+    // matching param slot, carrying the declared Ty). Returning a
+    // pre-built Rvalue lets the caller skip the temp-slot indirection
+    // for non-literal bodies without changing block layout.
+    let arm_body_value = |body: &KtExpr<'_>, strings: &mut Vec<String>| -> Option<(Rvalue, Ty)> {
+        if let Some((k, t)) = literal_to_const(body, strings) {
+            return Some((Rvalue::Const(k), t));
+        }
+        if let KtExpr::Reference(r) = body {
+            let n = r.name()?;
+            let idx = outer_param_names.iter().position(|p| p == n)?;
+            let slot = LocalId(idx as u32 + param_slot_offset);
+            let ty = outer_param_tys.get(idx).cloned().unwrap_or(Ty::Any);
+            return Some((Rvalue::Local(slot), ty));
+        }
+        None
+    };
 
     // Collect arms. Each arm's `cond_expr` is classified into a
     // `(CondShape, Vec<KtExpr>)` tuple: AllAnd (`a && b && c`), AnyOr
@@ -5971,6 +5992,13 @@ fn try_lower_when_subjectless(
         KtExpr::String(_) => Ty::String,
         KtExpr::Integer(_) => Ty::Int,
         KtExpr::Boolean(_) => Ty::Bool,
+        // Reference-to-param else body: inherit the param's declared
+        // Ty so the result slot's verifier type matches kotlinc.
+        KtExpr::Reference(r) => r
+            .name()
+            .and_then(|n| outer_param_names.iter().position(|p| p == n))
+            .and_then(|i| outer_param_tys.get(i).cloned())
+            .unwrap_or(Ty::Any),
         _ => Ty::Any,
     };
     extra_locals.push(result_ty);
@@ -6070,15 +6098,17 @@ fn try_lower_when_subjectless(
                 },
             });
         }
-        // Arm body block: kotlinc shape is `tmp = Const(...); result = Local(tmp)`.
+        // Arm body block: kotlinc shape is `tmp = <rvalue>; result =
+        // Local(tmp)`. The Rvalue is either a Const (literal body) or
+        // a Local of the matching param slot (Reference body).
         let mut arm_stmts: Vec<MStmt> = Vec::new();
-        let (k, ty) = literal_to_const(body, strings)?;
+        let (arm_rvalue, ty) = arm_body_value(body, strings)?;
         let tmp_slot = LocalId(next_slot);
         next_slot += 1;
         extra_locals.push(ty);
         arm_stmts.push(MStmt::Assign {
             dest: tmp_slot,
-            value: skotch_mir::Rvalue::Const(k),
+            value: arm_rvalue,
         });
         arm_stmts.push(MStmt::Assign {
             dest: result_slot,
@@ -6090,15 +6120,16 @@ fn try_lower_when_subjectless(
         });
     }
 
-    // Else block: also uses temp-slot copy-back.
+    // Else block: also uses temp-slot copy-back. Accepts the same
+    // shapes as arm bodies (literal or param Reference).
     let mut else_stmts: Vec<MStmt> = Vec::new();
-    let (k, ety) = literal_to_const(&else_body, strings)?;
+    let (else_rvalue, ety) = arm_body_value(&else_body, strings)?;
     let else_tmp = LocalId(next_slot);
     // next_slot increment dropped (dead store)
     extra_locals.push(ety);
     else_stmts.push(MStmt::Assign {
         dest: else_tmp,
-        value: skotch_mir::Rvalue::Const(k),
+        value: else_rvalue,
     });
     else_stmts.push(MStmt::Assign {
         dest: result_slot,
@@ -6170,13 +6201,24 @@ fn try_lower_when_expression(
     let _param_scope = ParamTyScope::new(param_fallback_tys);
 
     // Subject-less when: route to dedicated handler. When { cond -> body ; ... }
-    // is essentially an if-else chain.
+    // is essentially an if-else chain. Derive the param Tys from the
+    // declared parameter list so Reference-arm bodies can carry their
+    // declared Ty (Ty::Int for `default: Int`, etc.) instead of Ty::Any.
     let subject = match w.subject().map(unwrap_parens) {
         Some(s) => s,
         None => {
+            let outer_param_tys: Vec<Ty> = f
+                .value_parameter_list()
+                .map(|pl| {
+                    pl.parameters()
+                        .map(|p| p.type_reference().map(resolve_type_ref).unwrap_or(Ty::Any))
+                        .collect()
+                })
+                .unwrap_or_default();
             return try_lower_when_subjectless(
                 w,
                 &outer_param_names,
+                &outer_param_tys,
                 param_count,
                 strings,
                 val_lookup,
