@@ -46,7 +46,28 @@ fn is_d8_safe() -> bool {
 /// flag from the classfile. Falls back to the static JVM_INTERFACES
 /// list when the classfile isn't available.
 fn is_jvm_interface_check(class_name: &str) -> bool {
-    // Try classfile ACC_INTERFACE flag first (authoritative).
+    // First consult the current module's own classes — user-defined
+    // `interface` and `sealed interface` declarations aren't on the
+    // classpath while their parent module is being compiled, so the
+    // classinfo loader below would return None and the registry
+    // fallback would default to `false`. That produced
+    // `invokevirtual State.describe` against a sealed *interface*
+    // `State`, which hit IncompatibleClassChangeError at runtime
+    // (parity/13-sealed-interface-states).
+    let mod_ptr = EMIT_MODULE.with(|cell| *cell.borrow());
+    if let Some(mod_raw) = mod_ptr {
+        // SAFETY: EMIT_MODULE is set for the duration of a compile_*
+        // call and cleared after; the pointer is valid here because
+        // is_jvm_interface_check is only ever invoked inside an active
+        // emission scope.
+        let module = unsafe { &*mod_raw };
+        for c in &module.classes {
+            if c.name == class_name {
+                return c.is_interface;
+            }
+        }
+    }
+    // Try classfile ACC_INTERFACE flag (authoritative for JDK / dep JARs).
     if let Some(is_iface) = skotch_classinfo::check_is_interface(class_name) {
         return is_iface;
     }

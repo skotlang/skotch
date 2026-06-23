@@ -1309,7 +1309,17 @@ pub fn lower_file(
                     is_jvm_field: false,
                 })
                 .collect();
-            let is_interface = matches!(ext.kind, skotch_resolve::ExternalClassKind::Interface);
+            // SealedInterface is a separate ExternalClassKind variant but
+            // still produces ACC_INTERFACE on the JVM — cross-file stubs
+            // for sealed-interface decls must reflect that so call sites
+            // emit invokeinterface (not invokevirtual against an
+            // interface, which the JVM rejects with
+            // IncompatibleClassChangeError).
+            let is_interface = matches!(
+                ext.kind,
+                skotch_resolve::ExternalClassKind::Interface
+                    | skotch_resolve::ExternalClassKind::SealedInterface
+            );
             module.push_class(skotch_mir::MirClass {
                 name: simple_name.clone(),
                 super_class: None,
@@ -11758,7 +11768,20 @@ fn try_lower_multi_stmt_block_with_offset(
                     // with the alias because there are no
                     // reassignments.
                     let final_slot = if prop.is_var() {
-                        let rhs_ty = slot_ty_with_param_fallback(slot.0, &local_tys);
+                        // Prefer the explicit `var x: T = …` annotation
+                        // type over the init's narrow inferred type.
+                        // `var current: State = Idle` must track the slot
+                        // as `State`, not `Idle`, so subsequent
+                        // reassignments (`current = step(current)` where
+                        // step returns `State`) don't trip the stackmap
+                        // verifier on the back-edge with
+                        // "Inconsistent stackmap frames: locals[0] not
+                        // assignable to Idle" — sealed-interface +
+                        // singleton subtype `var` pattern.
+                        let rhs_ty = prop
+                            .type_reference()
+                            .map(resolve_type_ref)
+                            .unwrap_or_else(|| slot_ty_with_param_fallback(slot.0, &local_tys));
                         let new_slot = LocalId(next_slot);
                         next_slot += 1;
                         local_tys.push(rhs_ty);
