@@ -5746,6 +5746,22 @@ fn emit_method_body(
 
                 let mut merged = vec![true; max_slots];
                 let mut any_pred = false;
+                // Empty MIR blocks (those that emit zero bytes — typically
+                // an entry block whose only stmt is `goto block 1`,
+                // produced by a function whose first stmt is `while (...)`
+                // can't appear in `bytecode_pred_bis`: the bytecode scan
+                // needs at least one instruction to attribute a
+                // fall-through. Their MIR Goto IS a real predecessor edge
+                // though, and missing it from the merge causes the
+                // back-edge state alone to dominate the entry frame —
+                // yielding e.g. `full_frame(@0, {this, Integer, ...})` at
+                // method entry where only `this` is actually live.
+                // Surfaced by parity/17-json-parser-printer's `skipWs()`.
+                let block_is_empty = |bi: usize| -> bool {
+                    let start = block_offsets.get(bi).copied().unwrap_or(code.len());
+                    let end = block_offsets.get(bi + 1).copied().unwrap_or(code.len());
+                    start >= end
+                };
                 for (pi, pblk) in func.blocks.iter().enumerate() {
                     let is_mir_pred = match &pblk.terminator {
                         Terminator::Branch {
@@ -5765,8 +5781,13 @@ fn emit_method_body(
                     // (artifact of inline-tail-match-block et al.); a
                     // bytecode-pred without a matching MIR-pred is a
                     // peephole-introduced edge that should still merge.
+                    //
+                    // EXCEPTION: empty MIR blocks (zero bytecode bytes)
+                    // are MIR preds but invisible to the bytecode scan.
+                    // Include them whenever they're a MIR pred.
                     let is_pred = if !bytecode_pred_bis.is_empty() {
                         bytecode_pred_bis.contains(&pi)
+                            || (is_mir_pred && block_is_empty(pi) && reachable[pi])
                     } else {
                         is_mir_pred
                     };
