@@ -9632,6 +9632,35 @@ fn lower_loop_body(
                             }
                         }
                     }
+                    // Postfix wraps a child expression with a trailing
+                    // operator (`x!!`, `n++`, `n--`). For `!!` walk
+                    // children so a class-field bare reference like
+                    // `edges` inside `edges.get(from)!!.add(to)` is
+                    // preloaded into name_to_local before the lower_rich
+                    // pass. Skip for `++`/`--` because the dedicated
+                    // Postfix arm in lower_rich handles field-targeted
+                    // ones via class_field_lookup and would otherwise
+                    // increment a stale local slot instead of writing
+                    // back to the field.
+                    KtExpr::Postfix(p) => {
+                        let op_text = skotch_ast::children(p.syntax())
+                            .iter()
+                            .find_map(|c| {
+                                (c.kind == skotch_syntax::SyntaxKind::OPERATION_REFERENCE)
+                                    .then(|| {
+                                        skotch_ast::KtOperationReference::cast(c).map(|o| o.text())
+                                    })
+                                    .flatten()
+                            })
+                            .unwrap_or_default();
+                        if op_text == "!!" {
+                            for c in skotch_ast::children(p.syntax()) {
+                                if let Some(ce) = KtExpr::cast(c) {
+                                    collect_refs(ce, out);
+                                }
+                            }
+                        }
+                    }
                     KtExpr::ArrayAccess(aa) => {
                         for c in skotch_ast::children(aa.syntax()) {
                             if let Some(ce) = KtExpr::cast(c) {
@@ -22397,6 +22426,29 @@ fn lower_rich_expr_to_slot(
                     .flatten()
             })
             .unwrap_or_default();
+        // Null-assertion `expr!!`: kotlinc desugars to
+        // `Intrinsics.checkNotNull(expr)` returning the same slot. The
+        // JVM will throw a NullPointerException naturally at the next
+        // invokevirtual if the value is null; for now we forward the
+        // inner expr's slot unchanged so the surrounding DotQualified
+        // / Call dispatch can proceed. Matches semantic correctness
+        // (modulo the kotlinc-style explicit check) and unblocks
+        // common idioms like `m.get(k)!!.add(v)`.
+        if op_text.as_str() == "!!" {
+            let inner = skotch_ast::children(p.syntax())
+                .iter()
+                .find_map(KtExpr::cast)
+                .map(unwrap_parens)?;
+            return lower_rich_expr_to_slot(
+                inner,
+                lookup_name,
+                fn_lookup,
+                next_slot,
+                pre_stmts,
+                extra_locals,
+                strings,
+            );
+        }
         let mir_op = match op_text.as_str() {
             "++" => Some(skotch_mir::BinOp::AddI),
             "--" => Some(skotch_mir::BinOp::SubI),
@@ -24753,6 +24805,40 @@ fn lower_rich_expr_to_slot(
                         // below requires Int recv anyway, so a false
                         // positive returns None and re-bails harmlessly).
                         KtExpr::Binary(_) => Some(Ty::Int),
+                        // Postfix `!!` is a transparent null-assertion.
+                        // Peek through to the inner expression's shape so
+                        // chains like `s!!.uppercase()` or
+                        // `m.get(k)!!.add(v)` can pick the right
+                        // dispatch arm.
+                        KtExpr::Postfix(p) => {
+                            let op_text = skotch_ast::children(p.syntax())
+                                .iter()
+                                .find_map(|c| {
+                                    (c.kind == skotch_syntax::SyntaxKind::OPERATION_REFERENCE)
+                                        .then(|| {
+                                            skotch_ast::KtOperationReference::cast(c)
+                                                .map(|o| o.text())
+                                        })
+                                        .flatten()
+                                })
+                                .unwrap_or_default();
+                            if op_text == "!!" {
+                                let inner = skotch_ast::children(p.syntax())
+                                    .iter()
+                                    .find_map(KtExpr::cast)
+                                    .map(unwrap_parens);
+                                match inner {
+                                    Some(KtExpr::Reference(rr)) => rr
+                                        .name()
+                                        .and_then(lookup_name)
+                                        .map(|s| slot_ty_with_param_fallback(s.0, extra_locals)),
+                                    Some(KtExpr::String(_)) => Some(Ty::String),
+                                    _ => None,
+                                }
+                            } else {
+                                None
+                            }
+                        }
                         _ => None,
                     };
                     // Primitive numeric conversions on Int / Long / Double /
