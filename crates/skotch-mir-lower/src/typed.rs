@@ -10188,12 +10188,19 @@ fn lower_loop_body_blocks(
                 *next_slot += 1;
                 local_tys.push(Ty::Any);
                 // Helper to lower an arm expression to
-                // stmts that assign to prop_slot.
+                // stmts that assign to prop_slot. Also
+                // returns the lowered value_slot so the
+                // caller can refine prop_slot's Ty when
+                // both arms agree on a primitive type
+                // (otherwise the slot stays Ty::Any and
+                // the backend emits astore against a
+                // boxed result — VerifyError on later
+                // primitive use like `if (i < n)`).
                 let mut lower_arm = |arm: KtExpr<'_>,
                                      next_slot: &mut u32,
                                      local_tys: &mut Vec<Ty>,
                                      strings: &mut Vec<String>|
-                 -> Option<Vec<MStmt>> {
+                 -> Option<(Vec<MStmt>, LocalId)> {
                     let mut stmts: Vec<MStmt> = Vec::new();
                     let arm = unwrap_parens(arm);
                     // For block arms, recursively lower
@@ -10260,10 +10267,31 @@ fn lower_loop_body_blocks(
                         dest: prop_slot,
                         value: skotch_mir::Rvalue::Local(value_slot),
                     });
-                    Some(stmts)
+                    Some((stmts, value_slot))
                 };
-                let then_stmts = lower_arm(then_arm, next_slot, local_tys, strings)?;
-                let else_stmts = lower_arm(else_arm, next_slot, local_tys, strings)?;
+                let (then_stmts, then_value_slot) =
+                    lower_arm(then_arm, next_slot, local_tys, strings)?;
+                let (else_stmts, else_value_slot) =
+                    lower_arm(else_arm, next_slot, local_tys, strings)?;
+                // Refine prop_slot's Ty when both arms produced the
+                // same primitive type. Falls back to Ty::Any (object
+                // store/load) when the arms disagree or either is a
+                // reference type, preserving prior behavior.
+                let then_ty = slot_ty_with_param_fallback(then_value_slot.0, local_tys);
+                let else_ty = slot_ty_with_param_fallback(else_value_slot.0, local_tys);
+                if then_ty == else_ty
+                    && matches!(
+                        then_ty,
+                        Ty::Int | Ty::Bool | Ty::Long | Ty::Float | Ty::Double | Ty::Char
+                    )
+                {
+                    let prop_idx = prop_slot.0 as usize;
+                    let param_count = PARAM_TY_FALLBACK.with(|c| c.borrow().len());
+                    let local_idx = prop_idx.saturating_sub(param_count);
+                    if local_idx < local_tys.len() {
+                        local_tys[local_idx] = then_ty;
+                    }
+                }
                 let cond_block_id = block_offset + blocks.len() as u32;
                 let then_block_id = cond_block_id + 1;
                 let else_block_id = then_block_id + 1;
@@ -28730,6 +28758,153 @@ fn method_simple_body_full(
                                         } else {
                                             snap_locals.push((name.to_string(), rhs_slot));
                                         }
+                                        continue;
+                                    } else {
+                                        mini_ok = false;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        // Path C: ArrayAccess LHS — `arr[idx] = rhs`.
+                        // Covers an instance-field IntArray assignment
+                        // inside a class method body
+                        // (`data[r * cols + c] = value` in
+                        // `operator fun set`). Without this, the body
+                        // statement falls through to the generic
+                        // `other =>` arm which routes the whole `=`
+                        // expression through `lower_rich_expr_to_slot`
+                        // — which has no `=` Binary handler and returns
+                        // None, silently dropping the body. The result
+                        // was an empty `set` method, so subsequent
+                        // `m[r, c]` reads returned the default 0.
+                        if op_text == "=" {
+                            let lhs2 = b.lhs().map(unwrap_parens);
+                            let rhs2 = b.rhs().map(unwrap_parens);
+                            if let (Some(KtExpr::ArrayAccess(aa)), Some(rhs_e)) = (lhs2, rhs2) {
+                                let aa_children: Vec<&skotch_sil::SilNode> =
+                                    skotch_ast::children(aa.syntax()).iter().collect();
+                                let array_expr_opt = aa_children
+                                    .iter()
+                                    .find_map(|c| KtExpr::cast(c))
+                                    .map(unwrap_parens);
+                                let index_exprs: Vec<KtExpr<'_>> = aa_children
+                                    .iter()
+                                    .find_map(|c| {
+                                        if c.kind == skotch_syntax::SyntaxKind::INDICES {
+                                            Some(
+                                                skotch_ast::children(c)
+                                                    .iter()
+                                                    .filter_map(KtExpr::cast)
+                                                    .map(unwrap_parens)
+                                                    .collect::<Vec<_>>(),
+                                            )
+                                        } else {
+                                            None
+                                        }
+                                    })
+                                    .unwrap_or_default();
+                                if let (Some(array_expr), 1) = (array_expr_opt, index_exprs.len()) {
+                                    // Preload implicit-this class fields
+                                    // referenced in the array_expr, index,
+                                    // and rhs so subsequent lookups find
+                                    // them as snap_locals slots. Mirrors
+                                    // the val-init and PutField paths.
+                                    if let Some(cname) = class_name {
+                                        fn collect_refs<'a>(
+                                            e: skotch_ast::KtExpr<'a>,
+                                            out: &mut Vec<String>,
+                                        ) {
+                                            use skotch_ast::KtExpr;
+                                            let e = unwrap_parens(e);
+                                            match e {
+                                                KtExpr::Reference(r) => {
+                                                    if let Some(n) = r.name() {
+                                                        out.push(n.to_string());
+                                                    }
+                                                }
+                                                KtExpr::Binary(b) => {
+                                                    if let Some(l) = b.lhs() {
+                                                        collect_refs(l, out);
+                                                    }
+                                                    if let Some(r) = b.rhs() {
+                                                        collect_refs(r, out);
+                                                    }
+                                                }
+                                                _ => {}
+                                            }
+                                        }
+                                        let mut refs: Vec<String> = Vec::new();
+                                        collect_refs(array_expr, &mut refs);
+                                        collect_refs(index_exprs[0], &mut refs);
+                                        collect_refs(rhs_e, &mut refs);
+                                        for n in refs {
+                                            if snap_locals.iter().any(|(nm, _)| nm == &n) {
+                                                continue;
+                                            }
+                                            if let Some((fname, fty)) =
+                                                field_names.iter().find(|(nm, _)| nm == &n)
+                                            {
+                                                let slot = skotch_mir::LocalId(next_slot_inner);
+                                                next_slot_inner += 1;
+                                                extra_locals_inner.push(fty.clone());
+                                                pre_stmts_inner.push(skotch_mir::Stmt::Assign {
+                                                    dest: slot,
+                                                    value: skotch_mir::Rvalue::GetField {
+                                                        receiver: skotch_mir::LocalId(0),
+                                                        class_name: cname.to_string(),
+                                                        field_name: fname.clone(),
+                                                    },
+                                                });
+                                                snap_locals.push((n.clone(), slot));
+                                            }
+                                        }
+                                    }
+                                    let snap = snap_locals.clone();
+                                    let lookup = |n: &str| -> Option<skotch_mir::LocalId> {
+                                        snap.iter().rev().find(|(nm, _)| nm == n).map(|(_, l)| *l)
+                                    };
+                                    let arr_slot = lower_rich_expr_to_slot(
+                                        array_expr,
+                                        &lookup,
+                                        fn_lookup,
+                                        &mut next_slot_inner,
+                                        &mut pre_stmts_inner,
+                                        &mut extra_locals_inner,
+                                        strings,
+                                    );
+                                    let idx_slot = lower_rich_expr_to_slot(
+                                        index_exprs[0],
+                                        &lookup,
+                                        fn_lookup,
+                                        &mut next_slot_inner,
+                                        &mut pre_stmts_inner,
+                                        &mut extra_locals_inner,
+                                        strings,
+                                    );
+                                    let val_slot = lower_rich_expr_to_slot(
+                                        rhs_e,
+                                        &lookup,
+                                        fn_lookup,
+                                        &mut next_slot_inner,
+                                        &mut pre_stmts_inner,
+                                        &mut extra_locals_inner,
+                                        strings,
+                                    );
+                                    if let (Some(a), Some(i), Some(v)) =
+                                        (arr_slot, idx_slot, val_slot)
+                                    {
+                                        let unused = skotch_mir::LocalId(next_slot_inner);
+                                        next_slot_inner += 1;
+                                        extra_locals_inner.push(Ty::Unit);
+                                        pre_stmts_inner.push(skotch_mir::Stmt::Assign {
+                                            dest: unused,
+                                            value: skotch_mir::Rvalue::ArrayStore {
+                                                array: a,
+                                                index: i,
+                                                value: v,
+                                            },
+                                        });
                                         continue;
                                     } else {
                                         mini_ok = false;
