@@ -10820,7 +10820,21 @@ fn try_lower_multi_stmt_block_with_offset(
                                         .find(|(n, _)| n == recv_n)
                                         .map(|(_, l)| *l)
                                     {
-                                        if let Some(Ty::Class(cname)) =
+                                        // Trailing-lambda calls (e.g. `xs.fold(0.0) { ... }`)
+                                        // can't be lowered via the naive Virtual emit below —
+                                        // the lambda lives in `call.lambda_argument()`, not
+                                        // `value_argument_list()`, so it would be dropped and
+                                        // the resulting invoke would carry a descriptor missing
+                                        // the lambda param. Bail to the lower_rich fallback
+                                        // which routes through the CollectionsKt static-dispatch
+                                        // path (handles fold/map/filter/etc. with proper
+                                        // lambda+Function2 wiring).
+                                        if call.lambda_argument().is_some() {
+                                            // skip this Reference+Call arm; fall through to
+                                            // the `_ => {}` arm and onward to the lower_rich
+                                            // final fallback at the bottom of the property
+                                            // handler.
+                                        } else if let Some(Ty::Class(cname)) =
                                             local_tys.get(recv_slot.0 as usize).cloned()
                                         {
                                             let mut arg_slots: Vec<LocalId> = vec![recv_slot];
@@ -21473,6 +21487,19 @@ fn lower_rich_expr_to_slot(
                                     _ => None,
                                 };
                                 if let Some((cname, result_ty)) = dispatch {
+                                    // Bail when there's a trailing lambda — the naive Virtual
+                                    // dispatch below only iterates `value_argument_list()` and
+                                    // would drop the lambda, producing a descriptor missing
+                                    // the lambda param. Stdlib calls like `xs.fold(0.0) { acc, x -> ... }`
+                                    // need the CollectionsKt static-dispatch path (which knows
+                                    // the canonical Function2 lambda param).
+                                    if call.lambda_argument().is_some() {
+                                        trace_bail!(
+                                            "DotQualified Virtual fallback bails on trailing lambda (method={}, class={})",
+                                            method_n, cname
+                                        );
+                                        return None;
+                                    }
                                     let mut arg_slots: Vec<LocalId> = vec![slot];
                                     if let Some(arg_list) = call.value_argument_list() {
                                         // Bail on named arguments: Virtual
