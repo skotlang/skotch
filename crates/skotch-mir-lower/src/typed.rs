@@ -543,6 +543,18 @@ fn val_lookup_fallback(name: &str) -> Option<(Ty, String)> {
     })
 }
 
+/// The wrapper-class name for the file currently being lowered, as
+/// recorded by `ValLookupScope::new`. Used to qualify lifted-anon
+/// class names (Lambda$N / ObjectLit$N) so the same per-file counter
+/// in two sibling files (e.g. `Factory.kt` + `Main.kt`) doesn't
+/// emit two `.class` files with the same name into a shared output
+/// directory. The empty-string fallback only happens when we're
+/// lowering outside any file scope, which shouldn't occur in
+/// practice but keeps the call site total.
+fn current_wrapper_class() -> String {
+    VAL_LOOKUP_FALLBACK.with(|cell| cell.borrow().1.clone())
+}
+
 /// Resolve a Kotlin user-type name to a `Ty`. Primitives and stdlib
 /// shorthand go through `ty_from_name`; everything else (user
 /// classes, cross-file references) falls back to `Ty::Class(<JVM
@@ -3315,6 +3327,25 @@ pub fn lower_file(
         fixup_default_calls(&mut c.constructor, &fn_param_shape);
     }
 
+    // Drain accumulated lambda classes from the file-scoped registry
+    // and append to the module. Each KtExpr::Lambda arm in
+    // lower_rich_expr_to_slot pushes one MirClass with `is_lambda:
+    // true`; the JVM backend renders them as Function<arity>
+    // subclasses with a direct invoke method (no LambdaMetafactory
+    // bootstrap — kotlinc emits both shapes; the direct-class shape
+    // is byte-stable per project_lambda_typed_invoke_bridge).
+    //
+    // Drain BEFORE the field-type / method-return-type fixups so the
+    // ObjectLit$N and Lambda$N classes are visible to those passes —
+    // otherwise a `Virtual{class:"ObjectLit$0", method:"ap"}` Call
+    // whose dest slot is currently `Ty::Any` never gets promoted to
+    // the declared return Ty, and downstream `println(o.ap(...))`
+    // resolves to `println(Object)` against a primitive-int stack →
+    // VerifyError. (See parity/38-object-expr-capture.)
+    for cls in take_lambda_classes() {
+        module.push_class(cls);
+    }
+
     // Field-type fixup: snapshot class field declarations, then walk
     // every function looking for `Stmt::Assign { dest, value:
     // Rvalue::GetField { class_name, field_name } }`. When the local
@@ -3374,17 +3405,6 @@ pub fn lower_file(
             fixup_call_return_locals(m, &class_methods, &fn_returns);
         }
         fixup_call_return_locals(&mut c.constructor, &class_methods, &fn_returns);
-    }
-
-    // Drain accumulated lambda classes from the file-scoped registry
-    // and append to the module. Each KtExpr::Lambda arm in
-    // lower_rich_expr_to_slot pushes one MirClass with `is_lambda:
-    // true`; the JVM backend renders them as Function<arity>
-    // subclasses with a direct invoke method (no LambdaMetafactory
-    // bootstrap — kotlinc emits both shapes; the direct-class shape
-    // is byte-stable per project_lambda_typed_invoke_bridge).
-    for cls in take_lambda_classes() {
-        module.push_class(cls);
     }
 
     // Optional MIR dump for debugging. Gated on `SKOTCH_DUMP_MIR` env
@@ -18119,7 +18139,21 @@ fn lower_rich_expr_to_slot(
         }
         // Pre-compute a unique anonymous-class name.
         let obj_idx = next_lambda_idx();
-        let obj_name = format!("ObjectLit${}", obj_idx);
+        // Qualify the synthesized class name with the enclosing
+        // wrapper-class so two separately-compiled files in the same
+        // output directory don't collide on `ObjectLit$0`. Without
+        // this, e.g. `Factory.kt` produces `ObjectLit$0` for
+        // `makeProducer`, then `Main.kt` overwrites that .class file
+        // with its own `ObjectLit$0` (`inline` in main()) — and
+        // `makeProducer`'s NewInstance + `<init>` call link against
+        // the wrong constructor at runtime → NoSuchMethodError.
+        // (See parity/38-object-expr-capture.)
+        let wrapper = current_wrapper_class();
+        let obj_name = if wrapper.is_empty() {
+            format!("ObjectLit${}", obj_idx)
+        } else {
+            format!("{}$ObjectLit${}", wrapper, obj_idx)
+        };
         // Register each declared method's return Ty in CLASS_METHODS
         // so downstream dispatch sites (e.g. `println(obj.apply(2,
         // 5))` where obj is a local of this ObjectLit's type) can
@@ -18807,7 +18841,30 @@ fn lower_rich_expr_to_slot(
                 out.push(e);
             }
             flatten(e, &mut parts);
-            let has_string = parts.iter().any(|p| matches!(p, KtExpr::String(_)));
+            // Detect String-typed parts. A literal `KtExpr::String` is
+            // always String. A `KtExpr::Reference` whose name resolves
+            // (via `lookup_name`) to a slot already typed `Ty::String`
+            // is also String — that's the `prefix + suffix` shape inside
+            // an object-expression's override method, where both leaves
+            // are captures of outer-fn `String` params. Without this
+            // peek, `has_string = false` and the chain falls through to
+            // the integer-Binary arm, which emits a bogus `BinOp(+I, …)`
+            // on two reference slots → the body produces null at runtime.
+            // (See parity/38-object-expr-capture.)
+            let is_string_part = |p: &KtExpr<'_>| -> bool {
+                match p {
+                    KtExpr::String(_) => true,
+                    KtExpr::Reference(r) => r
+                        .name()
+                        .and_then(lookup_name)
+                        .map(|s| {
+                            matches!(slot_ty_with_param_fallback(s.0, extra_locals), Ty::String)
+                        })
+                        .unwrap_or(false),
+                    _ => false,
+                }
+            };
+            let has_string = parts.iter().any(&is_string_part);
             if has_string && parts.len() >= 2 {
                 let mut recipe = String::new();
                 let mut dyn_args: Vec<LocalId> = Vec::new();
