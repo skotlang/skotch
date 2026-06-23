@@ -19719,16 +19719,85 @@ fn lower_rich_expr_to_slot(
             .iter()
             .find_map(|c| KtExpr::cast(c))
             .map(unwrap_parens);
-        let index_expr_opt = children.iter().find_map(|c| {
-            if c.kind == skotch_syntax::SyntaxKind::INDICES {
-                skotch_ast::children(c)
-                    .iter()
-                    .find_map(KtExpr::cast)
-                    .map(unwrap_parens)
-            } else {
-                None
+        // Collect ALL index expressions inside INDICES — `m[i]` has
+        // one, `m[r, c]` has two, etc. The first is reused for the
+        // common single-index path below; multi-arg shapes (`m[r, c]`)
+        // dispatch to a user-defined `operator fun get` when the
+        // receiver is a Ty::Class registered in CLASS_METHODS, mirroring
+        // the set-side dispatch at the ArrayStore arm.
+        let index_exprs: Vec<KtExpr<'_>> = children
+            .iter()
+            .find_map(|c| {
+                if c.kind == skotch_syntax::SyntaxKind::INDICES {
+                    Some(
+                        skotch_ast::children(c)
+                            .iter()
+                            .filter_map(KtExpr::cast)
+                            .map(unwrap_parens)
+                            .collect::<Vec<_>>(),
+                    )
+                } else {
+                    None
+                }
+            })
+            .unwrap_or_default();
+        // Multi-index `m[r, c]` on a user class: dispatch to
+        // `m.get(r, c)`. Without this arm, the second index is dropped
+        // and the loader falls through to `aaload` against a class
+        // reference, producing a VerifyError.
+        if index_exprs.len() > 1 {
+            if let Some(array_expr) = array_expr_opt {
+                if let Some(array_slot) = lower_rich_expr_to_slot(
+                    array_expr,
+                    lookup_name,
+                    fn_lookup,
+                    next_slot,
+                    pre_stmts,
+                    extra_locals,
+                    strings,
+                ) {
+                    let recv_ty = slot_ty_with_param_fallback(array_slot.0, extra_locals);
+                    if let Ty::Class(cname) = &recv_ty {
+                        if let Some(ret_ty) = class_method_return_ty(cname, "get") {
+                            let mut arg_slots: Vec<LocalId> = vec![array_slot];
+                            let mut ok = true;
+                            for ie in &index_exprs {
+                                let Some(s) = lower_rich_expr_to_slot(
+                                    *ie,
+                                    lookup_name,
+                                    fn_lookup,
+                                    next_slot,
+                                    pre_stmts,
+                                    extra_locals,
+                                    strings,
+                                ) else {
+                                    ok = false;
+                                    break;
+                                };
+                                arg_slots.push(s);
+                            }
+                            if ok {
+                                let result_slot = LocalId(*next_slot);
+                                *next_slot += 1;
+                                extra_locals.push(ret_ty);
+                                pre_stmts.push(MStmt::Assign {
+                                    dest: result_slot,
+                                    value: skotch_mir::Rvalue::Call {
+                                        kind: skotch_mir::CallKind::Virtual {
+                                            class_name: cname.clone(),
+                                            method_name: "get".to_string(),
+                                        },
+                                        args: arg_slots,
+                                    },
+                                });
+                                return Some(result_slot);
+                            }
+                        }
+                    }
+                }
             }
-        });
+        }
+        let index_expr_opt = index_exprs.first().copied();
         if let (Some(array_expr), Some(index_expr)) = (array_expr_opt, index_expr_opt) {
             if let Some(array_slot) = lower_rich_expr_to_slot(
                 array_expr,
