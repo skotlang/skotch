@@ -377,8 +377,20 @@ fn append_method_annotations(
         .iter()
         .filter(|a| a.retention == skotch_mir::AnnotationRetention::Binary)
         .collect();
-    let has_notnull_return = method_returns_non_null_ref(func);
-    let has_nullable_return = method_returns_nullable_ref(func);
+    let has_suspend_attrs = func.is_suspend;
+    // The JVM class-file format permits at most ONE
+    // `RuntimeInvisibleAnnotations` attribute per method (JVMS §4.7.18).
+    // Suspend functions already get a `RuntimeInvisibleAnnotations`
+    // attribute (the @DebugMetadata marker), so we must NOT additionally
+    // emit the `@NotNull` / `@Nullable` return-type annotation — that
+    // would produce a second attribute of the same name and crash class
+    // loading with `java.lang.ClassFormatError: Multiple
+    // RuntimeInvisibleAnnotations attributes`. The suspend method's
+    // actual JVM return type is `Object` (the Continuation-suspension
+    // sentinel), so a source-level `@NotNull String` annotation on the
+    // method return is also semantically incorrect.
+    let has_notnull_return = !has_suspend_attrs && method_returns_non_null_ref(func);
+    let has_nullable_return = !has_suspend_attrs && method_returns_nullable_ref(func);
     let has_deprecated = func
         .annotations
         .iter()
@@ -387,7 +399,6 @@ fn append_method_annotations(
     let has_param_notnull = param_notnull_mask.iter().any(|&b| b);
     let param_annot_kinds = compute_param_annot_kinds(func);
     let has_param_nullable = param_annot_kinds.contains(&ParamAnnotKind::Nullable);
-    let has_suspend_attrs = func.is_suspend;
 
     // Pre-register the LocalVariableTable's per-param Utf8 strings
     // (param name + JVM descriptor). kotlinc adds these to the CP
@@ -3887,6 +3898,18 @@ fn emit_method_body(
                     && !is_composable_typed_invoke
                 {
                     &Ty::Any // JVM invoke returns Object
+                } else if func.name == "main" {
+                    // `jvm_descriptor` forces `fun main()` (and
+                    // `fun main(args: Array<String>)`) to a `void`
+                    // JVM descriptor regardless of the source-inferred
+                    // return type. `fun main() = runBlocking { ... }`
+                    // infers a non-Unit return (Ty::Any / Ty::Class)
+                    // because the body is an expression returning the
+                    // value of `runBlocking`. Without this override the
+                    // emitter would push `aconst_null; areturn` against
+                    // a `()V` descriptor, which the JVM verifier rejects
+                    // with "Method does not expect a return value".
+                    &Ty::Unit
                 } else {
                     &func.return_ty
                 };
@@ -6929,7 +6952,19 @@ fn emit_stub_method(
 
     // Build a minimal Code attribute: just return the default value.
     let mut code = Vec::new();
-    let (max_stack, code_bytes) = match &func.return_ty {
+    // `jvm_descriptor` forces the `main` function's descriptor to `()V`
+    // (or `([Ljava/lang/String;)V`) regardless of the source-inferred
+    // return type — `fun main() = runBlocking { ... }` infers a
+    // non-Unit return Ty (e.g. Ty::Any) but the emitted method must be
+    // void. If the stub follows `func.return_ty` blindly we'd emit
+    // `aconst_null; areturn` against a `()V` descriptor and crash the
+    // verifier with "Method does not expect a return value".
+    let stub_return_ty: &Ty = if func.name == "main" {
+        &Ty::Unit
+    } else {
+        &func.return_ty
+    };
+    let (max_stack, code_bytes) = match stub_return_ty {
         Ty::Unit => {
             code.push(0xB1); // return
             (0u16, code)
