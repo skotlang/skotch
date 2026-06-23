@@ -359,11 +359,20 @@ fn ext_param_from_value_parameter(
         .map(|tr| type_ref_to_ty(tr, imports, aliases))
         .unwrap_or(Ty::Any);
     // Receiver class for `(Foo.() -> R)` lambda parameter types.
+    // The SIL parser sometimes places the receiver's USER_TYPE
+    // directly under FUNCTION_TYPE_RECEIVER without an intermediate
+    // TYPE_REFERENCE wrapper; accept both shapes (mirrors the
+    // fallback in `type_ref_to_ty` above).
     let receiver_class = p.type_reference().and_then(|tr| {
         tr.function_type()
             .and_then(|ft| ft.receiver())
-            .and_then(|r| r.type_reference())
-            .and_then(|rt| rt.user_type())
+            .and_then(|r| {
+                r.type_reference()
+                    .and_then(|rt| rt.user_type())
+                    .or_else(|| {
+                        skotch_ast::first_typed_child::<skotch_ast::KtUserType<'_>>(r.syntax())
+                    })
+            })
             .and_then(|u| u.name().map(|s| s.to_string()))
     });
     ExternalParam {

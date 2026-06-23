@@ -241,6 +241,49 @@ impl Drop for ClassFieldsScope {
 }
 
 thread_local! {
+    /// Module-scoped registry of class methods that take a trailing
+    /// function-typed parameter. Key: `(class_name, method_name)`.
+    /// Value: receiver-class name (Some when the param's type is a
+    /// `T.() -> R` extension-fn type; None for plain `(Args) -> R`).
+    ///
+    /// Consumed by the implicit-this method-call dispatch path so
+    /// `child(label) { ... }` inside a `Tree.() -> Unit` lambda body
+    /// can lower the trailing lambda with the right receiver hint
+    /// (mirrors the Companion-factory `Tree.of("root") { ... }` path
+    /// which already wires this through). Without it, the trailing
+    /// lambda gets silently dropped — the invokevirtual emits a
+    /// 1-arg descriptor against the real 2-arg method, producing
+    /// NoSuchMethodError at runtime.
+    static CLASS_METHOD_LAMBDA_HINTS:
+        std::cell::RefCell<rustc_hash::FxHashMap<(String, String), Option<String>>> =
+        std::cell::RefCell::new(rustc_hash::FxHashMap::default());
+}
+
+fn lookup_class_method_lambda_hint(class_name: &str, method_name: &str) -> Option<Option<String>> {
+    CLASS_METHOD_LAMBDA_HINTS.with(|c| {
+        c.borrow()
+            .get(&(class_name.to_string(), method_name.to_string()))
+            .cloned()
+    })
+}
+
+struct ClassMethodLambdaHintsScope {
+    prev: rustc_hash::FxHashMap<(String, String), Option<String>>,
+}
+impl ClassMethodLambdaHintsScope {
+    fn new(table: rustc_hash::FxHashMap<(String, String), Option<String>>) -> Self {
+        let prev = CLASS_METHOD_LAMBDA_HINTS.with(|c| std::mem::take(&mut *c.borrow_mut()));
+        CLASS_METHOD_LAMBDA_HINTS.with(|c| *c.borrow_mut() = table);
+        Self { prev }
+    }
+}
+impl Drop for ClassMethodLambdaHintsScope {
+    fn drop(&mut self) {
+        CLASS_METHOD_LAMBDA_HINTS.with(|c| *c.borrow_mut() = std::mem::take(&mut self.prev));
+    }
+}
+
+thread_local! {
     /// File-scoped type-alias map: `Name → resolved Ty`. Populated in
     /// `lower_file` BEFORE class processing so resolve_type_ref can
     /// substitute `Predicate` → `Ty::Class("kotlin/jvm/functions/Function1")`
@@ -3616,6 +3659,103 @@ pub fn lower_file(
         table
     };
     let _class_methods_scope = ClassMethodsScope::new(class_method_returns);
+
+    // CLASS_METHOD_LAMBDA_HINTS: populate per (class, method) when the
+    // method's last param is a function type. Records the receiver class
+    // (Some) for `T.() -> R` or None for plain `(Args) -> R`. Walked at
+    // the implicit-this call dispatch site to lower a trailing lambda
+    // arg with the right hint instead of silently dropping it.
+    let class_method_lambda_hints: rustc_hash::FxHashMap<(String, String), Option<String>> = {
+        let mut t: rustc_hash::FxHashMap<(String, String), Option<String>> =
+            rustc_hash::FxHashMap::default();
+        for decl in file.decls() {
+            if let KtDecl::Class(c) = decl {
+                let Some(cname) = c.name() else { continue };
+                if let Some(body) = c.body() {
+                    for d in body.declarations() {
+                        if let KtDecl::Fun(f) = d {
+                            let Some(mname) = f.name() else { continue };
+                            let Some(plist) = f.value_parameter_list() else {
+                                continue;
+                            };
+                            let Some(last_p) = plist.parameters().last() else {
+                                continue;
+                            };
+                            let Some(tr) = last_p.type_reference() else {
+                                continue;
+                            };
+                            let Some(ft) = tr.function_type() else {
+                                continue;
+                            };
+                            // Require an arrow + return type — guards
+                            // against the parser-quirk no-arrow case.
+                            if ft.return_type().is_none() {
+                                continue;
+                            }
+                            // The SIL parser places the receiver's
+                            // USER_TYPE directly under FUNCTION_TYPE_RECEIVER
+                            // without a TYPE_REFERENCE wrapper (mirrors the
+                            // resolve_type_ref no-arrow fallback at line ~802).
+                            // Try the TYPE_REFERENCE path first; fall back
+                            // to the bare USER_TYPE child.
+                            let recv_class: Option<String> = ft.receiver().and_then(|r| {
+                                r.type_reference()
+                                    .and_then(|rtr| rtr.user_type())
+                                    .or_else(|| {
+                                        skotch_ast::first_typed_child::<skotch_ast::KtUserType<'_>>(
+                                            r.syntax(),
+                                        )
+                                    })
+                                    .and_then(|u| u.name())
+                                    .map(String::from)
+                            });
+                            t.insert((cname.to_string(), mname.to_string()), recv_class);
+                        }
+                    }
+                }
+            }
+        }
+        // Cross-file classes: surface the resolver's
+        // `ExternalParam.receiver_class` on the last param of each
+        // method as the hint receiver class. The resolver already
+        // walks the source `T.() -> R` shape; we just need to mirror
+        // it into our local map so call sites in this file can find
+        // it. Mirrors the cross-file branch of `class_method_returns`
+        // above at line ~3526.
+        if let Some(tbl) = package_symbols {
+            for (simple_name, decl) in tbl.classes.iter() {
+                for m in decl.methods.iter() {
+                    let Some(last_p) = m.params.last() else {
+                        continue;
+                    };
+                    // Only register when the param type is a
+                    // function type. Resolver fills `receiver_class`
+                    // only for receiver-typed function params, but a
+                    // plain `(A,B) -> R` last param ALSO wants a
+                    // hint entry (with None) so the call-site code
+                    // pulls in the trailing lambda even without a
+                    // receiver. Detect function type via Ty shape.
+                    // The resolver may surface the param Ty as
+                    // either Ty::Function (structured) or
+                    // Ty::Class("kotlin/jvm/functions/Function<N>")
+                    // depending on the encode path. Accept both.
+                    let is_fn_ty = match &last_p.ty {
+                        Ty::Function { .. } => true,
+                        Ty::Class(name) => name.starts_with("kotlin/jvm/functions/Function"),
+                        _ => false,
+                    };
+                    if !is_fn_ty {
+                        continue;
+                    }
+                    t.entry((simple_name.clone(), m.name.clone()))
+                        .or_insert_with(|| last_p.receiver_class.clone());
+                }
+            }
+        }
+        t
+    };
+    let _class_method_lambda_hints_scope =
+        ClassMethodLambdaHintsScope::new(class_method_lambda_hints);
 
     // CLASS_SUPER: user class → super class (JVM internal). Cross-file
     // `super_class` is the simple name, so FQ it like the local path does.
@@ -9487,6 +9627,81 @@ fn lower_loop_body(
                             .find(|(n, _)| n == recv_n)
                             .map(|(_, l)| *l)
                         {
+                            // Function-typed parameter dispatch:
+                            // `node.init()` where `init` is a `Tree<T>.() -> Unit`
+                            // parameter must call `Function1.invoke(node)` (the
+                            // lambda's receiver-arg slot), NOT `invokevirtual
+                            // Tree.init()` (which doesn't exist). Detect when
+                            // the selector name resolves to an in-scope local
+                            // whose Ty is `kotlin/jvm/functions/FunctionN`.
+                            //
+                            // Mirrors the same detection at the
+                            // `try_lower_multi_stmt_block_with_offset` site
+                            // (line ~15155); this arm handles the
+                            // `lower_loop_body` body-walker path that the
+                            // class-method block-body fallback
+                            // (`try_lower_function_body_via_blocks`) uses.
+                            if let Some(meth_slot) = name_to_local
+                                .iter()
+                                .rev()
+                                .find(|(n, _)| n == method_n)
+                                .map(|(_, l)| *l)
+                            {
+                                let meth_ty = slot_ty_with_param_fallback(meth_slot.0, local_tys);
+                                let fn_arity: Option<u8> = match &meth_ty {
+                                    Ty::Class(c) => c
+                                        .strip_prefix("kotlin/jvm/functions/Function")
+                                        .and_then(|n| n.parse::<u8>().ok()),
+                                    _ => None,
+                                };
+                                if let Some(arity) = fn_arity {
+                                    let mut invoke_args: Vec<LocalId> = vec![meth_slot, recv_slot];
+                                    let mut ok2 = true;
+                                    if let Some(arg_list) = call.value_argument_list() {
+                                        let snap = name_to_local.clone();
+                                        let lookup = |n: &str| -> Option<LocalId> {
+                                            snap.iter()
+                                                .rev()
+                                                .find(|(name, _)| name == n)
+                                                .map(|(_, l)| *l)
+                                        };
+                                        for arg in arg_list.arguments() {
+                                            let Some(arg_e) = arg.expression() else {
+                                                ok2 = false;
+                                                break;
+                                            };
+                                            let Some(s) = lower_rich_expr_to_slot(
+                                                arg_e,
+                                                &lookup,
+                                                fn_lookup_ref,
+                                                next_slot,
+                                                &mut body_mstmts,
+                                                local_tys,
+                                                strings,
+                                            ) else {
+                                                ok2 = false;
+                                                break;
+                                            };
+                                            invoke_args.push(s);
+                                        }
+                                    }
+                                    if ok2 && invoke_args.len() == (arity as usize) + 1 {
+                                        let result_slot = LocalId(*next_slot);
+                                        *next_slot += 1;
+                                        local_tys.push(Ty::Any);
+                                        body_mstmts.push(MStmt::Assign {
+                                            dest: result_slot,
+                                            value: skotch_mir::Rvalue::Call {
+                                                kind: skotch_mir::CallKind::FunctionInvoke {
+                                                    arity,
+                                                },
+                                                args: invoke_args,
+                                            },
+                                        });
+                                        continue;
+                                    }
+                                }
+                            }
                             let recv_ty = slot_ty_with_param_fallback(recv_slot.0, local_tys);
                             if let Ty::Class(cname) = recv_ty {
                                 let mut arg_slots: Vec<LocalId> = vec![recv_slot];
@@ -26941,6 +27156,54 @@ fn lower_rich_expr_to_slot(
                                     break;
                                 };
                                 arg_slots.push(s);
+                            }
+                        }
+                        // Trailing-lambda arg (`child("alpha") { ... }`
+                        // inside a `Tree.() -> Unit` receiver lambda).
+                        // The lambda lives in call.lambda_argument(),
+                        // separate from value_argument_list. Without
+                        // pulling it in, the invokevirtual emits a
+                        // descriptor short by one Function-typed param
+                        // and NoSuchMethodError fires at runtime.
+                        //
+                        // The CLASS_METHOD_LAMBDA_HINTS table tells us
+                        // both that the method's trailing param IS a
+                        // function type AND (for `T.() -> R` extension
+                        // function types) the receiver class to thread
+                        // through so bare member calls inside the
+                        // nested lambda body dispatch on the receiver
+                        // instead of failing the implicit-this lookup.
+                        if all_ok {
+                            if let Some(la) = call.lambda_argument() {
+                                if let Some(le) = skotch_ast::children(la.syntax())
+                                    .iter()
+                                    .find_map(KtExpr::cast)
+                                {
+                                    let recv_hint =
+                                        lookup_class_method_lambda_hint(&class_name, method_name)
+                                            .unwrap_or(None);
+                                    let _ty_hint = recv_hint.as_ref().map(|rc| {
+                                        LambdaParamTyHintScope::new(Some(vec![Ty::Class(
+                                            rc.clone(),
+                                        )]))
+                                    });
+                                    let _recv_hint = recv_hint
+                                        .as_ref()
+                                        .map(|rc| LambdaReceiverHintScope::new(Some(rc.clone())));
+                                    if let Some(s) = lower_rich_expr_to_slot(
+                                        le,
+                                        lookup_name,
+                                        fn_lookup,
+                                        next_slot,
+                                        pre_stmts,
+                                        extra_locals,
+                                        strings,
+                                    ) {
+                                        arg_slots.push(s);
+                                    } else {
+                                        all_ok = false;
+                                    }
+                                }
                             }
                         }
                         if all_ok {
