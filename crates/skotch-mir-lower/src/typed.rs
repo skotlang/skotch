@@ -305,6 +305,90 @@ fn reset_lambda_counter() {
 }
 
 thread_local! {
+    /// Call-site hint for a lambda's per-param Ty list. Set by the
+    /// caller before lowering a trailing-lambda arg; consumed by the
+    /// Lambda synthesizer to type `invoke_locals` (so DotQualified
+    /// receivers inside the body can resolve the right class).
+    static LAMBDA_PARAM_TY_HINT: std::cell::RefCell<Option<Vec<Ty>>> =
+        const { std::cell::RefCell::new(None) };
+
+    /// File-scoped `(fn_name, param_idx) → Vec<Ty>` for local top-
+    /// level fns whose param at `param_idx` has a function type like
+    /// `(Int, Step) -> Unit`. Populated in `lower_file` before any
+    /// body is lowered.
+    static FN_LAMBDA_PARAM_TYS:
+        std::cell::RefCell<rustc_hash::FxHashMap<(String, usize), Vec<Ty>>> =
+        std::cell::RefCell::new(rustc_hash::FxHashMap::default());
+}
+
+fn take_lambda_param_ty_hint() -> Option<Vec<Ty>> {
+    LAMBDA_PARAM_TY_HINT.with(|c| c.borrow_mut().take())
+}
+
+struct LambdaParamTyHintScope {
+    prev: Option<Vec<Ty>>,
+}
+impl LambdaParamTyHintScope {
+    fn new(tys: Option<Vec<Ty>>) -> Self {
+        let prev = LAMBDA_PARAM_TY_HINT.with(|c| c.borrow_mut().take());
+        LAMBDA_PARAM_TY_HINT.with(|c| *c.borrow_mut() = tys);
+        Self { prev }
+    }
+}
+impl Drop for LambdaParamTyHintScope {
+    fn drop(&mut self) {
+        LAMBDA_PARAM_TY_HINT.with(|c| *c.borrow_mut() = self.prev.take());
+    }
+}
+
+/// Extract per-param Tys from `f`'s parameter at `param_idx` when it's
+/// a `(A, B, ...) -> R` function type. None for plain types.
+fn fn_param_lambda_tys_from_decl(f: skotch_ast::KtFun<'_>, param_idx: usize) -> Option<Vec<Ty>> {
+    let plist = f.value_parameter_list()?;
+    let target = plist.parameters().nth(param_idx)?;
+    let ft = target.type_reference()?.function_type()?;
+    ft.return_type()?;
+    let pl = ft.parameter_list()?;
+    let mut out: Vec<Ty> = Vec::new();
+    if let Some(rty) = ft
+        .receiver()
+        .and_then(|r| r.type_reference())
+        .map(resolve_type_ref)
+    {
+        out.push(rty);
+    }
+    for p in pl.parameters() {
+        out.push(p.type_reference().map(resolve_type_ref).unwrap_or(Ty::Any));
+    }
+    Some(out)
+}
+
+fn record_fn_lambda_param_tys(name: &str, param_idx: usize, tys: Vec<Ty>) {
+    FN_LAMBDA_PARAM_TYS.with(|c| {
+        c.borrow_mut().insert((name.to_string(), param_idx), tys);
+    });
+}
+
+fn lookup_fn_lambda_param_tys(name: &str, param_idx: usize) -> Option<Vec<Ty>> {
+    FN_LAMBDA_PARAM_TYS.with(|c| c.borrow().get(&(name.to_string(), param_idx)).cloned())
+}
+
+struct FnLambdaParamTysScope {
+    prev: rustc_hash::FxHashMap<(String, usize), Vec<Ty>>,
+}
+impl FnLambdaParamTysScope {
+    fn new() -> Self {
+        let prev = FN_LAMBDA_PARAM_TYS.with(|c| std::mem::take(&mut *c.borrow_mut()));
+        Self { prev }
+    }
+}
+impl Drop for FnLambdaParamTysScope {
+    fn drop(&mut self) {
+        FN_LAMBDA_PARAM_TYS.with(|c| *c.borrow_mut() = std::mem::take(&mut self.prev));
+    }
+}
+
+thread_local! {
     /// File-scoped side table mapping a lifted local-fn name to the
     /// ordered list of captured outer-scope names. Populated in
     /// `lower_file` BEFORE function bodies are lowered, so call sites
@@ -975,6 +1059,23 @@ pub fn lower_file(
     // Also drain any straggling lambda classes from a prior file
     // that didn't get drained — defensive.
     let _ = take_lambda_classes();
+
+    // Populate per-file fn-lambda-param hints from the source decls
+    // BEFORE bodies lower so call sites can look them up.
+    let _fn_lambda_param_tys_scope = FnLambdaParamTysScope::new();
+    for decl in file.decls() {
+        if let KtDecl::Fun(f) = decl {
+            if let Some(name) = f.name() {
+                if let Some(plist) = f.value_parameter_list() {
+                    for (i, _p) in plist.parameters().enumerate() {
+                        if let Some(tys) = fn_param_lambda_tys_from_decl(f, i) {
+                            record_fn_lambda_param_tys(name, i, tys);
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     // Pre-pass: collect top-level fn name → (FuncId, ret Ty). Built
     // before classes/funs are processed so class method bodies can
@@ -12956,6 +13057,15 @@ fn try_lower_multi_stmt_block_with_offset(
                                                 .find(|(name, _)| name == n)
                                                 .map(|(_, l)| *l)
                                         };
+                                        // Plumb the callee's lambda-
+                                        // param Tys to the Lambda$N
+                                        // synthesizer (trailing lambda
+                                        // sits at arg_slots.len()).
+                                        let hint = lookup_fn_lambda_param_tys(
+                                            callee_name,
+                                            arg_slots.len(),
+                                        );
+                                        let _hint_scope = LambdaParamTyHintScope::new(hint);
                                         let slot = lower_rich_expr_to_slot(
                                             le,
                                             &lookup,
@@ -19744,6 +19854,9 @@ fn lower_rich_expr_to_slot(
             return None;
         };
         let body_block = func_lit.body()?;
+        // Consume caller's per-param Ty hint BEFORE any nested lambda
+        // could overwrite it; None falls back to Ty::Any per param.
+        let lambda_param_ty_hint: Option<Vec<Ty>> = take_lambda_param_ty_hint();
         // Param names: explicit value_parameter_list OR implicit `it`
         // if the body uses `it` as a Reference.
         let explicit_params: Vec<String> = func_lit
@@ -19767,6 +19880,12 @@ fn lower_rich_expr_to_slot(
             explicit_params
         };
         let arity = param_names.len();
+        // Per-param Tys for the lambda invoke method: use hint when
+        // arity matches, fallback Ty::Any otherwise.
+        let lambda_param_tys: Vec<Ty> = match lambda_param_ty_hint {
+            Some(tys) if tys.len() == arity => tys,
+            _ => vec![Ty::Any; arity],
+        };
         // Walk the body for free References — names that resolve in
         // the OUTER scope via `lookup_name` but aren't lambda params.
         // Each becomes a capture: ctor param + field on the Lambda$N
@@ -19956,6 +20075,12 @@ fn lower_rich_expr_to_slot(
         let lookup = |n: &str| -> Option<LocalId> {
             snap.iter().rev().find(|(nm, _)| nm == n).map(|(_, l)| *l)
         };
+        // Set ParamTyScope for the lambda invoke body so slot lookups
+        // resolve to lambda's params (not the outer fn's).
+        let mut lambda_param_fallback: Vec<Ty> = Vec::with_capacity(1 + arity);
+        lambda_param_fallback.push(Ty::Class(lambda_name.clone()));
+        lambda_param_fallback.extend(lambda_param_tys.iter().cloned());
+        let _lambda_param_scope = ParamTyScope::new(lambda_param_fallback);
         // The body block: single-statement expression body is the
         // common case (`{ it % 2 == 0 }`).
         // Body lowering can produce either a single block (rvalue
@@ -20130,11 +20255,13 @@ fn lower_rich_expr_to_slot(
         };
         let _ = lambda_idx;
         let func_class = format!("kotlin/jvm/functions/Function{}", arity);
-        // invoke locals: [Class(lambda), Any, Any, ...] + body extras.
+        // invoke locals: [Class(lambda), <lambda_param_tys>] + body
+        // extras. Tys only affect downstream dispatch (DotQualified
+        // receiver lookup) — JVM slot shape stays reference-typed.
         let mut invoke_locals: Vec<Ty> = Vec::with_capacity(1 + arity + extra_locals_inv.len());
         invoke_locals.push(Ty::Class(lambda_name.clone()));
-        for _ in 0..arity {
-            invoke_locals.push(Ty::Any);
+        for i in 0..arity {
+            invoke_locals.push(lambda_param_tys.get(i).cloned().unwrap_or(Ty::Any));
         }
         invoke_locals.extend(extra_locals_inv);
         // Post-process invoke_blocks: invoke()Object, so any
@@ -22668,6 +22795,17 @@ fn lower_rich_expr_to_slot(
                             .iter()
                             .find_map(KtExpr::cast)
                         {
+                            // Plumb the callee's lambda-param Tys.
+                            // Subtract prepended local-helper
+                            // captures from arg_slots.len() so the
+                            // param index matches the source-side
+                            // declaration.
+                            let cap_n = local_helper_captures(name).map(|v| v.len()).unwrap_or(0);
+                            let hint = lookup_fn_lambda_param_tys(
+                                name,
+                                arg_slots.len().saturating_sub(cap_n),
+                            );
+                            let _hint_scope = LambdaParamTyHintScope::new(hint);
                             let slot = lower_rich_expr_to_slot(
                                 le,
                                 lookup_name,
