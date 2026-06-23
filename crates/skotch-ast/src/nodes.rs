@@ -680,7 +680,24 @@ impl<'a> KtFun<'a> {
     }
 
     pub fn return_type(self) -> Option<KtTypeReference<'a>> {
-        first_typed_child(self.syntax())
+        // The return type's TYPE_REFERENCE appears AFTER the
+        // VALUE_PARAMETER_LIST node (i.e. `: ReturnType` follows
+        // `(params)`). For extension functions like
+        // `Iterable<T>.countWhere(...): Int`, the RECEIVER's
+        // TYPE_REFERENCE comes BEFORE the param-list, so a plain
+        // `first_typed_child` would return the receiver and miscompile
+        // every extension fn with a non-receiver return type.
+        let mut after_params = false;
+        for c in children(self.syntax()) {
+            if c.kind == SyntaxKind::VALUE_PARAMETER_LIST {
+                after_params = true;
+                continue;
+            }
+            if after_params && c.kind == SyntaxKind::TYPE_REFERENCE {
+                return KtTypeReference::cast(c);
+            }
+        }
+        None
     }
 
     pub fn body_block(self) -> Option<KtBlock<'a>> {
