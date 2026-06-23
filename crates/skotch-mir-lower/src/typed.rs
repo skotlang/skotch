@@ -898,6 +898,28 @@ fn resolve_type_ref(tr: skotch_ast::KtTypeReference<'_>) -> Ty {
         }
         return resolve_user_ty(name);
     }
+    // Nullable user type: `T?` parses as NULLABLE_TYPE wrapping a
+    // USER_TYPE rather than a direct user_type child. Without this
+    // peek, `val sibling: T? = null` collected its field Ty as
+    // Ty::Any, defeating downstream PutField / DotQualified arms
+    // that gate on Ty::Class — e.g. `tail.sibling = node` after
+    // `val tail = lastChild` (parity/14-generic-tree-dsl walk bail).
+    if let Some(nt) = tr.nullable_type() {
+        if let Some(name) = nt.inner_user_type().and_then(|u| u.name()) {
+            if let Some(alias_ty) = resolve_typealias(name) {
+                return alias_ty;
+            }
+            return resolve_user_ty(name);
+        }
+        if nt.inner_function_type().is_some() {
+            // Nullable function type — defer to the outer
+            // function_type arm by reconstructing the inner Ty via
+            // recursion-like lookup. The synthetic TypeReference
+            // doesn't survive here, so fall back to Ty::Any rather
+            // than fabricating a possibly-wrong arity.
+            return Ty::Any;
+        }
+    }
     Ty::Any
 }
 
@@ -3341,6 +3363,27 @@ pub fn lower_file(
             class_lookup.insert(name.to_string(), param_tys);
 
             // Collect fields (primary-ctor val/var + body val/var).
+            // Helper: extract the user-type name from a KtTypeReference,
+            // peeling a NULLABLE_TYPE wrapper so `T?` resolves to "T"
+            // instead of "Any". Without this, `var lastChild: T? = null`
+            // would be stored as "Any" → erased to Ty::Any → the
+            // `tail.sibling = node` PutField guard at lower_loop_body
+            // wouldn't fire (parity/14-generic-tree-dsl walk bail).
+            fn tref_user_name(tr: skotch_ast::KtTypeReference<'_>) -> Option<String> {
+                if let Some(u) = tr.user_type() {
+                    if let Some(n) = u.name() {
+                        return Some(n.to_string());
+                    }
+                }
+                if let Some(nt) = tr.nullable_type() {
+                    if let Some(u) = nt.inner_user_type() {
+                        if let Some(n) = u.name() {
+                            return Some(n.to_string());
+                        }
+                    }
+                }
+                None
+            }
             let mut fields: Vec<(String, String)> = Vec::new();
             if let Some(pc) = c.primary_constructor() {
                 if let Some(plist) = pc.value_parameter_list() {
@@ -3351,10 +3394,8 @@ pub fn lower_file(
                         let Some(fname) = p.name() else { continue };
                         let type_name = p
                             .type_reference()
-                            .and_then(|tr| tr.user_type())
-                            .and_then(|u| u.name())
-                            .unwrap_or("Any")
-                            .to_string();
+                            .and_then(tref_user_name)
+                            .unwrap_or_else(|| "Any".to_string());
                         fields.push((fname.to_string(), type_name));
                     }
                 }
@@ -3365,10 +3406,8 @@ pub fn lower_file(
                         if let Some(fname) = p.name() {
                             let type_name = p
                                 .type_reference()
-                                .and_then(|tr| tr.user_type())
-                                .and_then(|u| u.name())
-                                .unwrap_or("Any")
-                                .to_string();
+                                .and_then(tref_user_name)
+                                .unwrap_or_else(|| "Any".to_string());
                             fields.push((fname.to_string(), type_name));
                         }
                     }
@@ -8832,9 +8871,19 @@ fn lower_loop_body(
                                     .find(|(n, _)| n == rcv_n)
                                     .map(|(_, l)| *l)
                                 {
-                                    if let Some(Ty::Class(cname)) =
-                                        local_tys.get(rcv_slot.0 as usize).cloned()
-                                    {
+                                    // Receiver Ty lookup: use slot_ty_with_param_fallback
+                                    // so this resolves params (slots 0..param_count, held
+                                    // in PARAM_TY_FALLBACK by try_lower_function_body_via_blocks)
+                                    // AND body-local Tys uniformly. The legacy direct
+                                    // `local_tys.get(slot)` only worked for body locals,
+                                    // so `param.field = ...` shapes — e.g. appendChild's
+                                    // `tail.sibling = node` after `val tail = lastChild`
+                                    // — fell through and returned None, bailing the
+                                    // entire function (parity/14-generic-tree-dsl walk
+                                    // bail bucket).
+                                    let recv_ty =
+                                        slot_ty_with_param_fallback(rcv_slot.0, local_tys);
+                                    if let Ty::Class(cname) = recv_ty {
                                         let rhs_expr = b.rhs().map(unwrap_parens)?;
                                         let snap = name_to_local.clone();
                                         let lookup = |n: &str| -> Option<LocalId> {
@@ -9529,10 +9578,27 @@ fn lower_loop_body(
                         }
                     }
                 };
+                // String compound concat: `s += rhs` against a
+                // `var s: String`. Without this rewrite the AddI
+                // op flows through has_type_flow_issues (which flags
+                // String lhs/rhs as incompatible with primitive
+                // arithmetic) and the whole function body is replaced
+                // by a stub (parity/14-generic-tree-dsl indent()).
+                let resolved_op = if matches!(op, skotch_mir::BinOp::AddI) {
+                    let lhs_ty = slot_ty_with_param_fallback(lhs_slot.0, local_tys);
+                    let rhs_ty = slot_ty_with_param_fallback(rhs_slot.0, local_tys);
+                    if matches!(lhs_ty, Ty::String) || matches!(rhs_ty, Ty::String) {
+                        skotch_mir::BinOp::ConcatStr
+                    } else {
+                        op
+                    }
+                } else {
+                    op
+                };
                 body_mstmts.push(MStmt::Assign {
                     dest: lhs_slot,
                     value: skotch_mir::Rvalue::BinOp {
-                        op,
+                        op: resolved_op,
                         lhs: lhs_slot,
                         rhs: rhs_slot,
                     },
@@ -31389,12 +31455,16 @@ fn collect_class_fields(c: skotch_ast::KtClass<'_>) -> Vec<skotch_mir::MirField>
                     if p.initializer().is_none() && p.property_accessors().any(|a| a.is_getter()) {
                         continue;
                     }
-                    let ty = match p
-                        .type_reference()
-                        .and_then(|tr| tr.user_type())
-                        .and_then(|u| u.name())
-                    {
-                        Some(name) => resolve_user_ty(name),
+                    // Use `resolve_type_ref` so nullable wrappers (`T?`)
+                    // and function-type / typealias annotations all
+                    // route through the canonical resolver. Without
+                    // this, `private var firstChild: Tree<T>? = null`
+                    // collected ty=Ty::Any, the field was emitted with
+                    // descriptor `Ljava/lang/Object;`, and
+                    // GetField-into-stackmap-typed-as-Tree produced a
+                    // VerifyError (parity/14-generic-tree-dsl).
+                    let ty = match p.type_reference() {
+                        Some(tr) => resolve_type_ref(tr),
                         // No explicit type annotation: peek at the
                         // initializer literal to infer Int/Long/
                         // Double/Bool/String. Falls back to Ty::Any
