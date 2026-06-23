@@ -24931,9 +24931,34 @@ fn lower_rich_expr_to_slot(
                     // chained calls like `origin.translate(...).copy(...)`
                     // keep the receiver typed instead of cascading to
                     // Ty::Any (which would defeat this very fallback).
+                    //
+                    // When the bare-Reference receiver doesn't resolve
+                    // as a local but DOES resolve as a class field
+                    // (current method context, via `class_field_lookup`),
+                    // synthesize a fresh slot loaded from `this.<field>`
+                    // via GetField. Without this, `edges.containsKey(v)`
+                    // inside a method body bailed because `edges` was
+                    // a class field, not a local. Mirrors the
+                    // class-field fallback in lower_inline_expr_to_slot
+                    // for bare Reference (line ~19423).
                     if let KtExpr::Reference(rcv_ref) = &dq_exprs[0] {
                         if let Some(rn) = rcv_ref.name() {
-                            if let Some(slot) = lookup_name(rn) {
+                            let resolved_slot: Option<LocalId> = lookup_name(rn).or_else(|| {
+                                let (class_name, field_name, field_ty) = class_field_lookup(rn)?;
+                                let s = LocalId(*next_slot);
+                                *next_slot += 1;
+                                extra_locals.push(field_ty);
+                                pre_stmts.push(MStmt::Assign {
+                                    dest: s,
+                                    value: skotch_mir::Rvalue::GetField {
+                                        receiver: LocalId(0),
+                                        class_name,
+                                        field_name,
+                                    },
+                                });
+                                Some(s)
+                            });
+                            if let Some(slot) = resolved_slot {
                                 let recv_ty = slot_ty_with_param_fallback(slot.0, extra_locals);
                                 // Determine the dispatch class. If
                                 // recv_ty is Ty::Class(_), use it
