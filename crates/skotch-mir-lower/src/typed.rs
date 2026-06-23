@@ -8468,6 +8468,74 @@ fn try_lower_multi_stmt_block_inner(
     try_lower_function_body_via_blocks(block, f, strings, fn_lookup, 0)
 }
 
+/// Decoded `BUILDER { body }` shape for coroutine-builder calls.
+/// Returns the builder's name and the trailing lambda's body block
+/// when the expression is one of `runBlocking`/`launch`/`async`/
+/// `withContext` (and the other entries of `COROUTINE_BUILDERS`)
+/// with a `KtLambdaArgument` trailing-lambda. None otherwise.
+struct CoroutineBuilderBody<'a> {
+    builder_name: &'a str,
+    body: skotch_ast::KtBlock<'a>,
+}
+/// Identify `name.await()` where `name` is a known local, and return
+/// the local's slot. Used inside `${...}` template entries (and other
+/// expression-position dispatch sites) to fold coroutine
+/// `Deferred.await()` into a slot read of the inlined async-result.
+fn name_await_passthrough(
+    inner: skotch_ast::KtExpr<'_>,
+    lookup_name: &dyn Fn(&str) -> Option<skotch_mir::LocalId>,
+) -> Option<skotch_mir::LocalId> {
+    use skotch_ast::KtExpr;
+    let KtExpr::DotQualified(dq) = inner else {
+        return None;
+    };
+    let exprs: Vec<KtExpr<'_>> = skotch_ast::children(dq.syntax())
+        .iter()
+        .filter_map(KtExpr::cast)
+        .collect();
+    if exprs.len() != 2 {
+        return None;
+    }
+    let (KtExpr::Reference(rcv), KtExpr::Call(c)) = (&exprs[0], &exprs[1]) else {
+        return None;
+    };
+    let meth = match c.callee()? {
+        KtExpr::Reference(rr) => rr.name()?,
+        _ => return None,
+    };
+    if meth != "await" {
+        return None;
+    }
+    rcv.name().and_then(lookup_name)
+}
+
+fn coroutine_builder_lambda_body<'a>(
+    e: &skotch_ast::KtExpr<'a>,
+) -> Option<CoroutineBuilderBody<'a>> {
+    use skotch_ast::KtExpr;
+    let KtExpr::Call(call) = e else { return None };
+    let KtExpr::Reference(rc) = call.callee()? else {
+        return None;
+    };
+    let bname = rc.name()?;
+    if !skotch_types::intrinsics::is_coroutine_builder(bname) {
+        return None;
+    }
+    let la = call.lambda_argument()?;
+    let lambda = match skotch_ast::children(la.syntax())
+        .iter()
+        .find_map(KtExpr::cast)?
+    {
+        KtExpr::Lambda(l) => l,
+        _ => return None,
+    };
+    let body = lambda.function_literal()?.body()?;
+    Some(CoroutineBuilderBody {
+        builder_name: bname,
+        body,
+    })
+}
+
 /// Lower the body of a for-in / while loop into a flat
 /// Vec<MStmt>. Supports linear stmts (val/var, var-reassign,
 /// println, method/Call/extension-fn, postfix++) but NOT
@@ -8691,6 +8759,55 @@ fn lower_loop_body(
                     continue;
                 }
             }
+            // Coroutine-builder val init: `val job = launch { body }`
+            // (or `async`/`withContext` etc.). `runBlocking` runs the
+            // lambda body sequentially, so we splice the body in place
+            // and bind `pname` to either the last result slot
+            // (async/withContext → Deferred<T>/T) or a synthetic null
+            // Job slot (launch). Subsequent `name.join()`/`.await()`
+            // dispatch as no-op (Job) or identity (Deferred). Second
+            // leg of round 21's runBlocking trailing-lambda unwrap.
+            if let Some(coro_body) = coroutine_builder_lambda_body(&init) {
+                let bname = coro_body.builder_name;
+                let body_kids: Vec<&skotch_sil::SilNode> =
+                    skotch_ast::children(coro_body.body.syntax())
+                        .into_iter()
+                        .collect();
+                if let Some(inner_stmts) = lower_loop_body(
+                    &body_kids,
+                    name_to_local,
+                    next_slot,
+                    local_tys,
+                    strings,
+                    fn_lookup_ref,
+                    function_param_names,
+                ) {
+                    body_mstmts.extend(inner_stmts);
+                    let want_value = matches!(bname, "async" | "withContext");
+                    let bound_slot = if want_value {
+                        match body_mstmts.last() {
+                            Some(MStmt::Assign { dest, .. }) => Some(*dest),
+                            _ => None,
+                        }
+                    } else {
+                        None
+                    };
+                    let slot = if let Some(s) = bound_slot {
+                        s
+                    } else {
+                        let job_slot = LocalId(*next_slot);
+                        *next_slot += 1;
+                        local_tys.push(Ty::Class("kotlinx/coroutines/Job".to_string()));
+                        body_mstmts.push(MStmt::Assign {
+                            dest: job_slot,
+                            value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Null),
+                        });
+                        job_slot
+                    };
+                    name_to_local.push((pname.to_string(), slot));
+                    continue;
+                }
+            }
             // Final fallback: try rich expression lowerer.
             // Catches Reference (top-level vals), Prefix-!, etc.
             let snap = name_to_local.clone();
@@ -8837,7 +8954,12 @@ fn lower_loop_body(
                         continue;
                     }
                 }
-                let args = call.value_argument_list()?;
+                let Some(args) = call.value_argument_list() else {
+                    // Malformed println call (no arg-list) — skip without
+                    // failing the whole body. Previous shape `?`'d here
+                    // which bailed every later stmt in the loop body.
+                    continue;
+                };
                 let arg_exprs: Vec<KtExpr<'_>> =
                     args.arguments().filter_map(|a| a.expression()).collect();
                 if arg_exprs.is_empty() {
@@ -8852,19 +8974,18 @@ fn lower_loop_body(
                     continue;
                 }
                 if arg_exprs.len() != 1 {
-                    return None;
+                    // Multi-arg println variant not handled here — skip.
+                    continue;
                 }
-                let arg_slot = match &arg_exprs[0] {
-                    KtExpr::Reference(rr) => {
-                        let an = rr.name()?;
+                let arg_slot_opt: Option<LocalId> = match &arg_exprs[0] {
+                    KtExpr::Reference(rr) => rr.name().and_then(|an| {
                         name_to_local
                             .iter()
                             .rev()
                             .find(|(name, _)| name == an)
-                            .map(|(_, l)| *l)?
-                    }
+                            .map(|(_, l)| *l)
+                    }),
                     other => {
-                        // Try literal first.
                         if let Some((k, ty)) = literal_to_const(other, strings) {
                             let slot = LocalId(*next_slot);
                             *next_slot += 1;
@@ -8873,9 +8994,8 @@ fn lower_loop_body(
                                 dest: slot,
                                 value: skotch_mir::Rvalue::Const(k),
                             });
-                            slot
+                            Some(slot)
                         } else {
-                            // Fall back to lower_inline_expr_to_slot.
                             let snap = name_to_local.clone();
                             let lookup = |n: &str| -> Option<LocalId> {
                                 snap.iter()
@@ -8891,9 +9011,18 @@ fn lower_loop_body(
                                 &mut body_mstmts,
                                 local_tys,
                                 strings,
-                            )?
+                            )
                         }
                     }
+                };
+                // If the arg couldn't be lowered (e.g. a template with
+                // a sub-expression no handler recognized — most often a
+                // suspend `await()` inside a `${...}` slot), skip the
+                // println rather than bailing the whole body. Previously
+                // the `?` propagated None, taking every later stmt in
+                // the loop body down with it.
+                let Some(arg_slot) = arg_slot_opt else {
+                    continue;
                 };
                 let result_slot = LocalId(*next_slot);
                 *next_slot += 1;
@@ -9443,6 +9572,7 @@ fn lower_loop_body(
             let lhs = b.lhs().map(unwrap_parens)?;
             let rhs = b.rhs().map(unwrap_parens)?;
             let KtExpr::Reference(lref) = lhs else {
+                let _ = rhs;
                 return None;
             };
             let lname = lref.name()?;
@@ -9875,6 +10005,19 @@ fn lower_loop_body(
                             .find(|(n, _)| n == recv_n)
                             .map(|(_, l)| *l)
                         {
+                            // Coroutine `Job.join()` / `Deferred.await()`
+                            // stmt: no-op once the builder body has been
+                            // inlined (synthetic Job slot is null; the
+                            // suspend bridge isn't emitted).
+                            if matches!(method_n, "join" | "await")
+                                && matches!(
+                                    slot_ty_with_param_fallback(recv_slot.0, local_tys),
+                                    Ty::Class(ref c) if c == "kotlinx/coroutines/Job"
+                                        || c == "kotlinx/coroutines/Deferred"
+                                )
+                            {
+                                continue;
+                            }
                             // Function-typed parameter dispatch:
                             // `node.init()` where `init` is a `Tree<T>.() -> Unit`
                             // parameter must call `Function1.invoke(node)` (the
@@ -21011,24 +21154,37 @@ fn try_lower_println_template_with_rich_lookup(
                     .iter()
                     .find_map(KtExpr::cast)
                     .map(unwrap_parens)?;
-                let slot = match fn_lookup {
-                    Some(fl) => lower_rich_expr_to_slot(
-                        inner,
-                        lookup_name,
-                        fl,
-                        next_slot,
-                        pre_stmts,
-                        extra_locals,
-                        strings,
-                    )?,
-                    None => lower_inline_expr_to_slot(
-                        inner,
-                        lookup_name,
-                        next_slot,
-                        pre_stmts,
-                        extra_locals,
-                        strings,
-                    )?,
+                // Coroutine `name.await()` inside a template: bind to
+                // `name`'s slot directly. The coroutine-builder val
+                // handler in lower_loop_body assigns `name` to the
+                // inlined body's result slot (async/withContext) or a
+                // synthetic null Job slot (launch). Treat `.await()`
+                // as identity so the template renders the body's
+                // result instead of bailing on a non-existent
+                // JVM-side Deferred method.
+                let await_passthrough = name_await_passthrough(inner, lookup_name);
+                let slot = if let Some(s) = await_passthrough {
+                    s
+                } else {
+                    match fn_lookup {
+                        Some(fl) => lower_rich_expr_to_slot(
+                            inner,
+                            lookup_name,
+                            fl,
+                            next_slot,
+                            pre_stmts,
+                            extra_locals,
+                            strings,
+                        )?,
+                        None => lower_inline_expr_to_slot(
+                            inner,
+                            lookup_name,
+                            next_slot,
+                            pre_stmts,
+                            extra_locals,
+                            strings,
+                        )?,
+                    }
                 };
                 part_slots.push(slot);
             }
