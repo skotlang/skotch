@@ -152,18 +152,72 @@ fn type_ref_to_ty(
     aliases: &FxHashMap<String, AliasTarget>,
 ) -> Ty {
     if let Some(ft) = tr.function_type() {
-        let params: Vec<Ty> = ft
-            .parameter_list()
-            .map(|pl| {
-                pl.parameters()
-                    .map(|p| {
-                        p.type_reference()
-                            .map(|ptr| type_ref_to_ty(ptr, imports, aliases))
-                            .unwrap_or(Ty::Any)
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
+        // Parser-quirk guard: a real Kotlin function type always has
+        // an arrow + return type. A USER_TYPE that ends up wrapped in
+        // FUNCTION_TYPE → FUNCTION_TYPE_RECEIVER → USER_TYPE without
+        // any ARROW token (e.g. parser saw `x: T,` and over-matched
+        // the receiver-style production) is really a plain user-type
+        // reference. Fall back to the receiver's inner type so `x: T`
+        // doesn't get typed as `Function0`. Mirrors the same guard in
+        // `skotch-mir-lower::resolve_type_ref`.
+        let has_arrow = ft.return_type().is_some();
+        if !has_arrow {
+            let inner_name = ft
+                .receiver()
+                .and_then(|r| {
+                    r.type_reference()
+                        .and_then(|tr| tr.user_type())
+                        .or_else(|| {
+                            skotch_ast::first_typed_child::<skotch_ast::KtUserType<'_>>(r.syntax())
+                        })
+                })
+                .and_then(|u| u.name());
+            if let Some(name) = inner_name {
+                return skotch_types::ty_from_name(name).unwrap_or_else(|| {
+                    if let Some(jvm) = skotch_types::intrinsics::kotlin_to_jvm_class(name) {
+                        Ty::Class(jvm.to_string())
+                    } else if let Some(fq) = imports.get(name) {
+                        Ty::Class(fq.clone())
+                    } else {
+                        Ty::Any
+                    }
+                });
+            }
+            return Ty::Any;
+        }
+        // Receiver-lambda types like `Box<T>.() -> Unit` desugar to
+        // `Function1<Box, Unit>` on the JVM — the receiver becomes the
+        // first param. Without prepending it to `params`, a cross-file
+        // companion stub like `Tree.Companion.of(T, Tree<T>.() -> Unit)`
+        // surfaces the second param as `Function0` (arity 0) and the
+        // call-site descriptor builds `(Object, Function0)Tree` against
+        // the real `(Object, Function1)Tree` — runtime NoSuchMethodError.
+        //
+        // The SIL parser sometimes places the receiver's USER_TYPE
+        // directly under FUNCTION_TYPE_RECEIVER without an intermediate
+        // TYPE_REFERENCE wrapper, so we accept either shape (mirrors
+        // the same fallback in mir-lower::resolve_type_ref).
+        let mut params: Vec<Ty> = Vec::new();
+        if let Some(recv) = ft.receiver() {
+            if let Some(rtr) = recv.type_reference() {
+                params.push(type_ref_to_ty(rtr, imports, aliases));
+            } else if let Some(u) =
+                skotch_ast::first_typed_child::<skotch_ast::KtUserType<'_>>(recv.syntax())
+            {
+                params.push(user_type_to_ty(u, imports, aliases));
+            } else {
+                params.push(Ty::Any);
+            }
+        }
+        if let Some(pl) = ft.parameter_list() {
+            for p in pl.parameters() {
+                params.push(
+                    p.type_reference()
+                        .map(|ptr| type_ref_to_ty(ptr, imports, aliases))
+                        .unwrap_or(Ty::Any),
+                );
+            }
+        }
         let ret = ft
             .return_type()
             .map(|rtr| type_ref_to_ty(rtr, imports, aliases))

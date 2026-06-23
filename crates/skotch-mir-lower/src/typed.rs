@@ -1667,6 +1667,129 @@ pub fn lower_file(
                 static_fields: Vec::new(),
                 clinit: None,
             });
+            // Cross-file companion stub: when the cross-file class
+            // declares a `companion object`, the companion's methods
+            // are reachable via `<Outer>.<method>` call sites that the
+            // backend resolves through `<Outer>$Companion` (e.g.
+            // `Tree.of("root") { ... }` → `Tree$Companion.of(T,
+            // Function1)LTree;`). Without a stub MirClass for
+            // `<Outer>$Companion`, the backend's
+            // `module.find_class("Tree$Companion")` returns None and
+            // descriptor-building falls back to the caller's local
+            // Tys — which for a generic `T` ctor arg is the concrete
+            // call-site Ty (e.g. `String`) instead of the erased
+            // `Object`, producing a methodref `of(String, Function1)`
+            // that the JVM resolver can't match against the real
+            // `of(Object, Function1)` and throwing NoSuchMethodError
+            // at runtime.
+            if !ext.companion_methods.is_empty() {
+                let comp_qname = format!("{}$Companion", simple_name);
+                let mut comp_stub_methods: Vec<MirFunction> = ext
+                    .companion_methods
+                    .iter()
+                    .map(|m| {
+                        let mut locals: Vec<Ty> = Vec::with_capacity(1 + m.params.len());
+                        // params[0] = `this` (the Companion instance)
+                        locals.push(Ty::Class(comp_qname.clone()));
+                        for p in &m.params {
+                            locals.push(p.ty.clone());
+                        }
+                        let params: Vec<skotch_mir::LocalId> = (0..=m.params.len())
+                            .map(|i| skotch_mir::LocalId(i as u32))
+                            .collect();
+                        let n_params = m.params.len();
+                        MirFunction {
+                            id: FuncId(0),
+                            name: m.name.clone(),
+                            params,
+                            locals,
+                            blocks: vec![BasicBlock {
+                                stmts: Vec::new(),
+                                terminator: Terminator::Return,
+                            }],
+                            return_ty: m.return_ty.clone(),
+                            required_params: n_params,
+                            param_names: m.params.iter().map(|p| p.name.clone()).collect(),
+                            param_receiver_types: Vec::new(),
+                            param_defaults: Vec::new(),
+                            is_abstract: m.is_abstract,
+                            vararg_index: None,
+                            exception_handlers: Vec::new(),
+                            is_suspend: m.is_suspend,
+                            is_inline: m.is_inline,
+                            is_tailrec: false,
+                            has_type_params: false,
+                            suspend_original_return_ty: None,
+                            suspend_state_machine: None,
+                            annotations: Vec::new(),
+                            named_locals: Vec::new(),
+                            is_private: false,
+                            is_static: false,
+                            default_call_masks: Vec::new(),
+                            needs_leading_nop: false,
+                            local_generic_args: rustc_hash::FxHashMap::default(),
+                        }
+                    })
+                    .collect();
+                // Drop the placeholder marker — companion stub is
+                // non-emitting (`is_cross_file_stub: true`), so the
+                // body-less methods above suffice for descriptor
+                // resolution.
+                let _ = &mut comp_stub_methods; // silence unused-mut on empty-companion edge case
+                let comp_ctor_locals: Vec<Ty> = vec![Ty::Class(comp_qname.clone())];
+                let comp_ctor = MirFunction {
+                    id: FuncId(0),
+                    name: "<init>".to_string(),
+                    params: vec![skotch_mir::LocalId(0)],
+                    locals: comp_ctor_locals,
+                    blocks: vec![BasicBlock {
+                        stmts: Vec::new(),
+                        terminator: Terminator::Return,
+                    }],
+                    return_ty: Ty::Unit,
+                    required_params: 0,
+                    param_names: Vec::new(),
+                    param_receiver_types: Vec::new(),
+                    param_defaults: Vec::new(),
+                    is_abstract: false,
+                    vararg_index: None,
+                    exception_handlers: Vec::new(),
+                    is_suspend: false,
+                    is_inline: false,
+                    is_tailrec: false,
+                    has_type_params: false,
+                    suspend_original_return_ty: None,
+                    suspend_state_machine: None,
+                    annotations: Vec::new(),
+                    named_locals: Vec::new(),
+                    is_private: false,
+                    is_static: false,
+                    default_call_masks: Vec::new(),
+                    needs_leading_nop: false,
+                    local_generic_args: rustc_hash::FxHashMap::default(),
+                };
+                module.push_class(skotch_mir::MirClass {
+                    name: comp_qname,
+                    super_class: None,
+                    is_open: false,
+                    is_abstract: false,
+                    is_interface: false,
+                    interfaces: Vec::new(),
+                    fields: Vec::new(),
+                    methods: comp_stub_methods,
+                    constructor: comp_ctor,
+                    secondary_constructors: Vec::new(),
+                    is_suspend_lambda: false,
+                    is_lambda: false,
+                    is_cross_file_stub: true,
+                    annotations: Vec::new(),
+                    has_type_params: false,
+                    is_object_singleton: true,
+                    companion_class_name: None,
+                    static_fields: Vec::new(),
+                    clinit: None,
+                });
+            }
         }
     }
 
