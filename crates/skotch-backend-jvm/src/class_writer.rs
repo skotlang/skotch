@@ -16936,6 +16936,65 @@ fn walk_block(
                             if let Some(ref ptys) = pre_target_sig {
                                 let arg_ty = &func.locals[a.0 as usize];
                                 if let Some(pty) = ptys.get(i - 1) {
+                                    // Autobox: arg is primitive but target
+                                    // param is reference (Any/Object — the
+                                    // generic-erased shape from `T`). The
+                                    // descriptor built downstream picks the
+                                    // param's declared `Ljava/lang/Object;`
+                                    // so the raw primitive on the stack
+                                    // must be promoted to its wrapper to
+                                    // pass JVM verification. kotlinc emits
+                                    // the same `Integer.valueOf` before a
+                                    // `MinHeap.push(T)` invokevirtual when
+                                    // the caller passes an Int literal.
+                                    let param_is_ref = matches!(
+                                        pty,
+                                        Ty::Any | Ty::String | Ty::Class(_) | Ty::Nullable(_)
+                                    );
+                                    let arg_is_prim = matches!(
+                                        arg_ty,
+                                        Ty::Int
+                                            | Ty::Long
+                                            | Ty::Float
+                                            | Ty::Double
+                                            | Ty::Bool
+                                            | Ty::Byte
+                                            | Ty::Short
+                                            | Ty::Char
+                                    );
+                                    if param_is_ref && arg_is_prim {
+                                        let box_info: Option<(&str, &str)> = match arg_ty {
+                                            Ty::Int | Ty::Byte | Ty::Short => Some((
+                                                "java/lang/Integer",
+                                                "(I)Ljava/lang/Integer;",
+                                            )),
+                                            Ty::Char => Some((
+                                                "java/lang/Character",
+                                                "(C)Ljava/lang/Character;",
+                                            )),
+                                            Ty::Bool => Some((
+                                                "java/lang/Boolean",
+                                                "(Z)Ljava/lang/Boolean;",
+                                            )),
+                                            Ty::Long => {
+                                                Some(("java/lang/Long", "(J)Ljava/lang/Long;"))
+                                            }
+                                            Ty::Float => {
+                                                Some(("java/lang/Float", "(F)Ljava/lang/Float;"))
+                                            }
+                                            Ty::Double => {
+                                                Some(("java/lang/Double", "(D)Ljava/lang/Double;"))
+                                            }
+                                            _ => None,
+                                        };
+                                        if let Some((box_class, box_desc)) = box_info {
+                                            let mref = cp.methodref(box_class, "valueOf", box_desc);
+                                            code.push(0xB8); // invokestatic
+                                            code.write_u16::<BigEndian>(mref).unwrap();
+                                            let is_wide = matches!(arg_ty, Ty::Long | Ty::Double);
+                                            bump(stack, max_stack, if is_wide { -1 } else { 0 });
+                                        }
+                                    }
                                     let arg_is_obj = matches!(arg_ty, Ty::Any | Ty::Nullable(_));
                                     if arg_is_obj {
                                         let target_class: Option<String> = match pty {
@@ -17463,6 +17522,40 @@ fn walk_block(
                 // operand stack`.
                 let arr_ty = &func.locals[array.0 as usize];
                 let val_ty = &func.locals[value.0 as usize];
+                // Unbox Any/Object → primitive when the array's element
+                // type is a primitive but the value slot is reference-
+                // typed (common for `out[j] = heap.pop()` where pop()
+                // returns the generic-erased `T` (Object) and the array
+                // is IntArray). kotlinc emits the same checkcast+
+                // intValue() sequence before iastore.
+                let prim_elem: Option<(&str, &str, &str)> = match arr_ty {
+                    Ty::IntArray => Some(("java/lang/Integer", "intValue", "()I")),
+                    Ty::LongArray => Some(("java/lang/Long", "longValue", "()J")),
+                    Ty::DoubleArray => Some(("java/lang/Double", "doubleValue", "()D")),
+                    Ty::ByteArray => Some(("java/lang/Byte", "byteValue", "()B")),
+                    Ty::BooleanArray => Some(("java/lang/Boolean", "booleanValue", "()Z")),
+                    _ => None,
+                };
+                if let Some((box_class, unbox_method, unbox_desc)) = prim_elem {
+                    let val_is_ref = matches!(
+                        val_ty,
+                        Ty::Any | Ty::String | Ty::Nullable(_) | Ty::Class(_)
+                    );
+                    if val_is_ref {
+                        let cls_ci = cp.class(box_class);
+                        code.push(0xC0); // checkcast
+                        code.write_u16::<BigEndian>(cls_ci).unwrap();
+                        let m = cp.methodref(box_class, unbox_method, unbox_desc);
+                        code.push(0xB6); // invokevirtual
+                        code.write_u16::<BigEndian>(m).unwrap();
+                        // Wide-result rebalance: long/double unbox
+                        // returns a 2-slot value but the boxed receiver
+                        // was 1 slot, so net stack grows by 1.
+                        if matches!(arr_ty, Ty::LongArray | Ty::DoubleArray) {
+                            bump(stack, max_stack, 1);
+                        }
+                    }
+                }
                 let store_op: u8 = match arr_ty {
                     Ty::ByteArray => 0x54,    // bastore
                     Ty::IntArray => 0x4F,     // iastore
@@ -17478,8 +17571,15 @@ fn walk_block(
                     },
                 };
                 code.push(store_op);
-                let width = if matches!(val_ty, Ty::Long | Ty::Double) {
-                    -4 // wide: pops 2+1+2 → net -4... actually pops array+index+wide_value
+                // Wide-pop accounting: if the value was unboxed to
+                // Long/Double the stack actually has a 2-slot wide
+                // value (even though val_ty still says Ty::Any), so
+                // pop based on the ARRAY's element width when it's a
+                // known-wide primitive array.
+                let val_is_wide = matches!(val_ty, Ty::Long | Ty::Double)
+                    || matches!(arr_ty, Ty::LongArray | Ty::DoubleArray);
+                let width = if val_is_wide {
+                    -4 // wide: pops array+index+wide_value
                 } else {
                     -3 // narrow: pops 3
                 };
