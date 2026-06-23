@@ -2207,6 +2207,215 @@ pub fn lower_file(
                     };
                     methods.push(copy_fn);
                 }
+
+                // Data-class equals(Object): Boolean. Walks each
+                // primary-ctor val/var field and compares via
+                // BinOp::CmpEq (which the JVM backend lowers to the
+                // right shape per Ty: `if_icmpeq` for ints,
+                // `Intrinsics.areEqual` for Strings,
+                // `Object.equals` for nested Ty::Class). Layout:
+                //
+                //   block 0: inst = InstanceOf(other, ClassName);
+                //            Branch(inst, 1, FALSE)
+                //   block 1: other_cast = CheckCast(other, ClassName);
+                //            this_f1 = GetField(this, f1);
+                //            other_f1 = GetField(other_cast, f1);
+                //            cmp1 = CmpEq(this_f1, other_f1);
+                //            Branch(cmp1, 2, FALSE)
+                //   block 2..N: same for each subsequent field;
+                //            last cmp branches to TRUE on success.
+                //   block N+1 (FALSE): return false
+                //   block N+2 (TRUE): return true
+                //
+                // Skips when the user already declared equals. Skips
+                // the entire block when there are no data fields
+                // (kotlinc would still emit equals returning true for
+                // every same-class instance, but that's vacuous).
+                if !methods.iter().any(|m| m.name == "equals") && !data_fields.is_empty() {
+                    let n_fields = data_fields.len();
+                    let this_slot = LocalId(0);
+                    let other_slot = LocalId(1);
+                    let mut eq_locals: Vec<Ty> =
+                        vec![Ty::Class(name.clone()), Ty::Nullable(Box::new(Ty::Any))];
+                    let inst_slot = LocalId(eq_locals.len() as u32);
+                    eq_locals.push(Ty::Bool);
+                    let other_cast_slot = LocalId(eq_locals.len() as u32);
+                    eq_locals.push(Ty::Class(name.clone()));
+                    // Per-field: (this_f_slot, other_f_slot, cmp_slot).
+                    let mut field_slots: Vec<(LocalId, LocalId, LocalId)> =
+                        Vec::with_capacity(n_fields);
+                    for (_, fty) in &data_fields {
+                        let this_f = LocalId(eq_locals.len() as u32);
+                        eq_locals.push(fty.clone());
+                        let other_f = LocalId(eq_locals.len() as u32);
+                        eq_locals.push(fty.clone());
+                        let cmp_s = LocalId(eq_locals.len() as u32);
+                        eq_locals.push(Ty::Bool);
+                        field_slots.push((this_f, other_f, cmp_s));
+                    }
+                    let false_slot = LocalId(eq_locals.len() as u32);
+                    eq_locals.push(Ty::Bool);
+                    let true_slot = LocalId(eq_locals.len() as u32);
+                    eq_locals.push(Ty::Bool);
+
+                    // Block 0: InstanceOf check + branch.
+                    let mut blocks: Vec<BasicBlock> = Vec::with_capacity(n_fields + 3);
+                    // FALSE_BLOCK and TRUE_BLOCK indices (computed up-front).
+                    let false_block_idx: u32 = (n_fields + 1) as u32;
+                    let true_block_idx: u32 = (n_fields + 2) as u32;
+                    blocks.push(BasicBlock {
+                        stmts: vec![MStmt::Assign {
+                            dest: inst_slot,
+                            value: skotch_mir::Rvalue::InstanceOf {
+                                obj: other_slot,
+                                type_descriptor: name.clone(),
+                            },
+                        }],
+                        terminator: Terminator::Branch {
+                            cond: inst_slot,
+                            then_block: 1,
+                            else_block: false_block_idx,
+                        },
+                    });
+                    // Block 1: cast + first-field compare. For
+                    // single-field data classes (n_fields == 1), the
+                    // first field's branch goes straight to TRUE on
+                    // success. For multi-field, it advances to the next
+                    // per-field block.
+                    {
+                        let (this_f, other_f, cmp_s) = field_slots[0];
+                        let mut stmts: Vec<MStmt> = vec![
+                            MStmt::Assign {
+                                dest: other_cast_slot,
+                                value: skotch_mir::Rvalue::CheckCast {
+                                    obj: other_slot,
+                                    target_class: name.clone(),
+                                },
+                            },
+                            MStmt::Assign {
+                                dest: this_f,
+                                value: skotch_mir::Rvalue::GetField {
+                                    receiver: this_slot,
+                                    class_name: name.clone(),
+                                    field_name: data_fields[0].0.clone(),
+                                },
+                            },
+                            MStmt::Assign {
+                                dest: other_f,
+                                value: skotch_mir::Rvalue::GetField {
+                                    receiver: other_cast_slot,
+                                    class_name: name.clone(),
+                                    field_name: data_fields[0].0.clone(),
+                                },
+                            },
+                            MStmt::Assign {
+                                dest: cmp_s,
+                                value: skotch_mir::Rvalue::BinOp {
+                                    op: skotch_mir::BinOp::CmpEq,
+                                    lhs: this_f,
+                                    rhs: other_f,
+                                },
+                            },
+                        ];
+                        let next_block = if n_fields == 1 { true_block_idx } else { 2 };
+                        blocks.push(BasicBlock {
+                            stmts: std::mem::take(&mut stmts),
+                            terminator: Terminator::Branch {
+                                cond: cmp_s,
+                                then_block: next_block,
+                                else_block: false_block_idx,
+                            },
+                        });
+                    }
+                    // Block 2..n_fields: per-field compare.
+                    for i in 1..n_fields {
+                        let (this_f, other_f, cmp_s) = field_slots[i];
+                        let stmts = vec![
+                            MStmt::Assign {
+                                dest: this_f,
+                                value: skotch_mir::Rvalue::GetField {
+                                    receiver: this_slot,
+                                    class_name: name.clone(),
+                                    field_name: data_fields[i].0.clone(),
+                                },
+                            },
+                            MStmt::Assign {
+                                dest: other_f,
+                                value: skotch_mir::Rvalue::GetField {
+                                    receiver: other_cast_slot,
+                                    class_name: name.clone(),
+                                    field_name: data_fields[i].0.clone(),
+                                },
+                            },
+                            MStmt::Assign {
+                                dest: cmp_s,
+                                value: skotch_mir::Rvalue::BinOp {
+                                    op: skotch_mir::BinOp::CmpEq,
+                                    lhs: this_f,
+                                    rhs: other_f,
+                                },
+                            },
+                        ];
+                        let next_block = if i + 1 == n_fields {
+                            true_block_idx
+                        } else {
+                            (i + 2) as u32
+                        };
+                        blocks.push(BasicBlock {
+                            stmts,
+                            terminator: Terminator::Branch {
+                                cond: cmp_s,
+                                then_block: next_block,
+                                else_block: false_block_idx,
+                            },
+                        });
+                    }
+                    // FALSE_BLOCK: return false.
+                    blocks.push(BasicBlock {
+                        stmts: vec![MStmt::Assign {
+                            dest: false_slot,
+                            value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Bool(false)),
+                        }],
+                        terminator: Terminator::ReturnValue(false_slot),
+                    });
+                    // TRUE_BLOCK: return true.
+                    blocks.push(BasicBlock {
+                        stmts: vec![MStmt::Assign {
+                            dest: true_slot,
+                            value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Bool(true)),
+                        }],
+                        terminator: Terminator::ReturnValue(true_slot),
+                    });
+
+                    let equals_fn = MirFunction {
+                        id: FuncId(0),
+                        name: "equals".to_string(),
+                        params: vec![this_slot, other_slot],
+                        locals: eq_locals,
+                        blocks,
+                        return_ty: Ty::Bool,
+                        required_params: 0,
+                        param_names: vec!["other".to_string()],
+                        param_receiver_types: Vec::new(),
+                        param_defaults: Vec::new(),
+                        is_abstract: false,
+                        vararg_index: None,
+                        exception_handlers: Vec::new(),
+                        is_suspend: false,
+                        is_inline: false,
+                        has_type_params: false,
+                        suspend_original_return_ty: None,
+                        suspend_state_machine: None,
+                        annotations: Vec::new(),
+                        named_locals: Vec::new(),
+                        is_private: false,
+                        is_static: false,
+                        default_call_masks: Vec::new(),
+                        needs_leading_nop: false,
+                        local_generic_args: rustc_hash::FxHashMap::default(),
+                    };
+                    methods.push(equals_fn);
+                }
             }
 
             let mir_class = skotch_mir::MirClass {
@@ -8413,6 +8622,7 @@ fn lower_loop_body_blocks(
         PropertyWithWhenInit,
         NestedWhile,
         NestedForIn,
+        RepeatStmt,
         WhenStmt,
         ThrowStmt,
         TryStmt,
@@ -8466,6 +8676,31 @@ fn lower_loop_body_blocks(
             if matches!(expr, KtExpr::For(_)) {
                 special_at = Some((j, Special::NestedForIn));
                 break;
+            }
+            // `repeat(N) { body }` — Kotlin stdlib's inline counted loop.
+            // Detect Call(Reference("repeat"), [int_arg], trailing-lambda)
+            // and treat as a control-flow stmt so the body lowers via
+            // lower_loop_body_blocks (supports nested control flow). Falls
+            // through if shape doesn't match.
+            if let KtExpr::Call(call) = expr {
+                let callee_is_repeat = matches!(
+                    call.callee(),
+                    Some(KtExpr::Reference(r)) if r.name() == Some("repeat")
+                );
+                if callee_is_repeat {
+                    let has_lambda = call
+                        .lambda_argument()
+                        .map(|la| {
+                            skotch_ast::children(la.syntax())
+                                .iter()
+                                .any(|c| matches!(KtExpr::cast(c), Some(KtExpr::Lambda(_))))
+                        })
+                        .unwrap_or(false);
+                    if has_lambda {
+                        special_at = Some((j, Special::RepeatStmt));
+                        break;
+                    }
+                }
             }
             if matches!(expr, KtExpr::When(_)) {
                 special_at = Some((j, Special::WhenStmt));
@@ -9687,6 +9922,166 @@ fn lower_loop_body_blocks(
                             value: skotch_mir::Rvalue::BinOp {
                                 op: inner_step_op,
                                 lhs: i_slot,
+                                rhs: one_slot,
+                            },
+                        },
+                    ],
+                    terminator: Terminator::Goto(inner_cond_id),
+                });
+                name_to_local.pop();
+                i = j + 1;
+                continue;
+            }
+            Some((j, Special::RepeatStmt)) => {
+                // `repeat(N) { body }` — Kotlin stdlib's counted loop.
+                // Inlined as `for (it in 0 until N) { body }` with the
+                // implicit `it` (or explicit lambda param name) bound
+                // to the current iteration index. Matches kotlinc's
+                // inline-expansion shape conceptually; byte-identical
+                // parity is a future polish since kotlinc emits an
+                // extra unused `times` copy + `marker` slot.
+                let call_node = body_children[j];
+                let KtExpr::Call(call) = KtExpr::cast(call_node)? else {
+                    return None;
+                };
+                // Times arg — first positional value arg.
+                let times_arg = call
+                    .value_argument_list()
+                    .and_then(|al| al.arguments().next())
+                    .and_then(|a| a.expression())
+                    .map(unwrap_parens)?;
+                // Trailing lambda — the only argument shape we accept.
+                let lambda_arg = call.lambda_argument()?;
+                let lambda_expr = skotch_ast::children(lambda_arg.syntax())
+                    .iter()
+                    .find_map(KtExpr::cast)?;
+                let KtExpr::Lambda(lambda) = lambda_expr else {
+                    return None;
+                };
+                let func_lit = lambda.function_literal()?;
+                let body_block = func_lit.body()?;
+                let explicit_params: Vec<String> = func_lit
+                    .value_parameter_list()
+                    .map(|pl| {
+                        pl.parameters()
+                            .map(|p| p.name().unwrap_or("").to_string())
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let it_name: String = if explicit_params.is_empty() {
+                    "it".to_string()
+                } else {
+                    explicit_params[0].clone()
+                };
+
+                let snap = name_to_local.clone();
+                let lookup = |n: &str| -> Option<LocalId> {
+                    snap.iter()
+                        .rev()
+                        .find(|(name, _)| name == n)
+                        .map(|(_, l)| *l)
+                };
+                // times_slot = lower(times_arg).
+                let times_slot = lower_rich_expr_to_slot(
+                    times_arg,
+                    &lookup,
+                    fn_lookup_ref,
+                    next_slot,
+                    &mut cur_stmts,
+                    local_tys,
+                    strings,
+                )?;
+                // it_slot = 0 — also serves as the loop counter.
+                let it_slot = LocalId(*next_slot);
+                *next_slot += 1;
+                local_tys.push(Ty::Int);
+                cur_stmts.push(MStmt::Assign {
+                    dest: it_slot,
+                    value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(0)),
+                });
+                // CFG: pre → cond → body → step → cond ... → after.
+                let inner_cond_id = block_offset + blocks.len() as u32 + 1;
+                blocks.push(BasicBlock {
+                    stmts: std::mem::take(&mut cur_stmts),
+                    terminator: Terminator::Goto(inner_cond_id),
+                });
+                let cmp_slot = LocalId(*next_slot);
+                *next_slot += 1;
+                local_tys.push(Ty::Bool);
+                let cond_stmt = MStmt::Assign {
+                    dest: cmp_slot,
+                    value: skotch_mir::Rvalue::BinOp {
+                        op: skotch_mir::BinOp::CmpLt,
+                        lhs: it_slot,
+                        rhs: times_slot,
+                    },
+                };
+                name_to_local.push((it_name, it_slot));
+                let inner_body_children: Vec<&skotch_sil::SilNode> =
+                    skotch_ast::children(body_block.syntax()).iter().collect();
+                const SENT_BACK: u32 = 0xfffffffe;
+                const SENT_BREAK: u32 = 0xfffffffd;
+                let mut inner_body_blocks = lower_loop_body_blocks(
+                    &inner_body_children,
+                    name_to_local,
+                    next_slot,
+                    local_tys,
+                    strings,
+                    fn_lookup_ref,
+                    function_param_names,
+                    inner_cond_id + 1,
+                    SENT_BACK,
+                    SENT_BREAK,
+                )?;
+                let n_body = inner_body_blocks.len() as u32;
+                let step_id = inner_cond_id + 1 + n_body;
+                let after_id = step_id + 1;
+                for blk in &mut inner_body_blocks {
+                    let remap = |t: u32| -> u32 {
+                        if t == SENT_BACK {
+                            step_id
+                        } else if t == SENT_BREAK {
+                            after_id
+                        } else {
+                            t
+                        }
+                    };
+                    match &mut blk.terminator {
+                        Terminator::Goto(t) => *t = remap(*t),
+                        Terminator::Branch {
+                            then_block,
+                            else_block,
+                            ..
+                        } => {
+                            *then_block = remap(*then_block);
+                            *else_block = remap(*else_block);
+                        }
+                        _ => {}
+                    }
+                }
+                blocks.push(BasicBlock {
+                    stmts: vec![cond_stmt],
+                    terminator: Terminator::Branch {
+                        cond: cmp_slot,
+                        then_block: inner_cond_id + 1,
+                        else_block: after_id,
+                    },
+                });
+                blocks.extend(inner_body_blocks);
+                let one_slot = LocalId(*next_slot);
+                *next_slot += 1;
+                local_tys.push(Ty::Int);
+                blocks.push(BasicBlock {
+                    stmts: vec![
+                        MStmt::Assign {
+                            dest: one_slot,
+                            value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(1)),
+                        },
+                        MStmt::Assign {
+                            dest: it_slot,
+                            value: skotch_mir::Rvalue::BinOp {
+                                op: skotch_mir::BinOp::AddI,
+                                lhs: it_slot,
                                 rhs: one_slot,
                             },
                         },
