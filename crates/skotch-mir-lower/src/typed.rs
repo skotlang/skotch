@@ -7008,6 +7008,42 @@ fn lower_loop_body(
                                 }
                             }
                         }
+                        // Trailing-lambda arg: `later { ... }` keeps the
+                        // lambda outside value_argument_list, in
+                        // call.lambda_argument(). Without pulling it in,
+                        // the emitted invokestatic's descriptor expects
+                        // N+1 args while the operand stack only holds N
+                        // → VerifyError "operand stack underflow".
+                        if ok {
+                            if let Some(la) = call.lambda_argument() {
+                                if let Some(le) = skotch_ast::children(la.syntax())
+                                    .iter()
+                                    .find_map(KtExpr::cast)
+                                {
+                                    let snap = name_to_local.clone();
+                                    let lookup = |n: &str| -> Option<LocalId> {
+                                        snap.iter()
+                                            .rev()
+                                            .find(|(name, _)| name == n)
+                                            .map(|(_, l)| *l)
+                                    };
+                                    let s = lower_rich_expr_to_slot(
+                                        le,
+                                        &lookup,
+                                        fn_lookup_ref,
+                                        next_slot,
+                                        &mut body_mstmts,
+                                        local_tys,
+                                        strings,
+                                    );
+                                    if let Some(s) = s {
+                                        arg_slots.push(s);
+                                    } else {
+                                        ok = false;
+                                    }
+                                }
+                            }
+                        }
                         if ok {
                             let result_slot = LocalId(*next_slot);
                             *next_slot += 1;
@@ -16173,6 +16209,42 @@ fn try_lower_multi_stmt_block_with_offset(
                                                 break;
                                             }
                                         }
+                                    }
+                                }
+                            }
+                        }
+                        // Trailing-lambda arg: `later { ... }` puts the
+                        // lambda in call.lambda_argument(), not in
+                        // value_argument_list. Without pulling it in,
+                        // the emitted invokestatic's descriptor expects
+                        // N+1 args while the operand stack holds only N
+                        // → VerifyError "operand stack underflow".
+                        if ok {
+                            if let Some(la) = call.lambda_argument() {
+                                if let Some(le) = skotch_ast::children(la.syntax())
+                                    .iter()
+                                    .find_map(KtExpr::cast)
+                                {
+                                    let snap = name_to_local.clone();
+                                    let lookup = |n: &str| -> Option<LocalId> {
+                                        snap.iter()
+                                            .rev()
+                                            .find(|(name, _)| name == n)
+                                            .map(|(_, l)| *l)
+                                    };
+                                    let s = lower_rich_expr_to_slot(
+                                        le,
+                                        &lookup,
+                                        fn_lookup,
+                                        &mut next_slot,
+                                        &mut stmts,
+                                        &mut local_tys,
+                                        strings,
+                                    );
+                                    if let Some(s) = s {
+                                        arg_slots.push(s);
+                                    } else {
+                                        ok = false;
                                     }
                                 }
                             }
