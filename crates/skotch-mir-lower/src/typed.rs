@@ -10328,6 +10328,76 @@ fn lower_loop_body_blocks(
                         strings,
                     )?
                 };
+                // Smart-cast narrowing for `if (x is Class) <return-or-body>`:
+                // detect the cond_expr shape `Is(Reference(name), Type)`, allocate
+                // a CheckCast slot, push the cast stmt as a then-block prelude, and
+                // rebind `name → cast_slot` for the duration of the then-arm so
+                // member accesses dispatch on the narrowed class (matches kotlinc:
+                // `checkcast Class` + `invokevirtual Class.getX`).
+                let narrow: Option<(String, LocalId, Vec<MStmt>)> = if !multi_cond {
+                    if let KtExpr::Is(is_e) = cond_expr {
+                        let is_children: Vec<_> =
+                            skotch_ast::children(is_e.syntax()).iter().collect();
+                        let ref_name: Option<String> = is_children
+                            .iter()
+                            .find_map(|c| KtExpr::cast(c))
+                            .map(unwrap_parens)
+                            .and_then(|e| {
+                                if let KtExpr::Reference(r) = e {
+                                    r.name().map(String::from)
+                                } else {
+                                    None
+                                }
+                            });
+                        let type_name: Option<String> = is_children.iter().find_map(|c| {
+                            if c.kind == skotch_syntax::SyntaxKind::TYPE_REFERENCE {
+                                if let Some(tr) = skotch_ast::KtTypeReference::cast(c) {
+                                    return tr.user_type().and_then(|u| u.name()).map(String::from);
+                                }
+                            }
+                            None
+                        });
+                        match (ref_name, type_name) {
+                            (Some(rn), Some(tn)) => {
+                                if let Some(orig_slot) = lookup(&rn) {
+                                    let cast_slot = LocalId(*next_slot);
+                                    *next_slot += 1;
+                                    local_tys.push(Ty::Class(tn.clone()));
+                                    let cast_stmt = MStmt::Assign {
+                                        dest: cast_slot,
+                                        value: skotch_mir::Rvalue::CheckCast {
+                                            obj: orig_slot,
+                                            target_class: tn.clone(),
+                                        },
+                                    };
+                                    Some((rn, cast_slot, vec![cast_stmt]))
+                                } else {
+                                    None
+                                }
+                            }
+                            _ => None,
+                        }
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+                let narrow_name: Option<String> = narrow.as_ref().map(|(n, _, _)| n.clone());
+                let narrow_slot: Option<LocalId> = narrow.as_ref().map(|(_, s, _)| *s);
+                // Then-arm lookup honors the narrowed rebind first, falls back
+                // to outer snap. Else-arm and pre-cond stay on the original lookup.
+                let lookup_then = |n: &str| -> Option<LocalId> {
+                    if let (Some(nn), Some(ns)) = (narrow_name.as_ref(), narrow_slot) {
+                        if n == nn {
+                            return Some(ns);
+                        }
+                    }
+                    snap.iter()
+                        .rev()
+                        .find(|(name, _)| name == n)
+                        .map(|(_, l)| *l)
+                };
                 // Build a "return block" for each
                 // return-arm; the other arm is either a
                 // jump-back (Goto join) or a non-return.
@@ -10356,21 +10426,35 @@ fn lower_loop_body_blocks(
                 let make_return_block = |re: Option<KtExpr<'_>>,
                                          next_slot: &mut u32,
                                          local_tys: &mut Vec<Ty>,
-                                         strings: &mut Vec<String>|
+                                         strings: &mut Vec<String>,
+                                         prelude: Vec<MStmt>,
+                                         use_narrow: bool|
                  -> Option<BasicBlock> {
-                    let mut stmts: Vec<MStmt> = Vec::new();
+                    let mut stmts: Vec<MStmt> = prelude;
                     let term = match re {
                         None => Terminator::Return,
                         Some(re) => {
-                            let slot = lower_rich_expr_to_slot(
-                                re,
-                                &lookup,
-                                fn_lookup_ref,
-                                next_slot,
-                                &mut stmts,
-                                local_tys,
-                                strings,
-                            )?;
+                            let slot = if use_narrow {
+                                lower_rich_expr_to_slot(
+                                    re,
+                                    &lookup_then,
+                                    fn_lookup_ref,
+                                    next_slot,
+                                    &mut stmts,
+                                    local_tys,
+                                    strings,
+                                )?
+                            } else {
+                                lower_rich_expr_to_slot(
+                                    re,
+                                    &lookup,
+                                    fn_lookup_ref,
+                                    next_slot,
+                                    &mut stmts,
+                                    local_tys,
+                                    strings,
+                                )?
+                            };
                             Terminator::ReturnValue(slot)
                         }
                     };
@@ -10457,15 +10541,36 @@ fn lower_loop_body_blocks(
                     });
                 }
                 // Then-block:
+                let then_prelude: Vec<MStmt> = narrow
+                    .as_ref()
+                    .map(|(_, _, p)| p.clone())
+                    .unwrap_or_default();
                 if then_is_return {
                     let then_re = extract_inner_return(then_arm);
-                    blocks.push(make_return_block(then_re, next_slot, local_tys, strings)?);
+                    blocks.push(make_return_block(
+                        then_re,
+                        next_slot,
+                        local_tys,
+                        strings,
+                        then_prelude,
+                        true,
+                    )?);
                 } else {
                     let then_children: Vec<&skotch_sil::SilNode> = match then_arm {
                         KtExpr::Block(bl) => skotch_ast::children(bl.syntax()).iter().collect(),
                         other => vec![other.syntax()],
                     };
-                    let then_stmts = lower_loop_body(
+                    // For body-form then-arm: temporarily rebind the narrowed
+                    // name in name_to_local so nested expressions also see the
+                    // CheckCast slot. Pop after.
+                    let pushed_narrow =
+                        if let (Some(nn), Some(ns)) = (narrow_name.as_ref(), narrow_slot) {
+                            name_to_local.push((nn.clone(), ns));
+                            true
+                        } else {
+                            false
+                        };
+                    let then_stmts_res = lower_loop_body(
                         &then_children,
                         name_to_local,
                         next_slot,
@@ -10473,7 +10578,12 @@ fn lower_loop_body_blocks(
                         strings,
                         fn_lookup_ref,
                         function_param_names,
-                    )?;
+                    );
+                    if pushed_narrow {
+                        name_to_local.pop();
+                    }
+                    let mut then_stmts = then_prelude;
+                    then_stmts.extend(then_stmts_res?);
                     blocks.push(BasicBlock {
                         stmts: then_stmts,
                         terminator: Terminator::Goto(after_block_id),
@@ -10484,7 +10594,14 @@ fn lower_loop_body_blocks(
                     let else_arm_v = else_arm?;
                     if else_is_return {
                         let else_re = extract_inner_return(else_arm_v);
-                        blocks.push(make_return_block(else_re, next_slot, local_tys, strings)?);
+                        blocks.push(make_return_block(
+                            else_re,
+                            next_slot,
+                            local_tys,
+                            strings,
+                            Vec::new(),
+                            false,
+                        )?);
                     } else {
                         let else_children: Vec<&skotch_sil::SilNode> = match else_arm_v {
                             KtExpr::Block(bl) => skotch_ast::children(bl.syntax()).iter().collect(),
