@@ -27851,6 +27851,73 @@ fn constructor_from_primary_impl(
                     }
                 }
             }
+            // 3c. Generic fallback — try lower_rich_expr_to_slot for
+            // the initializer with a lookup that maps primary-ctor
+            // param names to their argument slots. Catches shapes like
+            // `val data: IntArray = IntArray(rows * cols)` where the
+            // initializer is a Call whose args read primary-ctor
+            // params. Bail (don't emit any partial side effects) if
+            // the rich lower fails — leaves the field uninitialized,
+            // matching the prior (silent) behaviour but no worse.
+            //
+            // Snapshot stmts / locals / strings / next_slot so we can
+            // rewind on partial-then-failed lowering.
+            let stmts_snap = stmts.len();
+            let locals_snap = locals.len();
+            let strings_snap = strings.len();
+            let next_slot_snap = next_slot;
+            // Build name→slot map for primary-ctor params (val/var
+            // AND non-val/non-var alike — kotlinc allows referencing
+            // any primary-ctor param from property initializers).
+            let param_slot_map: rustc_hash::FxHashMap<String, skotch_mir::LocalId> = params_iter
+                .iter()
+                .enumerate()
+                .filter_map(|(i, p)| {
+                    p.name()
+                        .map(|n| (n.to_string(), skotch_mir::LocalId((i + 1) as u32)))
+                })
+                .collect();
+            let lookup =
+                |name: &str| -> Option<skotch_mir::LocalId> { param_slot_map.get(name).copied() };
+            let maybe_slot = lower_rich_expr_to_slot(
+                init,
+                &lookup,
+                fn_lookup,
+                &mut next_slot,
+                &mut stmts,
+                &mut locals,
+                &mut strings,
+            );
+            if let Some(val_slot) = maybe_slot {
+                // Reject if any string interning occurred — the
+                // module-level strings table isn't merged from
+                // constructor-local strings, so backends would index
+                // a stale id at runtime. (Same restriction the
+                // literal-init arm already imposes for strings.)
+                if strings.len() != strings_snap {
+                    stmts.truncate(stmts_snap);
+                    locals.truncate(locals_snap);
+                    strings.truncate(strings_snap);
+                    next_slot = next_slot_snap;
+                } else {
+                    stmts.push(skotch_mir::Stmt::Assign {
+                        dest: this_slot,
+                        value: skotch_mir::Rvalue::PutField {
+                            receiver: this_slot,
+                            class_name: class_name.to_string(),
+                            field_name: field_name.to_string(),
+                            value: val_slot,
+                        },
+                    });
+                }
+            } else {
+                // Rewind any partial side effects (rich lowering
+                // may push pre_stmts before hitting a failure case).
+                stmts.truncate(stmts_snap);
+                locals.truncate(locals_snap);
+                strings.truncate(strings_snap);
+                next_slot = next_slot_snap;
+            }
         }
     }
 
