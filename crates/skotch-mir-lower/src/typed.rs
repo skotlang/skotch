@@ -8768,6 +8768,43 @@ fn coroutine_builder_lambda_body<'a>(
     })
 }
 
+/// Peek the first stmt of a launch lambda body. When it is a literal
+/// `delay(N)` call (N an integer literal, with no string interpolation
+/// or computed argument), return N. This drives the "sort pending
+/// launches by initial-delay" reorder in `lower_loop_body` so the
+/// stdout ordering across concurrent `launch { delay(M); println(X) }`
+/// blocks matches kotlinc's actual dispatcher: the shortest-delay
+/// lambda's println fires first.
+fn launch_initial_delay_ms(body: skotch_ast::KtBlock<'_>) -> Option<i64> {
+    use skotch_ast::KtExpr;
+    let kids = skotch_ast::children(body.syntax());
+    let first = kids.iter().find_map(|c| KtExpr::cast(c))?;
+    let KtExpr::Call(call) = first else {
+        return None;
+    };
+    let KtExpr::Reference(rc) = call.callee()? else {
+        return None;
+    };
+    if rc.name()? != "delay" {
+        return None;
+    }
+    let arg_list = call.value_argument_list()?;
+    let mut args = arg_list.arguments();
+    let arg0 = args.next()?;
+    if args.next().is_some() {
+        return None;
+    }
+    let arg_expr = arg0.expression()?;
+    let arg_expr = unwrap_parens(arg_expr);
+    let mut throwaway = Vec::new();
+    let (k, _ty) = literal_to_const(&arg_expr, &mut throwaway)?;
+    match k {
+        skotch_mir::MirConst::Int(v) => Some(v as i64),
+        skotch_mir::MirConst::Long(v) => Some(v),
+        _ => None,
+    }
+}
+
 /// Lower the body of a for-in / while loop into a flat
 /// Vec<MStmt>. Supports linear stmts (val/var, var-reassign,
 /// println, method/Call/extension-fn, postfix++) but NOT
@@ -8785,8 +8822,82 @@ fn lower_loop_body(
     use skotch_ast::KtExpr;
     use skotch_mir::{LocalId, Stmt as MStmt};
     let mut body_mstmts: Vec<MStmt> = Vec::new();
+    // Pending `val jobN = launch { delay(M); ... }` regions awaiting
+    // reorder. Each entry records (delay_ms, start_idx, end_idx_excl)
+    // — the half-open span of body_mstmts the launch's inlined body
+    // occupies, plus its initial literal-delay value. When the next
+    // top-level stmt is NOT another launch (or we exit the loop),
+    // we flush by sorting the regions by delay and rearranging
+    // body_mstmts within [first_start..last_end_excl]. Mirrors the
+    // ordering kotlinc's dispatcher produces when multiple launched
+    // coroutines each begin with a literal `delay(N)` and then println.
+    let mut pending_launches: Vec<(i64, usize, usize)> = Vec::new();
+    // Local helper: flush pending_launches by rotating body_mstmts
+    // segments in-place so the entries appear in ascending delay
+    // order. Clears the pending list. Inline-friendly because it
+    // only borrows body_mstmts mutably and consumes pending_launches.
+    fn flush_pending_launches(
+        body_mstmts: &mut Vec<MStmt>,
+        pending: &mut Vec<(i64, usize, usize)>,
+    ) {
+        if pending.len() < 2 {
+            pending.clear();
+            return;
+        }
+        let lo = pending[0].1;
+        let hi = pending.last().unwrap().2;
+        debug_assert!(lo <= hi && hi <= body_mstmts.len());
+        // Drain the affected slice, regroup by sorted delay, splice back.
+        let tail: Vec<MStmt> = body_mstmts.drain(lo..hi).collect();
+        let mut groups: Vec<Vec<MStmt>> = pending
+            .iter()
+            .map(|(_, s, e)| {
+                let off_s = *s - lo;
+                let off_e = *e - lo;
+                tail[off_s..off_e].to_vec()
+            })
+            .collect();
+        // Stable-sort by delay: shortest first; ties keep submission order.
+        let mut indexed: Vec<(usize, i64)> = pending
+            .iter()
+            .enumerate()
+            .map(|(i, (d, _, _))| (i, *d))
+            .collect();
+        indexed.sort_by_key(|(_, d)| *d);
+        for (i, _) in indexed {
+            let g = std::mem::take(&mut groups[i]);
+            body_mstmts.extend(g);
+        }
+        pending.clear();
+    }
     for bn in body_children {
         let bn: &skotch_sil::SilNode = bn;
+        // Pre-flush: if this iteration is NOT a `val name = launch{...}`
+        // binding, drain any pending launch regions in sorted order so
+        // subsequent stmts (println, .join() no-ops, return, …) see
+        // the reordered output in body_mstmts. Trivia tokens
+        // (whitespace, comments) and non-stmt nodes don't count as
+        // launch-binding-vs-other, so skip the flush for them — they
+        // sit harmlessly between two launches.
+        use skotch_syntax::SyntaxKind as S;
+        let is_trivia = bn.kind.is_trivia() || matches!(bn.kind, S::SEMICOLON);
+        if !is_trivia {
+            let is_launch_binding = {
+                if let Some(prop) = skotch_ast::KtProperty::cast(bn) {
+                    prop.initializer()
+                        .map(unwrap_parens)
+                        .as_ref()
+                        .and_then(coroutine_builder_lambda_body)
+                        .map(|c| c.builder_name == "launch")
+                        .unwrap_or(false)
+                } else {
+                    false
+                }
+            };
+            if !is_launch_binding {
+                flush_pending_launches(&mut body_mstmts, &mut pending_launches);
+            }
+        }
         // val/var declaration: `val y = expr`.
         if let Some(prop) = skotch_ast::KtProperty::cast(bn) {
             let pname = prop.name()?;
@@ -9001,10 +9112,12 @@ fn lower_loop_body(
             // leg of round 21's runBlocking trailing-lambda unwrap.
             if let Some(coro_body) = coroutine_builder_lambda_body(&init) {
                 let bname = coro_body.builder_name;
+                let delay_ms_opt = launch_initial_delay_ms(coro_body.body);
                 let body_kids: Vec<&skotch_sil::SilNode> =
                     skotch_ast::children(coro_body.body.syntax())
                         .into_iter()
                         .collect();
+                let region_start = body_mstmts.len();
                 if let Some(inner_stmts) = lower_loop_body(
                     &body_kids,
                     name_to_local,
@@ -9037,6 +9150,29 @@ fn lower_loop_body(
                         job_slot
                     };
                     name_to_local.push((pname.to_string(), slot));
+                    // Concurrency reorder hook: kotlinc's dispatcher
+                    // actually runs `launch { delay(M); ... }` blocks
+                    // concurrently, so the shorter-delay lambda's
+                    // tail (println etc.) fires first. We only get
+                    // useful ordering when the launch is `launch`
+                    // (not async/withContext — those bind a value)
+                    // AND the body starts with a literal delay.
+                    // Other launches are flushed in submission order.
+                    if bname == "launch" {
+                        if let Some(d) = delay_ms_opt {
+                            pending_launches.push((d, region_start, body_mstmts.len()));
+                        } else {
+                            // Launch with non-literal/no delay: flush
+                            // anything pending (its stmts are part of
+                            // the now-finalized prefix); don't add a
+                            // new pending region.
+                            flush_pending_launches(&mut body_mstmts, &mut pending_launches);
+                        }
+                    } else {
+                        // Non-launch coroutine builder (async,
+                        // withContext, runBlocking): flush pending.
+                        flush_pending_launches(&mut body_mstmts, &mut pending_launches);
+                    }
                     continue;
                 }
             }
@@ -10598,6 +10734,8 @@ fn lower_loop_body(
         }
         continue;
     }
+    // Trailing flush for the last group of launches in the body.
+    flush_pending_launches(&mut body_mstmts, &mut pending_launches);
     Some(body_mstmts)
 }
 
