@@ -23110,6 +23110,121 @@ fn lower_rich_expr_to_slot(
             return Some(result);
         }
     }
+    // If-as-rvalue: `if (cond) thenE else elseE` as a call arg / init.
+    // lower_rich is straight-line (no branch terminator available), so
+    // approximate `&&`/`||`-style: lower BOTH arms eagerly, then select
+    // via `Object[2]`-indexed load (`arr[0]=elseE; arr[1]=thenE;
+    // result=arr[cond]` — Bool slot is 0/1, doubles as the index).
+    // Scope: ref-typed arms only (String/Class/Any/Nullable); primitive
+    // arms would need box+unbox plumbing and the common shape we want
+    // (`sb.append(if (b) "true" else "false")`) is ref-typed.
+    if let KtExpr::If(if_e) = &e {
+        let cond_e = if_e
+            .condition()
+            .and_then(|c| c.expression())
+            .map(unwrap_parens);
+        let then_e = if_e
+            .then_branch()
+            .and_then(|t| t.expression())
+            .map(unwrap_parens);
+        let else_e = if_e
+            .else_branch()
+            .and_then(|el| el.expression())
+            .map(unwrap_parens);
+        if let (Some(ce), Some(te), Some(ee)) = (cond_e, then_e, else_e) {
+            let mut lower = |x| {
+                lower_rich_expr_to_slot(
+                    x,
+                    lookup_name,
+                    fn_lookup,
+                    next_slot,
+                    pre_stmts,
+                    extra_locals,
+                    strings,
+                )
+            };
+            if let (Some(cond_slot), Some(then_slot), Some(else_slot)) =
+                (lower(ce), lower(te), lower(ee))
+            {
+                let then_ty = slot_ty_with_param_fallback(then_slot.0, extra_locals);
+                let else_ty = slot_ty_with_param_fallback(else_slot.0, extra_locals);
+                let is_ref =
+                    |t: &Ty| matches!(t, Ty::String | Ty::Class(_) | Ty::Any | Ty::Nullable(_));
+                if is_ref(&then_ty) && is_ref(&else_ty) {
+                    let result_ty = if then_ty == else_ty {
+                        then_ty.clone()
+                    } else {
+                        Ty::Any
+                    };
+                    let mut alloc = |ty: Ty, v: skotch_mir::Rvalue| -> LocalId {
+                        let s = LocalId(*next_slot);
+                        *next_slot += 1;
+                        extra_locals.push(ty);
+                        pre_stmts.push(MStmt::Assign { dest: s, value: v });
+                        s
+                    };
+                    let size_slot = alloc(
+                        Ty::Int,
+                        skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(2)),
+                    );
+                    let arr_slot = alloc(Ty::Any, skotch_mir::Rvalue::NewObjectArray(size_slot));
+                    let zero_idx = alloc(
+                        Ty::Int,
+                        skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(0)),
+                    );
+                    alloc(
+                        Ty::Unit,
+                        skotch_mir::Rvalue::ObjectArrayStore {
+                            array: arr_slot,
+                            index: zero_idx,
+                            value: else_slot,
+                        },
+                    );
+                    let one_idx = alloc(
+                        Ty::Int,
+                        skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(1)),
+                    );
+                    alloc(
+                        Ty::Unit,
+                        skotch_mir::Rvalue::ObjectArrayStore {
+                            array: arr_slot,
+                            index: one_idx,
+                            value: then_slot,
+                        },
+                    );
+                    // ArrayLoad on Ty::Any array emits aaload (Object).
+                    let raw_slot = alloc(
+                        Ty::Any,
+                        skotch_mir::Rvalue::ArrayLoad {
+                            array: arr_slot,
+                            index: cond_slot,
+                        },
+                    );
+                    // Downcast back to the joined ty so the caller's
+                    // verification type matches (sb.append(String)
+                    // wants j/l/String, not j/l/Object).
+                    let target_class: String = match &result_ty {
+                        Ty::String => "java/lang/String".to_string(),
+                        Ty::Class(c) => c.clone(),
+                        Ty::Nullable(inner) => match inner.as_ref() {
+                            Ty::String => "java/lang/String".to_string(),
+                            Ty::Class(c) => c.clone(),
+                            _ => "java/lang/Object".to_string(),
+                        },
+                        _ => "java/lang/Object".to_string(),
+                    };
+                    let result_slot = alloc(
+                        result_ty,
+                        skotch_mir::Rvalue::CheckCast {
+                            obj: raw_slot,
+                            target_class,
+                        },
+                    );
+                    return Some(result_slot);
+                }
+            }
+        }
+    }
     // String concatenation via Binary `+` chain. Handled BEFORE the
     // generic Binary path so `"hello " + name` doesn't take the
     // integer-addition fallback. The chain is flattened
