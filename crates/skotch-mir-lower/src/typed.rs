@@ -15702,6 +15702,7 @@ fn try_lower_multi_stmt_block_with_offset(
                             | KtExpr::Return(_)
                             | KtExpr::While(_)
                             | KtExpr::For(_)
+                            | KtExpr::When(_)
                     ) {
                         return true;
                     }
@@ -16614,6 +16615,7 @@ fn try_lower_multi_stmt_block_with_offset(
                             | KtExpr::Return(_)
                             | KtExpr::While(_)
                             | KtExpr::For(_)
+                            | KtExpr::When(_)
                     ) {
                         return true;
                     }
@@ -17751,6 +17753,7 @@ fn try_lower_multi_stmt_block_with_offset(
                             | KtExpr::Return(_)
                             | KtExpr::While(_)
                             | KtExpr::For(_)
+                            | KtExpr::When(_)
                     ) {
                         return true;
                     }
