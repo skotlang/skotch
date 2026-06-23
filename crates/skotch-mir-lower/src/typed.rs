@@ -14477,6 +14477,81 @@ fn try_lower_multi_stmt_block_with_offset(
                                 .find(|(n, _)| n == recv_name)
                                 .map(|(_, l)| *l)
                             {
+                                // Function-typed parameter dispatch:
+                                // `t.init()` where `init` is a
+                                // `Tree<T>.() -> Unit` parameter must
+                                // call `Function1.invoke(t)` (the
+                                // lambda's receiver-arg slot), NOT
+                                // `invokevirtual Tree.init()` (which
+                                // doesn't exist). Detect when the
+                                // selector name resolves to an in-scope
+                                // local whose Ty is
+                                // `kotlin/jvm/functions/FunctionN` and
+                                // emit a FunctionInvoke with the
+                                // receiver as the first invoke arg.
+                                if let Some(meth_slot) = name_to_local
+                                    .iter()
+                                    .rev()
+                                    .find(|(n, _)| n == method_name)
+                                    .map(|(_, l)| *l)
+                                {
+                                    let meth_ty =
+                                        slot_ty_with_param_fallback(meth_slot.0, &local_tys);
+                                    let fn_arity: Option<u8> = match &meth_ty {
+                                        Ty::Class(c) => c
+                                            .strip_prefix("kotlin/jvm/functions/Function")
+                                            .and_then(|n| n.parse::<u8>().ok()),
+                                        _ => None,
+                                    };
+                                    if let Some(arity) = fn_arity {
+                                        let mut invoke_args: Vec<LocalId> =
+                                            vec![meth_slot, recv_slot];
+                                        let mut ok = true;
+                                        if let Some(arg_list) = call.value_argument_list() {
+                                            let snap = name_to_local.clone();
+                                            let lookup = |n: &str| -> Option<LocalId> {
+                                                snap.iter()
+                                                    .rev()
+                                                    .find(|(name, _)| name == n)
+                                                    .map(|(_, l)| *l)
+                                            };
+                                            for arg in arg_list.arguments() {
+                                                let Some(arg_e) = arg.expression() else {
+                                                    ok = false;
+                                                    break;
+                                                };
+                                                let Some(s) = lower_rich_expr_to_slot(
+                                                    arg_e,
+                                                    &lookup,
+                                                    fn_lookup,
+                                                    &mut next_slot,
+                                                    &mut stmts,
+                                                    &mut local_tys,
+                                                    strings,
+                                                ) else {
+                                                    ok = false;
+                                                    break;
+                                                };
+                                                invoke_args.push(s);
+                                            }
+                                        }
+                                        if ok && invoke_args.len() == (arity as usize) + 1 {
+                                            let result_slot = LocalId(next_slot);
+                                            next_slot += 1;
+                                            local_tys.push(Ty::Any);
+                                            stmts.push(MStmt::Assign {
+                                                dest: result_slot,
+                                                value: skotch_mir::Rvalue::Call {
+                                                    kind: skotch_mir::CallKind::FunctionInvoke {
+                                                        arity,
+                                                    },
+                                                    args: invoke_args,
+                                                },
+                                            });
+                                            continue;
+                                        }
+                                    }
+                                }
                                 // Use slot_ty_with_param_fallback (NOT
                                 // `local_tys.get(recv_slot.0)`) so a recv
                                 // slot whose index falls in the param
