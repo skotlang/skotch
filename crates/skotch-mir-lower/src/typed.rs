@@ -24990,13 +24990,84 @@ fn lower_rich_expr_to_slot(
                                 _ => None,
                             }
                         }
-                        KtExpr::DotQualified(_) => {
-                            // For chained method calls, recursively
-                            // peek at what the inner DotQualified
-                            // returns. Common case is String.
-                            // Default to String to allow chains like
-                            // `s.trim().uppercase()`.
-                            Some(Ty::String)
+                        KtExpr::DotQualified(inner_dq) => {
+                            // Peek through the inner DotQualified to
+                            // determine the recv Ty. Two common shapes:
+                            //   (a) `recv.field.method()` — inner is
+                            //       `Reference(recv).Reference(field)`.
+                            //       Resolve recv's class via lookup_name,
+                            //       then look up field's Ty in CLASS_FIELDS.
+                            //   (b) `recv.method1().method2()` — inner is
+                            //       `Reference(recv).Call(method1)`. Resolve
+                            //       method1's return Ty via class_method_return_ty.
+                            // Falls back to Ty::String for the
+                            // `s.trim().uppercase()`-shaped chain when the
+                            // inner returns a known String-returning method
+                            // (sniffed by name only — accurate enough for
+                            // the existing chains). Otherwise returns None
+                            // so the non-Reference receiver fallback below
+                            // (line ~26330) lowers the receiver and dispatches
+                            // on the actual recv_slot Ty — fixes
+                            // `v.items.isEmpty()` where v.items is a List
+                            // field and was being dispatched as String.
+                            let inner_exprs: Vec<KtExpr<'_>> =
+                                skotch_ast::children(inner_dq.syntax())
+                                    .iter()
+                                    .filter_map(KtExpr::cast)
+                                    .collect();
+                            if inner_exprs.len() == 2 {
+                                match (&inner_exprs[0], &inner_exprs[1]) {
+                                    (KtExpr::Reference(rcv), KtExpr::Reference(field_ref)) => {
+                                        let recv_ty = rcv.name().and_then(lookup_name).map(|s| {
+                                            slot_ty_with_param_fallback(s.0, extra_locals)
+                                        });
+                                        let field_n = field_ref.name();
+                                        match (recv_ty, field_n) {
+                                            (Some(Ty::Class(cls)), Some(fname)) => {
+                                                lookup_class_fields(&cls).and_then(|fs| {
+                                                    fs.iter()
+                                                        .find(|(n, _)| n == fname)
+                                                        .map(|(_, t)| t.clone())
+                                                })
+                                            }
+                                            _ => None,
+                                        }
+                                    }
+                                    (KtExpr::Reference(rcv), KtExpr::Call(c)) => {
+                                        let method_n = match c.callee() {
+                                            Some(KtExpr::Reference(r)) => {
+                                                r.name().map(|s| s.to_string())
+                                            }
+                                            _ => None,
+                                        };
+                                        let recv_ty = rcv.name().and_then(lookup_name).map(|s| {
+                                            slot_ty_with_param_fallback(s.0, extra_locals)
+                                        });
+                                        match (recv_ty, method_n.as_deref()) {
+                                            (Some(Ty::Class(cls)), Some(m)) => {
+                                                class_method_return_ty(&cls, m)
+                                            }
+                                            // Legacy: a String-returning
+                                            // inner call where we can't
+                                            // resolve via CLASS_METHODS
+                                            // (e.g. recv is a top-level
+                                            // val or unresolved) — assume
+                                            // String to preserve the
+                                            // `s.trim().uppercase()` path.
+                                            (_, Some("trim"))
+                                            | (_, Some("uppercase"))
+                                            | (_, Some("lowercase"))
+                                            | (_, Some("substring"))
+                                            | (_, Some("replace"))
+                                            | (_, Some("toString")) => Some(Ty::String),
+                                            _ => None,
+                                        }
+                                    }
+                                    _ => None,
+                                }
+                            } else {
+                                None
+                            }
                         }
                         KtExpr::ArrayAccess(aa) => {
                             // `arr[i].method()` — peek the array's
@@ -25864,6 +25935,17 @@ fn lower_rich_expr_to_slot(
                                             Some(("(Ljava/lang/Object;)Z", Ty::Bool, true))
                                         }
                                         "indexOf" => Some(("(Ljava/lang/Object;)I", Ty::Int, true)),
+                                        // JDK List/Collection interface
+                                        // methods. kotlinc inlines these
+                                        // to invokeinterface — the
+                                        // CollectionsKt static-extension
+                                        // path below claims to dispatch
+                                        // them but the runtime stdlib has
+                                        // no `(Iterable)Z` overload, so
+                                        // routing here is both faster AND
+                                        // correct.
+                                        "isEmpty" => Some(("()Z", Ty::Bool, false)),
+                                        "size" => Some(("()I", Ty::Int, false)),
                                         _ => None,
                                     };
                                     if let Some((desc, ret_ty, autobox)) = direct_method {
@@ -26588,6 +26670,37 @@ fn lower_rich_expr_to_slot(
                                 ) {
                                     return Some(rs);
                                 }
+                            }
+                            // JDK List/Collection direct-call fast path
+                            // for chained-receiver `isEmpty()`/`size()`.
+                            // kotlinc inlines these to `invokeinterface
+                            // java/util/List.{isEmpty,size}` — and the
+                            // CollectionsKt mapping below has no runtime
+                            // backing for `(Iterable)Z`, so routing here
+                            // is the only correct path. Triggered when
+                            // recv_ty resolves to a List/Collection class
+                            // (e.g. `obj.field.isEmpty()`).
+                            if recv_is_collection && matches!(method_n, "isEmpty" | "size") {
+                                let (desc, ret_ty) = match method_n {
+                                    "isEmpty" => ("()Z", Ty::Bool),
+                                    "size" => ("()I", Ty::Int),
+                                    _ => unreachable!(),
+                                };
+                                let result_slot = LocalId(*next_slot);
+                                *next_slot += 1;
+                                extra_locals.push(ret_ty);
+                                pre_stmts.push(MStmt::Assign {
+                                    dest: result_slot,
+                                    value: skotch_mir::Rvalue::Call {
+                                        kind: skotch_mir::CallKind::VirtualJava {
+                                            class_name: "java/util/List".to_string(),
+                                            method_name: method_n.to_string(),
+                                            descriptor: desc.to_string(),
+                                        },
+                                        args: vec![recv_slot],
+                                    },
+                                });
+                                return Some(result_slot);
                             }
                             if recv_is_collection {
                                 let mapped: Option<(&str, &str, &str, Ty)> = match method_n {
