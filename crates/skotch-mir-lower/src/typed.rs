@@ -29410,6 +29410,87 @@ fn method_simple_body_full(
                             let Some(te) = skotch_ast::KtExpr::cast(tn) else {
                                 continue;
                             };
+                            // Handle simple assignment statements
+                            // (`field = expr`, `localVar = expr`) up
+                            // front. lower_rich_expr_to_slot has no `=`
+                            // Binary arm — without this, an
+                            // `if (cond) { field = X; otherStmt(); }`
+                            // then-block silently bailed at the first
+                            // assignment, dropping the entire if-body
+                            // including the surviving statements.
+                            //
+                            // Class-field assignment takes priority over
+                            // a snap_locals match because
+                            // `prebind_class_fields` (run a few lines
+                            // above) caches every referenced field as a
+                            // snap_locals GetField slot. Assigning to
+                            // that slot would only update the cache,
+                            // never the heap — kotlinc semantics require
+                            // a PutField writeback. Also evict the stale
+                            // cache so later reads in this then-block
+                            // pick up the new value.
+                            if let KtExpr::Binary(b) = te {
+                                let op_text = b.operation().map(|o| o.text()).unwrap_or_default();
+                                if op_text == "=" {
+                                    let lhs = b.lhs().map(unwrap_parens);
+                                    let rhs = b.rhs().map(unwrap_parens);
+                                    if let (Some(KtExpr::Reference(rr)), Some(rhs_e)) = (lhs, rhs) {
+                                        if let Some(nm) = rr.name() {
+                                            // RHS lowered via the same
+                                            // snap_locals lookup.
+                                            let Some(rhs_slot) = lower_rich_expr_to_slot(
+                                                rhs_e,
+                                                &lookup2,
+                                                fn_lookup,
+                                                &mut next_slot_inner,
+                                                &mut then_stmts,
+                                                &mut extra_locals_inner,
+                                                strings,
+                                            ) else {
+                                                then_ok = false;
+                                                break;
+                                            };
+                                            // Path B (first): implicit-this
+                                            // field — emit PutField so the
+                                            // heap is updated AND evict the
+                                            // stale snap_locals cache.
+                                            if let (Some(cname), Some((fname, _fty))) = (
+                                                class_name,
+                                                field_names.iter().find(|(n, _)| n == nm),
+                                            ) {
+                                                then_stmts.push(skotch_mir::Stmt::Assign {
+                                                    dest: skotch_mir::LocalId(0),
+                                                    value: skotch_mir::Rvalue::PutField {
+                                                        receiver: skotch_mir::LocalId(0),
+                                                        class_name: cname.to_string(),
+                                                        field_name: fname.clone(),
+                                                        value: rhs_slot,
+                                                    },
+                                                });
+                                                snap_locals.retain(|(n, _)| n != nm);
+                                                continue;
+                                            }
+                                            // Path A: local snap_locals
+                                            // (param / earlier var).
+                                            if let Some(slot) = snap_locals
+                                                .iter()
+                                                .rev()
+                                                .find(|(n, _)| n == nm)
+                                                .map(|(_, l)| *l)
+                                            {
+                                                then_stmts.push(skotch_mir::Stmt::Assign {
+                                                    dest: slot,
+                                                    value: skotch_mir::Rvalue::Local(rhs_slot),
+                                                });
+                                                continue;
+                                            }
+                                            // Neither path resolved.
+                                            then_ok = false;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
                             if lower_rich_expr_to_slot(
                                 te,
                                 &lookup2,
@@ -29566,7 +29647,19 @@ fn method_simple_body_full(
             // `fun push(v: Int) { items.add(v) }` would fall through to
             // the trailing literal-search path, find no return, and
             // produce make_placeholder (an empty body).
-            if mini_ok && return_slot.is_none() && !pre_stmts_inner.is_empty() {
+            //
+            // Also covers the all-If-no-trailing-stmts shape: when the
+            // body is just `if (cond) { ... }`, the If handler moved its
+            // pre_stmts_inner into mini_extra_blocks (as the pre-branch
+            // block) and left `pre_stmts_inner` empty. Without the
+            // `!mini_extra_blocks.is_empty()` arm, that body fell through
+            // to the literal-search path → make_placeholder (empty
+            // body) — silently dropping a no-return `if (a && b) { ... }`
+            // in a class method.
+            if mini_ok
+                && return_slot.is_none()
+                && (!pre_stmts_inner.is_empty() || !mini_extra_blocks.is_empty())
+            {
                 let final_block = BasicBlock {
                     stmts: pre_stmts_inner,
                     terminator: Terminator::Return,
