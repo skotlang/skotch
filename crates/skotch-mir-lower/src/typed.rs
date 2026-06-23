@@ -696,6 +696,172 @@ fn clear_local_helper_captures() {
     LOCAL_HELPER_CAPTURES.with(|c| c.borrow_mut().clear());
 }
 
+/// Metadata for a cross-file user-defined extension function. Carries
+/// enough information to emit a `StaticJava` call against the declared
+/// wrapper class (e.g. `PipelineKt.countWhere(Iterable, Function1)I`)
+/// from a sibling file.
+#[derive(Clone, Debug)]
+struct CrossFileExtFn {
+    owner_class: String,
+    method_name: String,
+    descriptor: String,
+    return_ty: Ty,
+}
+
+/// Box a primitive-typed slot into its `java.lang.<Wrapper>` peer
+/// when the target JVM-level position expects an object reference
+/// (descriptor token NOT one of `I`/`J`/`F`/`D`/`Z`/`B`/`S`/`C`).
+/// Returns the original slot when no boxing is needed.
+fn box_primitive_arg(
+    s: skotch_mir::LocalId,
+    target_obj: bool,
+    extra_locals: &mut Vec<Ty>,
+    pre_stmts: &mut Vec<skotch_mir::Stmt>,
+    next_slot: &mut u32,
+) -> skotch_mir::LocalId {
+    use skotch_mir::{LocalId, Stmt as MStmt};
+    if !target_obj {
+        return s;
+    }
+    let ty = slot_ty_with_param_fallback(s.0, extra_locals);
+    let (boxed_cls, prim) = match &ty {
+        Ty::Int => ("java/lang/Integer", "I"),
+        Ty::Long => ("java/lang/Long", "J"),
+        Ty::Float => ("java/lang/Float", "F"),
+        Ty::Double => ("java/lang/Double", "D"),
+        Ty::Bool => ("java/lang/Boolean", "Z"),
+        Ty::Byte => ("java/lang/Byte", "B"),
+        Ty::Short => ("java/lang/Short", "S"),
+        Ty::Char => ("java/lang/Character", "C"),
+        _ => return s,
+    };
+    let boxed = LocalId(*next_slot);
+    *next_slot += 1;
+    extra_locals.push(Ty::Class(boxed_cls.to_string()));
+    pre_stmts.push(MStmt::Assign {
+        dest: boxed,
+        value: skotch_mir::Rvalue::Call {
+            kind: skotch_mir::CallKind::StaticJava {
+                class_name: boxed_cls.to_string(),
+                method_name: "valueOf".to_string(),
+                descriptor: format!("({})L{};", prim, boxed_cls),
+            },
+            args: vec![s],
+        },
+    });
+    boxed
+}
+
+/// Parse a JVM method descriptor's parameter section into per-token
+/// strings (`"I"`, `"Ljava/lang/String;"`, `"[Ljava/lang/Object;"`, …).
+/// Used by call-site autobox dispatch to know whether each positional
+/// arg slot expects a primitive or an object reference.
+fn parse_descriptor_params(desc: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let start = desc.find('(').unwrap_or(0) + 1;
+    let end = desc.find(')').unwrap_or(desc.len());
+    let bytes = desc.as_bytes();
+    let mut i = start;
+    while i < end {
+        let c = bytes[i] as char;
+        if c == 'L' {
+            let semi = desc[i..].find(';').map(|k| i + k).unwrap_or(end);
+            out.push(desc[i..=semi].to_string());
+            i = semi + 1;
+        } else if c == '[' {
+            let mut j = i;
+            while j < end && bytes[j] as char == '[' {
+                j += 1;
+            }
+            if j < end && (bytes[j] as char) == 'L' {
+                let semi = desc[j..].find(';').map(|k| j + k).unwrap_or(end);
+                out.push(desc[i..=semi].to_string());
+                i = semi + 1;
+            } else {
+                out.push(desc[i..=j].to_string());
+                i = j + 1;
+            }
+        } else {
+            out.push(desc[i..=i].to_string());
+            i += 1;
+        }
+    }
+    out
+}
+
+thread_local! {
+    /// Cross-file user-defined extension fn registry keyed by
+    /// `(simple_method_name, receiver_jvm_class)`. Populated in
+    /// `lower_file` from `package_symbols.functions`. Consulted by the
+    /// DotQualified dispatch as a final user-defined fallback before
+    /// the Virtual-dispatch bail — lets `nums.countWhere { ... }`
+    /// dispatch through `PipelineKt.countWhere` when the receiver is a
+    /// `List<T>`-shaped slot whose extension is declared on `Iterable<T>`.
+    ///
+    /// Distinct from `fn_lookup` (which is name-keyed and can't carry
+    /// per-receiver overloads). Distinct from `cross_file_fn_stubs` —
+    /// stubs intentionally skip extension fns.
+    static CROSS_FILE_EXT_FNS:
+        std::cell::RefCell<rustc_hash::FxHashMap<(String, String), CrossFileExtFn>> =
+        std::cell::RefCell::new(rustc_hash::FxHashMap::default());
+}
+
+fn register_cross_file_ext_fn(method: &str, recv_class: &str, info: CrossFileExtFn) {
+    CROSS_FILE_EXT_FNS.with(|c| {
+        c.borrow_mut()
+            .insert((method.to_string(), recv_class.to_string()), info);
+    });
+}
+
+fn lookup_cross_file_ext_fn(method: &str, recv_class: &str) -> Option<CrossFileExtFn> {
+    CROSS_FILE_EXT_FNS.with(|c| {
+        c.borrow()
+            .get(&(method.to_string(), recv_class.to_string()))
+            .cloned()
+    })
+}
+
+/// Iterate the registry to find an extension fn that matches `method`
+/// AND has a receiver class compatible with `recv_class` (direct match,
+/// or `recv_class` is a known subtype of the registered receiver — e.g.
+/// `java/util/List` is-a `java/lang/Iterable`). Returns the matching
+/// `CrossFileExtFn` so the caller can emit the static dispatch.
+fn lookup_cross_file_ext_fn_compat(method: &str, recv_class: &str) -> Option<CrossFileExtFn> {
+    if let Some(direct) = lookup_cross_file_ext_fn(method, recv_class) {
+        return Some(direct);
+    }
+    // Try each declared supertype of the receiver in turn. Limited to
+    // the collection-interface hierarchy that matters for the parity
+    // corpus today.
+    let supers: &[&str] = match recv_class {
+        "java/util/List" => &["java/util/Collection", "java/lang/Iterable"],
+        "java/util/Set" => &["java/util/Collection", "java/lang/Iterable"],
+        "java/util/Collection" => &["java/lang/Iterable"],
+        _ => &[],
+    };
+    for s in supers {
+        if let Some(hit) = lookup_cross_file_ext_fn(method, s) {
+            return Some(hit);
+        }
+    }
+    None
+}
+
+struct CrossFileExtFnsScope {
+    prev: rustc_hash::FxHashMap<(String, String), CrossFileExtFn>,
+}
+impl CrossFileExtFnsScope {
+    fn new() -> Self {
+        let prev = CROSS_FILE_EXT_FNS.with(|c| std::mem::take(&mut *c.borrow_mut()));
+        Self { prev }
+    }
+}
+impl Drop for CrossFileExtFnsScope {
+    fn drop(&mut self) {
+        CROSS_FILE_EXT_FNS.with(|c| *c.borrow_mut() = std::mem::take(&mut self.prev));
+    }
+}
+
 /// Pre-pass spec for a lifted local function. Built by `lower_file`
 /// before the outer-fn lowering loop so call sites can resolve to a
 /// reserved FuncId; consumed AFTER the outer loop to actually lower
@@ -1836,6 +2002,52 @@ pub fn lower_file(
     for (name, per_file_idx) in &local_fn_order {
         if let Some(slot) = fn_lookup.get_mut(name) {
             slot.0 = FuncId(local_fn_id_base + per_file_idx);
+        }
+    }
+
+    // Cross-file user-defined extension fn registry. Lets the
+    // DotQualified dispatch find sibling-file extensions like
+    // `fun <T> Iterable<T>.countWhere(...)` declared in `Pipeline.kt`
+    // when called from `Main.kt` as `nums.countWhere { ... }`. The
+    // registry is keyed by (method_name, receiver_jvm_class) — a single
+    // method name can be declared on multiple receiver types, and the
+    // call site picks the matching entry via the receiver slot's Ty
+    // (or supertype, via the JDK-collection chain).
+    let _cross_file_ext_fns_scope = CrossFileExtFnsScope::new();
+    if let Some(table) = package_symbols {
+        for (name, decls) in table.functions.iter() {
+            for decl in decls {
+                if !decl.is_extension {
+                    continue;
+                }
+                // Skip extensions declared in our own file — those
+                // route through the local fn_lookup path. Without this
+                // guard, a local extension would also land in the
+                // cross-file registry and could conflict with the
+                // local lookup.
+                if decl.owner_class == module.wrapper_class {
+                    continue;
+                }
+                let Some(recv_ty) = &decl.receiver_ty else {
+                    continue;
+                };
+                let Ty::Class(recv_class) = recv_ty else {
+                    continue;
+                };
+                // user_param_count excludes the receiver. ExternalFunDecl
+                // stores the receiver as the first entry of param_tys
+                // when is_extension is true.
+                register_cross_file_ext_fn(
+                    name,
+                    recv_class,
+                    CrossFileExtFn {
+                        owner_class: decl.owner_class.clone(),
+                        method_name: name.clone(),
+                        descriptor: decl.descriptor.clone(),
+                        return_ty: decl.return_ty.clone(),
+                    },
+                );
+            }
         }
     }
 
@@ -21195,6 +21407,20 @@ fn try_lower_multi_stmt_block_with_offset(
                                         Some(KtExpr::Reference(r)) => r.name()?,
                                         _ => return None,
                                     };
+                                    // Bail when the call carries a trailing
+                                    // lambda — this arm only handles positional
+                                    // value args and would silently drop the
+                                    // lambda, producing a no-arg Virtual call
+                                    // (e.g. `nums.countWhere { ... }` →
+                                    // `invokeinterface List.countWhere:()Object`,
+                                    // wrong shape, NoSuchMethodError at runtime).
+                                    // Returning None propagates up so the more
+                                    // capable lower_rich DotQualified arm
+                                    // (with cross-file extension-fn dispatch +
+                                    // trailing-lambda handling) takes over.
+                                    if call.lambda_argument().is_some() {
+                                        return None;
+                                    }
                                     let recv_slot = name_to_local
                                         .iter()
                                         .rev()
@@ -28239,6 +28465,115 @@ fn lower_rich_expr_to_slot(
                             });
                             if let Some(slot) = resolved_slot {
                                 let recv_ty = slot_ty_with_param_fallback(slot.0, extra_locals);
+                                // Cross-file user-defined extension fn dispatch.
+                                // `nums.countWhere { ... }` (Iterable<T>.countWhere
+                                // declared in Pipeline.kt, called from Main.kt) lands
+                                // here when (a) `countWhere` is NOT in fn_lookup
+                                // (cross-file stubs skip extensions) AND (b) the
+                                // stdlib mapped table doesn't carry the method.
+                                // We emit a StaticJava call against the declared
+                                // wrapper class so the runtime executes the real
+                                // extension body. Carries trailing lambda + value args.
+                                if let Ty::Class(recv_class) = &recv_ty {
+                                    if let Some(ext) =
+                                        lookup_cross_file_ext_fn_compat(method_n, recv_class)
+                                    {
+                                        let param_descs = parse_descriptor_params(&ext.descriptor);
+                                        let target_is_object = |idx: usize| -> bool {
+                                            param_descs
+                                                .get(idx)
+                                                .map(|p| {
+                                                    !matches!(
+                                                        p.as_str(),
+                                                        "I" | "J"
+                                                            | "F"
+                                                            | "D"
+                                                            | "Z"
+                                                            | "B"
+                                                            | "S"
+                                                            | "C"
+                                                    )
+                                                })
+                                                .unwrap_or(false)
+                                        };
+                                        let mut arg_slots: Vec<LocalId> = vec![box_primitive_arg(
+                                            slot,
+                                            target_is_object(0),
+                                            extra_locals,
+                                            pre_stmts,
+                                            next_slot,
+                                        )];
+                                        let mut all_ok = true;
+                                        let mut idx = 1usize;
+                                        if let Some(arg_list) = call.value_argument_list() {
+                                            for arg in arg_list.arguments() {
+                                                let Some(arg_e) = arg.expression() else {
+                                                    all_ok = false;
+                                                    break;
+                                                };
+                                                let Some(s) = lower_rich_expr_to_slot(
+                                                    arg_e,
+                                                    lookup_name,
+                                                    fn_lookup,
+                                                    next_slot,
+                                                    pre_stmts,
+                                                    extra_locals,
+                                                    strings,
+                                                ) else {
+                                                    all_ok = false;
+                                                    break;
+                                                };
+                                                arg_slots.push(box_primitive_arg(
+                                                    s,
+                                                    target_is_object(idx),
+                                                    extra_locals,
+                                                    pre_stmts,
+                                                    next_slot,
+                                                ));
+                                                idx += 1;
+                                            }
+                                        }
+                                        if all_ok {
+                                            if let Some(la) = call.lambda_argument() {
+                                                if let Some(le) = skotch_ast::children(la.syntax())
+                                                    .iter()
+                                                    .find_map(KtExpr::cast)
+                                                {
+                                                    if let Some(s) = lower_rich_expr_to_slot(
+                                                        le,
+                                                        lookup_name,
+                                                        fn_lookup,
+                                                        next_slot,
+                                                        pre_stmts,
+                                                        extra_locals,
+                                                        strings,
+                                                    ) {
+                                                        arg_slots.push(s);
+                                                    } else {
+                                                        all_ok = false;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        if all_ok && arg_slots.len() == param_descs.len() {
+                                            let result_slot = LocalId(*next_slot);
+                                            *next_slot += 1;
+                                            extra_locals.push(ext.return_ty.clone());
+                                            pre_stmts.push(MStmt::Assign {
+                                                dest: result_slot,
+                                                value: skotch_mir::Rvalue::Call {
+                                                    kind: skotch_mir::CallKind::StaticJava {
+                                                        class_name: ext.owner_class.clone(),
+                                                        method_name: ext.method_name.clone(),
+                                                        descriptor: ext.descriptor.clone(),
+                                                    },
+                                                    args: arg_slots,
+                                                },
+                                            });
+                                            return Some(result_slot);
+                                        }
+                                    }
+                                }
                                 // Determine the dispatch class. If
                                 // recv_ty is Ty::Class(_), use it
                                 // directly. Otherwise fall back to a
