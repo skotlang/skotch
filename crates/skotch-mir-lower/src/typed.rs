@@ -4200,6 +4200,7 @@ pub fn lower_file(
                 }
             }
 
+            let secondary_constructors = collect_secondary_ctors(c, &name, super_class.as_deref());
             let mir_class = skotch_mir::MirClass {
                 name: name.clone(),
                 super_class,
@@ -4210,7 +4211,7 @@ pub fn lower_file(
                 fields,
                 methods,
                 constructor,
-                secondary_constructors: collect_secondary_ctors(c, &name),
+                secondary_constructors,
                 is_suspend_lambda: false,
                 is_lambda: false,
                 is_cross_file_stub: false,
@@ -4246,6 +4247,8 @@ pub fn lower_file(
                             );
                             let nested_ctor = constructor_from_primary(nested, &nested_qname);
                             let (n_super, n_ifaces) = collect_class_super_iface_aware(nested);
+                            let nested_secondary_ctors =
+                                collect_secondary_ctors(nested, &nested_qname, n_super.as_deref());
                             let nested_mir = skotch_mir::MirClass {
                                 name: nested_qname.clone(),
                                 super_class: n_super,
@@ -4256,10 +4259,7 @@ pub fn lower_file(
                                 fields: nested_fields,
                                 methods: nested_methods,
                                 constructor: nested_ctor,
-                                secondary_constructors: collect_secondary_ctors(
-                                    nested,
-                                    &nested_qname,
-                                ),
+                                secondary_constructors: nested_secondary_ctors,
                                 is_suspend_lambda: false,
                                 is_lambda: false,
                                 is_cross_file_stub: false,
@@ -35477,10 +35477,21 @@ fn collect_class_fields(c: skotch_ast::KtClass<'_>) -> Vec<skotch_mir::MirField>
 }
 
 /// Collect secondary constructors from a class body. Each becomes a
-/// MirFunction named `<init>` with empty body — full body lowering
-/// (including the `: this(args)` / `: super(args)` delegation
-/// emission) lands in a follow-up.
-fn collect_secondary_ctors(c: skotch_ast::KtClass<'_>, class_fq: &str) -> Vec<MirFunction> {
+/// MirFunction named `<init>`. The body emits a minimum-viable
+/// delegation call (`super.<init>(...)` or `this(...)`) so the JVM
+/// verifier accepts the constructor — without it every secondary
+/// ctor would VerifyError with "Constructor must call super() or
+/// this() before return".
+///
+/// `super_class_fq` is the JVM-internal name of the resolved
+/// superclass (e.g. `"org/kotlincrypto/core/digest/Digest"`); used
+/// when the secondary ctor delegates via `: super(...)` or omits
+/// the delegation entirely (defaults to a no-arg super call).
+fn collect_secondary_ctors(
+    c: skotch_ast::KtClass<'_>,
+    class_fq: &str,
+    super_class_fq: Option<&str>,
+) -> Vec<MirFunction> {
     let mut out = Vec::new();
     let Some(body) = c.body() else { return out };
     // Owning class name (FQ) for the implicit `this` slot. Without
@@ -35491,6 +35502,7 @@ fn collect_secondary_ctors(c: skotch_ast::KtClass<'_>, class_fq: &str) -> Vec<Mi
     // overload-ambiguous shells) AND dropping the user-callable
     // `<init>(LSub;)V` that `copy()` references.
     let class_ty = Ty::Class(class_fq.to_string());
+    let super_default = super_class_fq.unwrap_or("java/lang/Object");
     for (sc_idx, sc) in body.secondary_constructors().enumerate() {
         let sc_idx = sc_idx as u32;
         let user_param_count = sc
@@ -35557,13 +35569,97 @@ fn collect_secondary_ctors(c: skotch_ast::KtClass<'_>, class_fq: &str) -> Vec<Mi
         let mut locals: Vec<Ty> = Vec::with_capacity(1 + user_param_count);
         locals.push(class_ty.clone());
         locals.extend(user_param_tys);
+
+        // Build the delegation call (`super(...)` / `this(...)` /
+        // implicit `super()`). Without at least an `aload_0;
+        // invokespecial X.<init>(...)V` the JVM verifier rejects
+        // every secondary ctor with "Constructor must call super()
+        // or this() before return". We only emit the delegation
+        // when we can statically forward the args: no-arg
+        // delegation, or Reference-shaped args that map 1:1 to
+        // user params. Complex argument shapes (named args, string
+        // templates, nested calls, companion-field loads) leave
+        // the body empty so the existing VerifyError surfaces
+        // unchanged — emitting a no-arg `super()` against a class
+        // that has no `<init>()V` would silently substitute a
+        // `NoSuchMethodError` for the VerifyError, which is no
+        // better (and harder to diagnose).
+        let this_slot = skotch_mir::LocalId(0);
+        let delegation = sc.delegation_call();
+        let is_this_delegation = delegation.map(|d| !d.is_super()).unwrap_or(false);
+        let target_class = if is_this_delegation {
+            class_fq.to_string()
+        } else {
+            super_default.to_string()
+        };
+        // Forward Reference-shaped args (References to user params)
+        // — matches the primary-ctor super-forwarding pattern at
+        // `constructor_from_primary_impl`.
+        let mut delegation_args: Vec<skotch_mir::LocalId> = vec![this_slot];
+        let mut delegation_ok = true;
+        if let Some(arg_list) = delegation.and_then(|d| d.value_argument_list()) {
+            let mut extra: Vec<skotch_mir::LocalId> = Vec::new();
+            for arg in arg_list.arguments() {
+                // Named args (`super(algorithm = ...)`) — bail.
+                if arg.name().is_some() {
+                    delegation_ok = false;
+                    break;
+                }
+                let Some(arg_e) = arg.expression() else {
+                    delegation_ok = false;
+                    break;
+                };
+                let skotch_ast::KtExpr::Reference(rr) = unwrap_parens(arg_e) else {
+                    delegation_ok = false;
+                    break;
+                };
+                let Some(name) = rr.name() else {
+                    delegation_ok = false;
+                    break;
+                };
+                let Some(idx) = param_names.iter().position(|n| n == name) else {
+                    delegation_ok = false;
+                    break;
+                };
+                extra.push(skotch_mir::LocalId((idx + 1) as u32));
+            }
+            if delegation_ok {
+                delegation_args.extend(extra);
+            }
+        }
+        // Decide whether to emit the delegation stmt. Cases:
+        //   1. No delegation call (implicit `super()`) — emit a
+        //      no-arg call to the resolved super. For Object the
+        //      no-arg ctor always exists; for other supers it
+        //      usually does too (kotlinc would have refused at
+        //      compile time otherwise).
+        //   2. Reference-args delegation — emit the forwarded call.
+        //   3. Anything that bailed (`delegation_ok == false`) —
+        //      skip the delegation; the resulting VerifyError is
+        //      no worse than the prior bail behavior, and matches
+        //      what `parity/101-hash`-style complex-args cases
+        //      already produce. Emitting a no-arg `super()` against
+        //      a class that has no `<init>()V` would silently
+        //      substitute a `NoSuchMethodError` for the VerifyError,
+        //      which is no better (and harder to diagnose).
+        let body_stmts = if delegation.is_none() || delegation_ok {
+            vec![skotch_mir::Stmt::Assign {
+                dest: this_slot,
+                value: skotch_mir::Rvalue::Call {
+                    kind: skotch_mir::CallKind::Constructor(target_class),
+                    args: delegation_args,
+                },
+            }]
+        } else {
+            Vec::new()
+        };
         out.push(MirFunction {
             id: FuncId(sc_idx),
             name: "<init>".to_string(),
             params,
             locals,
             blocks: vec![BasicBlock {
-                stmts: Vec::new(),
+                stmts: body_stmts,
                 terminator: Terminator::Return,
             }],
             return_ty: Ty::Unit,
