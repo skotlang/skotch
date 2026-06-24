@@ -505,16 +505,13 @@ thread_local! {
     static LAMBDA_RECEIVER_HINT: std::cell::RefCell<Option<String>> =
         const { std::cell::RefCell::new(None) };
 
-    /// Active implicit receiver: `(slot, class_name)`. Inside a
-    /// `T.() -> R` lambda body the receiver is the lambda's first
-    /// param (LocalId(1)) and its class is the call-site receiver Ty.
-    /// The bare `Call(Reference)` arm in `lower_rich_expr_to_slot`
-    /// consults this thread-local in addition to `current_class_name`
-    /// so member dispatch (`greet()` → `recv.greet()`) routes through
-    /// the right slot. Stays None outside receiver-lambda bodies.
+    /// Active implicit-receiver stack: `(slot, class_name)` per
+    /// frame. Nested DSL builders push a frame per `T.() -> R`
+    /// lambda; dispatch walks innermost-first and falls back to outer
+    /// receivers (Kotlin scoping rule, sans `@DslMarker`).
     static IMPLICIT_RECEIVER:
-        std::cell::RefCell<Option<(skotch_mir::LocalId, String)>> =
-        const { std::cell::RefCell::new(None) };
+        std::cell::RefCell<Vec<(skotch_mir::LocalId, String)>> =
+        const { std::cell::RefCell::new(Vec::new()) };
 }
 
 fn take_lambda_receiver_hint() -> Option<String> {
@@ -538,22 +535,40 @@ impl Drop for LambdaReceiverHintScope {
 }
 
 fn current_implicit_receiver() -> Option<(skotch_mir::LocalId, String)> {
-    IMPLICIT_RECEIVER.with(|c| c.borrow().clone())
+    IMPLICIT_RECEIVER.with(|c| c.borrow().last().cloned())
 }
 
+/// Implicit-receiver frames, innermost-first.
+fn all_implicit_receivers() -> Vec<(skotch_mir::LocalId, String)> {
+    IMPLICIT_RECEIVER.with(|c| {
+        let v = c.borrow();
+        v.iter().rev().cloned().collect()
+    })
+}
+
+/// RAII stack frame. `None` recv is a no-op (preserves the pre-stack
+/// API: callers pass `None` when no receiver is active).
 struct ImplicitReceiverScope {
-    prev: Option<(skotch_mir::LocalId, String)>,
+    was_pushed: bool,
 }
 impl ImplicitReceiverScope {
     fn new(recv: Option<(skotch_mir::LocalId, String)>) -> Self {
-        let prev = IMPLICIT_RECEIVER.with(|c| c.borrow_mut().take());
-        IMPLICIT_RECEIVER.with(|c| *c.borrow_mut() = recv);
-        Self { prev }
+        let was_pushed = if let Some(r) = recv {
+            IMPLICIT_RECEIVER.with(|c| c.borrow_mut().push(r));
+            true
+        } else {
+            false
+        };
+        Self { was_pushed }
     }
 }
 impl Drop for ImplicitReceiverScope {
     fn drop(&mut self) {
-        IMPLICIT_RECEIVER.with(|c| *c.borrow_mut() = self.prev.take());
+        if self.was_pushed {
+            IMPLICIT_RECEIVER.with(|c| {
+                c.borrow_mut().pop();
+            });
+        }
     }
 }
 
@@ -10153,23 +10168,60 @@ fn try_unary_plus_chain<'a>(e: skotch_ast::KtExpr<'a>) -> Option<Vec<skotch_ast:
 }
 
 /// Walk the current class + super chain for a `unaryPlus` method.
-/// Returns the DEFINING class so the emitted methodref points at the
-/// class that owns the method (JVM verifier accepts a subclass
-/// receiver). Returns None when no class context is active or no
-/// `unaryPlus` is in reach.
+/// Returns the DEFINING class. For DSL receiver-lambda bodies the
+/// class context is inactive, so additionally walk each implicit-
+/// receiver frame's class+super chain.
 fn lookup_owning_class_for_unary_plus() -> Option<String> {
-    let mut name = current_class_name()?;
-    for _ in 0..32 {
-        if class_method_return_ty(&name, "unaryPlus").is_some() {
-            return Some(name);
+    let walk_chain = |start: &str| -> Option<String> {
+        let mut name = start.to_string();
+        for _ in 0..32 {
+            if class_method_return_ty(&name, "unaryPlus").is_some() {
+                return Some(name);
+            }
+            let parent = CLASS_SUPER.with(|c| c.borrow().get(&name).cloned());
+            match parent {
+                Some(p) => name = p,
+                None => return None,
+            }
         }
-        let parent = CLASS_SUPER.with(|c| c.borrow().get(&name).cloned());
-        match parent {
-            Some(p) => name = p,
-            None => return None,
+        None
+    };
+    if let Some(c) = current_class_name() {
+        if let Some(owner) = walk_chain(&c) {
+            return Some(owner);
+        }
+    }
+    for (_slot, cls) in all_implicit_receivers() {
+        if let Some(owner) = walk_chain(&cls) {
+            return Some(owner);
         }
     }
     None
+}
+
+/// Pick the receiver slot for an inherited-method dispatch (used by
+/// unary-`+` chain emission). In class-method bodies this is slot 0
+/// (`this`). In receiver-lambda bodies, walks the implicit-receiver
+/// stack innermost-first.
+fn receiver_slot_for_owning_class(owning_class: &str) -> skotch_mir::LocalId {
+    use skotch_mir::LocalId;
+    if current_class_name().is_some() {
+        return LocalId(0);
+    }
+    for (slot, cls) in all_implicit_receivers() {
+        let mut name = cls.clone();
+        for _ in 0..32 {
+            if name == owning_class {
+                return slot;
+            }
+            let parent = CLASS_SUPER.with(|c| c.borrow().get(&name).cloned());
+            match parent {
+                Some(p) => name = p,
+                None => break,
+            }
+        }
+    }
+    LocalId(0)
 }
 
 /// Lower the body of a for-in / while loop into a flat
@@ -11394,6 +11446,11 @@ fn lower_loop_body(
         // silently swallowing the entire stmt.
         if let Some(unary_plus_operands) = try_unary_plus_chain(be) {
             if let Some(owning_class) = lookup_owning_class_for_unary_plus() {
+                // Pick the receiver slot: in a class method body this
+                // is LocalId(0) (`this`); inside a DSL receiver lambda
+                // (`p { +"hello" }`) it's the matching frame in the
+                // implicit-receiver stack.
+                let recv_slot = receiver_slot_for_owning_class(&owning_class);
                 let mut all_ok = true;
                 let pre_len = body_mstmts.len();
                 let save_next_slot = *next_slot;
@@ -11418,7 +11475,6 @@ fn lower_loop_body(
                         all_ok = false;
                         break;
                     };
-                    let this_slot = LocalId(0);
                     let result_slot = LocalId(*next_slot);
                     *next_slot += 1;
                     local_tys.push(Ty::Unit);
@@ -11429,7 +11485,7 @@ fn lower_loop_body(
                                 class_name: owning_class.clone(),
                                 method_name: "unaryPlus".to_string(),
                             },
-                            args: vec![this_slot, operand_slot],
+                            args: vec![recv_slot, operand_slot],
                         },
                     });
                 }
@@ -25394,6 +25450,62 @@ fn lower_rich_expr_to_slot(
                     stmts: pre_stmts_inv,
                     terminator: Terminator::ReturnValue(unit_slot),
                 }]
+            } else if let Some(unary_ops) =
+                try_unary_plus_chain(body_stmts[0]).filter(|ops| ops.len() >= 2)
+            {
+                // Folded multi-leaf unary-`+` chain (`p { +"a"; +"b" }`
+                // → parser joins into one Binary stmt). Single-leaf
+                // cases fall through to lower_rich's Prefix-`+` arm.
+                if let Some(owning_class) = lookup_owning_class_for_unary_plus() {
+                    let recv_slot = receiver_slot_for_owning_class(&owning_class);
+                    let mut chain_ok = true;
+                    for operand in unary_ops {
+                        let Some(operand_slot) = lower_rich_expr_to_slot(
+                            operand,
+                            &lookup,
+                            fn_lookup,
+                            &mut next_slot_inv,
+                            &mut pre_stmts_inv,
+                            &mut extra_locals_inv,
+                            strings,
+                        ) else {
+                            chain_ok = false;
+                            break;
+                        };
+                        let result_slot = LocalId(next_slot_inv);
+                        next_slot_inv += 1;
+                        extra_locals_inv.push(Ty::Unit);
+                        pre_stmts_inv.push(MStmt::Assign {
+                            dest: result_slot,
+                            value: skotch_mir::Rvalue::Call {
+                                kind: skotch_mir::CallKind::Virtual {
+                                    class_name: owning_class.clone(),
+                                    method_name: "unaryPlus".to_string(),
+                                },
+                                args: vec![recv_slot, operand_slot],
+                            },
+                        });
+                    }
+                    if !chain_ok {
+                        return None;
+                    }
+                    let unit_slot = LocalId(next_slot_inv);
+                    #[allow(unused_assignments)]
+                    {
+                        next_slot_inv += 1;
+                    }
+                    extra_locals_inv.push(Ty::Unit);
+                    pre_stmts_inv.push(MStmt::Assign {
+                        dest: unit_slot,
+                        value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Unit),
+                    });
+                    vec![BasicBlock {
+                        stmts: pre_stmts_inv,
+                        terminator: Terminator::ReturnValue(unit_slot),
+                    }]
+                } else {
+                    return None;
+                }
             } else {
                 let result_slot = lower_rich_expr_to_slot(
                     body_stmts[0],
@@ -25432,6 +25544,47 @@ fn lower_rich_expr_to_slot(
                 ) {
                     last_slot = None;
                     continue;
+                }
+                // Folded multi-leaf unary-`+` chain inside a multi-
+                // stmt body — the lone-stmt arm above only catches
+                // body_stmts.len() == 1, but `p { foo(); +"a"; +"b" }`
+                // ends up with the chain as one stmt among many.
+                if let Some(unary_ops) = try_unary_plus_chain(*stmt).filter(|ops| ops.len() >= 2) {
+                    if let Some(owning_class) = lookup_owning_class_for_unary_plus() {
+                        let recv_slot = receiver_slot_for_owning_class(&owning_class);
+                        let mut chain_ok = true;
+                        for operand in unary_ops {
+                            let Some(operand_slot) = lower_rich_expr_to_slot(
+                                operand,
+                                &lookup,
+                                fn_lookup,
+                                &mut next_slot_inv,
+                                &mut pre_stmts_inv,
+                                &mut extra_locals_inv,
+                                strings,
+                            ) else {
+                                chain_ok = false;
+                                break;
+                            };
+                            let result_slot = LocalId(next_slot_inv);
+                            next_slot_inv += 1;
+                            extra_locals_inv.push(Ty::Unit);
+                            pre_stmts_inv.push(MStmt::Assign {
+                                dest: result_slot,
+                                value: skotch_mir::Rvalue::Call {
+                                    kind: skotch_mir::CallKind::Virtual {
+                                        class_name: owning_class.clone(),
+                                        method_name: "unaryPlus".to_string(),
+                                    },
+                                    args: vec![recv_slot, operand_slot],
+                                },
+                            });
+                        }
+                        if chain_ok {
+                            last_slot = None;
+                            continue;
+                        }
+                    }
                 }
                 if let Some(s) = lower_rich_expr_to_slot(
                     *stmt,
@@ -26242,7 +26395,31 @@ fn lower_rich_expr_to_slot(
                 return Some(result);
             }
             "+" => {
-                // unary `+` is identity.
+                // DSL operator overload: `+expr` whose operand is a
+                // String inside a class chain that declares
+                // `operator fun String.unaryPlus()` dispatches to
+                // that method. Otherwise treat as numeric identity.
+                let inner_ty = slot_ty_with_param_fallback(inner_slot.0, extra_locals);
+                if matches!(inner_ty, Ty::Class(ref c) if c == "java/lang/String") {
+                    if let Some(owning_class) = lookup_owning_class_for_unary_plus() {
+                        let recv_slot = receiver_slot_for_owning_class(&owning_class);
+                        let result = LocalId(*next_slot);
+                        *next_slot += 1;
+                        extra_locals.push(Ty::Unit);
+                        pre_stmts.push(MStmt::Assign {
+                            dest: result,
+                            value: skotch_mir::Rvalue::Call {
+                                kind: skotch_mir::CallKind::Virtual {
+                                    class_name: owning_class,
+                                    method_name: "unaryPlus".to_string(),
+                                },
+                                args: vec![recv_slot, inner_slot],
+                            },
+                        });
+                        return Some(result);
+                    }
+                }
+                // Numeric unary `+` is identity.
                 return Some(inner_slot);
             }
             "!" => {
@@ -31695,6 +31872,12 @@ fn lower_rich_expr_to_slot(
     // returns None but `current_implicit_receiver` carries the receiver
     // slot + class — dispatch on that instead so `c.run { greet() }`
     // resolves `greet()` to `recv.greet()`.
+    //
+    // For nested DSL builders (`html { body { h1(...) } }`) the inner
+    // lambda's receiver may not own the method — walk the implicit-
+    // receiver stack innermost-first to find the OUTER receiver class
+    // that does (Kotlin's implicit-receiver scoping rule sans
+    // `@DslMarker`).
     if let KtExpr::Call(call) = e {
         if let Some(KtExpr::Reference(rc)) = call.callee() {
             if let Some(method_name) = rc.name() {
@@ -31702,13 +31885,19 @@ fn lower_rich_expr_to_slot(
                 // constructor call (e.g. `Box(second, first)`), not a
                 // same-class method dispatch. The constructor heuristic
                 // earlier in this function handles those.
+                // For nested DSL builders the inner receiver may not
+                // own `method_name` — walk the implicit-receiver stack
+                // innermost-first and pick the first frame whose class
+                // owns the method.
                 let dispatch_target: Option<(LocalId, String)> =
                     if method_name.starts_with(char::is_uppercase) {
                         None
                     } else if let Some(class_name) = current_class_name() {
                         Some((LocalId(0), class_name))
                     } else {
-                        current_implicit_receiver()
+                        all_implicit_receivers()
+                            .into_iter()
+                            .find(|(_, cls)| class_method_return_ty(cls, method_name).is_some())
                     };
                 if let Some((recv_slot, class_name)) = dispatch_target {
                     if let Some(ret_ty) = class_method_return_ty(&class_name, method_name) {
