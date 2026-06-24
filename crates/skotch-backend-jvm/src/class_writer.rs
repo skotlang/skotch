@@ -1986,6 +1986,22 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
                     true,
                 );
                 method_blobs.push(init_blob);
+                // kotlinc emits a synthetic `<init>(<user_params>, mask Int,
+                // reserved Int, DefaultConstructorMarker)V` overload for every
+                // primary constructor that has at least one defaulted param.
+                // External callers (kotlinc-compiled code, reflective frames)
+                // route through this overload — without it, `Foo(a = "hi")`
+                // at the call site fails with NoSuchMethodError.
+                if class.constructor.param_defaults.iter().any(|d| d.is_some()) {
+                    let default_blob = emit_default_synthetic(
+                        &class.constructor,
+                        module,
+                        &class.name,
+                        &mut cp,
+                        code_attr_name_idx,
+                    );
+                    method_blobs.push(default_blob);
+                }
             }
             // Secondary constructors — additional <init> methods.
             for sec_ctor in &class.secondary_constructors {
@@ -2209,6 +2225,20 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
                 true,
             );
             method_blobs2.push(init2);
+            // Mirror the first-pass synthetic ctor emission here so the
+            // shipped bytes include the `(args, mask, reserved Int, Marker)V`
+            // overload kotlinc-compiled callers expect for any class with
+            // defaulted primary-ctor params.
+            if class.constructor.param_defaults.iter().any(|d| d.is_some()) {
+                let default_blob2 = emit_default_synthetic(
+                    &class.constructor,
+                    module,
+                    &class.name,
+                    &mut cp2,
+                    code2,
+                );
+                method_blobs2.push(default_blob2);
+            }
         }
         // Secondary constructors — additional <init> methods.
         for sec_ctor in &class.secondary_constructors {
@@ -7476,22 +7506,48 @@ fn emit_default_synthetic(
     cp: &mut ConstantPool,
     code_attr_name_idx: u16,
 ) -> Vec<u8> {
-    let default_name = format!("{}$default", func.name);
+    // Primary constructors carry the original name `<init>`; kotlinc
+    // emits the defaults shim as a SECOND `<init>` overload on the
+    // class with an extra `(I I Lkotlin/jvm/internal/DefaultConstructorMarker;)`
+    // trailer. Top-level fns use `<name>$default` with the simpler
+    // `(I Ljava/lang/Object;)` trailer and route through `invokestatic`.
+    let is_ctor = func.name == "<init>";
+    let default_name = if is_ctor {
+        "<init>".to_string()
+    } else {
+        format!("{}$default", func.name)
+    };
+    // Constructors take an implicit `this` at slot 0; user params start
+    // at slot 1. Top-level fns are static, so user params start at slot 0.
+    let user_params: &[skotch_mir::LocalId] = if is_ctor {
+        &func.params[1..]
+    } else {
+        &func.params[..]
+    };
     let mut desc = String::from("(");
-    for &p in &func.params {
+    for &p in user_params {
         let ty = &func.locals[p.0 as usize];
         desc.push_str(&jvm_param_type_string(ty));
     }
-    desc.push_str("ILjava/lang/Object;)");
+    if is_ctor {
+        // (..., mask Int, DefaultConstructorMarker)V — kotlinc's primary-
+        // ctor synthetic carries exactly one mask Int per group-of-32
+        // params plus the typed marker (no extra reserved Int).
+        desc.push_str("ILkotlin/jvm/internal/DefaultConstructorMarker;)");
+    } else {
+        desc.push_str("ILjava/lang/Object;)");
+    }
     desc.push_str(&jvm_type_string(&func.return_ty));
 
     // Slot layout for synthetic body:
-    //   slot 0..N-1: original params (each 1 or 2 wide)
-    //   slot M:      mask Int
-    //   slot M+1:    marker Object
-    let mut slot_per_param: Vec<u8> = Vec::with_capacity(func.params.len());
-    let mut s: u8 = 0;
-    for &p in &func.params {
+    //   (ctor: slot 0 = this; then user params; then mask, marker)
+    //   (fn:   slot 0..N-1 = user params; then mask, marker)
+    // `param_defaults` is sized by user_params, so each index `i` here
+    // maps to user_params[i] and lives at `slot_per_param[i]`.
+    let base_slot: u8 = if is_ctor { 1 } else { 0 };
+    let mut slot_per_param: Vec<u8> = Vec::with_capacity(user_params.len());
+    let mut s: u8 = base_slot;
+    for &p in user_params {
         slot_per_param.push(s);
         let ty = &func.locals[p.0 as usize];
         s += if matches!(ty, Ty::Long | Ty::Double) {
@@ -7501,12 +7557,24 @@ fn emit_default_synthetic(
         };
     }
     let mask_slot = s;
-    let _marker_slot = s + 1;
     let total_locals = (s + 2) as u16;
 
-    // Pre-resolve the methodref for the original function (we'll pass
-    // through after applying defaults).
-    let orig_descriptor = jvm_descriptor(func);
+    // Pre-resolve the methodref for the original function. The ctor
+    // synthetic delegates via `invokespecial` against the SAME class;
+    // top-level fns route via `invokestatic`. The original ctor's
+    // descriptor on the methodref must NOT include the implicit `this`
+    // (which `jvm_descriptor` walks blindly through `func.params[0]`).
+    let orig_descriptor = if is_ctor {
+        let mut d = String::from("(");
+        for &p in user_params {
+            let ty = &func.locals[p.0 as usize];
+            d.push_str(&jvm_param_type_string(ty));
+        }
+        d.push_str(")V");
+        d
+    } else {
+        jvm_descriptor(func)
+    };
     let orig_mref = cp.methodref(class_name, &func.name, &orig_descriptor);
 
     // Build the body — for each parameter with a default, emit the
@@ -7520,6 +7588,9 @@ fn emit_default_synthetic(
         let Some(default_const) = default_opt.as_ref() else {
             continue;
         };
+        let Some(&p) = user_params.get(i) else {
+            continue;
+        };
         let bit = 1u32 << i;
         emit_iload_slot(&mut code, mask_slot);
         emit_simple_iconst(&mut code, bit as i32);
@@ -7528,7 +7599,7 @@ fn emit_default_synthetic(
         let ifeq_off_pos = code.len();
         let ifeq_insn_pos = code.len() - 1;
         code.write_i16::<BigEndian>(0).unwrap();
-        let pty = &func.locals[func.params[i].0 as usize];
+        let pty = &func.locals[p.0 as usize];
         emit_default_const(&mut code, cp, module, default_const);
         emit_xstore_slot(&mut code, pty, slot_per_param[i]);
         let after_store = code.len();
@@ -7539,22 +7610,30 @@ fn emit_default_synthetic(
         frame_offsets.push(after_store);
     }
 
-    // Now load all original args and call the original method.
-    for (i, &p) in func.params.iter().enumerate() {
+    // Now load all original args and call the original method. For
+    // ctors, push `this` first; user params follow.
+    if is_ctor {
+        emit_aload_slot(&mut code, 0);
+    }
+    for (i, &p) in user_params.iter().enumerate() {
         let ty = &func.locals[p.0 as usize];
         emit_xload_slot(&mut code, ty, slot_per_param[i]);
     }
-    code.push(0xB8); // invokestatic
+    code.push(if is_ctor { 0xB7 } else { 0xB8 }); // invokespecial / invokestatic
     code.write_u16::<BigEndian>(orig_mref).unwrap();
 
     // Return.
-    match &func.return_ty {
-        Ty::Unit => code.push(0xB1), // return
-        Ty::Bool | Ty::Byte | Ty::Short | Ty::Char | Ty::Int => code.push(0xAC),
-        Ty::Long => code.push(0xAD),
-        Ty::Float => code.push(0xAE),
-        Ty::Double => code.push(0xAF),
-        _ => code.push(0xB0), // areturn (incl. Nothing → Void)
+    if is_ctor {
+        code.push(0xB1); // return (void)
+    } else {
+        match &func.return_ty {
+            Ty::Unit => code.push(0xB1), // return
+            Ty::Bool | Ty::Byte | Ty::Short | Ty::Char | Ty::Int => code.push(0xAC),
+            Ty::Long => code.push(0xAD),
+            Ty::Float => code.push(0xAE),
+            Ty::Double => code.push(0xAF),
+            _ => code.push(0xB0), // areturn (incl. Nothing → Void)
+        }
     }
 
     // Compute max_stack: at most 2 (the iload+iconst+iand peak, and
@@ -7585,13 +7664,27 @@ fn emit_default_synthetic(
             }
         }
     }
+    // Resolve the StackMapTable utf8 entry directly when we're called
+    // from `compile_user_class` (where `code_attr_name_idx` is already a
+    // real CP index, so `patch_attribute_name_placeholders` can't
+    // recurse into the Code sub-attributes to patch a placeholder).
+    // `compile_class` interns "Code" as a placeholder and patches both
+    // levels; either way, calling `cp.utf8("StackMapTable")` here is
+    // safe because the CP is later serialized verbatim.
     let smt_attr_name_idx = if !smt_body.is_empty() {
-        ATTR_PLACEHOLDER_STACK_MAP
+        cp.utf8("StackMapTable")
     } else {
         0
     };
 
-    let access_flags = ACC_PUBLIC | ACC_STATIC | ACC_SYNTHETIC;
+    // Constructor synthetics are NOT static and don't carry ACC_SYNTHETIC
+    // (kotlinc emits them as ordinary public overloads). Top-level fn
+    // synthetics keep the static + synthetic shape.
+    let access_flags = if is_ctor {
+        ACC_PUBLIC
+    } else {
+        ACC_PUBLIC | ACC_STATIC | ACC_SYNTHETIC
+    };
     let name_idx = cp.utf8(&default_name);
     let descriptor_idx = cp.utf8(&desc);
     let code_len = code.len() as u32;

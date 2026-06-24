@@ -35397,11 +35397,13 @@ fn constructor_from_primary_impl(
     // source-level default. The metadata writer reads this to set
     // `ValueParameter.declaresDefault`, which kotlinc 2.4 consults
     // when accepting `Foo(name = value)` over a skipped defaulted
-    // param. Leaving `param_defaults` empty here keeps the JVM
-    // backend's `<name>$default` synthetic-emission decision
-    // (`func.param_defaults.iter().any(|d| d.is_some())`) gated on
-    // the existing path that lowers literal defaults explicitly —
-    // we only fix the *metadata-side* view of the param shape.
+    // param. The JVM backend's `<init>$default` synthetic-ctor
+    // emission gate (`func.param_defaults.iter().any(|d| d.is_some())`)
+    // also reads `param_defaults` directly, so callers that omit
+    // a defaulted ctor arg can land on a real synthetic ctor at
+    // runtime instead of NoSuchMethodError-ing on the missing
+    // `<init>(args, mask, 0, DefaultConstructorMarker)` overload
+    // that kotlinc emits.
     let user_required_param_count = params_iter
         .iter()
         .filter(|p| p.default_value().is_none())
@@ -35572,6 +35574,25 @@ fn constructor_from_primary_impl(
         Some(s) => s,
         None => &mut scratch_strings,
     };
+    // Extract literal default values for each primary-ctor param so
+    // the JVM backend's `<init>$default` synthetic-ctor emitter can
+    // fill in missing args at the call site. Mirrors the top-level
+    // fn lowering path (see `param_defaults_v` ~ line 5525). Non-literal
+    // defaults stay as None — the backend falls through to a 0/null
+    // fill in that case. String defaults route through the shared
+    // module strings table (when available) so the resulting StringId
+    // resolves to the right CP entry.
+    let user_param_defaults: Vec<Option<skotch_mir::MirConst>> = params_iter
+        .iter()
+        .map(|p| {
+            let dv = p.default_value().map(unwrap_parens)?;
+            if has_shared_strings {
+                lower_const_or_string_init(dv, strings)
+            } else {
+                lower_const_init_typed(dv)
+            }
+        })
+        .collect();
     if let Some(body) = c.body() {
         for d in body.declarations() {
             let KtDecl::Property(prop) = d else { continue };
@@ -35890,7 +35911,7 @@ fn constructor_from_primary_impl(
         required_params: user_required_param_count,
         param_names: user_param_names,
         param_receiver_types: Vec::new(),
-        param_defaults: Vec::new(),
+        param_defaults: user_param_defaults,
         is_abstract: false,
         vararg_index: None,
         exception_handlers: Vec::new(),
