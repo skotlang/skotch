@@ -18,6 +18,7 @@ skotch-classinfo = { workspace = true }
 
 [build-dependencies]
 prost-build = { workspace = true }
+protoc-bin-vendored = "3"
 
 [lints]
 workspace = true

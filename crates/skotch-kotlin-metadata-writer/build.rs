@@ -6,6 +6,15 @@
 //! cross-file `import` lines in the upstream files resolve unmodified.
 
 fn main() {
+    // Use the vendored protoc binary so the build does not require a
+    // system `protoc` install (CI runners typically don't have one).
+    let protoc = protoc_bin_vendored::protoc_bin_path()
+        .expect("protoc-bin-vendored: no protoc binary for this host platform");
+    // SAFETY: build scripts run single-threaded before any user code.
+    unsafe {
+        std::env::set_var("PROTOC", protoc);
+    }
+
     let proto_root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("proto");
 
     // Tell cargo to rerun the build script when any vendored proto
