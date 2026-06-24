@@ -902,6 +902,32 @@ pub struct MirClass {
     /// method as `ACC_STATIC` with no implicit `this`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub clinit: Option<MirFunction>,
+    /// True when the source class declaration carried both the
+    /// `@JvmInline` annotation and the soft `value` modifier (the Kotlin
+    /// 1.5+ inline value-class shape — `@JvmInline value class UserId(val
+    /// raw: Long)`). Phase H1 only records this bit; subsequent phases
+    /// (H2 backend, H3 call-site erasure, H4 metadata) consume it to
+    /// emit the kotlinc-shaped erased ABI (private `<init>`, static
+    /// `Companion.box-impl`/`unbox-impl`, mangled instance methods that
+    /// erase to operations on the underlying value). Until those phases
+    /// land, value classes still emit as ordinary wrapper classes — the
+    /// flag is informational only.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub is_value_class: bool,
+    /// When [`MirClass::is_value_class`] is set, this is the name of
+    /// the primary-constructor `val` parameter that holds the
+    /// underlying value (e.g. `"raw"` for
+    /// `value class UserId(val raw: Long)`). Phase H2+ consumes this to
+    /// emit the synthesized `unbox-impl()` accessor + static method
+    /// signatures that take the underlying type instead of `this`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value_underlying_field: Option<std::string::String>,
+    /// When [`MirClass::is_value_class`] is set, this is the [`Ty`] of
+    /// the underlying primary-ctor `val` parameter (e.g. [`Ty::Long`]
+    /// for `value class UserId(val raw: Long)`). Phase H2+ uses it to
+    /// build the erased method descriptors.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value_underlying_ty: Option<Ty>,
 }
 
 /// A field in a MIR class.

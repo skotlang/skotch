@@ -1116,6 +1116,17 @@ impl<'a> KtClass<'a> {
             .map(|m| m.has_kind(SyntaxKind::KW_INNER))
             .unwrap_or(false)
     }
+    /// True when the class declaration carries the soft `value` modifier
+    /// (`@JvmInline value class UserId(...)`). Phase H1 uses this together
+    /// with [`KtClass::annotation_names`] to detect Kotlin `@JvmInline`
+    /// value classes (Kotlin 1.5+ spec) and propagate the underlying
+    /// primary-ctor val parameter through typeck → MIR. Subsequent phases
+    /// will rewrite call sites and emit the kotlinc-shaped erased ABI.
+    pub fn is_value(self) -> bool {
+        self.modifier_list()
+            .map(|m| m.has_kind(SyntaxKind::KW_VALUE))
+            .unwrap_or(false)
+    }
     /// Annotation short-names on this class (`"Composable"`,
     /// `"Deprecated"`, …). Use-site target prefixes are stripped.
     pub fn annotation_names(self) -> Vec<&'a str> {

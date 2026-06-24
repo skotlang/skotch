@@ -856,6 +856,9 @@ mod tests {
             companion_class_name: None,
             static_fields: vec![],
             clinit: None,
+            is_value_class: false,
+            value_underlying_field: None,
+            value_underlying_ty: None,
         }
     }
 

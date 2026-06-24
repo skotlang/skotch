@@ -3198,6 +3198,9 @@ pub fn lower_file(
                 companion_class_name: None,
                 static_fields: Vec::new(),
                 clinit: None,
+                is_value_class: false,
+                value_underlying_field: None,
+                value_underlying_ty: None,
             });
             // Cross-file companion stub: when the cross-file class
             // declares a `companion object`, the companion's methods
@@ -3321,6 +3324,9 @@ pub fn lower_file(
                     companion_class_name: None,
                     static_fields: Vec::new(),
                     clinit: None,
+                    is_value_class: false,
+                    value_underlying_field: None,
+                    value_underlying_ty: None,
                 });
             }
         }
@@ -3685,6 +3691,9 @@ pub fn lower_file(
                     companion_class_name: None,
                     static_fields: Vec::new(),
                     clinit: None,
+                    is_value_class: false,
+                    value_underlying_field: None,
+                    value_underlying_ty: None,
                 };
                 Some((comp_qname, comp_class))
             } else {
@@ -4386,6 +4395,16 @@ pub fn lower_file(
             // proto next to the explicit secondaries and report
             // "overload resolution ambiguity" (parity/101-hash MD5).
             let has_explicit_primary_ctor = c.primary_constructor().is_some();
+            // Phase H1: detect `@JvmInline value class Foo(val raw: T)`
+            // and propagate the underlying field name + Ty into MirClass.
+            // Subsequent phases (H2 backend, H3 erasure, H4 metadata)
+            // consume these to emit the kotlinc-shaped value-class ABI.
+            // When the source class is not a well-formed value class
+            // (missing @JvmInline annotation, missing `value` modifier,
+            // or no single val primary-ctor param), the fields stay
+            // None and the class lowers as a regular wrapper class.
+            let (is_value_class, value_underlying_field, value_underlying_ty) =
+                detect_value_class_underlying(c);
             let mir_class = skotch_mir::MirClass {
                 name: name.clone(),
                 super_class,
@@ -4410,6 +4429,9 @@ pub fn lower_file(
                 companion_class_name: companion_class_name_str,
                 static_fields: Vec::new(),
                 clinit: None,
+                is_value_class,
+                value_underlying_field,
+                value_underlying_ty,
             };
             module.push_class(mir_class);
             if let Some((_, comp_class)) = companion_class_name {
@@ -4443,6 +4465,8 @@ pub fn lower_file(
                             );
                             let nested_has_explicit_primary_ctor =
                                 nested.primary_constructor().is_some();
+                            let (nested_is_value_class, nested_value_field, nested_value_ty) =
+                                detect_value_class_underlying(nested);
                             let nested_mir = skotch_mir::MirClass {
                                 name: nested_qname.clone(),
                                 super_class: n_super,
@@ -4467,6 +4491,9 @@ pub fn lower_file(
                                 companion_class_name: None,
                                 static_fields: Vec::new(),
                                 clinit: None,
+                                is_value_class: nested_is_value_class,
+                                value_underlying_field: nested_value_field,
+                                value_underlying_ty: nested_value_ty,
                             };
                             module.push_class(nested_mir);
                         }
@@ -4516,6 +4543,9 @@ pub fn lower_file(
                 companion_class_name: None,
                 static_fields: Vec::new(),
                 clinit: None,
+                is_value_class: false,
+                value_underlying_field: None,
+                value_underlying_ty: None,
             };
             module.push_class(mir_class);
         }
@@ -4604,6 +4634,9 @@ pub fn lower_file(
                 companion_class_name: None,
                 static_fields: Vec::new(),
                 clinit: None,
+                is_value_class: false,
+                value_underlying_field: None,
+                value_underlying_ty: None,
             };
             module.push_class(mir_class);
         }
@@ -4801,6 +4834,9 @@ pub fn lower_file(
                 companion_class_name: None,
                 static_fields,
                 clinit: clinit_fn,
+                is_value_class: false,
+                value_underlying_field: None,
+                value_underlying_ty: None,
             };
             module.push_class(mir_class);
             module.enum_names.insert(name);
@@ -25102,6 +25138,9 @@ fn try_lower_callable_ref(
         companion_class_name: None,
         static_fields: Vec::new(),
         clinit: None,
+        is_value_class: false,
+        value_underlying_field: None,
+        value_underlying_ty: None,
     });
     // Allocation at the call site.
     let result = LocalId(*next_slot);
@@ -26105,6 +26144,9 @@ fn lower_rich_expr_to_slot(
             companion_class_name: None,
             static_fields: Vec::new(),
             clinit: None,
+            is_value_class: false,
+            value_underlying_field: None,
+            value_underlying_ty: None,
         };
         register_lambda_class(lambda_class);
         // Allocation site: emit NewInstance + Constructor with capture slots.
@@ -26545,6 +26587,9 @@ fn lower_rich_expr_to_slot(
             companion_class_name: None,
             static_fields: Vec::new(),
             clinit: None,
+            is_value_class: false,
+            value_underlying_field: None,
+            value_underlying_ty: None,
         };
         register_lambda_class(obj_class);
         let result = LocalId(*next_slot);
@@ -36433,6 +36478,57 @@ fn collect_class_fields(c: skotch_ast::KtClass<'_>) -> Vec<skotch_mir::MirField>
     fields
 }
 
+/// Phase H1: detect a Kotlin `@JvmInline value class` and return the
+/// underlying primary-constructor `val` parameter (name + Ty).
+///
+/// The shape we recognize is `@JvmInline value class Foo(val raw: T)`:
+/// - exactly one primary-constructor `val` parameter,
+/// - the soft `value` modifier on the class,
+/// - the `@JvmInline` annotation on the class.
+///
+/// Anything that isn't a well-formed value class returns
+/// `(false, None, None)` and the class lowers as a regular wrapper.
+/// Hard-error diagnostics for malformed value-class shapes (missing
+/// annotation, missing val param, multiple params) are emitted by the
+/// typeck layer in [`skotch_typeck::typed::type_check`] rather than
+/// here — by the time mir-lower runs, those errors have already been
+/// reported. mir-lower stays permissive so subsequent phases can
+/// still produce a runnable wrapper-class fallback while the user
+/// sees the diagnostic from typeck.
+fn detect_value_class_underlying(c: skotch_ast::KtClass<'_>) -> (bool, Option<String>, Option<Ty>) {
+    if !c.is_value() {
+        return (false, None, None);
+    }
+    if !c.annotation_names().contains(&"JvmInline") {
+        return (false, None, None);
+    }
+    let Some(pc) = c.primary_constructor() else {
+        return (false, None, None);
+    };
+    let Some(plist) = pc.value_parameter_list() else {
+        return (false, None, None);
+    };
+    let mut params_iter = plist.parameters();
+    let Some(p0) = params_iter.next() else {
+        return (false, None, None);
+    };
+    if params_iter.next().is_some() {
+        // Multiple params is not a valid value class.
+        return (false, None, None);
+    }
+    if !p0.is_val() {
+        return (false, None, None);
+    }
+    let Some(name) = p0.name() else {
+        return (false, None, None);
+    };
+    let ty = match p0.type_reference() {
+        Some(tr) => resolve_type_ref(tr),
+        None => Ty::Any,
+    };
+    (true, Some(name.to_string()), Some(ty))
+}
+
 /// Collect secondary constructors from a class body. Each becomes a
 /// MirFunction named `<init>`. The body emits a minimum-viable
 /// delegation call (`super.<init>(...)` or `this(...)`) so the JVM
@@ -46008,5 +46104,140 @@ mod tests {
             module.top_level_props[0].2,
             skotch_mir::MirConst::Null
         ));
+    }
+
+    // ── Phase H1: @JvmInline value-class shape detection ────────────
+
+    #[test]
+    fn typed_lower_value_class_records_is_value_class_and_underlying_long() {
+        // `@JvmInline value class UserId(val raw: Long)` should lower
+        // to a MirClass with is_value_class=true, value_underlying_field
+        // = Some("raw"), value_underlying_ty = Some(Ty::Long).
+        let module = lower("@JvmInline value class UserId(val raw: Long)", "TestKt");
+        let cls = module
+            .classes
+            .iter()
+            .find(|c| c.name == "UserId")
+            .expect("expected UserId class");
+        assert!(
+            cls.is_value_class,
+            "expected is_value_class=true, got false"
+        );
+        assert_eq!(
+            cls.value_underlying_field.as_deref(),
+            Some("raw"),
+            "expected value_underlying_field=Some(\"raw\")"
+        );
+        assert_eq!(
+            cls.value_underlying_ty.as_ref(),
+            Some(&Ty::Long),
+            "expected value_underlying_ty=Some(Ty::Long)"
+        );
+    }
+
+    #[test]
+    fn typed_lower_non_value_class_with_same_shape_is_not_value_class() {
+        // Identical shape WITHOUT the @JvmInline annotation and `value`
+        // modifier: should lower as a plain wrapper class.
+        let module = lower("class UserId(val raw: Long)", "TestKt");
+        let cls = module
+            .classes
+            .iter()
+            .find(|c| c.name == "UserId")
+            .expect("expected UserId class");
+        assert!(
+            !cls.is_value_class,
+            "expected is_value_class=false for plain class, got true"
+        );
+        assert!(
+            cls.value_underlying_field.is_none(),
+            "expected value_underlying_field=None"
+        );
+        assert!(
+            cls.value_underlying_ty.is_none(),
+            "expected value_underlying_ty=None"
+        );
+    }
+
+    #[test]
+    fn typed_lower_value_class_int_underlying() {
+        // Smoke test for non-Long underlying Ty: Ty::Int round-trips
+        // through detect_value_class_underlying.
+        let module = lower("@JvmInline value class Tag(val n: Int)", "TestKt");
+        let cls = module
+            .classes
+            .iter()
+            .find(|c| c.name == "Tag")
+            .expect("expected Tag class");
+        assert!(cls.is_value_class);
+        assert_eq!(cls.value_underlying_field.as_deref(), Some("n"));
+        assert_eq!(cls.value_underlying_ty.as_ref(), Some(&Ty::Int));
+    }
+
+    #[test]
+    fn typed_typeck_diag_value_class_without_jvminline() {
+        // `value class Foo(val x: Int)` (no @JvmInline) must emit a
+        // hard-error diagnostic.
+        let parsed = skotch_ast::parse("test.kt", "value class Foo(val x: Int)");
+        let resolved = ResolvedFile::default();
+        let mut interner = Interner::new();
+        let mut diags = Diagnostics::new();
+        let _ = skotch_typeck::typed::type_check(
+            parsed.file(),
+            &resolved,
+            &mut interner,
+            &mut diags,
+            None,
+        );
+        assert!(
+            diags.has_errors(),
+            "expected an error diagnostic for value class without @JvmInline; got: {diags:?}"
+        );
+    }
+
+    #[test]
+    fn typed_typeck_diag_jvminline_without_value_modifier() {
+        // `@JvmInline class Foo(val x: Int)` (no `value` modifier) must
+        // emit a hard-error diagnostic.
+        let parsed = skotch_ast::parse("test.kt", "@JvmInline class Foo(val x: Int)");
+        let resolved = ResolvedFile::default();
+        let mut interner = Interner::new();
+        let mut diags = Diagnostics::new();
+        let _ = skotch_typeck::typed::type_check(
+            parsed.file(),
+            &resolved,
+            &mut interner,
+            &mut diags,
+            None,
+        );
+        assert!(
+            diags.has_errors(),
+            "expected an error diagnostic for @JvmInline without `value` modifier"
+        );
+    }
+
+    #[test]
+    fn typed_typeck_diag_value_class_with_multiple_params() {
+        // `@JvmInline value class Foo(val a: Int, val b: Int)` (two
+        // params) must emit a hard-error diagnostic — value classes
+        // must have exactly one underlying val.
+        let parsed = skotch_ast::parse(
+            "test.kt",
+            "@JvmInline value class Foo(val a: Int, val b: Int)",
+        );
+        let resolved = ResolvedFile::default();
+        let mut interner = Interner::new();
+        let mut diags = Diagnostics::new();
+        let _ = skotch_typeck::typed::type_check(
+            parsed.file(),
+            &resolved,
+            &mut interner,
+            &mut diags,
+            None,
+        );
+        assert!(
+            diags.has_errors(),
+            "expected an error diagnostic for value class with multiple ctor params"
+        );
     }
 }

@@ -58,6 +58,15 @@ pub(crate) struct TypeDecl {
     pub(crate) is_enum: bool,
     pub(crate) enum_entry_names: Vec<String>,
     pub(crate) is_sealed: bool,
+    /// Phase H1: true when this class is a well-formed Kotlin
+    /// `@JvmInline value class Foo(val raw: T)`. Phase H2+ consumes
+    /// this to route call sites through the erased ABI.
+    pub(crate) is_value_class: bool,
+    /// When [`TypeDecl::is_value_class`] is set, the (name, Ty) of the
+    /// underlying primary-ctor `val` parameter. Phase H2 emits this as
+    /// `Companion.box-impl(<ty>): Foo` and erases instance methods to
+    /// take the underlying value instead of `this`.
+    pub(crate) value_underlying: Option<(String, Ty)>,
 }
 
 #[derive(Clone, Debug)]
@@ -134,7 +143,7 @@ pub fn type_check(
     file: KtFile<'_>,
     _resolved: &ResolvedFile,
     _interner: &mut Interner,
-    _diags: &mut Diagnostics,
+    diags: &mut Diagnostics,
     package_symbols: Option<&PackageSymbolTable>,
 ) -> TypedFile {
     let mut out = TypedFile::default();
@@ -188,6 +197,17 @@ pub fn type_check(
 
     // ── TypeEnv: walk class/interface/enum/object decls ─────────────
     let env = build_type_env(file, &imports, &aliases);
+
+    // ── @JvmInline value-class shape check (Phase H1) ───────────────
+    //
+    // Kotlin 1.5+ value classes must have:
+    //   - the `@JvmInline` annotation,
+    //   - the soft `value` modifier,
+    //   - exactly one primary-constructor `val` parameter (the
+    //     "underlying" value).
+    // Any other combination is a hard error — the class can't lower
+    // to the kotlinc-shaped erased ABI without a single backing value.
+    check_value_class_shapes(file, diags);
 
     // ── Top-val cycle detection ─────────────────────────────────────
     let mut diags_ = Diagnostics::new();
@@ -449,6 +469,7 @@ fn register_class(
                 .push(name.to_string());
         }
     }
+    let (is_value_class, value_underlying) = detect_value_class_for_typeck(c, imports, aliases);
     env.types.insert(
         name.to_string(),
         TypeDecl {
@@ -461,8 +482,152 @@ fn register_class(
             is_enum: false,
             enum_entry_names: Vec::new(),
             is_sealed: c.is_sealed(),
+            is_value_class,
+            value_underlying,
         },
     );
+}
+
+/// Phase H1 typeck-side mirror of mir-lower's
+/// `detect_value_class_underlying`. Returns `(true, Some((name, Ty)))`
+/// only for a well-formed `@JvmInline value class Foo(val raw: T)`;
+/// otherwise `(false, None)` so the class is bucketed as a regular
+/// wrapper class in the TypeEnv.
+fn detect_value_class_for_typeck(
+    c: KtClass<'_>,
+    imports: &FxHashMap<String, String>,
+    aliases: &FxHashMap<String, AliasTarget>,
+) -> (bool, Option<(String, Ty)>) {
+    if !c.is_value() {
+        return (false, None);
+    }
+    if !c.annotation_names().contains(&"JvmInline") {
+        return (false, None);
+    }
+    let Some(pc) = c.primary_constructor() else {
+        return (false, None);
+    };
+    let Some(plist) = pc.value_parameter_list() else {
+        return (false, None);
+    };
+    let mut params_iter = plist.parameters();
+    let Some(p0) = params_iter.next() else {
+        return (false, None);
+    };
+    if params_iter.next().is_some() {
+        return (false, None);
+    }
+    if !p0.is_val() {
+        return (false, None);
+    }
+    let Some(name) = p0.name() else {
+        return (false, None);
+    };
+    let ty = p0
+        .type_reference()
+        .map(|tr| type_ref_to_ty(tr, imports, aliases))
+        .unwrap_or(Ty::Any);
+    (true, Some((name.to_string(), ty)))
+}
+
+/// Phase H1: hard-error diagnostics for malformed Kotlin
+/// `@JvmInline value class` declarations. Emits an `error`
+/// [`Diagnostic`] for any class that carries at least one of the
+/// value-class markers (the `value` modifier OR the `@JvmInline`
+/// annotation) but does not satisfy ALL of the value-class
+/// constraints:
+///   - both the `value` modifier AND `@JvmInline` annotation,
+///   - a primary constructor with exactly one parameter,
+///   - that single parameter declared `val`,
+///   - the parameter has a name.
+fn check_value_class_shapes(file: KtFile<'_>, diags: &mut Diagnostics) {
+    use skotch_ast::AstNode;
+    use skotch_diagnostics::Diagnostic;
+    for d in file.decls() {
+        let KtDecl::Class(c) = d else { continue };
+        let has_value_kw = c.is_value();
+        let has_jvm_inline = c.annotation_names().contains(&"JvmInline");
+        // Skip plain classes that have neither marker.
+        if !has_value_kw && !has_jvm_inline {
+            continue;
+        }
+        let class_name = c.name().unwrap_or("<anonymous>").to_string();
+        let span = c.span();
+        if has_value_kw && !has_jvm_inline {
+            diags.push(Diagnostic::error(
+                span,
+                format!(
+                    "value class `{class_name}` is missing the `@JvmInline` annotation \
+                     (required for inline value classes)"
+                ),
+            ));
+            continue;
+        }
+        if !has_value_kw && has_jvm_inline {
+            diags.push(Diagnostic::error(
+                span,
+                format!(
+                    "class `{class_name}` is annotated `@JvmInline` but is missing \
+                     the `value` modifier"
+                ),
+            ));
+            continue;
+        }
+        // Both markers present — now validate primary-ctor shape.
+        let Some(pc) = c.primary_constructor() else {
+            diags.push(Diagnostic::error(
+                span,
+                format!(
+                    "value class `{class_name}` must declare a primary constructor \
+                     with exactly one `val` parameter"
+                ),
+            ));
+            continue;
+        };
+        let params: Vec<_> = pc
+            .value_parameter_list()
+            .map(|pl| pl.parameters().collect())
+            .unwrap_or_default();
+        if params.is_empty() {
+            diags.push(Diagnostic::error(
+                span,
+                format!(
+                    "value class `{class_name}` must have exactly one primary-constructor \
+                     parameter (found 0)"
+                ),
+            ));
+            continue;
+        }
+        if params.len() > 1 {
+            diags.push(Diagnostic::error(
+                span,
+                format!(
+                    "value class `{class_name}` must have exactly one primary-constructor \
+                     parameter (found {})",
+                    params.len()
+                ),
+            ));
+            continue;
+        }
+        let p0 = params[0];
+        if !p0.is_val() {
+            diags.push(Diagnostic::error(
+                span,
+                format!(
+                    "value class `{class_name}`'s underlying parameter must be declared \
+                     `val` (not `var` or a plain parameter)"
+                ),
+            ));
+            continue;
+        }
+        if p0.name().is_none() {
+            diags.push(Diagnostic::error(
+                span,
+                format!("value class `{class_name}`'s underlying `val` parameter must be named"),
+            ));
+            continue;
+        }
+    }
 }
 
 fn register_interface(
@@ -493,6 +658,8 @@ fn register_interface(
             is_enum: false,
             enum_entry_names: Vec::new(),
             is_sealed: i.is_sealed(),
+            is_value_class: false,
+            value_underlying: None,
         },
     );
 }
@@ -532,6 +699,8 @@ fn register_object(
             is_enum: false,
             enum_entry_names: Vec::new(),
             is_sealed: false,
+            is_value_class: false,
+            value_underlying: None,
         },
     );
 }
@@ -581,6 +750,8 @@ fn register_enum(
             is_enum: true,
             enum_entry_names,
             is_sealed: false,
+            is_value_class: false,
+            value_underlying: None,
         },
     );
 }
