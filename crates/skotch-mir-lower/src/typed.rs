@@ -29572,6 +29572,74 @@ fn lower_rich_expr_to_slot(
                         });
                         return Some(result_slot);
                     }
+                    // `arr.copyOf()` stdlib intrinsic on primitive array
+                    // receivers. kotlinc desugars to
+                    //   dup; arraylength; invokestatic java/util/Arrays.copyOf([II)[I
+                    // (and the analogous descriptor for [J/[D/[B/[Z/[C/[F/[S).
+                    // The `dup + arraylength + Arrays.copyOf` sequence
+                    // pushes the source array, duplicates it, computes
+                    // its length, then copies. We model the same shape:
+                    // push the source slot, then a length slot from
+                    // ArrayLength, then a StaticJava call to
+                    // `java/util/Arrays.copyOf`.
+                    //
+                    // Triggered for the trailing secondary-ctor body
+                    // assignment `this.state = h.copyOf()` in
+                    // parity/101-hash — without this, the whitelist
+                    // accepted the shape but rich-expr returned None
+                    // and the body walker reverted the stmt, leaving
+                    // `state` unwritten.
+                    if method_n == "copyOf"
+                        && call
+                            .value_argument_list()
+                            .map(|al| al.arguments().count())
+                            .unwrap_or(0)
+                            == 0
+                    {
+                        let arr_kind: Option<(Ty, &str, &str)> = match &recv_ty_candidate {
+                            Some(Ty::IntArray) => Some((Ty::IntArray, "[I", "([II)[I")),
+                            Some(Ty::LongArray) => Some((Ty::LongArray, "[J", "([JI)[J")),
+                            Some(Ty::DoubleArray) => Some((Ty::DoubleArray, "[D", "([DI)[D")),
+                            Some(Ty::ByteArray) => Some((Ty::ByteArray, "[B", "([BI)[B")),
+                            Some(Ty::BooleanArray) => Some((Ty::BooleanArray, "[Z", "([ZI)[Z")),
+                            _ => None,
+                        };
+                        if let Some((result_ty, _desc_in, copyof_desc)) = arr_kind {
+                            let recv_slot = lower_rich_expr_to_slot(
+                                dq_exprs[0],
+                                lookup_name,
+                                fn_lookup,
+                                next_slot,
+                                pre_stmts,
+                                extra_locals,
+                                strings,
+                            )?;
+                            // length = arraylength(recv)
+                            let len_slot = LocalId(*next_slot);
+                            *next_slot += 1;
+                            extra_locals.push(Ty::Int);
+                            pre_stmts.push(MStmt::Assign {
+                                dest: len_slot,
+                                value: skotch_mir::Rvalue::ArrayLength(recv_slot),
+                            });
+                            // Arrays.copyOf(recv, length)
+                            let result_slot = LocalId(*next_slot);
+                            *next_slot += 1;
+                            extra_locals.push(result_ty);
+                            pre_stmts.push(MStmt::Assign {
+                                dest: result_slot,
+                                value: skotch_mir::Rvalue::Call {
+                                    kind: skotch_mir::CallKind::StaticJava {
+                                        class_name: "java/util/Arrays".to_string(),
+                                        method_name: "copyOf".to_string(),
+                                        descriptor: copyof_desc.to_string(),
+                                    },
+                                    args: vec![recv_slot, len_slot],
+                                },
+                            });
+                            return Some(result_slot);
+                        }
+                    }
                     if matches!(recv_ty_candidate, Some(Ty::String)) {
                         let arg_count = call
                             .value_argument_list()
@@ -31663,6 +31731,90 @@ fn lower_rich_expr_to_slot(
                                         },
                                     });
                                     return Some(result_slot);
+                                }
+                            }
+                        }
+                    }
+                    // FQ-resolved nested-class ctor call:
+                    //   `Counter.Bit32(incrementBy = BLOCK_SIZE)` where
+                    //   `Counter` is `import org.kotlincrypto.bitops.bits.Counter`
+                    //   and `Bit32` is a nested class on it.
+                    //
+                    // Without this branch, the singleton-dispatch arm
+                    // below would emit `getstatic Counter.INSTANCE
+                    // :LCounter;` + `invokevirtual Counter.Bit32(...)`,
+                    // both against the unqualified `Counter` name —
+                    // failing at link time with `NoClassDefFoundError`.
+                    //
+                    // Shape detection: receiver is a `Reference(qual)`
+                    // whose simple name is in `lookup_file_import` (i.e.
+                    // explicitly imported into this file) AND the tail
+                    // call's callee is `Reference(<UpperCaseTail>)`.
+                    // Build the nested JVM internal name `<fq>$<tail>`
+                    // and emit `new + dup + args + invokespecial`.
+                    if let KtExpr::Reference(qual_ref) = &dq_exprs[0] {
+                        if method_n.starts_with(char::is_uppercase) {
+                            if let Some(qual_name) = qual_ref.name() {
+                                if lookup_name(qual_name).is_none() {
+                                    if let Some(qual_fq) = lookup_file_import(qual_name) {
+                                        let nested_fq = format!("{qual_fq}${method_n}");
+                                        let mut arg_slots: Vec<LocalId> = Vec::new();
+                                        let mut all_ok = true;
+                                        if let Some(arg_list) = call.value_argument_list() {
+                                            for arg in arg_list.arguments() {
+                                                let Some(arg_e) = arg.expression() else {
+                                                    all_ok = false;
+                                                    break;
+                                                };
+                                                let Some(s) = lower_rich_expr_to_slot(
+                                                    arg_e,
+                                                    lookup_name,
+                                                    fn_lookup,
+                                                    next_slot,
+                                                    pre_stmts,
+                                                    extra_locals,
+                                                    strings,
+                                                ) else {
+                                                    all_ok = false;
+                                                    break;
+                                                };
+                                                arg_slots.push(s);
+                                            }
+                                        }
+                                        if all_ok {
+                                            // Build ctor descriptor from
+                                            // arg slot Tys. Reference and
+                                            // primitive shapes both flow
+                                            // through `ty_to_descriptor`.
+                                            let mut desc = String::from("(");
+                                            for s in &arg_slots {
+                                                let t =
+                                                    slot_ty_with_param_fallback(s.0, extra_locals);
+                                                desc.push_str(&ty_to_descriptor(&t));
+                                            }
+                                            desc.push_str(")V");
+                                            let new_slot = LocalId(*next_slot);
+                                            *next_slot += 1;
+                                            extra_locals.push(Ty::Class(nested_fq.clone()));
+                                            pre_stmts.push(MStmt::Assign {
+                                                dest: new_slot,
+                                                value: skotch_mir::Rvalue::NewInstance(
+                                                    nested_fq.clone(),
+                                                ),
+                                            });
+                                            pre_stmts.push(MStmt::Assign {
+                                                dest: new_slot,
+                                                value: skotch_mir::Rvalue::Call {
+                                                    kind: skotch_mir::CallKind::ConstructorJava {
+                                                        class_name: nested_fq,
+                                                        descriptor: desc,
+                                                    },
+                                                    args: arg_slots,
+                                                },
+                                            });
+                                            return Some(new_slot);
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -36950,9 +37102,17 @@ fn collect_secondary_ctors(
                     if kids.len() != 2 {
                         return false;
                     }
+                    // Recv accepted when it is a user param (e.g.
+                    // `other.h`, `h.copyOf()`) OR an imported-class
+                    // qualifier (e.g. `Counter.Bit32(...)` where the
+                    // new FQ-ctor arm in lower_rich_expr_to_slot emits
+                    // `new Counter$Bit32; invokespecial`).
                     let recv_ok = matches!(&kids[0],
                         KtExpr::Reference(r) if r.name()
-                            .map(|n| param_names.iter().any(|p| p == n))
+                            .map(|n| {
+                                param_names.iter().any(|p| p == n)
+                                    || lookup_file_import(n).is_some()
+                            })
                             .unwrap_or(false));
                     recv_ok && matches!(&kids[1], KtExpr::Call(_))
                 }
