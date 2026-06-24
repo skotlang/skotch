@@ -739,6 +739,23 @@ struct CrossFileExtFn {
     method_name: String,
     descriptor: String,
     return_ty: Ty,
+    /// `inline fun <reified T> Iterable<*>.firstOfType(): T?` shape.
+    is_reified_type_filter: bool,
+}
+
+/// Kotlin primitive name → JVM boxed class for reified-T `instanceof`.
+fn kotlin_primitive_to_boxed_class(name: &str) -> Option<&'static str> {
+    Some(match name {
+        "Int" => "java/lang/Integer",
+        "Long" => "java/lang/Long",
+        "Float" => "java/lang/Float",
+        "Double" => "java/lang/Double",
+        "Boolean" => "java/lang/Boolean",
+        "Byte" => "java/lang/Byte",
+        "Short" => "java/lang/Short",
+        "Char" => "java/lang/Character",
+        _ => return None,
+    })
 }
 
 /// Box a primitive-typed slot into its `java.lang.<Wrapper>` peer
@@ -2174,6 +2191,15 @@ pub fn lower_file(
                 // user_param_count excludes the receiver. ExternalFunDecl
                 // stores the receiver as the first entry of param_tys
                 // when is_extension is true.
+                // `firstOfType`-shaped reified-T type-filter: inline ext
+                // on Iterable with no user params, returning T? (Object?).
+                let is_reified_type_filter = decl.is_inline
+                    && recv_class == "java/lang/Iterable"
+                    && decl.param_count == 0
+                    && matches!(
+                        &decl.return_ty,
+                        Ty::Nullable(inner) if matches!(inner.as_ref(), Ty::Any | Ty::Class(_))
+                    );
                 register_cross_file_ext_fn(
                     name,
                     &recv_class,
@@ -2182,6 +2208,7 @@ pub fn lower_file(
                         method_name: name.clone(),
                         descriptor: decl.descriptor.clone(),
                         return_ty: decl.return_ty.clone(),
+                        is_reified_type_filter,
                     },
                 );
             }
@@ -11613,6 +11640,9 @@ fn lower_loop_body_blocks(
         /// either branches to a ReturnValue terminator or falls through with
         /// the name bound to the (now non-null) lhs slot.
         PropertyWithElvisReturn,
+        /// `val name: T? = recv.firstOfType()` against a reified-T
+        /// type-filter ext fn; emit inline iteration with concrete T.
+        PropertyWithReifiedTypeFilter,
         NestedWhile,
         NestedForIn,
         RepeatStmt,
@@ -11649,6 +11679,40 @@ fn lower_loop_body_blocks(
                         {
                             special_at = Some((j, Special::PropertyWithElvisReturn));
                             break;
+                        }
+                        // `val x: T? = recv.firstOfType()` — explicit
+                        // type ref carries the concrete T.
+                        KtExpr::DotQualified(dq) if prop.type_reference().is_some() => {
+                            let kids: Vec<KtExpr<'_>> = skotch_ast::children(dq.syntax())
+                                .iter()
+                                .filter_map(KtExpr::cast)
+                                .collect();
+                            if kids.len() == 2 {
+                                if let (KtExpr::Reference(_), KtExpr::Call(c)) =
+                                    (&kids[0], &kids[1])
+                                {
+                                    let has_no_args = c
+                                        .value_argument_list()
+                                        .map(|al| al.arguments().count() == 0)
+                                        .unwrap_or(true)
+                                        && c.lambda_argument().is_none();
+                                    let mname = match c.callee() {
+                                        Some(KtExpr::Reference(r)) => r.name(),
+                                        _ => None,
+                                    };
+                                    let is_filter = mname
+                                        .and_then(|n| {
+                                            lookup_cross_file_ext_fn(n, "java/lang/Iterable")
+                                        })
+                                        .map(|e| e.is_reified_type_filter)
+                                        .unwrap_or(false);
+                                    if has_no_args && is_filter {
+                                        special_at =
+                                            Some((j, Special::PropertyWithReifiedTypeFilter));
+                                        break;
+                                    }
+                                }
+                            }
                         }
                         _ => {}
                     }
@@ -13685,6 +13749,192 @@ fn lower_loop_body_blocks(
                 // value. No empty block is needed.
                 let _ = cont_block_id;
                 name_to_local.push((pname.to_string(), lhs_slot));
+                i = j + 1;
+                continue;
+            }
+            Some((j, Special::PropertyWithReifiedTypeFilter)) => {
+                // `val name: T? = recv.firstOfType()`: 7-block inline
+                // iteration (entry/cond/check/next/match/null/cont) with
+                // `item instanceof <T>` substituted at the check block.
+                let prop_node = body_children[j];
+                let prop = skotch_ast::KtProperty::cast(prop_node)?;
+                let pname = prop.name()?;
+                let type_ref = prop.type_reference()?;
+                let t_name = type_ref
+                    .nullable_type()
+                    .and_then(|n| n.inner_user_type())
+                    .or_else(|| type_ref.user_type())
+                    .and_then(|u| u.name())?;
+                let t_jvm_class = kotlin_primitive_to_boxed_class(t_name)
+                    .or_else(|| skotch_types::intrinsics::kotlin_to_jvm_class(t_name))
+                    .map(String::from)
+                    .unwrap_or_else(|| t_name.to_string());
+                let init = prop.initializer().map(unwrap_parens)?;
+                let KtExpr::DotQualified(dq) = init else {
+                    return None;
+                };
+                let recv_expr = skotch_ast::children(dq.syntax())
+                    .iter()
+                    .find_map(KtExpr::cast)?;
+                let snap = name_to_local.clone();
+                let lookup = |n: &str| -> Option<LocalId> {
+                    snap.iter()
+                        .rev()
+                        .find(|(name, _)| name == n)
+                        .map(|(_, l)| *l)
+                };
+                let recv_slot = lower_rich_expr_to_slot(
+                    recv_expr,
+                    &lookup,
+                    fn_lookup_ref,
+                    next_slot,
+                    &mut cur_stmts,
+                    local_tys,
+                    strings,
+                )?;
+                let size_slot = LocalId(*next_slot);
+                *next_slot += 1;
+                local_tys.push(Ty::Int);
+                cur_stmts.push(MStmt::Assign {
+                    dest: size_slot,
+                    value: skotch_mir::Rvalue::Call {
+                        kind: skotch_mir::CallKind::Virtual {
+                            class_name: "java/util/List".to_string(),
+                            method_name: "size".to_string(),
+                        },
+                        args: vec![recv_slot],
+                    },
+                });
+                let i_slot = LocalId(*next_slot);
+                *next_slot += 1;
+                local_tys.push(Ty::Int);
+                cur_stmts.push(MStmt::Assign {
+                    dest: i_slot,
+                    value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(0)),
+                });
+                let prop_slot = LocalId(*next_slot);
+                *next_slot += 1;
+                local_tys.push(Ty::Nullable(Box::new(Ty::Any)));
+                let id0 = block_offset + blocks.len() as u32;
+                let (
+                    cond_block_id,
+                    check_block_id,
+                    next_block_id,
+                    match_block_id,
+                    null_block_id,
+                    cont_block_id,
+                ) = (id0 + 1, id0 + 2, id0 + 3, id0 + 4, id0 + 5, id0 + 6);
+                blocks.push(BasicBlock {
+                    stmts: std::mem::take(&mut cur_stmts),
+                    terminator: Terminator::Goto(cond_block_id),
+                });
+                let cmp_slot = LocalId(*next_slot);
+                *next_slot += 1;
+                local_tys.push(Ty::Bool);
+                blocks.push(BasicBlock {
+                    stmts: vec![MStmt::Assign {
+                        dest: cmp_slot,
+                        value: skotch_mir::Rvalue::BinOp {
+                            op: skotch_mir::BinOp::CmpLt,
+                            lhs: i_slot,
+                            rhs: size_slot,
+                        },
+                    }],
+                    terminator: Terminator::Branch {
+                        cond: cmp_slot,
+                        then_block: check_block_id,
+                        else_block: null_block_id,
+                    },
+                });
+                let item_slot = LocalId(*next_slot);
+                *next_slot += 1;
+                local_tys.push(Ty::Any);
+                let ok_slot = LocalId(*next_slot);
+                *next_slot += 1;
+                local_tys.push(Ty::Bool);
+                blocks.push(BasicBlock {
+                    stmts: vec![
+                        MStmt::Assign {
+                            dest: item_slot,
+                            value: skotch_mir::Rvalue::Call {
+                                kind: skotch_mir::CallKind::Virtual {
+                                    class_name: "java/util/List".to_string(),
+                                    method_name: "get".to_string(),
+                                },
+                                args: vec![recv_slot, i_slot],
+                            },
+                        },
+                        MStmt::Assign {
+                            dest: ok_slot,
+                            value: skotch_mir::Rvalue::InstanceOf {
+                                obj: item_slot,
+                                type_descriptor: t_jvm_class.clone(),
+                            },
+                        },
+                    ],
+                    terminator: Terminator::Branch {
+                        cond: ok_slot,
+                        then_block: match_block_id,
+                        else_block: next_block_id,
+                    },
+                });
+                let one_slot = LocalId(*next_slot);
+                *next_slot += 1;
+                local_tys.push(Ty::Int);
+                blocks.push(BasicBlock {
+                    stmts: vec![
+                        MStmt::Assign {
+                            dest: one_slot,
+                            value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(1)),
+                        },
+                        MStmt::Assign {
+                            dest: i_slot,
+                            value: skotch_mir::Rvalue::BinOp {
+                                op: skotch_mir::BinOp::AddI,
+                                lhs: i_slot,
+                                rhs: one_slot,
+                            },
+                        },
+                    ],
+                    terminator: Terminator::Goto(cond_block_id),
+                });
+                let cast_slot = LocalId(*next_slot);
+                *next_slot += 1;
+                local_tys.push(Ty::Class(t_jvm_class.clone()));
+                blocks.push(BasicBlock {
+                    stmts: vec![
+                        MStmt::Assign {
+                            dest: cast_slot,
+                            value: skotch_mir::Rvalue::CheckCast {
+                                obj: item_slot,
+                                target_class: t_jvm_class.clone(),
+                            },
+                        },
+                        MStmt::Assign {
+                            dest: prop_slot,
+                            value: skotch_mir::Rvalue::Local(cast_slot),
+                        },
+                    ],
+                    terminator: Terminator::Goto(cont_block_id),
+                });
+                let null_slot = LocalId(*next_slot);
+                *next_slot += 1;
+                local_tys.push(Ty::Nullable(Box::new(Ty::Any)));
+                blocks.push(BasicBlock {
+                    stmts: vec![
+                        MStmt::Assign {
+                            dest: null_slot,
+                            value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Null),
+                        },
+                        MStmt::Assign {
+                            dest: prop_slot,
+                            value: skotch_mir::Rvalue::Local(null_slot),
+                        },
+                    ],
+                    terminator: Terminator::Goto(cont_block_id),
+                });
+                debug_assert_eq!(cont_block_id, block_offset + blocks.len() as u32);
+                name_to_local.push((pname.to_string(), prop_slot));
                 i = j + 1;
                 continue;
             }
