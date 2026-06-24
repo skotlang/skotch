@@ -44512,13 +44512,17 @@ mod tests {
         assert_eq!(sc.name, "<init>");
         assert_eq!(sc.required_params, 1);
         assert_eq!(sc.param_names, vec!["s".to_string()]);
-        // locals: [0] = `this` (Foo), [1] = user param `s` (String).
-        // The implicit `this` slot is what gives `emit_user_method`
+        // locals: [0] = `this` (Foo), [1] = user param `s` (String),
+        // [2] = scratch slot for the `s.length` argument to `this(...)`.
+        // The implicit `this` slot at [0] is what gives `emit_user_method`
         // the right offset when it builds the `(Ljava/lang/String;)V`
         // descriptor via `params.iter().skip(1)`. Without it the
         // descriptor came out as `()V`, colliding with the primary
         // `<init>()V` and dropping the typed entry point.
-        assert_eq!(sc.locals, vec![Ty::Class("Foo".to_string()), Ty::String]);
+        assert_eq!(
+            sc.locals,
+            vec![Ty::Class("Foo".to_string()), Ty::String, Ty::Int]
+        );
         // params: [this_slot, s_slot] — length 1 + user_param_count.
         assert_eq!(sc.params.len(), 2);
     }
