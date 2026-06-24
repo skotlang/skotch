@@ -17795,6 +17795,28 @@ fn walk_block(
             Rvalue::CheckCast { obj, target_class } => {
                 // Push the object onto the stack, then emit `checkcast`.
                 load_local(code, stack, max_stack, slots, *obj, &func.locals);
+                // Autobox primitive sources: `3 as Any` lowers to
+                // CheckCast(int_slot, Object), but the JVM verifier rejects
+                // `iconst_3; checkcast Object` — the operand stack must hold
+                // a reference. Box the primitive before the checkcast so
+                // `iconst_3; invokestatic Integer.valueOf; checkcast Object`
+                // is well-formed. The target class is always a reference
+                // type (CheckCast can only widen to a class), so boxing here
+                // is always safe.
+                let obj_ty = &func.locals[obj.0 as usize];
+                if matches!(
+                    obj_ty,
+                    Ty::Int
+                        | Ty::Long
+                        | Ty::Float
+                        | Ty::Double
+                        | Ty::Bool
+                        | Ty::Byte
+                        | Ty::Short
+                        | Ty::Char
+                ) {
+                    autobox(code, cp, stack, max_stack, obj_ty);
+                }
                 let class_idx = cp.class(target_class);
                 code.push(0xC0); // checkcast
                 code.push((class_idx >> 8) as u8);
