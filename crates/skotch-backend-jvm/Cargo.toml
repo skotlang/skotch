@@ -13,6 +13,7 @@ skotch-config          = { workspace = true }
 skotch-diagnostics     = { workspace = true }
 skotch-stdlib-registry = { workspace = true }
 skotch-classinfo       = { workspace = true }
+skotch-kotlin-metadata-writer = { workspace = true }
 byteorder        = { workspace = true }
 rustc-hash       = { workspace = true }
 

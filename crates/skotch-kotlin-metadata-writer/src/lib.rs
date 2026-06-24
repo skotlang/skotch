@@ -17,6 +17,7 @@
 //! "MIR-class → ProtoBuf.Class + StringTable" lowering on top.
 
 pub mod bit_encoding;
+pub mod walker;
 
 /// Generated protobuf message types. The vendored `.proto` files use
 /// `package org.jetbrains.kotlin.metadata{,.jvm}`, so prost emits
@@ -48,6 +49,10 @@ pub mod proto {
 }
 
 pub use bit_encoding::encode_bytes;
+pub use walker::{
+    class_proto_for, encode_class_metadata, encode_package_metadata, jvm_descriptor_to_type,
+    package_proto_for, ty_to_proto_type, Metadata, StringTable, METADATA_VERSION_2_4,
+};
 
 #[cfg(test)]
 mod tests {

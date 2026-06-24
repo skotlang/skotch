@@ -2594,6 +2594,7 @@ dependencies = [
  "skotch-config",
  "skotch-diagnostics",
  "skotch-intern",
+ "skotch-kotlin-metadata-writer",
  "skotch-mir",
  "skotch-mir-lower",
  "skotch-resolve",
@@ -2915,7 +2916,10 @@ dependencies = [
  "bytes",
  "prost",
  "prost-build",
+ "rustc-hash",
  "skotch-classinfo",
+ "skotch-mir",
+ "skotch-types",
 ]
 
 [[package]]
