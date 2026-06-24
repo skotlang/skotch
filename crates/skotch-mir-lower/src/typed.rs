@@ -36247,6 +36247,48 @@ fn collect_secondary_ctors(
                 out
             })
             .unwrap_or_default();
+        // Companion non-const val initializers — used to resolve bare
+        // `H`-style references at delegation call sites for plain
+        // (non-const) companion vals whose initializer expression is
+        // representable in MIR (e.g. `intArrayOf(...)` of literals).
+        // We inline the initializer at each call site rather than
+        // emitting a `getstatic` on the companion class because skotch's
+        // current backend doesn't hoist non-const companion vals to
+        // static fields on the outer class the way kotlinc does. The
+        // resulting bytecode is functionally equivalent (each ctor call
+        // materializes a fresh array) — adequate for parity-stdout but
+        // not byte-identical. Const refs above keep their literal-inline
+        // fast path; this list only fills in names that `literal_to_const`
+        // rejected. Required to graduate parity/101-hash SHA256's
+        // `super(h = H)` where `H` is a `private val H = intArrayOf(...)`
+        // companion val.
+        let companion_non_const_exprs: Vec<(String, skotch_ast::KtExpr<'_>)> = c
+            .body()
+            .map(|cb| {
+                let mut out: Vec<(String, skotch_ast::KtExpr<'_>)> = Vec::new();
+                let companion = cb.declarations().find_map(|d| match d {
+                    KtDecl::Object(o) if o.is_companion() => Some(o),
+                    _ => None,
+                });
+                let Some(co) = companion else { return out };
+                let Some(cob) = co.body() else { return out };
+                for decl in cob.declarations() {
+                    let KtDecl::Property(prop) = decl else {
+                        continue;
+                    };
+                    let Some(name) = prop.name() else { continue };
+                    // Skip if the const-fold path will already handle it.
+                    if companion_consts.iter().any(|(n, _, _)| n == name) {
+                        continue;
+                    }
+                    let Some(init) = prop.initializer() else {
+                        continue;
+                    };
+                    out.push((name.to_string(), unwrap_parens(init)));
+                }
+                out
+            })
+            .unwrap_or_default();
         // Allocate fresh local slots above the user-param window for
         // any const ops we need to emit. Slot 0 = `this`, 1..=N = user
         // params, N+1.. = our scratch.
@@ -36291,6 +36333,63 @@ fn collect_secondary_ctors(
                                 value: skotch_mir::Rvalue::Const(mc.clone()),
                             });
                             return Some(slot);
+                        }
+                        // Non-const companion val whose initializer
+                        // expression can be inlined (e.g.
+                        // `private val H = intArrayOf(...)`). We splice
+                        // the initializer at the call site rather than
+                        // emitting `getstatic` because the backend
+                        // doesn't (yet) hoist non-const companion vals
+                        // to outer-class static fields the way kotlinc
+                        // does. Param/companion-const name lookup is
+                        // supplied so the initializer can reference
+                        // earlier-resolved names (rare for companion
+                        // vals but cheap to support uniformly).
+                        if let Some((_, init_e)) = companion_non_const_exprs
+                            .iter()
+                            .find(|(fname, _)| fname == name)
+                        {
+                            let param_name_to_slot: rustc_hash::FxHashMap<
+                                String,
+                                skotch_mir::LocalId,
+                            > = param_names
+                                .iter()
+                                .enumerate()
+                                .map(|(i, n)| (n.clone(), skotch_mir::LocalId((i + 1) as u32)))
+                                .collect();
+                            let lookup = |nm: &str| -> Option<skotch_mir::LocalId> {
+                                param_name_to_slot.get(nm).copied()
+                            };
+                            let strings_snap = shared_strings.len();
+                            let pre_snap = pre_stmts.len();
+                            let locals_snap = locals.len();
+                            let next_slot_snap = next_slot;
+                            let maybe = lower_rich_expr_to_slot(
+                                *init_e,
+                                &lookup,
+                                fn_lookup,
+                                &mut next_slot,
+                                &mut pre_stmts,
+                                &mut locals,
+                                shared_strings,
+                            );
+                            if let Some(s) = maybe {
+                                if !has_shared_module_strings
+                                    && shared_strings.len() != strings_snap
+                                {
+                                    pre_stmts.truncate(pre_snap);
+                                    locals.truncate(locals_snap);
+                                    shared_strings.truncate(strings_snap);
+                                    next_slot = next_slot_snap;
+                                    return None;
+                                }
+                                return Some(s);
+                            } else {
+                                pre_stmts.truncate(pre_snap);
+                                locals.truncate(locals_snap);
+                                shared_strings.truncate(strings_snap);
+                                next_slot = next_slot_snap;
+                            }
                         }
                         None
                     }),
@@ -36477,24 +36576,45 @@ fn collect_secondary_ctors(
                         }
                         v
                     };
-                    let from_resolver = package_symbols.and_then(|ps| {
-                        for fq in &fq_candidates {
-                            if let Some(cd) = ps
-                                .classes_by_fq
-                                .get(fq)
-                                .or_else(|| fq.rsplit('/').next().and_then(|s| ps.classes.get(s)))
-                                .filter(|cd| cd.ctor_params.len() == lowered.len())
-                            {
-                                return Some(
-                                    cd.ctor_params
+                    let from_resolver =
+                        package_symbols.and_then(|ps| {
+                            for fq in &fq_candidates {
+                                if let Some(cd) = ps.classes_by_fq.get(fq).or_else(|| {
+                                    fq.rsplit('/').next().and_then(|s| ps.classes.get(s))
+                                }) {
+                                    // Try primary first (matching arity).
+                                    if cd.ctor_params.len() == lowered.len() {
+                                        return Some(
+                                            cd.ctor_params
+                                                .iter()
+                                                .map(|p| p.name.clone())
+                                                .collect::<Vec<_>>(),
+                                        );
+                                    }
+                                    // Fall back to secondary ctors — the
+                                    // super class may have ONLY secondary
+                                    // constructors (`Bit32Digest` declares
+                                    // `protected constructor(bitStrength,
+                                    // h)` with no primary). Pick the first
+                                    // matching-arity secondary; any other
+                                    // disambiguation needs type info we
+                                    // don't track at this layer.
+                                    if let Some(sec) = cd
+                                        .secondary_ctors
                                         .iter()
-                                        .map(|p| p.name.clone())
-                                        .collect::<Vec<_>>(),
-                                );
+                                        .find(|s| s.params.len() == lowered.len())
+                                    {
+                                        return Some(
+                                            sec.params
+                                                .iter()
+                                                .map(|p| p.name.clone())
+                                                .collect::<Vec<_>>(),
+                                        );
+                                    }
+                                }
                             }
-                        }
-                        None
-                    });
+                            None
+                        });
                     from_resolver.unwrap_or_else(|| {
                         for fq in &fq_candidates {
                             if let Some(v) =
