@@ -28592,6 +28592,24 @@ fn lower_rich_expr_to_slot(
                         ("Double", "MIN_VALUE") => {
                             Some((skotch_mir::MirConst::Double(f64::MIN_POSITIVE), Ty::Double))
                         }
+                        // Kotlin stdlib bit-width constants on numeric
+                        // companion objects — these are `const val`
+                        // Int values in kotlin.Byte/Short/Int/Long/Char,
+                        // NOT instance fields on a `Byte` class.
+                        ("Byte", "SIZE_BITS") => Some((skotch_mir::MirConst::Int(8), Ty::Int)),
+                        ("Byte", "SIZE_BYTES") => Some((skotch_mir::MirConst::Int(1), Ty::Int)),
+                        ("Short", "SIZE_BITS") => Some((skotch_mir::MirConst::Int(16), Ty::Int)),
+                        ("Short", "SIZE_BYTES") => Some((skotch_mir::MirConst::Int(2), Ty::Int)),
+                        ("Int", "SIZE_BITS") | ("Integer", "SIZE_BITS") => {
+                            Some((skotch_mir::MirConst::Int(32), Ty::Int))
+                        }
+                        ("Int", "SIZE_BYTES") | ("Integer", "SIZE_BYTES") => {
+                            Some((skotch_mir::MirConst::Int(4), Ty::Int))
+                        }
+                        ("Long", "SIZE_BITS") => Some((skotch_mir::MirConst::Int(64), Ty::Int)),
+                        ("Long", "SIZE_BYTES") => Some((skotch_mir::MirConst::Int(8), Ty::Int)),
+                        ("Char", "SIZE_BITS") => Some((skotch_mir::MirConst::Int(16), Ty::Int)),
+                        ("Char", "SIZE_BYTES") => Some((skotch_mir::MirConst::Int(2), Ty::Int)),
                         _ => None,
                     };
                     if let Some((k, ty)) = static_const {
