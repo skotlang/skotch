@@ -14209,6 +14209,29 @@ fn walk_block(
 ) {
     for (stmt_idx, stmt) in block.stmts.iter().enumerate() {
         let Stmt::Assign { dest, value } = stmt;
+        // Defensive guard: when MIR-lower emits a dest LocalId that
+        // wasn't grown into `func.locals` (a latent bug elsewhere in
+        // the lowerer), every downstream `func.locals[dest.0 as usize]`
+        // panics with index-out-of-bounds. Surface a bail and skip the
+        // op rather than crashing the entire compile — this lets a
+        // malformed user function fall through to a stub method while
+        // the rest of the module still compiles. Observed on
+        // parity/100-clikt (external project) where one of the rich
+        // lowered helpers handed a dest of 4 into a locals array of
+        // len 4.
+        if (dest.0 as usize) >= func.locals.len() {
+            if std::env::var_os("SKOTCH_DEBUG_BAILS").is_some() {
+                eprintln!(
+                    "[skotch bail] walk_block: dest LocalId {} out of bounds (locals.len={}) for fn `{}` block {} stmt {}",
+                    dest.0,
+                    func.locals.len(),
+                    func.name,
+                    block_idx,
+                    stmt_idx,
+                );
+            }
+            continue;
+        }
         // Look up the default-arg mask for this call site. Set when MIR-
         // lower injected default values; the Static-call handler uses it
         // to route through the kotlinc-style `name$default(...)` shim.
