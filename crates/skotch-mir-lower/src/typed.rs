@@ -4431,14 +4431,34 @@ pub fn lower_file(
         // val/var or body property with declared type `tr`. Only
         // registers when the slot is unoccupied so an explicit custom
         // getter (registered via the KtDecl::Fun arm above) wins.
+        // When the property has no explicit type annotation, also peek
+        // at the initializer expression so a stdlib collection-factory
+        // shorthand (`val items = mutableListOf<T>()`) registers the
+        // synth getter as `Ty::Class("java/util/List")` instead of
+        // `Ty::Any`. Without this, `t.children.add(x)` on a List-typed
+        // field falls through every direct-method dispatch arm (which
+        // gate on the recv slot's Ty) and silently drops `.add(x)`.
+        // Field-side inference at `collect_class_fields` already
+        // mirrors this via the same `infer_collection_factory_ty`
+        // helper, so the getter's return Ty now matches the field's
+        // declared Ty.
         let register_prop_getter =
             |methods: &mut rustc_hash::FxHashMap<String, Ty>,
              pname: &str,
-             tr: Option<skotch_ast::KtTypeReference<'_>>| {
+             tr: Option<skotch_ast::KtTypeReference<'_>>,
+             init: Option<skotch_ast::KtExpr<'_>>| {
                 let getter_name = property_getter_name(pname);
-                methods
-                    .entry(getter_name)
-                    .or_insert_with(|| ty_from_type_ref(tr));
+                methods.entry(getter_name).or_insert_with(|| {
+                    if tr.is_some() {
+                        return ty_from_type_ref(tr);
+                    }
+                    if let Some(init) = init.map(unwrap_parens) {
+                        if let Some(t) = infer_collection_factory_ty(&init) {
+                            return t;
+                        }
+                    }
+                    Ty::Any
+                });
             };
         // Local classes.
         for decl in file.decls() {
@@ -4478,7 +4498,7 @@ pub fn lower_file(
                                 continue;
                             }
                             if let Some(pname) = p.name() {
-                                register_prop_getter(&mut methods, pname, p.type_reference());
+                                register_prop_getter(&mut methods, pname, p.type_reference(), None);
                             }
                         }
                     }
@@ -4495,7 +4515,12 @@ pub fn lower_file(
                         // custom getter shapes via `or_insert_with`.
                         if let KtDecl::Property(p) = d {
                             if let Some(pname) = p.name() {
-                                register_prop_getter(&mut methods, pname, p.type_reference());
+                                register_prop_getter(
+                                    &mut methods,
+                                    pname,
+                                    p.type_reference(),
+                                    p.initializer(),
+                                );
                             }
                         }
                     }
