@@ -36730,7 +36730,8 @@ fn collect_secondary_ctors(
         //      no-arg `super()` against a class that has no
         //      `<init>()V` would silently substitute a
         //      `NoSuchMethodError` for the VerifyError.
-        let body_stmts: Vec<skotch_mir::Stmt> = if delegation.is_none() || delegation_ok {
+        let delegation_emitted = delegation.is_none() || delegation_ok;
+        let mut body_stmts: Vec<skotch_mir::Stmt> = if delegation_emitted {
             let mut s = pre_stmts;
             s.push(skotch_mir::Stmt::Assign {
                 dest: this_slot,
@@ -36743,6 +36744,294 @@ fn collect_secondary_ctors(
         } else {
             Vec::new()
         };
+
+        // Walk the secondary-ctor body's trailing statements after the
+        // delegation call. Without this, `this.field = expr` Binary
+        // statements inside `protected constructor(...): super(...) {
+        // this.h = h; this.x = IntArray(BLOCK_SIZE); ... }` were all
+        // dropped — parity/101-hash NPE-ed at the first read of
+        // `this.count`. Whitelist-driven so we never lower a RHS that
+        // would emit unresolved-class references (`Counter.Bit32(...)`
+        // resolved to `getstatic Counter.INSTANCE:LCounter;` against
+        // the unqualified class name, triggering `NoClassDefFoundError:
+        // Counter` at link time).
+        //
+        // RHS whitelist (anything else: skip the stmt, leaving the
+        // field unwritten — same observable shape as pre-fix):
+        //   - bare param reference (`this.h = h`)
+        //   - bare companion const (`this.x = BLOCK_SIZE`)
+        //   - `IntArray`/`LongArray`/… constructor Call with whitelisted args
+        //   - `param.method(...)` DotQualified-Call (receiver = user param)
+        //   - numeric / bool / char / string / null literal
+        fn rhs_is_whitelisted(
+            e: &skotch_ast::KtExpr<'_>,
+            param_names: &[String],
+            companion_consts: &[(String, skotch_mir::MirConst, Ty)],
+        ) -> bool {
+            use skotch_ast::KtExpr;
+            match e {
+                KtExpr::Reference(rr) => rr
+                    .name()
+                    .map(|n| {
+                        param_names.iter().any(|p| p == n)
+                            || companion_consts.iter().any(|(cn, _, _)| cn == n)
+                    })
+                    .unwrap_or(false),
+                KtExpr::Call(call) => {
+                    let Some(KtExpr::Reference(rr)) = call.callee() else {
+                        return false;
+                    };
+                    let Some(name) = rr.name() else { return false };
+                    if !matches!(
+                        name,
+                        "IntArray"
+                            | "LongArray"
+                            | "ByteArray"
+                            | "BooleanArray"
+                            | "DoubleArray"
+                            | "FloatArray"
+                            | "ShortArray"
+                            | "CharArray"
+                    ) {
+                        return false;
+                    }
+                    let Some(al) = call.value_argument_list() else {
+                        return false;
+                    };
+                    al.arguments().all(|arg| {
+                        arg.expression()
+                            .map(unwrap_parens)
+                            .map(|ae| rhs_is_whitelisted(&ae, param_names, companion_consts))
+                            .unwrap_or(false)
+                    })
+                }
+                KtExpr::DotQualified(dq) => {
+                    let kids: Vec<skotch_ast::KtExpr<'_>> = skotch_ast::children(dq.syntax())
+                        .iter()
+                        .filter_map(skotch_ast::KtExpr::cast)
+                        .collect();
+                    if kids.len() != 2 {
+                        return false;
+                    }
+                    let recv_ok = matches!(&kids[0],
+                        KtExpr::Reference(r) if r.name()
+                            .map(|n| param_names.iter().any(|p| p == n))
+                            .unwrap_or(false));
+                    recv_ok && matches!(&kids[1], KtExpr::Call(_))
+                }
+                KtExpr::Integer(_)
+                | KtExpr::Float(_)
+                | KtExpr::Boolean(_)
+                | KtExpr::Character(_)
+                | KtExpr::String(_)
+                | KtExpr::Null(_) => true,
+                _ => false,
+            }
+        }
+        if delegation_emitted {
+            if let Some(body_block) = sc.body() {
+                let field_index: rustc_hash::FxHashMap<String, Ty> = collect_class_fields(c)
+                    .into_iter()
+                    .map(|f| (f.name.clone(), f.ty.clone()))
+                    .collect();
+                let param_name_to_slot: rustc_hash::FxHashMap<String, skotch_mir::LocalId> =
+                    param_names
+                        .iter()
+                        .enumerate()
+                        .map(|(i, n)| (n.clone(), skotch_mir::LocalId((i + 1) as u32)))
+                        .collect();
+                // Pre-materialize each companion const whose bare name
+                // appears anywhere in this ctor's body (inlining
+                // matches kotlinc's own constant-fold for `const val`;
+                // without it `IntArray(BLOCK_SIZE)` emits `getstatic
+                // BLOCK_SIZE; newarray int` and VerifyErrors).
+                let mut companion_name_to_slot: rustc_hash::FxHashMap<String, skotch_mir::LocalId> =
+                    rustc_hash::FxHashMap::default();
+                {
+                    use skotch_syntax::SyntaxKind as S;
+                    fn walk_idents<'a>(n: &'a skotch_sil::SilNode, out: &mut Vec<&'a str>) {
+                        if n.kind == S::IDENTIFIER {
+                            if let skotch_sil::SilData::Token { text } = &n.data {
+                                out.push(text.as_str());
+                            }
+                        }
+                        for ch in skotch_ast::children(n) {
+                            walk_idents(ch, out);
+                        }
+                    }
+                    let mut idents: Vec<&str> = Vec::new();
+                    for stmt_e in body_block.statements() {
+                        walk_idents(stmt_e.syntax(), &mut idents);
+                    }
+                    for id in idents {
+                        if companion_name_to_slot.contains_key(id) {
+                            continue;
+                        }
+                        if let Some((_, mc, fty)) =
+                            companion_consts.iter().find(|(fname, _, _)| fname == id)
+                        {
+                            let slot = skotch_mir::LocalId(next_slot);
+                            next_slot += 1;
+                            locals.push(fty.clone());
+                            body_stmts.push(skotch_mir::Stmt::Assign {
+                                dest: slot,
+                                value: skotch_mir::Rvalue::Const(mc.clone()),
+                            });
+                            companion_name_to_slot.insert(id.to_string(), slot);
+                        }
+                    }
+                }
+                for stmt_e in body_block.statements() {
+                    let stmt_e = unwrap_parens(stmt_e);
+                    let skotch_ast::KtExpr::Binary(b) = stmt_e else {
+                        continue;
+                    };
+                    if b.operation().map(|o| o.text()).unwrap_or_default() != "=" {
+                        continue;
+                    }
+                    let (Some(lhs), Some(rhs)) =
+                        (b.lhs().map(unwrap_parens), b.rhs().map(unwrap_parens))
+                    else {
+                        continue;
+                    };
+                    // LHS shapes: `this.field = …` (DotQualified This+Reference)
+                    // or bare `field = …` (Reference matching a class field).
+                    let field_name: Option<String> = match &lhs {
+                        skotch_ast::KtExpr::DotQualified(dq) => {
+                            let kids: Vec<skotch_ast::KtExpr<'_>> =
+                                skotch_ast::children(dq.syntax())
+                                    .iter()
+                                    .filter_map(skotch_ast::KtExpr::cast)
+                                    .collect();
+                            if let (
+                                Some(skotch_ast::KtExpr::This(_)),
+                                Some(skotch_ast::KtExpr::Reference(rref)),
+                            ) = (kids.first(), kids.get(1))
+                            {
+                                rref.name().map(String::from)
+                            } else {
+                                None
+                            }
+                        }
+                        skotch_ast::KtExpr::Reference(rref) => rref
+                            .name()
+                            .filter(|n| field_index.contains_key(*n))
+                            .map(String::from),
+                        _ => None,
+                    };
+                    let Some(field_name) = field_name else {
+                        continue;
+                    };
+                    let Some(field_ty) = field_index.get(&field_name).cloned() else {
+                        continue;
+                    };
+                    // Skip when field type is unresolved-dotted: the
+                    // PutField descriptor + CheckCast would both encode
+                    // the malformed name, surfacing as a class-load
+                    // crash. Field stays unwritten (NPE on read, same
+                    // shape as pre-fix).
+                    if let Ty::Class(c) = &field_ty {
+                        if c.contains('.') {
+                            continue;
+                        }
+                    }
+                    if !rhs_is_whitelisted(&rhs, &param_names, &companion_consts) {
+                        continue;
+                    }
+                    let body_snap = body_stmts.len();
+                    let locals_snap = locals.len();
+                    let strings_snap = shared_strings.len();
+                    let next_slot_snap = next_slot;
+                    let lookup = |nm: &str| -> Option<skotch_mir::LocalId> {
+                        param_name_to_slot
+                            .get(nm)
+                            .copied()
+                            .or_else(|| companion_name_to_slot.get(nm).copied())
+                    };
+                    let rhs_slot = lower_rich_expr_to_slot(
+                        rhs,
+                        &lookup,
+                        fn_lookup,
+                        &mut next_slot,
+                        &mut body_stmts,
+                        &mut locals,
+                        shared_strings,
+                    );
+                    let Some(rhs_slot) = rhs_slot else {
+                        body_stmts.truncate(body_snap);
+                        locals.truncate(locals_snap);
+                        shared_strings.truncate(strings_snap);
+                        next_slot = next_slot_snap;
+                        continue;
+                    };
+                    // String literals require a shared module strings
+                    // table; without it the IDs would index a stale
+                    // array at link time (same restriction as the
+                    // primary-ctor literal-init path).
+                    if !has_shared_module_strings && shared_strings.len() != strings_snap {
+                        body_stmts.truncate(body_snap);
+                        locals.truncate(locals_snap);
+                        shared_strings.truncate(strings_snap);
+                        next_slot = next_slot_snap;
+                        continue;
+                    }
+                    // CheckCast Object-typed rhs into the field's
+                    // declared shape so the verifier accepts the
+                    // putfield against the typed Fieldref descriptor.
+                    // Skip when narrow-already-narrow or field Ty is
+                    // erased (Ty::Any).
+                    let field_target_class: Option<String> = match &field_ty {
+                        Ty::Class(c) => Some(c.clone()),
+                        Ty::IntArray => Some("[I".to_string()),
+                        Ty::LongArray => Some("[J".to_string()),
+                        Ty::DoubleArray => Some("[D".to_string()),
+                        Ty::BooleanArray => Some("[Z".to_string()),
+                        Ty::ByteArray => Some("[B".to_string()),
+                        _ => None,
+                    };
+                    let final_slot = if let Some(target_class) = field_target_class {
+                        let rhs_ty = locals.get(rhs_slot.0 as usize).cloned().unwrap_or(Ty::Any);
+                        let already_narrow = matches!(
+                            (&rhs_ty, &field_ty),
+                            (Ty::IntArray, Ty::IntArray)
+                                | (Ty::LongArray, Ty::LongArray)
+                                | (Ty::DoubleArray, Ty::DoubleArray)
+                                | (Ty::BooleanArray, Ty::BooleanArray)
+                                | (Ty::ByteArray, Ty::ByteArray)
+                        ) || matches!(
+                            (&rhs_ty, &field_ty),
+                            (Ty::Class(a), Ty::Class(b)) if a == b
+                        );
+                        if already_narrow {
+                            rhs_slot
+                        } else {
+                            let cast_slot = skotch_mir::LocalId(next_slot);
+                            next_slot += 1;
+                            locals.push(field_ty.clone());
+                            body_stmts.push(skotch_mir::Stmt::Assign {
+                                dest: cast_slot,
+                                value: skotch_mir::Rvalue::CheckCast {
+                                    obj: rhs_slot,
+                                    target_class,
+                                },
+                            });
+                            cast_slot
+                        }
+                    } else {
+                        rhs_slot
+                    };
+                    body_stmts.push(skotch_mir::Stmt::Assign {
+                        dest: this_slot,
+                        value: skotch_mir::Rvalue::PutField {
+                            receiver: this_slot,
+                            class_name: class_fq.to_string(),
+                            field_name,
+                            value: final_slot,
+                        },
+                    });
+                }
+            }
+        }
         // Surface source-level `private constructor(...)` to MIR so
         // the metadata writer can emit the matching `IS_SECONDARY |
         // private` flag word (kotlinc's `0x12`). Without this, every
