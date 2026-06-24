@@ -88,6 +88,15 @@ fn type_ref_to_descriptor(
         Some(u) => u,
         None => return "Ljava/lang/Object;".to_string(),
     };
+    // Qualified user type like `Counter.Bit32` (cross-file nested
+    // class). Resolve the qualifier through `imports` and emit
+    // `LOuter$Inner;` so the field/return descriptor links against
+    // the right binary name. Without this, the resolver emits the
+    // bare tail `LBit32;` and the loader fails at run time with
+    // `NoClassDefFoundError: Bit32`.
+    if let Some(nested) = resolve_qualified_user_descriptor(user, imports, aliases) {
+        return nested;
+    }
     let name = user.name().unwrap_or("");
     // Typealias substitution — `typealias Predicate = (Int) -> Boolean`
     if let Some(target) = aliases.get(name) {
@@ -120,6 +129,48 @@ fn type_ref_to_descriptor(
             }
         }
     }
+}
+
+/// Resolve a qualified `KtUserType` (`Outer.Inner`, possibly deeper)
+/// to its JVM internal name, threading the qualifier through the
+/// per-file imports map. Returns `None` when the user_type has no
+/// qualifier or the chain can't be resolved.
+fn resolve_user_type_to_internal_name(
+    u: KtUserType<'_>,
+    imports: &FxHashMap<String, String>,
+    aliases: &FxHashMap<String, AliasTarget>,
+) -> Option<String> {
+    let tail = u.name()?;
+    if let Some(q) = u.qualifier() {
+        let owner = resolve_user_type_to_internal_name(q, imports, aliases)?;
+        return Some(format!("{owner}${tail}"));
+    }
+    // Aliases that resolve to a plain user type would route through
+    // alias_target_to_descriptor; nested types via typealias aren't
+    // modeled here. Fall back to imports and the intrinsics map.
+    if aliases.contains_key(tail) {
+        return None;
+    }
+    if let Some(fq) = imports.get(tail) {
+        return Some(fq.clone());
+    }
+    if let Some(jvm) = skotch_types::intrinsics::kotlin_to_jvm_class(tail) {
+        return Some(jvm.to_string());
+    }
+    None
+}
+
+/// Wrap [`resolve_user_type_to_internal_name`] in JVM descriptor
+/// form (`LOwner$Inner;`), returning `None` when the user_type is
+/// unqualified (the caller's bare-name path handles it).
+fn resolve_qualified_user_descriptor(
+    u: KtUserType<'_>,
+    imports: &FxHashMap<String, String>,
+    aliases: &FxHashMap<String, AliasTarget>,
+) -> Option<String> {
+    u.qualifier()?;
+    let fq = resolve_user_type_to_internal_name(u, imports, aliases)?;
+    Some(format!("L{fq};"))
 }
 
 /// Build the JVM descriptor for a method: `(params)return`.
@@ -288,6 +339,15 @@ fn user_type_to_ty(
     imports: &FxHashMap<String, String>,
     aliases: &FxHashMap<String, AliasTarget>,
 ) -> Ty {
+    // Qualified nested classes (`Counter.Bit32`) — emit
+    // `Ty::Class("Owner$Inner")` so downstream descriptor / dispatch
+    // sees the right binary name. Without this, the tail name
+    // (`Bit32`) lands in Ty::Class on its own.
+    if u.qualifier().is_some() {
+        if let Some(fq) = resolve_user_type_to_internal_name(u, imports, aliases) {
+            return Ty::Class(fq);
+        }
+    }
     let name = u.name().unwrap_or("");
     if let Some(target) = aliases.get(name) {
         return alias_target_to_ty(target, imports, aliases);

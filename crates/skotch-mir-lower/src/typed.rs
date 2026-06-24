@@ -1803,6 +1803,44 @@ fn resolve_user_ty(name: &str) -> Ty {
     })
 }
 
+/// Resolve a `KtUserType` that may be qualified (`Outer.Inner` for a
+/// cross-file nested class). When the user_type's qualifier names an
+/// imported class, the inner becomes `Outer$Inner` at the JVM level.
+/// Without this, the field/return descriptor for `Counter.Bit32`
+/// (where `Counter` is `import org.kotlincrypto.bitops.bits.Counter`
+/// and `Bit32` is a nested class on it) collapses to the bare tail
+/// `LBit32;` → runtime NoClassDefFoundError.
+///
+/// Returns `Some(Ty::Class(<owner>$<tail>))` when the qualifier
+/// chain resolves to a known class via `lookup_file_import`. Returns
+/// `None` for unqualified user types (the caller should fall back to
+/// `resolve_user_ty` on the tail name).
+fn resolve_qualified_user_ty(u: skotch_ast::KtUserType<'_>) -> Option<Ty> {
+    let tail = u.name()?;
+    let q = u.qualifier()?;
+    let qualifier_fq = resolve_user_type_to_internal(q)?;
+    Some(Ty::Class(format!("{qualifier_fq}${tail}")))
+}
+
+/// Resolve a `KtUserType` (possibly qualified) to a JVM internal name
+/// (slash-separated, no `L`/`;` wrapper). Returns `None` for plain
+/// type-param names or unknown identifiers — callers that already
+/// have a Ty fallback should use that instead.
+fn resolve_user_type_to_internal(u: skotch_ast::KtUserType<'_>) -> Option<String> {
+    let tail = u.name()?;
+    if let Some(q) = u.qualifier() {
+        let qualifier_fq = resolve_user_type_to_internal(q)?;
+        return Some(format!("{qualifier_fq}${tail}"));
+    }
+    if let Some(fq) = lookup_file_import(tail) {
+        return Some(fq);
+    }
+    if let Some(jvm) = skotch_types::intrinsics::kotlin_to_jvm_class(tail) {
+        return Some(jvm.to_string());
+    }
+    None
+}
+
 /// Erase any `Ty::Class(name)` whose name appears in `type_params`
 /// (e.g. the function's declared `<T>` type parameter) down to
 /// `Ty::Any` so the JVM descriptor emits `Ljava/lang/Object;` instead
@@ -1905,12 +1943,20 @@ fn resolve_type_ref(tr: skotch_ast::KtTypeReference<'_>) -> Ty {
         return Ty::Class(format!("kotlin/jvm/functions/Function{}", arity));
     }
     // Plain user-type name. Check typealias map first, then the
-    // built-in resolver.
-    if let Some(name) = tr.user_type().and_then(|u| u.name()) {
-        if let Some(alias_ty) = resolve_typealias(name) {
-            return alias_ty;
+    // built-in resolver. Qualified user types (`Outer.Inner` for a
+    // cross-file nested class) take precedence over the bare-tail
+    // path so `Counter.Bit32` produces `Counter$Bit32` instead of
+    // a bare `Bit32` that won't link.
+    if let Some(u) = tr.user_type() {
+        if let Some(nested) = resolve_qualified_user_ty(u) {
+            return nested;
         }
-        return resolve_user_ty(name);
+        if let Some(name) = u.name() {
+            if let Some(alias_ty) = resolve_typealias(name) {
+                return alias_ty;
+            }
+            return resolve_user_ty(name);
+        }
     }
     // Nullable user type: `T?` parses as NULLABLE_TYPE wrapping a
     // USER_TYPE rather than a direct user_type child. Without this
@@ -1919,6 +1965,11 @@ fn resolve_type_ref(tr: skotch_ast::KtTypeReference<'_>) -> Ty {
     // that gate on Ty::Class — e.g. `tail.sibling = node` after
     // `val tail = lastChild` (parity/14-generic-tree-dsl walk bail).
     if let Some(nt) = tr.nullable_type() {
+        if let Some(u) = nt.inner_user_type() {
+            if let Some(nested) = resolve_qualified_user_ty(u) {
+                return nested;
+            }
+        }
         if let Some(name) = nt.inner_user_type().and_then(|u| u.name()) {
             if let Some(alias_ty) = resolve_typealias(name) {
                 return alias_ty;
