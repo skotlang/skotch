@@ -336,9 +336,43 @@ impl ConstantPool {
             match entry {
                 Entry::Utf8(s) => {
                     out.push(1); // CONSTANT_Utf8
-                    let bytes = s.as_bytes();
-                    out.write_u16::<BigEndian>(bytes.len() as u16).unwrap();
-                    out.write_all(bytes).unwrap();
+                                 // JVMS §4.4.7: CONSTANT_Utf8_info uses MODIFIED UTF-8,
+                                 // not standard UTF-8. The two differ in exactly one
+                                 // way for code points ≤ U+FFFF: the NUL character
+                                 // (U+0000) MUST be encoded as the two-byte sequence
+                                 // `0xC0 0x80` rather than the single byte `0x00`.
+                                 // Standard UTF-8 emits a literal `0x00` for NUL,
+                                 // which the JVM verifier rejects with
+                                 // `java.lang.ClassFormatError: Illegal UTF8 string`.
+                                 // The `@kotlin.Metadata.d1` codec deliberately
+                                 // packs raw protobuf bytes into Rust chars in the
+                                 // 0..=0xFF range; the NUL mode marker and any
+                                 // payload NULs both need this fix-up to survive
+                                 // class loading.
+                    let raw = s.as_bytes();
+                    let mut buf: Vec<u8> = Vec::with_capacity(raw.len());
+                    let mut needs_modification = false;
+                    for &b in raw {
+                        if b == 0 {
+                            needs_modification = true;
+                            break;
+                        }
+                    }
+                    if needs_modification {
+                        for &b in raw {
+                            if b == 0 {
+                                buf.push(0xC0);
+                                buf.push(0x80);
+                            } else {
+                                buf.push(b);
+                            }
+                        }
+                        out.write_u16::<BigEndian>(buf.len() as u16).unwrap();
+                        out.write_all(&buf).unwrap();
+                    } else {
+                        out.write_u16::<BigEndian>(raw.len() as u16).unwrap();
+                        out.write_all(raw).unwrap();
+                    }
                 }
                 Entry::Integer(v) => {
                     out.push(3); // CONSTANT_Integer
@@ -439,7 +473,42 @@ mod tests {
         assert_eq!(cp.count(), 2);
     }
 
+    /// JVMS §4.4.7 modified UTF-8: a `0x00` byte in the Rust string
+    /// MUST be written as `0xC0 0x80` (a two-byte over-long form), not
+    /// as a literal `0x00`. Any other byte in the standard-UTF-8
+    /// representation is forwarded verbatim — only the NUL byte differs
+    /// for code points ≤ U+FFFF, which covers the range our @Metadata
+    /// `d1` codec produces (chars 0x00..=0xFF).
+    #[test]
+    fn modified_utf8_nul_is_two_bytes() {
+        let mut cp = ConstantPool::new();
+        // "a\0b" — two ASCII chars around a NUL byte.
+        cp.utf8("a\u{0}b");
+        let mut out = Vec::new();
+        cp.write_to(&mut out);
+        // Layout: tag(1) length(u16) bytes. Expect bytes = `a` `0xC0` `0x80` `b`.
+        assert_eq!(out[0], 1, "tag should be CONSTANT_Utf8");
+        let len = u16::from_be_bytes([out[1], out[2]]) as usize;
+        assert_eq!(len, 4, "modified-UTF-8 length for `a\\0b` is 4");
+        assert_eq!(&out[3..3 + len], &[b'a', 0xC0, 0x80, b'b']);
+    }
+
+    /// ASCII-only strings (no NUL, no high bytes) must serialize with
+    /// EXACTLY their standard-UTF-8 bytes — modified UTF-8 only diverges
+    /// at NUL for the byte range we care about. The fast path that
+    /// skips the rebuild relies on this.
+    #[test]
+    fn modified_utf8_ascii_unchanged() {
+        let mut cp = ConstantPool::new();
+        cp.utf8("hello");
+        let mut out = Vec::new();
+        cp.write_to(&mut out);
+        assert_eq!(out[0], 1);
+        let len = u16::from_be_bytes([out[1], out[2]]) as usize;
+        assert_eq!(len, 5);
+        assert_eq!(&out[3..3 + len], b"hello");
+    }
+
     // ─── future test stubs ───────────────────────────────────────────────
     // TODO: long_takes_two_slots — Long entries skip the next index
-    // TODO: modified_utf8         — null bytes encoded as 0xC0 0x80
 }

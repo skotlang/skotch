@@ -354,6 +354,176 @@ fn encode_annotation_value(
     }
 }
 
+// ── @kotlin.Metadata RVA emission ──────────────────────────────────
+//
+// Every kotlinc-compiled class file carries a single
+// `@kotlin.Metadata(...)` annotation under `RuntimeVisibleAnnotations`.
+// The annotation's payload encodes the unerased Kotlin signatures
+// (parameter names, default-arg masks, suspend-ness, sealed-subclass
+// lists, etc.) downstream Kotlin consumers need — without it, kotlinc
+// refuses named-argument calls into our classes with "named arguments
+// are prohibited for non-Kotlin functions" (parity/100-clikt). The
+// payload itself is built by the `skotch-kotlin-metadata-writer` crate
+// (Phase A + Phase B: prost-generated proto types + MIR→ProtoBuf
+// walker); this site is the Phase C bridge that stamps the resulting
+// bytes onto every emitted class.
+//
+// The annotation has six element-value pairs in kotlinc's emit order:
+//   * mv (int[])    — metadata-version triple, currently `[2, 4, 0]`
+//   * k  (int)      — kind: 1 = user class, 2 = file facade (*Kt)
+//   * xi (int)      — extra integer flags; kotlinc 2.4 emits 48 for
+//                     `IS_STRICT_METADATA_VERSION_CHECK | HAS_ENUM_ENTRIES`
+//                     by default. The exact value doesn't affect
+//                     consumer behavior for the named-arg path; we mirror
+//                     `Metadata::xi` from the writer crate (default 0 if
+//                     unset by the caller).
+//   * d1 (String[]) — bit-encoded protobuf body (`String[]` per kotlinc)
+//   * d2 (String[]) — the raw string table the protobuf indices reference
+//
+// `pn` (package name) and `xs` (extra string) default to empty and
+// are omitted from the annotation element pairs when their respective
+// fields are empty — kotlinc behaves the same way for ordinary
+// (non-multi-file) classes.
+
+/// Build the body of a `RuntimeVisibleAnnotations` attribute that
+/// contains exactly one `@kotlin.Metadata(...)` annotation populated
+/// from `meta`. CP entries are interned into `cp` as they are
+/// referenced — callers MUST call this before serializing the
+/// constant pool. Returns `(attr_name_idx, body_bytes)`: the caller
+/// writes `attr_name(u16) | length(u32) | body` into the class
+/// attributes table at the appropriate spot.
+fn build_kotlin_metadata_rva(
+    meta: &skotch_kotlin_metadata_writer::Metadata,
+    cp: &mut ConstantPool,
+) -> (u16, Vec<u8>) {
+    let attr_name_idx = cp.utf8("RuntimeVisibleAnnotations");
+    let type_idx = cp.utf8("Lkotlin/Metadata;");
+    // Element-value pair name indices.
+    let mv_name = cp.utf8("mv");
+    let k_name = cp.utf8("k");
+    let xi_name = cp.utf8("xi");
+    let d1_name = cp.utf8("d1");
+    let d2_name = cp.utf8("d2");
+    let pn_name = if meta.pn.is_empty() { 0 } else { cp.utf8("pn") };
+    let xs_name = if meta.xs.is_empty() { 0 } else { cp.utf8("xs") };
+
+    // Pre-intern the int values that appear in `mv`, `k`, `xi`.
+    let mv_int_indices: Vec<u16> = meta.mv.iter().map(|n| cp.integer(*n)).collect();
+    let k_int_idx = cp.integer(meta.k);
+    let xi_int_idx = cp.integer(meta.xi);
+    // Pre-intern the d1/d2 string element values.
+    let d1_str_indices: Vec<u16> = meta.d1.iter().map(|s| cp.utf8(s)).collect();
+    let d2_str_indices: Vec<u16> = meta.d2.iter().map(|s| cp.utf8(s)).collect();
+    let pn_str_idx = if meta.pn.is_empty() {
+        0
+    } else {
+        cp.utf8(&meta.pn)
+    };
+    let xs_str_idx = if meta.xs.is_empty() {
+        0
+    } else {
+        cp.utf8(&meta.xs)
+    };
+
+    // Element pair count: mv, k, xi, d1, d2, optionally pn, xs.
+    let mut pair_count: u16 = 5;
+    if pn_name != 0 {
+        pair_count += 1;
+    }
+    if xs_name != 0 {
+        pair_count += 1;
+    }
+
+    let mut body: Vec<u8> = Vec::with_capacity(64);
+    // num_annotations
+    body.write_u16::<BigEndian>(1).unwrap();
+    // annotation { type_index, num_element_value_pairs, element_value_pairs[] }
+    body.write_u16::<BigEndian>(type_idx).unwrap();
+    body.write_u16::<BigEndian>(pair_count).unwrap();
+
+    // mv: int[]
+    body.write_u16::<BigEndian>(mv_name).unwrap();
+    body.push(b'[');
+    body.write_u16::<BigEndian>(mv_int_indices.len() as u16)
+        .unwrap();
+    for idx in &mv_int_indices {
+        body.push(b'I');
+        body.write_u16::<BigEndian>(*idx).unwrap();
+    }
+
+    // k: int
+    body.write_u16::<BigEndian>(k_name).unwrap();
+    body.push(b'I');
+    body.write_u16::<BigEndian>(k_int_idx).unwrap();
+
+    // xi: int
+    body.write_u16::<BigEndian>(xi_name).unwrap();
+    body.push(b'I');
+    body.write_u16::<BigEndian>(xi_int_idx).unwrap();
+
+    // d1: String[]
+    body.write_u16::<BigEndian>(d1_name).unwrap();
+    body.push(b'[');
+    body.write_u16::<BigEndian>(d1_str_indices.len() as u16)
+        .unwrap();
+    for idx in &d1_str_indices {
+        body.push(b's');
+        body.write_u16::<BigEndian>(*idx).unwrap();
+    }
+
+    // d2: String[]
+    body.write_u16::<BigEndian>(d2_name).unwrap();
+    body.push(b'[');
+    body.write_u16::<BigEndian>(d2_str_indices.len() as u16)
+        .unwrap();
+    for idx in &d2_str_indices {
+        body.push(b's');
+        body.write_u16::<BigEndian>(*idx).unwrap();
+    }
+
+    // pn: String (optional)
+    if pn_name != 0 {
+        body.write_u16::<BigEndian>(pn_name).unwrap();
+        body.push(b's');
+        body.write_u16::<BigEndian>(pn_str_idx).unwrap();
+    }
+    // xs: String (optional)
+    if xs_name != 0 {
+        body.write_u16::<BigEndian>(xs_name).unwrap();
+        body.push(b's');
+        body.write_u16::<BigEndian>(xs_str_idx).unwrap();
+    }
+
+    (attr_name_idx, body)
+}
+
+/// True when `class` should NOT receive a `@kotlin.Metadata` RVA.
+/// Synthetic backend-generated classes (lambda helpers, suspend
+/// continuations, cross-file stubs) carry no source-level Kotlin
+/// signatures consumers care about, and kotlinc's lambda classes
+/// either omit `@Metadata` entirely or stamp `k=3` (synthetic).
+/// Treat them as opaque-to-Kotlin-consumers for now — only
+/// user-declared classes and file-facade wrappers get the annotation.
+fn is_metadata_eligible_user_class(class: &skotch_mir::MirClass) -> bool {
+    if class.is_cross_file_stub {
+        return false;
+    }
+    if class.is_lambda || class.is_suspend_lambda {
+        return false;
+    }
+    // Synthesized DefaultImpls / anonymous classes nested under a `$N`
+    // numeric suffix are pure JVM-desugaring artifacts.
+    if let Some((_, suffix)) = class.name.rsplit_once('$') {
+        if suffix.chars().all(|c| c.is_ascii_digit()) {
+            return false;
+        }
+        if suffix == "DefaultImpls" {
+            return false;
+        }
+    }
+    true
+}
+
 /// Append annotation attributes to a method that was already assembled.
 /// The method bytes have the format: access(u16) name(u16) desc(u16)
 /// attrs_count(u16) [attr_data...]. This function increments attrs_count
@@ -1620,6 +1790,16 @@ fn compile_class(class_name: &str, module: &MirModule) -> Vec<u8> {
         0
     };
 
+    // Build the `@kotlin.Metadata` RVA payload for the file-facade
+    // wrapper (`k = 2`). Without this attribute, kotlinc rejects
+    // named-argument calls into our top-level functions with
+    // "named arguments are prohibited for non-Kotlin functions"
+    // (parity/100-clikt). The CP entries for the annotation must be
+    // pre-registered BEFORE `cp.write_to(&mut out)` below.
+    let metadata = skotch_kotlin_metadata_writer::encode_package_metadata(module);
+    let (metadata_attr_name_idx, metadata_attr_body) =
+        build_kotlin_metadata_rva(&metadata, &mut cp);
+
     // Register SourceFile entries last (kotlinc CP layout convention).
     let source_file_attr_name_idx = cp.utf8("SourceFile");
     let source_file_value_idx = cp.utf8(&source_simple);
@@ -1657,7 +1837,10 @@ fn compile_class(class_name: &str, module: &MirModule) -> Vec<u8> {
         out.extend_from_slice(blob);
     }
 
-    let mut attr_count: u16 = 1;
+    // SourceFile + RuntimeVisibleAnnotations(@kotlin.Metadata) always
+    // present on file-facade wrappers; InnerClasses / BootstrapMethods
+    // only when populated.
+    let mut attr_count: u16 = 2;
     if !inner_class_entries.is_empty() {
         attr_count += 1;
     }
@@ -1669,6 +1852,12 @@ fn compile_class(class_name: &str, module: &MirModule) -> Vec<u8> {
         .unwrap();
     out.write_u32::<BigEndian>(2).unwrap();
     out.write_u16::<BigEndian>(source_file_value_idx).unwrap();
+    // `@kotlin.Metadata` RVA — placed after SourceFile to match kotlinc's
+    // ordering.
+    out.write_u16::<BigEndian>(metadata_attr_name_idx).unwrap();
+    out.write_u32::<BigEndian>(metadata_attr_body.len() as u32)
+        .unwrap();
+    out.extend_from_slice(&metadata_attr_body);
     if !inner_class_entries.is_empty() {
         out.write_u16::<BigEndian>(inner_classes_name_idx).unwrap();
         let payload_len: u32 = 2 + (inner_class_entries.len() as u32) * 8;
@@ -2237,6 +2426,19 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
     } else {
         0
     };
+    // Pre-register the `@kotlin.Metadata` RVA on user-declared classes
+    // (synthetic backend-generated classes — lambdas, suspend
+    // continuations, cross-file stubs — are skipped via
+    // `is_metadata_eligible_user_class`). Mirrors the file-facade
+    // wrapper's metadata emission in `compile_class`; the CP entries
+    // it interns must be added BEFORE the constant pool is serialized
+    // below.
+    let metadata_class = if is_metadata_eligible_user_class(class) {
+        let meta = skotch_kotlin_metadata_writer::encode_class_metadata(class, "main");
+        Some(build_kotlin_metadata_rva(&meta, &mut cp2))
+    } else {
+        None
+    };
     out2.write_u16::<BigEndian>(cp2.count()).unwrap();
     cp2.write_to(&mut out2);
     out2.write_u16::<BigEndian>(class_flags).unwrap();
@@ -2526,11 +2728,24 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
     let bootstrap_entries2: Vec<crate::constant_pool::BootstrapEntry> =
         cp2.bootstrap_entries().to_vec();
     let bm_attr_name_idx = bm_attr_name_idx2;
-    let attr_count: u16 = if bootstrap_entries2.is_empty() { 1 } else { 2 };
+    let mut attr_count: u16 = 1; // SourceFile always.
+    if !bootstrap_entries2.is_empty() {
+        attr_count += 1;
+    }
+    if metadata_class.is_some() {
+        attr_count += 1;
+    }
     out2.write_u16::<BigEndian>(attr_count).unwrap();
     out2.write_u16::<BigEndian>(sf_name2).unwrap();
     out2.write_u32::<BigEndian>(2).unwrap();
     out2.write_u16::<BigEndian>(sf_val2).unwrap();
+    // `@kotlin.Metadata` RVA — kotlinc places it after SourceFile.
+    if let Some((meta_attr_name_idx, meta_attr_body)) = &metadata_class {
+        out2.write_u16::<BigEndian>(*meta_attr_name_idx).unwrap();
+        out2.write_u32::<BigEndian>(meta_attr_body.len() as u32)
+            .unwrap();
+        out2.extend_from_slice(meta_attr_body);
+    }
     if !bootstrap_entries2.is_empty() {
         out2.write_u16::<BigEndian>(bm_attr_name_idx).unwrap();
         let mut payload_len: u32 = 2;
