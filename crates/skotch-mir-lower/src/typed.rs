@@ -6789,6 +6789,25 @@ fn unwrap_parens<'a>(e: skotch_ast::KtExpr<'a>) -> skotch_ast::KtExpr<'a> {
     cur
 }
 
+/// Detect whether an `IS_EXPRESSION` is the negated form `x !is T` (as
+/// opposed to `x is T`). The parser folds both into a single
+/// `IS_EXPRESSION` whose `OPERATION_REFERENCE` child contains either
+/// `KW_IS` alone or `EXCL` followed by `KW_IS`. Without checking the
+/// operator, mir-lower would emit identical `instanceof` bytecode for
+/// both forms and silently flip the semantics of `!is` to `is`.
+fn is_negated_is_expr(is_e: skotch_ast::KtIsExpression<'_>) -> bool {
+    for c in skotch_ast::children(is_e.syntax()) {
+        if c.kind == skotch_syntax::SyntaxKind::OPERATION_REFERENCE {
+            for op_child in skotch_ast::children(c) {
+                if op_child.kind == skotch_syntax::SyntaxKind::EXCL {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
 /// Resolve the numeric Ty of an expression operand. Used by binary
 /// op lowering to pick the right AddI/AddL/AddD/etc variant.
 fn operand_numeric_ty(e: &skotch_ast::KtExpr<'_>, f: skotch_ast::KtFun<'_>) -> Ty {
@@ -12707,47 +12726,59 @@ fn lower_loop_body_blocks(
                 // member accesses dispatch on the narrowed class (matches kotlinc:
                 // `checkcast Class` + `invokevirtual Class.getX`).
                 let narrow: Option<(String, LocalId, Vec<MStmt>)> = if !multi_cond {
+                    // Smart-cast narrowing only applies in the `then`-arm of
+                    // `if (x is T)`. For the negated `x !is T`, the
+                    // then-arm is the path where the cast is NOT valid —
+                    // skip narrowing to avoid emitting a `checkcast T`
+                    // that will throw at runtime.
                     if let KtExpr::Is(is_e) = cond_expr {
-                        let is_children: Vec<_> =
-                            skotch_ast::children(is_e.syntax()).iter().collect();
-                        let ref_name: Option<String> = is_children
-                            .iter()
-                            .find_map(|c| KtExpr::cast(c))
-                            .map(unwrap_parens)
-                            .and_then(|e| {
-                                if let KtExpr::Reference(r) = e {
-                                    r.name().map(String::from)
-                                } else {
-                                    None
-                                }
-                            });
-                        let type_name: Option<String> = is_children.iter().find_map(|c| {
-                            if c.kind == skotch_syntax::SyntaxKind::TYPE_REFERENCE {
-                                if let Some(tr) = skotch_ast::KtTypeReference::cast(c) {
-                                    return tr.user_type().and_then(|u| u.name()).map(String::from);
-                                }
-                            }
+                        if is_negated_is_expr(is_e) {
                             None
-                        });
-                        match (ref_name, type_name) {
-                            (Some(rn), Some(tn)) => {
-                                if let Some(orig_slot) = lookup(&rn) {
-                                    let cast_slot = LocalId(*next_slot);
-                                    *next_slot += 1;
-                                    local_tys.push(Ty::Class(tn.clone()));
-                                    let cast_stmt = MStmt::Assign {
-                                        dest: cast_slot,
-                                        value: skotch_mir::Rvalue::CheckCast {
-                                            obj: orig_slot,
-                                            target_class: tn.clone(),
-                                        },
-                                    };
-                                    Some((rn, cast_slot, vec![cast_stmt]))
-                                } else {
-                                    None
+                        } else {
+                            let is_children: Vec<_> =
+                                skotch_ast::children(is_e.syntax()).iter().collect();
+                            let ref_name: Option<String> = is_children
+                                .iter()
+                                .find_map(|c| KtExpr::cast(c))
+                                .map(unwrap_parens)
+                                .and_then(|e| {
+                                    if let KtExpr::Reference(r) = e {
+                                        r.name().map(String::from)
+                                    } else {
+                                        None
+                                    }
+                                });
+                            let type_name: Option<String> = is_children.iter().find_map(|c| {
+                                if c.kind == skotch_syntax::SyntaxKind::TYPE_REFERENCE {
+                                    if let Some(tr) = skotch_ast::KtTypeReference::cast(c) {
+                                        return tr
+                                            .user_type()
+                                            .and_then(|u| u.name())
+                                            .map(String::from);
+                                    }
                                 }
+                                None
+                            });
+                            match (ref_name, type_name) {
+                                (Some(rn), Some(tn)) => {
+                                    if let Some(orig_slot) = lookup(&rn) {
+                                        let cast_slot = LocalId(*next_slot);
+                                        *next_slot += 1;
+                                        local_tys.push(Ty::Class(tn.clone()));
+                                        let cast_stmt = MStmt::Assign {
+                                            dest: cast_slot,
+                                            value: skotch_mir::Rvalue::CheckCast {
+                                                obj: orig_slot,
+                                                target_class: tn.clone(),
+                                            },
+                                        };
+                                        Some((rn, cast_slot, vec![cast_stmt]))
+                                    } else {
+                                        None
+                                    }
+                                }
+                                _ => None,
                             }
-                            _ => None,
                         }
                     } else {
                         None
@@ -31507,10 +31538,13 @@ fn lower_rich_expr_to_slot(
             }
         }
     }
-    // `<operand> is <Type>`: emit Rvalue::InstanceOf into a fresh
-    // Bool slot. Operand may be any rich expression (Reference,
-    // DotQualified, Call, etc.) — recurse via lower_rich_expr_to_slot.
+    // `<operand> is <Type>` / `<operand> !is <Type>`: emit
+    // Rvalue::InstanceOf into a fresh Bool slot. For the negated form
+    // chain a `CmpEq result, false` to flip the boolean. Operand may
+    // be any rich expression (Reference, DotQualified, Call, etc.) —
+    // recurse via lower_rich_expr_to_slot.
     if let KtExpr::Is(is_e) = &e {
+        let negated = is_negated_is_expr(*is_e);
         let children: Vec<_> = skotch_ast::children(is_e.syntax()).iter().collect();
         let operand = children
             .iter()
@@ -31547,6 +31581,27 @@ fn lower_rich_expr_to_slot(
                     type_descriptor: descriptor,
                 },
             });
+            if negated {
+                let false_slot = LocalId(*next_slot);
+                *next_slot += 1;
+                extra_locals.push(Ty::Bool);
+                pre_stmts.push(MStmt::Assign {
+                    dest: false_slot,
+                    value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Bool(false)),
+                });
+                let neg_slot = LocalId(*next_slot);
+                *next_slot += 1;
+                extra_locals.push(Ty::Bool);
+                pre_stmts.push(MStmt::Assign {
+                    dest: neg_slot,
+                    value: skotch_mir::Rvalue::BinOp {
+                        op: skotch_mir::BinOp::CmpEq,
+                        lhs: result_slot,
+                        rhs: false_slot,
+                    },
+                });
+                return Some(neg_slot);
+            }
             return Some(result_slot);
         }
     }
@@ -32814,10 +32869,12 @@ fn lower_simple_body(
         }
     }
 
-    // `is` type check: `fun isInt(x: Any): Boolean = x is Int`.
-    // Emits Rvalue::InstanceOf with the param slot and the type
-    // descriptor (e.g. "java/lang/Integer" for Int).
+    // `is` / `!is` type check: `fun isInt(x: Any): Boolean = x is Int`
+    // or `fun notInt(x: Any) = x !is Int`. Emits Rvalue::InstanceOf
+    // with the param slot and the type descriptor. For the negated
+    // form chain a `CmpEq result, false` to flip the boolean.
     if let KtExpr::Is(is_e) = &body_expr {
+        let negated = is_negated_is_expr(*is_e);
         // First child is the operand (Reference); the IS keyword and
         // the type follow.
         let children: Vec<_> = skotch_ast::children(is_e.syntax()).iter().collect();
@@ -32850,17 +32907,40 @@ fn lower_simple_body(
                         .unwrap_or(tname.clone());
                     let param_count = param_names.len();
                     let result_slot = skotch_mir::LocalId(param_count as u32);
-                    let blocks = vec![BasicBlock {
-                        stmts: vec![skotch_mir::Stmt::Assign {
-                            dest: result_slot,
-                            value: skotch_mir::Rvalue::InstanceOf {
-                                obj: skotch_mir::LocalId(idx as u32),
-                                type_descriptor: descriptor,
-                            },
-                        }],
-                        terminator: Terminator::ReturnValue(result_slot),
+                    let mut stmts = vec![skotch_mir::Stmt::Assign {
+                        dest: result_slot,
+                        value: skotch_mir::Rvalue::InstanceOf {
+                            obj: skotch_mir::LocalId(idx as u32),
+                            type_descriptor: descriptor,
+                        },
                     }];
-                    return (blocks, vec![Ty::Bool]);
+                    let mut local_tys = vec![Ty::Bool];
+                    let final_slot = if negated {
+                        let false_slot = skotch_mir::LocalId((param_count + 1) as u32);
+                        let neg_slot = skotch_mir::LocalId((param_count + 2) as u32);
+                        stmts.push(skotch_mir::Stmt::Assign {
+                            dest: false_slot,
+                            value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Bool(false)),
+                        });
+                        stmts.push(skotch_mir::Stmt::Assign {
+                            dest: neg_slot,
+                            value: skotch_mir::Rvalue::BinOp {
+                                op: skotch_mir::BinOp::CmpEq,
+                                lhs: result_slot,
+                                rhs: false_slot,
+                            },
+                        });
+                        local_tys.push(Ty::Bool);
+                        local_tys.push(Ty::Bool);
+                        neg_slot
+                    } else {
+                        result_slot
+                    };
+                    let blocks = vec![BasicBlock {
+                        stmts,
+                        terminator: Terminator::ReturnValue(final_slot),
+                    }];
+                    return (blocks, local_tys);
                 }
             }
         }
@@ -37867,9 +37947,13 @@ fn method_simple_body_full(
         }
     }
 
-    // `is` type check on a param or implicit-this field:
+    // `is` / `!is` type check on a param or implicit-this field:
     //   class P(val x: Any) { fun isStr(): Boolean = x is String }
+    //   class P(val x: Any?) { val isErr: Boolean get() = x !is Failure<*> }
+    // For the negated form we emit InstanceOf followed by `CmpEq result,
+    // false` which flips the boolean.
     if let KtExpr::Is(is_e) = &body_expr {
+        let negated = is_negated_is_expr(*is_e);
         let children: Vec<_> = skotch_ast::children(is_e.syntax()).iter().collect();
         let operand = children
             .iter()
@@ -37891,17 +37975,40 @@ fn method_simple_body_full(
                 // Try param first.
                 if let Some(idx) = param_names.iter().position(|p| p == name) {
                     let result_slot = skotch_mir::LocalId((1 + param_count) as u32);
-                    let blocks = vec![BasicBlock {
-                        stmts: vec![skotch_mir::Stmt::Assign {
-                            dest: result_slot,
-                            value: skotch_mir::Rvalue::InstanceOf {
-                                obj: skotch_mir::LocalId((1 + idx) as u32),
-                                type_descriptor: descriptor,
-                            },
-                        }],
-                        terminator: Terminator::ReturnValue(result_slot),
+                    let mut stmts = vec![skotch_mir::Stmt::Assign {
+                        dest: result_slot,
+                        value: skotch_mir::Rvalue::InstanceOf {
+                            obj: skotch_mir::LocalId((1 + idx) as u32),
+                            type_descriptor: descriptor,
+                        },
                     }];
-                    return (blocks, vec![Ty::Bool]);
+                    let mut local_tys = vec![Ty::Bool];
+                    let final_slot = if negated {
+                        let false_slot = skotch_mir::LocalId((1 + param_count + 1) as u32);
+                        let neg_slot = skotch_mir::LocalId((1 + param_count + 2) as u32);
+                        stmts.push(skotch_mir::Stmt::Assign {
+                            dest: false_slot,
+                            value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Bool(false)),
+                        });
+                        stmts.push(skotch_mir::Stmt::Assign {
+                            dest: neg_slot,
+                            value: skotch_mir::Rvalue::BinOp {
+                                op: skotch_mir::BinOp::CmpEq,
+                                lhs: result_slot,
+                                rhs: false_slot,
+                            },
+                        });
+                        local_tys.push(Ty::Bool);
+                        local_tys.push(Ty::Bool);
+                        neg_slot
+                    } else {
+                        result_slot
+                    };
+                    let blocks = vec![BasicBlock {
+                        stmts,
+                        terminator: Terminator::ReturnValue(final_slot),
+                    }];
+                    return (blocks, local_tys);
                 }
                 // Then implicit-this field.
                 if let (Some(cname), Some((fname, _fty))) =
@@ -37909,27 +38016,50 @@ fn method_simple_body_full(
                 {
                     let field_slot = skotch_mir::LocalId((1 + param_count) as u32);
                     let result_slot = skotch_mir::LocalId((1 + param_count + 1) as u32);
+                    let mut stmts = vec![
+                        skotch_mir::Stmt::Assign {
+                            dest: field_slot,
+                            value: skotch_mir::Rvalue::GetField {
+                                receiver: skotch_mir::LocalId(0),
+                                class_name: cname.to_string(),
+                                field_name: fname.clone(),
+                            },
+                        },
+                        skotch_mir::Stmt::Assign {
+                            dest: result_slot,
+                            value: skotch_mir::Rvalue::InstanceOf {
+                                obj: field_slot,
+                                type_descriptor: descriptor,
+                            },
+                        },
+                    ];
+                    let mut local_tys = vec![Ty::Any, Ty::Bool];
+                    let final_slot = if negated {
+                        let false_slot = skotch_mir::LocalId((1 + param_count + 2) as u32);
+                        let neg_slot = skotch_mir::LocalId((1 + param_count + 3) as u32);
+                        stmts.push(skotch_mir::Stmt::Assign {
+                            dest: false_slot,
+                            value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Bool(false)),
+                        });
+                        stmts.push(skotch_mir::Stmt::Assign {
+                            dest: neg_slot,
+                            value: skotch_mir::Rvalue::BinOp {
+                                op: skotch_mir::BinOp::CmpEq,
+                                lhs: result_slot,
+                                rhs: false_slot,
+                            },
+                        });
+                        local_tys.push(Ty::Bool);
+                        local_tys.push(Ty::Bool);
+                        neg_slot
+                    } else {
+                        result_slot
+                    };
                     let blocks = vec![BasicBlock {
-                        stmts: vec![
-                            skotch_mir::Stmt::Assign {
-                                dest: field_slot,
-                                value: skotch_mir::Rvalue::GetField {
-                                    receiver: skotch_mir::LocalId(0),
-                                    class_name: cname.to_string(),
-                                    field_name: fname.clone(),
-                                },
-                            },
-                            skotch_mir::Stmt::Assign {
-                                dest: result_slot,
-                                value: skotch_mir::Rvalue::InstanceOf {
-                                    obj: field_slot,
-                                    type_descriptor: descriptor,
-                                },
-                            },
-                        ],
-                        terminator: Terminator::ReturnValue(result_slot),
+                        stmts,
+                        terminator: Terminator::ReturnValue(final_slot),
                     }];
-                    return (blocks, vec![Ty::Any, Ty::Bool]);
+                    return (blocks, local_tys);
                 }
             }
         }
