@@ -23419,36 +23419,84 @@ fn lower_rich_expr_to_slot(
             false
         }
         for (i, p_name) in param_names.iter().enumerate() {
-            if !body_stmts.iter().any(|s| param_used_as_int(*s, p_name)) {
-                continue;
-            }
             let param_slot = LocalId((1 + i) as u32);
-            let cast_slot = LocalId(next_slot_inv);
-            next_slot_inv += 1;
-            extra_locals_inv.push(Ty::Class("java/lang/Number".to_string()));
-            pre_stmts_inv.push(MStmt::Assign {
-                dest: cast_slot,
-                value: skotch_mir::Rvalue::CheckCast {
-                    obj: param_slot,
-                    target_class: "java/lang/Number".to_string(),
-                },
-            });
-            let int_slot = LocalId(next_slot_inv);
-            next_slot_inv += 1;
-            extra_locals_inv.push(Ty::Int);
-            pre_stmts_inv.push(MStmt::Assign {
-                dest: int_slot,
-                value: skotch_mir::Rvalue::Call {
-                    kind: skotch_mir::CallKind::VirtualJava {
-                        class_name: "java/lang/Number".to_string(),
-                        method_name: "intValue".to_string(),
-                        descriptor: "()I".to_string(),
+            let hint_ty = lambda_param_tys.get(i).cloned().unwrap_or(Ty::Any);
+            // Whether the JVM-level invoke slot for this param is
+            // `Object` (erased FunctionN shape) or the narrower typed
+            // Ty. The backend mirrors this exact rule when picking the
+            // typed-vs-erased invoke descriptor:
+            //   * Int/Bool ⇒ has_int_params triggers typed descriptor
+            //   * everything else ⇒ erased Object (unless arity mismatch)
+            // See class_writer.rs `has_int_params` check (~line 3385).
+            let typed_in_descriptor = matches!(&hint_ty, Ty::Int | Ty::Bool);
+            // Numeric-unbox prologue. When the descriptor is erased
+            // (Object) but the hint says the body wants a primitive,
+            // emit `CHECKCAST Number; <typeValue>` so the rebound
+            // snap_locals entry holds the unboxed primitive slot.
+            // When the descriptor is already typed (Int/Bool), the
+            // JVM slot is primitive — no prologue needed.
+            let arith_used = body_stmts.iter().any(|s| param_used_as_int(*s, p_name));
+            let (target_prim, unbox_method, unbox_desc): (Option<Ty>, Option<&str>, Option<&str>) =
+                if typed_in_descriptor {
+                    (None, None, None)
+                } else {
+                    match &hint_ty {
+                        Ty::Long => (Some(Ty::Long), Some("longValue"), Some("()J")),
+                        Ty::Float => (Some(Ty::Float), Some("floatValue"), Some("()F")),
+                        Ty::Double => (Some(Ty::Double), Some("doubleValue"), Some("()D")),
+                        Ty::Any if arith_used => (Some(Ty::Int), Some("intValue"), Some("()I")),
+                        _ => (None, None, None),
+                    }
+                };
+            if let (Some(prim_ty), Some(method), Some(desc)) =
+                (target_prim, unbox_method, unbox_desc)
+            {
+                let cast_slot = LocalId(next_slot_inv);
+                next_slot_inv += 1;
+                extra_locals_inv.push(Ty::Class("java/lang/Number".to_string()));
+                pre_stmts_inv.push(MStmt::Assign {
+                    dest: cast_slot,
+                    value: skotch_mir::Rvalue::CheckCast {
+                        obj: param_slot,
+                        target_class: "java/lang/Number".to_string(),
                     },
-                    args: vec![cast_slot],
-                },
-            });
-            snap_locals.retain(|(n, _)| n != p_name);
-            snap_locals.push((p_name.clone(), int_slot));
+                });
+                let prim_slot = LocalId(next_slot_inv);
+                next_slot_inv += 1;
+                extra_locals_inv.push(prim_ty);
+                pre_stmts_inv.push(MStmt::Assign {
+                    dest: prim_slot,
+                    value: skotch_mir::Rvalue::Call {
+                        kind: skotch_mir::CallKind::VirtualJava {
+                            class_name: "java/lang/Number".to_string(),
+                            method_name: method.to_string(),
+                            descriptor: desc.to_string(),
+                        },
+                        args: vec![cast_slot],
+                    },
+                });
+                snap_locals.retain(|(n, _)| n != p_name);
+                snap_locals.push((p_name.clone(), prim_slot));
+            } else if let Ty::Class(cls) = &hint_ty {
+                // Class-typed hint with erased Object descriptor (the
+                // common case — only Int/Bool trigger typed). Insert
+                // CheckCast so the body's member dispatch passes the
+                // verifier and rebind snap_locals to the narrowed slot.
+                if !typed_in_descriptor {
+                    let cast_slot = LocalId(next_slot_inv);
+                    next_slot_inv += 1;
+                    extra_locals_inv.push(Ty::Class(cls.clone()));
+                    pre_stmts_inv.push(MStmt::Assign {
+                        dest: cast_slot,
+                        value: skotch_mir::Rvalue::CheckCast {
+                            obj: param_slot,
+                            target_class: cls.clone(),
+                        },
+                    });
+                    snap_locals.retain(|(n, _)| n != p_name);
+                    snap_locals.push((p_name.clone(), cast_slot));
+                }
+            }
         }
         let snap = snap_locals.clone();
         let lookup = |n: &str| -> Option<LocalId> {
@@ -28544,6 +28592,50 @@ fn lower_rich_expr_to_slot(
                                                     .iter()
                                                     .find_map(KtExpr::cast)
                                                 {
+                                                    // Propagate the list's element Ty to the
+                                                    // lambda's param-Ty hint so dispatch on
+                                                    // `it.method()` / `s.method()` inside the
+                                                    // lambda body picks the right receiver class
+                                                    // (instead of erasing to Ty::Any and bailing
+                                                    // when `unique_class_owning_method` returns
+                                                    // None on an overridden method like
+                                                    // `Shape.area` + `Circle.area`).
+                                                    //
+                                                    // Stdlib collection-method-to-Function-arity
+                                                    // map:
+                                                    //   Function1<T,_> : it=T   — filter, map,
+                                                    //                            forEach, any,
+                                                    //                            all, count,
+                                                    //                            groupBy
+                                                    //   Function2<R,T,R> : acc=R, x=T — fold
+                                                    let elem_ty = lookup_list_element_ty(slot.0);
+                                                    let hint: Option<Vec<Ty>> =
+                                                        match (method, elem_ty.as_ref()) {
+                                                            (
+                                                                "filter" | "map" | "forEach"
+                                                                | "any" | "all" | "count"
+                                                                | "groupBy",
+                                                                Some(t),
+                                                            ) => Some(vec![t.clone()]),
+                                                            ("fold", Some(t)) => {
+                                                                // Initial value is the 2nd slot in
+                                                                // arg_slots (after receiver). Its Ty
+                                                                // is R; if unknown, fall back to Any.
+                                                                let acc_ty = arg_slots
+                                                                    .get(1)
+                                                                    .map(|s| {
+                                                                        slot_ty_with_param_fallback(
+                                                                            s.0,
+                                                                            extra_locals,
+                                                                        )
+                                                                    })
+                                                                    .unwrap_or(Ty::Any);
+                                                                Some(vec![acc_ty, t.clone()])
+                                                            }
+                                                            _ => None,
+                                                        };
+                                                    let _hint_scope =
+                                                        LambdaParamTyHintScope::new(hint);
                                                     if let Some(s) = lower_rich_expr_to_slot(
                                                         le,
                                                         lookup_name,
