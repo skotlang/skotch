@@ -3543,8 +3543,13 @@ pub fn lower_file(
                 &val_lookup,
                 &module.wrapper_class,
             );
-            let constructor =
-                constructor_from_primary_with_fn_lookup(c, &name, &fn_lookup, &mut module.strings);
+            let constructor = constructor_from_primary_with_fn_lookup(
+                c,
+                &name,
+                &fn_lookup,
+                &mut module.strings,
+                package_symbols,
+            );
             // Companion object handling: if the class body has a
             // `companion object [Name] { ... }`, emit a sibling
             // MirClass `<Outer>$<Companion>` and point the outer's
@@ -4268,8 +4273,14 @@ pub fn lower_file(
                 }
             }
 
-            let secondary_constructors =
-                collect_secondary_ctors(c, &name, super_class.as_deref(), package_symbols);
+            let secondary_constructors = collect_secondary_ctors(
+                c,
+                &name,
+                super_class.as_deref(),
+                package_symbols,
+                Some(&mut module.strings),
+                Some(&fn_lookup),
+            );
             let mir_class = skotch_mir::MirClass {
                 name: name.clone(),
                 super_class,
@@ -4321,6 +4332,8 @@ pub fn lower_file(
                                 &nested_qname,
                                 n_super.as_deref(),
                                 package_symbols,
+                                None,
+                                None,
                             );
                             let nested_mir = skotch_mir::MirClass {
                                 name: nested_qname.clone(),
@@ -35141,12 +35154,19 @@ fn constructor_from_primary_with_fn_lookup(
     class_name: &str,
     fn_lookup: &rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)>,
     module_strings: &mut Vec<String>,
+    package_symbols: Option<&PackageSymbolTable>,
 ) -> MirFunction {
-    constructor_from_primary_impl(c, class_name, fn_lookup, Some(module_strings))
+    constructor_from_primary_impl(
+        c,
+        class_name,
+        fn_lookup,
+        Some(module_strings),
+        package_symbols,
+    )
 }
 
 fn constructor_from_primary(c: skotch_ast::KtClass<'_>, class_name: &str) -> MirFunction {
-    constructor_from_primary_impl(c, class_name, &rustc_hash::FxHashMap::default(), None)
+    constructor_from_primary_impl(c, class_name, &rustc_hash::FxHashMap::default(), None, None)
 }
 
 fn constructor_from_primary_impl(
@@ -35154,6 +35174,7 @@ fn constructor_from_primary_impl(
     class_name: &str,
     fn_lookup: &rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)>,
     module_strings: Option<&mut Vec<String>>,
+    package_symbols: Option<&PackageSymbolTable>,
 ) -> MirFunction {
     let params_iter: Vec<_> = c
         .primary_constructor()
@@ -35286,6 +35307,7 @@ fn constructor_from_primary_impl(
         }
     }
     let _ = fn_lookup;
+    let _ = package_symbols;
     stmts.push(skotch_mir::Stmt::Assign {
         dest: this_slot,
         value: skotch_mir::Rvalue::Call {
@@ -35770,6 +35792,8 @@ fn collect_secondary_ctors(
     class_fq: &str,
     super_class_fq: Option<&str>,
     package_symbols: Option<&PackageSymbolTable>,
+    module_strings: Option<&mut Vec<String>>,
+    fn_lookup: Option<&rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)>>,
 ) -> Vec<MirFunction> {
     let mut out = Vec::new();
     let Some(body) = c.body() else { return out };
@@ -35782,6 +35806,19 @@ fn collect_secondary_ctors(
     // `<init>(LSub;)V` that `copy()` references.
     let class_ty = Ty::Class(class_fq.to_string());
     let super_default = super_class_fq.unwrap_or("java/lang/Object");
+    // Shared scratch when the caller didn't pass module_strings — keeps
+    // the rich-expression super-arg walker callable but rejects string
+    // literals (no module strings pool to register them into).
+    let mut scratch_module_strings: Vec<String> = Vec::new();
+    let has_shared_module_strings = module_strings.is_some();
+    let shared_strings: &mut Vec<String> = match module_strings {
+        Some(s) => s,
+        None => &mut scratch_module_strings,
+    };
+    let empty_fn_lookup: rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)> =
+        rustc_hash::FxHashMap::default();
+    let fn_lookup: &rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)> =
+        fn_lookup.unwrap_or(&empty_fn_lookup);
     for (sc_idx, sc) in body.secondary_constructors().enumerate() {
         let sc_idx = sc_idx as u32;
         let user_param_count = sc
@@ -35968,6 +36005,11 @@ fn collect_secondary_ctors(
                 //   2. Bare reference to a same-class companion-const
                 //      (inlined as a const literal).
                 //   3. Numeric / Bool / Char / Null literal.
+                //   4. Rich-expression fallback (string template /
+                //      arithmetic / nested calls) via
+                //      `lower_rich_expr_to_slot`. The lookup closure
+                //      resolves user-param names AND inlines same-class
+                //      companion `const val` references on demand.
                 let resolved: Option<skotch_mir::LocalId> = match &arg_e {
                     skotch_ast::KtExpr::Reference(rr) => rr.name().and_then(|name| {
                         if let Some(idx) = param_names.iter().position(|n| n == name) {
@@ -36007,6 +36049,111 @@ fn collect_secondary_ctors(
                                 Some(slot)
                             })
                         }
+                    }
+                };
+                // Tier-4 rich path. The fast tiers above already
+                // captured the trivial Reference/literal shapes — this
+                // arm handles string templates (`"SHA-$bitStrength"`),
+                // arithmetic on params (`bitStrength / 8`), and
+                // anything else `lower_rich_expr_to_slot` knows about.
+                // The lookup closure folds in companion `const val`
+                // references so a bare `BLOCK_SIZE` inside an
+                // arithmetic expression resolves the same way the
+                // top-level Reference arm above does.
+                let resolved = if resolved.is_some() {
+                    resolved
+                } else {
+                    let strings_snap = shared_strings.len();
+                    let pre_snap = pre_stmts.len();
+                    let locals_snap = locals.len();
+                    let next_slot_snap = next_slot;
+                    // Pre-materialize each companion `const val` whose
+                    // bare name appears anywhere inside the arg
+                    // expression. This avoids both a per-name
+                    // materialization step inside the lookup closure
+                    // (which would need RefCell to mutate the
+                    // surrounding pre_stmts/locals/next_slot) and the
+                    // alternative of eagerly materializing every
+                    // companion const whether referenced or not.
+                    let mut companion_name_to_slot: rustc_hash::FxHashMap<
+                        String,
+                        skotch_mir::LocalId,
+                    > = rustc_hash::FxHashMap::default();
+                    {
+                        use skotch_syntax::SyntaxKind as S;
+                        fn walk_idents<'a>(n: &'a skotch_sil::SilNode, out: &mut Vec<&'a str>) {
+                            if n.kind == S::IDENTIFIER {
+                                if let skotch_sil::SilData::Token { text } = &n.data {
+                                    out.push(text.as_str());
+                                }
+                            }
+                            for ch in skotch_ast::children(n) {
+                                walk_idents(ch, out);
+                            }
+                        }
+                        let mut idents: Vec<&str> = Vec::new();
+                        walk_idents(arg_e.syntax(), &mut idents);
+                        for id in idents {
+                            if companion_name_to_slot.contains_key(id) {
+                                continue;
+                            }
+                            if let Some((_, mc, fty)) =
+                                companion_consts.iter().find(|(fname, _, _)| fname == id)
+                            {
+                                let slot = skotch_mir::LocalId(next_slot);
+                                next_slot += 1;
+                                locals.push(fty.clone());
+                                pre_stmts.push(skotch_mir::Stmt::Assign {
+                                    dest: slot,
+                                    value: skotch_mir::Rvalue::Const(mc.clone()),
+                                });
+                                companion_name_to_slot.insert(id.to_string(), slot);
+                            }
+                        }
+                    }
+                    let param_name_to_slot: rustc_hash::FxHashMap<String, skotch_mir::LocalId> =
+                        param_names
+                            .iter()
+                            .enumerate()
+                            .map(|(i, n)| (n.clone(), skotch_mir::LocalId((i + 1) as u32)))
+                            .collect();
+                    let lookup = |name: &str| -> Option<skotch_mir::LocalId> {
+                        if let Some(s) = param_name_to_slot.get(name).copied() {
+                            return Some(s);
+                        }
+                        companion_name_to_slot.get(name).copied()
+                    };
+                    let maybe = lower_rich_expr_to_slot(
+                        arg_e,
+                        &lookup,
+                        fn_lookup,
+                        &mut next_slot,
+                        &mut pre_stmts,
+                        &mut locals,
+                        shared_strings,
+                    );
+                    if let Some(s) = maybe {
+                        // Reject strings if we don't actually own the
+                        // module strings pool — the IDs would index a
+                        // stale table at link time.
+                        if !has_shared_module_strings && shared_strings.len() != strings_snap {
+                            pre_stmts.truncate(pre_snap);
+                            locals.truncate(locals_snap);
+                            shared_strings.truncate(strings_snap);
+                            next_slot = next_slot_snap;
+                            None
+                        } else {
+                            Some(s)
+                        }
+                    } else {
+                        // Rich path bailed too — revert any scratch we
+                        // allocated for companion-const
+                        // pre-materialization above.
+                        pre_stmts.truncate(pre_snap);
+                        locals.truncate(locals_snap);
+                        shared_strings.truncate(strings_snap);
+                        next_slot = next_slot_snap;
+                        None
                     }
                 };
                 let Some(slot) = resolved else {
