@@ -11132,7 +11132,15 @@ fn lower_loop_body(
                 }
             }
         }
-        // PutField stmt in loop body: `obj.field = value`.
+        // PutField stmt in loop body: `obj.field = value` or
+        // `this.field = value`. The `this`-receiver shape resolves
+        // the LHS field name against the active CLASS_METHOD_CTX
+        // (own + inherited) so a `this.m = input` inside a class
+        // method body lowers to `putfield this.m` even when `m`
+        // is also shadowed by a local of the same name. Without
+        // this arm, the lower_loop_body assignment handler at the
+        // bottom of this loop bails on KtExpr::This LHS and the
+        // entire then-arm of an enclosing if drops out of MIR.
         if let KtExpr::Binary(b) = be {
             if b.operation().map(|o| o.text()).as_deref() == Some("=") {
                 if let Some(KtExpr::DotQualified(dq)) = b.lhs().map(unwrap_parens) {
@@ -11140,7 +11148,51 @@ fn lower_loop_body(
                         .iter()
                         .filter_map(KtExpr::cast)
                         .collect();
+                    // `this.field = value` shape — receiver is KtExpr::This,
+                    // RHS field is a Reference. Look the field up in the
+                    // active class-method context and emit PutField off
+                    // slot 0 (= `this`).
                     if exprs.len() == 2 {
+                        if let (KtExpr::This(_), KtExpr::Reference(prop_ref)) =
+                            (&exprs[0], &exprs[1])
+                        {
+                            if let Some(prop_n) = prop_ref.name() {
+                                if let Some((class_name, field_name, _field_ty)) =
+                                    class_field_lookup(prop_n)
+                                {
+                                    let rhs_expr = b.rhs().map(unwrap_parens)?;
+                                    let snap = name_to_local.clone();
+                                    let lookup = |n: &str| -> Option<LocalId> {
+                                        snap.iter()
+                                            .rev()
+                                            .find(|(name, _)| name == n)
+                                            .map(|(_, l)| *l)
+                                    };
+                                    let value_slot = lower_rich_expr_to_slot(
+                                        rhs_expr,
+                                        &lookup,
+                                        fn_lookup_ref,
+                                        next_slot,
+                                        &mut body_mstmts,
+                                        local_tys,
+                                        strings,
+                                    )?;
+                                    let unused = LocalId(*next_slot);
+                                    *next_slot += 1;
+                                    local_tys.push(Ty::Unit);
+                                    body_mstmts.push(MStmt::Assign {
+                                        dest: unused,
+                                        value: skotch_mir::Rvalue::PutField {
+                                            receiver: LocalId(0),
+                                            class_name,
+                                            field_name,
+                                            value: value_slot,
+                                        },
+                                    });
+                                    continue;
+                                }
+                            }
+                        }
                         if let (KtExpr::Reference(rcv_ref), KtExpr::Reference(prop_ref)) =
                             (&exprs[0], &exprs[1])
                         {
