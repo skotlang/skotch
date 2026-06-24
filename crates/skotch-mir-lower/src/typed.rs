@@ -320,6 +320,7 @@ impl Drop for InheritedClassFieldsScope {
 fn lookup_class_fields(class_name: &str) -> Option<Vec<(String, Ty)>> {
     CLASS_FIELDS.with(|c| c.borrow().get(class_name).cloned())
 }
+
 struct ClassFieldsScope {
     prev: rustc_hash::FxHashMap<String, Vec<(String, Ty)>>,
 }
@@ -27964,8 +27965,62 @@ fn lower_rich_expr_to_slot(
                                 // entries are registered in CLASS_METHODS
                                 // alongside user-declared methods so
                                 // this lookup hits for every property.
-                                let result_ty =
+                                let mut result_ty =
                                     class_method_return_ty(cname, &getter_name).unwrap_or(Ty::Any);
+                                // Inherited-field fallback: when the
+                                // direct lookup misses (the property
+                                // lives on a parent class, e.g.
+                                // `Container.children` accessed via a
+                                // `Body`-typed local), walk
+                                // INHERITED_CLASS_FIELDS for the
+                                // defining parent. Surface the parent's
+                                // registered getter return Ty when
+                                // available, otherwise use the
+                                // inherited field's Ty directly — this
+                                // is the JDK collection class for
+                                // `MutableList<X>` etc., which keeps
+                                // downstream chained `.add(...)` calls
+                                // routable through the collection-method
+                                // dispatch arms. Also propagate
+                                // collection-element / map-value
+                                // metadata onto the result slot so
+                                // chains like `obj.items.get(i).field`
+                                // pick the right element class.
+                                let mut elem_ty_for_slot: Option<Ty> = None;
+                                let mut val_ty_for_slot: Option<Ty> = None;
+                                if matches!(result_ty, Ty::Any) {
+                                    let inherited = lookup_inherited_class_fields(cname);
+                                    if let Some((parent, fname, field_ty)) =
+                                        inherited.iter().find(|(_, n, _)| n == prop_name)
+                                    {
+                                        if let Some(t) =
+                                            class_method_return_ty(parent, &getter_name)
+                                        {
+                                            result_ty = t;
+                                        }
+                                        if matches!(result_ty, Ty::Any)
+                                            && !matches!(field_ty, Ty::Any)
+                                        {
+                                            result_ty = field_ty.clone();
+                                        }
+                                        if let Some(e) =
+                                            lookup_class_field_element_ty(parent, fname)
+                                        {
+                                            if matches!(result_ty, Ty::Any) {
+                                                result_ty = Ty::Class("java/util/List".to_string());
+                                            }
+                                            elem_ty_for_slot = Some(e);
+                                        }
+                                        if let Some(v) =
+                                            lookup_class_field_map_value_ty(parent, fname)
+                                        {
+                                            if matches!(result_ty, Ty::Any) {
+                                                result_ty = Ty::Class("java/util/Map".to_string());
+                                            }
+                                            val_ty_for_slot = Some(v);
+                                        }
+                                    }
+                                }
                                 let result_slot = LocalId(*next_slot);
                                 *next_slot += 1;
                                 extra_locals.push(result_ty);
@@ -27979,6 +28034,12 @@ fn lower_rich_expr_to_slot(
                                         args: vec![recv_slot],
                                     },
                                 });
+                                if let Some(e) = elem_ty_for_slot {
+                                    record_list_element_ty(result_slot.0, e);
+                                }
+                                if let Some(v) = val_ty_for_slot {
+                                    record_map_value_ty(result_slot.0, v);
+                                }
                                 return Some(result_slot);
                             }
                         }
