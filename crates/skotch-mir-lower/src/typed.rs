@@ -13154,7 +13154,27 @@ fn lower_loop_body_blocks(
                     return None;
                 };
                 let loop_var = for_e.loop_parameter()?;
-                let loop_var_name = loop_var.name()?;
+                // For-in destructuring: `for ((k, v) in map)`. The loop
+                // parameter wraps a DESTRUCTURING_DECLARATION with one
+                // entry per name. When that's present, we don't have a
+                // single `loop_var_name` — instead the body needs to see
+                // each entry-name bound to a projection of the per-
+                // iteration element (e.g. `entry.getKey()` / `getValue()`
+                // for a Map.entrySet() walk). Returns None to defer when
+                // the receiver isn't a Map (we only support Map<K,V>
+                // destructuring today); Pair / Triple / data class
+                // destructuring is future work.
+                let destructuring_entries: Option<Vec<String>> =
+                    loop_var.destructuring().map(|d| {
+                        d.entries()
+                            .filter_map(|e| e.name().map(|s| s.to_string()))
+                            .collect()
+                    });
+                let loop_var_name = match (&destructuring_entries, loop_var.name()) {
+                    (None, Some(n)) => n,
+                    (Some(_), _) => "$desugar$entry",
+                    _ => return None,
+                };
                 let range_expr = for_e
                     .loop_range()
                     .and_then(|r| r.expression())
@@ -13263,7 +13283,72 @@ fn lower_loop_body_blocks(
                             "java/util/List" | "java/util/Collection" | "java/lang/Iterable"
                         )
                     );
-                    if is_list {
+                    let is_map = matches!(
+                        &range_ty,
+                        Ty::Class(c) if c == "java/util/Map"
+                    );
+                    if is_map && destructuring_entries.is_some() {
+                        // `for ((k, v) in attrs)` over a Map:
+                        // kotlinc desugars to
+                        //   iter = attrs.entrySet().iterator()
+                        //   while (iter.hasNext()) {
+                        //     entry = (Map.Entry) iter.next()
+                        //     k = entry.getKey() as K
+                        //     v = entry.getValue() as V
+                        //     body
+                        //   }
+                        // We route through the user_iter path. The
+                        // body-prepend specialized for Map.Entry below
+                        // (see the user_iter block) emits the per-iter
+                        // entry-decode and binds the entries' names.
+                        let es_slot = LocalId(*next_slot);
+                        *next_slot += 1;
+                        local_tys.push(Ty::Class("java/util/Set".to_string()));
+                        cur_stmts.push(MStmt::Assign {
+                            dest: es_slot,
+                            value: skotch_mir::Rvalue::Call {
+                                kind: skotch_mir::CallKind::Virtual {
+                                    class_name: "java/util/Map".to_string(),
+                                    method_name: "entrySet".to_string(),
+                                },
+                                args: vec![range_slot],
+                            },
+                        });
+                        let iter_slot = LocalId(*next_slot);
+                        *next_slot += 1;
+                        local_tys.push(Ty::Class("java/util/Iterator".to_string()));
+                        cur_stmts.push(MStmt::Assign {
+                            dest: iter_slot,
+                            value: skotch_mir::Rvalue::Call {
+                                kind: skotch_mir::CallKind::Virtual {
+                                    class_name: "java/util/Set".to_string(),
+                                    method_name: "iterator".to_string(),
+                                },
+                                args: vec![es_slot],
+                            },
+                        });
+                        user_iter = Some((
+                            iter_slot,
+                            "java/util/Iterator".to_string(),
+                            Ty::Class("java/util/Map$Entry".to_string()),
+                        ));
+                        list_recv = Some(range_slot);
+                        let lo = LocalId(*next_slot);
+                        *next_slot += 1;
+                        local_tys.push(Ty::Int);
+                        cur_stmts.push(MStmt::Assign {
+                            dest: lo,
+                            value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(0)),
+                        });
+                        let hi = LocalId(*next_slot);
+                        *next_slot += 1;
+                        local_tys.push(Ty::Int);
+                        cur_stmts.push(MStmt::Assign {
+                            dest: hi,
+                            value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(0)),
+                        });
+                        (lo, hi, skotch_mir::BinOp::CmpLt, 1)
+                    } else if is_list {
                         list_recv = Some(range_slot);
                         let lo = LocalId(*next_slot);
                         *next_slot += 1;
@@ -13461,10 +13546,32 @@ fn lower_loop_body_blocks(
                 } else {
                     None
                 };
-                if let Some(es) = elem_slot_opt {
-                    name_to_local.push((loop_var_name.to_string(), es));
-                } else {
-                    name_to_local.push((loop_var_name.to_string(), i_slot));
+                // Allocate slots for `(k, v)` destructuring entries
+                // BEFORE the body so name_to_local resolves them. The
+                // body-prepend later assigns these slots from the
+                // per-iteration Map.Entry. We allocate Ty::Any for now;
+                // K/V are inferred lazily from value Ty annotations or
+                // remain Object across the loop body.
+                let destructuring_slots: Vec<LocalId> =
+                    if let Some(entries) = &destructuring_entries {
+                        let mut slots = Vec::with_capacity(entries.len());
+                        for name in entries {
+                            let s = LocalId(*next_slot);
+                            *next_slot += 1;
+                            local_tys.push(Ty::Any);
+                            name_to_local.push((name.clone(), s));
+                            slots.push(s);
+                        }
+                        slots
+                    } else {
+                        Vec::new()
+                    };
+                if destructuring_entries.is_none() {
+                    if let Some(es) = elem_slot_opt {
+                        name_to_local.push((loop_var_name.to_string(), es));
+                    } else {
+                        name_to_local.push((loop_var_name.to_string(), i_slot));
+                    }
                 }
                 let inner_cond_id = block_offset + blocks.len() as u32 + 1;
                 blocks.push(BasicBlock {
@@ -13533,18 +13640,71 @@ fn lower_loop_body_blocks(
                     // emits `()I` and `next(): String` emits
                     // `()Ljava/lang/String;`. No CheckCast — the backend
                     // already knows the return type.
+                    //
+                    // For Map.entrySet().iterator() destructuring
+                    // (`for ((k, v) in attrs)`), we additionally emit a
+                    // checkcast-to-Map.Entry on the next() result, then
+                    // pull getKey()/getValue() into the destructuring
+                    // entry slots so the body can refer to k/v.
                     if let Some(elem) = elem_slot_opt {
                         if let Some(first_body) = inner_body_blocks.first_mut() {
-                            let mut prepend: Vec<MStmt> = vec![MStmt::Assign {
-                                dest: elem,
-                                value: skotch_mir::Rvalue::Call {
-                                    kind: skotch_mir::CallKind::Virtual {
-                                        class_name: iter_cls.clone(),
-                                        method_name: "next".to_string(),
+                            let is_map_entry_destructure = !destructuring_slots.is_empty()
+                                && matches!(iter_cls.as_str(), "java/util/Iterator");
+                            let mut prepend: Vec<MStmt> = Vec::new();
+                            if is_map_entry_destructure {
+                                // raw = iter.next()
+                                let raw = LocalId(*next_slot);
+                                *next_slot += 1;
+                                local_tys.push(Ty::Any);
+                                prepend.push(MStmt::Assign {
+                                    dest: raw,
+                                    value: skotch_mir::Rvalue::Call {
+                                        kind: skotch_mir::CallKind::Virtual {
+                                            class_name: iter_cls.clone(),
+                                            method_name: "next".to_string(),
+                                        },
+                                        args: vec![*iter_slot],
                                     },
-                                    args: vec![*iter_slot],
-                                },
-                            }];
+                                });
+                                // elem = (Map.Entry) raw
+                                prepend.push(MStmt::Assign {
+                                    dest: elem,
+                                    value: skotch_mir::Rvalue::CheckCast {
+                                        obj: raw,
+                                        target_class: "java/util/Map$Entry".to_string(),
+                                    },
+                                });
+                                // For each (entry_idx → slot, accessor): emit
+                                // slot = entry.getKey() / getValue().
+                                // We support 1-arg or 2-arg destructuring; more
+                                // entries on a Map.Entry are nonsensical and
+                                // we silently fall back to leaving them at Any.
+                                let accessors = ["getKey", "getValue"];
+                                for (i, slot) in destructuring_slots.iter().enumerate() {
+                                    let accessor = accessors.get(i).copied().unwrap_or("getKey");
+                                    prepend.push(MStmt::Assign {
+                                        dest: *slot,
+                                        value: skotch_mir::Rvalue::Call {
+                                            kind: skotch_mir::CallKind::Virtual {
+                                                class_name: "java/util/Map$Entry".to_string(),
+                                                method_name: accessor.to_string(),
+                                            },
+                                            args: vec![elem],
+                                        },
+                                    });
+                                }
+                            } else {
+                                prepend.push(MStmt::Assign {
+                                    dest: elem,
+                                    value: skotch_mir::Rvalue::Call {
+                                        kind: skotch_mir::CallKind::Virtual {
+                                            class_name: iter_cls.clone(),
+                                            method_name: "next".to_string(),
+                                        },
+                                        args: vec![*iter_slot],
+                                    },
+                                });
+                            }
                             prepend.append(&mut first_body.stmts);
                             first_body.stmts = prepend;
                         }

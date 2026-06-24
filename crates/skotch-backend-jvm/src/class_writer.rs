@@ -17560,6 +17560,7 @@ fn walk_block(
                                 | "kotlinx/coroutines/Job"
                                 | "java/util/List"
                                 | "java/util/Map"
+                                | "java/util/Map$Entry"
                                 | "java/util/Set"
                                 | "java/util/Iterator"
                                 | "java/util/Collection"

@@ -851,6 +851,12 @@ impl<'a> KtValueParameter<'a> {
         }
         None
     }
+
+    /// For-loop destructuring parameter: `for ((a, b) in xs)`. Wraps
+    /// a DESTRUCTURING_DECLARATION inside the VALUE_PARAMETER node.
+    pub fn destructuring(self) -> Option<KtDestructuringDeclaration<'a>> {
+        first_typed_child(self.syntax())
+    }
 }
 
 impl<'a> KtBlock<'a> {
@@ -1865,6 +1871,28 @@ impl<'a> KtFor<'a> {
     }
     pub fn destructuring(self) -> Option<KtDestructuringDeclaration<'a>> {
         first_typed_child(self.syntax())
+    }
+}
+
+impl<'a> KtDestructuringDeclaration<'a> {
+    /// Iterate the `(a, b, c)` entries left-to-right. Each entry is a
+    /// `DESTRUCTURING_DECLARATION_ENTRY` carrying a single IDENTIFIER.
+    pub fn entries(self) -> impl Iterator<Item = KtDestructuringDeclarationEntry<'a>> + 'a {
+        typed_children(self.syntax())
+    }
+}
+
+impl<'a> KtDestructuringDeclarationEntry<'a> {
+    /// Name of this destructuring slot (`a` in `val (a, b) = ...`).
+    pub fn name(self) -> Option<&'a str> {
+        children(self.syntax()).iter().find_map(|c| {
+            if c.kind == SyntaxKind::IDENTIFIER {
+                if let SilData::Token { text } = &c.data {
+                    return Some(text.as_str());
+                }
+            }
+            None
+        })
     }
 }
 
