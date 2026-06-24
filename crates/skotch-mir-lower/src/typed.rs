@@ -1891,17 +1891,45 @@ pub fn lower_file(
             for f in overloads {
                 for (i, p) in f.param_tys.iter().enumerate() {
                     if let Ty::Function { params, .. } = p {
-                        record_fn_lambda_param_tys(fname, i, params.clone());
+                        // The resolver's Ty::Function strips the
+                        // receiver from `params`. The mir-lower's
+                        // in-file walker (`fn_param_lambda_tys_from_decl`)
+                        // PREPENDS the receiver. Re-introduce the
+                        // receiver here so cross-file `html { body { ... } }`
+                        // shape sees the same hint as in-file calls:
+                        // `Some([Class("HTML")])`, not the empty
+                        // `Some([])` we'd otherwise produce — keeping
+                        // the lambda-param-Ty + lambda-receiver-class
+                        // wiring in sync across the resolve boundary.
+                        let recv_class = f.param_receiver_classes.get(i).and_then(|o| o.clone());
+                        if let Some(rc) = recv_class.as_ref() {
+                            let mut tys = Vec::with_capacity(params.len() + 1);
+                            tys.push(Ty::Class(rc.clone()));
+                            tys.extend(params.iter().cloned());
+                            record_fn_lambda_param_tys(fname, i, tys);
+                        } else {
+                            record_fn_lambda_param_tys(fname, i, params.clone());
+                        }
+                    }
+                }
+                // Cross-file `T.() -> R` callee dispatch: surface the
+                // per-param receiver-class hint so the lambda body's
+                // bare member calls (`body { ... }` inside the html
+                // lambda) install an ImplicitReceiverScope. Mirrors the
+                // in-file `fn_param_lambda_receiver_class` walk above.
+                // Empty Vec when no params carry receiver-typed function
+                // shape (the resolver elides it then).
+                for (i, recv_class) in f.param_receiver_classes.iter().enumerate() {
+                    if let Some(rc) = recv_class {
+                        record_fn_lambda_receiver_class(fname, i, rc.clone());
                     }
                 }
             }
         }
     }
-    // (Cross-file top-level fns: `ExternalFunDecl` does not currently
-    // carry per-param receiver_class metadata — only `ExternalParam`
-    // on methods/ctors does. Cross-file `T.() -> R` callee dispatch
-    // would need a side channel through resolve; out of scope for this
-    // focused fix. The in-file case above is what graduates the
+    // (Cross-file top-level fns now surface per-param receiver_class
+    // metadata via `ExternalFunDecl.param_receiver_classes`. The in-file
+    // case above is what graduates the
     // common shape.)
 
     // Pre-pass: collect top-level fn name → (FuncId, ret Ty). Built

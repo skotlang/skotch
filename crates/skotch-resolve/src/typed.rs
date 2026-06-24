@@ -1057,6 +1057,46 @@ pub fn gather_declarations<'a>(
                         .value_parameter_list()
                         .map(|pl| pl.parameters().map(|p| p.is_vararg()).collect())
                         .unwrap_or_default();
+                    // Per-param lambda receiver class for `T.() -> R`
+                    // params (Kotlin DSL builder shape). Mirrors the
+                    // in-file `fn_param_lambda_receiver_class` walker
+                    // in mir-lower so cross-file call sites
+                    // (`html { body { ... } }` where `html`/`body` live
+                    // in another file) can install the implicit receiver
+                    // for the trailing lambda body. Skip emitting when
+                    // every entry is None to keep the on-wire payload
+                    // small.
+                    let param_receiver_classes: Vec<Option<String>> = f
+                        .value_parameter_list()
+                        .map(|pl| {
+                            pl.parameters()
+                                .map(|p| {
+                                    p.type_reference().and_then(|tr| {
+                                        tr.function_type().and_then(|ft| {
+                                            ft.receiver().and_then(|r| {
+                                                r.type_reference()
+                                                    .and_then(|rt| rt.user_type())
+                                                    .or_else(|| {
+                                                        skotch_ast::first_typed_child::<
+                                                            skotch_ast::KtUserType<'_>,
+                                                        >(
+                                                            r.syntax()
+                                                        )
+                                                    })
+                                                    .and_then(|u| u.name().map(String::from))
+                                            })
+                                        })
+                                    })
+                                })
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    let param_receiver_classes =
+                        if param_receiver_classes.iter().any(|p| p.is_some()) {
+                            param_receiver_classes
+                        } else {
+                            Vec::new()
+                        };
                     let receiver_ty = f
                         .receiver_type()
                         .map(|tr| type_ref_to_ty(tr, imports, aliases));
@@ -1072,6 +1112,7 @@ pub fn gather_declarations<'a>(
                         receiver_ty,
                         has_default,
                         is_vararg,
+                        param_receiver_classes,
                         annotations: f.annotation_names().into_iter().map(String::from).collect(),
                     };
                     table

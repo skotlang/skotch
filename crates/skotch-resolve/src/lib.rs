@@ -234,6 +234,17 @@ pub struct ExternalFunDecl {
     /// Per-param `vararg` bits.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub is_vararg: Vec<bool>,
+    /// Per-param lambda receiver class for `T.() -> R` (extension
+    /// function type) params. Same length as `param_tys` when present;
+    /// `None` for non-receiver-typed params. Lets cross-file DSL
+    /// builder call sites (`html { body { ... } }` where `html` and
+    /// `body` live in another file) install the implicit receiver so
+    /// the trailing lambda body's bare member calls dispatch via
+    /// `recv.method(...)`. In-file fns get this via
+    /// `fn_param_lambda_receiver_class` in mir-lower; this surfaces
+    /// the same info across the resolve boundary.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub param_receiver_classes: Vec<Option<String>>,
     /// Annotation simple-names on this function (`"JvmStatic"`,
     /// `"Composable"`, `"Deprecated"`, etc).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
