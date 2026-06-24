@@ -72,6 +72,27 @@ pub fn is_static_method_on_class(class_jvm_path: &str, method_name: &str) -> boo
     .unwrap_or(false)
 }
 
+/// Look up the source-level parameter names of a constructor on
+/// `class_jvm_path` whose arity matches `arity` (excluding the
+/// implicit `this`). Reads `@kotlin.Metadata` from the loaded
+/// classfile and walks the protobuf-encoded constructor list. Used by
+/// the cross-file super-call named-arg reorder in mir-lower so
+/// `class Sub: Base { constructor(...) : super(algorithm = ..., ...) }`
+/// can map `super(name = expr, ...)` back to the positional order
+/// expected by `Base.<init>`. Returns `None` if the class isn't
+/// loaded, has no metadata, or has no constructor of that arity.
+pub fn lookup_external_ctor_param_names(class_jvm_path: &str, arity: usize) -> Option<Vec<String>> {
+    ensure_class_loaded(class_jvm_path);
+    let raw = with_registry(|reg| reg.get(class_jvm_path).cloned()).flatten()?;
+    let raw_md = raw.metadata.as_ref()?;
+    let md = skotch_classinfo::kotlin_metadata::parse_metadata(raw_md)?;
+    let ctor = md
+        .constructors
+        .iter()
+        .find(|c| c.value_params.len() == arity)?;
+    Some(ctor.value_params.iter().map(|p| p.name.clone()).collect())
+}
+
 /// Check if `class_name` is a JVM interface. Reads the ACC_INTERFACE
 /// flag from the classfile when the class is available in the
 /// registry; falls back to the static stdlib registry for known

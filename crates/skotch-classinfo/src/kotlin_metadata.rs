@@ -716,15 +716,29 @@ pub struct FunctionInfo {
     pub receiver_type: Option<TypeInfo>,
 }
 
-/// The functions of a Kotlin class / file facade, recovered from its
-/// `@Metadata`.
+/// A constructor recovered from `@Metadata` (`ProtoBuf.Constructor`).
+/// Only present in class metadata (`raw.kind == 1`), never on file
+/// facades. Carries just the value parameters in source-declaration
+/// order — flags / signature / visibility are dropped here, since the
+/// only consumer so far is the cross-file super-call named-arg
+/// reorder (it needs the param names to map `super(name = expr)` back
+/// to positional order).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ConstructorInfo {
+    pub value_params: Vec<ParamInfo>,
+}
+
+/// The declarations of a Kotlin class / file facade, recovered from
+/// its `@Metadata`. `constructors` is empty for file facades.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ClassMetadata {
     pub functions: Vec<FunctionInfo>,
+    pub constructors: Vec<ConstructorInfo>,
 }
 
-/// Parse a [`RawMetadata`] into its declared functions and their
-/// parameter shapes. Returns `None` on a malformed/empty payload.
+/// Parse a [`RawMetadata`] into its declared functions, constructors,
+/// and their parameter shapes. Returns `None` on a malformed/empty
+/// payload.
 pub fn parse_metadata(raw: &RawMetadata) -> Option<ClassMetadata> {
     let decoded = bit_encoding::decode_bytes(&raw.data1);
     if decoded.is_empty() {
@@ -738,18 +752,32 @@ pub fn parse_metadata(raw: &RawMetadata) -> Option<ClassMetadata> {
 
     // Package.function = 3 ; Class.function = 9.
     let function_field = if raw.kind == 1 { 9 } else { 3 };
+    // Kotlin's `Class.constructor` field number varies by metadata
+    // proto version: the legacy schema used field 7, but the modern
+    // (`mv ≥ 2.x`) format that kotlinc 2.x emits uses field 8.
+    // Accept both — only one will be present in any given payload.
+    let constructor_fields: &[u32] = if raw.kind == 1 { &[7, 8] } else { &[] };
+    let is_class = raw.kind == 1;
     let mut functions = Vec::new();
+    let mut constructors = Vec::new();
     let mut r = Reader::new(body);
     while let Some((field, wire)) = r.read_tag() {
         if field == function_field && wire == WIRE_LEN {
             if let Some(fn_bytes) = r.read_len_bytes() {
                 functions.push(parse_function(fn_bytes, &resolver));
             }
+        } else if is_class && constructor_fields.contains(&field) && wire == WIRE_LEN {
+            if let Some(ctor_bytes) = r.read_len_bytes() {
+                constructors.push(parse_constructor(ctor_bytes, &resolver));
+            }
         } else {
             r.skip_field(wire)?;
         }
     }
-    Some(ClassMetadata { functions })
+    Some(ClassMetadata {
+        functions,
+        constructors,
+    })
 }
 
 fn parse_string_table(bytes: &[u8], strings: Vec<String>) -> NameResolver {
@@ -940,6 +968,36 @@ fn parse_function(bytes: &[u8], nr: &NameResolver) -> FunctionInfo {
             .collect(),
         return_type: return_ref.map(|rf| resolve_type(rf, nr, t, 0)),
         receiver_type: receiver_ref.map(|rf| resolve_type(rf, nr, t, 0)),
+    }
+}
+
+/// Parse a `ProtoBuf.Constructor` into its value-parameter list. Same
+/// shape as `parse_function` but with only the fields the named-arg
+/// reorder consumer cares about (flags / version-requirement /
+/// signature attrs are ignored).
+fn parse_constructor(bytes: &[u8], nr: &NameResolver) -> ConstructorInfo {
+    let mut param_raws: Vec<&[u8]> = Vec::new();
+    let mut r = Reader::new(bytes);
+    while let Some((field, wire)) = r.read_tag() {
+        match (field, wire) {
+            // Constructor.value_parameter = 2.
+            (2, WIRE_LEN) => {
+                if let Some(vp) = r.read_len_bytes() {
+                    param_raws.push(vp);
+                }
+            }
+            (_, w) => {
+                if r.skip_field(w).is_none() {
+                    break;
+                }
+            }
+        }
+    }
+    ConstructorInfo {
+        value_params: param_raws
+            .into_iter()
+            .map(|vp| parse_value_parameter(vp, nr, None))
+            .collect(),
     }
 }
 

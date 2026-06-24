@@ -4268,7 +4268,8 @@ pub fn lower_file(
                 }
             }
 
-            let secondary_constructors = collect_secondary_ctors(c, &name, super_class.as_deref());
+            let secondary_constructors =
+                collect_secondary_ctors(c, &name, super_class.as_deref(), package_symbols);
             let mir_class = skotch_mir::MirClass {
                 name: name.clone(),
                 super_class,
@@ -4315,8 +4316,12 @@ pub fn lower_file(
                             );
                             let nested_ctor = constructor_from_primary(nested, &nested_qname);
                             let (n_super, n_ifaces) = collect_class_super_iface_aware(nested);
-                            let nested_secondary_ctors =
-                                collect_secondary_ctors(nested, &nested_qname, n_super.as_deref());
+                            let nested_secondary_ctors = collect_secondary_ctors(
+                                nested,
+                                &nested_qname,
+                                n_super.as_deref(),
+                                package_symbols,
+                            );
                             let nested_mir = skotch_mir::MirClass {
                                 name: nested_qname.clone(),
                                 super_class: n_super,
@@ -35586,6 +35591,7 @@ fn collect_secondary_ctors(
     c: skotch_ast::KtClass<'_>,
     class_fq: &str,
     super_class_fq: Option<&str>,
+    package_symbols: Option<&PackageSymbolTable>,
 ) -> Vec<MirFunction> {
     let mut out = Vec::new();
     let Some(body) = c.body() else { return out };
@@ -35697,11 +35703,18 @@ fn collect_secondary_ctors(
             super_default.to_string()
         };
         // Param-name positions on the delegation target. Used to
-        // reorder named-arg call sites. Only available when the
-        // target is the owning class's primary ctor (`: this(...)`).
-        // For `: super(...)` we'd need cross-file lookup, which is
-        // out of scope for this incremental fix.
-        let target_param_names: Vec<String> = if is_this_delegation {
+        // reorder named-arg call sites. For `: this(...)` we read the
+        // owning class's primary-ctor params directly from the AST.
+        // For `: super(...)` we (a) fall through to the cross-file
+        // registry lookup below — which reads `@kotlin.Metadata` off
+        // the loaded super-class classfile — or (b) leave it empty if
+        // the lookup misses, so the existing bail behavior takes
+        // over. Both paths are populated lazily: the super-case
+        // lookup needs the arg arity to disambiguate overloads, and
+        // we don't know that until after we've walked the arg list,
+        // so the empty-fallback assignment here is filled in by the
+        // post-lowering branch below.
+        let target_param_names_this: Vec<String> = if is_this_delegation {
             c.primary_constructor()
                 .and_then(|pc| pc.value_parameter_list())
                 .map(|pl| {
@@ -35829,9 +35842,80 @@ fn collect_secondary_ctors(
         // named and we have target positions. Mixed named/positional
         // is accepted in source order (Kotlin's own rule: positional
         // must precede named, and we don't validate that here).
+        //
+        // For `: super(...)` delegation, we look up the super class's
+        // ctor param names from the loaded classfile's `@Metadata`
+        // (`registry::lookup_external_ctor_param_names`). The arity
+        // disambiguates overloads — kotlinc-emitted classes carry one
+        // `Constructor` proto per declared ctor, and we pick the one
+        // whose value-parameter count matches the args we lowered.
+        // The lookup falls back to empty (then bails) when the super
+        // class isn't loaded, has no metadata (plain Java class), or
+        // has no matching-arity constructor.
         if delegation_ok && !lowered.is_empty() {
             let has_named = lowered.iter().any(|(n, _)| n.is_some());
             if has_named {
+                let target_param_names: Vec<String> = if is_this_delegation {
+                    target_param_names_this.clone()
+                } else {
+                    // First try the source-file resolver — same-build
+                    // super classes carry their primary-ctor param
+                    // names in `ExternalClassDecl.ctor_params`. Falls
+                    // back to the JAR-registry @Metadata path for
+                    // pre-compiled super classes (Kotlin stdlib /
+                    // dependency jars), then to empty (which bails).
+                    //
+                    // FQ-resolution: when the super class header used
+                    // a bare simple name (`class Sub : Base` with
+                    // `import com.foo.Base`), `target_class` may
+                    // arrive as that simple name rather than the
+                    // JVM-internal slashed FQ. Try `lookup_file_import`
+                    // so the JAR registry lookup succeeds keyed by
+                    // its real FQ name.
+                    let fq_candidates: Vec<String> = {
+                        let mut v = vec![target_class.clone()];
+                        if !target_class.contains('/') {
+                            if let Some(fq) = lookup_file_import(&target_class) {
+                                v.push(fq);
+                            }
+                            // Same-package fallback: owning class is
+                            // at `pkg/Sub`, so super `Base` is likely
+                            // `pkg/Base` when no explicit import.
+                            if let Some(slash) = class_fq.rfind('/') {
+                                v.push(format!("{}/{}", &class_fq[..slash], target_class));
+                            }
+                        }
+                        v
+                    };
+                    let from_resolver = package_symbols.and_then(|ps| {
+                        for fq in &fq_candidates {
+                            if let Some(cd) = ps
+                                .classes_by_fq
+                                .get(fq)
+                                .or_else(|| fq.rsplit('/').next().and_then(|s| ps.classes.get(s)))
+                                .filter(|cd| cd.ctor_params.len() == lowered.len())
+                            {
+                                return Some(
+                                    cd.ctor_params
+                                        .iter()
+                                        .map(|p| p.name.clone())
+                                        .collect::<Vec<_>>(),
+                                );
+                            }
+                        }
+                        None
+                    });
+                    from_resolver.unwrap_or_else(|| {
+                        for fq in &fq_candidates {
+                            if let Some(v) =
+                                crate::registry::lookup_external_ctor_param_names(fq, lowered.len())
+                            {
+                                return v;
+                            }
+                        }
+                        Vec::new()
+                    })
+                };
                 if target_param_names.is_empty() {
                     delegation_ok = false;
                 } else {
