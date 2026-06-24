@@ -413,6 +413,41 @@ impl Drop for TypeAliasScope {
 }
 
 thread_local! {
+    /// File-scoped imports map: `SimpleName -> FQ JVM name` derived from
+    /// `import` directives at the top of each `.kt` file. Populated by
+    /// `lower_file` BEFORE class processing so `collect_class_super_iface`
+    /// can FQ-qualify supertype references. Without this, `class Sub: Base`
+    /// where `Base` is `import com.foo.Base` emits `extends Base`
+    /// (default package) instead of `extends com/foo/Base`, producing
+    /// a class whose JVM-verifier load fails with
+    /// "cannot access 'Base' which is a supertype of 'Sub'".
+    static FILE_IMPORTS_MAP: std::cell::RefCell<rustc_hash::FxHashMap<String, String>> =
+        std::cell::RefCell::new(rustc_hash::FxHashMap::default());
+}
+
+fn lookup_file_import(simple_name: &str) -> Option<String> {
+    FILE_IMPORTS_MAP.with(|t| t.borrow().get(simple_name).cloned())
+}
+
+struct FileImportsScope {
+    prev: rustc_hash::FxHashMap<String, String>,
+}
+
+impl FileImportsScope {
+    fn new(table: rustc_hash::FxHashMap<String, String>) -> Self {
+        let prev = FILE_IMPORTS_MAP.with(|t| std::mem::take(&mut *t.borrow_mut()));
+        FILE_IMPORTS_MAP.with(|t| *t.borrow_mut() = table);
+        FileImportsScope { prev }
+    }
+}
+
+impl Drop for FileImportsScope {
+    fn drop(&mut self) {
+        FILE_IMPORTS_MAP.with(|t| *t.borrow_mut() = std::mem::take(&mut self.prev));
+    }
+}
+
+thread_local! {
     /// File-scoped registry for synthesized lambda classes. A
     /// `KtExpr::Lambda` arm in lower_rich produces a MirClass (one
     /// per lambda expression) and pushes it here; `lower_file` drains
@@ -2163,6 +2198,114 @@ pub fn lower_file(
     // Also drain any straggling lambda classes from a prior file
     // that didn't get drained — defensive.
     let _ = take_lambda_classes();
+
+    // Build a per-file imports map (`SimpleName -> FQ JVM internal`)
+    // from the source `import` directives. Used by
+    // `collect_class_super_iface` so `class Sub: Base` whose `Base`
+    // is `import com.foo.Base` emits `extends com/foo/Base` instead
+    // of dropping the package and producing an unloadable class.
+    //
+    // The SIL shape nests the dotted path inside
+    // DOT_QUALIFIED_EXPRESSION → REFERENCE_EXPRESSION → IDENTIFIER
+    // composites, so a flat direct-children scan returns no parts.
+    // Recurse through those wrappers to collect every leaf IDENTIFIER
+    // token before the IMPORT_ALIAS sentinel.
+    let _file_imports_scope = {
+        fn collect_import_parts(node: &skotch_sil::SilNode, out: &mut Vec<String>) {
+            for c in skotch_ast::children(node) {
+                use skotch_syntax::SyntaxKind::*;
+                match c.kind {
+                    IDENTIFIER => {
+                        if let skotch_sil::SilData::Token { text } = &c.data {
+                            out.push(text.to_string());
+                        }
+                    }
+                    DOT_QUALIFIED_EXPRESSION | REFERENCE_EXPRESSION => {
+                        collect_import_parts(c, out);
+                    }
+                    IMPORT_ALIAS => break,
+                    _ => {}
+                }
+            }
+        }
+        let mut map: rustc_hash::FxHashMap<String, String> = rustc_hash::FxHashMap::default();
+        if let Some(import_list) = file.import_list() {
+            for imp in
+                skotch_ast::typed_children::<skotch_ast::KtImportDirective>(import_list.syntax())
+            {
+                if imp.is_wildcard() {
+                    continue;
+                }
+                let mut parts: Vec<String> = Vec::new();
+                collect_import_parts(imp.syntax(), &mut parts);
+                if parts.is_empty() {
+                    continue;
+                }
+                let fq = parts.join("/");
+                let simple_owned: String = imp
+                    .alias()
+                    .and_then(|a| a.name())
+                    .map(String::from)
+                    .unwrap_or_else(|| parts.last().cloned().unwrap_or_default());
+                if !simple_owned.is_empty() {
+                    map.insert(simple_owned, fq);
+                }
+            }
+        }
+        // Same-package classes are implicitly visible without an import.
+        // `package_symbols.simple_name_to_fq` carries the simple-name →
+        // FQ-name index across every file in this compilation unit, so
+        // `class SHA256: Bit32Digest` in `org.kotlincrypto.hash.sha2`
+        // resolves `Bit32Digest` to `org/kotlincrypto/hash/sha2/Bit32Digest`
+        // even though no `import` directive lists it.
+        //
+        // Local imports (above) win on key collision so an explicit
+        // `import other.pkg.Bit32Digest` overrides a same-package class
+        // of the same simple name.
+        if let Some(tbl) = package_symbols {
+            for (simple_name, fq) in tbl.simple_name_to_fq.iter() {
+                map.entry(simple_name.clone()).or_insert_with(|| fq.clone());
+            }
+        }
+        // Also surface in-file class declarations. The same-file case
+        // is not in `package_symbols` for a single-file compile, and the
+        // multi-file case may have its package table built without this
+        // file's decls (the typed pipeline populates `package_symbols`
+        // from the OTHER files in the same package). Without this, a
+        // file that declares two sibling classes `A` and `B` where
+        // `class B: A()` would emit `extends A` (default package).
+        let in_file_pkg_prefix = pkg_prefix.clone();
+        for decl in file.decls() {
+            match decl {
+                KtDecl::Class(c) => {
+                    if let Some(n) = c.name() {
+                        map.entry(n.to_string())
+                            .or_insert_with(|| format!("{in_file_pkg_prefix}{n}"));
+                    }
+                }
+                KtDecl::Object(o) => {
+                    if let Some(n) = o.name() {
+                        map.entry(n.to_string())
+                            .or_insert_with(|| format!("{in_file_pkg_prefix}{n}"));
+                    }
+                }
+                KtDecl::Interface(i) => {
+                    if let Some(n) = i.name() {
+                        map.entry(n.to_string())
+                            .or_insert_with(|| format!("{in_file_pkg_prefix}{n}"));
+                    }
+                }
+                KtDecl::EnumClass(e) => {
+                    if let Some(n) = e.name() {
+                        map.entry(n.to_string())
+                            .or_insert_with(|| format!("{in_file_pkg_prefix}{n}"));
+                    }
+                }
+                _ => {}
+            }
+        }
+        FileImportsScope::new(map)
+    };
 
     // Populate per-file fn-lambda-param hints from the source decls
     // BEFORE bodies lower so call sites can look them up.
@@ -34732,9 +34875,25 @@ fn constructor_from_primary_impl(
         .and_then(|tr| tr.user_type())
         .and_then(|u| u.name())
         .map(|n| {
-            skotch_types::intrinsics::kotlin_to_jvm_class(n)
-                .map(|s| s.to_string())
-                .unwrap_or_else(|| n.to_string())
+            // 1. Kotlin builtin → JVM mapping (`String` → `java/lang/String`)
+            if let Some(s) = skotch_types::intrinsics::kotlin_to_jvm_class(n) {
+                return s.to_string();
+            }
+            // 2. Imported simple name → FQ via file's import directives.
+            //    Without this, `class Sub: Base(args)` where `Base` is
+            //    `import com.foo.Base` emits `invokespecial Base.<init>`
+            //    instead of `com/foo/Base.<init>`, producing a class whose
+            //    `<init>` calls a default-package phantom super.
+            if !n.contains('.') && !n.contains('/') {
+                if let Some(fq) = lookup_file_import(n) {
+                    return fq;
+                }
+            }
+            // 3. Source-dotted names → JVM-internal slashes.
+            if n.contains('.') {
+                return n.replace('.', "/");
+            }
+            n.to_string()
         })
         .unwrap_or_else(|| "java/lang/Object".to_string());
     // Forward `: Super(arg, …)` value-args (Reference-to-primary-ctor-
@@ -39208,9 +39367,24 @@ fn collect_class_super_iface(
     let mut super_class = None;
     let mut ifaces = Vec::new();
     let to_fq = |n: String| -> String {
-        skotch_types::intrinsics::kotlin_to_jvm_class(&n)
-            .map(|s| s.to_string())
-            .unwrap_or(n)
+        // 1. Kotlin builtin → JVM mapping (`String` → `java/lang/String`)
+        if let Some(mapped) = skotch_types::intrinsics::kotlin_to_jvm_class(&n) {
+            return mapped.to_string();
+        }
+        // 2. Imported simple name → FQ via file's import directives.
+        //    `import com.foo.Base` + `class Sub: Base` → `com/foo/Base`.
+        //    Skip when the source already looks dotted (`a.B`) — those
+        //    are user-qualified and convert directly to slashes.
+        if !n.contains('.') && !n.contains('/') {
+            if let Some(fq) = lookup_file_import(&n) {
+                return fq;
+            }
+        }
+        // 3. Source-dotted names → JVM-internal slashes.
+        if n.contains('.') {
+            return n.replace('.', "/");
+        }
+        n
     };
     for entry in l.entries() {
         let name = entry
