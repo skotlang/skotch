@@ -5008,6 +5008,53 @@ pub fn lower_file(
                     }
                 }
             }
+            // Reified type-parameter erasure in inline-fn bodies. The
+            // `firstOfType<reified T>` shape literally writes
+            // `item is T` and `item as T` in source; pass-2 lowering
+            // takes the AST type-reference and produces an
+            // `Rvalue::InstanceOf { type_descriptor: "T" }` /
+            // `Rvalue::CheckCast { target_class: "T" }`. The JVM
+            // resolver then throws `NoClassDefFoundError: T` at link
+            // time. kotlinc instead emits `instanceof java/lang/Object`
+            // in the standalone body (the body is a fallback used only
+            // when the call site can't inline) and substitutes the
+            // concrete type at every inline-substituted call site.
+            // For now mirror just the standalone-body shape: any
+            // descriptor matching a declared type-parameter name in
+            // this inline function gets rewritten to `java/lang/Object`
+            // so the bytecode is at least JVM-loadable. Full call-site
+            // reified specialization is the next layer of work.
+            if f.is_inline() {
+                use skotch_mir::{Rvalue, Stmt as MStmt};
+                let type_param_names: std::collections::HashSet<String> = f
+                    .type_parameter_list()
+                    .map(|tpl| {
+                        tpl.parameters()
+                            .filter_map(|tp| tp.name().map(String::from))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                if !type_param_names.is_empty() {
+                    for block in blocks.iter_mut() {
+                        for stmt in block.stmts.iter_mut() {
+                            let MStmt::Assign { value, .. } = stmt;
+                            match value {
+                                Rvalue::InstanceOf {
+                                    type_descriptor, ..
+                                } if type_param_names.contains(type_descriptor) => {
+                                    *type_descriptor = "java/lang/Object".to_string();
+                                }
+                                Rvalue::CheckCast { target_class, .. }
+                                    if type_param_names.contains(target_class) =>
+                                {
+                                    *target_class = "java/lang/Object".to_string();
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+            }
             // Tailrec TCO: rewrite each self-recursive tail call (a block
             // ending with `Assign(t, Call(Static(self_id), args)); ReturnValue(t)`)
             // into `<param_i := arg_i, ...>; Goto(block 0)`. kotlinc emits
