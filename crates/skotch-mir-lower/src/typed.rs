@@ -10053,6 +10053,112 @@ fn launch_initial_delay_ms(body: skotch_ast::KtBlock<'_>) -> Option<i64> {
     }
 }
 
+/// Detect a unary-`+` operator-overload stmt and return the list of
+/// operands that the enclosing class's `unaryPlus` should be called on,
+/// in source order. Used by `lower_loop_body` to lower the classic
+/// Kotlin DSL pattern (`+"hello"` inside an HTML-builder body) into
+/// `this.unaryPlus(...)` calls.
+///
+/// The parser surfaces `+expr` as either a `Prefix` expression (clear
+/// stmt boundaries via `;`) OR a `Binary` expression with `rhs=None`
+/// (lone `+expr` line). Two newline-separated `+expr` stmts without
+/// semicolons fold into `(+expr1) + expr2` — an outer Binary whose
+/// lhs is the unary-`+` and whose rhs is the next operand. Walks the
+/// left spine of `+` ops so a chain of `n` unary-`+` stmts emits
+/// `n` separate virtual calls.
+fn try_unary_plus_chain<'a>(e: skotch_ast::KtExpr<'a>) -> Option<Vec<skotch_ast::KtExpr<'a>>> {
+    use skotch_ast::KtExpr;
+    let e = unwrap_parens(e);
+    match e {
+        KtExpr::Prefix(p) => {
+            let op_text = skotch_ast::children(p.syntax())
+                .iter()
+                .find_map(|c| {
+                    if c.kind == skotch_syntax::SyntaxKind::OPERATION_REFERENCE {
+                        skotch_ast::KtOperationReference::cast(c).map(|o| o.text())
+                    } else {
+                        None
+                    }
+                })
+                .unwrap_or_default();
+            if op_text != "+" {
+                return None;
+            }
+            let operand = skotch_ast::children(p.syntax())
+                .iter()
+                .find_map(KtExpr::cast)
+                .map(unwrap_parens)?;
+            Some(vec![operand])
+        }
+        KtExpr::Binary(b) => {
+            let op_text = b.operation().map(|o| o.text()).unwrap_or_default();
+            // Two parse shapes both surface here as a Binary:
+            //   (a) explicit `+` operator linking two operands (folded
+            //       from `(+"a") + "b"`): op == "+", both lhs+rhs.
+            //   (b) phantom-binary from missing-semicolon stmt junction:
+            //       op is empty / whitespace-only (e.g. "\n        "),
+            //       both lhs+rhs are themselves unary-`+` shapes. The
+            //       parser saw two adjacent expression statements with
+            //       no separator and joined them into a Binary node.
+            // Both shapes mean "two consecutive unary-`+` stmts" — emit
+            // separate virtual calls in source order. The lhs must
+            // decompose into a unary-`+` chain; the rhs must either
+            // decompose too OR be a Prefix-`+` / unary-`+` Binary leaf.
+            // Reject ordinary numeric `+` so `a + b` (genuine string
+            // concat / addition) doesn't trip the dispatch.
+            let is_plus = op_text == "+";
+            let is_phantom = op_text.trim().is_empty();
+            if !is_plus && !is_phantom {
+                return None;
+            }
+            let lhs = b.lhs()?;
+            let Some(rhs) = b.rhs() else {
+                // Pure unary-`+` (no rhs): single-leaf chain.
+                return Some(vec![unwrap_parens(lhs)]);
+            };
+            // Outer LHS must always be a unary-`+` chain — that's how
+            // we distinguish operator-overload dispatch from ordinary
+            // numeric `+`. Without this, ordinary `1 + 2` would also
+            // hit this arm.
+            let mut left_chain = try_unary_plus_chain(lhs)?;
+            if is_phantom {
+                // Phantom-binary's rhs must ALSO be a unary-`+` (we're
+                // joining two unary-`+` stmts). If it isn't, this isn't
+                // a unary-`+` chain — let the caller try a different
+                // interpretation.
+                let right_chain = try_unary_plus_chain(rhs)?;
+                left_chain.extend(right_chain);
+            } else {
+                // Explicit `+`: the rhs is treated as an additional
+                // unary-`+` leaf — it can be any expression.
+                left_chain.push(unwrap_parens(rhs));
+            }
+            Some(left_chain)
+        }
+        _ => None,
+    }
+}
+
+/// Walk the current class + super chain for a `unaryPlus` method.
+/// Returns the DEFINING class so the emitted methodref points at the
+/// class that owns the method (JVM verifier accepts a subclass
+/// receiver). Returns None when no class context is active or no
+/// `unaryPlus` is in reach.
+fn lookup_owning_class_for_unary_plus() -> Option<String> {
+    let mut name = current_class_name()?;
+    for _ in 0..32 {
+        if class_method_return_ty(&name, "unaryPlus").is_some() {
+            return Some(name);
+        }
+        let parent = CLASS_SUPER.with(|c| c.borrow().get(&name).cloned());
+        match parent {
+            Some(p) => name = p,
+            None => return None,
+        }
+    }
+    None
+}
+
 /// Lower the body of a for-in / while loop into a flat
 /// Vec<MStmt>. Supports linear stmts (val/var, var-reassign,
 /// println, method/Call/extension-fn, postfix++) but NOT
@@ -11250,6 +11356,78 @@ fn lower_loop_body(
                         }
                     }
                 }
+            }
+        }
+        // Unary-`+` stmt: `+"hello"` inside a class method whose class
+        // (or a parent) declares `operator fun T.unaryPlus()` — the
+        // classic Kotlin DSL pattern (parity 51-html-dsl-builder
+        // sub-gap "unaryplus_extension").
+        //
+        // The parser surfaces `+expr` as either a Prefix expression
+        // (with semicolons / clear stmt boundaries) OR a Binary
+        // expression with rhs=None (lone `+expr` line). When two
+        // newline-separated `+expr` stmts appear back-to-back without
+        // semicolons, the parser folds them into a single Binary tree:
+        //   `+"hello"\n +"world"`  →  `(+"hello") + "world"`
+        // i.e. lhs is a unary-`+` Binary with rhs=None and the outer
+        // Binary has both lhs and rhs. Walk the left spine of `+` ops
+        // and collect leaves so all consecutive unary-`+` stmts emit
+        // separate virtual calls in source order.
+        //
+        // The lower_rich Prefix-`+` arm treats `+` as identity (which
+        // is correct for built-in numeric prefix-+) and would silently
+        // drop the operator-overload dispatch. The var-reassign Binary
+        // arm immediately below would otherwise `continue` on `+`,
+        // silently swallowing the entire stmt.
+        if let Some(unary_plus_operands) = try_unary_plus_chain(be) {
+            if let Some(owning_class) = lookup_owning_class_for_unary_plus() {
+                let mut all_ok = true;
+                let pre_len = body_mstmts.len();
+                let save_next_slot = *next_slot;
+                let save_locals_len = local_tys.len();
+                for operand in unary_plus_operands {
+                    let snap = name_to_local.clone();
+                    let lookup = |n: &str| -> Option<LocalId> {
+                        snap.iter()
+                            .rev()
+                            .find(|(name, _)| name == n)
+                            .map(|(_, l)| *l)
+                    };
+                    let Some(operand_slot) = lower_rich_expr_to_slot(
+                        operand,
+                        &lookup,
+                        fn_lookup_ref,
+                        next_slot,
+                        &mut body_mstmts,
+                        local_tys,
+                        strings,
+                    ) else {
+                        all_ok = false;
+                        break;
+                    };
+                    let this_slot = LocalId(0);
+                    let result_slot = LocalId(*next_slot);
+                    *next_slot += 1;
+                    local_tys.push(Ty::Unit);
+                    body_mstmts.push(MStmt::Assign {
+                        dest: result_slot,
+                        value: skotch_mir::Rvalue::Call {
+                            kind: skotch_mir::CallKind::Virtual {
+                                class_name: owning_class.clone(),
+                                method_name: "unaryPlus".to_string(),
+                            },
+                            args: vec![this_slot, operand_slot],
+                        },
+                    });
+                }
+                if all_ok {
+                    continue;
+                }
+                // Roll back any partial emission so the generic
+                // fallback can re-lower the whole expression cleanly.
+                body_mstmts.truncate(pre_len);
+                *next_slot = save_next_slot;
+                local_tys.truncate(save_locals_len);
             }
         }
         // var-reassign: `x = expr` or `x += expr` style.
