@@ -17584,6 +17584,14 @@ fn try_lower_multi_stmt_block_with_offset(
                         // Reject body shapes that contain control flow —
                         // those need the multi-block body path which
                         // isn't wired through this short-circuit shim.
+                        // `When` is included here because the linear
+                        // `lower_loop_body` used below silently drops
+                        // when-stmts (only `lower_loop_body_blocks` has
+                        // a `Special::WhenStmt` handler). Without this,
+                        // a `while (a && b) { when (x) { ... } }` body
+                        // would emit just the val-prelude with the
+                        // when arms missing — every arm body
+                        // (push/pop/pc++) vanished from bytecode.
                         let sc_body_has_control = sc_body_children.iter().any(|c| {
                             if let Some(e) = KtExpr::cast(c) {
                                 matches!(
@@ -17594,6 +17602,7 @@ fn try_lower_multi_stmt_block_with_offset(
                                         | KtExpr::While(_)
                                         | KtExpr::For(_)
                                         | KtExpr::If(_)
+                                        | KtExpr::When(_)
                                 )
                             } else {
                                 false
