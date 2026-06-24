@@ -4747,7 +4747,11 @@ pub fn lower_file(
             let mut return_ty = typed_fn.map(|tf| tf.return_ty.clone()).unwrap_or(Ty::Unit);
             // Generic erasure: if the function declares type params and
             // the return type is a Ty::Class matching one of them,
-            // erase to Ty::Any.
+            // erase to Ty::Any. Also covers `T?` (Nullable wrapping a
+            // type-param Class), which kotlinc erases to `Object` too —
+            // without this the descriptor came out as `LT;` and the JVM
+            // failed to link the cross-file call site
+            // (fixture parity/49: `inline fun <reified T> ...firstOfType(): T?`).
             {
                 let type_param_names_ret: std::collections::HashSet<String> = f
                     .type_parameter_list()
@@ -4758,10 +4762,18 @@ pub fn lower_file(
                     })
                     .unwrap_or_default();
                 if !type_param_names_ret.is_empty() {
-                    if let Ty::Class(n) = &return_ty {
-                        if type_param_names_ret.contains(n) {
+                    match &return_ty {
+                        Ty::Class(n) if type_param_names_ret.contains(n) => {
                             return_ty = Ty::Any;
                         }
+                        Ty::Nullable(inner) => {
+                            if let Ty::Class(n) = inner.as_ref() {
+                                if type_param_names_ret.contains(n) {
+                                    return_ty = Ty::Nullable(Box::new(Ty::Any));
+                                }
+                            }
+                        }
+                        _ => {}
                     }
                 }
             }
@@ -4794,10 +4806,18 @@ pub fn lower_file(
                 .unwrap_or_default();
             if !type_param_names.is_empty() {
                 for ty in param_tys.iter_mut() {
-                    if let Ty::Class(n) = ty {
-                        if type_param_names.contains(n) {
+                    match ty {
+                        Ty::Class(n) if type_param_names.contains(n) => {
                             *ty = Ty::Any;
                         }
+                        Ty::Nullable(inner) => {
+                            if let Ty::Class(n) = inner.as_ref() {
+                                if type_param_names.contains(n) {
+                                    *ty = Ty::Nullable(Box::new(Ty::Any));
+                                }
+                            }
+                        }
+                        _ => {}
                     }
                 }
             }
