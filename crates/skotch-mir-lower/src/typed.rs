@@ -35669,16 +35669,25 @@ fn collect_secondary_ctors(
         // implicit `super()`). Without at least an `aload_0;
         // invokespecial X.<init>(...)V` the JVM verifier rejects
         // every secondary ctor with "Constructor must call super()
-        // or this() before return". We only emit the delegation
-        // when we can statically forward the args: no-arg
-        // delegation, or Reference-shaped args that map 1:1 to
-        // user params. Complex argument shapes (named args, string
-        // templates, nested calls, companion-field loads) leave
-        // the body empty so the existing VerifyError surfaces
-        // unchanged — emitting a no-arg `super()` against a class
-        // that has no `<init>()V` would silently substitute a
-        // `NoSuchMethodError` for the VerifyError, which is no
-        // better (and harder to diagnose).
+        // or this() before return". We forward an arg when we can
+        // statically lower it; complex shapes (string templates,
+        // arbitrary calls, binary expressions, qualified refs) still
+        // bail and the existing VerifyError surfaces.
+        //
+        // Supported arg shapes (per the round-34 follow-up plan):
+        //   - Reference to a user param of this secondary ctor.
+        //   - Reference to a companion-object `const val` field on
+        //     the OWNING class (e.g. `this(blockSize = BLOCK_SIZE)`)
+        //     — the const is inlined as `Const(N)` rather than a
+        //     `getstatic` since skotch's current backend doesn't
+        //     materialize companion const-vals as actual JVM fields.
+        //   - Numeric / Bool / Char / Null literal (`this(0)`).
+        //   - Named arg with any of the above as its value, reordered
+        //     by the target ctor's param-name positions. For `:
+        //     this(...)` delegation we use this class's primary-ctor
+        //     param names; for `: super(...)` we'd need cross-file
+        //     resolution, which is out of scope here — those still
+        //     bail when any arg is named.
         let this_slot = skotch_mir::LocalId(0);
         let delegation = sc.delegation_call();
         let is_this_delegation = delegation.map(|d| !d.is_super()).unwrap_or(false);
@@ -35687,39 +35696,179 @@ fn collect_secondary_ctors(
         } else {
             super_default.to_string()
         };
-        // Forward Reference-shaped args (References to user params)
-        // — matches the primary-ctor super-forwarding pattern at
-        // `constructor_from_primary_impl`.
+        // Param-name positions on the delegation target. Used to
+        // reorder named-arg call sites. Only available when the
+        // target is the owning class's primary ctor (`: this(...)`).
+        // For `: super(...)` we'd need cross-file lookup, which is
+        // out of scope for this incremental fix.
+        let target_param_names: Vec<String> = if is_this_delegation {
+            c.primary_constructor()
+                .and_then(|pc| pc.value_parameter_list())
+                .map(|pl| {
+                    pl.parameters()
+                        .map(|p| p.name().unwrap_or("").to_string())
+                        .collect()
+                })
+                .unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+        // Companion-class `const val` index — used to resolve bare
+        // `BLOCK_SIZE`-style references at delegation call sites. We
+        // inline the const value directly (rather than a `getstatic`
+        // on the companion class) because skotch's current backend
+        // doesn't always materialize companion `const val` as an
+        // actual static field; inlining sidesteps the gap and
+        // matches kotlinc's own constant-fold for `const val`.
+        let companion_consts: Vec<(String, skotch_mir::MirConst, Ty)> = c
+            .body()
+            .map(|cb| {
+                let mut out: Vec<(String, skotch_mir::MirConst, Ty)> = Vec::new();
+                let companion = cb.declarations().find_map(|d| match d {
+                    KtDecl::Object(o) if o.is_companion() => Some(o),
+                    _ => None,
+                });
+                let Some(co) = companion else { return out };
+                let Some(cob) = co.body() else { return out };
+                for decl in cob.declarations() {
+                    let KtDecl::Property(prop) = decl else {
+                        continue;
+                    };
+                    let Some(name) = prop.name() else { continue };
+                    let Some(init) = prop.initializer() else {
+                        continue;
+                    };
+                    let init = unwrap_parens(init);
+                    let mut tmp: Vec<String> = Vec::new();
+                    let Some((mc, t)) = literal_to_const(&init, &mut tmp) else {
+                        continue;
+                    };
+                    // String literals leaked into our scratch table —
+                    // can't safely emit them without the module's
+                    // shared strings pool. Skip strings here.
+                    if matches!(mc, skotch_mir::MirConst::String(_)) {
+                        continue;
+                    }
+                    out.push((name.to_string(), mc, t));
+                }
+                out
+            })
+            .unwrap_or_default();
+        // Allocate fresh local slots above the user-param window for
+        // any const ops we need to emit. Slot 0 = `this`, 1..=N = user
+        // params, N+1.. = our scratch.
+        let mut next_slot = (1 + user_param_count) as u32;
+        let mut pre_stmts: Vec<skotch_mir::Stmt> = Vec::new();
+        let mut scratch_strings: Vec<String> = Vec::new();
         let mut delegation_args: Vec<skotch_mir::LocalId> = vec![this_slot];
         let mut delegation_ok = true;
+        // Collect ALL args first as (Option<name>, lowered slot). We
+        // need the full list before reordering by `target_param_names`.
+        let mut lowered: Vec<(Option<String>, skotch_mir::LocalId)> = Vec::new();
         if let Some(arg_list) = delegation.and_then(|d| d.value_argument_list()) {
-            let mut extra: Vec<skotch_mir::LocalId> = Vec::new();
             for arg in arg_list.arguments() {
-                // Named args (`super(algorithm = ...)`) — bail.
-                if arg.name().is_some() {
-                    delegation_ok = false;
-                    break;
-                }
                 let Some(arg_e) = arg.expression() else {
                     delegation_ok = false;
                     break;
                 };
-                let skotch_ast::KtExpr::Reference(rr) = unwrap_parens(arg_e) else {
+                let arg_e = unwrap_parens(arg_e);
+                // Attempt arg lowering, in order:
+                //   1. Bare reference to a user param.
+                //   2. Bare reference to a same-class companion-const
+                //      (inlined as a const literal).
+                //   3. Numeric / Bool / Char / Null literal.
+                let resolved: Option<skotch_mir::LocalId> = match &arg_e {
+                    skotch_ast::KtExpr::Reference(rr) => rr.name().and_then(|name| {
+                        if let Some(idx) = param_names.iter().position(|n| n == name) {
+                            return Some(skotch_mir::LocalId((idx + 1) as u32));
+                        }
+                        if let Some((_, mc, fty)) =
+                            companion_consts.iter().find(|(fname, _, _)| fname == name)
+                        {
+                            let slot = skotch_mir::LocalId(next_slot);
+                            next_slot += 1;
+                            locals.push(fty.clone());
+                            pre_stmts.push(skotch_mir::Stmt::Assign {
+                                dest: slot,
+                                value: skotch_mir::Rvalue::Const(mc.clone()),
+                            });
+                            return Some(slot);
+                        }
+                        None
+                    }),
+                    other => {
+                        // String literals would need access to
+                        // module.strings; out of scope for this fix.
+                        if matches!(other, skotch_ast::KtExpr::String(_)) {
+                            None
+                        } else {
+                            literal_to_const(other, &mut scratch_strings).and_then(|(k, t)| {
+                                if matches!(k, skotch_mir::MirConst::String(_)) {
+                                    return None;
+                                }
+                                let slot = skotch_mir::LocalId(next_slot);
+                                next_slot += 1;
+                                locals.push(t);
+                                pre_stmts.push(skotch_mir::Stmt::Assign {
+                                    dest: slot,
+                                    value: skotch_mir::Rvalue::Const(k),
+                                });
+                                Some(slot)
+                            })
+                        }
+                    }
+                };
+                let Some(slot) = resolved else {
                     delegation_ok = false;
                     break;
                 };
-                let Some(name) = rr.name() else {
-                    delegation_ok = false;
-                    break;
-                };
-                let Some(idx) = param_names.iter().position(|n| n == name) else {
-                    delegation_ok = false;
-                    break;
-                };
-                extra.push(skotch_mir::LocalId((idx + 1) as u32));
+                lowered.push((arg.name().map(|s| s.to_string()), slot));
             }
-            if delegation_ok {
-                delegation_args.extend(extra);
+        }
+        // Reorder named args by `target_param_names` when any arg is
+        // named and we have target positions. Mixed named/positional
+        // is accepted in source order (Kotlin's own rule: positional
+        // must precede named, and we don't validate that here).
+        if delegation_ok && !lowered.is_empty() {
+            let has_named = lowered.iter().any(|(n, _)| n.is_some());
+            if has_named {
+                if target_param_names.is_empty() {
+                    delegation_ok = false;
+                } else {
+                    let mut reordered: Vec<Option<skotch_mir::LocalId>> =
+                        vec![None; target_param_names.len()];
+                    let mut next_pos = 0usize;
+                    for (name, slot) in &lowered {
+                        if let Some(nm) = name {
+                            if let Some(idx) = target_param_names.iter().position(|p| p == nm) {
+                                reordered[idx] = Some(*slot);
+                            } else {
+                                delegation_ok = false;
+                                break;
+                            }
+                        } else {
+                            if next_pos >= reordered.len() {
+                                delegation_ok = false;
+                                break;
+                            }
+                            reordered[next_pos] = Some(*slot);
+                            next_pos += 1;
+                        }
+                    }
+                    if delegation_ok {
+                        if reordered.iter().any(|s| s.is_none()) {
+                            delegation_ok = false;
+                        } else {
+                            for s in reordered.into_iter().flatten() {
+                                delegation_args.push(s);
+                            }
+                        }
+                    }
+                }
+            } else {
+                for (_, slot) in lowered {
+                    delegation_args.push(slot);
+                }
             }
         }
         // Decide whether to emit the delegation stmt. Cases:
@@ -35728,23 +35877,24 @@ fn collect_secondary_ctors(
         //      no-arg ctor always exists; for other supers it
         //      usually does too (kotlinc would have refused at
         //      compile time otherwise).
-        //   2. Reference-args delegation — emit the forwarded call.
+        //   2. Lowered args — emit the forwarded call (with
+        //      preceding const prep stmts).
         //   3. Anything that bailed (`delegation_ok == false`) —
         //      skip the delegation; the resulting VerifyError is
-        //      no worse than the prior bail behavior, and matches
-        //      what `parity/101-hash`-style complex-args cases
-        //      already produce. Emitting a no-arg `super()` against
-        //      a class that has no `<init>()V` would silently
-        //      substitute a `NoSuchMethodError` for the VerifyError,
-        //      which is no better (and harder to diagnose).
-        let body_stmts = if delegation.is_none() || delegation_ok {
-            vec![skotch_mir::Stmt::Assign {
+        //      no worse than the prior bail behavior. Emitting a
+        //      no-arg `super()` against a class that has no
+        //      `<init>()V` would silently substitute a
+        //      `NoSuchMethodError` for the VerifyError.
+        let body_stmts: Vec<skotch_mir::Stmt> = if delegation.is_none() || delegation_ok {
+            let mut s = pre_stmts;
+            s.push(skotch_mir::Stmt::Assign {
                 dest: this_slot,
                 value: skotch_mir::Rvalue::Call {
                     kind: skotch_mir::CallKind::Constructor(target_class),
                     args: delegation_args,
                 },
-            }]
+            });
+            s
         } else {
             Vec::new()
         };
