@@ -1,0 +1,20 @@
+[package]
+name         = "skotch-kotlin-metadata-writer"
+description  = "Encoder for kotlin.Metadata annotation payloads (ProtoBuf.Class/Package → BitEncoding String[])"
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+version.workspace      = true
+
+[dependencies]
+prost = { workspace = true }
+bytes = { workspace = true }
+
+[dev-dependencies]
+skotch-classinfo = { workspace = true }
+
+[build-dependencies]
+prost-build = { workspace = true }
+
+[lints]
+workspace = true
