@@ -1638,6 +1638,74 @@ fn infer_collection_factory_ty(init: &skotch_ast::KtExpr<'_>) -> Option<Ty> {
     None
 }
 
+/// Counterpart to `tref_collection_element_ty` for initializer
+/// expressions. Returns Some(ElemTy) when the initializer is a stdlib
+/// collection factory call carrying an explicit type argument
+/// (`mutableListOf<Tag>()`, `mutableSetOf<Item>()`, etc.). Used by
+/// `collect_class_fields` so a body property without an explicit type
+/// annotation still surfaces its element-Ty into
+/// CLASS_FIELD_ELEMENT_TY — required for `for (c in children)`
+/// dispatch through `c.method()` to find the right user class instead
+/// of the elem slot erasing to Ty::Any. List / Set factories only;
+/// Map needs key+value separately and is handled by
+/// `infer_collection_factory_map_value_ty`.
+fn infer_collection_factory_element_ty(init: &skotch_ast::KtExpr<'_>) -> Option<Ty> {
+    use skotch_ast::KtExpr;
+    let KtExpr::Call(call) = init else {
+        return None;
+    };
+    let Some(KtExpr::Reference(r)) = call.callee() else {
+        return None;
+    };
+    let n = r.name()?;
+    if !matches!(
+        n,
+        "listOf"
+            | "mutableListOf"
+            | "listOfNotNull"
+            | "emptyList"
+            | "arrayListOf"
+            | "setOf"
+            | "mutableSetOf"
+            | "hashSetOf"
+            | "linkedSetOf"
+            | "sortedSetOf"
+            | "emptySet"
+    ) {
+        return None;
+    }
+    let args = call.type_argument_list()?;
+    let first = args.arguments().next()?;
+    let elem_tr = first.type_reference()?;
+    Some(resolve_type_ref(elem_tr))
+}
+
+/// Map<K,V> value-Ty counterpart to `infer_collection_factory_element_ty`.
+/// `mutableMapOf<K, V>()` → Some(Ty for V). The key Ty is intentionally
+/// dropped (downstream `m.get(k)` returns V, not K, so V is what
+/// matters for chained dispatch).
+fn infer_collection_factory_map_value_ty(init: &skotch_ast::KtExpr<'_>) -> Option<Ty> {
+    use skotch_ast::KtExpr;
+    let KtExpr::Call(call) = init else {
+        return None;
+    };
+    let Some(KtExpr::Reference(r)) = call.callee() else {
+        return None;
+    };
+    let n = r.name()?;
+    if !matches!(
+        n,
+        "mapOf" | "mutableMapOf" | "hashMapOf" | "linkedMapOf" | "sortedMapOf" | "emptyMap"
+    ) {
+        return None;
+    }
+    let args = call.type_argument_list()?;
+    // Map<K, V>: skip K, take V.
+    let val_arg = args.arguments().nth(1)?;
+    let val_tr = val_arg.type_reference()?;
+    Some(resolve_type_ref(val_tr))
+}
+
 /// Returns Some(ElemTy) for a KtTypeReference shaped like `List<T>` /
 /// `MutableList<T>` / `Iterable<T>` / `Set<T>` / `MutableSet<T>` /
 /// `Collection<T>` / `MutableCollection<T>` / `ArrayList<T>`; None
@@ -13885,7 +13953,17 @@ fn lower_loop_body_blocks(
                     }
                 } else if let (Some(recv), Some(elem)) = (list_recv, elem_slot_opt) {
                     if let Some(first_body) = inner_body_blocks.first_mut() {
-                        let elem_ty = local_tys.get(elem.0 as usize).cloned().unwrap_or(Ty::Any);
+                        // Use the param-aware fallback so absolute
+                        // slot numbers map back to the correct
+                        // local_tys index (method bodies prefix the
+                        // first N slots with `this` + params; the
+                        // body-walker only stores body-local Tys
+                        // starting at slot N+1). A naive
+                        // `local_tys[elem.0]` read leaked Ty::Any
+                        // for any method with two or more params,
+                        // dropping the CheckCast emit and producing
+                        // VerifyError at the elem-typed user call.
+                        let elem_ty = slot_ty_with_param_fallback(elem.0, local_tys);
                         let target_class = match &elem_ty {
                             Ty::Class(c) if c != "java/lang/Object" => Some(c.clone()),
                             _ => None,
@@ -28640,11 +28718,28 @@ fn lower_rich_expr_to_slot(
                                         let field_n = field_ref.name();
                                         match (recv_ty, field_n) {
                                             (Some(Ty::Class(cls)), Some(fname)) => {
-                                                lookup_class_fields(&cls).and_then(|fs| {
-                                                    fs.iter()
-                                                        .find(|(n, _)| n == fname)
-                                                        .map(|(_, t)| t.clone())
-                                                })
+                                                // Direct class fields first, then walk
+                                                // the inherited-fields list when the
+                                                // own-class table has no entry. Fixes
+                                                // `h.children.add(...)` where `h:H1`
+                                                // and `children` lives on the parent
+                                                // class `Tag` — the inner DotQualified
+                                                // recv-Ty would otherwise resolve to
+                                                // None and the outer .add(...) call
+                                                // would bail kind=DotQualified (parity
+                                                // 51-html-dsl-builder sub-gap 2).
+                                                lookup_class_fields(&cls)
+                                                    .and_then(|fs| {
+                                                        fs.iter()
+                                                            .find(|(n, _)| n == fname)
+                                                            .map(|(_, t)| t.clone())
+                                                    })
+                                                    .or_else(|| {
+                                                        lookup_inherited_class_fields(&cls)
+                                                            .into_iter()
+                                                            .find(|(_, n, _)| n == fname)
+                                                            .map(|(_, _, t)| t)
+                                                    })
                                             }
                                             _ => None,
                                         }
@@ -39301,7 +39396,21 @@ fn collect_class_methods(
                     // the element Ty onto the prebound field slot and
                     // `xs[i].method(...)` dispatch resolves the
                     // receiver to its real class.
-                    if let Some(elem_ty) = prop_collection_element_ty(p) {
+                    //
+                    // Falls back to the initializer's type-argument list
+                    // when the property has no explicit annotation —
+                    // `val children = mutableListOf<Tag>()` exposes
+                    // `Ty::Class("Tag")` so `for (c in children)`
+                    // dispatch through `c.render(...)` finds the right
+                    // user class instead of erasing to Ty::Any and
+                    // bailing the whole stmt (parity 51-html-dsl-builder
+                    // sub-gap 2).
+                    let elem_ty_opt = prop_collection_element_ty(p).or_else(|| {
+                        p.initializer()
+                            .map(unwrap_parens)
+                            .and_then(|init| infer_collection_factory_element_ty(&init))
+                    });
+                    if let Some(elem_ty) = elem_ty_opt {
                         // Erase class type params: `items: MutableList<T>`
                         // gives Ty::Class("T"), which would otherwise drive a
                         // `checkcast T` at `items[i]` use sites and crash
@@ -39317,7 +39426,12 @@ fn collect_class_methods(
                     // element-Ty registration above so that
                     // `m.get(k)!!.member(...)` dispatch in any method
                     // body can recover V's class.
-                    if let Some(val_ty) = prop_map_value_ty(p) {
+                    let val_ty_opt = prop_map_value_ty(p).or_else(|| {
+                        p.initializer()
+                            .map(unwrap_parens)
+                            .and_then(|init| infer_collection_factory_map_value_ty(&init))
+                    });
+                    if let Some(val_ty) = val_ty_opt {
                         let val_ty = erase_tp(val_ty);
                         if !matches!(val_ty, Ty::Any) {
                             record_class_field_map_value_ty(class_name, n, val_ty);
