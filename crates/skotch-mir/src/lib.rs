@@ -38,6 +38,18 @@ fn is_zero_usize(v: &usize) -> bool {
     *v == 0
 }
 
+/// Default `true` for serde fields whose absence in older JSON should
+/// be treated as "yes" (e.g. [`MirClass::has_explicit_primary_ctor`]).
+fn skotch_default_true() -> bool {
+    true
+}
+
+/// Skip serializing a `bool` field when it's the default `true`.
+#[allow(clippy::trivially_copy_pass_by_ref)]
+fn skotch_is_true(v: &bool) -> bool {
+    *v
+}
+
 /// Side-channel metadata for cross-file top-level functions. Carries
 /// declaration-level facts the call site needs but `cross_file_fns`'s
 /// `(owner_class, descriptor, return_ty)` tuple doesn't hold:
@@ -792,6 +804,24 @@ pub struct MirClass {
     /// Secondary constructors — additional `<init>` methods with different signatures.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub secondary_constructors: Vec<MirFunction>,
+    /// True when the Kotlin source actually declared a primary
+    /// constructor (parenthesised parameter list on the class header,
+    /// even if empty). When `false`, mir-lower still populates
+    /// [`MirClass::constructor`] with a synthesized no-arg shell so
+    /// JVM bytecode emission stays uniform — but the metadata writer
+    /// must suppress that shell from the `@Metadata` `B`-records when
+    /// the class also declares one or more explicit secondaries, to
+    /// avoid a duplicate `<init>()V` `Constructor` proto that trips
+    /// kotlinc 2.4's "overload resolution ambiguity" diagnostic on
+    /// consumers (e.g. parity/101-hash MD5).
+    ///
+    /// Defaults to `true` so existing fixtures (whose ctor shape never
+    /// includes "no-primary + only secondaries") are unchanged.
+    #[serde(
+        default = "skotch_default_true",
+        skip_serializing_if = "skotch_is_true"
+    )]
+    pub has_explicit_primary_ctor: bool,
     /// True for synthetic lambda classes whose body
     /// contains a suspend call (or are declared `suspend {}`). When
     /// set, the JVM backend emits the class as a subclass of

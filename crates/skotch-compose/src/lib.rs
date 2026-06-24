@@ -1197,6 +1197,7 @@ mod tests {
             methods,
             constructor: make_composable_function(), // reuse as dummy
             secondary_constructors: vec![],
+            has_explicit_primary_ctor: true,
             is_lambda: false,
             is_suspend_lambda: false,
             is_cross_file_stub: false,

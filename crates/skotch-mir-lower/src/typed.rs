@@ -3112,6 +3112,7 @@ pub fn lower_file(
                 methods: stub_methods,
                 constructor: ctor,
                 secondary_constructors: Vec::new(),
+                has_explicit_primary_ctor: true,
                 is_suspend_lambda: false,
                 is_lambda: false,
                 is_cross_file_stub: true,
@@ -3234,6 +3235,7 @@ pub fn lower_file(
                     methods: comp_stub_methods,
                     constructor: comp_ctor,
                     secondary_constructors: Vec::new(),
+                    has_explicit_primary_ctor: true,
                     is_suspend_lambda: false,
                     is_lambda: false,
                     is_cross_file_stub: true,
@@ -3597,6 +3599,7 @@ pub fn lower_file(
                     methods: comp_methods,
                     constructor: empty_constructor(&comp_qname),
                     secondary_constructors: Vec::new(),
+                    has_explicit_primary_ctor: true,
                     is_suspend_lambda: false,
                     is_lambda: false,
                     is_cross_file_stub: false,
@@ -4296,6 +4299,17 @@ pub fn lower_file(
                 Some(&mut module.strings),
                 Some(&fn_lookup),
             );
+            // Kotlin classes with NO `(params)` after the name and at
+            // least one body-level `constructor(...)` declaration have
+            // no primary ctor at the source level. mir-lower still
+            // synthesizes an empty no-arg `MirClass::constructor` so
+            // the JVM backend's emission stays uniform, but the
+            // metadata writer must suppress that synthesized shell
+            // from `@Metadata` `B`-records — otherwise consumers like
+            // kotlinc 2.4 see a duplicate `<init>()V` Constructor
+            // proto next to the explicit secondaries and report
+            // "overload resolution ambiguity" (parity/101-hash MD5).
+            let has_explicit_primary_ctor = c.primary_constructor().is_some();
             let mir_class = skotch_mir::MirClass {
                 name: name.clone(),
                 super_class,
@@ -4307,6 +4321,7 @@ pub fn lower_file(
                 methods,
                 constructor,
                 secondary_constructors,
+                has_explicit_primary_ctor,
                 is_suspend_lambda: false,
                 is_lambda: false,
                 is_cross_file_stub: false,
@@ -4350,6 +4365,8 @@ pub fn lower_file(
                                 None,
                                 None,
                             );
+                            let nested_has_explicit_primary_ctor =
+                                nested.primary_constructor().is_some();
                             let nested_mir = skotch_mir::MirClass {
                                 name: nested_qname.clone(),
                                 super_class: n_super,
@@ -4361,6 +4378,7 @@ pub fn lower_file(
                                 methods: nested_methods,
                                 constructor: nested_ctor,
                                 secondary_constructors: nested_secondary_ctors,
+                                has_explicit_primary_ctor: nested_has_explicit_primary_ctor,
                                 is_suspend_lambda: false,
                                 is_lambda: false,
                                 is_cross_file_stub: false,
@@ -4409,6 +4427,7 @@ pub fn lower_file(
                 methods,
                 constructor: empty_constructor(&name),
                 secondary_constructors: Vec::new(),
+                has_explicit_primary_ctor: true,
                 is_suspend_lambda: false,
                 is_lambda: false,
                 is_cross_file_stub: false,
@@ -4499,6 +4518,7 @@ pub fn lower_file(
                 methods,
                 constructor,
                 secondary_constructors: Vec::new(),
+                has_explicit_primary_ctor: true,
                 is_suspend_lambda: false,
                 is_lambda: false,
                 is_cross_file_stub: false,
@@ -4695,6 +4715,7 @@ pub fn lower_file(
                 methods: Vec::new(),
                 constructor,
                 secondary_constructors: Vec::new(),
+                has_explicit_primary_ctor: true,
                 is_suspend_lambda: false,
                 is_lambda: false,
                 is_cross_file_stub: false,
@@ -24845,6 +24866,7 @@ fn try_lower_callable_ref(
         methods: vec![invoke_method],
         constructor,
         secondary_constructors: Vec::new(),
+        has_explicit_primary_ctor: true,
         is_suspend_lambda: false,
         is_lambda: true,
         is_cross_file_stub: false,
@@ -25847,6 +25869,7 @@ fn lower_rich_expr_to_slot(
             methods: vec![invoke_method],
             constructor,
             secondary_constructors: Vec::new(),
+            has_explicit_primary_ctor: true,
             is_suspend_lambda: false,
             is_lambda: true,
             is_cross_file_stub: false,
@@ -26286,6 +26309,7 @@ fn lower_rich_expr_to_slot(
             methods,
             constructor,
             secondary_constructors: Vec::new(),
+            has_explicit_primary_ctor: true,
             is_suspend_lambda: false,
             is_lambda: false,
             is_cross_file_stub: false,
@@ -36548,6 +36572,12 @@ fn collect_secondary_ctors(
         } else {
             Vec::new()
         };
+        // Surface source-level `private constructor(...)` to MIR so
+        // the metadata writer can emit the matching `IS_SECONDARY |
+        // private` flag word (kotlinc's `0x12`). Without this, every
+        // secondary ctor lands at `public` and the parity diff stays
+        // open on the second `B`-record's flag byte.
+        let is_private_ctor = matches!(sc.visibility(), skotch_syntax::Visibility::Private);
         out.push(MirFunction {
             id: FuncId(sc_idx),
             name: "<init>".to_string(),
@@ -36573,7 +36603,7 @@ fn collect_secondary_ctors(
             suspend_state_machine: None,
             annotations: Vec::new(),
             named_locals: Vec::new(),
-            is_private: false,
+            is_private: is_private_ctor,
             is_static: false,
             default_call_masks: Vec::new(),
             needs_leading_nop: false,

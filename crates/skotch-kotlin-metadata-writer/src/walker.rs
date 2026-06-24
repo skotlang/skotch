@@ -320,10 +320,22 @@ fn function_to_proto(func: &MirFunction, table: &mut StringTable) -> pb::Functio
 /// Encode a MIR function as a `ProtoBuf.Constructor`. Only the value-
 /// parameter list is populated — that's the field the consumer-side
 /// named-arg reorder reads.
-fn constructor_to_proto(func: &MirFunction, table: &mut StringTable) -> pb::Constructor {
+///
+/// `is_secondary` controls the `IS_SECONDARY` (bit 6) flag — kotlinc
+/// sets it on every body-declared `constructor(...)` so consumers can
+/// tell primary from secondary at lookup time. Without it, a class
+/// with no source-level primary but several explicit secondaries
+/// looks (to a kotlinc consumer reading the metadata) like it has a
+/// synthesized primary, which then conflicts with the matching
+/// no-arg secondary the source actually declared.
+fn constructor_to_proto(
+    func: &MirFunction,
+    table: &mut StringTable,
+    is_secondary: bool,
+) -> pb::Constructor {
     pb::Constructor {
         value_parameter: collect_value_parameters(func, table),
-        flags: Some(constructor_flags(func)),
+        flags: Some(constructor_flags(func, is_secondary)),
         ..pb::Constructor::default()
     }
 }
@@ -410,8 +422,34 @@ fn function_flags(_func: &MirFunction) -> i32 {
     FLAG_PUBLIC_FINAL_DECLARATION
 }
 
-fn constructor_flags(_func: &MirFunction) -> i32 {
-    FLAG_PUBLIC_FINAL_DECLARATION
+/// Constructor flag layout follows `Flags.CONSTRUCTOR_FLAGS`:
+///   bit 0:    hasAnnotations
+///   bits 1-3: visibility (0=internal/1=private/2=protected/3=public/…)
+///   bits 4-5: modality
+///   bit 6:    isSecondary
+///   bit 7:    hasNonStableParameterNames
+///
+/// We currently emit `public final` (`6`) for every ctor; secondaries
+/// additionally set the `IS_SECONDARY` bit so kotlinc consumers
+/// reading the metadata don't conflate a body-declared `constructor()`
+/// with the synthesized primary `<init>()V` (parity/101-hash MD5).
+/// `func.is_private` flips the visibility bits from public to
+/// private, mirroring kotlinc's `0x12` shape for
+/// `private constructor(...)`.
+fn constructor_flags(func: &MirFunction, is_secondary: bool) -> i32 {
+    const IS_SECONDARY_BIT: i32 = 1 << 6;
+    let visibility = if func.is_private {
+        pb::Visibility::Private as i32 // 0
+    } else {
+        pb::Visibility::Public as i32 // 3
+    };
+    // Layout: hasAnnotations(1) | visibility(3) | modality(2) | ...
+    // `FLAG_PUBLIC_FINAL_DECLARATION` (6) = (Public << 1) | (Final << 4).
+    let mut flags = (visibility << 1) | ((pb::Modality::Final as i32) << 4);
+    if is_secondary {
+        flags |= IS_SECONDARY_BIT;
+    }
+    flags
 }
 
 fn value_parameter_flags(func: &MirFunction, params_idx: usize, user_idx: usize) -> i32 {
@@ -499,10 +537,26 @@ pub fn class_proto_for(class: &MirClass, table: &mut StringTable) -> pb::Class {
     // Primary constructor first, then secondaries — matches kotlinc's
     // declaration order so the cross-file named-arg reorder picks the
     // primary by index 0.
-    out.constructor
-        .push(constructor_to_proto(&class.constructor, table));
+    //
+    // Exception: when the Kotlin source declared NO primary constructor
+    // (`class MD5 : Digest { constructor(): super(...) {} ... }`),
+    // mir-lower still synthesizes an empty no-arg
+    // [`MirClass::constructor`] for backend-uniformity. Emitting that
+    // shell into `@Metadata` next to a body-level `constructor()`
+    // duplicates the `<init>()V` proto, which kotlinc 2.4 rejects with
+    // "overload resolution ambiguity" — and the cascading
+    // unresolved-reference diagnostics that follow (`update`,
+    // `digest`, `blockSize`, …) blocked parity/101-hash. Suppress the
+    // synthesized shell in that exact shape: source has no primary AND
+    // at least one explicit secondary covers the same call surface.
+    let suppress_synthesized_primary =
+        !class.has_explicit_primary_ctor && !class.secondary_constructors.is_empty();
+    if !suppress_synthesized_primary {
+        out.constructor
+            .push(constructor_to_proto(&class.constructor, table, false));
+    }
     for sec in &class.secondary_constructors {
-        out.constructor.push(constructor_to_proto(sec, table));
+        out.constructor.push(constructor_to_proto(sec, table, true));
     }
     for m in &class.methods {
         // Constructors live in their own slot; abstract methods still
@@ -792,6 +846,7 @@ mod tests {
             methods: vec![],
             constructor: ctor,
             secondary_constructors: vec![],
+            has_explicit_primary_ctor: true,
             is_suspend_lambda: false,
             is_lambda: false,
             is_cross_file_stub: false,
