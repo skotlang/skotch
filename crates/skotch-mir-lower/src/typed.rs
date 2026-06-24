@@ -3727,7 +3727,14 @@ pub fn lower_file(
                 None => continue,
             };
             let (_, interfaces) = collect_class_super_iface(i.super_type_list());
-            let methods = collect_interface_methods(i, &mut module.strings);
+            let methods = collect_interface_methods_with_class(
+                i,
+                &mut module.strings,
+                Some(&name),
+                &fn_lookup,
+                &val_lookup,
+                &module.wrapper_class,
+            );
             let mir_class = skotch_mir::MirClass {
                 name: name.clone(),
                 super_class: None,
@@ -33725,17 +33732,40 @@ fn collect_secondary_ctors(c: skotch_ast::KtClass<'_>) -> Vec<MirFunction> {
     out
 }
 
-/// Same-shape helper for interfaces.
-fn collect_interface_methods(
+/// Class-aware variant for interfaces. Routes default-method bodies
+/// (`fun describe(): String = "step[${name()}]"`) through
+/// `method_from_fun_with_class` so the body can resolve `this`-based
+/// calls (`name()` → invokeinterface on the owning interface) and
+/// emit the actual body bytecode instead of a `aconst_null; areturn`
+/// stub. Without this, the JVM dispatches the default method (Java 8
+/// `default`) but the bytecode returns null — call sites then print
+/// `null` instead of the formatted string.
+#[allow(clippy::too_many_arguments)]
+fn collect_interface_methods_with_class(
     i: skotch_ast::KtInterface<'_>,
     strings: &mut Vec<String>,
+    class_name: Option<&str>,
+    fn_lookup: &rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)>,
+    val_lookup: &rustc_hash::FxHashMap<String, Ty>,
+    wrapper_class: &str,
 ) -> Vec<MirFunction> {
     let mut methods = Vec::new();
     let Some(body) = i.body() else { return methods };
     let mut method_idx = 0u32;
     for d in body.declarations() {
         if let KtDecl::Fun(f) = d {
-            methods.push(method_from_fun(f, method_idx, true, strings));
+            methods.push(method_from_fun_with_class(
+                f,
+                method_idx,
+                true,
+                strings,
+                class_name,
+                &[],
+                fn_lookup,
+                val_lookup,
+                wrapper_class,
+                &[],
+            ));
             method_idx += 1;
         }
     }
@@ -36972,26 +37002,6 @@ fn method_simple_body_full(
 /// Build a MirFunction from a typed KtFun. `is_abstract_default`
 /// applies when the source has no body and the surrounding decl is
 /// an interface (where methods default abstract).
-fn method_from_fun(
-    f: skotch_ast::KtFun<'_>,
-    method_idx: u32,
-    is_abstract_default: bool,
-    strings: &mut Vec<String>,
-) -> MirFunction {
-    method_from_fun_with_class(
-        f,
-        method_idx,
-        is_abstract_default,
-        strings,
-        None,
-        &[],
-        &rustc_hash::FxHashMap::default(),
-        &rustc_hash::FxHashMap::default(),
-        "",
-        &[],
-    )
-}
-
 #[allow(clippy::too_many_arguments)]
 fn method_from_fun_with_class(
     f: skotch_ast::KtFun<'_>,
