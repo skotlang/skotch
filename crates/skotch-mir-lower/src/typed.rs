@@ -12671,6 +12671,43 @@ fn lower_loop_body_blocks(
                     .loop_range()
                     .and_then(|r| r.expression())
                     .map(unwrap_parens)?;
+                // Preload class-field reference appearing as the for-in
+                // range. `for (c in children)` inside a method body
+                // references `children` as a bare class field — without
+                // this preload, `lookup(rname)?` below returns None and
+                // bails the whole function body to empty MIR. Mirrors
+                // the class-field preload in `lower_loop_body` (the
+                // simpler, no-control-flow sibling).
+                if let KtExpr::Reference(rref) = &range_expr {
+                    if let Some(rname) = rref.name() {
+                        let already_bound = name_to_local.iter().any(|(n, _)| n == rname);
+                        if !already_bound {
+                            if let Some((cname, fname, fty)) = class_field_lookup(rname) {
+                                let slot = LocalId(*next_slot);
+                                *next_slot += 1;
+                                local_tys.push(fty);
+                                cur_stmts.push(MStmt::Assign {
+                                    dest: slot,
+                                    value: skotch_mir::Rvalue::GetField {
+                                        receiver: LocalId(0),
+                                        class_name: cname.clone(),
+                                        field_name: fname.clone(),
+                                    },
+                                });
+                                if let Some(elem_ty) = lookup_class_field_element_ty(&cname, &fname)
+                                {
+                                    record_list_element_ty(slot.0, elem_ty);
+                                }
+                                if let Some(val_ty) =
+                                    lookup_class_field_map_value_ty(&cname, &fname)
+                                {
+                                    record_map_value_ty(slot.0, val_ty);
+                                }
+                                name_to_local.push((rname.to_string(), slot));
+                            }
+                        }
+                    }
+                }
                 let snap = name_to_local.clone();
                 let lookup = |n: &str| -> Option<LocalId> {
                     snap.iter()
