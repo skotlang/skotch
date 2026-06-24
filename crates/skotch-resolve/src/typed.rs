@@ -56,10 +56,15 @@ fn type_ref_to_descriptor(
     param_position: bool,
 ) -> String {
     // Function type: `(P, ...) -> R` → `Lkotlin/jvm/functions/FunctionN;`
+    // Extension function types `T.() -> R` desugar to `Function1<T, R>`
+    // — receiver counts as an extra param.
     if let Some(ft) = tr.function_type() {
         let base = ft.parameter_list().map_or(0, |pl| pl.parameters().count());
-        let arity =
-            base + if tr.is_composable() { 2 } else { 0 } + if tr.is_suspend() { 1 } else { 0 };
+        let recv = if ft.receiver().is_some() { 1 } else { 0 };
+        let arity = base
+            + recv
+            + if tr.is_composable() { 2 } else { 0 }
+            + if tr.is_suspend() { 1 } else { 0 };
         return format!("Lkotlin/jvm/functions/Function{arity};");
     }
     // Nullable wrapper — for typecheck-bound nullable types, fall back to
@@ -69,8 +74,11 @@ fn type_ref_to_descriptor(
         // so callers see the Function shape (matches legacy).
         if let Some(ft) = n.inner_function_type() {
             let base = ft.parameter_list().map_or(0, |pl| pl.parameters().count());
-            let arity =
-                base + if tr.is_composable() { 2 } else { 0 } + if tr.is_suspend() { 1 } else { 0 };
+            let recv = if ft.receiver().is_some() { 1 } else { 0 };
+            let arity = base
+                + recv
+                + if tr.is_composable() { 2 } else { 0 }
+                + if tr.is_suspend() { 1 } else { 0 };
             return format!("Lkotlin/jvm/functions/Function{arity};");
         }
         return "Ljava/lang/Object;".to_string();
@@ -142,6 +150,33 @@ fn build_method_descriptor(
         desc.push('V');
     }
     desc
+}
+
+/// Infer a `Ty::Class("java/util/{List,Set,Map}")` for a property
+/// initializer that calls a stdlib collection factory
+/// (`mutableListOf<T>()`, `mapOf(...)`, etc.). Used by the class-body
+/// property walk so cross-file stubs carry the right descriptor when
+/// the source omits an explicit `: T` annotation. Mirrors
+/// `skotch_mir_lower::typed::infer_collection_factory_ty`.
+fn infer_collection_factory_class(init: &skotch_ast::KtExpr<'_>) -> Option<Ty> {
+    use skotch_ast::KtExpr;
+    if let KtExpr::Call(call) = init {
+        if let Some(KtExpr::Reference(r)) = call.callee() {
+            let n = r.name()?;
+            let cls: Option<&str> = match n {
+                "listOf" | "mutableListOf" | "listOfNotNull" | "emptyList" | "arrayListOf" => {
+                    Some("java/util/List")
+                }
+                "setOf" | "mutableSetOf" | "hashSetOf" | "linkedSetOf" | "sortedSetOf"
+                | "emptySet" => Some("java/util/Set"),
+                "mapOf" | "mutableMapOf" | "hashMapOf" | "linkedMapOf" | "sortedMapOf"
+                | "emptyMap" => Some("java/util/Map"),
+                _ => None,
+            };
+            return cls.map(|c| Ty::Class(c.to_string()));
+        }
+    }
+    None
 }
 
 // ── TypeRef → Ty ────────────────────────────────────────────────────
@@ -707,8 +742,32 @@ fn gather_class_recursive(
     }
     let imports = &class_imports;
 
-    let (fields, ctor_params) = build_ctor_shape(c.primary_constructor(), imports, aliases);
+    let (mut fields, ctor_params) = build_ctor_shape(c.primary_constructor(), imports, aliases);
     let (body_methods, body_props) = body_methods_and_props(c.body());
+    // Body-declared val/var properties (NOT primary-ctor val/var, which
+    // build_ctor_shape already captured). Without these, cross-file
+    // call sites lose visibility of plain `class HTML { val children =
+    // mutableListOf<String>() }` body fields and a receiver-typed
+    // lambda body like `html { children.add("x") }` can't dispatch the
+    // implicit-receiver field load — bails the whole DSL builder.
+    for p in &body_props {
+        let Some(name) = p.name() else { continue };
+        // Prefer explicit `: T` annotation; fall back to a stdlib
+        // collection-factory initializer (`val xs = mutableListOf<E>()`
+        // → `java/util/List`) so the cross-file stub MirField carries
+        // the correct JVM descriptor instead of erasing to `Object`.
+        // Mirrors the same inference in mir-lower's local
+        // `class_fields` walk.
+        let ty = p
+            .type_reference()
+            .map(|tr| type_ref_to_ty(tr, imports, aliases))
+            .or_else(|| {
+                let init = p.initializer()?;
+                infer_collection_factory_class(&init)
+            })
+            .unwrap_or(Ty::Any);
+        fields.push((name.to_string(), ty));
+    }
     let property_getters: Vec<ExternalMethod> = body_props
         .iter()
         .filter_map(|p| property_getter_method(*p, imports, aliases))

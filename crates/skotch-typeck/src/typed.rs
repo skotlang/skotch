@@ -1077,18 +1077,31 @@ fn function_type_to_ty(
     is_suspend: bool,
     is_composable: bool,
 ) -> Ty {
-    let params: Vec<Ty> = ft
-        .parameter_list()
-        .map(|pl| {
-            pl.parameters()
-                .map(|p| {
-                    p.type_reference()
-                        .map(|ptr| type_ref_to_ty(ptr, imports, aliases))
-                        .unwrap_or(Ty::Any)
-                })
-                .collect()
-        })
-        .unwrap_or_default();
+    let mut params: Vec<Ty> = Vec::new();
+    // Extension function type `T.() -> R` desugars to `Function1<T, R>`
+    // on the JVM — the receiver becomes the first param. Without
+    // prepending it here, a `fun html(init: HTML.() -> Unit)` declaration
+    // surfaces `init` as `Function0` and the call-site `html { ... }`
+    // dispatch builds a `(Function0)HTML` descriptor against the real
+    // `(Function1)HTML` runtime shape.
+    if let Some(recv) = ft.receiver() {
+        if let Some(rtr) = recv.type_reference() {
+            params.push(type_ref_to_ty(rtr, imports, aliases));
+        } else if let Some(u) =
+            skotch_ast::first_typed_child::<skotch_ast::KtUserType<'_>>(recv.syntax())
+        {
+            params.push(user_type_to_ty(u, imports, aliases));
+        }
+    }
+    if let Some(pl) = ft.parameter_list() {
+        for p in pl.parameters() {
+            params.push(
+                p.type_reference()
+                    .map(|ptr| type_ref_to_ty(ptr, imports, aliases))
+                    .unwrap_or(Ty::Any),
+            );
+        }
+    }
     let ret = ft
         .return_type()
         .map(|rtr| type_ref_to_ty(rtr, imports, aliases))
