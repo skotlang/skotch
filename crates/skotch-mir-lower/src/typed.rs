@@ -33092,11 +33092,27 @@ fn constructor_from_primary_impl(
     let user_param_tys: Vec<Ty> = params_iter
         .iter()
         .map(|p| {
-            let ty = p.type_reference().map(resolve_type_ref).unwrap_or(Ty::Any);
+            let tr = p.type_reference();
+            let is_nullable = tr.map(|t| t.is_nullable()).unwrap_or(false);
+            let ty = tr.map(resolve_type_ref).unwrap_or(Ty::Any);
             if let Ty::Class(n) = &ty {
                 if class_type_param_set.contains(n) {
                     return Ty::Any;
                 }
+            }
+            // `resolve_type_ref` strips nullability for non-fn user
+            // types (intentional, to keep downstream PutField gating
+            // on `Ty::Class`). Re-wrap here so the backend's
+            // `is_non_null_reference_param` check correctly skips the
+            // `Intrinsics.checkNotNullParameter` prologue for
+            // nullable ctor params (e.g. `var next: Node<T>?` in a
+            // self-referential generic linked-list node). The JVM
+            // descriptor for `Ty::Nullable(Ty::Class(_))` is the
+            // same `LFoo;` as the unwrapped class, so signature
+            // matching is unaffected; the @Nullable annotation also
+            // gets added by the backend.
+            if is_nullable && matches!(ty, Ty::Class(_) | Ty::String) {
+                return Ty::Nullable(Box::new(ty));
             }
             ty
         })
