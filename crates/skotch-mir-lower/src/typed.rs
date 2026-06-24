@@ -1110,6 +1110,30 @@ fn register_cross_file_ext_fn(method: &str, recv_class: &str, info: CrossFileExt
     });
 }
 
+/// Bridge a receiver `Ty` to the JVM class name the cross-file
+/// extension-fn registry is keyed under. Primitive Tys map to their
+/// boxed wrapper class (`Ty::Int` → `java/lang/Integer`) so a
+/// declaration like `fun Int.cents(): Money` — whose
+/// `ExternalFunDecl.receiver_ty` is `Ty::Int` — registers and looks
+/// up under `java/lang/Integer`. `Ty::Class(c)` returns `c` as-is.
+/// `Ty::Any` bridges to `java/lang/Object` so `Any.foo()` extensions
+/// resolve when the call-site receiver Ty is also Any.
+fn ext_fn_receiver_jvm_class(ty: &Ty) -> Option<String> {
+    Some(match ty {
+        Ty::Class(c) => c.clone(),
+        Ty::Any => "java/lang/Object".to_string(),
+        Ty::Int => "java/lang/Integer".to_string(),
+        Ty::Long => "java/lang/Long".to_string(),
+        Ty::Bool => "java/lang/Boolean".to_string(),
+        Ty::Float => "java/lang/Float".to_string(),
+        Ty::Double => "java/lang/Double".to_string(),
+        Ty::Char => "java/lang/Character".to_string(),
+        Ty::Byte => "java/lang/Byte".to_string(),
+        Ty::Short => "java/lang/Short".to_string(),
+        _ => return None,
+    })
+}
+
 fn lookup_cross_file_ext_fn(method: &str, recv_class: &str) -> Option<CrossFileExtFn> {
     CROSS_FILE_EXT_FNS.with(|c| {
         c.borrow()
@@ -2701,11 +2725,12 @@ pub fn lower_file(
                 // also remaps `Ty::Any` receivers to `java/lang/Object`)
                 // finds the registration. Without this, a cross-file
                 // `Any.isInstanceOf<T>()` is never registered and the
-                // DotQualified arm bails on the receiver.
-                let recv_class: String = match recv_ty {
-                    Ty::Class(c) => c.clone(),
-                    Ty::Any => "java/lang/Object".to_string(),
-                    _ => continue,
+                // DotQualified arm bails on the receiver. Primitive
+                // receivers (`fun Int.cents()`) are keyed under their
+                // boxed JVM class (`java/lang/Integer`); see
+                // `ext_fn_receiver_jvm_class`.
+                let Some(recv_class) = ext_fn_receiver_jvm_class(recv_ty) else {
+                    continue;
                 };
                 // user_param_count excludes the receiver. ExternalFunDecl
                 // stores the receiver as the first entry of param_tys
@@ -6097,6 +6122,72 @@ pub fn lower_file(
     module
 }
 
+/// Pick the wider of two primitive numeric Tys following Kotlin's
+/// binary-numeric promotion rules: `Double > Float > Long > Int >
+/// Short/Byte/Char`. Returns `None` for non-numeric / Bool. Used by
+/// the cmp fixup to know which side(s) to convert when a Long is
+/// compared to an Int literal.
+fn numeric_widen_target(a: &Ty, b: &Ty) -> Option<Ty> {
+    let rank = |t: &Ty| -> Option<u8> {
+        match t {
+            Ty::Byte | Ty::Short | Ty::Char => Some(1),
+            Ty::Int => Some(2),
+            Ty::Long => Some(3),
+            Ty::Float => Some(4),
+            Ty::Double => Some(5),
+            _ => None,
+        }
+    };
+    let (ra, rb) = (rank(a)?, rank(b)?);
+    Some(if ra >= rb { a.clone() } else { b.clone() })
+}
+
+/// Emit a `$convert` pseudo-static call that the JVM backend lowers
+/// to a single primitive-conversion opcode (i2l, i2d, l2d, …) to
+/// widen `src` from `from` to `to`. Returns the new slot holding the
+/// converted value.
+fn emit_prim_widen(
+    src: skotch_mir::LocalId,
+    from: &Ty,
+    to: &Ty,
+    locals: &mut Vec<Ty>,
+    out: &mut Vec<skotch_mir::Stmt>,
+) -> skotch_mir::LocalId {
+    use skotch_mir::{LocalId, Rvalue, Stmt};
+    let prim_char = |t: &Ty| match t {
+        Ty::Int | Ty::Byte | Ty::Short | Ty::Char => 'i',
+        Ty::Long => 'l',
+        Ty::Float => 'f',
+        Ty::Double => 'd',
+        _ => 'i',
+    };
+    let prim_desc = |t: &Ty| match t {
+        Ty::Int | Ty::Byte | Ty::Short | Ty::Char => "I",
+        Ty::Long => "J",
+        Ty::Float => "F",
+        Ty::Double => "D",
+        _ => "I",
+    };
+    let f = prim_char(from);
+    let t = prim_char(to);
+    let opcode = format!("{}2{}", f, t);
+    let descriptor = format!("({}){}", prim_desc(from), prim_desc(to));
+    let dst = LocalId(locals.len() as u32);
+    locals.push(to.clone());
+    out.push(Stmt::Assign {
+        dest: dst,
+        value: Rvalue::Call {
+            kind: skotch_mir::CallKind::StaticJava {
+                class_name: "$convert".to_string(),
+                method_name: opcode,
+                descriptor,
+            },
+            args: vec![src],
+        },
+    });
+    dst
+}
+
 /// Insert CHECKCAST java/lang/Number + INVOKEVIRTUAL <T>Value() before
 /// any BinOp Cmp or ArrayStore where one operand is primitive numeric
 /// and the other (or the value) is a reference type — covers generic
@@ -6168,6 +6259,38 @@ fn fixup_cmp_unbox(f: &mut MirFunction) {
                         nr = emit_unbox(rhs, &lt, &mut f.locals, &mut new_stmts);
                     } else if is_prim(&rt) && is_ref(&lt) {
                         nl = emit_unbox(lhs, &rt, &mut f.locals, &mut new_stmts);
+                    } else if is_prim(&lt) && is_prim(&rt) && lt != rt {
+                        // Kotlin numeric promotion for `a < b` / `<=`
+                        // / `>` / `>=` between mismatched primitive
+                        // numeric types: widen the narrower operand
+                        // to the wider one. Order: Double > Float >
+                        // Long > Int > Char/Short/Byte. Without this,
+                        // `rem < 10` where `rem: Long` and `10: Int`
+                        // produces `bipush 10; lcmp` — the verifier
+                        // rejects the Int on the long-cmp stack. We
+                        // emit a `$convert` static call (i2l / i2d / …)
+                        // the backend lowers to a single opcode.
+                        let widen_target = numeric_widen_target(&lt, &rt);
+                        if let Some(target) = widen_target {
+                            if lt != target {
+                                nl = emit_prim_widen(
+                                    lhs,
+                                    &lt,
+                                    &target,
+                                    &mut f.locals,
+                                    &mut new_stmts,
+                                );
+                            }
+                            if rt != target {
+                                nr = emit_prim_widen(
+                                    rhs,
+                                    &rt,
+                                    &target,
+                                    &mut f.locals,
+                                    &mut new_stmts,
+                                );
+                            }
+                        }
                     }
                     new_stmts.push(Stmt::Assign {
                         dest,
@@ -29124,6 +29247,17 @@ fn lower_rich_expr_to_slot(
                             .name()
                             .and_then(lookup_name)
                             .map(|s| slot_ty_with_param_fallback(s.0, extra_locals)),
+                        // `this.<method>()` inside a class method or an
+                        // extension fn — `this` is slot 0, whose Ty was
+                        // installed in PARAM_TY_FALLBACK by the body
+                        // lowerer. For a primitive-receiver extension
+                        // (`fun Int.cents()`), this surfaces `Ty::Int`
+                        // so the `prim_conv` table below picks `i2l` for
+                        // `this.toLong()` instead of bailing into the
+                        // virtual fallback (which would emit
+                        // `invokevirtual Int.toLong()` against the
+                        // non-existent class "Int").
+                        KtExpr::This(_) => Some(slot_ty_with_param_fallback(0, extra_locals)),
                         KtExpr::String(_) => Some(Ty::String),
                         KtExpr::Call(c) => {
                             // listOf / mapOf / setOf chained call
@@ -30874,12 +31008,14 @@ fn lower_rich_expr_to_slot(
                                 // `java/lang/Object` so cross-file `Any.foo()`
                                 // extensions still resolve. Without this,
                                 // `(3 as Any).isInstanceOf<Int>()` bails the
-                                // entire DotQualified expression.
-                                let recv_class_opt: Option<String> = match &recv_ty {
-                                    Ty::Class(c) => Some(c.clone()),
-                                    Ty::Any => Some("java/lang/Object".to_string()),
-                                    _ => None,
-                                };
+                                // entire DotQualified expression. Primitive
+                                // receiver Tys (`Ty::Int`, `Ty::Long`, …) are
+                                // bridged to their boxed JVM class names so
+                                // `30.cents()` (declared as `fun Int.cents()`)
+                                // finds the registry entry keyed under
+                                // `java/lang/Integer`.
+                                let recv_class_opt: Option<String> =
+                                    ext_fn_receiver_jvm_class(&recv_ty);
                                 if let Some(recv_class) = &recv_class_opt {
                                     if let Some(ext) =
                                         lookup_cross_file_ext_fn_compat(method_n, recv_class)
@@ -31218,12 +31354,13 @@ fn lower_rich_expr_to_slot(
                             // resolve to the static `Any.isInstanceOf`
                             // wrapper-class method. `Ty::Any` is bridged to
                             // `java/lang/Object` so `Any.foo()` extensions
-                            // are found in the registry.
-                            let recv_class_opt: Option<String> = match &recv_ty {
-                                Ty::Class(c) => Some(c.clone()),
-                                Ty::Any => Some("java/lang/Object".to_string()),
-                                _ => None,
-                            };
+                            // are found in the registry. Primitive receiver
+                            // Tys (`Ty::Int`, `Ty::Long`, …) are bridged to
+                            // their boxed JVM class names so `30.cents()`
+                            // (declared `fun Int.cents()`) resolves under
+                            // `java/lang/Integer`.
+                            let recv_class_opt: Option<String> =
+                                ext_fn_receiver_jvm_class(&recv_ty);
                             if let Some(recv_class) = &recv_class_opt {
                                 if let Some(ext) =
                                     lookup_cross_file_ext_fn_compat(method_n, recv_class)
@@ -37190,9 +37327,16 @@ fn method_simple_body_full(
         .map(|pl| pl.parameters().count())
         .unwrap_or(0);
     let mut early_param_fallback: Vec<Ty> = Vec::with_capacity(1 + early_param_count);
+    // `this` slot Ty. For a non-primitive receiver this is the
+    // declared class; for a primitive receiver (extension on
+    // `Int`/`Long`/`Char`/…) kotlinc lowers the static fn with the
+    // primitive in slot 0 (descriptor `I`/`J`/…), so `this.toLong()`
+    // inside the body must see `Ty::Int` to dispatch through the
+    // primitive-conversion path (i2l opcode) instead of an invalid
+    // `invokevirtual Int.toLong()` on a class named "Int".
     early_param_fallback.push(
         class_name
-            .map(|c| Ty::Class(c.to_string()))
+            .map(|c| skotch_types::ty_from_name(c).unwrap_or_else(|| Ty::Class(c.to_string())))
             .unwrap_or(Ty::Any),
     );
     if let Some(pl) = f.value_parameter_list() {
@@ -38545,8 +38689,16 @@ fn method_simple_body_full(
     // `field.method()` shapes — the exact shape Add.eval/Add.show
     // bodies use.
     let mut method_param_fallback: Vec<Ty> = Vec::with_capacity(1 + param_count);
+    // For a primitive-receiver extension fn (`fun Int.cents()`),
+    // surface `Ty::Int` on slot 0 instead of `Ty::Class("Int")` so
+    // `this.toLong()` lands the `prim_conv` arm in lower_rich (i2l)
+    // rather than emitting a nonsensical `invokevirtual Int.toLong`.
+    // Mirrors the same primitive-aware lookup applied in
+    // `early_param_fallback` above.
     if let Some(cname) = class_name {
-        method_param_fallback.push(Ty::Class(cname.to_string()));
+        method_param_fallback.push(
+            skotch_types::ty_from_name(cname).unwrap_or_else(|| Ty::Class(cname.to_string())),
+        );
     } else {
         method_param_fallback.push(Ty::Any);
     }
@@ -39886,6 +40038,15 @@ fn method_simple_body_full(
     // Explicit `this.method(args)` body for class methods. Same emit
     // as the implicit-this virtual call below, but the receiver is
     // explicitly `this` inside a DotQualified.
+    //
+    // SKIP this arm when `class_name` resolves to a JVM primitive
+    // (extension fn on `Int`/`Long`/`Char`/…). The Virtual emit below
+    // would produce `invokevirtual Int.toLong()` against the
+    // (non-existent) class "Int", and the JVM can't dispatch a
+    // virtual on a primitive receiver anyway. Falling through lets
+    // the generic `lower_rich_expr_to_slot` arm pick up the
+    // `prim_conv` table (i2l, i2d, …) for primitive→primitive
+    // conversions, and the cross-file ext-fn registry for the rest.
     if let KtExpr::DotQualified(dq) = &body_expr {
         let exprs: Vec<KtExpr<'_>> = skotch_ast::children(dq.syntax())
             .iter()
@@ -39897,7 +40058,22 @@ fn method_simple_body_full(
                     Some(KtExpr::Reference(r)) => r.name(),
                     _ => None,
                 };
-                if let (Some(cname), Some(meth_name)) = (class_name, meth_name) {
+                let class_name_for_virtual = class_name.filter(|c| {
+                    !matches!(
+                        skotch_types::ty_from_name(c),
+                        Some(
+                            Ty::Int
+                                | Ty::Long
+                                | Ty::Short
+                                | Ty::Byte
+                                | Ty::Bool
+                                | Ty::Char
+                                | Ty::Float
+                                | Ty::Double
+                        )
+                    )
+                });
+                if let (Some(cname), Some(meth_name)) = (class_name_for_virtual, meth_name) {
                     let this_slot = skotch_mir::LocalId(0);
                     let mut next_slot = (1 + param_count) as u32;
                     let mut pre_stmts: Vec<skotch_mir::Stmt> = Vec::new();
