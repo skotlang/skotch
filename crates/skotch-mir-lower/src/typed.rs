@@ -741,6 +741,202 @@ struct CrossFileExtFn {
     return_ty: Ty,
     /// `inline fun <reified T> Iterable<*>.firstOfType(): T?` shape.
     is_reified_type_filter: bool,
+    /// `inline fun <reified T> Any.isInstanceOf(): Boolean` shape — bound
+    /// reified instance check. Call sites with a `<X>` type-arg can be
+    /// inlined as `Rvalue::InstanceOf { obj: recv, type_descriptor: X }`
+    /// instead of dispatching to the static body (whose `T` is erased to
+    /// `Object` and would always return true).
+    is_reified_instance_check: bool,
+}
+
+/// Emit the 7-block inline expansion of `recv.firstOfType<T>()` /
+/// `firstOfType<T>(recv)` reified-instance-filter:
+///   entry (size + i=0, into cur_stmts then flushed) → cond → check
+///   → next → match → null → cont.
+/// `cur_stmts` is taken (drained into the entry block) so any post-
+/// expansion stmts emitted by the caller land cleanly in the cont
+/// block. Returns the `prop_slot` (Nullable<Any>) the result is bound
+/// to. Block IDs are computed off `block_offset + blocks.len()` so the
+/// caller can keep appending blocks afterwards without renumbering.
+#[allow(clippy::too_many_arguments)]
+fn emit_reified_first_of_type_blocks(
+    recv_slot: skotch_mir::LocalId,
+    t_jvm_class: &str,
+    next_slot: &mut u32,
+    local_tys: &mut Vec<Ty>,
+    cur_stmts: &mut Vec<skotch_mir::Stmt>,
+    blocks: &mut Vec<BasicBlock>,
+    block_offset: u32,
+) -> skotch_mir::LocalId {
+    use skotch_mir::{LocalId, Stmt as MStmt};
+    let size_slot = LocalId(*next_slot);
+    *next_slot += 1;
+    local_tys.push(Ty::Int);
+    cur_stmts.push(MStmt::Assign {
+        dest: size_slot,
+        value: skotch_mir::Rvalue::Call {
+            kind: skotch_mir::CallKind::Virtual {
+                class_name: "java/util/List".to_string(),
+                method_name: "size".to_string(),
+            },
+            args: vec![recv_slot],
+        },
+    });
+    let i_slot = LocalId(*next_slot);
+    *next_slot += 1;
+    local_tys.push(Ty::Int);
+    cur_stmts.push(MStmt::Assign {
+        dest: i_slot,
+        value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(0)),
+    });
+    let prop_slot = LocalId(*next_slot);
+    *next_slot += 1;
+    local_tys.push(Ty::Nullable(Box::new(Ty::Any)));
+    let id0 = block_offset + blocks.len() as u32;
+    let (
+        cond_block_id,
+        check_block_id,
+        next_block_id,
+        match_block_id,
+        null_block_id,
+        cont_block_id,
+    ) = (id0 + 1, id0 + 2, id0 + 3, id0 + 4, id0 + 5, id0 + 6);
+    blocks.push(BasicBlock {
+        stmts: std::mem::take(cur_stmts),
+        terminator: Terminator::Goto(cond_block_id),
+    });
+    let cmp_slot = LocalId(*next_slot);
+    *next_slot += 1;
+    local_tys.push(Ty::Bool);
+    blocks.push(BasicBlock {
+        stmts: vec![MStmt::Assign {
+            dest: cmp_slot,
+            value: skotch_mir::Rvalue::BinOp {
+                op: skotch_mir::BinOp::CmpLt,
+                lhs: i_slot,
+                rhs: size_slot,
+            },
+        }],
+        terminator: Terminator::Branch {
+            cond: cmp_slot,
+            then_block: check_block_id,
+            else_block: null_block_id,
+        },
+    });
+    let item_slot = LocalId(*next_slot);
+    *next_slot += 1;
+    local_tys.push(Ty::Any);
+    let ok_slot = LocalId(*next_slot);
+    *next_slot += 1;
+    local_tys.push(Ty::Bool);
+    blocks.push(BasicBlock {
+        stmts: vec![
+            MStmt::Assign {
+                dest: item_slot,
+                value: skotch_mir::Rvalue::Call {
+                    kind: skotch_mir::CallKind::Virtual {
+                        class_name: "java/util/List".to_string(),
+                        method_name: "get".to_string(),
+                    },
+                    args: vec![recv_slot, i_slot],
+                },
+            },
+            MStmt::Assign {
+                dest: ok_slot,
+                value: skotch_mir::Rvalue::InstanceOf {
+                    obj: item_slot,
+                    type_descriptor: t_jvm_class.to_string(),
+                },
+            },
+        ],
+        terminator: Terminator::Branch {
+            cond: ok_slot,
+            then_block: match_block_id,
+            else_block: next_block_id,
+        },
+    });
+    let one_slot = LocalId(*next_slot);
+    *next_slot += 1;
+    local_tys.push(Ty::Int);
+    blocks.push(BasicBlock {
+        stmts: vec![
+            MStmt::Assign {
+                dest: one_slot,
+                value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(1)),
+            },
+            MStmt::Assign {
+                dest: i_slot,
+                value: skotch_mir::Rvalue::BinOp {
+                    op: skotch_mir::BinOp::AddI,
+                    lhs: i_slot,
+                    rhs: one_slot,
+                },
+            },
+        ],
+        terminator: Terminator::Goto(cond_block_id),
+    });
+    let cast_slot = LocalId(*next_slot);
+    *next_slot += 1;
+    local_tys.push(Ty::Class(t_jvm_class.to_string()));
+    blocks.push(BasicBlock {
+        stmts: vec![
+            MStmt::Assign {
+                dest: cast_slot,
+                value: skotch_mir::Rvalue::CheckCast {
+                    obj: item_slot,
+                    target_class: t_jvm_class.to_string(),
+                },
+            },
+            MStmt::Assign {
+                dest: prop_slot,
+                value: skotch_mir::Rvalue::Local(cast_slot),
+            },
+        ],
+        terminator: Terminator::Goto(cont_block_id),
+    });
+    let null_slot = LocalId(*next_slot);
+    *next_slot += 1;
+    local_tys.push(Ty::Nullable(Box::new(Ty::Any)));
+    blocks.push(BasicBlock {
+        stmts: vec![
+            MStmt::Assign {
+                dest: null_slot,
+                value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Null),
+            },
+            MStmt::Assign {
+                dest: prop_slot,
+                value: skotch_mir::Rvalue::Local(null_slot),
+            },
+        ],
+        terminator: Terminator::Goto(cont_block_id),
+    });
+    debug_assert_eq!(cont_block_id, block_offset + blocks.len() as u32);
+    prop_slot
+}
+
+/// Extract the JVM-internal class name for the first type argument
+/// of a `Call` expression (e.g. `foo<String>(...)` → `"java/lang/String"`).
+/// Returns None when the call has no type-arg list, no arguments, or
+/// the type ref can't be resolved to a user-type name. Primitives are
+/// mapped to their boxed peer (Int → `java/lang/Integer`) because
+/// reified `is T` against a primitive type uses the boxed instanceof.
+fn extract_call_first_type_arg_jvm_class(
+    call: &skotch_ast::KtCallExpression<'_>,
+) -> Option<String> {
+    let tal = call.type_argument_list()?;
+    let tp = tal.arguments().next()?;
+    let tr = tp.type_reference()?;
+    let t_name = tr
+        .nullable_type()
+        .and_then(|n| n.inner_user_type())
+        .or_else(|| tr.user_type())
+        .and_then(|u| u.name())?;
+    Some(
+        kotlin_primitive_to_boxed_class(t_name)
+            .or_else(|| skotch_types::intrinsics::kotlin_to_jvm_class(t_name))
+            .map(String::from)
+            .unwrap_or_else(|| t_name.to_string()),
+    )
 }
 
 /// Kotlin primitive name → JVM boxed class for reified-T `instanceof`.
@@ -909,6 +1105,51 @@ impl CrossFileExtFnsScope {
 impl Drop for CrossFileExtFnsScope {
     fn drop(&mut self) {
         CROSS_FILE_EXT_FNS.with(|c| *c.borrow_mut() = std::mem::take(&mut self.prev));
+    }
+}
+
+thread_local! {
+    /// Per-file registry of FREE (non-extension) `inline fun <reified T>`
+    /// top-level fns whose body shape we recognize for call-site
+    /// inlining. Keyed by simple fn name. Currently used for
+    /// `firstOfType<T>(items: List<Any>): T?` — the call site emits a
+    /// 7-block inline iteration with `instanceof T` substituted.
+    static REIFIED_FREE_FN_SHAPES:
+        std::cell::RefCell<rustc_hash::FxHashMap<String, ReifiedFreeFnShape>> =
+        std::cell::RefCell::new(rustc_hash::FxHashMap::default());
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ReifiedFreeFnShape {
+    /// `inline fun <reified T> firstOfType(items: List<Any>): T?`
+    /// shape: scans the single `List<Any>` arg, returns first item
+    /// matching `is T` or null. Call sites are inlined with the
+    /// concrete T from the `<X>` type-arg.
+    FirstOfType,
+}
+
+fn register_reified_free_fn_shape(name: &str, shape: ReifiedFreeFnShape) {
+    REIFIED_FREE_FN_SHAPES.with(|c| {
+        c.borrow_mut().insert(name.to_string(), shape);
+    });
+}
+
+fn lookup_reified_free_fn_shape(name: &str) -> Option<ReifiedFreeFnShape> {
+    REIFIED_FREE_FN_SHAPES.with(|c| c.borrow().get(name).copied())
+}
+
+struct ReifiedFreeFnShapesScope {
+    prev: rustc_hash::FxHashMap<String, ReifiedFreeFnShape>,
+}
+impl ReifiedFreeFnShapesScope {
+    fn new() -> Self {
+        let prev = REIFIED_FREE_FN_SHAPES.with(|c| std::mem::take(&mut *c.borrow_mut()));
+        Self { prev }
+    }
+}
+impl Drop for ReifiedFreeFnShapesScope {
+    fn drop(&mut self) {
+        REIFIED_FREE_FN_SHAPES.with(|c| *c.borrow_mut() = std::mem::take(&mut self.prev));
     }
 }
 
@@ -2200,6 +2441,13 @@ pub fn lower_file(
                         &decl.return_ty,
                         Ty::Nullable(inner) if matches!(inner.as_ref(), Ty::Any | Ty::Class(_))
                     );
+                // `Any.isInstanceOf<T>()` shape — inline ext on Object
+                // (Ty::Any), no user params, returning Boolean. Call
+                // sites can substitute concrete T as `Rvalue::InstanceOf`.
+                let is_reified_instance_check = decl.is_inline
+                    && recv_class == "java/lang/Object"
+                    && decl.param_count == 0
+                    && matches!(&decl.return_ty, Ty::Bool);
                 register_cross_file_ext_fn(
                     name,
                     &recv_class,
@@ -2209,8 +2457,61 @@ pub fn lower_file(
                         descriptor: decl.descriptor.clone(),
                         return_ty: decl.return_ty.clone(),
                         is_reified_type_filter,
+                        is_reified_instance_check,
                     },
                 );
+            }
+        }
+    }
+
+    // Per-file registry of FREE reified inline fns whose body shape we
+    // recognize for call-site inlining. Currently:
+    //   `inline fun <reified T> firstOfType(items: List<Any>): T?`
+    // Lets `firstOfType<String>(mixed)` substitute concrete `String`
+    // into a 7-block inline iteration instead of dispatching to a body
+    // whose `T` has been erased to `Object` (returning the first item).
+    let _reified_free_fn_shapes_scope = ReifiedFreeFnShapesScope::new();
+    if let Some(table) = package_symbols {
+        for (name, decls) in table.functions.iter() {
+            for decl in decls {
+                if decl.is_extension {
+                    continue;
+                }
+                // `firstOfType` shape: inline + single `List<Any>` /
+                // `Iterable<Any>` / Object param + nullable Object/T?
+                // return. The `T?` erases to `Nullable(Any)` once the
+                // generic-erasure pass runs, so we accept Nullable(Any)
+                // OR Nullable(Class(_)) (pre-erasure).
+                if !decl.is_inline {
+                    continue;
+                }
+                if decl.param_count != 1 {
+                    continue;
+                }
+                let return_ok = matches!(
+                    &decl.return_ty,
+                    Ty::Nullable(inner) if matches!(inner.as_ref(), Ty::Any | Ty::Class(_))
+                );
+                if !return_ok {
+                    continue;
+                }
+                // Param must be a list-like receiver. Accept Iterable,
+                // Collection, List (and Mutable variants) — the inline
+                // body uses `for (it in items)` which lowers to
+                // size+get over java/util/List at runtime.
+                let p0_ok = matches!(
+                    decl.param_tys.first(),
+                    Some(Ty::Class(c)) if matches!(
+                        c.as_str(),
+                        "java/util/List"
+                            | "java/util/Collection"
+                            | "java/lang/Iterable"
+                    )
+                );
+                if !p0_ok {
+                    continue;
+                }
+                register_reified_free_fn_shape(name, ReifiedFreeFnShape::FirstOfType);
             }
         }
     }
@@ -11668,6 +11969,12 @@ fn lower_loop_body_blocks(
         /// `val name: T? = recv.firstOfType()` against a reified-T
         /// type-filter ext fn; emit inline iteration with concrete T.
         PropertyWithReifiedTypeFilter,
+        /// `val name = firstOfType<X>(items)` — free-fn variant of
+        /// the reified type-filter. The concrete `X` comes from the
+        /// call's type-arg list; the list receiver is the first call
+        /// arg. Inlined as a 7-block iteration just like
+        /// `PropertyWithReifiedTypeFilter`.
+        PropertyWithReifiedFirstOfTypeCall,
         NestedWhile,
         NestedForIn,
         RepeatStmt,
@@ -11737,6 +12044,35 @@ fn lower_loop_body_blocks(
                                         break;
                                     }
                                 }
+                            }
+                        }
+                        // `val firstStr = firstOfType<String>(mixed)` —
+                        // free-fn variant. Concrete `T` comes from the
+                        // call's `<X>` type-arg, the list receiver is
+                        // the single value arg. We accept this even
+                        // without an explicit prop type ref because the
+                        // type-arg carries the substitution.
+                        KtExpr::Call(c) => {
+                            let callee_name = match c.callee() {
+                                Some(KtExpr::Reference(r)) => r.name(),
+                                _ => None,
+                            };
+                            let has_type_arg = c
+                                .type_argument_list()
+                                .map(|tal| tal.arguments().next().is_some())
+                                .unwrap_or(false);
+                            let one_arg = c
+                                .value_argument_list()
+                                .map(|al| al.arguments().count() == 1)
+                                .unwrap_or(false)
+                                && c.lambda_argument().is_none();
+                            let is_first_of_type = callee_name
+                                .and_then(lookup_reified_free_fn_shape)
+                                .map(|s| s == ReifiedFreeFnShape::FirstOfType)
+                                .unwrap_or(false);
+                            if has_type_arg && one_arg && is_first_of_type {
+                                special_at = Some((j, Special::PropertyWithReifiedFirstOfTypeCall));
+                                break;
                             }
                         }
                         _ => {}
@@ -13817,148 +14153,61 @@ fn lower_loop_body_blocks(
                     local_tys,
                     strings,
                 )?;
-                let size_slot = LocalId(*next_slot);
-                *next_slot += 1;
-                local_tys.push(Ty::Int);
-                cur_stmts.push(MStmt::Assign {
-                    dest: size_slot,
-                    value: skotch_mir::Rvalue::Call {
-                        kind: skotch_mir::CallKind::Virtual {
-                            class_name: "java/util/List".to_string(),
-                            method_name: "size".to_string(),
-                        },
-                        args: vec![recv_slot],
-                    },
-                });
-                let i_slot = LocalId(*next_slot);
-                *next_slot += 1;
-                local_tys.push(Ty::Int);
-                cur_stmts.push(MStmt::Assign {
-                    dest: i_slot,
-                    value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(0)),
-                });
-                let prop_slot = LocalId(*next_slot);
-                *next_slot += 1;
-                local_tys.push(Ty::Nullable(Box::new(Ty::Any)));
-                let id0 = block_offset + blocks.len() as u32;
-                let (
-                    cond_block_id,
-                    check_block_id,
-                    next_block_id,
-                    match_block_id,
-                    null_block_id,
-                    cont_block_id,
-                ) = (id0 + 1, id0 + 2, id0 + 3, id0 + 4, id0 + 5, id0 + 6);
-                blocks.push(BasicBlock {
-                    stmts: std::mem::take(&mut cur_stmts),
-                    terminator: Terminator::Goto(cond_block_id),
-                });
-                let cmp_slot = LocalId(*next_slot);
-                *next_slot += 1;
-                local_tys.push(Ty::Bool);
-                blocks.push(BasicBlock {
-                    stmts: vec![MStmt::Assign {
-                        dest: cmp_slot,
-                        value: skotch_mir::Rvalue::BinOp {
-                            op: skotch_mir::BinOp::CmpLt,
-                            lhs: i_slot,
-                            rhs: size_slot,
-                        },
-                    }],
-                    terminator: Terminator::Branch {
-                        cond: cmp_slot,
-                        then_block: check_block_id,
-                        else_block: null_block_id,
-                    },
-                });
-                let item_slot = LocalId(*next_slot);
-                *next_slot += 1;
-                local_tys.push(Ty::Any);
-                let ok_slot = LocalId(*next_slot);
-                *next_slot += 1;
-                local_tys.push(Ty::Bool);
-                blocks.push(BasicBlock {
-                    stmts: vec![
-                        MStmt::Assign {
-                            dest: item_slot,
-                            value: skotch_mir::Rvalue::Call {
-                                kind: skotch_mir::CallKind::Virtual {
-                                    class_name: "java/util/List".to_string(),
-                                    method_name: "get".to_string(),
-                                },
-                                args: vec![recv_slot, i_slot],
-                            },
-                        },
-                        MStmt::Assign {
-                            dest: ok_slot,
-                            value: skotch_mir::Rvalue::InstanceOf {
-                                obj: item_slot,
-                                type_descriptor: t_jvm_class.clone(),
-                            },
-                        },
-                    ],
-                    terminator: Terminator::Branch {
-                        cond: ok_slot,
-                        then_block: match_block_id,
-                        else_block: next_block_id,
-                    },
-                });
-                let one_slot = LocalId(*next_slot);
-                *next_slot += 1;
-                local_tys.push(Ty::Int);
-                blocks.push(BasicBlock {
-                    stmts: vec![
-                        MStmt::Assign {
-                            dest: one_slot,
-                            value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(1)),
-                        },
-                        MStmt::Assign {
-                            dest: i_slot,
-                            value: skotch_mir::Rvalue::BinOp {
-                                op: skotch_mir::BinOp::AddI,
-                                lhs: i_slot,
-                                rhs: one_slot,
-                            },
-                        },
-                    ],
-                    terminator: Terminator::Goto(cond_block_id),
-                });
-                let cast_slot = LocalId(*next_slot);
-                *next_slot += 1;
-                local_tys.push(Ty::Class(t_jvm_class.clone()));
-                blocks.push(BasicBlock {
-                    stmts: vec![
-                        MStmt::Assign {
-                            dest: cast_slot,
-                            value: skotch_mir::Rvalue::CheckCast {
-                                obj: item_slot,
-                                target_class: t_jvm_class.clone(),
-                            },
-                        },
-                        MStmt::Assign {
-                            dest: prop_slot,
-                            value: skotch_mir::Rvalue::Local(cast_slot),
-                        },
-                    ],
-                    terminator: Terminator::Goto(cont_block_id),
-                });
-                let null_slot = LocalId(*next_slot);
-                *next_slot += 1;
-                local_tys.push(Ty::Nullable(Box::new(Ty::Any)));
-                blocks.push(BasicBlock {
-                    stmts: vec![
-                        MStmt::Assign {
-                            dest: null_slot,
-                            value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Null),
-                        },
-                        MStmt::Assign {
-                            dest: prop_slot,
-                            value: skotch_mir::Rvalue::Local(null_slot),
-                        },
-                    ],
-                    terminator: Terminator::Goto(cont_block_id),
-                });
-                debug_assert_eq!(cont_block_id, block_offset + blocks.len() as u32);
+                let prop_slot = emit_reified_first_of_type_blocks(
+                    recv_slot,
+                    &t_jvm_class,
+                    next_slot,
+                    local_tys,
+                    &mut cur_stmts,
+                    &mut blocks,
+                    block_offset,
+                );
+                name_to_local.push((pname.to_string(), prop_slot));
+                i = j + 1;
+                continue;
+            }
+            Some((j, Special::PropertyWithReifiedFirstOfTypeCall)) => {
+                // `val name = firstOfType<X>(items)`: same 7-block
+                // inline expansion as PropertyWithReifiedTypeFilter,
+                // but recv comes from the single value arg and the
+                // concrete `X` from the call's type-arg list.
+                let prop_node = body_children[j];
+                let prop = skotch_ast::KtProperty::cast(prop_node)?;
+                let pname = prop.name()?;
+                let init = prop.initializer().map(unwrap_parens)?;
+                let KtExpr::Call(call_expr) = init else {
+                    return None;
+                };
+                let t_jvm_class = extract_call_first_type_arg_jvm_class(&call_expr)?;
+                let recv_expr = call_expr
+                    .value_argument_list()
+                    .and_then(|al| al.arguments().next())
+                    .and_then(|a| a.expression())?;
+                let snap = name_to_local.clone();
+                let lookup = |n: &str| -> Option<LocalId> {
+                    snap.iter()
+                        .rev()
+                        .find(|(name, _)| name == n)
+                        .map(|(_, l)| *l)
+                };
+                let recv_slot = lower_rich_expr_to_slot(
+                    recv_expr,
+                    &lookup,
+                    fn_lookup_ref,
+                    next_slot,
+                    &mut cur_stmts,
+                    local_tys,
+                    strings,
+                )?;
+                let prop_slot = emit_reified_first_of_type_blocks(
+                    recv_slot,
+                    &t_jvm_class,
+                    next_slot,
+                    local_tys,
+                    &mut cur_stmts,
+                    &mut blocks,
+                    block_offset,
+                );
                 name_to_local.push((pname.to_string(), prop_slot));
                 i = j + 1;
                 continue;
@@ -15640,6 +15889,49 @@ fn try_lower_multi_stmt_block_with_offset(
         }
     });
     if body_has_throw_or_try_arm {
+        return None;
+    }
+
+    // Bail to the builder path when any top-level KtProperty's init is a
+    // free Call to a reified `firstOfType<X>(items)` shape — the
+    // legacy linear walker dispatches it to the static body (whose `T`
+    // is erased to Object, always matching the first element). The
+    // builder path's `lower_loop_body_blocks` recognizes
+    // `Special::PropertyWithReifiedFirstOfTypeCall` and inlines the
+    // 7-block iteration with concrete T substituted. Without this bail,
+    // top-level `val firstStr = firstOfType<String>(mixed)` in main()
+    // would silently return the first element regardless of type.
+    let body_has_reified_first_of_type = block_children.iter().any(|c| {
+        let Some(prop) = skotch_ast::KtProperty::cast(c) else {
+            return false;
+        };
+        let Some(init) = prop.initializer() else {
+            return false;
+        };
+        let KtExpr::Call(call) = unwrap_parens(init) else {
+            return false;
+        };
+        let callee_name = match call.callee() {
+            Some(KtExpr::Reference(r)) => r.name(),
+            _ => None,
+        };
+        let has_type_arg = call
+            .type_argument_list()
+            .map(|tal| tal.arguments().next().is_some())
+            .unwrap_or(false);
+        let one_arg = call
+            .value_argument_list()
+            .map(|al| al.arguments().count() == 1)
+            .unwrap_or(false)
+            && call.lambda_argument().is_none();
+        has_type_arg
+            && one_arg
+            && callee_name
+                .and_then(lookup_reified_free_fn_shape)
+                .map(|s| s == ReifiedFreeFnShape::FirstOfType)
+                .unwrap_or(false)
+    });
+    if body_has_reified_first_of_type {
         return None;
     }
 
@@ -29634,6 +29926,33 @@ fn lower_rich_expr_to_slot(
                                     if let Some(ext) =
                                         lookup_cross_file_ext_fn_compat(method_n, recv_class)
                                     {
+                                        // Reified `Any.isInstanceOf<X>()`
+                                        // fast path: substitute concrete X
+                                        // from the call's type-arg into
+                                        // an `Rvalue::InstanceOf`. The
+                                        // static body's `is T` is erased
+                                        // to `is Object` (always true),
+                                        // so dispatching there would
+                                        // always return true. Inlining
+                                        // here preserves Kotlin
+                                        // reified-T semantics.
+                                        if ext.is_reified_instance_check {
+                                            if let Some(t_jvm) =
+                                                extract_call_first_type_arg_jvm_class(call)
+                                            {
+                                                let ok_slot = LocalId(*next_slot);
+                                                *next_slot += 1;
+                                                extra_locals.push(Ty::Bool);
+                                                pre_stmts.push(MStmt::Assign {
+                                                    dest: ok_slot,
+                                                    value: skotch_mir::Rvalue::InstanceOf {
+                                                        obj: slot,
+                                                        type_descriptor: t_jvm,
+                                                    },
+                                                });
+                                                return Some(ok_slot);
+                                            }
+                                        }
                                         let param_descs = parse_descriptor_params(&ext.descriptor);
                                         let target_is_object = |idx: usize| -> bool {
                                             param_descs
@@ -29951,6 +30270,31 @@ fn lower_rich_expr_to_slot(
                                 if let Some(ext) =
                                     lookup_cross_file_ext_fn_compat(method_n, recv_class)
                                 {
+                                    // Reified `Any.isInstanceOf<X>()`
+                                    // fast path for non-Reference recv
+                                    // (e.g. `(3 as Any).isInstanceOf<Int>()`):
+                                    // substitute concrete X from the
+                                    // call's type-arg and emit
+                                    // `Rvalue::InstanceOf` directly. See
+                                    // the Reference-receiver arm above
+                                    // for rationale.
+                                    if ext.is_reified_instance_check {
+                                        if let Some(t_jvm) =
+                                            extract_call_first_type_arg_jvm_class(call)
+                                        {
+                                            let ok_slot = LocalId(*next_slot);
+                                            *next_slot += 1;
+                                            extra_locals.push(Ty::Bool);
+                                            pre_stmts.push(MStmt::Assign {
+                                                dest: ok_slot,
+                                                value: skotch_mir::Rvalue::InstanceOf {
+                                                    obj: recv_slot,
+                                                    type_descriptor: t_jvm,
+                                                },
+                                            });
+                                            return Some(ok_slot);
+                                        }
+                                    }
                                     let param_descs = parse_descriptor_params(&ext.descriptor);
                                     let target_is_object = |idx: usize| -> bool {
                                         param_descs
