@@ -322,6 +322,136 @@ pub fn lookup_method_descriptor(
     None
 }
 
+/// Variant of [`lookup_method_descriptor`] that disambiguates same-arity
+/// overloads by call-site arg-type compatibility.
+///
+/// `arg_class_names` is the list of JVM internal names of the *non-`this*
+/// arguments at the call site (e.g. `["java/lang/String"]` for
+/// `RuntimeException(message)` where `message: String`). When two or more
+/// overloads share the requested arity, prefer the one whose declared
+/// param types match the supplied names exactly; fall back to
+/// [`lookup_method_descriptor`]'s "any reference type" tiebreaker when no
+/// exact match exists (the widening case, e.g. passing an Exception into
+/// a Throwable slot).
+///
+/// Returns `None` when no overload with the requested arity exists.
+pub fn lookup_method_descriptor_for_args(
+    class_path: &str,
+    method_name: &str,
+    arg_class_names: &[Option<&str>],
+) -> Option<String> {
+    let param_count = arg_class_names.len();
+
+    // Walk the same registries as `lookup_method_descriptor` and collect
+    // every same-arity overload before picking. We materialize the
+    // descriptors as owned Strings up front so the borrow checker is
+    // happy across the classpath-cache → JDK fallback boundary.
+    let mut candidates: Vec<String> = Vec::new();
+    if let Some(ci) = cached_class_lookup(class_path) {
+        for m in &ci.methods {
+            if m.name == method_name && count_descriptor_params(&m.descriptor) == param_count {
+                candidates.push(m.descriptor.clone());
+            }
+        }
+        if candidates.is_empty() {
+            for m in &ci.methods {
+                if matches_mangled(&m.name, method_name)
+                    && count_descriptor_params(&m.descriptor) == param_count
+                {
+                    candidates.push(m.descriptor.clone());
+                }
+            }
+        }
+    }
+    if candidates.is_empty() {
+        if let Ok(ci) = load_jdk_class(class_path) {
+            for m in &ci.methods {
+                if m.name == method_name && count_descriptor_params(&m.descriptor) == param_count {
+                    candidates.push(m.descriptor.clone());
+                }
+            }
+            if candidates.is_empty() {
+                for m in &ci.methods {
+                    if matches_mangled(&m.name, method_name)
+                        && count_descriptor_params(&m.descriptor) == param_count
+                    {
+                        candidates.push(m.descriptor.clone());
+                    }
+                }
+            }
+        }
+    }
+    if candidates.is_empty() {
+        return None;
+    }
+
+    // Score each candidate: +1 per param whose declared internal name
+    // matches the corresponding call-site arg name. Highest score wins;
+    // ties fall back to the first candidate (preserves prior behavior
+    // when no arg-type info is available).
+    let mut best_idx = 0usize;
+    let mut best_score: i32 = -1;
+    for (idx, desc) in candidates.iter().enumerate() {
+        let params = parse_descriptor_param_internal_names(desc);
+        let mut score = 0i32;
+        for (i, declared) in params.iter().enumerate() {
+            if let (Some(d), Some(Some(a))) = (declared, arg_class_names.get(i)) {
+                if d == a {
+                    score += 1;
+                }
+            }
+        }
+        if score > best_score {
+            best_score = score;
+            best_idx = idx;
+        }
+    }
+    Some(candidates.swap_remove(best_idx))
+}
+
+/// Parse a JVM method descriptor into its parameter list, returning
+/// `Some(internal_name)` for reference params (`Lfoo/Bar;`) and `None`
+/// for primitives / arrays. Used by [`lookup_method_descriptor_for_args`]
+/// to score overload matches by call-site arg types.
+fn parse_descriptor_param_internal_names(desc: &str) -> Vec<Option<String>> {
+    let inner = desc
+        .strip_prefix('(')
+        .and_then(|s| s.split(')').next())
+        .unwrap_or("");
+    let bytes = inner.as_bytes();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'L' => {
+                let end = inner[i..].find(';').map(|e| i + e).unwrap_or(bytes.len());
+                let name = &inner[i + 1..end];
+                out.push(Some(name.to_string()));
+                i = end + 1;
+            }
+            b'[' => {
+                // Array — consume the [ markers + the element type but
+                // record None (caller treats arrays as "no exact match").
+                while i < bytes.len() && bytes[i] == b'[' {
+                    i += 1;
+                }
+                if i < bytes.len() && bytes[i] == b'L' {
+                    let end = inner[i..].find(';').map(|e| i + e).unwrap_or(bytes.len());
+                    i = end + 1;
+                } else if i < bytes.len() {
+                    i += 1;
+                }
+                out.push(None);
+            }
+            _ => {
+                out.push(None);
+                i += 1;
+            }
+        }
+    }
+    out
+}
+
 /// Look up the parsed generic signature for a method, if present in
 /// its classfile. Returns `None` for non-generic methods (no
 /// `Signature` attribute) or when the class can't be loaded. Resolved

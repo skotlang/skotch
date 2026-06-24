@@ -17133,9 +17133,41 @@ fn walk_block(
                         // `RuntimeException.<init>(String, Exception)`
                         // doesn't exist — only
                         // `<init>(String, Throwable)` does.
+                        // Build arg-type hints (call-site JVM internal
+                        // names) so that when the JDK super-class
+                        // declares multiple same-arity ctors (e.g.
+                        // `RuntimeException(String)` vs
+                        // `RuntimeException(Throwable)`), we pick the
+                        // overload that actually matches the call's
+                        // argument types. Without this, ambiguous
+                        // arity-1 lookups land on the wrong overload and
+                        // emit a bogus `checkcast Throwable` on a
+                        // `String` arg (regressed parity/08
+                        // post-Phase-F: `class CalcError(message:
+                        // String) : RuntimeException(message)` crashed
+                        // with a runtime ClassCastException).
                         let jdk_param_descs: Option<Vec<String>> = if target_param_tys.is_none() {
-                            skotch_classinfo::lookup_method_descriptor(
-                                class_name, "<init>", provided,
+                            let arg_class_names: Vec<Option<&str>> = args
+                                .iter()
+                                .skip(1)
+                                .map(|a| {
+                                    let ty = &func.locals[a.0 as usize];
+                                    match ty {
+                                        Ty::Class(n) => Some(n.as_str()),
+                                        Ty::Nullable(inner) => match inner.as_ref() {
+                                            Ty::Class(n) => Some(n.as_str()),
+                                            Ty::String => Some("java/lang/String"),
+                                            _ => None,
+                                        },
+                                        Ty::String => Some("java/lang/String"),
+                                        _ => None,
+                                    }
+                                })
+                                .collect();
+                            skotch_classinfo::lookup_method_descriptor_for_args(
+                                class_name,
+                                "<init>",
+                                &arg_class_names,
                             )
                             .map(|d| parse_descriptor_param_types_jvm(&d))
                         } else {
