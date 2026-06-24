@@ -417,6 +417,30 @@ fn ext_method_from_fun(
     }
 }
 
+/// Erase `Ty::Class(name)` where `name` is the simple name of a
+/// declared type parameter (`T`, `K`, `V`, …) down to `Ty::Any`.
+/// Without this, cross-file callers tag their dest slots with
+/// `Ty::Class("T")` and the backend emits `LT;` in descriptors —
+/// `NoClassDefFoundError: T` at load time. Also handles the common
+/// `T?` shape (Nullable wrapping a type-param Class).
+fn erase_type_param_classes(ty: &Ty, type_params: &std::collections::HashSet<String>) -> Ty {
+    if type_params.is_empty() {
+        return ty.clone();
+    }
+    match ty {
+        Ty::Class(n) if type_params.contains(n) => Ty::Any,
+        Ty::Nullable(inner) => {
+            if let Ty::Class(n) = inner.as_ref() {
+                if type_params.contains(n) {
+                    return Ty::Nullable(Box::new(Ty::Any));
+                }
+            }
+            ty.clone()
+        }
+        _ => ty.clone(),
+    }
+}
+
 /// Best-effort return-type inference from the function body. Mirrors
 /// the legacy `infer_body_return_ty` semantics: only when an explicit
 /// `return value` statement is present we infer the type of the
@@ -1045,6 +1069,27 @@ pub fn gather_declarations<'a>(
                         .return_type()
                         .map(|tr| type_ref_to_ty(tr, imports, aliases))
                         .unwrap_or_else(|| infer_body_return_ty(f));
+                    // Erase type-parameter Tys (`<T>`, `<K, V>`, etc.)
+                    // down to `Ty::Any` so cross-file callers don't
+                    // tag their dest slots with `Ty::Class("T")` —
+                    // which would descriptor as `LT;` at use sites
+                    // (e.g. `makeConcatWithConstants:(LT;)`) and
+                    // trip `NoClassDefFoundError: T` at load time.
+                    // Mirrors the in-file erasure in mir-lower's
+                    // function finalization (typed.rs ~4793-4806).
+                    let type_params: std::collections::HashSet<String> = f
+                        .type_parameter_list()
+                        .map(|tpl| {
+                            tpl.parameters()
+                                .filter_map(|tp| tp.name().map(String::from))
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    let return_ty = erase_type_param_classes(&return_ty, &type_params);
+                    let param_tys: Vec<Ty> = param_tys
+                        .into_iter()
+                        .map(|t| erase_type_param_classes(&t, &type_params))
+                        .collect();
                     let has_default: Vec<bool> = f
                         .value_parameter_list()
                         .map(|pl| {

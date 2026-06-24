@@ -1426,6 +1426,52 @@ fn resolve_user_ty(name: &str) -> Ty {
     })
 }
 
+/// Erase any `Ty::Class(name)` whose name appears in `type_params`
+/// (e.g. the function's declared `<T>` type parameter) down to
+/// `Ty::Any` so the JVM descriptor emits `Ljava/lang/Object;` instead
+/// of a bogus `LT;` that would fail to link at runtime. Also handles
+/// the common `T?` shape (Nullable wrapping a type-param Class).
+///
+/// Mirrors the in-body erasure pass run when finalizing each function
+/// (typed.rs ~4793-4806) but is applied to the call-site `fn_lookup`
+/// entry's return Ty so that downstream local-slot Tys (and therefore
+/// `makeConcatWithConstants` arg descriptors and other call-site
+/// descriptors) also get the erasure. Without this, a caller that
+/// stores `firstOfType<String>(items)` into a slot tags the slot with
+/// the unsubstituted `Ty::Class("T")`, and the println template's
+/// `makeConcatWithConstants:(LT;)Ljava/lang/String;` descriptor
+/// triggers `NoClassDefFoundError: T` at load time.
+fn erase_type_param_classes(ty: &Ty, type_params: &std::collections::HashSet<String>) -> Ty {
+    if type_params.is_empty() {
+        return ty.clone();
+    }
+    match ty {
+        Ty::Class(n) if type_params.contains(n) => Ty::Any,
+        Ty::Nullable(inner) => {
+            if let Ty::Class(n) = inner.as_ref() {
+                if type_params.contains(n) {
+                    return Ty::Nullable(Box::new(Ty::Any));
+                }
+            }
+            ty.clone()
+        }
+        _ => ty.clone(),
+    }
+}
+
+/// Collect the declared type-parameter names of a `KtFun` (the `<T, U>`
+/// list, if any). Used by [`erase_type_param_classes`] to recognize
+/// when a `Ty::Class("T")` should erase to `Ty::Any`.
+fn fn_type_param_names(f: &skotch_ast::KtFun<'_>) -> std::collections::HashSet<String> {
+    f.type_parameter_list()
+        .map(|tpl| {
+            tpl.parameters()
+                .filter_map(|tp| tp.name().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// Like [`resolve_user_ty`] but accepts a full `KtTypeReference` so
 /// function-type annotations (`(Int, Step) -> Unit`) are recognized
 /// and lowered to `Ty::Class("kotlin/jvm/functions/Function<arity>")`.
@@ -1953,7 +1999,13 @@ pub fn lower_file(
             if let KtDecl::Fun(f) = decl {
                 if let Some(name) = f.name() {
                     let typed_fn = typed.functions.iter().find(|tf| tf.name_index == idx);
-                    let ret = typed_fn.map(|tf| tf.return_ty.clone()).unwrap_or(Ty::Unit);
+                    let ret_raw = typed_fn.map(|tf| tf.return_ty.clone()).unwrap_or(Ty::Unit);
+                    // Erase type-parameter Tys so call-site dest slots
+                    // get `Ty::Any` (descriptor `Ljava/lang/Object;`)
+                    // instead of `Ty::Class("T")` (descriptor `LT;`).
+                    // See `erase_type_param_classes` for rationale.
+                    let tparams = fn_type_param_names(&f);
+                    let ret = erase_type_param_classes(&ret_raw, &tparams);
                     fn_lookup.insert(name.to_string(), (FuncId(idx), ret));
                     local_fn_names.insert(name.to_string());
                     local_fn_order.push((name.to_string(), idx));
@@ -2108,15 +2160,23 @@ pub fn lower_file(
                 let Some(recv_ty) = &decl.receiver_ty else {
                     continue;
                 };
-                let Ty::Class(recv_class) = recv_ty else {
-                    continue;
+                // `Any.foo()` extensions land here as `Ty::Any`; bridge
+                // to `java/lang/Object` so the call-site lookup (which
+                // also remaps `Ty::Any` receivers to `java/lang/Object`)
+                // finds the registration. Without this, a cross-file
+                // `Any.isInstanceOf<T>()` is never registered and the
+                // DotQualified arm bails on the receiver.
+                let recv_class: String = match recv_ty {
+                    Ty::Class(c) => c.clone(),
+                    Ty::Any => "java/lang/Object".to_string(),
+                    _ => continue,
                 };
                 // user_param_count excludes the receiver. ExternalFunDecl
                 // stores the receiver as the first entry of param_tys
                 // when is_extension is true.
                 register_cross_file_ext_fn(
                     name,
-                    recv_class,
+                    &recv_class,
                     CrossFileExtFn {
                         owner_class: decl.owner_class.clone(),
                         method_name: name.clone(),
@@ -29283,7 +29343,19 @@ fn lower_rich_expr_to_slot(
                                 // We emit a StaticJava call against the declared
                                 // wrapper class so the runtime executes the real
                                 // extension body. Carries trailing lambda + value args.
-                                if let Ty::Class(recv_class) = &recv_ty {
+                                //
+                                // `Ty::Any` receivers (from `(x as Any)` casts or
+                                // `val a: Any = ...`) are bridged to
+                                // `java/lang/Object` so cross-file `Any.foo()`
+                                // extensions still resolve. Without this,
+                                // `(3 as Any).isInstanceOf<Int>()` bails the
+                                // entire DotQualified expression.
+                                let recv_class_opt: Option<String> = match &recv_ty {
+                                    Ty::Class(c) => Some(c.clone()),
+                                    Ty::Any => Some("java/lang/Object".to_string()),
+                                    _ => None,
+                                };
+                                if let Some(recv_class) = &recv_class_opt {
                                     if let Some(ext) =
                                         lookup_cross_file_ext_fn_compat(method_n, recv_class)
                                     {
@@ -29586,6 +29658,92 @@ fn lower_rich_expr_to_slot(
                             strings,
                         ) {
                             let recv_ty = slot_ty_with_param_fallback(recv_slot.0, extra_locals);
+                            // Cross-file user-defined extension fn dispatch
+                            // for non-Reference receivers — mirrors the
+                            // Reference-receiver arm above. Lets shapes like
+                            // `(3 as Any).isInstanceOf<Int>()` (receiver is
+                            // BinaryWithTypeRhs, declared in a sibling file)
+                            // resolve to the static `Any.isInstanceOf`
+                            // wrapper-class method. `Ty::Any` is bridged to
+                            // `java/lang/Object` so `Any.foo()` extensions
+                            // are found in the registry.
+                            let recv_class_opt: Option<String> = match &recv_ty {
+                                Ty::Class(c) => Some(c.clone()),
+                                Ty::Any => Some("java/lang/Object".to_string()),
+                                _ => None,
+                            };
+                            if let Some(recv_class) = &recv_class_opt {
+                                if let Some(ext) =
+                                    lookup_cross_file_ext_fn_compat(method_n, recv_class)
+                                {
+                                    let param_descs = parse_descriptor_params(&ext.descriptor);
+                                    let target_is_object = |idx: usize| -> bool {
+                                        param_descs
+                                            .get(idx)
+                                            .map(|p| {
+                                                !matches!(
+                                                    p.as_str(),
+                                                    "I" | "J" | "F" | "D" | "Z" | "B" | "S" | "C"
+                                                )
+                                            })
+                                            .unwrap_or(false)
+                                    };
+                                    let mut arg_slots: Vec<LocalId> = vec![box_primitive_arg(
+                                        recv_slot,
+                                        target_is_object(0),
+                                        extra_locals,
+                                        pre_stmts,
+                                        next_slot,
+                                    )];
+                                    let mut all_ok = true;
+                                    let mut idx = 1usize;
+                                    if let Some(arg_list) = call.value_argument_list() {
+                                        for arg in arg_list.arguments() {
+                                            let Some(arg_e) = arg.expression() else {
+                                                all_ok = false;
+                                                break;
+                                            };
+                                            let Some(s) = lower_rich_expr_to_slot(
+                                                arg_e,
+                                                lookup_name,
+                                                fn_lookup,
+                                                next_slot,
+                                                pre_stmts,
+                                                extra_locals,
+                                                strings,
+                                            ) else {
+                                                all_ok = false;
+                                                break;
+                                            };
+                                            arg_slots.push(box_primitive_arg(
+                                                s,
+                                                target_is_object(idx),
+                                                extra_locals,
+                                                pre_stmts,
+                                                next_slot,
+                                            ));
+                                            idx += 1;
+                                        }
+                                    }
+                                    if all_ok && arg_slots.len() == param_descs.len() {
+                                        let result_slot = LocalId(*next_slot);
+                                        *next_slot += 1;
+                                        extra_locals.push(ext.return_ty.clone());
+                                        pre_stmts.push(MStmt::Assign {
+                                            dest: result_slot,
+                                            value: skotch_mir::Rvalue::Call {
+                                                kind: skotch_mir::CallKind::StaticJava {
+                                                    class_name: ext.owner_class.clone(),
+                                                    method_name: ext.method_name.clone(),
+                                                    descriptor: ext.descriptor.clone(),
+                                                },
+                                                args: arg_slots,
+                                            },
+                                        });
+                                        return Some(result_slot);
+                                    }
+                                }
+                            }
                             // CollectionsKt dispatch on chained collection
                             // receivers — `listOf(...).sorted()`,
                             // `mapOf(...).entries`, etc. Without this,
