@@ -3248,7 +3248,7 @@ pub fn lower_file(
         for decl in file.decls() {
             if let KtDecl::Class(c) = decl {
                 let Some(cname) = c.name() else { continue };
-                let (super_class, _) = collect_class_super_iface(c.super_type_list());
+                let (super_class, _) = collect_class_super_iface_aware(c);
                 if let Some(sc) = super_class {
                     supers.insert(cname.to_string(), sc);
                 }
@@ -3302,7 +3302,7 @@ pub fn lower_file(
                 Some(n) => format!("{pkg_prefix}{n}"),
                 None => continue,
             };
-            let (super_class, interfaces) = collect_class_super_iface(c.super_type_list());
+            let (super_class, interfaces) = collect_class_super_iface_aware(c);
             let mut fields = collect_class_fields(c);
             // Generic erasure for class fields: type params appear as
             // Ty::Class("A"). Erase to Ty::Any so descriptors come out
@@ -4067,7 +4067,7 @@ pub fn lower_file(
                 fields,
                 methods,
                 constructor,
-                secondary_constructors: collect_secondary_ctors(c),
+                secondary_constructors: collect_secondary_ctors(c, &name),
                 is_suspend_lambda: false,
                 is_lambda: false,
                 is_cross_file_stub: false,
@@ -4102,8 +4102,7 @@ pub fn lower_file(
                                 &module.wrapper_class,
                             );
                             let nested_ctor = constructor_from_primary(nested, &nested_qname);
-                            let (n_super, n_ifaces) =
-                                collect_class_super_iface(nested.super_type_list());
+                            let (n_super, n_ifaces) = collect_class_super_iface_aware(nested);
                             let nested_mir = skotch_mir::MirClass {
                                 name: nested_qname.clone(),
                                 super_class: n_super,
@@ -4114,7 +4113,10 @@ pub fn lower_file(
                                 fields: nested_fields,
                                 methods: nested_methods,
                                 constructor: nested_ctor,
-                                secondary_constructors: collect_secondary_ctors(nested),
+                                secondary_constructors: collect_secondary_ctors(
+                                    nested,
+                                    &nested_qname,
+                                ),
                                 is_suspend_lambda: false,
                                 is_lambda: false,
                                 is_cross_file_stub: false,
@@ -4945,7 +4947,7 @@ pub fn lower_file(
         for decl in file.decls() {
             if let KtDecl::Class(c) = decl {
                 let Some(cname) = c.name() else { continue };
-                let (_, ifaces) = collect_class_super_iface(c.super_type_list());
+                let (_, ifaces) = collect_class_super_iface_aware(c);
                 if !ifaces.is_empty() {
                     pending_iface_inherit.push((cname.to_string(), ifaces));
                 }
@@ -5100,7 +5102,7 @@ pub fn lower_file(
         for decl in file.decls() {
             if let KtDecl::Class(c) = decl {
                 let Some(cname) = c.name() else { continue };
-                let (super_class, _) = collect_class_super_iface(c.super_type_list());
+                let (super_class, _) = collect_class_super_iface_aware(c);
                 if let Some(sc) = super_class {
                     t.insert(cname.to_string(), sc);
                 }
@@ -35079,16 +35081,25 @@ fn collect_class_fields(c: skotch_ast::KtClass<'_>) -> Vec<skotch_mir::MirField>
 /// MirFunction named `<init>` with empty body — full body lowering
 /// (including the `: this(args)` / `: super(args)` delegation
 /// emission) lands in a follow-up.
-fn collect_secondary_ctors(c: skotch_ast::KtClass<'_>) -> Vec<MirFunction> {
+fn collect_secondary_ctors(c: skotch_ast::KtClass<'_>, class_fq: &str) -> Vec<MirFunction> {
     let mut out = Vec::new();
     let Some(body) = c.body() else { return out };
+    // Owning class name (FQ) for the implicit `this` slot. Without
+    // this, the backend's `is_init` descriptor builder
+    // (`func.params.iter().skip(1)`) drops the FIRST user parameter
+    // — so `secondary constructor (other: Sub)` was emitted as
+    // `<init>()V`, colliding with the primary `<init>()V` (two
+    // overload-ambiguous shells) AND dropping the user-callable
+    // `<init>(LSub;)V` that `copy()` references.
+    let class_ty = Ty::Class(class_fq.to_string());
     for (sc_idx, sc) in body.secondary_constructors().enumerate() {
         let sc_idx = sc_idx as u32;
-        let param_count = sc
+        let user_param_count = sc
             .value_parameter_list()
             .map(|pl| pl.parameters().count())
             .unwrap_or(0);
-        let params: Vec<skotch_mir::LocalId> = (0..param_count)
+        // params: local 0 = `this`, locals 1..=N = user params.
+        let params: Vec<skotch_mir::LocalId> = (0..=user_param_count)
             .map(|i| skotch_mir::LocalId(i as u32))
             .collect();
         let param_names: Vec<String> = sc
@@ -35099,31 +35110,65 @@ fn collect_secondary_ctors(c: skotch_ast::KtClass<'_>) -> Vec<MirFunction> {
                     .collect()
             })
             .unwrap_or_default();
-        let param_tys: Vec<Ty> = sc
+        // Package prefix of the owning class so a self-typed param
+        // (`private constructor(other: Sub)` in package `z`)
+        // produces the FQ descriptor `(Lz/Sub;)V` that the matching
+        // `Sub(this)` call site in `copy()` references.
+        let class_pkg_prefix: String = match class_fq.rfind('/') {
+            Some(i) => format!("{}/", &class_fq[..i]),
+            None => String::new(),
+        };
+        let class_simple = class_fq.rsplit('/').next().unwrap_or(class_fq);
+        let user_param_tys: Vec<Ty> = sc
             .value_parameter_list()
             .map(|pl| {
                 pl.parameters()
                     .map(|p| {
-                        p.type_reference()
+                        let Some(name) = p
+                            .type_reference()
                             .and_then(|tr| tr.user_type())
                             .and_then(|u| u.name())
-                            .and_then(skotch_types::ty_from_name)
-                            .unwrap_or(Ty::Any)
+                        else {
+                            return Ty::Any;
+                        };
+                        // Prefer builtin (Int/String/…). Otherwise
+                        // treat as user class (kotlinc's
+                        // `private constructor(other: Sub)` requires
+                        // descriptor `(LSub;)V`, not erased
+                        // `(Ljava/lang/Object;)V`).
+                        if let Some(t) = skotch_types::ty_from_name(name) {
+                            return t;
+                        }
+                        // FQ the name when it matches the owning
+                        // class (the common `copy-ctor` pattern). For
+                        // cross-class references (`Base`,
+                        // `Bit32Digest`, …) we leave the simple name
+                        // — downstream FQ-resolution is best-effort
+                        // and a wrong package guess would mis-route
+                        // the descriptor.
+                        if name == class_simple {
+                            Ty::Class(format!("{}{}", class_pkg_prefix, name))
+                        } else {
+                            Ty::Class(name.to_string())
+                        }
                     })
                     .collect()
             })
             .unwrap_or_default();
+        let mut locals: Vec<Ty> = Vec::with_capacity(1 + user_param_count);
+        locals.push(class_ty.clone());
+        locals.extend(user_param_tys);
         out.push(MirFunction {
             id: FuncId(sc_idx),
             name: "<init>".to_string(),
             params,
-            locals: param_tys,
+            locals,
             blocks: vec![BasicBlock {
                 stmts: Vec::new(),
                 terminator: Terminator::Return,
             }],
             return_ty: Ty::Unit,
-            required_params: param_count,
+            required_params: user_param_count,
             param_names,
             param_receiver_types: Vec::new(),
             param_defaults: Vec::new(),
@@ -39020,6 +39065,35 @@ fn collect_class_super_iface(
         }
     }
     (super_class, ifaces)
+}
+
+/// Class-aware variant of [`collect_class_super_iface`]. When the
+/// class header uses the secondary-ctor form `class Sub: Base` (no
+/// `Base(args)` parens — the args live on each secondary's
+/// `: super(...)` delegation), the base function would route the
+/// bare entry to `interfaces`, producing `implements Base` plus a
+/// duplicated synthesized `<init>()V` shell that chains to
+/// `Object.<init>` instead of `Base.<init>`. When at least one
+/// secondary ctor delegates via `: super(...)`, the first bare
+/// entry IS the super class (Kotlin allows only one super class,
+/// so any remaining bare entries stay as interfaces).
+fn collect_class_super_iface_aware(c: skotch_ast::KtClass<'_>) -> (Option<String>, Vec<String>) {
+    let (sc, mut ifaces) = collect_class_super_iface(c.super_type_list());
+    if sc.is_some() {
+        return (sc, ifaces);
+    }
+    let has_super_delegation = c
+        .body()
+        .map(|b| {
+            b.secondary_constructors()
+                .any(|sec| sec.delegation_call().map(|d| d.is_super()).unwrap_or(false))
+        })
+        .unwrap_or(false);
+    if !has_super_delegation || ifaces.is_empty() {
+        return (sc, ifaces);
+    }
+    let first = ifaces.remove(0);
+    (Some(first), ifaces)
 }
 
 /// Build a minimal `<init>()V` constructor for a class with no
@@ -43205,7 +43279,15 @@ mod tests {
         assert_eq!(sc.name, "<init>");
         assert_eq!(sc.required_params, 1);
         assert_eq!(sc.param_names, vec!["s".to_string()]);
-        assert_eq!(sc.locals, vec![Ty::String]);
+        // locals: [0] = `this` (Foo), [1] = user param `s` (String).
+        // The implicit `this` slot is what gives `emit_user_method`
+        // the right offset when it builds the `(Ljava/lang/String;)V`
+        // descriptor via `params.iter().skip(1)`. Without it the
+        // descriptor came out as `()V`, colliding with the primary
+        // `<init>()V` and dropping the typed entry point.
+        assert_eq!(sc.locals, vec![Ty::Class("Foo".to_string()), Ty::String]);
+        // params: [this_slot, s_slot] — length 1 + user_param_count.
+        assert_eq!(sc.params.len(), 2);
     }
 
     #[test]
