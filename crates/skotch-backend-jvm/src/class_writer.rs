@@ -17119,15 +17119,79 @@ fn walk_block(
                                 }
                                 None
                             });
-                        for a in args {
-                            load_local(code, stack, max_stack, slots, *a, &func.locals);
+                        // JDK fallback: when the super-class isn't in
+                        // this compilation unit (e.g. `: RuntimeException(
+                        // message, cause)` where the user's `cause:
+                        // Exception?` is passed into a param declared
+                        // `Throwable`), look up the actual `<init>`
+                        // descriptor from the JDK class registry.
+                        // kotlinc emits a `checkcast Throwable` on the
+                        // Exception arg before invokespecial, and the
+                        // invokespecial descriptor uses the declared
+                        // `Throwable` param type. Without this, the JVM
+                        // rejects the class because
+                        // `RuntimeException.<init>(String, Exception)`
+                        // doesn't exist — only
+                        // `<init>(String, Throwable)` does.
+                        let jdk_param_descs: Option<Vec<String>> = if target_param_tys.is_none() {
+                            skotch_classinfo::lookup_method_descriptor(
+                                class_name, "<init>", provided,
+                            )
+                            .map(|d| parse_descriptor_param_types_jvm(&d))
+                        } else {
+                            None
+                        };
+                        // Load receiver (this) first.
+                        if let Some(this_arg) = args.first() {
+                            load_local(code, stack, max_stack, slots, *this_arg, &func.locals);
                         }
                         let mut descriptor = String::from("(");
                         for (i, a) in args.iter().enumerate().skip(1) {
+                            load_local(code, stack, max_stack, slots, *a, &func.locals);
+                            // Decide param descriptor + emit checkcast
+                            // if the arg's static class is a JDK
+                            // subtype of the target param's class
+                            // (e.g. Exception → Throwable).
+                            let arg_ty = func.locals[a.0 as usize].clone();
+                            let param_idx = i - 1;
+                            if let Some(jdk) = jdk_param_descs.as_ref() {
+                                if let Some(target_desc) = jdk.get(param_idx) {
+                                    // Emit checkcast on widening
+                                    // reference-to-reference. The
+                                    // `target_desc` starts with `L` and
+                                    // ends with `;`; strip them to get
+                                    // the JVM-internal name.
+                                    let target_is_ref = target_desc.starts_with('L');
+                                    let actual_is_ref = matches!(
+                                        arg_ty,
+                                        Ty::Class(_) | Ty::Nullable(_) | Ty::String | Ty::Any
+                                    );
+                                    if target_is_ref && actual_is_ref {
+                                        let target_name = &target_desc[1..target_desc.len() - 1];
+                                        let arg_name = match &arg_ty {
+                                            Ty::Class(n) => Some(n.as_str()),
+                                            Ty::Nullable(inner) => match inner.as_ref() {
+                                                Ty::Class(n) => Some(n.as_str()),
+                                                Ty::String => Some("java/lang/String"),
+                                                _ => None,
+                                            },
+                                            Ty::String => Some("java/lang/String"),
+                                            _ => None,
+                                        };
+                                        if arg_name != Some(target_name) {
+                                            let ci = cp.class(target_name);
+                                            code.push(0xC0); // checkcast
+                                            code.write_u16::<BigEndian>(ci).unwrap();
+                                        }
+                                    }
+                                    descriptor.push_str(target_desc);
+                                    continue;
+                                }
+                            }
                             let ty: Ty = target_param_tys
                                 .as_ref()
-                                .and_then(|v| v.get(i - 1).cloned())
-                                .unwrap_or_else(|| func.locals[a.0 as usize].clone());
+                                .and_then(|v| v.get(param_idx).cloned())
+                                .unwrap_or(arg_ty);
                             descriptor.push_str(&jvm_param_type_string(&ty));
                         }
                         descriptor.push_str(")V");
