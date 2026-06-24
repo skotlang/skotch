@@ -19,13 +19,22 @@
 //!
 //! ## String table strategy
 //!
-//! The reader's [`NameResolver`] consults the `StringTableTypes.record`
-//! list first, then falls back to the raw `d2` `String[]` if a record
-//! is absent for the index. We exploit that fallback: this writer emits
-//! an empty `StringTableTypes` and puts every interned string directly
-//! into `d2` — every name-index then resolves through `data2[i]`. This
-//! is the simplest correctness-preserving strategy and matches what the
-//! decoder will read back for both predefined and arbitrary names.
+//! kotlinc's `JvmNameResolverBase.getString(i)` does an UNCHECKED
+//! `records.get(i)`. If our payload references a name index that is
+//! out of bounds for the records list, kotlinc 2.4 throws
+//! `IndexOutOfBoundsException` deep in metadata deserialization. Our
+//! own reader is more permissive (it falls back to the raw `d2` array
+//! when a record is missing), but the strict kotlinc resolver requires
+//! a record for EVERY referenced index.
+//!
+//! Strategy: emit one "default" record per `d2` entry. A default record
+//! has neither `string` nor `predefined_index` set, which causes the
+//! resolver to fall through to `strings[i]` (the `d2` array entry).
+//! To stay compact we use the `range` field — a single record with
+//! `range = N` expands (via `JvmNameResolverKt.toExpandedRecordsList`)
+//! into N identical empty records, one per `d2` index. Net wire cost
+//! is a few bytes for a single record header regardless of `d2` size,
+//! while satisfying kotlinc 2.4's strict bounds check.
 //!
 //! ## Coverage
 //!
@@ -323,13 +332,27 @@ fn collect_value_parameters(
     func: &MirFunction,
     table: &mut StringTable,
 ) -> Vec<pb::ValueParameter> {
-    let mut out = Vec::with_capacity(func.params.len());
-    // Skip the implicit `this` slot for instance methods. mir-lower
-    // reserves slot 0 for `this` and emits param locals starting at 1;
-    // the source-level value parameters are exactly `func.params[..]`,
-    // which already excludes the receiver slot. Names live in
-    // `param_names`, indexed positionally against `params`.
-    for (i, local_id) in func.params.iter().enumerate() {
+    // The number of user-facing value parameters equals
+    // `param_names.len()` (which never includes the receiver slot).
+    // MIR's `params` list MAY prepend a `this` slot for instance
+    // members; we detect that via the slot-count asymmetry. The
+    // emitted ValueParameter list has exactly `n_user_params` entries.
+    let n_user_params = func.param_names.len();
+    let user_param_offset = if func.params.len() == n_user_params + 1 {
+        1
+    } else {
+        0
+    };
+    let user_params: &[skotch_mir::LocalId] = if n_user_params == 0 {
+        &[]
+    } else if user_param_offset + n_user_params <= func.params.len() {
+        &func.params[user_param_offset..user_param_offset + n_user_params]
+    } else {
+        // Defensive: shape mismatch — emit what we can.
+        &func.params[user_param_offset..]
+    };
+    let mut out = Vec::with_capacity(user_params.len());
+    for (i, local_id) in user_params.iter().enumerate() {
         let name = func
             .param_names
             .get(i)
@@ -338,7 +361,7 @@ fn collect_value_parameters(
         // Skip the trailing `$completion: Continuation` parameter that
         // mir-lower injects on suspend functions — kotlinc emits the
         // user-facing parameter list only.
-        if func.is_suspend && i + 1 == func.params.len() && name == "$completion" {
+        if func.is_suspend && i + 1 == user_params.len() && name == "$completion" {
             continue;
         }
         let ty = func
@@ -346,10 +369,14 @@ fn collect_value_parameters(
             .get(local_id.0 as usize)
             .cloned()
             .unwrap_or(Ty::Any);
+        // `param_defaults` is indexed against `func.params` (which
+        // still includes the leading receiver slot), so the call-site
+        // index is the user-list index plus the receiver offset.
+        let params_idx = user_param_offset + i;
         out.push(pb::ValueParameter {
             name: table.intern(&name),
             r#type: Some(ty_to_proto_type(&ty, table)),
-            flags: Some(value_parameter_flags(func, i)),
+            flags: Some(value_parameter_flags(func, params_idx, i)),
             ..pb::ValueParameter::default()
         });
     }
@@ -387,8 +414,46 @@ fn constructor_flags(_func: &MirFunction) -> i32 {
     FLAG_PUBLIC_FINAL_DECLARATION
 }
 
-fn value_parameter_flags(_func: &MirFunction, _idx: usize) -> i32 {
-    0
+fn value_parameter_flags(func: &MirFunction, params_idx: usize, user_idx: usize) -> i32 {
+    // ValueParameter flag layout (see kotlinc's
+    // `Flags.VALUE_PARAMETER_FLAGS`):
+    //   bit 0: hasAnnotations
+    //   bit 1: declaresDefault
+    //   bit 2: isCrossinline
+    //   bit 3: isNoinline
+    //
+    // We can only recover `declaresDefault` from MIR right now. Two
+    // sources, in priority order:
+    //   1. `param_defaults[idx]` is `Some(MirConst)` — mir-lower
+    //      lowered a literal default and the backend will emit a
+    //      `<name>$default` synthetic shim.
+    //   2. `required_params` says "the first N user params are
+    //      required"; user params at index >= required_params have a
+    //      default. Constructors whose mir-lower path leaves
+    //      `param_defaults` empty (e.g. `cause: Throwable? = null`
+    //      where the default lowering is implicit) still set
+    //      `required_params < user_count`, so this is the
+    //      consumer-side signal kotlinc relies on for named-arg
+    //      reordering across skipped defaults.
+    //
+    // Without this bit kotlinc 2.4 refuses calls like
+    // `CliktError(msg = "x")` with "no value passed for parameter
+    // 'cause'".
+    let mut flags = 0i32;
+    let has_literal_default = matches!(func.param_defaults.get(params_idx), Some(Some(_)));
+    // Treat `required_params == 0` as "no defaults known" only when
+    // `param_names` is also empty (caller didn't populate either) —
+    // otherwise zero required-params means "ALL params have defaults",
+    // which is the shape mir-lower produces for `class C(val x = 1,
+    // val y = 2)` (see `constructor_from_primary_impl`).
+    let n_user_params = func.param_names.len().max(func.params.len());
+    let any_user_params = n_user_params > 0;
+    let has_implicit_default =
+        any_user_params && func.required_params < n_user_params && user_idx >= func.required_params;
+    if has_literal_default || has_implicit_default {
+        flags |= 1 << 1;
+    }
+    flags
 }
 
 fn property_flags(_field: &MirField) -> i32 {
@@ -505,12 +570,14 @@ pub fn package_proto_for(module: &MirModule, table: &mut StringTable) -> pb::Pac
 pub fn encode_class_metadata(class: &MirClass, _module_name: &str) -> Metadata {
     let mut table = StringTable::default();
     let proto = class_proto_for(class, &mut table);
-    let d1 = encode_payload(proto.encode_to_vec());
+    let body = proto.encode_to_vec();
+    let d2 = table.into_strings();
+    let d1 = encode_payload(body, d2.len());
     Metadata {
         k: 1,
         mv: METADATA_VERSION_2_4.to_vec(),
         d1,
-        d2: table.into_strings(),
+        d2,
         ..Metadata::default()
     }
 }
@@ -520,33 +587,56 @@ pub fn encode_class_metadata(class: &MirClass, _module_name: &str) -> Metadata {
 pub fn encode_package_metadata(module: &MirModule) -> Metadata {
     let mut table = StringTable::default();
     let proto = package_proto_for(module, &mut table);
-    let d1 = encode_payload(proto.encode_to_vec());
+    let body = proto.encode_to_vec();
+    let d2 = table.into_strings();
+    let d1 = encode_payload(body, d2.len());
     Metadata {
         k: 2,
         mv: METADATA_VERSION_2_4.to_vec(),
         d1,
-        d2: table.into_strings(),
+        d2,
         ..Metadata::default()
     }
 }
 
-/// Prepend a length-delimited (empty) `StringTableTypes` to the
+/// Prepend a length-delimited `StringTableTypes` to the
 /// `Class`/`Package` body and bit-encode the resulting byte stream.
 /// The reader at [`skotch_classinfo::kotlin_metadata::parse_metadata`]
 /// consumes exactly that shape: `read_len_bytes` for the leading
 /// StringTableTypes, then `remaining()` for the body.
-fn encode_payload(body: Vec<u8>) -> Vec<String> {
+///
+/// The `StringTableTypes` is built with `string_count` "default"
+/// records collapsed into a single `Record { range = N }`. kotlinc's
+/// `JvmNameResolverKt.toExpandedRecordsList` expands that into N empty
+/// records whose `getString(i)` falls through to `strings[i]` — i.e.
+/// the d2 entry — which is the value-paramater-name / class-name our
+/// `StringTable` already populated d2 with.
+fn encode_payload(body: Vec<u8>, string_count: usize) -> Vec<String> {
     let mut combined = Vec::new();
-    // Build an empty (but well-formed) StringTableTypes message. The
-    // reader is happy with zero records — every name index then routes
-    // through the `data2` fallback.
-    let stt = jvm_pb::StringTableTypes::default();
+    let stt = build_string_table_types(string_count);
     let stt_bytes = stt.encode_to_vec();
     // Length-delimited (varint length + bytes).
     encode_varint(stt_bytes.len() as u64, &mut combined);
     combined.extend_from_slice(&stt_bytes);
     combined.extend_from_slice(&body);
     encode_bytes(&combined)
+}
+
+/// Build a `StringTableTypes` message whose expanded records list
+/// covers indices `0..string_count`. Each expanded record is "default"
+/// (no `string`, no `predefined_index`, no `operation`/`substring`/
+/// `replace_char`), so `JvmNameResolverBase.getString(i)` falls
+/// through to the `d2` array at `i`. Encoded as a single record with
+/// `range = string_count` to keep the wire form compact.
+fn build_string_table_types(string_count: usize) -> jvm_pb::StringTableTypes {
+    let mut stt = jvm_pb::StringTableTypes::default();
+    if string_count > 0 {
+        stt.record.push(jvm_pb::string_table_types::Record {
+            range: Some(string_count as i32),
+            ..jvm_pb::string_table_types::Record::default()
+        });
+    }
+    stt
 }
 
 fn encode_varint(mut v: u64, out: &mut Vec<u8>) {
@@ -619,8 +709,70 @@ mod tests {
         }
     }
 
+    /// Like [`mk_function`] but prepends a synthetic `this` slot to
+    /// `params` (without naming it in `param_names`). Models the
+    /// real-world MIR shape for instance methods / constructors:
+    /// `params.len() == param_names.len() + 1`. The walker uses that
+    /// asymmetry to detect-and-skip the receiver slot.
+    fn mk_instance_function(
+        name: &str,
+        receiver_ty: Ty,
+        return_ty: Ty,
+        params: Vec<(&str, Ty)>,
+        next_id: u32,
+    ) -> MirFunction {
+        let mut locals = vec![receiver_ty];
+        let mut param_ids = vec![LocalId(0)];
+        let mut param_names = Vec::new();
+        for (pname, pty) in params {
+            let id = LocalId(locals.len() as u32);
+            locals.push(pty);
+            param_ids.push(id);
+            param_names.push(pname.to_string());
+        }
+        MirFunction {
+            id: FuncId(next_id),
+            name: name.to_string(),
+            params: param_ids,
+            locals,
+            blocks: vec![BasicBlock {
+                stmts: vec![],
+                terminator: Terminator::Return,
+            }],
+            return_ty,
+            required_params: 0,
+            param_names,
+            param_receiver_types: vec![],
+            param_defaults: vec![],
+            is_abstract: false,
+            vararg_index: None,
+            exception_handlers: vec![],
+            is_suspend: false,
+            is_inline: false,
+            is_tailrec: false,
+            has_type_params: false,
+            suspend_original_return_ty: None,
+            suspend_state_machine: None,
+            annotations: vec![],
+            named_locals: vec![],
+            is_private: false,
+            is_static: false,
+            default_call_masks: vec![],
+            needs_leading_nop: false,
+            local_generic_args: rustc_hash::FxHashMap::default(),
+        }
+    }
+
     fn mk_class(name: &str, ctor_params: Vec<(&str, Ty)>) -> MirClass {
-        let ctor = mk_function("<init>", Ty::Unit, ctor_params.clone(), 0);
+        // Real-shape constructor: `params[0]` is `this` (the class
+        // itself), and `param_names` only lists user-facing params.
+        let ctor = mk_instance_function(
+            "<init>",
+            Ty::Class(name.to_string()),
+            Ty::Unit,
+            ctor_params.clone(),
+            0,
+        );
         let fields = ctor_params
             .iter()
             .map(|(n, ty)| MirField {
@@ -761,8 +913,9 @@ mod tests {
     #[test]
     fn class_method_with_return_type_round_trips() {
         let mut class = mk_class("Greeter", vec![]);
-        class.methods.push(mk_function(
+        class.methods.push(mk_instance_function(
             "greet",
+            Ty::Class("Greeter".to_string()),
             Ty::String,
             vec![("first", Ty::String), ("count", Ty::Int)],
             1,
@@ -822,7 +975,10 @@ mod tests {
     }
 
     /// Bit-encoding sanity: the Phase A round-trip path must accept
-    /// our Phase B output unchanged.
+    /// our Phase D output unchanged. Phase D emits a non-empty
+    /// `StringTableTypes` (a single `Record { range = d2.len() }`) so
+    /// kotlinc's strict `JvmNameResolverBase` doesn't IOOB on the
+    /// records list.
     #[test]
     fn bit_encoding_round_trips_through_decoder() {
         let class = mk_class("Foo", vec![("x", Ty::Int)]);
@@ -832,9 +988,10 @@ mod tests {
         // prefix length parses and the remaining bytes are non-empty.
         let bytes = decode_bytes(&md.d1);
         assert!(bytes.len() > 1);
-        // First byte is the varint length of StringTableTypes; for an
-        // empty StringTableTypes it's 0.
-        assert_eq!(bytes[0], 0);
+        // First byte is the varint length of the StringTableTypes
+        // message. Phase D emits exactly one record (`range = N`),
+        // which serialises to a small (>0) byte count.
+        assert!(bytes[0] > 0, "expected non-empty StringTableTypes prefix");
     }
 
     /// Secondary constructors must surface as separate `Constructor`
@@ -842,8 +999,9 @@ mod tests {
     #[test]
     fn secondary_constructors_round_trip() {
         let mut class = mk_class("Box", vec![("x", Ty::Int)]);
-        class.secondary_constructors.push(mk_function(
+        class.secondary_constructors.push(mk_instance_function(
             "<init>",
+            Ty::Class("Box".to_string()),
             Ty::Unit,
             vec![("y", Ty::String)],
             0,

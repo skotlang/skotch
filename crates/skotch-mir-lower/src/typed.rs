@@ -35393,6 +35393,19 @@ fn constructor_from_primary_impl(
         .iter()
         .map(|p| p.name().unwrap_or("").to_string())
         .collect();
+    // `required_params` reflects the number of leading params with no
+    // source-level default. The metadata writer reads this to set
+    // `ValueParameter.declaresDefault`, which kotlinc 2.4 consults
+    // when accepting `Foo(name = value)` over a skipped defaulted
+    // param. Leaving `param_defaults` empty here keeps the JVM
+    // backend's `<name>$default` synthetic-emission decision
+    // (`func.param_defaults.iter().any(|d| d.is_some())`) gated on
+    // the existing path that lowers literal defaults explicitly —
+    // we only fix the *metadata-side* view of the param shape.
+    let user_required_param_count = params_iter
+        .iter()
+        .filter(|p| p.default_value().is_none())
+        .count();
     // Generic erasure: ctor params named after class type params get
     // erased to Ty::Any so `<init>` descriptor matches kotlinc.
     let class_type_param_set: std::collections::HashSet<String> = c
@@ -35874,7 +35887,7 @@ fn constructor_from_primary_impl(
             terminator: Terminator::Return,
         }],
         return_ty: Ty::Unit,
-        required_params: user_param_count,
+        required_params: user_required_param_count,
         param_names: user_param_names,
         param_receiver_types: Vec::new(),
         param_defaults: Vec::new(),
