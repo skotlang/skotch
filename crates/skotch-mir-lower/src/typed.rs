@@ -23160,6 +23160,318 @@ fn emit_join_to_string_default(
     Some(result_slot)
 }
 
+/// Synthesize a small `Lambda$N` class for a `obj::method` or
+/// `Class::method` callable reference and emit the allocation at the
+/// call site. MVP: zero-arg methods only (receiver is captured for
+/// bound refs, passed as param 0 for class-member refs).
+fn try_lower_callable_ref(
+    lhs: skotch_ast::KtExpr<'_>,
+    method_name: &str,
+    lookup_name: &dyn Fn(&str) -> Option<skotch_mir::LocalId>,
+    next_slot: &mut u32,
+    pre_stmts: &mut Vec<skotch_mir::Stmt>,
+    extra_locals: &mut Vec<Ty>,
+) -> Option<skotch_mir::LocalId> {
+    use skotch_ast::KtExpr;
+    use skotch_mir::{LocalId, Stmt as MStmt};
+    let KtExpr::Reference(lhs_ref) = unwrap_parens(lhs) else {
+        return None;
+    };
+    let lhs_name = lhs_ref.name()?;
+    let bound_slot: Option<LocalId> = lookup_name(lhs_name);
+    let (receiver_class, is_bound) = if let Some(slot) = bound_slot {
+        let Ty::Class(cls) = slot_ty_with_param_fallback(slot.0, extra_locals) else {
+            return None;
+        };
+        (cls, true)
+    } else if lhs_name.starts_with(char::is_uppercase) {
+        // Unbound class-member ref. Map a few builtin Kotlin names to
+        // their JVM-internal forms; otherwise the lhs IS the JVM name.
+        let cls = match lhs_name {
+            "String" => "java/lang/String",
+            "Int" => "java/lang/Integer",
+            "Long" => "java/lang/Long",
+            "Double" => "java/lang/Double",
+            "Float" => "java/lang/Float",
+            "Boolean" => "java/lang/Boolean",
+            "Char" => "java/lang/Character",
+            other => other,
+        };
+        (cls.to_string(), false)
+    } else {
+        return None;
+    };
+    // Resolve method descriptor: classinfo for JDK, CLASS_METHODS for
+    // user classes (zero-arg only — synthesize `()<ret>`).
+    let (method_desc, is_user_class): (String, bool) = if let Some(d) =
+        skotch_classinfo::lookup_method_descriptor(&receiver_class, method_name, 0)
+    {
+        (d, false)
+    } else if let Some(rt) = class_method_return_ty(&receiver_class, method_name) {
+        let suffix = match &rt {
+            Ty::Unit => "V".to_string(),
+            Ty::Int => "I".to_string(),
+            Ty::Long => "J".to_string(),
+            Ty::Float => "F".to_string(),
+            Ty::Double => "D".to_string(),
+            Ty::Bool => "Z".to_string(),
+            Ty::Class(c) => format!("L{};", c),
+            _ => "Ljava/lang/Object;".to_string(),
+        };
+        (format!("(){}", suffix), true)
+    } else {
+        return None;
+    };
+    if !method_desc.starts_with("()") {
+        return None;
+    }
+    let ret_desc = method_desc.rsplit_once(')').map(|(_, r)| r.to_string())?;
+    let arity: usize = if is_bound { 0 } else { 1 };
+    let lambda_name = format!("Lambda${}", next_lambda_idx());
+    // Invoke body. Bound: aload_0; getfield receiver; checkcast; call.
+    // Unbound: aload_1; checkcast; call. Then box-or-Unit and areturn.
+    let mut invoke_locals: Vec<Ty> = vec![Ty::Class(lambda_name.clone())];
+    if arity == 1 {
+        invoke_locals.push(Ty::Any);
+    }
+    let mut invoke_stmts: Vec<MStmt> = Vec::new();
+    let mut next_inv: u32 = invoke_locals.len() as u32;
+    let mut alloc_slot = |ty: Ty, locals: &mut Vec<Ty>| -> LocalId {
+        let s = LocalId(next_inv);
+        next_inv += 1;
+        locals.push(ty);
+        s
+    };
+    let raw_recv_slot = if is_bound {
+        let s = alloc_slot(Ty::Any, &mut invoke_locals);
+        invoke_stmts.push(MStmt::Assign {
+            dest: s,
+            value: skotch_mir::Rvalue::GetField {
+                receiver: LocalId(0),
+                class_name: lambda_name.clone(),
+                field_name: "receiver".to_string(),
+            },
+        });
+        s
+    } else {
+        LocalId(1)
+    };
+    let cast_recv = alloc_slot(Ty::Class(receiver_class.clone()), &mut invoke_locals);
+    invoke_stmts.push(MStmt::Assign {
+        dest: cast_recv,
+        value: skotch_mir::Rvalue::CheckCast {
+            obj: raw_recv_slot,
+            target_class: receiver_class.clone(),
+        },
+    });
+    let ret_ty: Ty = match ret_desc.as_str() {
+        "V" => Ty::Unit,
+        "I" => Ty::Int,
+        "J" => Ty::Long,
+        "F" => Ty::Float,
+        "D" => Ty::Double,
+        "Z" => Ty::Bool,
+        s if s.starts_with('L') && s.ends_with(';') => Ty::Class(s[1..s.len() - 1].to_string()),
+        _ => Ty::Any,
+    };
+    let call_dest = alloc_slot(ret_ty.clone(), &mut invoke_locals);
+    let call_kind = if is_user_class {
+        skotch_mir::CallKind::Virtual {
+            class_name: receiver_class.clone(),
+            method_name: method_name.to_string(),
+        }
+    } else {
+        skotch_mir::CallKind::VirtualJava {
+            class_name: receiver_class.clone(),
+            method_name: method_name.to_string(),
+            descriptor: method_desc.clone(),
+        }
+    };
+    invoke_stmts.push(MStmt::Assign {
+        dest: call_dest,
+        value: skotch_mir::Rvalue::Call {
+            kind: call_kind,
+            args: vec![cast_recv],
+        },
+    });
+    // Box / Unit-singleton return for `invoke()Object`.
+    let return_slot = match &ret_ty {
+        Ty::Int | Ty::Long | Ty::Float | Ty::Double | Ty::Bool => {
+            let (box_method, box_desc): (&str, &str) = match &ret_ty {
+                Ty::Int => ("boxInt", "(I)Ljava/lang/Integer;"),
+                Ty::Long => ("boxLong", "(J)Ljava/lang/Long;"),
+                Ty::Float => ("boxFloat", "(F)Ljava/lang/Float;"),
+                Ty::Double => ("boxDouble", "(D)Ljava/lang/Double;"),
+                Ty::Bool => ("boxBoolean", "(Z)Ljava/lang/Boolean;"),
+                _ => unreachable!(),
+            };
+            let boxed = alloc_slot(Ty::Any, &mut invoke_locals);
+            invoke_stmts.push(MStmt::Assign {
+                dest: boxed,
+                value: skotch_mir::Rvalue::Call {
+                    kind: skotch_mir::CallKind::StaticJava {
+                        class_name: "kotlin/coroutines/jvm/internal/Boxing".to_string(),
+                        method_name: box_method.to_string(),
+                        descriptor: box_desc.to_string(),
+                    },
+                    args: vec![call_dest],
+                },
+            });
+            boxed
+        }
+        Ty::Unit => {
+            let unit_slot = alloc_slot(Ty::Class("kotlin/Unit".to_string()), &mut invoke_locals);
+            invoke_stmts.push(MStmt::Assign {
+                dest: unit_slot,
+                value: skotch_mir::Rvalue::GetStaticField {
+                    class_name: "kotlin/Unit".to_string(),
+                    field_name: "INSTANCE".to_string(),
+                    descriptor: "Lkotlin/Unit;".to_string(),
+                },
+            });
+            unit_slot
+        }
+        _ => call_dest,
+    };
+    let make_method = |name: &str,
+                       params: Vec<LocalId>,
+                       locals: Vec<Ty>,
+                       blocks: Vec<BasicBlock>,
+                       return_ty: Ty,
+                       param_names: Vec<String>| MirFunction {
+        id: FuncId(0),
+        name: name.to_string(),
+        params,
+        locals,
+        blocks,
+        return_ty,
+        required_params: param_names.len(),
+        param_names,
+        param_receiver_types: Vec::new(),
+        param_defaults: Vec::new(),
+        is_abstract: false,
+        vararg_index: None,
+        exception_handlers: Vec::new(),
+        is_suspend: false,
+        is_inline: false,
+        is_tailrec: false,
+        has_type_params: false,
+        suspend_original_return_ty: None,
+        suspend_state_machine: None,
+        annotations: Vec::new(),
+        named_locals: Vec::new(),
+        is_private: false,
+        is_static: false,
+        default_call_masks: Vec::new(),
+        needs_leading_nop: false,
+        local_generic_args: rustc_hash::FxHashMap::default(),
+    };
+    let invoke_method = make_method(
+        "invoke",
+        (0..=arity).map(|i| LocalId(i as u32)).collect(),
+        invoke_locals,
+        vec![BasicBlock {
+            stmts: invoke_stmts,
+            terminator: Terminator::ReturnValue(return_slot),
+        }],
+        Ty::Any,
+        if is_bound {
+            Vec::new()
+        } else {
+            vec!["p0".to_string()]
+        },
+    );
+    // Constructor: bound captures receiver into field; unbound is no-arg.
+    let ctor_this = LocalId(0);
+    let mut ctor_locals: Vec<Ty> = vec![Ty::Class(lambda_name.clone())];
+    let mut ctor_stmts: Vec<MStmt> = vec![MStmt::Assign {
+        dest: ctor_this,
+        value: skotch_mir::Rvalue::Call {
+            kind: skotch_mir::CallKind::Constructor("java/lang/Object".to_string()),
+            args: vec![ctor_this],
+        },
+    }];
+    let n_ctor_params = if is_bound { 1 } else { 0 };
+    if is_bound {
+        ctor_locals.push(Ty::Any);
+        ctor_stmts.push(MStmt::Assign {
+            dest: ctor_this,
+            value: skotch_mir::Rvalue::PutField {
+                receiver: ctor_this,
+                class_name: lambda_name.clone(),
+                field_name: "receiver".to_string(),
+                value: LocalId(1),
+            },
+        });
+    }
+    let constructor = make_method(
+        "<init>",
+        (0..=n_ctor_params).map(|i| LocalId(i as u32)).collect(),
+        ctor_locals,
+        vec![BasicBlock {
+            stmts: ctor_stmts,
+            terminator: Terminator::Return,
+        }],
+        Ty::Unit,
+        if is_bound {
+            vec!["receiver".to_string()]
+        } else {
+            Vec::new()
+        },
+    );
+    let fields = if is_bound {
+        vec![skotch_mir::MirField {
+            name: "receiver".to_string(),
+            ty: Ty::Any,
+            is_jvm_field: false,
+        }]
+    } else {
+        Vec::new()
+    };
+    register_lambda_class(skotch_mir::MirClass {
+        name: lambda_name.clone(),
+        super_class: Some("java/lang/Object".to_string()),
+        is_open: false,
+        is_abstract: false,
+        is_interface: false,
+        interfaces: vec![format!("kotlin/jvm/functions/Function{}", arity)],
+        fields,
+        methods: vec![invoke_method],
+        constructor,
+        secondary_constructors: Vec::new(),
+        is_suspend_lambda: false,
+        is_lambda: true,
+        is_cross_file_stub: false,
+        annotations: Vec::new(),
+        has_type_params: false,
+        is_object_singleton: false,
+        companion_class_name: None,
+        static_fields: Vec::new(),
+        clinit: None,
+    });
+    // Allocation at the call site.
+    let result = LocalId(*next_slot);
+    *next_slot += 1;
+    extra_locals.push(Ty::Class(lambda_name.clone()));
+    pre_stmts.push(MStmt::Assign {
+        dest: result,
+        value: skotch_mir::Rvalue::NewInstance(lambda_name.clone()),
+    });
+    let ctor_args: Vec<LocalId> = if is_bound {
+        vec![bound_slot.expect("bound implies slot")]
+    } else {
+        Vec::new()
+    };
+    pre_stmts.push(MStmt::Assign {
+        dest: result,
+        value: skotch_mir::Rvalue::Call {
+            kind: skotch_mir::CallKind::Constructor(lambda_name),
+            args: ctor_args,
+        },
+    });
+    Some(result)
+}
+
 fn lower_rich_expr_to_slot(
     e: skotch_ast::KtExpr<'_>,
     lookup_name: &dyn Fn(&str) -> Option<skotch_mir::LocalId>,
@@ -23172,6 +23484,48 @@ fn lower_rich_expr_to_slot(
     use skotch_ast::KtExpr;
     use skotch_mir::{LocalId, Stmt as MStmt};
     let e = unwrap_parens(e);
+    // Callable references: `obj::method` (bound) and `Class::method`
+    // (unbound class-member). Kotlinc lowers each to a synthetic class
+    // extending `FunctionReferenceImpl` / `PropertyReference1Impl`; for
+    // stdout parity we synthesize a thinner `Lambda$N` that implements
+    // the right Function arity and dispatches the wrapped method.
+    //
+    // Scope (MVP): zero-arg methods only — the method is invoked with
+    // either zero source args (bound) or one (unbound: the receiver).
+    // Bound refs capture the receiver; unbound refs take it as param 0.
+    //
+    // Examples:
+    //   val f: () -> Unit = counter::inc        // bound, arity 0
+    //   val g: (String) -> Int = String::length // unbound, arity 1
+    if let KtExpr::CallableRef(cref) = &e {
+        let cref_kids: Vec<KtExpr<'_>> = skotch_ast::children(cref.syntax())
+            .iter()
+            .filter_map(KtExpr::cast)
+            .collect();
+        // CALLABLE_REFERENCE_EXPRESSION children: optional lhs
+        // expression, then the rhs REFERENCE_EXPRESSION holding the
+        // method name. Standalone `::name` (no receiver) has only the
+        // rhs reference; we don't synthesize for that case (would need
+        // an enclosing-class receiver inference pass).
+        if cref_kids.len() == 2 {
+            if let (Some(lhs), Some(KtExpr::Reference(rhs_ref))) =
+                (cref_kids.first().cloned(), cref_kids.get(1).cloned())
+            {
+                if let Some(method_name) = rhs_ref.name() {
+                    if let Some(slot) = try_lower_callable_ref(
+                        lhs,
+                        method_name,
+                        lookup_name,
+                        next_slot,
+                        pre_stmts,
+                        extra_locals,
+                    ) {
+                        return Some(slot);
+                    }
+                }
+            }
+        }
+    }
     // Lambda expression: synthesize a `<wrapper>$lambda$N` MirClass
     // (Function<arity> subclass with an invoke method holding the
     // lambda body) and emit `new + <init>` at the allocation site.
