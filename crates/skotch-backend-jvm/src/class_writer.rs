@@ -17069,6 +17069,41 @@ fn walk_block(
                     class_name,
                     method_name,
                 } => {
+                    // Kotlin `MutableList.removeAt(Int)` desugars at the
+                    // JVM level to `java.util.List.remove(I)Object` —
+                    // `removeAt` is a Kotlin extension that doesn't exist
+                    // on the JDK interface. Any mir-lower path that emits
+                    // a descriptor-less Virtual call with `removeAt` on a
+                    // List-shaped receiver would otherwise emit
+                    // `invokeinterface java/util/List.removeAt:(I)Object`
+                    // → NoSuchMethodError at runtime. The mir-lower
+                    // VirtualJava paths already do this rewrite at the
+                    // emit site (with an explicit descriptor); the
+                    // descriptor-less Virtual path needs the same fixup
+                    // here because the methodref's name field is what
+                    // ends up in the constant pool.
+                    let removeat_rewrite_owned: String;
+                    // `is_remove_at_rewrite` signals that we rewrote the
+                    // method name on this call. The classinfo lookup
+                    // below would otherwise pick `List.remove(Object):Z`
+                    // (the "prefer Object params" overload) and produce
+                    // a `(I)Z` descriptor — which is invalid: the int
+                    // overload is `(I)Object`, not `(I)Z`. So when this
+                    // flag is set we hardcode the descriptor's tail to
+                    // `Ljava/lang/Object;` regardless of what classinfo
+                    // returns.
+                    let mut is_remove_at_rewrite = false;
+                    let method_name: &str = if method_name == "removeAt"
+                        && matches!(
+                            class_name.as_str(),
+                            "java/util/List" | "java/util/ArrayList" | "java/util/LinkedList"
+                        ) {
+                        removeat_rewrite_owned = "remove".to_string();
+                        is_remove_at_rewrite = true;
+                        &removeat_rewrite_owned
+                    } else {
+                        method_name.as_str()
+                    };
                     let dest_ty = &func.locals[dest.0 as usize];
                     let is_function_invoke = method_name == "invoke"
                         && (module.is_lambda_class(class_name)
@@ -17120,12 +17155,12 @@ fn walk_block(
                                 | "java/util/LinkedHashMap"
                                 | "java/util/LinkedHashSet"
                         ) && matches!(
-                            method_name.as_str(),
+                            method_name,
                             "add" | "contains" | "containsKey" | "containsValue" | "put"
                         ) || matches!(
                             class_name.as_str(),
                             "java/util/Map" | "java/util/HashMap" | "java/util/LinkedHashMap"
-                        ) && matches!(method_name.as_str(), "get" | "remove"))
+                        ) && matches!(method_name, "get" | "remove"))
                             && !is_function_invoke
                             && module.find_class(class_name).is_none();
                     // Load receiver (first arg) then remaining args.
@@ -17395,7 +17430,7 @@ fn walk_block(
                             | "java/util/LinkedHashSet"
                     );
                     let erased_arg_method = matches!(
-                        method_name.as_str(),
+                        method_name,
                         "add" | "contains" | "containsKey" | "containsValue" | "put"
                     );
                     // Map-only erased-arg methods. `Map.get` / `Map.remove`
@@ -17408,7 +17443,7 @@ fn walk_block(
                         "java/util/Map" | "java/util/HashMap" | "java/util/LinkedHashMap"
                     );
                     let map_erased_arg_method =
-                        is_map_class && matches!(method_name.as_str(), "get" | "remove");
+                        is_map_class && matches!(method_name, "get" | "remove");
                     let force_object_args = (collection_iface
                         && erased_arg_method
                         && !is_function_invoke
@@ -17467,6 +17502,17 @@ fn walk_block(
                             ) && method_name == "append";
                             if fluent_self_ret {
                                 Some(format!("L{};", class_name))
+                            } else if is_remove_at_rewrite {
+                                // We rewrote `removeAt`→`remove` above. The
+                                // JDK `List.remove` has TWO overloads sharing
+                                // the same name+arity-1: `remove(Object):Z`
+                                // and `remove(int):Object`. classinfo's
+                                // overload picker prefers Object params, so
+                                // a plain lookup would return the boolean
+                                // overload — but we know this site is the
+                                // int-arg overload (came from `removeAt`).
+                                // Force the return to `Object` to match.
+                                Some("Ljava/lang/Object;".to_string())
                             } else {
                                 skotch_classinfo::lookup_method_descriptor(
                                     class_name,
