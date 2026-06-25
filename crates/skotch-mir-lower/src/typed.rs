@@ -29228,10 +29228,31 @@ fn lower_rich_expr_to_slot(
             }
         }
     }
-    // IntArray(size) — primitive int[] allocation.
+    // Primitive-array constructor: `IntArray(n)`, `ByteArray(n)`,
+    // `LongArray(n)`, `DoubleArray(n)`, `BooleanArray(n)`. The
+    // backend's `NewIntArray` Rvalue picks the JVM newarray type-code
+    // from the dest slot's `Ty::*Array` variant (see
+    // class_writer.rs `Rvalue::NewIntArray` arm), so a single Rvalue
+    // covers all primitive-array shapes once we tag the result slot
+    // with the right `Ty`.
+    //
+    // Phase H6b: `ByteArray(n)` was the next blocker after H6a — the
+    // SHA2 `digestProtected` body's first statement is
+    // `val digest = ByteArray(digestLength())`, which previously fell
+    // through every `lower_rich_expr_to_slot` arm (kind=Call) and
+    // bailed the entire fn body to empty MIR, returning a null
+    // ByteArray to `bytesToHex()` and triggering the NPE.
     if let KtExpr::Call(call) = e {
         if let Some(KtExpr::Reference(rc)) = call.callee() {
-            if rc.name() == Some("IntArray") {
+            let prim_array_ty: Option<Ty> = match rc.name() {
+                Some("IntArray") => Some(Ty::IntArray),
+                Some("ByteArray") => Some(Ty::ByteArray),
+                Some("LongArray") => Some(Ty::LongArray),
+                Some("DoubleArray") => Some(Ty::DoubleArray),
+                Some("BooleanArray") => Some(Ty::BooleanArray),
+                _ => None,
+            };
+            if let Some(arr_ty) = prim_array_ty {
                 if let Some(arg_list) = call.value_argument_list() {
                     let args: Vec<_> = arg_list.arguments().collect();
                     if args.len() == 1 {
@@ -29247,7 +29268,7 @@ fn lower_rich_expr_to_slot(
                             )?;
                             let result_slot = LocalId(*next_slot);
                             *next_slot += 1;
-                            extra_locals.push(Ty::IntArray);
+                            extra_locals.push(arr_ty);
                             pre_stmts.push(MStmt::Assign {
                                 dest: result_slot,
                                 value: skotch_mir::Rvalue::NewIntArray(size_slot),
@@ -30816,6 +30837,244 @@ fn lower_rich_expr_to_slot(
                                 });
                                 return Some(result_slot);
                             }
+                        }
+                    }
+                    // Phase H6b: KotlinCrypto bitops `bePackIntoUnsafe`
+                    // dispatch — sibling of the `lePackIntoUnsafe` arm
+                    // above. Same JAR (`endian-jvm-0.3.0.jar`) under
+                    // `org/kotlincrypto/bitops/endian/Endian$Big`, but
+                    // the SHA2 `Bit32Digest` uses three distinct
+                    // receiver/dest shapes:
+                    //
+                    //   ByteArray.bePackIntoUnsafe(IntArray, dO, sIS, sIE)
+                    //                                     → ([B[IIII)[I
+                    //   IntArray.bePackIntoUnsafe(ByteArray, dO[, sIS, sIE])
+                    //                                     → ([I[BIII)[B
+                    //   LongArray.bePackIntoUnsafe(ByteArray, dO[, sIS, sIE])
+                    //                                     → ([J[BIII)[B
+                    //   Int.bePackIntoUnsafe(ByteArray, dO)
+                    //                                     → (I[BI)[B
+                    //   Long.bePackIntoUnsafe(ByteArray, dO)
+                    //                                     → (J[BI)[B
+                    //
+                    // Named-arg shapes from Bit32Digest.kt:
+                    //   input.bePackIntoUnsafe(x, destOffset=0,
+                    //       sourceIndexStart=offset,
+                    //       sourceIndexEnd=offset+BLOCK_SIZE)
+                    //   bitsHi.bePackIntoUnsafe(buf, destOffset=56)
+                    //   state.bePackIntoUnsafe(dest=dest,
+                    //       destOffset=destOffset,
+                    //       sourceIndexEnd=digestLength()/Int.SIZE_BYTES)
+                    // The last omits `sourceIndexStart`; we synthesize
+                    // a 0 literal so we can call the non-`$default`
+                    // overload directly.
+                    if method_n == "bePackIntoUnsafe" {
+                        let mut dest_e: Option<KtExpr<'_>> = None;
+                        let mut dest_off_e: Option<KtExpr<'_>> = None;
+                        let mut src_start_e: Option<KtExpr<'_>> = None;
+                        let mut src_end_e: Option<KtExpr<'_>> = None;
+                        let mut positional: Vec<KtExpr<'_>> = Vec::new();
+                        if let Some(arg_list) = call.value_argument_list() {
+                            for a in arg_list.arguments() {
+                                let Some(ae) = a.expression() else {
+                                    positional.clear();
+                                    break;
+                                };
+                                match a.name() {
+                                    Some("dest") => dest_e = Some(ae),
+                                    Some("destOffset") => dest_off_e = Some(ae),
+                                    Some("sourceIndexStart") => src_start_e = Some(ae),
+                                    Some("sourceIndexEnd") => src_end_e = Some(ae),
+                                    Some(_) => {}
+                                    None => positional.push(ae),
+                                }
+                            }
+                        }
+                        let mut pos_iter = positional.into_iter();
+                        if dest_e.is_none() {
+                            dest_e = pos_iter.next();
+                        }
+                        if dest_off_e.is_none() {
+                            dest_off_e = pos_iter.next();
+                        }
+                        if src_start_e.is_none() {
+                            src_start_e = pos_iter.next();
+                        }
+                        if src_end_e.is_none() {
+                            src_end_e = pos_iter.next();
+                        }
+
+                        // Pick the JVM descriptor from receiver type.
+                        // Falls through to existing arms when the
+                        // receiver shape isn't recognised, so this
+                        // arm never preempts a working dispatch path.
+                        let recv_is_byte_arr = matches!(recv_ty_candidate, Some(Ty::ByteArray));
+                        let recv_is_int_arr = matches!(recv_ty_candidate, Some(Ty::IntArray));
+                        let recv_is_long_arr = matches!(recv_ty_candidate, Some(Ty::LongArray));
+                        let recv_is_int = matches!(recv_ty_candidate, Some(Ty::Int));
+                        let recv_is_long = matches!(recv_ty_candidate, Some(Ty::Long));
+
+                        // Range-form (4 trailing args after recv) vs
+                        // scalar-form (1 trailing arg). Range form
+                        // takes (recv, dest, dO, sIS, sIE); scalar
+                        // takes (recv, dest, dO).
+                        let have_range_args = src_start_e.is_some() || src_end_e.is_some();
+
+                        if (recv_is_byte_arr
+                            || recv_is_int_arr
+                            || recv_is_long_arr
+                            || recv_is_int
+                            || recv_is_long)
+                            && dest_e.is_some()
+                            && dest_off_e.is_some()
+                        {
+                            let recv_slot = lower_rich_expr_to_slot(
+                                dq_exprs[0],
+                                lookup_name,
+                                fn_lookup,
+                                next_slot,
+                                pre_stmts,
+                                extra_locals,
+                                strings,
+                            )?;
+                            let dest_slot = lower_rich_expr_to_slot(
+                                dest_e.unwrap(),
+                                lookup_name,
+                                fn_lookup,
+                                next_slot,
+                                pre_stmts,
+                                extra_locals,
+                                strings,
+                            )?;
+                            let dest_off_slot = lower_rich_expr_to_slot(
+                                dest_off_e.unwrap(),
+                                lookup_name,
+                                fn_lookup,
+                                next_slot,
+                                pre_stmts,
+                                extra_locals,
+                                strings,
+                            )?;
+
+                            // For the range form, synthesize a 0
+                            // literal when `sourceIndexStart` is
+                            // omitted (Bit32Digest's `state.bePack…`
+                            // call shape). Both bounds must be
+                            // materialised onto the operand stack
+                            // before the invokestatic.
+                            let mut args = vec![recv_slot, dest_slot, dest_off_slot];
+                            if have_range_args {
+                                let src_start_slot = if let Some(e) = src_start_e {
+                                    lower_rich_expr_to_slot(
+                                        e,
+                                        lookup_name,
+                                        fn_lookup,
+                                        next_slot,
+                                        pre_stmts,
+                                        extra_locals,
+                                        strings,
+                                    )?
+                                } else {
+                                    let s = LocalId(*next_slot);
+                                    *next_slot += 1;
+                                    extra_locals.push(Ty::Int);
+                                    pre_stmts.push(MStmt::Assign {
+                                        dest: s,
+                                        value: skotch_mir::Rvalue::Const(
+                                            skotch_mir::MirConst::Int(0),
+                                        ),
+                                    });
+                                    s
+                                };
+                                let src_end_slot = if let Some(e) = src_end_e {
+                                    lower_rich_expr_to_slot(
+                                        e,
+                                        lookup_name,
+                                        fn_lookup,
+                                        next_slot,
+                                        pre_stmts,
+                                        extra_locals,
+                                        strings,
+                                    )?
+                                } else {
+                                    // Should not happen — only
+                                    // sourceIndexStart legitimately
+                                    // defaults in the Kotlin source.
+                                    let s = LocalId(*next_slot);
+                                    *next_slot += 1;
+                                    extra_locals.push(Ty::Int);
+                                    pre_stmts.push(MStmt::Assign {
+                                        dest: s,
+                                        value: skotch_mir::Rvalue::Const(
+                                            skotch_mir::MirConst::Int(0),
+                                        ),
+                                    });
+                                    s
+                                };
+                                args.push(src_start_slot);
+                                args.push(src_end_slot);
+                            }
+
+                            let dest_ty = slot_ty_with_param_fallback(dest_slot.0, extra_locals);
+                            // Compose JVM descriptor from
+                            // recv/dest/arity. `recv_desc` and
+                            // `dest_desc` are JVM type sigs; range
+                            // form appends `III` (sIS, sIE, sIE-sIS?
+                            // — actually 3 ints: dO, sIS, sIE).
+                            let recv_desc: &str = if recv_is_byte_arr {
+                                "[B"
+                            } else if recv_is_int_arr {
+                                "[I"
+                            } else if recv_is_long_arr {
+                                "[J"
+                            } else if recv_is_int {
+                                "I"
+                            } else {
+                                "J"
+                            };
+                            let dest_desc: &str = if matches!(dest_ty, Ty::ByteArray) {
+                                "[B"
+                            } else if matches!(dest_ty, Ty::IntArray) {
+                                "[I"
+                            } else if matches!(dest_ty, Ty::LongArray) {
+                                "[J"
+                            } else if recv_is_byte_arr {
+                                // ByteArray.bePack with unresolved
+                                // dest type — assume IntArray, which
+                                // matches Bit32Digest's `input.bePack(x, …)`
+                                // where `x` is an IntArray field
+                                // declared as `private val x: IntArray`.
+                                "[I"
+                            } else {
+                                "[B"
+                            };
+                            let (ret_desc, ret_ty) = if recv_is_byte_arr {
+                                if dest_desc == "[J" {
+                                    ("[J", Ty::LongArray)
+                                } else {
+                                    ("[I", Ty::IntArray)
+                                }
+                            } else {
+                                ("[B", Ty::ByteArray)
+                            };
+                            let trail = if have_range_args { "III" } else { "I" };
+                            let desc = format!("({}{}{}){}", recv_desc, dest_desc, trail, ret_desc);
+                            let result_slot = LocalId(*next_slot);
+                            *next_slot += 1;
+                            extra_locals.push(ret_ty);
+                            pre_stmts.push(MStmt::Assign {
+                                dest: result_slot,
+                                value: skotch_mir::Rvalue::Call {
+                                    kind: skotch_mir::CallKind::StaticJava {
+                                        class_name: "org/kotlincrypto/bitops/endian/Endian$Big"
+                                            .to_string(),
+                                        method_name: "bePackIntoUnsafe".to_string(),
+                                        descriptor: desc,
+                                    },
+                                    args,
+                                },
+                            });
+                            return Some(result_slot);
                         }
                     }
                     if matches!(recv_ty_candidate, Some(Ty::String)) {
