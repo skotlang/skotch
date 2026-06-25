@@ -1354,8 +1354,15 @@ fn extract_splice_safe_body(
         return None;
     }
     let block = &blocks[0];
+    // Phase H5e: accept `Terminator::Return` for Unit-returning ext
+    // fn bodies (e.g. `inline fun V.fill() { m.fill(0) }`). The body
+    // has nothing to "return" — synthesize a dummy slot at index 0
+    // (always the receiver, never read by Unit-typed callers); the
+    // caller's splice path ignores the return slot when the surrounding
+    // call dest is also Unit-typed.
     let ret = match &block.terminator {
         Terminator::ReturnValue(s) => *s,
+        Terminator::Return => skotch_mir::LocalId(0),
         _ => return None,
     };
     // All statements are Assigns (the only Stmt variant currently —
@@ -6113,11 +6120,27 @@ pub fn lower_file(
             // file's `module.classes` via `find_class`.
             let value_class_ext_info: Option<(String, String, Ty)> = if is_extension {
                 receiver_type_name.as_deref().and_then(|recv_name| {
-                    let cls = module.find_class(recv_name)?;
+                    // Phase H5e: classes are keyed by FQ name (e.g.
+                    // `org/kotlincrypto/hash/blake2/internal/Bit32Message`)
+                    // when the source declares a `package` directive, but
+                    // the receiver-type name on a same-file ext fn is the
+                    // simple form (`Bit32Message`). Try the simple name
+                    // first, then the package-qualified form before
+                    // giving up — without the fallback, every
+                    // value-class ext fn declared in a packaged file
+                    // missed the H5a/H5d body-shape lowering and
+                    // produced empty MIR.
+                    let cls = module.find_class(recv_name).or_else(|| {
+                        if pkg_prefix.is_empty() {
+                            None
+                        } else {
+                            module.find_class(&format!("{pkg_prefix}{recv_name}"))
+                        }
+                    })?;
                     if cls.is_value_class {
                         let field = cls.value_underlying_field.clone()?;
                         let ty = cls.value_underlying_ty.clone()?;
-                        Some((recv_name.to_string(), field, ty))
+                        Some((cls.name.clone(), field, ty))
                     } else {
                         None
                     }
@@ -30372,6 +30395,36 @@ fn lower_rich_expr_to_slot(
                         }
                         _ => None,
                     };
+                    // Phase H5e: `byteVal.toInt()` and `shortVal.toInt()`
+                    // are no-ops at the JVM level — bytes/shorts live in
+                    // int-width slots and the `iload`/`bipush`/etc.
+                    // already produce a sign-extended int on the stack.
+                    // Surface the receiver slot directly so the caller's
+                    // ArrayAccess/Arithmetic path sees a plain int.
+                    // Without this, the source-level
+                    // `m[sigmaByte.toInt()]` (value-class ext fn body
+                    // shape) fell through to the generic recv handler
+                    // and the call bailed at lower_rich.
+                    if matches!(
+                        &recv_ty_candidate,
+                        Some(Ty::Byte) | Some(Ty::Short) | Some(Ty::Char)
+                    ) && method_n == "toInt"
+                    {
+                        let recv_slot = lower_rich_expr_to_slot(
+                            dq_exprs[0],
+                            lookup_name,
+                            fn_lookup,
+                            next_slot,
+                            pre_stmts,
+                            extra_locals,
+                            strings,
+                        )?;
+                        // Char.toInt() needs an explicit unsigned-extend
+                        // path elsewhere when called on a Char, but for
+                        // a bare receiver the int representation is
+                        // already correct on the JVM stack.
+                        return Some(recv_slot);
+                    }
                     // Primitive numeric conversions on Int / Long / Double /
                     // Float receivers. kotlinc emits a single i2d/l2d/etc.
                     // opcode for `n.toDouble()` etc.; we represent each as
@@ -30519,6 +30572,96 @@ fn lower_rich_expr_to_slot(
                                         descriptor: copyof_desc.to_string(),
                                     },
                                     args: vec![recv_slot, len_slot],
+                                },
+                            });
+                            return Some(result_slot);
+                        }
+                    }
+                    // Phase H5e: `arr.fill(v)` stdlib intrinsic on
+                    // primitive array receivers. kotlinc desugars to
+                    // `invokestatic java/util/Arrays.fill([II)V` (with
+                    // the analogous descriptor per element Ty). The
+                    // result is Unit — we still allocate a slot for the
+                    // assignment dest so the statement-level lowering
+                    // path treats it as a side-effecting call.
+                    //
+                    // Triggered for the inline ext fn
+                    //   `fun Bit32Message.fill() { m.fill(0) }`
+                    // in parity/101-hash — without this, `m.fill(0)`
+                    // bailed the entire body to empty MIR.
+                    if method_n == "fill"
+                        && call
+                            .value_argument_list()
+                            .map(|al| al.arguments().count())
+                            .unwrap_or(0)
+                            == 1
+                    {
+                        let fill_kind: Option<&str> = match &recv_ty_candidate {
+                            Some(Ty::IntArray) => Some("([II)V"),
+                            Some(Ty::LongArray) => Some("([JJ)V"),
+                            Some(Ty::DoubleArray) => Some("([DD)V"),
+                            Some(Ty::ByteArray) => Some("([BB)V"),
+                            Some(Ty::BooleanArray) => Some("([ZZ)V"),
+                            _ => None,
+                        };
+                        if let Some(fill_desc) = fill_kind {
+                            let recv_slot = lower_rich_expr_to_slot(
+                                dq_exprs[0],
+                                lookup_name,
+                                fn_lookup,
+                                next_slot,
+                                pre_stmts,
+                                extra_locals,
+                                strings,
+                            )?;
+                            let arg_e = call
+                                .value_argument_list()
+                                .and_then(|al| al.arguments().next())
+                                .and_then(|a| a.expression())?;
+                            let mut val_slot = lower_rich_expr_to_slot(
+                                arg_e,
+                                lookup_name,
+                                fn_lookup,
+                                next_slot,
+                                pre_stmts,
+                                extra_locals,
+                                strings,
+                            )?;
+                            // Widen Int → Long for LongArray.fill(0)
+                            // shape (the source-level 0 lowers as Int
+                            // but Arrays.fill([J,J)V wants a long).
+                            if matches!(&recv_ty_candidate, Some(Ty::LongArray)) {
+                                let val_ty = slot_ty_with_param_fallback(val_slot.0, extra_locals);
+                                if matches!(val_ty, Ty::Int) {
+                                    let widened = LocalId(*next_slot);
+                                    *next_slot += 1;
+                                    extra_locals.push(Ty::Long);
+                                    pre_stmts.push(MStmt::Assign {
+                                        dest: widened,
+                                        value: skotch_mir::Rvalue::Call {
+                                            kind: skotch_mir::CallKind::StaticJava {
+                                                class_name: "$convert".to_string(),
+                                                method_name: "i2l".to_string(),
+                                                descriptor: "(I)J".to_string(),
+                                            },
+                                            args: vec![val_slot],
+                                        },
+                                    });
+                                    val_slot = widened;
+                                }
+                            }
+                            let result_slot = LocalId(*next_slot);
+                            *next_slot += 1;
+                            extra_locals.push(Ty::Unit);
+                            pre_stmts.push(MStmt::Assign {
+                                dest: result_slot,
+                                value: skotch_mir::Rvalue::Call {
+                                    kind: skotch_mir::CallKind::StaticJava {
+                                        class_name: "java/util/Arrays".to_string(),
+                                        method_name: "fill".to_string(),
+                                        descriptor: fill_desc.to_string(),
+                                    },
+                                    args: vec![recv_slot, val_slot],
                                 },
                             });
                             return Some(result_slot);
@@ -38775,6 +38918,17 @@ fn method_simple_body_full(
                                         }
                                     }
                                 }
+                                // Phase H5e: walk ArrayAccess so the val
+                                // init `val x = m[i]` (value-class ext
+                                // fn body shape) preloads `m` from
+                                // field_names.
+                                KtExpr::ArrayAccess(aa) => {
+                                    for child in skotch_ast::children(aa.syntax()) {
+                                        if let Some(ce) = KtExpr::cast(child) {
+                                            collect_refs(ce, out);
+                                        }
+                                    }
+                                }
                                 _ => {}
                             }
                         }
@@ -39317,6 +39471,16 @@ fn method_simple_body_full(
                                             }
                                         }
                                     }
+                                    // Phase H5e: walk ArrayAccess for
+                                    // `return m[i]`-shaped value-class
+                                    // ext fn bodies.
+                                    KtExpr::ArrayAccess(aa) => {
+                                        for child in skotch_ast::children(aa.syntax()) {
+                                            if let Some(ce) = KtExpr::cast(child) {
+                                                collect_refs(ce, out);
+                                            }
+                                        }
+                                    }
                                     _ => {}
                                 }
                             }
@@ -39829,6 +39993,18 @@ fn method_simple_body_full(
                                                 if let Some(ae) = arg.expression() {
                                                     collect_refs(ae, out);
                                                 }
+                                            }
+                                        }
+                                    }
+                                    // Phase H5e: walk ArrayAccess children
+                                    // so block-body stmts like
+                                    // `m[i] = m[j] + 1` (value-class ext
+                                    // fn body shape) preload `m` and `j`
+                                    // into snap_locals.
+                                    KtExpr::ArrayAccess(aa) => {
+                                        for child in skotch_ast::children(aa.syntax()) {
+                                            if let Some(ce) = KtExpr::cast(child) {
+                                                collect_refs(ce, out);
                                             }
                                         }
                                     }
@@ -41791,6 +41967,20 @@ fn method_simple_body_full(
                             if let Some(ae) = arg.expression() {
                                 collect_refs(ae, out);
                             }
+                        }
+                    }
+                }
+                // Phase H5e: walk both the array expr and every index
+                // expr inside an ArrayAccess so a bare `m` in
+                // `m[i.toInt()]` (value-class ext fn body shape) gets
+                // preloaded into snap_locals via field_names. Without
+                // this, the ArrayAccess arm in lower_rich falls into
+                // class_field_lookup which is unset for top-level fns
+                // and bails the entire body to empty MIR.
+                KtExpr::ArrayAccess(aa) => {
+                    for child in skotch_ast::children(aa.syntax()) {
+                        if let Some(ce) = KtExpr::cast(child) {
+                            collect_refs(ce, out);
                         }
                     }
                 }
