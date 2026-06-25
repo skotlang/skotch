@@ -2094,13 +2094,30 @@ fn parse_type_ref(p: &mut Parser<'_, '_>) -> CompletedMarker {
 /// `.(` separator.
 fn looks_like_receiver_function_type(p: &Parser<'_, '_>) -> bool {
     // Walk forward balancing `<>`s. Find the FIRST top-level `.(` that
-    // is followed eventually by `->`.
+    // is followed eventually by `->`. Stop at tokens that can never
+    // appear inside a type-ref but commonly start the next declaration
+    // — without this, `class P : Container("p")` followed by another
+    // class with a receiver-function-type param sees `.()->` through
+    // the next file-level decl boundary and misparses the bodyless
+    // super-ctor call as FUNCTION_TYPE_RECEIVER + bogus VALUE_PARAMETER_LIST.
     let mut i = 0usize;
     let mut depth_lt = 0i32;
     loop {
         let k = p.nth(i);
         match k {
             S::EOF | S::LBRACE | S::SEMICOLON | S::EQ => return false,
+            S::KW_CLASS
+            | S::KW_FUN
+            | S::KW_OBJECT
+            | S::KW_INTERFACE
+            | S::KW_VAL
+            | S::KW_VAR
+            | S::KW_TYPEALIAS
+            | S::KW_ENUM
+                if depth_lt == 0 =>
+            {
+                return false;
+            }
             S::LT => depth_lt += 1,
             S::GT => depth_lt -= 1,
             S::DOT if depth_lt == 0 && p.nth(i + 1) == S::LPAR => {
@@ -2206,6 +2223,9 @@ fn parse_receiver_function_type(p: &mut Parser<'_, '_>) {
 
 fn looks_like_function_type(p: &Parser<'_, '_>) -> bool {
     // Find the matching `)`, then check if `->` follows past trivia.
+    // Stop at top-level decl keywords so we don't scan across a class /
+    // fun boundary and falsely identify a future `(...) ->` as belonging
+    // to the current type-ref position.
     let mut depth = 0i32;
     let mut i = 0;
     loop {
@@ -2230,6 +2250,18 @@ fn looks_like_function_type(p: &Parser<'_, '_>) -> bool {
                 }
             }
             S::EOF | S::LBRACE | S::SEMICOLON => return false,
+            S::KW_CLASS
+            | S::KW_FUN
+            | S::KW_OBJECT
+            | S::KW_INTERFACE
+            | S::KW_VAL
+            | S::KW_VAR
+            | S::KW_TYPEALIAS
+            | S::KW_ENUM
+                if depth == 0 =>
+            {
+                return false;
+            }
             _ => {}
         }
         i += 1;
