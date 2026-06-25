@@ -2460,10 +2460,22 @@ fn current_wrapper_class() -> String {
 /// `invokevirtual` lookups at link time).
 fn resolve_user_ty(name: &str) -> Ty {
     skotch_types::ty_from_name(name).unwrap_or_else(|| {
-        let fq = skotch_types::intrinsics::kotlin_to_jvm_class(name)
-            .map(|s| s.to_string())
-            .unwrap_or_else(|| name.to_string());
-        Ty::Class(fq)
+        // 1. Kotlin builtin → JVM mapping (`String` → `java/lang/String`).
+        if let Some(fq) = skotch_types::intrinsics::kotlin_to_jvm_class(name) {
+            return Ty::Class(fq.to_string());
+        }
+        // 2. Imported simple name → FQ via current file's import map.
+        //    Without this, `val state: F1600` collected `Ty::Class("F1600")`
+        //    from the bare parser name; subsequent emit sites (field
+        //    descriptor, method return type, NewInstance, …) used the
+        //    bare name and ClassNotFoundException fired at link time.
+        //    Same-package classes are pre-registered in the import map
+        //    by `lower_file`, so a class's own simple name (e.g.
+        //    `copy(): SHA256` inside SHA256.kt) FQ-resolves correctly.
+        if let Some(fq) = lookup_file_import(name) {
+            return Ty::Class(fq);
+        }
+        Ty::Class(name.to_string())
     })
 }
 
@@ -30045,8 +30057,23 @@ fn lower_rich_expr_to_slot(
                     // mapping the backend emits `new StringBuilder`
                     // (bare), which fails ClassLoader.loadClass at
                     // runtime.
+                    //
+                    // Fall back to the file's import map for user-class
+                    // ctor calls (`F1600()` where F1600 is
+                    // `import org.kotlincrypto.sponges.keccak.F1600`).
+                    // Without this, a same-file secondary ctor body
+                    // assignment `this.state = F1600()` produced
+                    // `new F1600` (bare) → ClassNotFoundException at
+                    // link time.
                     let jvm_class = skotch_types::intrinsics::kotlin_to_jvm_class(name)
                         .map(|s| s.to_string())
+                        .or_else(|| {
+                            if name.starts_with(char::is_uppercase) {
+                                lookup_file_import(name)
+                            } else {
+                                None
+                            }
+                        })
                         .unwrap_or_else(|| name.to_string());
                     extra_locals.push(Ty::Class(jvm_class.clone()));
                     pre_stmts.push(MStmt::Assign {
@@ -30202,6 +30229,79 @@ fn lower_rich_expr_to_slot(
                                 },
                             });
                             return Some(result_slot);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    // Unqualified constructor call: `F1600()` where `F1600` is an
+    // imported class. Without this arm, the body walker for secondary
+    // constructors silently drops `this.state = F1600()` (the rhs
+    // whitelist accepts only known array constructors otherwise), so
+    // the field stays null and the runtime NPE-s on first read.
+    //
+    // Fires when the callee is a bare Reference to an uppercase name
+    // that resolves via `lookup_file_import` AND isn't in scope as a
+    // local (would shadow a user-named slot). The emitted shape mirrors
+    // the nested-ctor arm above: `NewInstance + ConstructorJava` with
+    // the descriptor built from the arg slot Tys.
+    if let KtExpr::Call(call) = e {
+        if let Some(KtExpr::Reference(rc)) = call.callee() {
+            if let Some(name) = rc.name() {
+                let is_class_namespace = name.starts_with(char::is_uppercase)
+                    && lookup_name(name).is_none()
+                    && !fn_lookup.contains_key(name);
+                if is_class_namespace {
+                    if let Some(class_fq) = lookup_file_import(name) {
+                        let mut arg_slots: Vec<LocalId> = Vec::new();
+                        let mut all_ok = true;
+                        if let Some(arg_list) = call.value_argument_list() {
+                            for arg in arg_list.arguments() {
+                                let Some(arg_e) = arg.expression() else {
+                                    all_ok = false;
+                                    break;
+                                };
+                                let Some(s) = lower_rich_expr_to_slot(
+                                    arg_e,
+                                    lookup_name,
+                                    fn_lookup,
+                                    next_slot,
+                                    pre_stmts,
+                                    extra_locals,
+                                    strings,
+                                ) else {
+                                    all_ok = false;
+                                    break;
+                                };
+                                arg_slots.push(s);
+                            }
+                        }
+                        if all_ok {
+                            let mut desc = String::from("(");
+                            for s in &arg_slots {
+                                let t = slot_ty_with_param_fallback(s.0, extra_locals);
+                                desc.push_str(&ty_to_descriptor(&t));
+                            }
+                            desc.push_str(")V");
+                            let new_slot = LocalId(*next_slot);
+                            *next_slot += 1;
+                            extra_locals.push(Ty::Class(class_fq.clone()));
+                            pre_stmts.push(MStmt::Assign {
+                                dest: new_slot,
+                                value: skotch_mir::Rvalue::NewInstance(class_fq.clone()),
+                            });
+                            pre_stmts.push(MStmt::Assign {
+                                dest: new_slot,
+                                value: skotch_mir::Rvalue::Call {
+                                    kind: skotch_mir::CallKind::ConstructorJava {
+                                        class_name: class_fq,
+                                        descriptor: desc,
+                                    },
+                                    args: arg_slots,
+                                },
+                            });
+                            return Some(new_slot);
                         }
                     }
                 }
@@ -38844,6 +38944,27 @@ fn constructor_from_primary_impl(
 /// Collect fields from a class body's `val`/`var` properties +
 /// primary-constructor `val`/`var` parameters.
 fn collect_class_fields(c: skotch_ast::KtClass<'_>) -> Vec<skotch_mir::MirField> {
+    // FQ-resolve a `Ty::Class(simple)` whose simple name appears in the
+    // current file's import map. Without this, `private val state: F1600`
+    // collected `Ty::Class("F1600")` from the parser's bare simple name,
+    // and downstream PutField + field descriptor sites emitted `LF1600;`
+    // — the JVM then failed to load class "F1600" at write/read of state.
+    // Only fields are post-processed so the global `resolve_user_ty`
+    // behavior stays stable (callers like extension-receiver Ty
+    // collection that need bare names continue to work).
+    fn fq_resolve_field_ty(t: Ty) -> Ty {
+        match t {
+            Ty::Class(n) if !n.contains('/') => {
+                if let Some(fq) = lookup_file_import(&n) {
+                    Ty::Class(fq)
+                } else {
+                    Ty::Class(n)
+                }
+            }
+            Ty::Nullable(inner) => Ty::Nullable(Box::new(fq_resolve_field_ty(*inner))),
+            other => other,
+        }
+    }
     let mut fields = Vec::new();
     if let Some(pc) = c.primary_constructor() {
         if let Some(plist) = pc.value_parameter_list() {
@@ -38859,6 +38980,7 @@ fn collect_class_fields(c: skotch_ast::KtClass<'_>) -> Vec<skotch_mir::MirField>
                             Some(tr) => resolve_type_ref(tr),
                             None => Ty::Any,
                         };
+                        let ty = fq_resolve_field_ty(ty);
                         fields.push(skotch_mir::MirField {
                             name: n.to_string(),
                             ty,
@@ -38928,6 +39050,7 @@ fn collect_class_fields(c: skotch_ast::KtClass<'_>) -> Vec<skotch_mir::MirField>
                             })
                             .unwrap_or(Ty::Any),
                     };
+                    let ty = fq_resolve_field_ty(ty);
                     fields.push(skotch_mir::MirField {
                         name: n.to_string(),
                         ty,
@@ -39792,7 +39915,12 @@ fn collect_secondary_ctors(
                         return false;
                     };
                     let Some(name) = rr.name() else { return false };
-                    if !matches!(
+                    // Accept either a known primitive-array constructor
+                    // (`IntArray(N)`, etc.) OR a user-imported class
+                    // constructor (`F1600()`) — the lower_rich_expr arm
+                    // above handles both via NewInstance + ConstructorJava
+                    // when the callee resolves to an imported class.
+                    let is_known_array = matches!(
                         name,
                         "IntArray"
                             | "LongArray"
@@ -39802,11 +39930,17 @@ fn collect_secondary_ctors(
                             | "FloatArray"
                             | "ShortArray"
                             | "CharArray"
-                    ) {
+                    );
+                    let is_imported_class = !is_known_array
+                        && name.starts_with(char::is_uppercase)
+                        && lookup_file_import(name).is_some();
+                    if !is_known_array && !is_imported_class {
                         return false;
                     }
                     let Some(al) = call.value_argument_list() else {
-                        return false;
+                        // No args is valid (`F1600()`); only fail when
+                        // we couldn't read the arg list at all.
+                        return true;
                     };
                     al.arguments().all(|arg| {
                         arg.expression()
