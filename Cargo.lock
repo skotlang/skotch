@@ -2652,6 +2652,7 @@ name = "skotch-backend-jvm"
 version = "0.41.0"
 dependencies = [
  "byteorder",
+ "md-5",
  "rustc-hash",
  "skotch-ast",
  "skotch-classinfo",

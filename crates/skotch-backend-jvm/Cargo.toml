@@ -16,6 +16,7 @@ skotch-classinfo       = { workspace = true }
 skotch-kotlin-metadata-writer = { workspace = true }
 byteorder        = { workspace = true }
 rustc-hash       = { workspace = true }
+md-5             = { workspace = true }
 
 [dev-dependencies]
 skotch-ast       = { workspace = true }

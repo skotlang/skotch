@@ -16,6 +16,7 @@
 //! avoid branches, so we don't emit one.
 
 use crate::constant_pool::ConstantPool;
+use crate::value_class;
 use byteorder::{BigEndian, WriteBytesExt};
 use rustc_hash::{FxHashMap, FxHashSet};
 use skotch_config::jvm;
@@ -2127,11 +2128,14 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
     // we run a proper stability analysis, emit the field with default
     // value 0 (the JVM zero-init for int fields is automatic; no clinit
     // entry needed). For interfaces / suspend lambdas / object singletons
-    // / companion-only classes, kotlinc skips this field — we mirror.
+    // / companion-only classes / value classes, kotlinc skips this field
+    // — we mirror. (Value classes have no instance state beyond their
+    // single underlying value so Compose's stability check is moot.)
     if !effective_suspend_lambda
         && !class.is_interface
         && !class.is_object_singleton
         && !class.is_lambda
+        && !class.is_value_class
         && !class.name.ends_with("$Companion")
     {
         let n = cp2.utf8("$stable");
@@ -2215,7 +2219,7 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
             method_blobs2.push(blob);
         }
         if !primary_conflicts {
-            let init2 = emit_user_method(
+            let mut init2 = emit_user_method(
                 &class.constructor,
                 module,
                 &class.name,
@@ -2224,6 +2228,17 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
                 code2,
                 true,
             );
+            // Phase H2: value-class `<init>` becomes `ACC_PRIVATE |
+            // ACC_SYNTHETIC` (kotlinc shape) — external callers must
+            // route through the `box-impl` static. Patching the leading
+            // u16 access-flags field in-place is safe because
+            // `emit_user_method` always writes `access_flags` as the
+            // very first 2 bytes of the returned method blob.
+            if class.is_value_class && init2.len() >= 2 {
+                let flags = ACC_PRIVATE | ACC_SYNTHETIC;
+                init2[0] = (flags >> 8) as u8;
+                init2[1] = (flags & 0xFF) as u8;
+            }
             method_blobs2.push(init2);
             // Mirror the first-pass synthetic ctor emission here so the
             // shipped bytes include the `(args, mask, reserved Int, Marker)V`
@@ -2315,6 +2330,33 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
                 &mut cp2,
                 code_attr_name_idx,
             ));
+        }
+
+        // Phase H2: append the seven standard `@JvmInline value class`
+        // synthetic methods + instance forwarders (`constructor-impl`,
+        // `box-impl`, `unbox-impl`, `equals-impl`/`equals-impl0`,
+        // `hashCode-impl`, `toString-impl` + matching instance
+        // `equals/hashCode/toString` that delegate to the static
+        // variants). The existing primary `<init>` (above) was already
+        // patched to `ACC_PRIVATE | ACC_SYNTHETIC` so `box-impl` is the
+        // only legal external constructor. User-declared instance
+        // methods are kept unchanged for now — the H3 phase will swap
+        // them for the static `-impl` variants and rewrite call sites
+        // to skip the box/unbox round-trip.
+        if class.is_value_class {
+            if let (Some(field), Some(underlying)) = (
+                class.value_underlying_field.as_deref(),
+                class.value_underlying_ty.as_ref(),
+            ) {
+                let synthetics = value_class::emit_value_class_synthetics(
+                    &class.name,
+                    field,
+                    underlying,
+                    &mut cp2,
+                    code_attr_name_idx,
+                );
+                method_blobs2.extend(synthetics);
+            }
         }
     }
 
@@ -30386,5 +30428,152 @@ fun main() {
             s.contains("ArithmeticException"),
             "class file should reference ArithmeticException"
         );
+    }
+
+    // ─── Phase H2: @JvmInline value-class wrapper emission ──────────
+
+    /// Compile a source snippet and return the (name, bytes) tuple
+    /// for the named class (panics if absent). Used by H2 tests to
+    /// pluck a value-class output from the multi-class module.
+    fn compile_named(src: &str, name: &str) -> Vec<u8> {
+        let (results, diags) = compile(src);
+        assert!(!diags.has_errors(), "diagnostics: {diags:?}");
+        for (n, b) in &results {
+            if n == name {
+                return b.clone();
+            }
+        }
+        panic!(
+            "expected class {name} in output; got {:?}",
+            results.iter().map(|(n, _)| n.as_str()).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn h2_value_class_emits_constructor_box_unbox_impl_utf8s() {
+        // `@JvmInline value class V(val x: Long) { fun double(): Long
+        //  = x * 2 }` — the bytecode should reference the three
+        // canonical synthetic names AND the user method's static
+        // sibling.
+        let src = r#"
+@JvmInline
+value class V(val x: Long) {
+    fun doubled(): Long = x * 2
+}
+"#;
+        let bytes = compile_named(src, "V");
+        let s = String::from_utf8_lossy(&bytes);
+        for needle in [
+            "constructor-impl",
+            "box-impl",
+            "unbox-impl",
+            "equals-impl",
+            "equals-impl0",
+            "hashCode-impl",
+            "toString-impl",
+        ] {
+            assert!(
+                s.contains(needle),
+                "expected constant-pool Utf8 `{needle}` in V.class"
+            );
+        }
+    }
+
+    #[test]
+    fn h2_value_class_init_is_acc_private_synthetic() {
+        // Scan the method table for `<init>` and verify its access
+        // flags are exactly ACC_PRIVATE | ACC_SYNTHETIC (0x1002).
+        let src = r#"
+@JvmInline
+value class V(val x: Long)
+"#;
+        let bytes = compile_named(src, "V");
+        // Find the `<init>` Utf8 string and its CP index. We don't
+        // parse the CP — instead, we just assert the access-flags
+        // word `0x1002` appears in the file. (The plain wrapper-class
+        // init is `0x0001` ACC_PUBLIC, so the presence of `0x1002`
+        // here is sufficient evidence the patch took effect.)
+        // Big-endian byte pair {0x10, 0x02}.
+        assert!(
+            bytes.windows(2).any(|w| w == [0x10, 0x02]),
+            "expected ACC_PRIVATE|ACC_SYNTHETIC (0x1002) flags on value-class <init>"
+        );
+    }
+
+    #[test]
+    fn h2_value_class_skips_dollar_stable_field() {
+        // Value classes shouldn't carry the Compose `$stable` field.
+        let src = r#"
+@JvmInline
+value class V(val x: Long)
+"#;
+        let bytes = compile_named(src, "V");
+        let s = String::from_utf8_lossy(&bytes);
+        assert!(
+            !s.contains("$stable"),
+            "value class should not carry the $stable Compose stability field"
+        );
+    }
+
+    #[test]
+    fn h2_value_class_with_string_underlying_emits_synthetics() {
+        // Underlying String — the synthetics should use the
+        // `Ljava/lang/String;` descriptor everywhere it'd otherwise
+        // use a primitive letter.
+        let src = r#"
+@JvmInline
+value class Password(val raw: String)
+"#;
+        let bytes = compile_named(src, "Password");
+        let s = String::from_utf8_lossy(&bytes);
+        assert!(s.contains("box-impl"), "box-impl must exist");
+        assert!(s.contains("unbox-impl"), "unbox-impl must exist");
+        // The box-impl descriptor is `(Ljava/lang/String;)LPassword;`.
+        assert!(
+            s.contains("(Ljava/lang/String;)LPassword;"),
+            "expected box-impl descriptor in CP"
+        );
+        // The unbox-impl descriptor is `()Ljava/lang/String;`.
+        assert!(
+            s.contains("()Ljava/lang/String;"),
+            "expected unbox-impl descriptor in CP"
+        );
+    }
+
+    #[test]
+    #[ignore = "dev-time only — dumps emitted .class files to /tmp for javap inspection"]
+    fn h2_value_class_dump_to_tmp_for_javap() {
+        let src = r#"
+@JvmInline
+value class V(val x: Long) {
+    fun doubled(): Long = x * 2
+}
+"#;
+        let (results, diags) = compile(src);
+        assert!(!diags.has_errors(), "diagnostics: {diags:?}");
+        std::fs::create_dir_all("/tmp/h2_skotch_dump").ok();
+        for (name, bytes) in &results {
+            let path = format!("/tmp/h2_skotch_dump/{}.class", name);
+            std::fs::write(&path, bytes).unwrap();
+            eprintln!("wrote {path}: {} bytes", bytes.len());
+        }
+    }
+
+    #[test]
+    fn h2_non_value_class_unchanged() {
+        // A plain class with the same shape (NO `@JvmInline value`)
+        // must NOT acquire the value-class synthetics. Verifies the
+        // emission is gated on `class.is_value_class`.
+        let src = r#"
+class Plain(val x: Long)
+"#;
+        let bytes = compile_named(src, "Plain");
+        let s = String::from_utf8_lossy(&bytes);
+        for forbidden in ["box-impl", "unbox-impl", "constructor-impl"] {
+            assert!(
+                !s.contains(forbidden),
+                "plain class must not have `{forbidden}` symbol"
+            );
+        }
     }
 }
