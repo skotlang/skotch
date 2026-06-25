@@ -584,6 +584,38 @@ thread_local! {
     static IMPLICIT_RECEIVER:
         std::cell::RefCell<Vec<(skotch_mir::LocalId, String)>> =
         const { std::cell::RefCell::new(Vec::new()) };
+
+    /// Slot override for `KtExpr::This` inside the body of a
+    /// member-extension method like
+    /// `class C { operator fun String.unaryPlus() { ... } }`.
+    /// Slot 0 is the dispatch receiver (`C`) and slot 1 is the
+    /// extension receiver (`String`); inside the body, `this`
+    /// refers to the extension receiver per Kotlin semantics, so
+    /// any LocalId(0) literal in the lowerer's `KtExpr::This`
+    /// arms must defer to this override when set. Cleared by an
+    /// `ExtensionThisScope` RAII guard.
+    static EXTENSION_THIS_SLOT: std::cell::RefCell<Option<skotch_mir::LocalId>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+fn current_extension_this_slot() -> Option<skotch_mir::LocalId> {
+    EXTENSION_THIS_SLOT.with(|c| *c.borrow())
+}
+
+struct ExtensionThisScope {
+    prev: Option<skotch_mir::LocalId>,
+}
+impl ExtensionThisScope {
+    fn new(slot: Option<skotch_mir::LocalId>) -> Self {
+        let prev = EXTENSION_THIS_SLOT.with(|c| c.borrow_mut().take());
+        EXTENSION_THIS_SLOT.with(|c| *c.borrow_mut() = slot);
+        Self { prev }
+    }
+}
+impl Drop for ExtensionThisScope {
+    fn drop(&mut self) {
+        EXTENSION_THIS_SLOT.with(|c| *c.borrow_mut() = self.prev.take());
+    }
 }
 
 fn take_lambda_receiver_hint() -> Option<String> {
@@ -6430,6 +6462,7 @@ pub fn lower_file(
                     &fn_lookup,
                     &val_lookup,
                     &wrapper_class,
+                    0,
                 )
             } else {
                 let r = lower_simple_body(
@@ -25004,7 +25037,11 @@ fn lower_inline_expr_to_slot(
         // method context; callers that don't want this should
         // pre-check before recursion (or simply not recurse via this
         // helper inside non-method contexts).
-        KtExpr::This(_) => Some(skotch_mir::LocalId(0)),
+        // For member-extension methods (`class C { fun T.f() }`),
+        // slot 0 is the dispatch receiver C and slot 1 is the
+        // extension receiver T; inside the body, `this` refers to
+        // the extension receiver, hence the override.
+        KtExpr::This(_) => Some(current_extension_this_slot().unwrap_or(skotch_mir::LocalId(0))),
         KtExpr::Reference(r) => {
             let n = r.name()?;
             if let Some(slot) = lookup_name(n) {
@@ -37527,7 +37564,7 @@ fn constructor_from_primary_impl(
     c: skotch_ast::KtClass<'_>,
     class_name: &str,
     fn_lookup: &rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)>,
-    module_strings: Option<&mut Vec<String>>,
+    mut module_strings: Option<&mut Vec<String>>,
     package_symbols: Option<&PackageSymbolTable>,
 ) -> MirFunction {
     let params_iter: Vec<_> = c
@@ -37649,6 +37686,14 @@ fn constructor_from_primary_impl(
     // `class CalcError(m: String) : RuntimeException(m)` dropped m and
     // `getMessage()` returned null at runtime.
     let mut super_args: Vec<skotch_mir::LocalId> = vec![this_slot];
+    // Pre-stmts to materialize literal super-call args (e.g.
+    // `class HTML : Container("html")` pushes "html" as a String
+    // literal into a fresh slot before invokespecial). These are
+    // prepended to `stmts` below the super call's Call::Assign so
+    // the literal is on the operand stack at the invocation site.
+    let mut super_literal_pre_stmts: Vec<skotch_mir::Stmt> = Vec::new();
+    let mut super_literal_extra_locals: Vec<Ty> = Vec::new();
+    let mut super_literal_next_slot = (1 + user_param_count) as u32;
     if let Some(arg_list) = super_call_entry.and_then(|c| c.value_argument_list()) {
         let mut ok = true;
         let mut extra: Vec<skotch_mir::LocalId> = Vec::new();
@@ -37657,24 +37702,60 @@ fn constructor_from_primary_impl(
                 ok = false;
                 break;
             };
-            let skotch_ast::KtExpr::Reference(rr) = unwrap_parens(arg_e) else {
+            let inner = unwrap_parens(arg_e);
+            // 1. Reference to a primary-ctor param — forward the
+            //    slot directly (the original code path).
+            if let skotch_ast::KtExpr::Reference(rr) = inner {
+                if let Some(name) = rr.name() {
+                    if let Some(idx) = user_param_names.iter().position(|n| n == name) {
+                        extra.push(skotch_mir::LocalId((idx + 1) as u32));
+                        continue;
+                    }
+                }
+                ok = false;
+                break;
+            }
+            // 2. Literal (String/Int/Long/etc.) — synthesize a const
+            //    slot. Required by the DSL-builder idiom
+            //    `class HTML : Container("html")` where the super
+            //    call passes a string literal that's NOT a Reference
+            //    to a primary-ctor param.
+            let module_strings_ref: &mut Vec<String> = match &mut module_strings {
+                Some(s) => s,
+                None => {
+                    ok = false;
+                    break;
+                }
+            };
+            let Some((mir_const, ty)) = literal_to_const(&inner, module_strings_ref) else {
                 ok = false;
                 break;
             };
-            let Some(name) = rr.name() else {
-                ok = false;
-                break;
-            };
-            let Some(idx) = user_param_names.iter().position(|n| n == name) else {
-                ok = false;
-                break;
-            };
-            extra.push(skotch_mir::LocalId((idx + 1) as u32));
+            let slot = skotch_mir::LocalId(super_literal_next_slot);
+            super_literal_next_slot += 1;
+            super_literal_extra_locals.push(ty);
+            super_literal_pre_stmts.push(skotch_mir::Stmt::Assign {
+                dest: slot,
+                value: skotch_mir::Rvalue::Const(mir_const),
+            });
+            extra.push(slot);
         }
         if ok {
             super_args.extend(extra);
+        } else {
+            // Discard any partially-built literal slots; they would
+            // be unreferenced and a later pass might flag them.
+            super_literal_pre_stmts.clear();
+            super_literal_extra_locals.clear();
         }
     }
+    // Splice the literal pre-stmts BEFORE the super-call Assign,
+    // and extend the function's local table with their Tys so slot
+    // indexing stays in-bounds at the JVM backend (StackMapTable
+    // verification reads `locals[slot]` for every Const::String
+    // load).
+    stmts.extend(super_literal_pre_stmts);
+    locals.extend(super_literal_extra_locals);
     let _ = fn_lookup;
     let _ = package_symbols;
     stmts.push(skotch_mir::Stmt::Assign {
@@ -37708,7 +37789,15 @@ fn constructor_from_primary_impl(
     //      - literal init: `val x: Int = 100` → Const + PutField
     //      - zero-arg top-level fn call: `val y = compute()` →
     //        Call(Static) + PutField
-    let mut next_slot = (1 + user_param_count) as u32;
+    //
+    // `next_slot` reserves slot 0 for `this`, slots 1..=N for user
+    // params, then the slots claimed by super-call literal args
+    // (e.g. `class HTML : Container("html")` reserves one slot for
+    // the "html" StringId). Without the literal offset, the field
+    // init pass below would reuse those reserved slots and clobber
+    // the super-call's String literal between materialization and
+    // the invokespecial site.
+    let mut next_slot = super_literal_next_slot;
     // When called from the top-level lowering pass, route through the
     // module's shared strings table so String literal initializers
     // (`val s: String = "hello"`) get a valid StringId that the JVM
@@ -39288,6 +39377,14 @@ fn collect_object_methods_with_class(
 /// shape. The receiver `this` is at slot 0; user params at 1..N+1.
 /// `class_name` and `field_names` are needed for `Reference(field)`
 /// in the body to emit GetField on `this`.
+///
+/// `extra_param_slots` is the number of extra param slots inserted
+/// AFTER `this` and BEFORE user value parameters. For an ordinary
+/// instance method this is 0 (the default). For a class-member
+/// extension method (`class C { fun T.f(x: X) }`), this is 1: slot 0
+/// = dispatch this C, slot 1 = extension receiver T, slots 2..=N+1 =
+/// user params. The same value is forwarded to inner body lowerers'
+/// `slot_offset` arg.
 #[allow(clippy::too_many_arguments)]
 fn method_simple_body_full(
     f: skotch_ast::KtFun<'_>,
@@ -39297,6 +39394,7 @@ fn method_simple_body_full(
     fn_lookup: &rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)>,
     val_lookup: &rustc_hash::FxHashMap<String, Ty>,
     wrapper_class: &str,
+    extra_param_slots: u32,
 ) -> (Vec<BasicBlock>, Vec<Ty>) {
     use skotch_ast::KtExpr;
 
@@ -39322,7 +39420,8 @@ fn method_simple_body_full(
         .value_parameter_list()
         .map(|pl| pl.parameters().count())
         .unwrap_or(0);
-    let mut early_param_fallback: Vec<Ty> = Vec::with_capacity(1 + early_param_count);
+    let mut early_param_fallback: Vec<Ty> =
+        Vec::with_capacity(1 + extra_param_slots as usize + early_param_count);
     // `this` slot Ty. For a non-primitive receiver this is the
     // declared class; for a primitive receiver (extension on
     // `Int`/`Long`/`Char`/…) kotlinc lowers the static fn with the
@@ -39335,6 +39434,19 @@ fn method_simple_body_full(
             .map(|c| skotch_types::ty_from_name(c).unwrap_or_else(|| Ty::Class(c.to_string())))
             .unwrap_or(Ty::Any),
     );
+    // Slot(s) for an extension-receiver between dispatch `this` and
+    // the user value params. The body-lowering pipeline will see
+    // `KtExpr::This` resolve to `LocalId(1)` via `ExtensionThisScope`,
+    // so seed the corresponding fallback Ty with the extension
+    // receiver class (`String`, `Iterable<T>`, …) here.
+    let extension_receiver_ty: Option<Ty> = f
+        .receiver_type()
+        .and_then(|tr| tr.user_type())
+        .and_then(|u| u.name())
+        .map(resolve_user_ty);
+    for _ in 0..extra_param_slots {
+        early_param_fallback.push(extension_receiver_ty.clone().unwrap_or(Ty::Any));
+    }
     if let Some(pl) = f.value_parameter_list() {
         for p in pl.parameters() {
             let pty = p.type_reference().map(resolve_type_ref).unwrap_or(Ty::Any);
@@ -39342,6 +39454,15 @@ fn method_simple_body_full(
         }
     }
     let _early_param_scope = ParamTyScope::new(early_param_fallback);
+    // Install the extension-receiver `this` slot override BEFORE any
+    // body lowering. Resolved by every `KtExpr::This(_)` arm via
+    // `current_extension_this_slot()`. Slot 1 because slot 0 is the
+    // dispatch receiver.
+    let _ext_this_scope = if extra_param_slots > 0 {
+        Some(ExtensionThisScope::new(Some(skotch_mir::LocalId(1))))
+    } else {
+        None
+    };
 
     let body_expr = match f.body_expression() {
         Some(e) => e,
@@ -39360,7 +39481,7 @@ fn method_simple_body_full(
                 val_lookup,
                 &rustc_hash::FxHashMap::default(),
                 wrapper_class,
-                1,
+                1 + extra_param_slots,
                 class_name,
                 field_names,
             ) {
@@ -39377,10 +39498,18 @@ fn method_simple_body_full(
             // 17-json-parser-printer) fell through to the mini-walker, which
             // bails on While stmts and produced empty MIR (parseStringLit
             // returned null, NPE-ing describe()).
+            //
+            // For class-member extension methods, slot_offset is bumped by
+            // `extra_param_slots` so user params land at 2..=N+1 and the
+            // synthetic extension receiver occupies slot 1.
             if class_name.is_some() {
-                if let Some((blocks, locals)) =
-                    try_lower_function_body_via_blocks(block, f, strings, fn_lookup, 1)
-                {
+                if let Some((blocks, locals)) = try_lower_function_body_via_blocks(
+                    block,
+                    f,
+                    strings,
+                    fn_lookup,
+                    1 + extra_param_slots,
+                ) {
                     return (blocks, locals);
                 }
             }
@@ -42653,16 +42782,33 @@ fn method_from_fun_with_class(
         .value_parameter_list()
         .map(|pl| pl.parameters().count())
         .unwrap_or(0);
+    // Member extension method? `class C { fun T.f(x: X) }` lowers to
+    // a virtual method on C with descriptor `(T, X)R`: slot 0 =
+    // dispatch this (C), slot 1 = extension receiver (T), slots
+    // 2..=N+1 = user value params. The body's `this` resolves to
+    // slot 1 via the `EXTENSION_THIS_SLOT` override installed by
+    // `method_simple_body_full` when its `extra_param_slots` arg is 1.
+    let extension_receiver_ty: Option<Ty> = f
+        .receiver_type()
+        .and_then(|tr| tr.user_type())
+        .and_then(|u| u.name())
+        .map(resolve_user_ty);
+    let extra_param_slots: u32 = if extension_receiver_ty.is_some() {
+        1
+    } else {
+        0
+    };
     // For instance methods, params[0] is `this` (slot 0); user
-    // params are slots 1..=N. The JVM backend's emit_user_method
-    // skips params[0] when building the descriptor, matching this
-    // convention.
-    let mut params: Vec<skotch_mir::LocalId> = Vec::with_capacity(1 + user_param_count);
+    // params are slots 1..=N (or 2..=N+1 for extension methods).
+    // The JVM backend's emit_user_method skips params[0] when
+    // building the descriptor, matching this convention.
+    let total_param_count = user_param_count + extra_param_slots as usize;
+    let mut params: Vec<skotch_mir::LocalId> = Vec::with_capacity(1 + total_param_count);
     params.push(skotch_mir::LocalId(0)); // this
-    for i in 1..=user_param_count {
+    for i in 1..=total_param_count {
         params.push(skotch_mir::LocalId(i as u32));
     }
-    let param_count = user_param_count;
+    let param_count = total_param_count;
     let param_names: Vec<String> = f
         .value_parameter_list()
         .map(|pl| {
@@ -42695,6 +42841,7 @@ fn method_from_fun_with_class(
             fn_lookup,
             val_lookup,
             wrapper_class,
+            extra_param_slots,
         )
     } else {
         (
@@ -42706,6 +42853,7 @@ fn method_from_fun_with_class(
         )
     };
     // Local layout: this (Ty::Class of owning class when known),
+    // optional extension receiver (Ty resolved from `f.receiver_type`),
     // each user param using its source-declared Ty, then any
     // extra_locals from the body lowering. Without param Tys, the
     // JVM backend's Virtual-call descriptor inference at the call
@@ -42718,13 +42866,16 @@ fn method_from_fun_with_class(
             .map(|c| Ty::Class(c.to_string()))
             .unwrap_or(Ty::Any),
     );
+    if let Some(ext_ty) = &extension_receiver_ty {
+        locals.push(erase_generic(ext_ty.clone()));
+    }
     if let Some(pl) = f.value_parameter_list() {
         for p in pl.parameters() {
             let pty = p.type_reference().map(resolve_type_ref).unwrap_or(Ty::Any);
             locals.push(erase_generic(pty));
         }
     } else {
-        for _ in 0..param_count {
+        for _ in 0..user_param_count {
             locals.push(Ty::Any);
         }
     }
