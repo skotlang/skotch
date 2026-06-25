@@ -30667,6 +30667,157 @@ fn lower_rich_expr_to_slot(
                             return Some(result_slot);
                         }
                     }
+                    // Phase H6a: KotlinCrypto bitops `lePackIntoUnsafe`
+                    // dispatch. Recognises the cross-file
+                    //   `inline fun ByteArray.lePackIntoUnsafe(
+                    //        dest: IntArray|LongArray,
+                    //        destOffset: Int,
+                    //        sourceIndexStart: Int,
+                    //        sourceIndexEnd: Int,
+                    //    )`
+                    // declared in the precompiled `endian-jvm` jar
+                    // (`org/kotlincrypto/bitops/endian/Endian$Little`).
+                    // The cross-file ext fn registry only carries
+                    // source-level Kotlin decls — JAR-only ext fns
+                    // never get registered, and the receiver-type
+                    // dispatch arm below resolves `Ty::ByteArray` to
+                    // `None`, so the entire call would fall through
+                    // and bail the surrounding `populate` body to
+                    // empty MIR. Emitting an explicit `invokestatic`
+                    // here resolves the call as a side-effecting
+                    // statement (return value is the int[]/long[]
+                    // `dest`, but the source-level callers discard
+                    // it). Named-arg reorder handled inline since
+                    // the canonical call shape in `-Message.kt` uses
+                    // `destOffset = 0, sourceIndexStart = …,
+                    //  sourceIndexEnd = …` with `dest` positional.
+                    if method_n == "lePackIntoUnsafe"
+                        && matches!(recv_ty_candidate, Some(Ty::ByteArray))
+                    {
+                        if let Some(arg_list) = call.value_argument_list() {
+                            let mut dest_e: Option<KtExpr<'_>> = None;
+                            let mut dest_off_e: Option<KtExpr<'_>> = None;
+                            let mut src_start_e: Option<KtExpr<'_>> = None;
+                            let mut src_end_e: Option<KtExpr<'_>> = None;
+                            let mut positional: Vec<KtExpr<'_>> = Vec::new();
+                            for a in arg_list.arguments() {
+                                let Some(ae) = a.expression() else {
+                                    positional.clear();
+                                    break;
+                                };
+                                match a.name() {
+                                    Some("dest") => dest_e = Some(ae),
+                                    Some("destOffset") => dest_off_e = Some(ae),
+                                    Some("sourceIndexStart") => src_start_e = Some(ae),
+                                    Some("sourceIndexEnd") => src_end_e = Some(ae),
+                                    Some(_) => {}
+                                    None => positional.push(ae),
+                                }
+                            }
+                            // Fill any unset slots from positional list
+                            // in dest, destOffset, sourceIndexStart,
+                            // sourceIndexEnd order — handles the
+                            // `b.lePackIntoUnsafe(m, 0, off, end)`
+                            // shape as well as the canonical
+                            // `b.lePackIntoUnsafe(m, destOffset=0, …)`
+                            // shape in -Message.kt.
+                            let mut pos_iter = positional.into_iter();
+                            if dest_e.is_none() {
+                                dest_e = pos_iter.next();
+                            }
+                            if dest_off_e.is_none() {
+                                dest_off_e = pos_iter.next();
+                            }
+                            if src_start_e.is_none() {
+                                src_start_e = pos_iter.next();
+                            }
+                            if src_end_e.is_none() {
+                                src_end_e = pos_iter.next();
+                            }
+                            if let (
+                                Some(dest_ae),
+                                Some(dest_off_ae),
+                                Some(src_start_ae),
+                                Some(src_end_ae),
+                            ) = (dest_e, dest_off_e, src_start_e, src_end_e)
+                            {
+                                let recv_slot = lower_rich_expr_to_slot(
+                                    dq_exprs[0],
+                                    lookup_name,
+                                    fn_lookup,
+                                    next_slot,
+                                    pre_stmts,
+                                    extra_locals,
+                                    strings,
+                                )?;
+                                let dest_slot = lower_rich_expr_to_slot(
+                                    dest_ae,
+                                    lookup_name,
+                                    fn_lookup,
+                                    next_slot,
+                                    pre_stmts,
+                                    extra_locals,
+                                    strings,
+                                )?;
+                                let dest_off_slot = lower_rich_expr_to_slot(
+                                    dest_off_ae,
+                                    lookup_name,
+                                    fn_lookup,
+                                    next_slot,
+                                    pre_stmts,
+                                    extra_locals,
+                                    strings,
+                                )?;
+                                let src_start_slot = lower_rich_expr_to_slot(
+                                    src_start_ae,
+                                    lookup_name,
+                                    fn_lookup,
+                                    next_slot,
+                                    pre_stmts,
+                                    extra_locals,
+                                    strings,
+                                )?;
+                                let src_end_slot = lower_rich_expr_to_slot(
+                                    src_end_ae,
+                                    lookup_name,
+                                    fn_lookup,
+                                    next_slot,
+                                    pre_stmts,
+                                    extra_locals,
+                                    strings,
+                                )?;
+                                let dest_ty =
+                                    slot_ty_with_param_fallback(dest_slot.0, extra_locals);
+                                let (desc, ret_ty) = match dest_ty {
+                                    Ty::LongArray => ("([B[JIII)[J", Ty::LongArray),
+                                    _ => ("([B[IIII)[I", Ty::IntArray),
+                                };
+                                let result_slot = LocalId(*next_slot);
+                                *next_slot += 1;
+                                extra_locals.push(ret_ty);
+                                pre_stmts.push(MStmt::Assign {
+                                    dest: result_slot,
+                                    value: skotch_mir::Rvalue::Call {
+                                        kind: skotch_mir::CallKind::StaticJava {
+                                            class_name:
+                                                "org/kotlincrypto/bitops/endian/Endian$Little"
+                                                    .to_string(),
+                                            method_name: "lePackIntoUnsafe".to_string(),
+                                            descriptor: desc.to_string(),
+                                        },
+                                        args: vec![
+                                            recv_slot,
+                                            dest_slot,
+                                            dest_off_slot,
+                                            src_start_slot,
+                                            src_end_slot,
+                                        ],
+                                    },
+                                });
+                                return Some(result_slot);
+                            }
+                        }
+                    }
                     if matches!(recv_ty_candidate, Some(Ty::String)) {
                         let arg_count = call
                             .value_argument_list()
