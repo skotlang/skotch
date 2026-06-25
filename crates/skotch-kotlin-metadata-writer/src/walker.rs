@@ -511,12 +511,25 @@ fn class_flags(class: &MirClass) -> i32 {
     } else {
         pb::class::Kind::Class as i32
     };
-    // Layout (LSB → MSB): hasAnnotations(1) | visibility(3) | modality(2) | kind(3) | ...
+    // Layout (LSB → MSB): hasAnnotations(1) | visibility(3) | modality(2) | kind(3) |
+    // isInner(1) | isData(1) | isExternal(1) | isExpect(1) | isInline(1)/isValue | isFun(1) | ...
     // We approximate kotlinc's `FLAGS_DEFAULT` for `public final class` and
     // override the kind bits.
     let visibility_public = pb::Visibility::Public as i32; // 3
     let modality_final = pb::Modality::Final as i32; // 0
-    (visibility_public << 1) | (modality_final << 4) | (kind << 6)
+    let mut flags = (visibility_public << 1) | (modality_final << 4) | (kind << 6);
+    // Phase H4: kotlinc marks `@JvmInline value class` with the
+    // `isValue` bit at position 13 (the same bit that was historically
+    // `isInline` for `inline class`). External consumers (kotlinc,
+    // kotlinx-serialization-compiler-plugin, …) check this bit to know
+    // they should dispatch through `box-impl` / `<name>-impl` rather
+    // than the wrapper class itself. Also flag `hasAnnotations` at
+    // position 0 since the class carries `@JvmInline`.
+    if class.is_value_class {
+        flags |= 1 << 13;
+        flags |= 1; // hasAnnotations
+    }
+    flags
 }
 
 // ── Top-level entry points ─────────────────────────────────────────
@@ -579,6 +592,27 @@ pub fn class_proto_for(class: &MirClass, table: &mut StringTable) -> pb::Class {
     }
     if let Some(sc) = &class.super_class {
         out.supertype.push(named_class_type(sc, table));
+    }
+    // Phase H4: value-class metadata. kotlinc populates
+    // `inline_class_underlying_property_name` + `inline_class_underlying_type`
+    // (the legacy proto field names for what is now the @JvmInline
+    // value-class shape) so that external consumers reading the
+    // metadata know which property carries the erased underlying value.
+    // Also emit a synthetic `@kotlin.jvm.JvmInline` annotation entry so
+    // metadata-only consumers see the marker even if they don't inspect
+    // the bit flag.
+    if class.is_value_class {
+        if let Some(field) = class.value_underlying_field.as_deref() {
+            out.inline_class_underlying_property_name = Some(table.intern(field));
+        }
+        if let Some(uty) = class.value_underlying_ty.as_ref() {
+            out.inline_class_underlying_type = Some(ty_to_proto_type(uty, table));
+        }
+        let jvm_inline_fq = table.intern_qualified("kotlin/jvm/JvmInline");
+        out.annotation.push(pb::Annotation {
+            id: jvm_inline_fq,
+            argument: Vec::new(),
+        });
     }
     out
 }
@@ -1105,6 +1139,69 @@ mod tests {
         assert_eq!(md_class.k, 1);
         assert_eq!(md_pkg.k, 2);
         assert_ne!(md_class.d2, md_pkg.d2, "string tables are per-payload");
+    }
+
+    /// Phase H4: `@JvmInline value class V(val x: Long)` carries the
+    /// `isValue` flag bit (position 13) AND populates
+    /// `inline_class_underlying_property_name` + `inline_class_underlying_type`
+    /// so external consumers know which property carries the erased
+    /// value. The class also gets a `@kotlin.jvm.JvmInline` annotation.
+    #[test]
+    fn value_class_sets_is_value_flag_and_underlying_property() {
+        let mut class = mk_class("V", vec![("x", Ty::Long)]);
+        class.is_value_class = true;
+        class.value_underlying_field = Some("x".to_string());
+        class.value_underlying_ty = Some(Ty::Long);
+
+        let mut table = StringTable::default();
+        let proto = class_proto_for(&class, &mut table);
+
+        // isValue bit at position 13.
+        let flags = proto.flags.expect("class must carry flags");
+        assert_ne!(
+            flags & (1 << 13),
+            0,
+            "value class must set isValue bit at position 13, got flags=0x{flags:x}"
+        );
+        // hasAnnotations bit since @JvmInline is present.
+        assert_ne!(
+            flags & 1,
+            0,
+            "value class must set hasAnnotations bit, got flags=0x{flags:x}"
+        );
+        // Underlying property + type populated.
+        assert!(
+            proto.inline_class_underlying_property_name.is_some(),
+            "inline_class_underlying_property_name must be set for value class"
+        );
+        assert!(
+            proto.inline_class_underlying_type.is_some(),
+            "inline_class_underlying_type must be set for value class"
+        );
+        // @JvmInline annotation emitted.
+        assert_eq!(
+            proto.annotation.len(),
+            1,
+            "value class must carry @JvmInline annotation"
+        );
+    }
+
+    /// Phase H4: non-value classes must NOT set the isValue bit even
+    /// though they share the `class_flags` computation path.
+    #[test]
+    fn plain_class_does_not_set_is_value_flag() {
+        let class = mk_class("Foo", vec![("y", Ty::Int)]);
+        let mut table = StringTable::default();
+        let proto = class_proto_for(&class, &mut table);
+        let flags = proto.flags.expect("class must carry flags");
+        assert_eq!(
+            flags & (1 << 13),
+            0,
+            "plain class must NOT set isValue bit, got flags=0x{flags:x}"
+        );
+        assert!(proto.inline_class_underlying_property_name.is_none());
+        assert!(proto.inline_class_underlying_type.is_none());
+        assert!(proto.annotation.is_empty());
     }
 
     /// Skipping suppression: a `suspend fun` carries a trailing

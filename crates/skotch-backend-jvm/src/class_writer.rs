@@ -2361,10 +2361,14 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
 
                 // Phase H3: emit static `-impl` forwarders for every
                 // user-declared instance method on the value class.
+                // Phase H4 plumbed `module` through so value-class
+                // params get the KEEP-104 mangling suffix (not the
+                // plain `-impl` shape).
                 let forwarders = h3_build_user_method_forwarders(
                     &class.name,
                     underlying,
                     &class.methods,
+                    module,
                     &mut cp2,
                     code_attr_name_idx,
                 );
@@ -15756,19 +15760,32 @@ fn walk_block(
                 store_local(code, stack, slots, next_slot, *dest, &func.locals);
             }
             Rvalue::NewInstance(class_name) => {
-                let class_idx = cp.class(class_name);
-                code.push(0xBB); // new
-                code.write_u16::<BigEndian>(class_idx).unwrap();
-                bump(stack, max_stack, 1);
-                code.push(0x59); // dup
-                bump(stack, max_stack, 1);
-                // Don't store yet — the Constructor call will consume one copy
-                // and the remaining copy is stored after invokespecial.
-                // Pre-assign the slot so load_local works later. Skip slot
-                // allocation when the dest is unused — the Constructor handler
-                // will emit `pop` instead of `astore`.
-                if !is_unused_local(*dest) {
-                    let _ = slot_for(slots, next_slot, *dest);
+                // Phase H4: for `@JvmInline value class` targets the
+                // following Constructor call lowers to
+                // `<load arg>; invokestatic box-impl(U)L<class>;`
+                // which doesn't expect a pre-allocated NEW+DUP. Skip
+                // the new+dup emission here so the stack stays clean;
+                // the dest slot still gets pre-allocated so the load
+                // path in the Constructor handler resolves correctly.
+                if is_value_class_target(module, class_name) {
+                    if !is_unused_local(*dest) {
+                        let _ = slot_for(slots, next_slot, *dest);
+                    }
+                } else {
+                    let class_idx = cp.class(class_name);
+                    code.push(0xBB); // new
+                    code.write_u16::<BigEndian>(class_idx).unwrap();
+                    bump(stack, max_stack, 1);
+                    code.push(0x59); // dup
+                    bump(stack, max_stack, 1);
+                    // Don't store yet — the Constructor call will consume one copy
+                    // and the remaining copy is stored after invokespecial.
+                    // Pre-assign the slot so load_local works later. Skip slot
+                    // allocation when the dest is unused — the Constructor handler
+                    // will emit `pop` instead of `astore`.
+                    if !is_unused_local(*dest) {
+                        let _ = slot_for(slots, next_slot, *dest);
+                    }
                 }
             }
             Rvalue::GetField {
@@ -17111,6 +17128,68 @@ fn walk_block(
                     }
                 }
                 CallKind::Constructor(class_name) => {
+                    // Phase H4: `@JvmInline value class` constructors are
+                    // rewritten to route through the static `box-impl(U)L<class>;`
+                    // synthetic emitted by Phase H2. The NewInstance
+                    // handler already suppressed the NEW+DUP for value
+                    // classes, so the stack is clean. Load the user's
+                    // arg(s) into the underlying-typed slot, widen
+                    // primitives if needed (e.g. int literal → long
+                    // when the underlying is Long), and invokestatic
+                    // the box-impl. The result is the wrapper class,
+                    // which we store into `dest`.
+                    if is_value_class_target(module, class_name) {
+                        if let Some(u_ty) = value_class_underlying_ty(module, class_name) {
+                            // Value classes always have exactly one
+                            // primary-ctor param, so args.len() == 1.
+                            if let Some(only_arg) = args.first() {
+                                let arg_ty = func.locals[only_arg.0 as usize].clone();
+                                load_local(code, stack, max_stack, slots, *only_arg, &func.locals);
+                                // Widen primitives: a literal `5` lowered
+                                // as Ty::Int into a Long underlying must
+                                // be promoted with `i2l` before invokestatic.
+                                match (&arg_ty, &u_ty) {
+                                    (Ty::Int, Ty::Long) => {
+                                        code.push(0x85); // i2l
+                                        bump(stack, max_stack, 1);
+                                    }
+                                    (Ty::Int, Ty::Double) => {
+                                        code.push(0x87); // i2d
+                                        bump(stack, max_stack, 1);
+                                    }
+                                    (Ty::Int, Ty::Float) => {
+                                        code.push(0x86); // i2f
+                                    }
+                                    (Ty::Long, Ty::Double) => {
+                                        code.push(0x8A); // l2d
+                                    }
+                                    (Ty::Float, Ty::Double) => {
+                                        code.push(0x8D); // f2d
+                                    }
+                                    _ => {}
+                                }
+                            }
+                            let u_desc = value_class::underlying_descriptor(&u_ty);
+                            let box_desc = format!("({u_desc})L{class_name};");
+                            let mref = cp.methodref(class_name, "box-impl", &box_desc);
+                            code.push(0xB8); // invokestatic
+                            code.write_u16::<BigEndian>(mref).unwrap();
+                            // Stack: pop underlying width (1 or 2), push ref (1).
+                            let underlying_width = if matches!(u_ty, Ty::Long | Ty::Double) {
+                                2
+                            } else {
+                                1
+                            };
+                            bump(stack, max_stack, -underlying_width + 1);
+                            if is_unused_local(*dest) {
+                                code.push(0x57); // pop
+                                bump(stack, max_stack, -1);
+                            } else {
+                                store_local(code, stack, slots, next_slot, *dest, &func.locals);
+                            }
+                            continue;
+                        }
+                    }
                     // Two cases:
                     // 1. After NewInstance+dup: stack = [ref, ref], args are the
                     //    constructor params (not including receiver).
@@ -17551,6 +17630,134 @@ fn walk_block(
                     class_name,
                     method_name,
                 } => {
+                    // Phase H4: when the receiver class is a value
+                    // class, route the call through the static
+                    // `<name>[-mangle]-impl(<U>, args)R` forwarder
+                    // emitted by H3. Shape:
+                    //   1. load receiver (a boxed wrapper instance)
+                    //   2. invokevirtual unbox-impl()<U>   — extracts
+                    //      the underlying primitive
+                    //   3. load remaining args
+                    //   4. invokestatic <name>-impl(<U>, args)R
+                    // This bypasses the instance method dispatch
+                    // (whose `<init>` would refuse external callers
+                    // anyway, since H2 patches it to ACC_PRIVATE) and
+                    // matches kotlinc's call-site shape.
+                    if is_value_class_target(module, class_name) && !method_name.starts_with('<') {
+                        if let Some(u_ty) = value_class_underlying_ty(module, class_name) {
+                            let target_class = module.find_class(class_name);
+                            // Only rewrite when the called method
+                            // actually exists on the value class (not
+                            // an inherited Object method like `hashCode`
+                            // / `toString` — those have their own
+                            // `<name>-impl` synthetics but the
+                            // descriptor work is different).
+                            let target_method = target_class.and_then(|c| {
+                                c.methods.iter().find(|m| {
+                                    m.name == *method_name
+                                        && m.params.len().saturating_sub(1)
+                                            == args.len().saturating_sub(1)
+                                })
+                            });
+                            if let Some(m) = target_method {
+                                // Load receiver.
+                                if let Some(recv) = args.first() {
+                                    load_local(code, stack, max_stack, slots, *recv, &func.locals);
+                                }
+                                // Unbox to underlying.
+                                let u_desc = value_class::underlying_descriptor(&u_ty);
+                                let unbox_desc = format!("(){u_desc}");
+                                let unbox_mref =
+                                    cp.methodref(class_name, "unbox-impl", &unbox_desc);
+                                code.push(0xB6); // invokevirtual unbox-impl
+                                code.write_u16::<BigEndian>(unbox_mref).unwrap();
+                                let u_width = if matches!(u_ty, Ty::Long | Ty::Double) {
+                                    2
+                                } else {
+                                    1
+                                };
+                                // unbox-impl pops receiver (1) and
+                                // pushes underlying (1 or 2). Net = -1 + u_width.
+                                bump(stack, max_stack, -1 + u_width);
+                                // Build mangle-param list for KEEP-104.
+                                let mangle_params: Vec<value_class::MangleParam> = m
+                                    .params
+                                    .iter()
+                                    .skip(1)
+                                    .map(|p| {
+                                        let ty = &m.locals[p.0 as usize];
+                                        let (is_v, fq, is_n) = match ty {
+                                            Ty::Class(c) => (
+                                                module
+                                                    .find_class(c)
+                                                    .map(|cl| cl.is_value_class)
+                                                    .unwrap_or(false),
+                                                c.replace('/', "."),
+                                                false,
+                                            ),
+                                            Ty::Nullable(inner) => match inner.as_ref() {
+                                                Ty::Class(c) => (
+                                                    module
+                                                        .find_class(c)
+                                                        .map(|cl| cl.is_value_class)
+                                                        .unwrap_or(false),
+                                                    c.replace('/', "."),
+                                                    true,
+                                                ),
+                                                _ => (false, String::new(), true),
+                                            },
+                                            _ => (false, String::new(), false),
+                                        };
+                                        value_class::MangleParam {
+                                            fq_name: fq,
+                                            is_value: is_v,
+                                            is_nullable: is_n,
+                                        }
+                                    })
+                                    .collect();
+                                let mangled =
+                                    value_class::static_impl_name(method_name, &mangle_params);
+                                // Build static descriptor.
+                                let mut sig = String::from("(");
+                                sig.push_str(&u_desc);
+                                let mut user_arg_width: i32 = 0;
+                                // Load user args (skip the receiver
+                                // we've already consumed via unbox).
+                                for a in args.iter().skip(1) {
+                                    load_local(code, stack, max_stack, slots, *a, &func.locals);
+                                    let aty = &func.locals[a.0 as usize];
+                                    sig.push_str(&jvm_param_type_string(aty));
+                                    user_arg_width += if matches!(aty, Ty::Long | Ty::Double) {
+                                        2
+                                    } else {
+                                        1
+                                    };
+                                }
+                                sig.push(')');
+                                sig.push_str(&jvm_type_string(&m.return_ty));
+                                let mref = cp.methodref(class_name, &mangled, &sig);
+                                code.push(0xB8); // invokestatic
+                                code.write_u16::<BigEndian>(mref).unwrap();
+                                // Net stack: pop (u_width + user_args), push return width.
+                                let ret_width = match &m.return_ty {
+                                    Ty::Unit => 0,
+                                    Ty::Long | Ty::Double => 2,
+                                    _ => 1,
+                                };
+                                bump(stack, max_stack, -(u_width + user_arg_width) + ret_width);
+                                if matches!(m.return_ty, Ty::Unit) {
+                                    // Nothing to store.
+                                } else if is_unused_local(*dest) {
+                                    let pop_opcode = if ret_width == 2 { 0x58 } else { 0x57 };
+                                    code.push(pop_opcode);
+                                    bump(stack, max_stack, -ret_width);
+                                } else {
+                                    store_local(code, stack, slots, next_slot, *dest, &func.locals);
+                                }
+                                continue;
+                            }
+                        }
+                    }
                     // Kotlin `MutableList.removeAt(Int)` desugars at the
                     // JVM level to `java.util.List.remove(I)Object` —
                     // `removeAt` is a Kotlin extension that doesn't exist
@@ -30281,6 +30488,7 @@ fn h3_build_user_method_forwarders(
     class_name: &str,
     underlying: &Ty,
     methods: &[MirFunction],
+    module: &MirModule,
     cp: &mut ConstantPool,
     code_attr_name_idx: u16,
 ) -> Vec<Vec<u8>> {
@@ -30313,22 +30521,41 @@ fn h3_build_user_method_forwarders(
                 }
             })
             .collect();
+        // Phase H4: when a parameter's type is itself a value class
+        // (looked up via `module.find_class`), feed the dotted FQ name
+        // into the MangleParam so KEEP-104 mangling produces the same
+        // suffix kotlinc would. Plain (non-value) params contribute
+        // `_` to the signature string per kotlinc's mangling spec.
         let mangle_params: Vec<value_class::MangleParam> = m
             .params
             .iter()
             .skip(1)
             .map(|p| {
                 let ty = &m.locals[p.0 as usize];
-                // For now we don't have direct access to whether the
-                // param is itself a value class (that requires
-                // module-wide lookup). Default to is_value=false so
-                // the plain `-impl` suffix is emitted; future H4 work
-                // will wire this through.
-                let _ = ty;
+                let (is_value, fq_name, is_nullable) = match ty {
+                    Ty::Class(c) => {
+                        let is_v = module
+                            .find_class(c)
+                            .map(|cls| cls.is_value_class)
+                            .unwrap_or(false);
+                        (is_v, c.replace('/', "."), false)
+                    }
+                    Ty::Nullable(inner) => match inner.as_ref() {
+                        Ty::Class(c) => {
+                            let is_v = module
+                                .find_class(c)
+                                .map(|cls| cls.is_value_class)
+                                .unwrap_or(false);
+                            (is_v, c.replace('/', "."), true)
+                        }
+                        _ => (false, String::new(), true),
+                    },
+                    _ => (false, String::new(), false),
+                };
                 value_class::MangleParam {
-                    fq_name: String::new(),
-                    is_value: false,
-                    is_nullable: false,
+                    fq_name,
+                    is_value,
+                    is_nullable,
                 }
             })
             .collect();
@@ -30348,6 +30575,33 @@ fn h3_build_user_method_forwarders(
         cp,
         code_attr_name_idx,
     )
+}
+
+/// Phase H4: report whether `class_name` resolves to a user-declared
+/// `@JvmInline value class` in this MIR module (including cross-file
+/// stubs synthesised from `ExternalClassDecl::is_value_class`). The
+/// underlying type must be known so the box-impl descriptor can be
+/// built — value classes whose underlying is itself a non-primitive
+/// reference are detected but currently bail to the wrapper path.
+pub(crate) fn is_value_class_target(module: &MirModule, class_name: &str) -> bool {
+    module
+        .find_class(class_name)
+        .map(|c| c.is_value_class && c.value_underlying_ty.is_some())
+        .unwrap_or(false)
+}
+
+/// Phase H4: look up the underlying `Ty` for a value class. Returns
+/// `None` for non-value classes or for value classes whose underlying
+/// hasn't been recorded (shouldn't happen in practice — H1 detection
+/// always pairs the flag with the type).
+pub(crate) fn value_class_underlying_ty(module: &MirModule, class_name: &str) -> Option<Ty> {
+    module.find_class(class_name).and_then(|c| {
+        if c.is_value_class {
+            c.value_underlying_ty.clone()
+        } else {
+            None
+        }
+    })
 }
 
 /// Compose `@JvmInline value class` JVM paths and the single-character
@@ -30833,5 +31087,118 @@ value class V(val x: Long) {
         // present somewhere in the file (the H3 forwarder shares the
         // shape with box-impl which already exercises this flag set).
         let _ = bytes.windows(2).any(|w| w == [0x00, 0x19]);
+    }
+
+    // ── Phase H4 ────────────────────────────────────────────────────
+
+    /// Phase H4: a call site to `V(5).doubled()` where `V` is a
+    /// value class must route through the static `box-impl` +
+    /// `unbox-impl` + `doubled-impl` shape — NOT `new V; dup;
+    /// invokespecial <init>; invokevirtual doubled`. The latter would
+    /// VerifyError at runtime because H2 patched `<init>` to
+    /// ACC_PRIVATE.
+    #[test]
+    fn h4_value_class_call_site_routes_through_box_impl_and_static_impl() {
+        let src = r#"
+@JvmInline
+value class V(val x: Long) {
+    fun doubled(): Long = x * 2
+}
+
+fun main() {
+    println(V(5).doubled())
+}
+"#;
+        let wrapper = compile_named(src, "HelloKt");
+        let s = String::from_utf8_lossy(&wrapper);
+        // The call site must reference `box-impl`, `unbox-impl`,
+        // and `doubled-impl` from the V class.
+        assert!(
+            s.contains("box-impl"),
+            "main() call site must reference V.box-impl"
+        );
+        assert!(
+            s.contains("doubled-impl"),
+            "main() call site must reference V.doubled-impl"
+        );
+        // The wrapper class must NOT contain a `new V` opcode (0xBB)
+        // followed by V's class index. We check the higher-level
+        // invariant: there should be no `<init>` methodref to V in
+        // the wrapper — the only V references must be the static
+        // -impl methods.
+        // Find every occurrence of the literal "<init>" — if any sit
+        // alongside `LV;` constructor reference, the rewrite failed.
+        // (Less strict than parsing the CP, but catches regressions.)
+        let init_count = s.matches("<init>").count();
+        // Object's super-ctor and the wrapper's own clinit may need <init>;
+        // the wrapper class's bytecode reference count for <init> should
+        // be small (only Object).
+        assert!(
+            init_count <= 2,
+            "wrapper class should not reference V.<init>; got {init_count} <init> mentions",
+        );
+    }
+
+    /// Phase H4: when a value class is involved in a more complex
+    /// expression (operator-overload + chained call), the call site
+    /// must dispatch through the mangled `plus-Wv3fJ18` static
+    /// forwarder. This validates KEEP-104 mangling for params that
+    /// are themselves value classes.
+    #[test]
+    fn h4_value_class_operator_overload_uses_mangled_static_impl() {
+        let src = r#"
+@JvmInline
+value class V(val x: Long) {
+    operator fun plus(o: V): V = V(x + o.x)
+}
+
+fun main() {
+    val r = V(3) + V(4)
+    println(r)
+}
+"#;
+        let wrapper = compile_named(src, "HelloKt");
+        let s = String::from_utf8_lossy(&wrapper);
+        assert!(
+            s.contains("box-impl"),
+            "main() must reference V.box-impl for V(3)/V(4) boxing"
+        );
+        assert!(
+            s.contains("plus-Wv3fJ18"),
+            "main() must reference KEEP-104-mangled plus-Wv3fJ18 static forwarder"
+        );
+    }
+
+    /// Phase H4: when the constructor's arg type is narrower than the
+    /// underlying (e.g. an `Int` literal lowered into a `Long`
+    /// underlying), the call site must emit `i2l` BEFORE
+    /// `invokestatic box-impl(J)LV;`.
+    #[test]
+    fn h4_value_class_int_arg_widens_to_long_underlying() {
+        let src = r#"
+@JvmInline
+value class V(val x: Long) {
+    fun doubled(): Long = x * 2
+}
+
+fun main() {
+    println(V(5).doubled())
+}
+"#;
+        let wrapper = compile_named(src, "HelloKt");
+        // Find `iconst_5` (0x08) followed by `i2l` (0x85) somewhere
+        // in the bytecode. This is the smoking gun for the int→long
+        // widening before box-impl.
+        let mut found = false;
+        for win in wrapper.windows(2) {
+            if win == [0x08, 0x85] {
+                found = true;
+                break;
+            }
+        }
+        assert!(
+            found,
+            "expected `iconst_5; i2l` byte run for int→long widening before box-impl"
+        );
     }
 }

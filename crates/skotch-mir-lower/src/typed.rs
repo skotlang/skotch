@@ -3198,9 +3198,17 @@ pub fn lower_file(
                 companion_class_name: None,
                 static_fields: Vec::new(),
                 clinit: None,
-                is_value_class: false,
-                value_underlying_field: None,
-                value_underlying_ty: None,
+                // Phase H4: propagate value-class metadata from the
+                // cross-file ExternalClassDecl so backend call-site
+                // rewriting (constructor → box-impl, virtual → static
+                // -impl forwarder) fires across files.
+                is_value_class: ext.is_value_class,
+                value_underlying_field: if ext.is_value_class {
+                    ext.ctor_params.first().map(|p| p.name.clone())
+                } else {
+                    None
+                },
+                value_underlying_ty: ext.value_underlying_ty.clone(),
             });
             // Cross-file companion stub: when the cross-file class
             // declares a `companion object`, the companion's methods
