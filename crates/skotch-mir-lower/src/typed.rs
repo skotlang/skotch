@@ -284,6 +284,49 @@ impl Drop for ClassMethodsScope {
 }
 
 thread_local! {
+    /// Module-scoped class-method-param-names table:
+    /// `(class_name → method_name → Vec<param_name>)`. Mirrors
+    /// CLASS_METHODS but for declared parameter names instead of return
+    /// Ty. Populated by `lower_file` so the DotQualified Virtual
+    /// dispatch site can reorder named-arg call sites
+    /// (`obj.method(value=7, len=2)`) into positional order before
+    /// emitting the `invokevirtual`. Without it the call site bails
+    /// on any non-data-class user method with named args.
+    static CLASS_METHOD_PARAM_NAMES:
+        std::cell::RefCell<rustc_hash::FxHashMap<String, rustc_hash::FxHashMap<String, Vec<String>>>> =
+        std::cell::RefCell::new(rustc_hash::FxHashMap::default());
+}
+
+fn lookup_class_method_param_names(class_name: &str, method_name: &str) -> Option<Vec<String>> {
+    CLASS_METHOD_PARAM_NAMES.with(|c| {
+        c.borrow()
+            .get(class_name)
+            .and_then(|m| m.get(method_name))
+            .cloned()
+    })
+}
+
+struct ClassMethodParamNamesScope {
+    prev: rustc_hash::FxHashMap<String, rustc_hash::FxHashMap<String, Vec<String>>>,
+}
+
+impl ClassMethodParamNamesScope {
+    fn new(
+        table: rustc_hash::FxHashMap<String, rustc_hash::FxHashMap<String, Vec<String>>>,
+    ) -> Self {
+        let prev = CLASS_METHOD_PARAM_NAMES.with(|c| std::mem::take(&mut *c.borrow_mut()));
+        CLASS_METHOD_PARAM_NAMES.with(|c| *c.borrow_mut() = table);
+        ClassMethodParamNamesScope { prev }
+    }
+}
+
+impl Drop for ClassMethodParamNamesScope {
+    fn drop(&mut self) {
+        CLASS_METHOD_PARAM_NAMES.with(|c| *c.borrow_mut() = std::mem::take(&mut self.prev));
+    }
+}
+
+thread_local! {
     /// `user class → super class (JVM internal)`. Walked by
     /// `class_extends_throwable` so `.message` on a user exception
     /// subclass routes through `getMessage()Ljava/lang/String;` rather
@@ -2661,6 +2704,92 @@ macro_rules! trace_bail {
             eprintln!("[skotch bail] {}", format!($($arg)*));
         }
     };
+}
+
+/// Reorder a call's named/positional args into the target's declared
+/// positional order. Used by the DotQualified Virtual dispatch sites
+/// (Reference- and non-Reference-receiver arms) so a named-arg call
+/// like `obj.method(value=7, len=2)` emits arg slots in the order the
+/// target's descriptor expects. Returns `None` (with a trace_bail
+/// line) when:
+///   - the method's param-name metadata isn't known
+///   - an arg expression is missing
+///   - a named arg doesn't match any declared param
+///   - the reorder leaves a slot unfilled (would require $default)
+///
+/// `cname` / `method_n` are passed through purely for the trace_bail
+/// labels — they're never inspected.
+fn reorder_named_call_args<'a>(
+    arg_list: skotch_ast::KtValueArgumentList<'a>,
+    cname: &str,
+    method_n: &str,
+) -> Option<Vec<skotch_ast::KtExpr<'a>>> {
+    let names = lookup_class_method_param_names(cname, method_n)
+        .filter(|v| !v.iter().any(|n| n.is_empty()));
+    let Some(target_param_names) = names else {
+        trace_bail!(
+            "DotQualified Virtual reorder bails — no param-name metadata (method={}, class={})",
+            method_n,
+            cname
+        );
+        return None;
+    };
+    let mut named_map: rustc_hash::FxHashMap<String, skotch_ast::KtExpr<'a>> =
+        rustc_hash::FxHashMap::default();
+    let mut positional: Vec<skotch_ast::KtExpr<'a>> = Vec::new();
+    for a in arg_list.arguments() {
+        let Some(ae) = a.expression() else {
+            trace_bail!(
+                "DotQualified Virtual reorder bails — empty arg (method={}, class={})",
+                method_n,
+                cname
+            );
+            return None;
+        };
+        if let Some(n) = a.name() {
+            named_map.insert(n.to_string(), ae);
+        } else {
+            positional.push(ae);
+        }
+    }
+    for nm in named_map.keys() {
+        if !target_param_names.iter().any(|p| p == nm) {
+            trace_bail!(
+                "DotQualified Virtual reorder bails — unknown name '{}' (method={}, class={})",
+                nm,
+                method_n,
+                cname
+            );
+            return None;
+        }
+    }
+    let mut next_pos = 0usize;
+    let mut reordered: Vec<skotch_ast::KtExpr<'a>> = Vec::with_capacity(target_param_names.len());
+    for pname in &target_param_names {
+        if let Some(e) = named_map.get(pname).copied() {
+            reordered.push(e);
+        } else if next_pos < positional.len() {
+            reordered.push(positional[next_pos]);
+            next_pos += 1;
+        } else {
+            // Slot unfilled — would require $default dispatch.
+            trace_bail!(
+                "DotQualified Virtual reorder bails — partial fill (method={}, class={})",
+                method_n,
+                cname
+            );
+            return None;
+        }
+    }
+    if next_pos != positional.len() {
+        trace_bail!(
+            "DotQualified Virtual reorder bails — leftover positionals (method={}, class={})",
+            method_n,
+            cname
+        );
+        return None;
+    }
+    Some(reordered)
 }
 
 /// Render the kind of an unhandled body child for the trace and
@@ -6125,6 +6254,129 @@ pub fn lower_file(
         table
     };
     let _class_methods_scope = ClassMethodsScope::new(class_method_returns);
+
+    // CLASS_METHOD_PARAM_NAMES: parallel to CLASS_METHODS — for each
+    // `(class, method)` record the declared param names so the
+    // DotQualified Virtual dispatch site can reorder named-arg call
+    // sites into positional order before emitting `invokevirtual`.
+    // Without this the call site bailed on every non-data-class user
+    // method invoked with named args. Walks the same sources as
+    // `class_method_returns` (local classes, local interfaces, local
+    // companion objects, cross-file package_symbols).
+    let class_method_param_names: rustc_hash::FxHashMap<
+        String,
+        rustc_hash::FxHashMap<String, Vec<String>>,
+    > = {
+        let mut t: rustc_hash::FxHashMap<String, rustc_hash::FxHashMap<String, Vec<String>>> =
+            rustc_hash::FxHashMap::default();
+        let collect_fn_param_names = |f: &skotch_ast::KtFun<'_>| -> Vec<String> {
+            f.value_parameter_list()
+                .map(|pl| {
+                    pl.parameters()
+                        .map(|p| p.name().unwrap_or("").to_string())
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+        // Local interfaces — abstract methods carry param names too.
+        for decl in file.decls() {
+            if let KtDecl::Interface(i) = decl {
+                let Some(iname) = i.name() else { continue };
+                let mut methods: rustc_hash::FxHashMap<String, Vec<String>> =
+                    rustc_hash::FxHashMap::default();
+                if let Some(body) = i.body() {
+                    for d in body.declarations() {
+                        if let KtDecl::Fun(f) = d {
+                            if let Some(mname) = f.name() {
+                                methods.insert(mname.to_string(), collect_fn_param_names(&f));
+                            }
+                        }
+                    }
+                }
+                t.insert(iname.to_string(), methods);
+            }
+        }
+        // Local classes (body methods + companion).
+        for decl in file.decls() {
+            if let KtDecl::Class(c) = decl {
+                let Some(cname) = c.name() else { continue };
+                let mut methods: rustc_hash::FxHashMap<String, Vec<String>> =
+                    rustc_hash::FxHashMap::default();
+                if let Some(body) = c.body() {
+                    for d in body.declarations() {
+                        if let KtDecl::Fun(f) = d {
+                            if let Some(mname) = f.name() {
+                                methods.insert(mname.to_string(), collect_fn_param_names(&f));
+                            }
+                        }
+                    }
+                    for d in body.declarations() {
+                        if let KtDecl::Object(o) = d {
+                            if o.is_companion() {
+                                let comp_name = format!("{}$Companion", cname);
+                                let mut comp_methods: rustc_hash::FxHashMap<String, Vec<String>> =
+                                    rustc_hash::FxHashMap::default();
+                                if let Some(obody) = o.body() {
+                                    for od in obody.declarations() {
+                                        if let KtDecl::Fun(f) = od {
+                                            if let Some(mname) = f.name() {
+                                                comp_methods.insert(
+                                                    mname.to_string(),
+                                                    collect_fn_param_names(&f),
+                                                );
+                                            }
+                                        }
+                                    }
+                                }
+                                t.insert(comp_name, comp_methods);
+                            }
+                        }
+                    }
+                }
+                t.insert(cname.to_string(), methods);
+            }
+        }
+        // Cross-file classes from package symbols.
+        if let Some(tbl) = package_symbols {
+            for (simple_name, decl) in tbl.classes.iter() {
+                let mut methods: rustc_hash::FxHashMap<String, Vec<String>> =
+                    rustc_hash::FxHashMap::default();
+                for m in decl.methods.iter() {
+                    methods.insert(
+                        m.name.clone(),
+                        m.params.iter().map(|p| p.name.clone()).collect(),
+                    );
+                }
+                t.entry(simple_name.clone())
+                    .and_modify(|m| {
+                        for (k, v) in &methods {
+                            m.entry(k.clone()).or_insert_with(|| v.clone());
+                        }
+                    })
+                    .or_insert(methods);
+                if !decl.companion_methods.is_empty() {
+                    let comp_name = format!("{}$Companion", simple_name);
+                    let mut comp_methods: rustc_hash::FxHashMap<String, Vec<String>> =
+                        rustc_hash::FxHashMap::default();
+                    for m in decl.companion_methods.iter() {
+                        comp_methods.insert(
+                            m.name.clone(),
+                            m.params.iter().map(|p| p.name.clone()).collect(),
+                        );
+                    }
+                    t.entry(comp_name)
+                        .and_modify(|m| {
+                            for (k, v) in &comp_methods {
+                                m.entry(k.clone()).or_insert_with(|| v.clone());
+                            }
+                        })
+                        .or_insert(comp_methods);
+                }
+            }
+        }
+        t
+    };
+    let _class_method_param_names_scope = ClassMethodParamNamesScope::new(class_method_param_names);
 
     // CLASS_METHOD_LAMBDA_HINTS: populate per (class, method) when the
     // method's last param is a function type. Records the receiver class
@@ -24286,6 +24538,20 @@ fn try_lower_multi_stmt_block_with_offset(
                                     if call.lambda_argument().is_some() {
                                         return None;
                                     }
+                                    // Bail when any arg is named — this fast
+                                    // path emits args in source order, but a
+                                    // named-arg call site needs to reorder
+                                    // them to match the target method's
+                                    // declared param order. Fall through to
+                                    // `lower_rich_expr_to_slot` which carries
+                                    // the named-arg reorder logic.
+                                    if call
+                                        .value_argument_list()
+                                        .map(|al| al.arguments().any(|a| a.name().is_some()))
+                                        .unwrap_or(false)
+                                    {
+                                        return None;
+                                    }
                                     let recv_slot = name_to_local
                                         .iter()
                                         .rev()
@@ -33330,13 +33596,23 @@ fn lower_rich_expr_to_slot(
                                             && (has_named
                                                 || arg_count
                                                     < fields_for_copy.as_ref().unwrap().len());
-                                        if has_named && !use_copy_path {
-                                            trace_bail!(
-                                                "DotQualified Virtual fallback bails on named args (method={}, class={})",
-                                                method_n, cname
-                                            );
-                                            return None;
-                                        }
+                                        // Non-data-class Virtual dispatch
+                                        // with named args: reorder via the
+                                        // target's declared param names so the
+                                        // emitted `invokevirtual` matches the
+                                        // JVM's positional descriptor. Mirrors
+                                        // the primary-ctor / super-ctor reorder
+                                        // path. Bails up via `?` when the
+                                        // helper can't reorder (no metadata /
+                                        // unknown name / partial fill).
+                                        let named_reorder: Option<Vec<KtExpr<'_>>> =
+                                            if has_named && !use_copy_path {
+                                                Some(reorder_named_call_args(
+                                                    arg_list, &cname, method_n,
+                                                )?)
+                                            } else {
+                                                None
+                                            };
                                         if use_copy_path {
                                             let fields = fields_for_copy.unwrap();
                                             let mut named_map: rustc_hash::FxHashMap<
@@ -33383,6 +33659,19 @@ fn lower_rich_expr_to_slot(
                                                     });
                                                     gf_slot
                                                 };
+                                                arg_slots.push(s);
+                                            }
+                                        } else if let Some(reordered) = named_reorder {
+                                            for arg_e in reordered {
+                                                let s = lower_rich_expr_to_slot(
+                                                    arg_e,
+                                                    lookup_name,
+                                                    fn_lookup,
+                                                    next_slot,
+                                                    pre_stmts,
+                                                    extra_locals,
+                                                    strings,
+                                                )?;
                                                 arg_slots.push(s);
                                             }
                                         } else {
@@ -33819,9 +34108,45 @@ fn lower_rich_expr_to_slot(
                                 }
                             }
                             if let Ty::Class(cname) = recv_ty {
+                                // Named-arg reorder mirrors the
+                                // Reference-receiver arm above: when
+                                // the call site has named args, look
+                                // up the target method's param names
+                                // and rebuild the positional walk
+                                // before lowering. Without this,
+                                // `F().addData(value=7, len=2)` would
+                                // emit args in source order and the
+                                // resulting `(II)…` descriptor would
+                                // miss the real `(III)…` method.
+                                let has_named = call
+                                    .value_argument_list()
+                                    .map(|al| al.arguments().any(|a| a.name().is_some()))
+                                    .unwrap_or(false);
+                                let reordered_args: Option<Vec<KtExpr<'_>>> = if has_named {
+                                    let arg_list = call.value_argument_list()?;
+                                    Some(reorder_named_call_args(arg_list, &cname, method_n)?)
+                                } else {
+                                    None
+                                };
                                 let mut arg_slots: Vec<LocalId> = vec![recv_slot];
                                 let mut all_args_ok = true;
-                                if let Some(arg_list) = call.value_argument_list() {
+                                if let Some(reordered) = reordered_args {
+                                    for arg_e in reordered {
+                                        let Some(s) = lower_rich_expr_to_slot(
+                                            arg_e,
+                                            lookup_name,
+                                            fn_lookup,
+                                            next_slot,
+                                            pre_stmts,
+                                            extra_locals,
+                                            strings,
+                                        ) else {
+                                            all_args_ok = false;
+                                            break;
+                                        };
+                                        arg_slots.push(s);
+                                    }
+                                } else if let Some(arg_list) = call.value_argument_list() {
                                     for arg in arg_list.arguments() {
                                         let Some(arg_e) = arg.expression() else {
                                             all_args_ok = false;
