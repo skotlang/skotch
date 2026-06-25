@@ -535,6 +535,21 @@ pub struct MirFunction {
     /// args), so it doesn't bloat memory on uses without generics.
     #[serde(default, skip_serializing_if = "rustc_hash::FxHashMap::is_empty")]
     pub local_generic_args: rustc_hash::FxHashMap<u32, Vec<skotch_types::Ty>>,
+    /// Phase H5a: when this top-level function is an extension fn whose
+    /// receiver type is a `@JvmInline value class`, this carries
+    /// `(value_class_jvm_name, underlying_ty)`. The JVM backend emits
+    /// the method with:
+    ///   - mangled KEEP-104 name suffix (kotlinc unconditionally mangles
+    ///     these — the receiver is itself a value-class param)
+    ///   - first descriptor parameter = `underlying` (not the wrapper)
+    ///   - flags `ACC_PUBLIC | ACC_STATIC | ACC_FINAL`
+    ///   - StackMapTable initial-frame slot 0 typed as the underlying.
+    /// The body's slot 0 holds the underlying value directly (set up by
+    /// mir-lower so implicit-this references resolve to the right Ty).
+    /// `None` for every other function. Defaults to `None` so existing
+    /// fixtures are unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub is_value_class_extension: Option<(String, Ty)>,
 }
 
 /// Metadata describing the shape of a coroutine state machine, either

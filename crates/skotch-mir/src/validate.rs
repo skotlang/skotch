@@ -420,6 +420,7 @@ mod tests {
             default_call_masks: Vec::new(),
             needs_leading_nop: false,
             local_generic_args: rustc_hash::FxHashMap::default(),
+            is_value_class_extension: None,
         }
     }
 

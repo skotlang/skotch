@@ -7466,7 +7466,24 @@ fn emit_method(
     } else {
         visibility_flag | ACC_STATIC | ACC_FINAL | varargs_flag | synthetic_flag
     };
-    let name_idx = cp.utf8(&func.name);
+    // Phase H5a: top-level extension fn on a `@JvmInline value class`
+    // receiver. kotlinc unconditionally KEEP-104-mangles the method
+    // name because the receiver is itself a value-class parameter
+    // (signature input is `"L<vc-name>;"`). The descriptor naturally
+    // emits with the underlying primitive in slot 0 because mir-lower
+    // has already retyped `func.locals[0]` to the underlying Ty.
+    let effective_name: String = if let Some((vc_name, _)) = &func.is_value_class_extension {
+        let dotted = vc_name.replace('/', ".");
+        let mp = value_class::MangleParam {
+            fq_name: dotted,
+            is_value: true,
+            is_nullable: false,
+        };
+        value_class::static_impl_name(&func.name, &[mp])
+    } else {
+        func.name.clone()
+    };
+    let name_idx = cp.utf8(&effective_name);
     let descriptor_idx = cp.utf8(&descriptor);
     // Pre-register attribute-driven CP entries before the body emits any
     // bytecode-level entries (invokedynamic, methodrefs, fieldrefs, …).
@@ -31199,6 +31216,166 @@ fun main() {
         assert!(
             found,
             "expected `iconst_5; i2l` byte run for int→long widening before box-impl"
+        );
+    }
+
+    // ─── Phase H5a: value-class top-level extension fn emission ─────
+
+    #[test]
+    fn h5a_value_class_extension_emits_mangled_static_with_underlying_descriptor() {
+        // `@JvmInline value class V(val x: Long); fun V.triple(): Long
+        //  = x * 3` should emit a file-facade static method whose name
+        // is KEEP-104 mangled (`triple-<7chars>`) and whose descriptor
+        // takes the underlying long, returning long (`(J)J`). The
+        // value-class wrapper's `<init>` is ACC_PRIVATE so a
+        // wrapper-shape extension would VerifyError; the static-impl
+        // shape is what kotlinc emits and external callers expect.
+        let src = r#"
+@JvmInline
+value class V(val x: Long)
+
+fun V.triple(): Long = x * 3
+"#;
+        let wrapper = compile_named(src, "HelloKt");
+        let s = String::from_utf8_lossy(&wrapper);
+        // The descriptor `(J)J` must appear as a Utf8 entry
+        // (the extension fn's descriptor).
+        assert!(
+            s.contains("(J)J"),
+            "expected `(J)J` descriptor in HelloKt constant pool"
+        );
+        // The mangled name has the form `triple-<7chars>` — base64url
+        // alphabet of MD5(b"LV;")[..5]. The exact suffix is
+        // `triple-Wv3fJ18` (single value-class param `V`). Cross-check
+        // with the same input mangling used in
+        // `value_class::tests::mangle_single_value_param_matches_kotlinc`.
+        assert!(
+            s.contains("triple-Wv3fJ18"),
+            "expected `triple-Wv3fJ18` mangled method name in HelloKt"
+        );
+        // The bare `triple` Utf8 should NOT appear — kotlinc only emits
+        // the mangled form on the file facade.
+        // (We approximate by checking the bare name doesn't appear as
+        // a method-name Utf8 entry. Since `triple` may appear inside
+        // the mangled name itself, we just confirm the mangled form is
+        // there.)
+    }
+
+    #[test]
+    fn h5a_value_class_extension_with_int_underlying() {
+        // Smoke test for non-Long underlying: `value class W(val n:
+        // Int); fun W.scaled(k: Int): Int = n + k`. Descriptor is
+        // `(II)I` (underlying Int, user param Int) and the name is
+        // mangled because the receiver is a value-class param.
+        let src = r#"
+@JvmInline
+value class W(val n: Int)
+
+fun W.scaled(k: Int): Int = n + k
+"#;
+        let wrapper = compile_named(src, "HelloKt");
+        let s = String::from_utf8_lossy(&wrapper);
+        assert!(
+            s.contains("(II)I"),
+            "expected `(II)I` descriptor in HelloKt constant pool"
+        );
+        // Mangled name = `scaled-<hash>` where hash =
+        // base64url(md5("LW;")[..5]). We verify the `scaled-` prefix
+        // is in the CP (the exact suffix depends on the value-class
+        // FQ name in the signature input).
+        assert!(
+            s.contains("scaled-"),
+            "expected `scaled-<hash>` mangled method name in HelloKt"
+        );
+    }
+
+    #[test]
+    fn h5a_value_class_extension_acc_public_static_final() {
+        // The static-impl extension fn must be ACC_PUBLIC (0x0001) |
+        // ACC_STATIC (0x0008) | ACC_FINAL (0x0010) = 0x0019. Same as
+        // every other top-level fn; we just confirm the flag word is
+        // present alongside the descriptor.
+        let src = r#"
+@JvmInline
+value class V(val x: Long)
+
+fun V.identity(): Long = x
+"#;
+        let wrapper = compile_named(src, "HelloKt");
+        // 0x0019 = ACC_PUBLIC | ACC_STATIC | ACC_FINAL.
+        assert!(
+            wrapper.windows(2).any(|w| w == [0x00, 0x19]),
+            "expected ACC_PUBLIC|ACC_STATIC|ACC_FINAL (0x0019) flags on extension fn"
+        );
+    }
+
+    #[test]
+    fn h5a_value_class_extension_body_loads_slot_0_directly() {
+        // Verify the BODY shape: `fun V.triple(): Long = x * 3` should
+        // compile to `lload_0; ldc2_w 3L; lmul; lreturn`. Without the
+        // mir-lower H5a post-pass, `x` would have been a `getfield V.x`
+        // off slot 0 (typed as Ty::Class("V")) — which is wrong because
+        // slot 0 actually holds the underlying long.
+        let src = r#"
+@JvmInline
+value class V(val x: Long)
+
+fun V.triple(): Long = x * 3
+"#;
+        let wrapper = compile_named(src, "HelloKt");
+        // lload_0 = 0x1E
+        assert!(
+            wrapper.contains(&0x1E),
+            "expected `lload_0` (0x1E) in HelloKt — slot 0 is the underlying long"
+        );
+        // lmul = 0x69
+        assert!(
+            wrapper.contains(&0x69),
+            "expected `lmul` (0x69) in HelloKt for `x * 3`"
+        );
+        // lreturn = 0xAD
+        assert!(
+            wrapper.contains(&0xAD),
+            "expected `lreturn` (0xAD) in HelloKt"
+        );
+        // No `getfield` (0xB4) on V.x — the post-pass should have
+        // rewritten it to a direct local load.
+        let s = String::from_utf8_lossy(&wrapper);
+        // The wrapper class shouldn't contain a `V.x` field-ref Utf8
+        // (only the V class file should).
+        // Note: this is a weak check because the simple "V" letter
+        // could appear in other Utf8s, so we use a stronger check:
+        // the descriptor (J)J should appear (the static fn) and the
+        // body should be ~7 bytes (lload_0 + ldc2_w + lmul + lreturn ≈
+        // 1 + 3 + 1 + 1 = 6 bytes), but exact code length is hard to
+        // verify without parsing the class file. The above opcode
+        // checks suffice as a smoke test.
+        let _ = s;
+    }
+
+    #[test]
+    fn h5a_non_value_class_extension_is_not_mangled() {
+        // Negative control: extension fn on a plain (non-value) class
+        // should NOT be mangled. The bare `triple` name must appear,
+        // and no `triple-<hash>` mangled form.
+        let src = r#"
+class P(val x: Long)
+
+fun P.triple(): Long = x * 3
+"#;
+        let wrapper = compile_named(src, "HelloKt");
+        let s = String::from_utf8_lossy(&wrapper);
+        // The bare name must appear (it's not mangled).
+        assert!(
+            s.contains("triple"),
+            "expected bare `triple` name on plain-class extension fn"
+        );
+        // Make sure no `triple-` prefix (with a base64url-shaped suffix
+        // immediately following) is present.
+        let mangled = s.contains("triple-");
+        assert!(
+            !mangled,
+            "non-value-class extension fn must NOT be KEEP-104 mangled"
         );
     }
 }

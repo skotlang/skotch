@@ -2670,6 +2670,7 @@ pub fn lower_file(
                 default_call_masks: Vec::new(),
                 needs_leading_nop: false,
                 local_generic_args: rustc_hash::FxHashMap::default(),
+                is_value_class_extension: None,
             });
             fn_lookup.insert(name.clone(), (FuncId(stub_id), decl.return_ty.clone()));
             module.cross_file_fn_stubs.insert(
@@ -3035,6 +3036,7 @@ pub fn lower_file(
                         default_call_masks: Vec::new(),
                         needs_leading_nop: false,
                         local_generic_args: rustc_hash::FxHashMap::default(),
+                        is_value_class_extension: None,
                     }
                 })
                 .collect();
@@ -3114,6 +3116,7 @@ pub fn lower_file(
                             default_call_masks: Vec::new(),
                             needs_leading_nop: false,
                             local_generic_args: rustc_hash::FxHashMap::default(),
+                            is_value_class_extension: None,
                         });
                     }
                 }
@@ -3156,6 +3159,7 @@ pub fn lower_file(
                 default_call_masks: Vec::new(),
                 needs_leading_nop: false,
                 local_generic_args: rustc_hash::FxHashMap::default(),
+                is_value_class_extension: None,
             };
             let stub_fields: Vec<skotch_mir::MirField> = ext
                 .fields
@@ -3271,6 +3275,7 @@ pub fn lower_file(
                             default_call_masks: Vec::new(),
                             needs_leading_nop: false,
                             local_generic_args: rustc_hash::FxHashMap::default(),
+                            is_value_class_extension: None,
                         }
                     })
                     .collect();
@@ -3310,6 +3315,7 @@ pub fn lower_file(
                     default_call_masks: Vec::new(),
                     needs_leading_nop: false,
                     local_generic_args: rustc_hash::FxHashMap::default(),
+                    is_value_class_extension: None,
                 };
                 module.push_class(skotch_mir::MirClass {
                     name: comp_qname,
@@ -3799,6 +3805,7 @@ pub fn lower_file(
                         default_call_masks: Vec::new(),
                         needs_leading_nop: false,
                         local_generic_args: rustc_hash::FxHashMap::default(),
+                        is_value_class_extension: None,
                     };
                     methods.push(bridge_fn);
                 }
@@ -4000,6 +4007,7 @@ pub fn lower_file(
                                 default_call_masks: Vec::new(),
                                 needs_leading_nop: false,
                                 local_generic_args: rustc_hash::FxHashMap::default(),
+                                is_value_class_extension: None,
                             };
                             methods.push(forwarder);
                         }
@@ -4105,6 +4113,7 @@ pub fn lower_file(
                         default_call_masks: Vec::new(),
                         needs_leading_nop: false,
                         local_generic_args: rustc_hash::FxHashMap::default(),
+                        is_value_class_extension: None,
                     };
                     methods.push(to_string_fn);
                 }
@@ -4169,6 +4178,7 @@ pub fn lower_file(
                         default_call_masks: Vec::new(),
                         needs_leading_nop: false,
                         local_generic_args: rustc_hash::FxHashMap::default(),
+                        is_value_class_extension: None,
                     };
                     methods.push(copy_fn);
                 }
@@ -4379,6 +4389,7 @@ pub fn lower_file(
                         default_call_masks: Vec::new(),
                         needs_leading_nop: false,
                         local_generic_args: rustc_hash::FxHashMap::default(),
+                        is_value_class_extension: None,
                     };
                     methods.push(equals_fn);
                 }
@@ -4620,6 +4631,7 @@ pub fn lower_file(
                 default_call_masks: Vec::new(),
                 needs_leading_nop: false,
                 local_generic_args: rustc_hash::FxHashMap::default(),
+                is_value_class_extension: None,
             };
             let mir_class = skotch_mir::MirClass {
                 name: name.clone(),
@@ -4724,6 +4736,7 @@ pub fn lower_file(
                 default_call_masks: Vec::new(),
                 needs_leading_nop: false,
                 local_generic_args: rustc_hash::FxHashMap::default(),
+                is_value_class_extension: None,
             };
             // Synthesize <clinit>: for each entry, build
             //   new EnumClass; dup; ldc "NAME"; iconst_<ord>;
@@ -4819,6 +4832,7 @@ pub fn lower_file(
                     default_call_masks: Vec::new(),
                     needs_leading_nop: false,
                     local_generic_args: rustc_hash::FxHashMap::default(),
+                    is_value_class_extension: None,
                 })
             };
             let mir_class = skotch_mir::MirClass {
@@ -5570,6 +5584,32 @@ pub fn lower_file(
             // `Ty::Any` via the generic-erasure pass below.
             let receiver_ty: Option<Ty> = receiver_type_name.as_deref().map(resolve_user_ty);
             let is_extension = receiver_type_name.is_some();
+            // Phase H5a: detect a value-class receiver. When the source
+            // shape is `fun V.method(): R` where `V` is a `@JvmInline
+            // value class V(val u: U)`, the JVM-shaped emit produces a
+            // file-facade static fn with the underlying type `U` in
+            // slot 0 (descriptor `(U, ...)R`) and the KEEP-104 mangled
+            // name (kotlinc unconditionally mangles value-class
+            // receivers). The body sees the underlying value directly
+            // in slot 0 — bare references to the value's underlying
+            // field name resolve to `Local(0)` instead of
+            // `GetField(this, V, u)`. Cross-file value-class receivers
+            // are deferred to Phase H5c; here we only check this
+            // file's `module.classes` via `find_class`.
+            let value_class_ext_info: Option<(String, String, Ty)> = if is_extension {
+                receiver_type_name.as_deref().and_then(|recv_name| {
+                    let cls = module.find_class(recv_name)?;
+                    if cls.is_value_class {
+                        let field = cls.value_underlying_field.clone()?;
+                        let ty = cls.value_underlying_ty.clone()?;
+                        Some((recv_name.to_string(), field, ty))
+                    } else {
+                        None
+                    }
+                })
+            } else {
+                None
+            };
             // Pull param/return Ty from the TypedFile pass-1 output if
             // the indices line up.
             let typed_fn = typed.functions.iter().find(|tf| tf.name_index == fn_id);
@@ -5694,11 +5734,27 @@ pub fn lower_file(
                 // Route extension fns through the method body lowerer
                 // so `this` resolves to slot 0 and user params to 1..N.
                 let receiver_class = receiver_type_name.clone().unwrap_or_default();
+                // Phase H5a: for a value-class extension receiver,
+                // expose the value class's underlying val as a
+                // CLASS_METHOD_CTX-visible field so the body's bare
+                // reference to it resolves to a `GetField(this, V, u)`
+                // tuple. A post-lowering pass below rewrites those
+                // GetFields to `Local(0)` once slot 0 is retyped to
+                // the underlying.
+                let value_class_fields: Vec<(String, Ty)> = value_class_ext_info
+                    .as_ref()
+                    .map(|(_, field, ty)| vec![(field.clone(), ty.clone())])
+                    .unwrap_or_default();
+                let field_names_slice: &[(String, Ty)] = if value_class_ext_info.is_some() {
+                    value_class_fields.as_slice()
+                } else {
+                    &[]
+                };
                 method_simple_body_full(
                     f,
                     &mut module.strings,
                     Some(&receiver_class),
-                    &[],
+                    field_names_slice,
                     &fn_lookup,
                     &val_lookup,
                     &wrapper_class,
@@ -5739,6 +5795,37 @@ pub fn lower_file(
 
             let mut locals = param_tys;
             locals.extend(extra_locals);
+            // Phase H5a: post-lowering rewrite for value-class
+            // extension fns. The body walker resolved bare references
+            // to the underlying field as
+            // `GetField{receiver=0, class_name=V, field_name=<u>}` —
+            // correct for an in-class method body where slot 0 is a V
+            // instance, but wrong for the file-facade static fn we
+            // emit, where slot 0 holds the underlying value directly.
+            // Rewrite those GetFields to `Local(0)` and retype slot 0
+            // to the underlying Ty (was `Ty::Class(V)` from the
+            // `method_simple_body_full` early-param fallback).
+            if let Some((vc_name, vc_field, vc_underlying)) = value_class_ext_info.as_ref() {
+                use skotch_mir::{Rvalue, Stmt as MStmt};
+                for block in blocks.iter_mut() {
+                    for stmt in block.stmts.iter_mut() {
+                        let MStmt::Assign { value, .. } = stmt;
+                        if let Rvalue::GetField {
+                            receiver,
+                            class_name,
+                            field_name,
+                        } = value
+                        {
+                            if receiver.0 == 0 && class_name == vc_name && field_name == vc_field {
+                                *value = Rvalue::Local(skotch_mir::LocalId(0));
+                            }
+                        }
+                    }
+                }
+                if !locals.is_empty() {
+                    locals[0] = vc_underlying.clone();
+                }
+            }
             // For suspend functions: replace bare Return terminator
             // with a Null assignment + ReturnValue to match legacy
             // suspend trampoline shape. Also set
@@ -5943,6 +6030,15 @@ pub fn lower_file(
                 default_call_masks: Vec::new(),
                 needs_leading_nop: false,
                 local_generic_args: rustc_hash::FxHashMap::default(),
+                // Phase H5a: when this top-level fn is an extension fn
+                // whose receiver is a `@JvmInline value class`, carry
+                // (value_class_jvm_name, underlying_ty) so the JVM
+                // backend can emit the kotlinc-shaped erased static
+                // (mangled name, underlying-typed slot 0, ACC_PUBLIC |
+                // ACC_STATIC | ACC_FINAL).
+                is_value_class_extension: value_class_ext_info
+                    .as_ref()
+                    .map(|(name, _, ty)| (name.clone(), ty.clone())),
             });
             fn_id += 1;
         }
@@ -16631,6 +16727,7 @@ fn lower_local_helper_body(
         default_call_masks: Vec::new(),
         needs_leading_nop: false,
         local_generic_args: rustc_hash::FxHashMap::default(),
+        is_value_class_extension: None,
     })
 }
 
@@ -16703,6 +16800,7 @@ fn build_helper_stub(spec: &LocalHelperSpec<'_>) -> MirFunction {
         default_call_masks: Vec::new(),
         needs_leading_nop: false,
         local_generic_args: rustc_hash::FxHashMap::default(),
+        is_value_class_extension: None,
     }
 }
 
@@ -25062,6 +25160,7 @@ fn try_lower_callable_ref(
         default_call_masks: Vec::new(),
         needs_leading_nop: false,
         local_generic_args: rustc_hash::FxHashMap::default(),
+        is_value_class_extension: None,
     };
     let invoke_method = make_method(
         "invoke",
@@ -26048,6 +26147,7 @@ fn lower_rich_expr_to_slot(
             default_call_masks: Vec::new(),
             needs_leading_nop: false,
             local_generic_args: rustc_hash::FxHashMap::default(),
+            is_value_class_extension: None,
         };
         // Constructor: takes captures as params, putfield each, then
         // chains to Lambda.<init>().
@@ -26121,6 +26221,7 @@ fn lower_rich_expr_to_slot(
             default_call_masks: Vec::new(),
             needs_leading_nop: false,
             local_generic_args: rustc_hash::FxHashMap::default(),
+            is_value_class_extension: None,
         };
         let capture_fields: Vec<skotch_mir::MirField> = captures
             .iter()
@@ -26504,6 +26605,7 @@ fn lower_rich_expr_to_slot(
                 default_call_masks: Vec::new(),
                 needs_leading_nop: false,
                 local_generic_args: rustc_hash::FxHashMap::default(),
+                is_value_class_extension: None,
             });
         }
         // Constructor taking captures.
@@ -26565,6 +26667,7 @@ fn lower_rich_expr_to_slot(
             default_call_masks: Vec::new(),
             needs_leading_nop: false,
             local_generic_args: rustc_hash::FxHashMap::default(),
+            is_value_class_extension: None,
         };
         let capture_fields: Vec<skotch_mir::MirField> = captures
             .iter()
@@ -36397,6 +36500,7 @@ fn constructor_from_primary_impl(
         default_call_masks: Vec::new(),
         needs_leading_nop: false,
         local_generic_args: rustc_hash::FxHashMap::default(),
+        is_value_class_extension: None,
     }
 }
 
@@ -37521,6 +37625,7 @@ fn collect_secondary_ctors(
             default_call_masks: Vec::new(),
             needs_leading_nop: false,
             local_generic_args: rustc_hash::FxHashMap::default(),
+            is_value_class_extension: None,
         });
     }
     out
@@ -41090,6 +41195,7 @@ fn method_from_fun_with_class(
         default_call_masks: Vec::new(),
         needs_leading_nop: false,
         local_generic_args: rustc_hash::FxHashMap::default(),
+        is_value_class_extension: None,
     }
 }
 
@@ -41368,6 +41474,7 @@ fn collect_class_methods(
                     default_call_masks: Vec::new(),
                     needs_leading_nop: false,
                     local_generic_args: rustc_hash::FxHashMap::default(),
+                    is_value_class_extension: None,
                 });
             }
         }
@@ -41469,6 +41576,7 @@ fn collect_class_methods(
                 default_call_masks: Vec::new(),
                 needs_leading_nop: false,
                 local_generic_args: rustc_hash::FxHashMap::default(),
+                is_value_class_extension: None,
             });
         }
     }
@@ -41602,6 +41710,7 @@ fn empty_constructor_super(class_name: &str, super_class: &str) -> MirFunction {
         default_call_masks: Vec::new(),
         needs_leading_nop: false,
         local_generic_args: rustc_hash::FxHashMap::default(),
+        is_value_class_extension: None,
     }
 }
 
@@ -46180,6 +46289,72 @@ mod tests {
         assert!(cls.is_value_class);
         assert_eq!(cls.value_underlying_field.as_deref(), Some("n"));
         assert_eq!(cls.value_underlying_ty.as_ref(), Some(&Ty::Int));
+    }
+
+    // ── Phase H5a: top-level value-class extension fn detection ────
+
+    #[test]
+    fn typed_lower_value_class_extension_sets_is_value_class_extension() {
+        // `fun V.triple(): Long = x * 3` on `@JvmInline value class
+        // V(val x: Long)` should set is_value_class_extension =
+        // Some(("V", Ty::Long)) on the resulting MirFunction and
+        // retype the receiver slot (params[0]) to Long.
+        let module = lower(
+            "@JvmInline value class V(val x: Long)\n\
+             fun V.triple(): Long = x * 3",
+            "TestKt",
+        );
+        let f = module
+            .functions
+            .iter()
+            .find(|f| f.name == "triple")
+            .expect("expected `triple` MirFunction");
+        assert_eq!(
+            f.is_value_class_extension,
+            Some(("V".to_string(), Ty::Long)),
+            "expected is_value_class_extension = Some((V, Long))"
+        );
+        // Receiver slot (slot 0) must be retyped to the underlying.
+        assert_eq!(
+            f.locals.first(),
+            Some(&Ty::Long),
+            "receiver slot 0 must be retyped to the underlying Long"
+        );
+        // Body's references to the underlying field name `x` should
+        // have been rewritten from GetField to Local(0). Walk the
+        // statements to confirm no GetField{class_name="V"} remains.
+        for block in &f.blocks {
+            for stmt in &block.stmts {
+                let skotch_mir::Stmt::Assign { value, .. } = stmt;
+                if let skotch_mir::Rvalue::GetField { class_name, .. } = value {
+                    assert_ne!(
+                        class_name, "V",
+                        "no GetField against V should remain after H5a post-pass"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn typed_lower_plain_class_extension_does_not_set_is_value_class_extension() {
+        // Negative control: `fun P.triple(): Long = x * 3` on a plain
+        // (non-value) class should NOT set is_value_class_extension.
+        let module = lower(
+            "class P(val x: Long)\n\
+             fun P.triple(): Long = x * 3",
+            "TestKt",
+        );
+        let f = module
+            .functions
+            .iter()
+            .find(|f| f.name == "triple")
+            .expect("expected `triple` MirFunction");
+        assert!(
+            f.is_value_class_extension.is_none(),
+            "plain-class extension fn must NOT set is_value_class_extension; got {:?}",
+            f.is_value_class_extension
+        );
     }
 
     #[test]
