@@ -3809,7 +3809,15 @@ pub fn lower_file(
             );
             module.push_class(skotch_mir::MirClass {
                 name: simple_name.clone(),
-                super_class: None,
+                // Preserve the supertype chain for cross-file stubs so
+                // the backend's inherited-method walker (which steps
+                // through `super_class`) can resolve methods declared
+                // on a transitive parent. Without this, a chain
+                // `HTML -> Container -> Tag` collapses at the call
+                // site: HTML's stub has `super_class: None`, the walk
+                // stops, and the JVM descriptor falls through to
+                // `Ljava/lang/Object;` → NoSuchMethodError at runtime.
+                super_class: ext.super_class.clone(),
                 is_open: ext.is_open,
                 is_abstract: ext.is_abstract,
                 is_interface,
