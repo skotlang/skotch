@@ -43802,8 +43802,27 @@ fn method_from_fun_with_class(
     }
     if let Some(pl) = f.value_parameter_list() {
         for p in pl.parameters() {
-            let pty = p.type_reference().map(resolve_type_ref).unwrap_or(Ty::Any);
-            locals.push(erase_generic(pty));
+            let tr = p.type_reference();
+            let is_nullable = tr.map(|t| t.is_nullable()).unwrap_or(false);
+            let pty = tr.map(resolve_type_ref).unwrap_or(Ty::Any);
+            let pty = erase_generic(pty);
+            // `resolve_type_ref` strips nullability for non-fn user
+            // types (intentional, to keep downstream PutField gating
+            // on `Ty::Class`). Re-wrap here so the backend's
+            // `is_non_null_reference_param` check correctly skips the
+            // `Intrinsics.checkNotNullParameter` prologue for
+            // nullable method params (e.g. `r: SpongeRemainder?` in
+            // KeccakDigest.extract). Mirrors the same fix applied to
+            // primary-ctor params in `constructor_from_primary_impl`.
+            // The JVM descriptor for `Ty::Nullable(Ty::Class(_))` is
+            // the same `LFoo;` as the unwrapped class, so signature
+            // matching and overload resolution are unaffected.
+            let pty = if is_nullable && matches!(pty, Ty::Class(_) | Ty::String) {
+                Ty::Nullable(Box::new(pty))
+            } else {
+                pty
+            };
+            locals.push(pty);
         }
     } else {
         for _ in 0..user_param_count {
