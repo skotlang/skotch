@@ -5718,6 +5718,39 @@ pub fn lower_file(
                                         None
                                     }
                                 })
+                                .or_else(|| {
+                                    // Ctor-call shorthand: `val rule
+                                    // = Rule()` → field type "Rule".
+                                    // Resolves the chained DotQualified
+                                    // dispatch case where the outer
+                                    // call's receiver-Ty lookup hits
+                                    // this field and would otherwise
+                                    // see Ty::Any. Only fires for an
+                                    // unqualified `Foo(...)` call whose
+                                    // callee starts with an uppercase
+                                    // letter (a class constructor by
+                                    // Kotlin convention) — guards
+                                    // against `mutableListOf()` style
+                                    // factory calls which the
+                                    // collection-factory arm above
+                                    // already handles.
+                                    let init = p.initializer().map(unwrap_parens)?;
+                                    let call = match init {
+                                        skotch_ast::KtExpr::Call(c) => c,
+                                        _ => return None,
+                                    };
+                                    let callee = call.callee()?;
+                                    let rref = match callee {
+                                        skotch_ast::KtExpr::Reference(r) => r,
+                                        _ => return None,
+                                    };
+                                    let cname = rref.name()?;
+                                    if cname.starts_with(char::is_uppercase) {
+                                        Some(cname.to_string())
+                                    } else {
+                                        None
+                                    }
+                                })
                                 .unwrap_or_else(|| "Any".to_string());
                             fields.push((fname.to_string(), type_name));
                         }
@@ -30245,6 +30278,58 @@ fn lower_rich_expr_to_slot(
                                 // pick the right element class.
                                 let mut elem_ty_for_slot: Option<Ty> = None;
                                 let mut val_ty_for_slot: Option<Ty> = None;
+                                // Own-class field fallback: when the
+                                // getter isn't registered in
+                                // CLASS_METHODS (cross-file class
+                                // whose synthesized `getX` accessor
+                                // never made it into the table),
+                                // look up the OWN-class field's
+                                // declared Ty before walking the
+                                // inherited chain. Without this, a
+                                // chained access like
+                                // `cfg.rule.colorFileName("x")`
+                                // returned `Ty::Any` for `cfg.rule`
+                                // and the outer DotQualified Call
+                                // dispatch (which keys on
+                                // `Ty::Class(_)`) bailed. We track
+                                // whether we promoted via this
+                                // fallback so a CheckCast can be
+                                // emitted after the getter call —
+                                // the getter's actual JVM descriptor
+                                // may erase to `Object` (skotch's
+                                // type-inference gap on
+                                // `val rule = Rule()`) while
+                                // CLASS_FIELDS knows the declared Ty.
+                                let mut needs_checkcast_to: Option<String> = None;
+                                if matches!(result_ty, Ty::Any) {
+                                    if let Some(fields) = lookup_class_fields(cname) {
+                                        if let Some((_, field_ty)) =
+                                            fields.iter().find(|(n, _)| n == prop_name)
+                                        {
+                                            if let Ty::Class(target) = field_ty {
+                                                result_ty = field_ty.clone();
+                                                needs_checkcast_to = Some(target.clone());
+                                            } else if !matches!(field_ty, Ty::Any) {
+                                                result_ty = field_ty.clone();
+                                            }
+                                        }
+                                    }
+                                    if let Some(e) = lookup_class_field_element_ty(cname, prop_name)
+                                    {
+                                        if matches!(result_ty, Ty::Any) {
+                                            result_ty = Ty::Class("java/util/List".to_string());
+                                        }
+                                        elem_ty_for_slot = Some(e);
+                                    }
+                                    if let Some(v) =
+                                        lookup_class_field_map_value_ty(cname, prop_name)
+                                    {
+                                        if matches!(result_ty, Ty::Any) {
+                                            result_ty = Ty::Class("java/util/Map".to_string());
+                                        }
+                                        val_ty_for_slot = Some(v);
+                                    }
+                                }
                                 if matches!(result_ty, Ty::Any) {
                                     let inherited = lookup_inherited_class_fields(cname);
                                     if let Some((parent, fname, field_ty)) =
@@ -30278,11 +30363,11 @@ fn lower_rich_expr_to_slot(
                                         }
                                     }
                                 }
-                                let result_slot = LocalId(*next_slot);
+                                let raw_slot = LocalId(*next_slot);
                                 *next_slot += 1;
-                                extra_locals.push(result_ty);
+                                extra_locals.push(result_ty.clone());
                                 pre_stmts.push(MStmt::Assign {
-                                    dest: result_slot,
+                                    dest: raw_slot,
                                     value: skotch_mir::Rvalue::Call {
                                         kind: skotch_mir::CallKind::Virtual {
                                             class_name: cname.clone(),
@@ -30291,6 +30376,30 @@ fn lower_rich_expr_to_slot(
                                         args: vec![recv_slot],
                                     },
                                 });
+                                // CheckCast bridge: the property
+                                // getter's underlying JVM signature
+                                // may erase to Object even when
+                                // CLASS_FIELDS knows the field's
+                                // declared Class type (cross-file
+                                // class whose `val x = T()` lacks an
+                                // inferred Ty). Without the cast the
+                                // verifier rejects the next chained
+                                // dispatch on `result_slot`.
+                                let result_slot = if let Some(target) = needs_checkcast_to {
+                                    let cs = LocalId(*next_slot);
+                                    *next_slot += 1;
+                                    extra_locals.push(result_ty);
+                                    pre_stmts.push(MStmt::Assign {
+                                        dest: cs,
+                                        value: skotch_mir::Rvalue::CheckCast {
+                                            obj: raw_slot,
+                                            target_class: target,
+                                        },
+                                    });
+                                    cs
+                                } else {
+                                    raw_slot
+                                };
                                 if let Some(e) = elem_ty_for_slot {
                                     record_list_element_ty(result_slot.0, e);
                                 }
@@ -38383,14 +38492,27 @@ fn collect_class_fields(c: skotch_ast::KtClass<'_>) -> Vec<skotch_mir::MirField>
                         // Double/Bool/String, OR at a stdlib
                         // collection factory call shorthand
                         // (`val items = mutableListOf<T>()`) to infer
-                        // the resulting Java collection class. Falls
-                        // back to Ty::Any when neither matches.
+                        // the resulting Java collection class, OR at
+                        // a bare uppercase-Reference Call (`val rule
+                        // = Rule()`) to infer the user class as the
+                        // field Ty. Falls back to Ty::Any when none
+                        // match.
                         None => p
                             .initializer()
                             .map(unwrap_parens)
                             .and_then(|init| {
                                 if let Some(t) = infer_collection_factory_ty(&init) {
                                     return Some(t);
+                                }
+                                if let skotch_ast::KtExpr::Call(call) = init {
+                                    if let Some(skotch_ast::KtExpr::Reference(rref)) = call.callee()
+                                    {
+                                        if let Some(cname) = rref.name() {
+                                            if cname.starts_with(char::is_uppercase) {
+                                                return Some(resolve_user_ty(cname));
+                                            }
+                                        }
+                                    }
                                 }
                                 let mut strings_scratch: Vec<String> = Vec::new();
                                 literal_to_const(&init, &mut strings_scratch).map(|(_, t)| t)

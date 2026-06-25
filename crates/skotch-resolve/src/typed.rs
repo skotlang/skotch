@@ -230,6 +230,42 @@ fn infer_collection_factory_class(init: &skotch_ast::KtExpr<'_>) -> Option<Ty> {
     None
 }
 
+/// Infer `Ty::Class("Foo")` from a constructor-call initializer
+/// (`val rule = Rule()`). The callee must be a bare `Reference`
+/// whose name starts with an uppercase letter — guards against
+/// `mutableListOf()` (factory) which the collection-factory arm
+/// covers, and against lowercase user fns. Resolves the chained
+/// DotQualified-dispatch case where a downstream call like
+/// `cfg.rule.colorFileName("x")` needs the property's actual
+/// class type to find the method on the right receiver.
+fn infer_ctor_call_class(
+    init: &skotch_ast::KtExpr<'_>,
+    imports: &FxHashMap<String, String>,
+) -> Option<Ty> {
+    use skotch_ast::KtExpr;
+    let call = match init {
+        KtExpr::Call(c) => c,
+        _ => return None,
+    };
+    let callee = call.callee()?;
+    let rref = match callee {
+        KtExpr::Reference(r) => r,
+        _ => return None,
+    };
+    let cname = rref.name()?;
+    if !cname.starts_with(char::is_uppercase) {
+        return None;
+    }
+    // Prefer FQ-resolved name via imports; else use the source-level
+    // simple name (downstream `kotlin_to_jvm_class` / wrapper-class
+    // resolution turns it into the right JVM internal).
+    let resolved = imports
+        .get(cname)
+        .cloned()
+        .unwrap_or_else(|| cname.to_string());
+    Some(Ty::Class(resolved))
+}
+
 // ── TypeRef → Ty ────────────────────────────────────────────────────
 
 fn type_ref_to_ty(
@@ -633,6 +669,14 @@ fn property_getter_method(
     let ret = p
         .type_reference()
         .map(|tr| type_ref_to_ty(tr, imports, aliases))
+        .or_else(|| {
+            let init = p.initializer()?;
+            infer_collection_factory_class(&init)
+        })
+        .or_else(|| {
+            let init = p.initializer()?;
+            infer_ctor_call_class(&init, imports)
+        })
         .unwrap_or(Ty::Any);
     Some(ExternalMethod {
         name: getter_name,
@@ -865,6 +909,10 @@ fn gather_class_recursive(
             .or_else(|| {
                 let init = p.initializer()?;
                 infer_collection_factory_class(&init)
+            })
+            .or_else(|| {
+                let init = p.initializer()?;
+                infer_ctor_call_class(&init, imports)
             })
             .unwrap_or(Ty::Any);
         fields.push((name.to_string(), ty));
