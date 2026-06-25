@@ -798,6 +798,14 @@ struct CrossFileExtFn {
     /// instead of dispatching to the static body (whose `T` is erased to
     /// `Object` and would always return true).
     is_reified_instance_check: bool,
+    /// Phase H5c: when this cross-file extension fn's receiver is a
+    /// `@JvmInline value class V(val u: U)`, this carries `(V_jvm_name,
+    /// U_ty)` so the call-site dispatch can rewrite to the kotlinc-
+    /// shaped erased static (unbox-impl + mangled `-impl` static).
+    /// Mirrors `MirFunction::is_value_class_extension` for the in-file
+    /// H5b call path; consumers detect this BEFORE emitting the plain
+    /// `StaticJava` dispatch.
+    is_value_class_extension: Option<(String, Ty)>,
 }
 
 /// Emit the 7-block inline expansion of `recv.firstOfType<T>()` /
@@ -1047,6 +1055,154 @@ fn box_primitive_arg(
         },
     });
     boxed
+}
+
+/// Phase H5c: JVM descriptor for the underlying primitive/string of a
+/// `@JvmInline value class V(val u: U)`. Mirrors
+/// `skotch_backend_jvm::value_class::underlying_descriptor` — we don't
+/// pull that crate in as a dep just for this one tiny helper.
+fn vc_underlying_descriptor(ty: &Ty) -> String {
+    match ty {
+        Ty::Bool => "Z".to_string(),
+        Ty::Byte => "B".to_string(),
+        Ty::Short => "S".to_string(),
+        Ty::Char => "C".to_string(),
+        Ty::Int => "I".to_string(),
+        Ty::Float => "F".to_string(),
+        Ty::Long => "J".to_string(),
+        Ty::Double => "D".to_string(),
+        Ty::String => "Ljava/lang/String;".to_string(),
+        Ty::Class(n) => format!("L{n};"),
+        Ty::Any => "Ljava/lang/Object;".to_string(),
+        Ty::IntArray => "[I".to_string(),
+        Ty::LongArray => "[J".to_string(),
+        Ty::DoubleArray => "[D".to_string(),
+        Ty::BooleanArray => "[Z".to_string(),
+        Ty::ByteArray => "[B".to_string(),
+        _ => "Ljava/lang/Object;".to_string(),
+    }
+}
+
+/// Phase H5c: KEEP-104 method-name mangling for value-class extension
+/// fns. Mirrors
+/// `skotch_backend_jvm::value_class::{mangle_method_name,static_impl_name}`
+/// for the call-site shape we need — a single value-class param (the
+/// extension receiver). For more general mixed-param cases the backend
+/// helper is canonical; mir-lower's call site doesn't need them yet.
+fn vc_mangle_receiver_only(name: &str, vc_dotted_name: &str) -> String {
+    use md5::{Digest, Md5};
+    let sig = format!("L{vc_dotted_name};");
+    let mut hasher = Md5::new();
+    hasher.update(sig.as_bytes());
+    let digest = hasher.finalize();
+    let suffix = vc_base64url_no_pad(&digest[..5]);
+    format!("{name}-{suffix}")
+}
+
+/// Phase H5c: URL-safe Base64 (no padding) for the 5-byte MD5 prefix.
+/// Mirrors `skotch_backend_jvm::value_class::base64url_no_pad`.
+fn vc_base64url_no_pad(bytes: &[u8]) -> String {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        match chunk.len() {
+            3 => {
+                let n = ((chunk[0] as u32) << 16) | ((chunk[1] as u32) << 8) | chunk[2] as u32;
+                out.push(ALPHABET[((n >> 18) & 0x3F) as usize] as char);
+                out.push(ALPHABET[((n >> 12) & 0x3F) as usize] as char);
+                out.push(ALPHABET[((n >> 6) & 0x3F) as usize] as char);
+                out.push(ALPHABET[(n & 0x3F) as usize] as char);
+            }
+            2 => {
+                let n = ((chunk[0] as u32) << 16) | ((chunk[1] as u32) << 8);
+                out.push(ALPHABET[((n >> 18) & 0x3F) as usize] as char);
+                out.push(ALPHABET[((n >> 12) & 0x3F) as usize] as char);
+                out.push(ALPHABET[((n >> 6) & 0x3F) as usize] as char);
+            }
+            1 => {
+                let n = (chunk[0] as u32) << 16;
+                out.push(ALPHABET[((n >> 18) & 0x3F) as usize] as char);
+                out.push(ALPHABET[((n >> 12) & 0x3F) as usize] as char);
+            }
+            _ => {}
+        }
+    }
+    out
+}
+
+/// Phase H5c: emit the call-site sequence for a cross-file extension
+/// fn whose receiver is a `@JvmInline value class V(val u: U)`. The
+/// shape is:
+///   ```ignore
+///   unbox = recv.unbox-impl()<u_desc>   // VirtualJava V.unbox-impl
+///   result = FacadeKt.<name>-<KEEP104mangle>(unbox, args)<ret_desc>
+///                                       // StaticJava facade
+///   ```
+/// kotlinc unconditionally KEEP-104-mangles the method name because the
+/// receiver is itself a value-class parameter (signature input
+/// `"L<vc>;"`). For cross-file callers the only difference vs the H5b
+/// in-file path is that the static-call owner class is the declaring
+/// file's facade (carried in `ext.owner_class`), not our own wrapper.
+/// Returns the result slot, or `None` when the args couldn't be
+/// rebuilt (signaled by `arg_slots.len() != expected`).
+#[allow(clippy::too_many_arguments)]
+fn emit_value_class_ext_dispatch(
+    recv_slot: skotch_mir::LocalId,
+    user_arg_slots: &[skotch_mir::LocalId],
+    user_arg_descs: &[String],
+    vc_jvm_name: &str,
+    u_ty: &Ty,
+    owner_class: &str,
+    method_name: &str,
+    return_ty: &Ty,
+    extra_locals: &mut Vec<Ty>,
+    pre_stmts: &mut Vec<skotch_mir::Stmt>,
+    next_slot: &mut u32,
+) -> skotch_mir::LocalId {
+    use skotch_mir::{LocalId, Stmt as MStmt};
+    // Step 1: unbox the wrapper to the underlying.
+    let u_desc = vc_underlying_descriptor(u_ty);
+    let unbox_slot = LocalId(*next_slot);
+    *next_slot += 1;
+    extra_locals.push(u_ty.clone());
+    pre_stmts.push(MStmt::Assign {
+        dest: unbox_slot,
+        value: skotch_mir::Rvalue::Call {
+            kind: skotch_mir::CallKind::VirtualJava {
+                class_name: vc_jvm_name.to_string(),
+                method_name: "unbox-impl".to_string(),
+                descriptor: format!("(){u_desc}"),
+            },
+            args: vec![recv_slot],
+        },
+    });
+    // Step 2: build the mangled name + erased descriptor and emit the
+    // static dispatch on the facade class.
+    let mangled = vc_mangle_receiver_only(method_name, &vc_jvm_name.replace('/', "."));
+    let mut desc = String::from("(");
+    desc.push_str(&u_desc);
+    for d in user_arg_descs {
+        desc.push_str(d);
+    }
+    desc.push(')');
+    desc.push_str(&vc_underlying_descriptor(return_ty));
+    let result_slot = LocalId(*next_slot);
+    *next_slot += 1;
+    extra_locals.push(return_ty.clone());
+    let mut args = vec![unbox_slot];
+    args.extend_from_slice(user_arg_slots);
+    pre_stmts.push(MStmt::Assign {
+        dest: result_slot,
+        value: skotch_mir::Rvalue::Call {
+            kind: skotch_mir::CallKind::StaticJava {
+                class_name: owner_class.to_string(),
+                method_name: mangled,
+                descriptor: desc,
+            },
+            args,
+        },
+    });
+    result_slot
 }
 
 /// Parse a JVM method descriptor's parameter section into per-token
@@ -2752,18 +2908,39 @@ pub fn lower_file(
                     && recv_class == "java/lang/Object"
                     && decl.param_count == 0
                     && matches!(&decl.return_ty, Ty::Bool);
-                register_cross_file_ext_fn(
-                    name,
-                    &recv_class,
-                    CrossFileExtFn {
-                        owner_class: decl.owner_class.clone(),
-                        method_name: name.clone(),
-                        descriptor: decl.descriptor.clone(),
-                        return_ty: decl.return_ty.clone(),
-                        is_reified_type_filter,
-                        is_reified_instance_check,
-                    },
-                );
+                let cf_ext = CrossFileExtFn {
+                    owner_class: decl.owner_class.clone(),
+                    method_name: name.clone(),
+                    descriptor: decl.descriptor.clone(),
+                    return_ty: decl.return_ty.clone(),
+                    is_reified_type_filter,
+                    is_reified_instance_check,
+                    // Phase H5c: thread the `(V_jvm_name, U_ty)`
+                    // pair populated by the resolve crate's
+                    // gather-side value-class index into the
+                    // dispatch registry so the call-site rewrite
+                    // can fire the kotlinc-shaped erased static
+                    // dispatch sequence.
+                    is_value_class_extension: decl.is_value_class_extension.clone(),
+                };
+                register_cross_file_ext_fn(name, &recv_class, cf_ext.clone());
+                // Phase H5c follow-up: also register under the simple
+                // (last-segment) name when the registered receiver is
+                // an FQ JVM class. Cross-file call sites may type the
+                // receiver as `Ty::Class("V")` (the bare name) when
+                // the constructor call's slot is resolved via
+                // `resolve_user_ty`, which doesn't know about cross-
+                // file FQ mapping. Without the simple-name alias the
+                // lookup would miss its own entry. The duplicate is
+                // safe — the value is `.clone()` of the same struct
+                // and collisions across different value classes with
+                // the same simple name + extension name are rejected
+                // by kotlinc at source level.
+                if let Some(simple) = recv_class.rsplit('/').next() {
+                    if simple != recv_class {
+                        register_cross_file_ext_fn(name, simple, cf_ext);
+                    }
+                }
             }
         }
     }
@@ -31296,6 +31473,88 @@ fn lower_rich_expr_to_slot(
                                     if let Some(ext) =
                                         lookup_cross_file_ext_fn_compat(method_n, recv_class)
                                     {
+                                        // Phase H5c: cross-file extension
+                                        // fn whose receiver is a
+                                        // `@JvmInline value class V(val u:
+                                        // U)`. Mirror H5b's in-file rewrite
+                                        // (unbox-impl + KEEP-104-mangled
+                                        // static dispatch on the declaring
+                                        // file's facade), but uses
+                                        // `ext.owner_class` for the static
+                                        // target instead of our own
+                                        // wrapper. Receiver-only mangling
+                                        // is enough for the
+                                        // `fun V.method(): R` shape; the
+                                        // mixed-value-class-param shape is
+                                        // not yet exercised cross-file in
+                                        // the corpus.
+                                        if let Some((vc_name, u_ty)) =
+                                            ext.is_value_class_extension.clone()
+                                        {
+                                            // Lower user args first (no
+                                            // boxing — the descriptor will
+                                            // use the underlying for the
+                                            // receiver and the user param
+                                            // types as-declared).
+                                            let mut user_arg_slots: Vec<LocalId> = Vec::new();
+                                            let mut user_arg_descs: Vec<String> = Vec::new();
+                                            let mut all_ok = true;
+                                            // `ext.descriptor` is the
+                                            // source-shape `(LV;, …)R` —
+                                            // skip the first param (the
+                                            // receiver) when collecting
+                                            // the user-arg descs.
+                                            let source_param_descs =
+                                                parse_descriptor_params(&ext.descriptor);
+                                            for (i, arg) in call
+                                                .value_argument_list()
+                                                .iter()
+                                                .flat_map(|al| al.arguments())
+                                                .enumerate()
+                                            {
+                                                let Some(arg_e) = arg.expression() else {
+                                                    all_ok = false;
+                                                    break;
+                                                };
+                                                let Some(s) = lower_rich_expr_to_slot(
+                                                    arg_e,
+                                                    lookup_name,
+                                                    fn_lookup,
+                                                    next_slot,
+                                                    pre_stmts,
+                                                    extra_locals,
+                                                    strings,
+                                                ) else {
+                                                    all_ok = false;
+                                                    break;
+                                                };
+                                                user_arg_slots.push(s);
+                                                if let Some(d) =
+                                                    source_param_descs.get(i + 1).cloned()
+                                                {
+                                                    user_arg_descs.push(d);
+                                                } else {
+                                                    all_ok = false;
+                                                    break;
+                                                }
+                                            }
+                                            if all_ok {
+                                                let result_slot = emit_value_class_ext_dispatch(
+                                                    slot,
+                                                    &user_arg_slots,
+                                                    &user_arg_descs,
+                                                    &vc_name,
+                                                    &u_ty,
+                                                    &ext.owner_class,
+                                                    &ext.method_name,
+                                                    &ext.return_ty,
+                                                    extra_locals,
+                                                    pre_stmts,
+                                                    next_slot,
+                                                );
+                                                return Some(result_slot);
+                                            }
+                                        }
                                         // Reified `Any.isInstanceOf<X>()`
                                         // fast path: substitute concrete X
                                         // from the call's type-arg into
@@ -31641,6 +31900,71 @@ fn lower_rich_expr_to_slot(
                                 if let Some(ext) =
                                     lookup_cross_file_ext_fn_compat(method_n, recv_class)
                                 {
+                                    // Phase H5c: cross-file extension fn
+                                    // whose receiver is a `@JvmInline
+                                    // value class V(val u: U)` —
+                                    // chained-receiver variant (e.g.
+                                    // `wrap(x).doubled()`). Same shape as
+                                    // the Reference-receiver path above:
+                                    // unbox-impl + KEEP-104-mangled
+                                    // static dispatch on the declaring
+                                    // file's facade.
+                                    if let Some((vc_name, u_ty)) =
+                                        ext.is_value_class_extension.clone()
+                                    {
+                                        let mut user_arg_slots: Vec<LocalId> = Vec::new();
+                                        let mut user_arg_descs: Vec<String> = Vec::new();
+                                        let mut all_ok = true;
+                                        let source_param_descs =
+                                            parse_descriptor_params(&ext.descriptor);
+                                        for (i, arg) in call
+                                            .value_argument_list()
+                                            .iter()
+                                            .flat_map(|al| al.arguments())
+                                            .enumerate()
+                                        {
+                                            let Some(arg_e) = arg.expression() else {
+                                                all_ok = false;
+                                                break;
+                                            };
+                                            let Some(s) = lower_rich_expr_to_slot(
+                                                arg_e,
+                                                lookup_name,
+                                                fn_lookup,
+                                                next_slot,
+                                                pre_stmts,
+                                                extra_locals,
+                                                strings,
+                                            ) else {
+                                                all_ok = false;
+                                                break;
+                                            };
+                                            user_arg_slots.push(s);
+                                            if let Some(d) = source_param_descs.get(i + 1).cloned()
+                                            {
+                                                user_arg_descs.push(d);
+                                            } else {
+                                                all_ok = false;
+                                                break;
+                                            }
+                                        }
+                                        if all_ok {
+                                            let result_slot = emit_value_class_ext_dispatch(
+                                                recv_slot,
+                                                &user_arg_slots,
+                                                &user_arg_descs,
+                                                &vc_name,
+                                                &u_ty,
+                                                &ext.owner_class,
+                                                &ext.method_name,
+                                                &ext.return_ty,
+                                                extra_locals,
+                                                pre_stmts,
+                                                next_slot,
+                                            );
+                                            return Some(result_slot);
+                                        }
+                                    }
                                     // Reified `Any.isInstanceOf<X>()`
                                     // fast path for non-Reference recv
                                     // (e.g. `(3 as Any).isInstanceOf<Int>()`):
@@ -46334,6 +46658,170 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// Phase H5c helper: lower a single file with a shared
+    /// `PackageSymbolTable` gathered from `(decl_src, main_src)` so the
+    /// cross-file extension fn registry sees the value-class extension
+    /// declared in `decl_src` when lowering `main_src`. Returns the
+    /// lowered `MirModule` for `main_src`.
+    fn lower_with_other_file(decl_src: &str, main_src: &str) -> MirModule {
+        let decl_parsed = skotch_ast::parse("decl.kt", decl_src);
+        let main_parsed = skotch_ast::parse("main.kt", main_src);
+        let interner_for_gather = Interner::new();
+        let table = skotch_resolve::typed::gather_declarations(
+            &[
+                (decl_parsed.file(), "DeclKt"),
+                (main_parsed.file(), "MainKt"),
+            ],
+            &interner_for_gather,
+        );
+        let resolved = ResolvedFile::default();
+        let mut interner = Interner::new();
+        let mut diags = Diagnostics::new();
+        let typed = skotch_typeck::typed::type_check(
+            main_parsed.file(),
+            &resolved,
+            &mut interner,
+            &mut diags,
+            Some(&table),
+        );
+        lower_file(
+            main_parsed.file(),
+            &resolved,
+            &typed,
+            &mut interner,
+            &mut diags,
+            "MainKt",
+            Some(&table),
+        )
+    }
+
+    #[test]
+    fn typed_lower_cross_file_value_class_ext_call_emits_unbox_and_static() {
+        // File A: `@JvmInline value class V(val x: Long)` + extension
+        // `fun V.doubled(): Long = x * 2`. File B: `fun main() {
+        // println(V(5).doubled()) }`. Lowering main.kt should produce a
+        // VirtualJava unbox-impl on V followed by a StaticJava call on
+        // DeclKt with the mangled `doubled-<hash>` name and erased
+        // descriptor `(J)J`. Without H5c, the dispatch would fall
+        // through to either no-op (extension fn not found) or an
+        // un-erased `(LV;)J` static — both runtime LinkErrors against
+        // kotlinc's facade.
+        let module = lower_with_other_file(
+            "@JvmInline value class V(val x: Long)\n\
+             fun V.doubled(): Long = x * 2",
+            "fun main() { println(V(5).doubled()) }",
+        );
+        // Find the unbox-impl + static dispatch in main's body.
+        let main_fn = module
+            .functions
+            .iter()
+            .find(|f| f.name == "main")
+            .expect("expected main");
+        let mut saw_unbox = false;
+        let mut saw_static_mangled = false;
+        for block in &main_fn.blocks {
+            for stmt in &block.stmts {
+                let skotch_mir::Stmt::Assign { value, .. } = stmt;
+                if let skotch_mir::Rvalue::Call { kind, .. } = value {
+                    match kind {
+                        skotch_mir::CallKind::VirtualJava {
+                            class_name,
+                            method_name,
+                            descriptor,
+                        } if class_name == "V"
+                            && method_name == "unbox-impl"
+                            && descriptor == "()J" =>
+                        {
+                            saw_unbox = true;
+                        }
+                        skotch_mir::CallKind::StaticJava {
+                            class_name,
+                            method_name,
+                            descriptor,
+                        } if class_name == "DeclKt"
+                            && method_name.starts_with("doubled-")
+                            && descriptor == "(J)J" =>
+                        {
+                            saw_static_mangled = true;
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+        assert!(
+            saw_unbox,
+            "expected `V.unbox-impl()J` call in main; got {:#?}",
+            main_fn.blocks
+        );
+        assert!(
+            saw_static_mangled,
+            "expected `DeclKt.doubled-<hash>(J)J` static call in main; got {:#?}",
+            main_fn.blocks
+        );
+    }
+
+    #[test]
+    fn typed_lower_cross_file_value_class_ext_call_emits_unbox_and_static_with_package() {
+        // Same as the no-package test above but the value class lives
+        // in a named package. The constructor call site sees the
+        // receiver as a bare `Ty::Class("V")` (a pre-existing
+        // limitation of `resolve_user_ty` for cross-file types), so
+        // the registry's simple-name alias is what makes this hit.
+        // Verifies the same H5c rewrite chain fires under the
+        // packaged shape.
+        let module = lower_with_other_file(
+            "package com.x\n\
+             @JvmInline value class V(val x: Long)\n\
+             fun V.doubled(): Long = x * 2",
+            "package com.x\nfun main() { println(V(5).doubled()) }",
+        );
+        let main_fn = module
+            .functions
+            .iter()
+            .find(|f| f.name == "main")
+            .expect("expected main");
+        let mut saw_unbox = false;
+        let mut saw_static_mangled = false;
+        for block in &main_fn.blocks {
+            for stmt in &block.stmts {
+                let skotch_mir::Stmt::Assign { value, .. } = stmt;
+                if let skotch_mir::Rvalue::Call { kind, .. } = value {
+                    match kind {
+                        skotch_mir::CallKind::VirtualJava {
+                            method_name,
+                            descriptor,
+                            ..
+                        } if method_name == "unbox-impl" && descriptor == "()J" => {
+                            saw_unbox = true;
+                        }
+                        skotch_mir::CallKind::StaticJava {
+                            class_name,
+                            method_name,
+                            descriptor,
+                        } if class_name == "com/x/DeclKt"
+                            && method_name.starts_with("doubled-")
+                            && descriptor == "(J)J" =>
+                        {
+                            saw_static_mangled = true;
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+        assert!(
+            saw_unbox,
+            "expected `unbox-impl()J` call in main; got {:#?}",
+            main_fn.blocks
+        );
+        assert!(
+            saw_static_mangled,
+            "expected `com/x/DeclKt.doubled-<hash>(J)J` static call in main; got {:#?}",
+            main_fn.blocks
+        );
     }
 
     #[test]

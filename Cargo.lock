@@ -3024,6 +3024,7 @@ dependencies = [
 name = "skotch-mir-lower"
 version = "0.41.0"
 dependencies = [
+ "md-5",
  "rustc-hash",
  "skotch-ast",
  "skotch-classinfo",

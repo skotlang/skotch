@@ -1206,6 +1206,33 @@ pub fn gather_declarations<'a>(
         .map(|(file, wrapper_class)| build_file_state(*file, wrapper_class, files))
         .collect();
 
+    // Phase H5c: scan every file's top-level classes to build an index
+    // of `@JvmInline value class` declarations keyed by their FQ JVM
+    // name → underlying primitive `Ty`. Used below in the `KtDecl::Fun`
+    // arm to tag extension fns whose receiver is a value class so the
+    // mir-lower's cross-file stub registration carries the
+    // `is_value_class_extension` field. Mirrors the in-file detection
+    // in mir-lower (`module.find_class(...).is_value_class`) but spans
+    // every file in the compilation unit — so a fn in File B can see a
+    // value class declared in File A.
+    let mut value_class_index: FxHashMap<String, Ty> = FxHashMap::default();
+    for (state, (file, _)) in file_state.iter().zip(files.iter()) {
+        let imports = &state.imports;
+        let aliases = &state.aliases;
+        for decl in file.decls() {
+            if let KtDecl::Class(c) = decl {
+                let (is_vc, u_ty) = detect_value_class(c, imports, aliases);
+                if is_vc {
+                    let Some(name) = c.name() else { continue };
+                    let fq = format!("{}{name}", state.pkg_prefix);
+                    if let Some(ty) = u_ty {
+                        value_class_index.insert(fq, ty);
+                    }
+                }
+            }
+        }
+    }
+
     for (state, (file, _)) in file_state.iter().zip(files.iter()) {
         let pkg_prefix = state.pkg_prefix.clone();
         let imports = &state.imports;
@@ -1318,6 +1345,22 @@ pub fn gather_declarations<'a>(
                     let receiver_ty = f
                         .receiver_type()
                         .map(|tr| type_ref_to_ty(tr, imports, aliases));
+                    // Phase H5c: a top-level extension fn whose receiver
+                    // resolves to a `@JvmInline value class V(val u: U)`
+                    // (declared in this file or any sibling file) carries
+                    // `(V_jvm_name, U_ty)` so the cross-file mir-lower
+                    // stub registration can mirror H5a's in-file detection
+                    // and the JVM backend's H5b call-site rewrite can fire
+                    // against the recorded owner class. The lookup keys
+                    // off `Ty::Class(fq)` — primitive receivers (`Int`,
+                    // `Double`, …) and lambda-typed receivers can't be
+                    // value classes so they're skipped.
+                    let is_value_class_extension = match &receiver_ty {
+                        Some(Ty::Class(fq)) => value_class_index
+                            .get(fq)
+                            .map(|u_ty| (fq.clone(), u_ty.clone())),
+                        _ => None,
+                    };
                     let ext = ExternalFunDecl {
                         owner_class: fq_wrapper.clone(),
                         descriptor,
@@ -1332,6 +1375,7 @@ pub fn gather_declarations<'a>(
                         is_vararg,
                         param_receiver_classes,
                         annotations: f.annotation_names().into_iter().map(String::from).collect(),
+                        is_value_class_extension,
                     };
                     table
                         .functions
@@ -2341,5 +2385,72 @@ mod tests {
         let c = table.classes.get("Color").expect("enum Color");
         assert!(!c.is_value_class);
         assert_eq!(c.value_underlying_ty, None);
+    }
+
+    // ── Phase H5c cross-file value-class extension fn metadata ──────
+
+    #[test]
+    fn h5c_value_class_ext_fn_in_same_file_is_recorded() {
+        // `@JvmInline value class V(val x: Long)` + `fun V.doubled():
+        // Long = x * 2` in ONE file. The fn ExternalDecl should carry
+        // `is_value_class_extension = Some(("V", Ty::Long))` (FQ name is
+        // bare "V" since no package).
+        let p = parse(
+            "@JvmInline value class V(val x: Long)\n\
+             fun V.doubled(): Long = x * 2",
+        );
+        let interner = Interner::new();
+        let table = gather_declarations(&[(p.file(), "TestKt")], &interner);
+        let decls = table
+            .functions
+            .get("doubled")
+            .expect("expected ExternalFunDecl for doubled");
+        let decl = decls.iter().find(|d| d.is_extension).expect("ext fn");
+        assert_eq!(
+            decl.is_value_class_extension,
+            Some(("V".to_string(), Ty::Long)),
+            "expected is_value_class_extension = Some((V, Long))"
+        );
+    }
+
+    #[test]
+    fn h5c_value_class_ext_fn_across_files_is_recorded() {
+        // File A declares `@JvmInline value class V(val x: Long)`.
+        // File B declares `fun V.doubled(): Long = x * 2`. The
+        // cross-file index must surface the value-class extension
+        // metadata on B's fn ExternalDecl. The package is shared so
+        // file B's `V` reference resolves to file A's V via the same-
+        // package decl map.
+        let a = parse("package com.x\n@JvmInline value class V(val x: Long)");
+        let b = parse("package com.x\nfun V.doubled(): Long = x * 2");
+        let interner = Interner::new();
+        let table = gather_declarations(&[(a.file(), "AKt"), (b.file(), "BKt")], &interner);
+        let decls = table
+            .functions
+            .get("doubled")
+            .expect("expected ExternalFunDecl for doubled");
+        let decl = decls.iter().find(|d| d.is_extension).expect("ext fn");
+        assert_eq!(
+            decl.is_value_class_extension,
+            Some(("com/x/V".to_string(), Ty::Long)),
+            "expected cross-file V receiver to be tagged value-class"
+        );
+    }
+
+    #[test]
+    fn h5c_plain_class_ext_fn_across_files_not_value_class() {
+        // Negative control: same shape but `class V` (no @JvmInline)
+        // → fn must NOT be tagged.
+        let a = parse("package com.x\nclass V(val x: Long)");
+        let b = parse("package com.x\nfun V.doubled(): Long = x * 2");
+        let interner = Interner::new();
+        let table = gather_declarations(&[(a.file(), "AKt"), (b.file(), "BKt")], &interner);
+        let decls = table.functions.get("doubled").expect("expected fn");
+        let decl = decls.iter().find(|d| d.is_extension).expect("ext fn");
+        assert!(
+            decl.is_value_class_extension.is_none(),
+            "plain class receiver must not be tagged value-class; got {:?}",
+            decl.is_value_class_extension
+        );
     }
 }

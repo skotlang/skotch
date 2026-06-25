@@ -249,6 +249,20 @@ pub struct ExternalFunDecl {
     /// `"Composable"`, `"Deprecated"`, etc).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub annotations: Vec<String>,
+    /// Phase H5c cross-file metadata: when this is a top-level extension
+    /// function whose receiver type is a `@JvmInline value class V(val u:
+    /// U)`, this carries `(value_class_jvm_name, underlying_ty)` — the
+    /// same shape as
+    /// [`skotch_mir::MirFunction::is_value_class_extension`]. Cross-file
+    /// callers in another file consult this so the call-site rewrite
+    /// can emit the kotlinc-shaped erased static dispatch (mangled
+    /// `<name>-<KEEP104-mangle>` + underlying-typed slot 0) against the
+    /// declaring file's facade class. `None` when the receiver is not a
+    /// value class. Mirrors H4's `ExternalClassDecl::is_value_class` +
+    /// `value_underlying_ty` cross-file plumbing, but on the function
+    /// side instead of the class side.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub is_value_class_extension: Option<(String, Ty)>,
 }
 
 /// Metadata for a top-level val from another file.

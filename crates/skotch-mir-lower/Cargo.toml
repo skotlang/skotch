@@ -19,6 +19,11 @@ skotch-stdlib-registry = { workspace = true }
 skotch-sil         = { workspace = true }
 skotch-ast         = { workspace = true }
 rustc-hash       = { workspace = true }
+# Phase H5c: KEEP-104 method-name mangling for cross-file value-class
+# extension fn dispatch. Same crate the JVM backend uses for the
+# in-file H5b path — the mangle algorithm is `md5(sig)[..5]` →
+# base64url(no-pad).
+md-5             = { workspace = true }
 
 [dev-dependencies]
 skotch-lexer  = { workspace = true }
