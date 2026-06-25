@@ -30764,6 +30764,90 @@ fn lower_rich_expr_to_slot(
                                             (None, false) => None,
                                         }
                                     }
+                                    // Constructor-call receiver: `Foo().bar`
+                                    // chain shape. Receiver is a bare
+                                    // uppercase Reference Call — treat it
+                                    // as a class instance whose Ty is the
+                                    // ctor's class, then look up the
+                                    // trailing property in CLASS_FIELDS.
+                                    // Fixes chains like
+                                    // `PlainSummaryReporterProvider().id`
+                                    // (parity 103-ktlint) where the inner
+                                    // DotQualified resolved to None and
+                                    // the outer DotQualified Virtual
+                                    // dispatch bailed on a non-Class
+                                    // receiver Ty.
+                                    (KtExpr::Call(ctor), KtExpr::Reference(field_ref)) => {
+                                        let ctor_cls = match ctor.callee() {
+                                            Some(KtExpr::Reference(r)) => r
+                                                .name()
+                                                .filter(|n| {
+                                                    n.starts_with(char::is_uppercase)
+                                                        && lookup_name(n).is_none()
+                                                })
+                                                .map(|s| s.to_string()),
+                                            _ => None,
+                                        };
+                                        let fname = field_ref.name();
+                                        match (ctor_cls, fname) {
+                                            (Some(cls), Some(fn_name)) => lookup_class_fields(&cls)
+                                                .and_then(|fs| {
+                                                    fs.iter()
+                                                        .find(|(n, _)| n == fn_name)
+                                                        .map(|(_, t)| t.clone())
+                                                })
+                                                .or_else(|| {
+                                                    let getter = property_getter_name(fn_name);
+                                                    class_method_return_ty(&cls, &getter)
+                                                })
+                                                .or_else(|| {
+                                                    lookup_inherited_class_fields(&cls)
+                                                        .into_iter()
+                                                        .find(|(_, n, _)| n == fn_name)
+                                                        .map(|(_, _, t)| t)
+                                                }),
+                                            _ => None,
+                                        }
+                                    }
+                                    // Constructor-call receiver, method
+                                    // call: `Foo().bar()` chain shape.
+                                    // Same receiver-Ty rule as the
+                                    // (Call, Reference) arm above, but
+                                    // resolves the trailing method's
+                                    // return Ty rather than a field.
+                                    // Used by `Counter.Bit32()...`-shape
+                                    // chains and any factory-ctor-then-
+                                    // method idiom.
+                                    (KtExpr::Call(ctor), KtExpr::Call(inner_call)) => {
+                                        let ctor_cls = match ctor.callee() {
+                                            Some(KtExpr::Reference(r)) => r
+                                                .name()
+                                                .filter(|n| {
+                                                    n.starts_with(char::is_uppercase)
+                                                        && lookup_name(n).is_none()
+                                                })
+                                                .map(|s| s.to_string()),
+                                            _ => None,
+                                        };
+                                        let inner_meth = match inner_call.callee() {
+                                            Some(KtExpr::Reference(r)) => {
+                                                r.name().map(|s| s.to_string())
+                                            }
+                                            _ => None,
+                                        };
+                                        match (ctor_cls, inner_meth) {
+                                            (Some(cls), Some(m)) => {
+                                                let inner_arity = inner_call
+                                                    .value_argument_list()
+                                                    .map(|al| al.arguments().count())
+                                                    .unwrap_or(0);
+                                                class_method_return_ty(&cls, &m).or_else(|| {
+                                                    jdk_method_return_ty(&cls, &m, inner_arity)
+                                                })
+                                            }
+                                            _ => None,
+                                        }
+                                    }
                                     _ => None,
                                 }
                             } else {
