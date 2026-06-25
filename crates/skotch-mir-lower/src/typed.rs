@@ -806,6 +806,11 @@ struct CrossFileExtFn {
     /// H5b call path; consumers detect this BEFORE emitting the plain
     /// `StaticJava` dispatch.
     is_value_class_extension: Option<(String, Ty)>,
+    /// Phase H5d: surfaced so the call-site dispatch can branch to the
+    /// inline-body splice path (instead of `unbox + StaticJava`) when
+    /// an `inline fun V.foo()` body shape is registered in the
+    /// `VALUE_CLASS_INLINE_EXT_FN_BODIES` table.
+    is_inline: bool,
 }
 
 /// Emit the 7-block inline expansion of `recv.firstOfType<T>()` /
@@ -1264,6 +1269,331 @@ fn register_cross_file_ext_fn(method: &str, recv_class: &str, info: CrossFileExt
         c.borrow_mut()
             .insert((method.to_string(), recv_class.to_string()), info);
     });
+}
+
+/// Phase H5d: snapshot of a same-file value-class `inline fun V.foo()`
+/// body that we can splice at a call site. Carries enough information
+/// to remap slot 0 (the receiver — already-unboxed underlying value)
+/// + user param slots + extra-local slots into the call-site's slot
+/// space and emit the body's statements there directly.
+///
+/// `stmts` are the lowered body's assignments (without the
+/// terminator); `return_slot` is the slot id the body's
+/// `ReturnValue` terminator referred to (relative to the body's own
+/// local layout). `param_count` excludes the receiver slot (which is
+/// always slot 0 in the body). `extra_locals_offset` is the slot id
+/// where extra (body-local) slots start (`= 1 + param_count`).
+/// `extra_locals` carries the Tys of those extras so the call-site
+/// splice can re-push them into the surrounding extra_locals vector.
+#[derive(Clone, Debug)]
+struct ValueClassInlineExtBody {
+    stmts: Vec<skotch_mir::Stmt>,
+    return_slot: skotch_mir::LocalId,
+    param_count: usize,
+    extra_locals: Vec<Ty>,
+    extra_locals_offset: u32,
+}
+
+thread_local! {
+    /// Per-file registry of value-class `inline fun V.foo()` bodies
+    /// recognized as splice-safe. Keyed by `(method_name, V_jvm_name)`.
+    /// Same-file only — cross-file inlining would require plumbing
+    /// the body shape through the resolve crate.
+    static VALUE_CLASS_INLINE_EXT_FN_BODIES:
+        std::cell::RefCell<rustc_hash::FxHashMap<(String, String), ValueClassInlineExtBody>> =
+        std::cell::RefCell::new(rustc_hash::FxHashMap::default());
+}
+
+fn register_value_class_inline_ext_body(
+    method: &str,
+    vc_jvm_name: &str,
+    body: ValueClassInlineExtBody,
+) {
+    VALUE_CLASS_INLINE_EXT_FN_BODIES.with(|c| {
+        c.borrow_mut()
+            .insert((method.to_string(), vc_jvm_name.to_string()), body);
+    });
+}
+
+fn lookup_value_class_inline_ext_body(
+    method: &str,
+    vc_jvm_name: &str,
+) -> Option<ValueClassInlineExtBody> {
+    VALUE_CLASS_INLINE_EXT_FN_BODIES.with(|c| {
+        c.borrow()
+            .get(&(method.to_string(), vc_jvm_name.to_string()))
+            .cloned()
+    })
+}
+
+struct ValueClassInlineExtBodiesScope {
+    prev: rustc_hash::FxHashMap<(String, String), ValueClassInlineExtBody>,
+}
+impl ValueClassInlineExtBodiesScope {
+    fn new() -> Self {
+        let prev = VALUE_CLASS_INLINE_EXT_FN_BODIES.with(|c| std::mem::take(&mut *c.borrow_mut()));
+        Self { prev }
+    }
+}
+impl Drop for ValueClassInlineExtBodiesScope {
+    fn drop(&mut self) {
+        VALUE_CLASS_INLINE_EXT_FN_BODIES.with(|c| *c.borrow_mut() = std::mem::take(&mut self.prev));
+    }
+}
+
+/// Walk a body's `BasicBlock` slice and decide whether it's "splice-safe":
+/// a single linear block whose terminator is `ReturnValue(slot)`. Every
+/// `Stmt::Assign` must reference only Rvalues we know are slot-safe to
+/// remap (Local, Const, BinOp, ArrayLoad, ArrayStore, Cast, CheckCast,
+/// InstanceOf, Field reads/writes, Call). Returns the assignment
+/// statements + the return slot id when splice-safe.
+fn extract_splice_safe_body(
+    blocks: &[BasicBlock],
+) -> Option<(Vec<skotch_mir::Stmt>, skotch_mir::LocalId)> {
+    if blocks.len() != 1 {
+        return None;
+    }
+    let block = &blocks[0];
+    let ret = match &block.terminator {
+        Terminator::ReturnValue(s) => *s,
+        _ => return None,
+    };
+    // All statements are Assigns (the only Stmt variant currently —
+    // matched explicitly so adding new variants forces a re-check).
+    for stmt in block.stmts.iter() {
+        let skotch_mir::Stmt::Assign { .. } = stmt;
+    }
+    Some((block.stmts.clone(), ret))
+}
+
+/// Remap a `LocalId` from the body's slot space into the call site's
+/// slot space. Slot 0 (the body's receiver) maps to `recv_slot`. Slots
+/// `1..=param_count` map into `user_arg_slots`. Higher slots are
+/// body-local extras: each one allocates a fresh slot in the call
+/// site's `extra_locals` on first encounter (tracked via
+/// `extras_map`). Returns `None` if a body slot can't be mapped (e.g.
+/// param slot index out of range — defensive, shouldn't happen on
+/// well-formed splice-safe bodies).
+fn remap_body_slot(
+    body_slot: skotch_mir::LocalId,
+    recv_slot: skotch_mir::LocalId,
+    user_arg_slots: &[skotch_mir::LocalId],
+    param_count: usize,
+    extras_offset: u32,
+    extras: &[Ty],
+    extras_map: &mut rustc_hash::FxHashMap<u32, skotch_mir::LocalId>,
+    next_slot: &mut u32,
+    extra_locals: &mut Vec<Ty>,
+) -> Option<skotch_mir::LocalId> {
+    let s = body_slot.0;
+    if s == 0 {
+        return Some(recv_slot);
+    }
+    if (s as usize) <= param_count {
+        let idx = (s - 1) as usize;
+        return user_arg_slots.get(idx).copied();
+    }
+    if s < extras_offset {
+        // Param-slot gap (e.g. body declared more params than
+        // user_arg_slots — caller bug).
+        return None;
+    }
+    if let Some(mapped) = extras_map.get(&s) {
+        return Some(*mapped);
+    }
+    let extra_idx = (s - extras_offset) as usize;
+    let ty = extras.get(extra_idx).cloned().unwrap_or(Ty::Any);
+    let fresh = skotch_mir::LocalId(*next_slot);
+    *next_slot += 1;
+    extra_locals.push(ty);
+    extras_map.insert(s, fresh);
+    Some(fresh)
+}
+
+/// Remap every `LocalId` inside an `Rvalue` via `remap_body_slot`.
+/// Used by the inline-splice path to rewrite a body statement's
+/// operand slots into the call site's slot space.
+#[allow(clippy::too_many_arguments)]
+fn remap_rvalue_slots(
+    rv: &mut skotch_mir::Rvalue,
+    recv_slot: skotch_mir::LocalId,
+    user_arg_slots: &[skotch_mir::LocalId],
+    param_count: usize,
+    extras_offset: u32,
+    extras: &[Ty],
+    extras_map: &mut rustc_hash::FxHashMap<u32, skotch_mir::LocalId>,
+    next_slot: &mut u32,
+    extra_locals: &mut Vec<Ty>,
+) -> bool {
+    use skotch_mir::Rvalue;
+    let mut remap = |slot: &mut skotch_mir::LocalId| -> bool {
+        match remap_body_slot(
+            *slot,
+            recv_slot,
+            user_arg_slots,
+            param_count,
+            extras_offset,
+            extras,
+            extras_map,
+            next_slot,
+            extra_locals,
+        ) {
+            Some(s) => {
+                *slot = s;
+                true
+            }
+            None => false,
+        }
+    };
+    match rv {
+        Rvalue::Local(s) => remap(s),
+        Rvalue::Const(_) => true,
+        Rvalue::BinOp { lhs, rhs, .. } => remap(lhs) && remap(rhs),
+        Rvalue::ArrayLoad { array, index } => remap(array) && remap(index),
+        Rvalue::ArrayStore {
+            array,
+            index,
+            value,
+        } => remap(array) && remap(index) && remap(value),
+        Rvalue::CheckCast { obj, .. } => remap(obj),
+        Rvalue::InstanceOf { obj, .. } => remap(obj),
+        Rvalue::GetField { receiver, .. } => remap(receiver),
+        Rvalue::PutField {
+            receiver, value, ..
+        } => remap(receiver) && remap(value),
+        Rvalue::Call { args, .. } => {
+            for a in args.iter_mut() {
+                if !remap(a) {
+                    return false;
+                }
+            }
+            true
+        }
+        Rvalue::ArrayLength(s) => remap(s),
+        Rvalue::NewIntArray(s) => remap(s),
+        Rvalue::NewObjectArray(s) => remap(s),
+        Rvalue::NewTypedObjectArray { size, .. } => remap(size),
+        Rvalue::ObjectArrayStore {
+            array,
+            index,
+            value,
+        } => remap(array) && remap(index) && remap(value),
+        Rvalue::PutStaticField { value, .. } => remap(value),
+        Rvalue::GetStaticField { .. } => true,
+        Rvalue::NewInstance(_) => true,
+    }
+}
+
+/// Phase H5d: try the inline-splice path for a cross-file value-class
+/// ext fn call. Looks up a registered body shape, emits an unbox-impl
+/// on the boxed receiver, then splices the body. Returns `None` when
+/// the ext fn isn't `inline`, no body is registered, or the splice
+/// fails — caller then falls back to the dispatch path.
+#[allow(clippy::too_many_arguments)]
+fn try_inline_splice_value_class_ext_call(
+    ext: &CrossFileExtFn,
+    recv_slot: skotch_mir::LocalId,
+    vc_name: &str,
+    u_ty: &Ty,
+    user_arg_slots: &[skotch_mir::LocalId],
+    pre_stmts: &mut Vec<skotch_mir::Stmt>,
+    extra_locals: &mut Vec<Ty>,
+    next_slot: &mut u32,
+) -> Option<skotch_mir::LocalId> {
+    if !ext.is_inline {
+        return None;
+    }
+    let body = lookup_value_class_inline_ext_body(&ext.method_name, vc_name)?;
+    let u_desc = vc_underlying_descriptor(u_ty);
+    let unbox_slot = skotch_mir::LocalId(*next_slot);
+    *next_slot += 1;
+    extra_locals.push(u_ty.clone());
+    pre_stmts.push(skotch_mir::Stmt::Assign {
+        dest: unbox_slot,
+        value: skotch_mir::Rvalue::Call {
+            kind: skotch_mir::CallKind::VirtualJava {
+                class_name: vc_name.to_string(),
+                method_name: "unbox-impl".to_string(),
+                descriptor: format!("(){u_desc}"),
+            },
+            args: vec![recv_slot],
+        },
+    });
+    splice_value_class_inline_ext_body(
+        &body,
+        unbox_slot,
+        user_arg_slots,
+        pre_stmts,
+        extra_locals,
+        next_slot,
+    )
+}
+
+/// Phase H5d: splice a recorded value-class inline-ext-fn body into
+/// the call site. Substitutes slot 0 with `recv_slot`, param slots
+/// with `user_arg_slots`, and freshly allocates each body-local
+/// extra slot. Pushes the remapped assignment statements into
+/// `pre_stmts` and returns the remapped return slot, or `None` when
+/// any operand fails to remap (caller falls back to dispatch).
+#[allow(clippy::too_many_arguments)]
+fn splice_value_class_inline_ext_body(
+    body: &ValueClassInlineExtBody,
+    recv_slot: skotch_mir::LocalId,
+    user_arg_slots: &[skotch_mir::LocalId],
+    pre_stmts: &mut Vec<skotch_mir::Stmt>,
+    extra_locals: &mut Vec<Ty>,
+    next_slot: &mut u32,
+) -> Option<skotch_mir::LocalId> {
+    if user_arg_slots.len() != body.param_count {
+        return None;
+    }
+    let mut extras_map: rustc_hash::FxHashMap<u32, skotch_mir::LocalId> =
+        rustc_hash::FxHashMap::default();
+    let mut remapped_stmts: Vec<skotch_mir::Stmt> = Vec::with_capacity(body.stmts.len());
+    for stmt in body.stmts.iter().cloned() {
+        let skotch_mir::Stmt::Assign { dest, mut value } = stmt;
+        if !remap_rvalue_slots(
+            &mut value,
+            recv_slot,
+            user_arg_slots,
+            body.param_count,
+            body.extra_locals_offset,
+            &body.extra_locals,
+            &mut extras_map,
+            next_slot,
+            extra_locals,
+        ) {
+            return None;
+        }
+        let new_dest = remap_body_slot(
+            dest,
+            recv_slot,
+            user_arg_slots,
+            body.param_count,
+            body.extra_locals_offset,
+            &body.extra_locals,
+            &mut extras_map,
+            next_slot,
+            extra_locals,
+        )?;
+        remapped_stmts.push(skotch_mir::Stmt::Assign {
+            dest: new_dest,
+            value,
+        });
+    }
+    let return_slot = remap_body_slot(
+        body.return_slot,
+        recv_slot,
+        user_arg_slots,
+        body.param_count,
+        body.extra_locals_offset,
+        &body.extra_locals,
+        &mut extras_map,
+        next_slot,
+        extra_locals,
+    )?;
+    pre_stmts.extend(remapped_stmts);
+    Some(return_slot)
 }
 
 /// Bridge a receiver `Ty` to the JVM class name the cross-file
@@ -2860,6 +3190,10 @@ pub fn lower_file(
     // call site picks the matching entry via the receiver slot's Ty
     // (or supertype, via the JDK-collection chain).
     let _cross_file_ext_fns_scope = CrossFileExtFnsScope::new();
+    // Phase H5d: per-file registry of value-class inline ext fn body
+    // shapes for call-site splicing. Cleared at the start of each file
+    // so registrations don't leak between modules.
+    let _value_class_inline_bodies_scope = ValueClassInlineExtBodiesScope::new();
     if let Some(table) = package_symbols {
         for (name, decls) in table.functions.iter() {
             for decl in decls {
@@ -2922,6 +3256,10 @@ pub fn lower_file(
                     // can fire the kotlinc-shaped erased static
                     // dispatch sequence.
                     is_value_class_extension: decl.is_value_class_extension.clone(),
+                    // Phase H5d: surface `inline` so call sites can
+                    // splice the recorded body shape in place of the
+                    // unbox + static-dispatch sequence.
+                    is_inline: decl.is_inline,
                 };
                 register_cross_file_ext_fn(name, &recv_class, cf_ext.clone());
                 // Phase H5c follow-up: also register under the simple
@@ -6002,6 +6340,39 @@ pub fn lower_file(
                 if !locals.is_empty() {
                     locals[0] = vc_underlying.clone();
                 }
+                // Phase H5d: register a snapshot of the lowered body
+                // for inline substitution at call sites in this file.
+                // Only `inline` ext fns get registered (matches
+                // kotlinc's `inline fun V.foo()` source modifier).
+                // Splice-safety check: single-block linear bodies
+                // with a `ReturnValue` terminator and Stmt::Assign
+                // statements (the common shape for expression-body
+                // ext fns like `inline fun V.triple() = x * 3`).
+                if f.is_inline() {
+                    if let Some((stmts, ret_slot)) = extract_splice_safe_body(&blocks) {
+                        let body_param_count = f
+                            .value_parameter_list()
+                            .map(|pl| pl.parameters().count())
+                            .unwrap_or(0);
+                        let extras_offset = (1 + body_param_count) as u32;
+                        let extras: Vec<Ty> = locals
+                            .iter()
+                            .skip(extras_offset as usize)
+                            .cloned()
+                            .collect();
+                        register_value_class_inline_ext_body(
+                            &name,
+                            vc_name,
+                            ValueClassInlineExtBody {
+                                stmts,
+                                return_slot: ret_slot,
+                                param_count: body_param_count,
+                                extra_locals: extras,
+                                extra_locals_offset: extras_offset,
+                            },
+                        );
+                    }
+                }
             }
             // For suspend functions: replace bare Return terminator
             // with a Null assignment + ReturnValue to match legacy
@@ -6247,6 +6618,134 @@ pub fn lower_file(
         )
         .unwrap_or_else(|| build_helper_stub(&spec));
         module.functions.push(helper_fn);
+    }
+
+    // Phase H5d: same-file inline value-class ext fn substitution.
+    // Walk every function's blocks for `Stmt::Assign { value:
+    // Rvalue::Call { kind: CallKind::Static(fid), args } }` where
+    // the target is `is_value_class_extension + is_inline` and has a
+    // recorded splice-safe body. Splice the body's stmts into the
+    // caller, substituting the receiver slot (already-boxed wrapper
+    // — we unbox via VirtualJava::unbox-impl into a fresh slot) and
+    // user-arg slots. Without this, same-file V.method() calls go
+    // through `unbox + invokestatic <name>-<mangle>` at the backend
+    // (Phase H5b), which kotlinc only emits as a fallback — when the
+    // declaration is `inline` kotlinc splices the body at every call
+    // site instead. The cross-file path is handled at the call-site
+    // dispatch arms in lower_rich (see Phase H5d notes there).
+    //
+    // Iteration cap: 4 passes. Splicing can expose nested inline
+    // calls within the spliced body; running the pass a few times
+    // catches them. Bounded so a pathological cyclic-inline source
+    // can't loop forever (kotlinc rejects that at source level).
+    let inline_vc_targets: rustc_hash::FxHashMap<u32, (String, Ty, String)> = module
+        .functions
+        .iter()
+        .enumerate()
+        .filter_map(|(i, f)| {
+            f.is_value_class_extension
+                .as_ref()
+                .filter(|_| f.is_inline)
+                .map(|(vc, u)| (i as u32, (vc.clone(), u.clone(), f.name.clone())))
+        })
+        .collect();
+    if !inline_vc_targets.is_empty() {
+        for _ in 0..4 {
+            let mut any_changed = false;
+            for f_idx in 0..module.functions.len() {
+                let mut next_slot = module.functions[f_idx].locals.len() as u32;
+                let mut new_blocks: Vec<BasicBlock> =
+                    Vec::with_capacity(module.functions[f_idx].blocks.len());
+                let mut extra_locals_appended: Vec<Ty> = Vec::new();
+                for block in module.functions[f_idx].blocks.clone() {
+                    let mut new_stmts: Vec<skotch_mir::Stmt> =
+                        Vec::with_capacity(block.stmts.len());
+                    for stmt in block.stmts {
+                        let skotch_mir::Stmt::Assign { dest, value } = stmt.clone();
+                        if let skotch_mir::Rvalue::Call {
+                            kind: skotch_mir::CallKind::Static(target_fid),
+                            args,
+                        } = &value
+                        {
+                            if let Some((vc_name, u_ty, method_name)) =
+                                inline_vc_targets.get(&target_fid.0)
+                            {
+                                if let Some(body) =
+                                    lookup_value_class_inline_ext_body(method_name, vc_name)
+                                {
+                                    if !args.is_empty() {
+                                        let recv_slot = args[0];
+                                        let user_arg_slots: Vec<skotch_mir::LocalId> =
+                                            args.iter().skip(1).copied().collect();
+                                        let recv_ty = module.functions[f_idx]
+                                            .locals
+                                            .get(recv_slot.0 as usize)
+                                            .cloned()
+                                            .unwrap_or(Ty::Any);
+                                        let mut pre_stmts: Vec<skotch_mir::Stmt> = Vec::new();
+                                        // Unbox unless the caller's slot
+                                        // already holds the underlying.
+                                        let unbox_slot = if recv_ty == *u_ty {
+                                            recv_slot
+                                        } else {
+                                            let u_desc = vc_underlying_descriptor(u_ty);
+                                            let s = skotch_mir::LocalId(next_slot);
+                                            next_slot += 1;
+                                            extra_locals_appended.push(u_ty.clone());
+                                            pre_stmts.push(skotch_mir::Stmt::Assign {
+                                                dest: s,
+                                                value: skotch_mir::Rvalue::Call {
+                                                    kind: skotch_mir::CallKind::VirtualJava {
+                                                        class_name: vc_name.clone(),
+                                                        method_name: "unbox-impl".to_string(),
+                                                        descriptor: format!("(){u_desc}"),
+                                                    },
+                                                    args: vec![recv_slot],
+                                                },
+                                            });
+                                            s
+                                        };
+                                        let mut splice_extras: Vec<Ty> = Vec::new();
+                                        if let Some(ret_slot) = splice_value_class_inline_ext_body(
+                                            &body,
+                                            unbox_slot,
+                                            &user_arg_slots,
+                                            &mut pre_stmts,
+                                            &mut splice_extras,
+                                            &mut next_slot,
+                                        ) {
+                                            extra_locals_appended.extend(splice_extras);
+                                            new_stmts.extend(pre_stmts);
+                                            // Bind the call's dest to the
+                                            // body's return slot via a
+                                            // Local assignment so any
+                                            // downstream stmts that read
+                                            // `dest` continue to work.
+                                            new_stmts.push(skotch_mir::Stmt::Assign {
+                                                dest,
+                                                value: skotch_mir::Rvalue::Local(ret_slot),
+                                            });
+                                            any_changed = true;
+                                            continue;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        new_stmts.push(stmt);
+                    }
+                    new_blocks.push(BasicBlock {
+                        stmts: new_stmts,
+                        terminator: block.terminator,
+                    });
+                }
+                module.functions[f_idx].blocks = new_blocks;
+                module.functions[f_idx].locals.extend(extra_locals_appended);
+            }
+            if !any_changed {
+                break;
+            }
+        }
     }
 
     // Post-process pass: many lowering sites hard-code `BinOp::AddI`
@@ -31539,6 +32038,23 @@ fn lower_rich_expr_to_slot(
                                                 }
                                             }
                                             if all_ok {
+                                                // Phase H5d: try the inline
+                                                // splice path; falls back
+                                                // to the dispatch on None.
+                                                if let Some(rs) =
+                                                    try_inline_splice_value_class_ext_call(
+                                                        &ext,
+                                                        slot,
+                                                        &vc_name,
+                                                        &u_ty,
+                                                        &user_arg_slots,
+                                                        pre_stmts,
+                                                        extra_locals,
+                                                        next_slot,
+                                                    )
+                                                {
+                                                    return Some(rs);
+                                                }
                                                 let result_slot = emit_value_class_ext_dispatch(
                                                     slot,
                                                     &user_arg_slots,
@@ -31949,6 +32465,22 @@ fn lower_rich_expr_to_slot(
                                             }
                                         }
                                         if all_ok {
+                                            // Phase H5d: try inline-splice
+                                            // for the chained-receiver
+                                            // variant; falls back to
+                                            // dispatch on None.
+                                            if let Some(rs) = try_inline_splice_value_class_ext_call(
+                                                &ext,
+                                                recv_slot,
+                                                &vc_name,
+                                                &u_ty,
+                                                &user_arg_slots,
+                                                pre_stmts,
+                                                extra_locals,
+                                                next_slot,
+                                            ) {
+                                                return Some(rs);
+                                            }
                                             let result_slot = emit_value_class_ext_dispatch(
                                                 recv_slot,
                                                 &user_arg_slots,
@@ -46909,6 +47441,105 @@ mod tests {
         assert!(
             diags.has_errors(),
             "expected an error diagnostic for value class with multiple ctor params"
+        );
+    }
+
+    // ── Phase H5d: inline value-class ext fn substitution ──────────
+
+    #[test]
+    fn typed_lower_inline_value_class_ext_splices_body_at_call_site() {
+        // `inline fun V.triple(): Long = x * 3` called as `V(7).triple()`
+        // should NOT emit a static dispatch to `triple-<mangle>`. The
+        // body's `lmul` BinOp should appear directly at the call site
+        // (with slot 0 substituted for the receiver's underlying).
+        let module = lower(
+            "@JvmInline value class V(val x: Long)\n\
+             inline fun V.triple(): Long = x * 3\n\
+             fun main() { println(V(7).triple()) }",
+            "TestKt",
+        );
+        let main_fn = module
+            .functions
+            .iter()
+            .find(|f| f.name == "main")
+            .expect("expected main");
+        let mut saw_static_dispatch = false;
+        let mut saw_inline_lmul = false;
+        for block in &main_fn.blocks {
+            for stmt in &block.stmts {
+                let skotch_mir::Stmt::Assign { value, .. } = stmt;
+                match value {
+                    skotch_mir::Rvalue::Call {
+                        kind: skotch_mir::CallKind::Static(fid),
+                        ..
+                    } => {
+                        let target = &module.functions[fid.0 as usize];
+                        if target.name == "triple" {
+                            saw_static_dispatch = true;
+                        }
+                    }
+                    skotch_mir::Rvalue::BinOp {
+                        op: skotch_mir::BinOp::MulL,
+                        ..
+                    } => {
+                        saw_inline_lmul = true;
+                    }
+                    _ => {}
+                }
+            }
+        }
+        assert!(
+            !saw_static_dispatch,
+            "expected NO Static dispatch to `triple` in main after H5d \
+             splice; got blocks {:#?}",
+            main_fn.blocks
+        );
+        assert!(
+            saw_inline_lmul,
+            "expected the `x * 3` BinOp::MulL spliced inline at the call \
+             site; got blocks {:#?}",
+            main_fn.blocks
+        );
+    }
+
+    #[test]
+    fn typed_lower_non_inline_value_class_ext_still_dispatches() {
+        // Negative control: a NON-inline `fun V.triple()` declaration
+        // should leave the call site's Static dispatch alone — the
+        // H5d post-pass only triggers when the target is BOTH
+        // is_value_class_extension AND is_inline.
+        let module = lower(
+            "@JvmInline value class V(val x: Long)\n\
+             fun V.triple(): Long = x * 3\n\
+             fun main() { println(V(7).triple()) }",
+            "TestKt",
+        );
+        let main_fn = module
+            .functions
+            .iter()
+            .find(|f| f.name == "main")
+            .expect("expected main");
+        let mut saw_static_dispatch = false;
+        for block in &main_fn.blocks {
+            for stmt in &block.stmts {
+                let skotch_mir::Stmt::Assign { value, .. } = stmt;
+                if let skotch_mir::Rvalue::Call {
+                    kind: skotch_mir::CallKind::Static(fid),
+                    ..
+                } = value
+                {
+                    let target = &module.functions[fid.0 as usize];
+                    if target.name == "triple" {
+                        saw_static_dispatch = true;
+                    }
+                }
+            }
+        }
+        assert!(
+            saw_static_dispatch,
+            "expected the dispatch path (NOT inline splice) for a \
+             non-inline value-class ext fn; blocks: {:#?}",
+            main_fn.blocks
         );
     }
 }
