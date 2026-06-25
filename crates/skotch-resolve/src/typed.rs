@@ -40,9 +40,9 @@ use skotch_syntax::{SyntaxKind, Visibility};
 use skotch_types::Ty;
 
 use crate::{
-    DefId, ExternalClassDecl, ExternalClassKind, ExternalConstructor, ExternalFunDecl,
-    ExternalMethod, ExternalParam, ExternalValDecl, PackageSymbolTable, ResolvedFile,
-    ResolvedFunction,
+    CompanionConstValue, DefId, ExternalClassDecl, ExternalClassKind, ExternalConstructor,
+    ExternalFunDecl, ExternalMethod, ExternalParam, ExternalValDecl, PackageSymbolTable,
+    ResolvedFile, ResolvedFunction,
 };
 
 // ── TypeRef → JVM descriptor ────────────────────────────────────────
@@ -778,6 +778,228 @@ fn body_methods_and_props<'a>(
     (methods, props)
 }
 
+/// Extract the compile-time literal value of a `const val` initializer
+/// expression. Returns `None` for shapes that don't constant-fold to a
+/// primitive/String (interpolated string templates, arithmetic, calls,
+/// etc.). Mirrors the subset of `mir_lower::literal_to_const` that we
+/// need to inline cross-file companion-const references — but
+/// `mir-lower` sits ABOVE `skotch-resolve` in the dep graph, so we
+/// duplicate the small parser here. Char literals widen to `Char`; the
+/// declared field type drives the JVM descriptor letter via the
+/// optional `declared` hint (e.g. `: Byte` → `CompanionConstValue::Byte`).
+fn extract_const_lit_value(
+    e: &skotch_ast::KtExpr<'_>,
+    declared: Option<&str>,
+) -> Option<CompanionConstValue> {
+    use skotch_ast::KtExpr;
+    use skotch_syntax::SyntaxKind as S;
+    // Unary minus on a numeric literal.
+    if let KtExpr::Prefix(p) = e {
+        let op_text = skotch_ast::children(p.syntax())
+            .iter()
+            .find_map(|c| {
+                if c.kind == S::OPERATION_REFERENCE {
+                    skotch_ast::KtOperationReference::cast(c).map(|o| o.text())
+                } else {
+                    None
+                }
+            })
+            .unwrap_or_default();
+        if op_text == "-" || op_text == "+" {
+            let inner = skotch_ast::children(p.syntax())
+                .iter()
+                .find_map(KtExpr::cast)?;
+            let v = extract_const_lit_value(&inner, declared)?;
+            if op_text == "+" {
+                return Some(v);
+            }
+            return match v {
+                CompanionConstValue::Int(n) => Some(CompanionConstValue::Int(-n)),
+                CompanionConstValue::Long(n) => Some(CompanionConstValue::Long(-n)),
+                CompanionConstValue::Byte(n) => Some(CompanionConstValue::Byte(-n)),
+                CompanionConstValue::Float(n) => Some(CompanionConstValue::Float(-n)),
+                CompanionConstValue::Double(n) => Some(CompanionConstValue::Double(-n)),
+                _ => None,
+            };
+        }
+        return None;
+    }
+    match e {
+        KtExpr::Integer(_) => {
+            let (text, is_long) =
+                skotch_ast::children(e.syntax())
+                    .iter()
+                    .find_map(|c| match c.kind {
+                        S::INTEGER_LITERAL => {
+                            if let skotch_sil::SilData::Token { text } = &c.data {
+                                return Some((text.as_str().to_string(), false));
+                            }
+                            None
+                        }
+                        S::LONG_LITERAL => {
+                            if let skotch_sil::SilData::Token { text } = &c.data {
+                                return Some((text.as_str().to_string(), true));
+                            }
+                            None
+                        }
+                        _ => None,
+                    })?;
+            let parse_int = |s: &str| -> Option<i64> {
+                let s = s.replace('_', "");
+                if let Some(hex) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
+                    return i64::from_str_radix(hex, 16).ok();
+                }
+                if let Some(bin) = s.strip_prefix("0b").or_else(|| s.strip_prefix("0B")) {
+                    return i64::from_str_radix(bin, 2).ok();
+                }
+                s.parse().ok()
+            };
+            if is_long {
+                let trimmed = text.trim_end_matches(['L', 'l']);
+                let v = parse_int(trimmed)?;
+                return Some(CompanionConstValue::Long(v));
+            }
+            let v = parse_int(&text)?;
+            // The declared type drives the variant: `: Byte` → Byte,
+            // `: Long` → Long (no `L` suffix needed on the literal),
+            // else default Int.
+            match declared {
+                Some("Byte") => Some(CompanionConstValue::Byte(v as i8)),
+                Some("Long") => Some(CompanionConstValue::Long(v)),
+                _ => Some(CompanionConstValue::Int(v as i32)),
+            }
+        }
+        KtExpr::Boolean(_) => {
+            let is_true = skotch_ast::children(e.syntax())
+                .iter()
+                .any(|c| c.kind == S::KW_TRUE);
+            Some(CompanionConstValue::Bool(is_true))
+        }
+        KtExpr::Character(_) => {
+            let text = skotch_ast::children(e.syntax()).iter().find_map(|c| {
+                if c.kind == S::CHARACTER_LITERAL {
+                    if let skotch_sil::SilData::Token { text } = &c.data {
+                        return Some(text.as_str().to_string());
+                    }
+                }
+                None
+            })?;
+            let inner = text.strip_prefix('\'')?.strip_suffix('\'')?;
+            let ch = match inner {
+                "\\n" => '\n',
+                "\\t" => '\t',
+                "\\r" => '\r',
+                "\\\\" => '\\',
+                "\\'" => '\'',
+                "\\\"" => '"',
+                "\\0" => '\0',
+                _ => inner.chars().next()?,
+            };
+            Some(CompanionConstValue::Char(ch))
+        }
+        KtExpr::Float(_) => {
+            let (text, is_float) = skotch_ast::children(e.syntax())
+                .iter()
+                .find_map(|c| match c.kind {
+                    S::FLOAT_LITERAL => {
+                        if let skotch_sil::SilData::Token { text } = &c.data {
+                            return Some((text.as_str().to_string(), true));
+                        }
+                        None
+                    }
+                    S::DOUBLE_LITERAL => {
+                        if let skotch_sil::SilData::Token { text } = &c.data {
+                            return Some((text.as_str().to_string(), false));
+                        }
+                        None
+                    }
+                    _ => None,
+                })?;
+            if is_float {
+                let trimmed = text.trim_end_matches(['f', 'F']);
+                let v: f32 = trimmed.parse().ok()?;
+                Some(CompanionConstValue::Float(v))
+            } else {
+                let v: f64 = text.parse().ok()?;
+                Some(CompanionConstValue::Double(v))
+            }
+        }
+        KtExpr::String(_) => {
+            // Only pure literal (no interpolation) — extract the
+            // concatenated LITERAL_STRING_TEMPLATE_ENTRY contents.
+            let mut buf = String::new();
+            for child in skotch_ast::children(e.syntax()) {
+                match child.kind {
+                    S::LITERAL_STRING_TEMPLATE_ENTRY => {
+                        for cc in skotch_ast::children(child) {
+                            if cc.kind == S::STRING_CHUNK {
+                                if let skotch_sil::SilData::Token { text } = &cc.data {
+                                    buf.push_str(text);
+                                }
+                            }
+                        }
+                    }
+                    S::ESCAPE_STRING_TEMPLATE_ENTRY => {
+                        for cc in skotch_ast::children(child) {
+                            if let skotch_sil::SilData::Token { text } = &cc.data {
+                                let raw = text.as_str();
+                                if let Some(stripped) = raw.strip_prefix('\\') {
+                                    match stripped.chars().next() {
+                                        Some('n') => buf.push('\n'),
+                                        Some('t') => buf.push('\t'),
+                                        Some('r') => buf.push('\r'),
+                                        Some('\\') => buf.push('\\'),
+                                        Some('"') => buf.push('"'),
+                                        Some('\'') => buf.push('\''),
+                                        Some('$') => buf.push('$'),
+                                        Some('b') => buf.push('\u{0008}'),
+                                        Some('0') => buf.push('\0'),
+                                        Some(other) => buf.push(other),
+                                        None => {}
+                                    }
+                                } else {
+                                    buf.push_str(raw);
+                                }
+                            }
+                        }
+                    }
+                    S::STRING_START | S::STRING_END | S::WHITE_SPACE => {}
+                    // Any other entry kind (SHORT/LONG/BLOCK template
+                    // entry) means interpolation — not a foldable literal.
+                    _ => return None,
+                }
+            }
+            Some(CompanionConstValue::String(buf))
+        }
+        _ => None,
+    }
+}
+
+/// Collect compile-time `const val` declarations from a class's
+/// companion object. Drives cross-file inlining of inherited
+/// companion-const references at sub-class call sites (e.g.
+/// `class SHA3_256: KeccakDigest { constructor(): super(algorithm =
+/// "${SHA3}-256", …) }` — `SHA3` is a `const val` on
+/// `KeccakDigest`'s companion).
+fn companion_const_inits(comp_props: &[KtProperty<'_>]) -> Vec<(String, CompanionConstValue)> {
+    comp_props
+        .iter()
+        .filter_map(|p| {
+            if !p.is_const() {
+                return None;
+            }
+            let name = p.name()?.to_string();
+            let init = p.initializer()?;
+            let declared = p
+                .type_reference()
+                .and_then(|tr| tr.user_type())
+                .and_then(|u| u.name());
+            let v = extract_const_lit_value(&init, declared)?;
+            Some((name, v))
+        })
+        .collect()
+}
+
 fn companion_members<'a>(
     body: Option<KtClassBody<'a>>,
 ) -> (Vec<KtFun<'a>>, Vec<KtProperty<'a>>, bool) {
@@ -970,6 +1192,7 @@ fn gather_class_recursive(
         .map(|m| ext_method_from_fun(*m, imports, aliases))
         .collect();
     companion_methods.extend(comp_property_getters);
+    let companion_const_inits_v = companion_const_inits(&comp_props);
 
     let secondary_ctors: Vec<ExternalConstructor> = c
         .body()
@@ -1010,6 +1233,7 @@ fn gather_class_recursive(
             .unwrap_or(false),
         is_value_class,
         value_underlying_ty,
+        companion_const_inits: companion_const_inits_v,
     };
     register_class(table, &simple_name, ext);
 
@@ -1090,6 +1314,7 @@ fn gather_object(
         // value object`. Always false.
         is_value_class: false,
         value_underlying_ty: None,
+        companion_const_inits: Vec::new(),
     };
     register_class(table, name, ext);
 }
@@ -1154,6 +1379,7 @@ fn gather_interface(
         // Interfaces can't be value classes. Always false.
         is_value_class: false,
         value_underlying_ty: None,
+        companion_const_inits: Vec::new(),
     };
     register_class(table, name, ext);
 }
@@ -1225,6 +1451,7 @@ fn gather_enum(
         // Enums can't be value classes. Always false.
         is_value_class: false,
         value_underlying_ty: None,
+        companion_const_inits: Vec::new(),
     };
     register_class(table, name, ext);
 }

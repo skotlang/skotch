@@ -39239,6 +39239,85 @@ fn collect_secondary_ctors(
                 out
             })
             .unwrap_or_default();
+        // Inherited companion `const val`s: walk the super-class chain
+        // through `package_symbols.classes_by_fq` collecting every
+        // `companion_const_inits` entry. Kotlin lets a subclass refer
+        // to inherited companion-const names by simple name in its
+        // body — kotlinc constant-folds those references at the use
+        // site (the JVM emits `ldc "SHA3"` / `bipush 6` rather than
+        // `getstatic`). This list lets us match kotlinc's shape at
+        // sub-class secondary ctor delegation arg sites without
+        // depending on the ConstantValue attribute on the parent's
+        // static-final field at link time. Required to graduate
+        // parity/101-hash where `SHA3_256` extends `KeccakDigest` and
+        // its `: super(algorithm = "${SHA3}-256", dsByte = PAD_SHA3)`
+        // delegation references both `SHA3` (String) and `PAD_SHA3`
+        // (Byte) from the parent's companion.
+        let inherited_companion_consts: Vec<(String, skotch_mir::MirConst, Ty)> = {
+            use skotch_resolve::CompanionConstValue as CCV;
+            let mut out: Vec<(String, skotch_mir::MirConst, Ty)> = Vec::new();
+            if let Some(ps) = package_symbols {
+                // The super class FQ may arrive as a slashed JVM
+                // internal name OR a simple name; try both keys.
+                let lookup_decl = |name: &str| -> Option<&skotch_resolve::ExternalClassDecl> {
+                    ps.classes_by_fq
+                        .get(name)
+                        .or_else(|| ps.classes_by_fq.get(&name.replace('.', "/")))
+                        .or_else(|| {
+                            name.rsplit('/')
+                                .next()
+                                .and_then(|simple| ps.classes.get(simple))
+                        })
+                };
+                let mut current: Option<String> = super_class_fq.map(String::from);
+                let mut hops = 0;
+                // Hop-limit guards against pathological cycles in the
+                // table (shouldn't happen for well-typed sources, but
+                // a malformed cross-file entry could otherwise loop).
+                while let Some(name) = current.take() {
+                    if hops > 32 {
+                        break;
+                    }
+                    hops += 1;
+                    let Some(decl) = lookup_decl(&name) else {
+                        break;
+                    };
+                    for (cname, cval) in &decl.companion_const_inits {
+                        // Same-class entry shadows inherited;
+                        // existing-name in `out` (from a closer
+                        // ancestor) keeps its slot too.
+                        if out.iter().any(|(n, _, _)| n == cname) {
+                            continue;
+                        }
+                        // String values need the module's shared
+                        // strings pool to register the interned StringId.
+                        let pair = match cval {
+                            CCV::String(s) => {
+                                let sid = match shared_strings.iter().position(|x| x == s) {
+                                    Some(i) => skotch_mir::StringId(i as u32),
+                                    None => {
+                                        let id = skotch_mir::StringId(shared_strings.len() as u32);
+                                        shared_strings.push(s.clone());
+                                        id
+                                    }
+                                };
+                                (skotch_mir::MirConst::String(sid), Ty::String)
+                            }
+                            CCV::Int(v) => (skotch_mir::MirConst::Int(*v), Ty::Int),
+                            CCV::Long(v) => (skotch_mir::MirConst::Long(*v), Ty::Long),
+                            CCV::Bool(v) => (skotch_mir::MirConst::Bool(*v), Ty::Bool),
+                            CCV::Byte(v) => (skotch_mir::MirConst::Int(*v as i32), Ty::Byte),
+                            CCV::Char(v) => (skotch_mir::MirConst::Int(*v as i32), Ty::Char),
+                            CCV::Float(v) => (skotch_mir::MirConst::Float(*v), Ty::Float),
+                            CCV::Double(v) => (skotch_mir::MirConst::Double(*v), Ty::Double),
+                        };
+                        out.push((cname.clone(), pair.0, pair.1));
+                    }
+                    current = decl.super_class.clone();
+                }
+            }
+            out
+        };
         // Allocate fresh local slots above the user-param window for
         // any const ops we need to emit. Slot 0 = `this`, 1..=N = user
         // params, N+1.. = our scratch.
@@ -39274,6 +39353,30 @@ fn collect_secondary_ctors(
                         }
                         if let Some((_, mc, fty)) =
                             companion_consts.iter().find(|(fname, _, _)| fname == name)
+                        {
+                            let slot = skotch_mir::LocalId(next_slot);
+                            next_slot += 1;
+                            locals.push(fty.clone());
+                            pre_stmts.push(skotch_mir::Stmt::Assign {
+                                dest: slot,
+                                value: skotch_mir::Rvalue::Const(mc.clone()),
+                            });
+                            return Some(slot);
+                        }
+                        // Inherited companion `const val` from a
+                        // super-class. Kotlin lets sub-classes refer
+                        // to these by simple name from anywhere in
+                        // the body (including the super-ctor
+                        // delegation expression), and kotlinc
+                        // constant-folds the value at the use site
+                        // — we mirror that here so the call-site
+                        // descriptor is `B`/`I`/`Ljava/lang/String;`
+                        // instead of the bogus `LSHA3;`/`LPAD_SHA3;`
+                        // the otherwise-fall-through-to-object
+                        // resolver would synthesize.
+                        if let Some((_, mc, fty)) = inherited_companion_consts
+                            .iter()
+                            .find(|(fname, _, _)| fname == name)
                         {
                             let slot = skotch_mir::LocalId(next_slot);
                             next_slot += 1;
@@ -39411,9 +39514,17 @@ fn collect_secondary_ctors(
                             if companion_name_to_slot.contains_key(id) {
                                 continue;
                             }
-                            if let Some((_, mc, fty)) =
-                                companion_consts.iter().find(|(fname, _, _)| fname == id)
-                            {
+                            // Same-class shadows inherited (Kotlin
+                            // scoping rule).
+                            let hit = companion_consts
+                                .iter()
+                                .find(|(fname, _, _)| fname == id)
+                                .or_else(|| {
+                                    inherited_companion_consts
+                                        .iter()
+                                        .find(|(fname, _, _)| fname == id)
+                                });
+                            if let Some((_, mc, fty)) = hit {
                                 let slot = skotch_mir::LocalId(next_slot);
                                 next_slot += 1;
                                 locals.push(fty.clone());

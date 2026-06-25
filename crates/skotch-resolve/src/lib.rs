@@ -374,6 +374,42 @@ pub struct ExternalClassDecl {
     /// `None` when the class is not a value class.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub value_underlying_ty: Option<Ty>,
+    /// Compile-time-known `const val` declarations on this class's
+    /// companion object, paired with their literal value. Kotlin
+    /// compiles a `companion object { const val NAME = LITERAL }`
+    /// shape as a `static final` field on the OUTER class with a
+    /// `ConstantValue` attribute, and constant-folds bare references
+    /// to `NAME` at every use site. Subclasses can refer to inherited
+    /// `const val`s by simple name in their bodies — the cross-file
+    /// caller (mir-lower's super-ctor delegation walker) walks the
+    /// super-class chain in this table and inlines the matching value
+    /// at the call site, the same way kotlinc does. Empty for kinds
+    /// with no companion (object, enum, interface) and for companions
+    /// that hold no `const val` decls.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub companion_const_inits: Vec<(String, CompanionConstValue)>,
+}
+
+/// Compile-time value of a `const val` declared inside a class's
+/// companion object. Encodes the literal type so cross-file consumers
+/// can pick the right `MirConst` variant and JVM descriptor letter
+/// (e.g. `B` vs `I`) without re-parsing the source text. Mirrors the
+/// shape of `MirConst` from `skotch-mir` without pulling in that
+/// dependency — `skotch-resolve` sits below `mir-lower` in the dep
+/// graph.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub enum CompanionConstValue {
+    String(String),
+    Int(i32),
+    Long(i64),
+    Bool(bool),
+    /// Byte-typed `const val` — JVM has no Byte primitive at the
+    /// operand-stack level, but the descriptor letter (`B`) matters
+    /// at the call site so we carry the declared-type tag here.
+    Byte(i8),
+    Char(char),
+    Float(f32),
+    Double(f64),
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
