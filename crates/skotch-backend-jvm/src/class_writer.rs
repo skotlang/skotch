@@ -16253,6 +16253,106 @@ fn walk_block(
                         continue;
                     }
                     let target = &module.functions[target_id.0 as usize];
+                    // Phase H5b: top-level extension fn whose receiver
+                    // is a `@JvmInline value class V(val u: U)`. H5a
+                    // emitted the method as
+                    //   `static <name>-<mangle>(<U>, args)<ret>`
+                    // on the file facade with the underlying primitive
+                    // in slot 0. The call site holds the wrapper
+                    // instance in `args[0]` (Ty::Class(V)) — we need
+                    // to:
+                    //   1. load receiver
+                    //   2. `invokevirtual V.unbox-impl()<U>` to extract
+                    //      the underlying (skipped when the receiver
+                    //      slot is already the underlying primitive,
+                    //      e.g. when value-class field plumbing has
+                    //      collapsed slot 0 into the underlying — the
+                    //      H5a body's `Local(0)` rewrite produces this
+                    //      shape for nested calls)
+                    //   3. load remaining args
+                    //   4. `invokestatic FacadeKt.<name>-<mangle>
+                    //      (<U>, args)<ret>` using the H5a-mangled name
+                    //      and the descriptor that already falls out
+                    //      of `jvm_descriptor(target)` since target's
+                    //      slot 0 is the underlying.
+                    // Default-arg dispatch and the value-class shape
+                    // are mutually exclusive in practice (kotlinc
+                    // doesn't accept default params on value-class
+                    // receivers in the corpus); H5b short-circuits
+                    // BEFORE the default-arg path so we don't double-
+                    // load the receiver.
+                    if let Some((vc_name, u_ty)) = target.is_value_class_extension.clone() {
+                        if !args.is_empty() {
+                            let recv = args[0];
+                            let recv_ty = func.locals[recv.0 as usize].clone();
+                            load_local(code, stack, max_stack, slots, recv, &func.locals);
+                            // If the caller already holds the unboxed
+                            // underlying (e.g. inside another H5a body
+                            // where slot 0 is the underlying), skip the
+                            // unbox-impl. Otherwise emit it. The
+                            // detection compares the caller's slot Ty
+                            // to the underlying — when they match no
+                            // unbox is needed.
+                            let already_unboxed = recv_ty == u_ty;
+                            if !already_unboxed {
+                                let u_desc = value_class::underlying_descriptor(&u_ty);
+                                let unbox_desc = format!("(){u_desc}");
+                                let unbox_mref = cp.methodref(&vc_name, "unbox-impl", &unbox_desc);
+                                code.push(0xB6); // invokevirtual
+                                code.write_u16::<BigEndian>(unbox_mref).unwrap();
+                                let u_width = if matches!(u_ty, Ty::Long | Ty::Double) {
+                                    2
+                                } else {
+                                    1
+                                };
+                                // pop wrapper (1) + push underlying (u_width).
+                                bump(stack, max_stack, -1 + u_width);
+                            }
+                            // Load remaining user args.
+                            let mut user_arg_width: i32 = 0;
+                            for a in args.iter().skip(1) {
+                                load_local(code, stack, max_stack, slots, *a, &func.locals);
+                                let aty = &func.locals[a.0 as usize];
+                                user_arg_width += if matches!(aty, Ty::Long | Ty::Double) {
+                                    2
+                                } else {
+                                    1
+                                };
+                            }
+                            let mp = value_class::MangleParam {
+                                fq_name: vc_name.replace('/', "."),
+                                is_value: true,
+                                is_nullable: false,
+                            };
+                            let mangled = value_class::static_impl_name(&target.name, &[mp]);
+                            let descriptor = jvm_descriptor(target);
+                            let effective_class = module.wrapper_class.as_str();
+                            let mref = cp.methodref(effective_class, &mangled, &descriptor);
+                            code.push(0xB8); // invokestatic
+                            code.write_u16::<BigEndian>(mref).unwrap();
+                            let u_width = if matches!(u_ty, Ty::Long | Ty::Double) {
+                                2
+                            } else {
+                                1
+                            };
+                            let ret_width = match &target.return_ty {
+                                Ty::Unit | Ty::Nothing => 0,
+                                Ty::Long | Ty::Double => 2,
+                                _ => 1,
+                            };
+                            bump(stack, max_stack, -(u_width + user_arg_width) + ret_width);
+                            if matches!(target.return_ty, Ty::Unit | Ty::Nothing) {
+                                // No result to store.
+                            } else if is_unused_local(*dest) {
+                                let pop_opcode = if ret_width == 2 { 0x58 } else { 0x57 };
+                                code.push(pop_opcode);
+                                bump(stack, max_stack, -ret_width);
+                            } else {
+                                store_local(code, stack, slots, next_slot, *dest, &func.locals);
+                            }
+                            continue;
+                        }
+                    }
                     for (i, a) in args.iter().enumerate() {
                         // Default-arg dispatch: if MIR-lower flagged this
                         // call as taking the default at position `i`,
@@ -31376,6 +31476,106 @@ fun P.triple(): Long = x * 3
         assert!(
             !mangled,
             "non-value-class extension fn must NOT be KEEP-104 mangled"
+        );
+    }
+
+    // ─── Phase H5b: value-class extension fn call-site rewriting ────
+
+    #[test]
+    fn h5b_value_class_extension_call_site_unboxes_and_invokes_mangled() {
+        // The H5a-emitted `triple-Wv3fJ18(J)J` static must be called
+        // from `main()` with the receiver routed through
+        // `V.unbox-impl()J`. Without the H5b rewrite the call site
+        // would invoke `triple(LV;)J` which doesn't exist → LinkError.
+        let src = r#"
+@JvmInline
+value class V(val x: Long)
+
+fun V.triple(): Long = x * 3
+
+fun main() {
+    println(V(7).triple())
+}
+"#;
+        let wrapper = compile_named(src, "HelloKt");
+        let s = String::from_utf8_lossy(&wrapper);
+        assert!(
+            s.contains("unbox-impl"),
+            "expected `unbox-impl` reference at the V.triple() call site"
+        );
+        assert!(
+            s.contains("triple-Wv3fJ18"),
+            "expected mangled `triple-Wv3fJ18` methodref at the call site"
+        );
+        // The unmangled `triple(LV;)J` shape must NOT be in the
+        // constant pool — that would mean the old non-rewritten call
+        // path was still active.
+        assert!(
+            !s.contains("triple(LV;)J"),
+            "stale `triple(LV;)J` descriptor leaked — H5b rewriting did not fire"
+        );
+    }
+
+    #[test]
+    fn h5b_value_class_extension_with_int_underlying_calls_mangled_static() {
+        // `value class W(val n: Int); fun W.scaled(k: Int): Int`. The
+        // call site `W(3).scaled(4)` must route through `unbox-impl()I`
+        // and `scaled-<hash>(II)I`.
+        let src = r#"
+@JvmInline
+value class W(val n: Int)
+
+fun W.scaled(k: Int): Int = n + k
+
+fun main() {
+    println(W(3).scaled(4))
+}
+"#;
+        let wrapper = compile_named(src, "HelloKt");
+        let s = String::from_utf8_lossy(&wrapper);
+        assert!(
+            s.contains("unbox-impl"),
+            "expected `unbox-impl` at the W.scaled() call site"
+        );
+        assert!(
+            s.contains("scaled-"),
+            "expected mangled `scaled-<hash>` methodref at the call site"
+        );
+        // The H5a-emitted descriptor is `(II)I` — must appear in CP.
+        assert!(
+            s.contains("(II)I"),
+            "expected `(II)I` descriptor — H5b should reuse the H5a-emitted descriptor"
+        );
+    }
+
+    #[test]
+    fn h5b_value_class_extension_array_underlying_routes_through_unbox() {
+        // Underlying type that's a reference (IntArray): the call site
+        // must still emit `unbox-impl()[I` before the static call.
+        let src = r#"
+@JvmInline
+value class V(val arr: IntArray)
+
+fun V.first(): Int = arr[0]
+
+fun main() {
+    println(V(intArrayOf(7, 8)).first())
+}
+"#;
+        let wrapper = compile_named(src, "HelloKt");
+        let s = String::from_utf8_lossy(&wrapper);
+        assert!(
+            s.contains("unbox-impl"),
+            "expected `unbox-impl` at the V.first() call site for IntArray-underlying value class"
+        );
+        // `first-<hash>([I)I` is the H5a-emitted shape.
+        assert!(
+            s.contains("first-"),
+            "expected mangled `first-<hash>` methodref at the call site"
+        );
+        assert!(
+            s.contains("([I)I"),
+            "expected `([I)I` descriptor — H5b should reuse the H5a-emitted descriptor"
         );
     }
 }
