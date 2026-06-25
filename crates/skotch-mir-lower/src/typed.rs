@@ -124,6 +124,78 @@ fn class_method_return_ty(class_name: &str, method_name: &str) -> Option<Ty> {
     })
 }
 
+/// Walk `start`'s super chain (via CLASS_SUPER) and look up
+/// `method_name` at each level. Returns the return Ty of the first
+/// match. Tries CLASS_METHODS first (user classes + cross-file
+/// `ExternalClassDecl.methods`), then classinfo (`jdk_method_return_ty`)
+/// for parents that live in a classpath JAR — e.g. `Bit32Digest` (user
+/// class) extends `Digest` (JAR class) and a bare `digestLength()` in
+/// `Bit32Digest`'s body must resolve through `Digest.digestLength()` in
+/// the digest-jvm.jar.
+///
+/// `arity` is the source-side arg count (no receiver), passed through to
+/// `jdk_method_return_ty`. The walker does not check `start` itself —
+/// callers should consult `class_method_return_ty(start, m)` first.
+///
+/// `start` is keyed against CLASS_SUPER which stores user classes by
+/// simple name (`Bit32Digest`) but lowering passes the FQ form
+/// (`org/kotlincrypto/hash/sha2/Bit32Digest`). Try both so the chain
+/// walks regardless of which form a caller carries.
+fn inherited_method_return_ty(start: &str, method_name: &str, arity: usize) -> Option<Ty> {
+    fn class_super(name: &str) -> Option<String> {
+        CLASS_SUPER.with(|c| {
+            let t = c.borrow();
+            if let Some(p) = t.get(name) {
+                return Some(p.clone());
+            }
+            // Caller passed an FQ name (`a/b/Bit32Digest`) — retry with
+            // the simple last segment (`Bit32Digest`) which is how
+            // CLASS_SUPER is keyed for user classes.
+            let post_slash = name.rsplit('/').next().unwrap_or(name);
+            if post_slash != name {
+                if let Some(p) = t.get(post_slash) {
+                    return Some(p.clone());
+                }
+            }
+            // Nested-class form (`Outer$Inner` after the package strip)
+            // — try the dollar-qualified form (CLASS_SUPER's nested
+            // entry) then the simple inner name.
+            let post_dollar = post_slash.rsplit('$').next().unwrap_or(post_slash);
+            if post_dollar != post_slash {
+                if let Some(p) = t.get(post_dollar) {
+                    return Some(p.clone());
+                }
+            }
+            None
+        })
+    }
+    let mut name = class_super(start)?;
+    for _ in 0..32 {
+        // `name` is FQ when it came from CLASS_SUPER (cross-file path
+        // stores FQ; in-file path stores the FQ form produced by
+        // collect_class_super_iface's `to_fq`). Try CLASS_METHODS with
+        // both forms — user classes are keyed by simple name.
+        let simple = name.rsplit('/').next().unwrap_or(&name).to_string();
+        if let Some(rt) = class_method_return_ty(&simple, method_name) {
+            return Some(rt);
+        }
+        if simple != name {
+            if let Some(rt) = class_method_return_ty(&name, method_name) {
+                return Some(rt);
+            }
+        }
+        // classinfo lookup requires the FQ JVM-internal form.
+        if let Some(rt) = jdk_method_return_ty(&name, method_name, arity) {
+            return Some(rt);
+        }
+        match class_super(&name) {
+            Some(p) => name = p,
+            None => return None,
+        }
+    }
+    None
+}
+
 /// JDK / Kotlin-stdlib method return-Ty lookup. Used as a fallback by
 /// the DotQualified+Call dispatch paths so chained calls
 /// (`sb.append("x").append("y")`) can determine the receiver Ty of the
@@ -3948,6 +4020,68 @@ pub fn lower_file(
         table
     };
     let _typealias_scope = TypeAliasScope::new(typealias_table);
+
+    // CLASS_SUPER scope must be installed BEFORE class lowering — class
+    // method bodies whose `current_class_name()` lands on a sub-class
+    // and use a bare `inheritedMethod()` need the super-chain walker
+    // (`inherited_method_return_ty`) to find the method's owning class.
+    // The original CLASS_SUPER scope was installed at line 6133, AFTER
+    // class lowering — so during nested method body lowering it was
+    // empty and inherited dispatch silently bailed. Walks file.decls()
+    // (top-level) plus each class's body for `KtDecl::Class` (nested),
+    // matching the MirClass emission scope. Cross-file user classes
+    // also seed via `package_symbols.classes`.
+    let class_super_table_early: rustc_hash::FxHashMap<String, String> = {
+        let mut t: rustc_hash::FxHashMap<String, String> = rustc_hash::FxHashMap::default();
+        // Walk top-level classes + nested. For nested classes the key is
+        // both the simple name (`Bit32`) AND the `Outer$Inner` form
+        // (`BLAKE2Digest$Bit32`) — the dispatch site's `class_name`
+        // arrives in the dollar-qualified form (since
+        // `collect_class_methods` for a nested class is called with
+        // `nested_qname = format!("{}${}", name, nested_simple)`).
+        fn walk_class<'a>(
+            c: skotch_ast::KtClass<'a>,
+            outer_qname: Option<&str>,
+            t: &mut rustc_hash::FxHashMap<String, String>,
+        ) {
+            let Some(cname) = c.name() else { return };
+            let (sc, _) = collect_class_super_iface_aware(c);
+            let qname = match outer_qname {
+                Some(o) => format!("{o}${cname}"),
+                None => cname.to_string(),
+            };
+            if let Some(s) = sc {
+                t.entry(cname.to_string()).or_insert_with(|| s.clone());
+                if qname != cname {
+                    t.entry(qname.clone()).or_insert(s);
+                }
+            }
+            if let Some(body) = c.body() {
+                for d in body.declarations() {
+                    if let KtDecl::Class(nested) = d {
+                        walk_class(nested, Some(&qname), t);
+                    }
+                }
+            }
+        }
+        for decl in file.decls() {
+            if let KtDecl::Class(c) = decl {
+                walk_class(c, None, &mut t);
+            }
+        }
+        if let Some(tbl) = package_symbols {
+            for (simple_name, decl) in tbl.classes.iter() {
+                if let Some(sc) = decl.super_class.as_ref() {
+                    let fq = skotch_types::intrinsics::kotlin_to_jvm_class(sc)
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| sc.clone());
+                    t.entry(simple_name.clone()).or_insert(fq);
+                }
+            }
+        }
+        t
+    };
+    let _class_super_scope_early = ClassSuperScope::new(class_super_table_early);
 
     // CLASS_METHODS scope must be installed BEFORE class
     // processing — otherwise method bodies that reference sibling
@@ -33888,18 +34022,50 @@ fn lower_rich_expr_to_slot(
                 // own `method_name` — walk the implicit-receiver stack
                 // innermost-first and pick the first frame whose class
                 // owns the method.
-                let dispatch_target: Option<(LocalId, String)> =
-                    if method_name.starts_with(char::is_uppercase) {
-                        None
-                    } else if let Some(class_name) = current_class_name() {
-                        Some((LocalId(0), class_name))
-                    } else {
-                        all_implicit_receivers()
-                            .into_iter()
-                            .find(|(_, cls)| class_method_return_ty(cls, method_name).is_some())
-                    };
+                // Source-side arg count (no receiver), pre-walked here
+                // because `inherited_method_return_ty` needs it to
+                // consult classinfo for parents that live in a
+                // classpath JAR (e.g. `Bit32Digest.digestLength()`
+                // resolves to `Digest.digestLength()` in
+                // digest-jvm.jar).
+                let call_arity: usize = call
+                    .value_argument_list()
+                    .map(|al| al.arguments().count())
+                    .unwrap_or(0);
+                let dispatch_target: Option<(LocalId, String)> = if method_name
+                    .starts_with(char::is_uppercase)
+                {
+                    None
+                } else if let Some(class_name) = current_class_name() {
+                    Some((LocalId(0), class_name))
+                } else {
+                    all_implicit_receivers().into_iter().find(|(_, cls)| {
+                        class_method_return_ty(cls, method_name).is_some()
+                            || inherited_method_return_ty(cls, method_name, call_arity).is_some()
+                    })
+                };
                 if let Some((recv_slot, class_name)) = dispatch_target {
-                    if let Some(ret_ty) = class_method_return_ty(&class_name, method_name) {
+                    // Walk the super chain when the method isn't
+                    // declared directly on `class_name` — Kotlin's
+                    // implicit-this dispatch resolves inherited methods
+                    // (e.g. bare `digestLength()` inside `Bit32Digest`'s
+                    // body lowers to `invokevirtual
+                    // Bit32Digest.digestLength` where the JVM resolves
+                    // through the super chain to `Digest.digestLength`
+                    // at link time). `class_name` may be the FQ form
+                    // (`org/kotlincrypto/.../Bit32Digest`) while
+                    // CLASS_METHODS is keyed by the simple last segment.
+                    let class_simple = class_name
+                        .rsplit('/')
+                        .next()
+                        .unwrap_or(&class_name)
+                        .to_string();
+                    if let Some(ret_ty) = class_method_return_ty(&class_simple, method_name)
+                        .or_else(|| class_method_return_ty(&class_name, method_name))
+                        .or_else(|| {
+                            inherited_method_return_ty(&class_name, method_name, call_arity)
+                        })
+                    {
                         let mut arg_slots: Vec<LocalId> = vec![recv_slot];
                         let mut all_ok = true;
                         if let Some(arg_list) = call.value_argument_list() {
