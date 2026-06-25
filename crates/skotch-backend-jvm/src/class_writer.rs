@@ -1265,6 +1265,34 @@ pub(crate) fn synthesize_getter_name(field_name: &str) -> String {
     )
 }
 
+/// Walk the superclass chain looking for an inherited property/field of
+/// the given name, starting from (but excluding) `start_class`. Returns
+/// the field's declared type along with the JVM-internal name of the
+/// class that actually declares it. Used by GetField call sites where
+/// the receiver class is a subclass that inherits — without
+/// redeclaring — a typed property from a superclass: without this walk,
+/// the descriptor erases to `Ty::Any` (Object) and the synthesized
+/// getter invocation gets the wrong return type at the call site,
+/// producing `NoSuchMethodError` at runtime when the JVM resolves
+/// against the actual superclass-declared `getFoo():List` shape.
+pub(crate) fn find_inherited_field<'a>(
+    module: &'a skotch_mir::MirModule,
+    start_class: &str,
+    field_name: &str,
+) -> Option<(&'a str, &'a skotch_mir::MirField)> {
+    let mut current = module.find_class(start_class)?.super_class.as_deref()?;
+    // Bounded walk — class hierarchies in practice are shallow; we cap
+    // at 32 to avoid runaway loops on malformed MIR.
+    for _ in 0..32 {
+        let parent = module.find_class(current)?;
+        if let Some(f) = parent.fields.iter().find(|f| f.name == *field_name) {
+            return Some((&parent.name, f));
+        }
+        current = parent.super_class.as_deref()?;
+    }
+    None
+}
+
 fn emit_property_getter(
     class_name: &str,
     field_name: &str,
@@ -11567,7 +11595,19 @@ fn emit_mir_segment(
                 let owning_class = module.find_class(field_class);
                 let declared_ty = owning_class
                     .and_then(|c| c.fields.iter().find(|f| &f.name == field_name))
-                    .map(|f| f.ty.clone());
+                    .map(|f| f.ty.clone())
+                    // Inherited property: walk superclasses so that
+                    // `H1.children` (declared on Tag as `MutableList<Tag>`)
+                    // resolves to `Ty::Class(java/util/List)` instead of
+                    // collapsing to `Ty::Any` via the dest-local fallback.
+                    // Without this, the synthesized-getter call site
+                    // emits `getFoo():Ljava/lang/Object;` while the
+                    // actual class declares `getFoo():Ljava/util/List;`,
+                    // producing `NoSuchMethodError` at runtime.
+                    .or_else(|| {
+                        find_inherited_field(module, field_class, field_name)
+                            .map(|(_, f)| f.ty.clone())
+                    });
                 let dest_local_ty = &func.locals[dest.0 as usize];
                 let field_ty = declared_ty.as_ref().unwrap_or(dest_local_ty);
                 // When the receiver is `this` (param 0) and refers to the
@@ -11613,40 +11653,52 @@ fn emit_mir_segment(
                     synthesize_getter_name(field_name)
                 };
                 let getter_descriptor = format!("(){}", jvm_param_type_string(field_ty));
+                // Inherited-property indicator: when `field_class`
+                // doesn't declare the field itself but a superclass
+                // does (and synthesizes a getter), we must route
+                // through the inherited getter — emitting `getfield`
+                // against the subclass would NoSuchFieldError, and the
+                // JVM resolves invokevirtual through the superclass
+                // chain for matching name+descriptor.
+                let has_inherited_field = owning_class.is_some()
+                    && !owning_class
+                        .is_some_and(|c| c.fields.iter().any(|f| f.name == *field_name))
+                    && find_inherited_field(module, field_class, field_name).is_some();
                 let has_getter = !receiver_is_this_of_field_class
-                    && owning_class
-                        .map(|c| {
-                            if c.is_cross_file_stub {
-                                return false;
-                            }
-                            // Explicit getter declared in MIR.
-                            if c.methods
-                                .iter()
-                                .any(|m| m.name == getter_name && m.params.len() == 1)
-                            {
-                                return true;
-                            }
-                            // The field-existence fallback predicts the
-                            // getter synthesized by `compile_user_class`.
-                            // Lambda classes go through different emit
-                            // paths and never get this synthesis.
-                            if module.is_lambda_class(field_class) {
-                                return false;
-                            }
-                            // Auto-synthesized getter for a non-@JvmField,
-                            // non-synthetic field. Mirror the gating in
-                            // `compile_user_class` (line ~1960). `c` is
-                            // a non-lambda user class here (we returned
-                            // early above for lambda classes), so user
-                            // properties named `label` DO get getters.
-                            c.fields.iter().any(|f| {
-                                f.name == *field_name
-                                    && !f.is_jvm_field
-                                    && f.name != "$stable"
-                                    && !f.name.starts_with('$')
+                    && (has_inherited_field
+                        || owning_class
+                            .map(|c| {
+                                if c.is_cross_file_stub {
+                                    return false;
+                                }
+                                // Explicit getter declared in MIR.
+                                if c.methods
+                                    .iter()
+                                    .any(|m| m.name == getter_name && m.params.len() == 1)
+                                {
+                                    return true;
+                                }
+                                // The field-existence fallback predicts the
+                                // getter synthesized by `compile_user_class`.
+                                // Lambda classes go through different emit
+                                // paths and never get this synthesis.
+                                if module.is_lambda_class(field_class) {
+                                    return false;
+                                }
+                                // Auto-synthesized getter for a non-@JvmField,
+                                // non-synthetic field. Mirror the gating in
+                                // `compile_user_class` (line ~1960). `c` is
+                                // a non-lambda user class here (we returned
+                                // early above for lambda classes), so user
+                                // properties named `label` DO get getters.
+                                c.fields.iter().any(|f| {
+                                    f.name == *field_name
+                                        && !f.is_jvm_field
+                                        && f.name != "$stable"
+                                        && !f.name.starts_with('$')
+                                })
                             })
-                        })
-                        .unwrap_or(false);
+                            .unwrap_or(false));
                 if has_getter {
                     let mref = cp.methodref(field_class, &getter_name, &getter_descriptor);
                     code.push(0xB6); // invokevirtual
@@ -15821,7 +15873,19 @@ fn walk_block(
                 let owning_class = module.find_class(field_class);
                 let declared_ty = owning_class
                     .and_then(|c| c.fields.iter().find(|f| &f.name == field_name))
-                    .map(|f| f.ty.clone());
+                    .map(|f| f.ty.clone())
+                    // Inherited property: walk superclasses so that
+                    // `H1.children` (declared on Tag as `MutableList<Tag>`)
+                    // resolves to `Ty::Class(java/util/List)` instead of
+                    // collapsing to `Ty::Any` via the dest-local fallback.
+                    // Otherwise the synthesized-getter call emits
+                    // `getFoo():Ljava/lang/Object;` while the declaring
+                    // class actually defines `getFoo():Ljava/util/List;`,
+                    // and the JVM throws NoSuchMethodError at runtime.
+                    .or_else(|| {
+                        find_inherited_field(module, field_class, field_name)
+                            .map(|(_, f)| f.ty.clone())
+                    });
                 let dest_ty = &func.locals[dest.0 as usize];
                 let field_ty = declared_ty.as_ref().unwrap_or(dest_ty);
                 let descriptor = jvm_param_type_string(field_ty);
@@ -15864,35 +15928,46 @@ fn walk_block(
                 } else {
                     synthesize_getter_name(field_name)
                 };
+                // Inherited-property indicator: when `field_class`
+                // doesn't declare the field itself but a superclass
+                // does, force the getter route. `getfield` against the
+                // subclass would NoSuchFieldError, while invokevirtual
+                // through the inherited synthesized getter resolves
+                // correctly per JVM dispatch.
+                let has_inherited_field = owning_class.is_some()
+                    && !owning_class
+                        .is_some_and(|c| c.fields.iter().any(|f| f.name == *field_name))
+                    && find_inherited_field(module, field_class, field_name).is_some();
                 let has_getter = !is_this_same_class
-                    && owning_class
-                        .map(|c| {
-                            if c.is_cross_file_stub {
-                                return false;
-                            }
-                            if c.methods
-                                .iter()
-                                .any(|m| m.name == getter_name && m.params.len() == 1)
-                            {
-                                return true;
-                            }
-                            // The field-existence fallback predicts the
-                            // getter synthesized by `compile_user_class`.
-                            // Lambda classes go through different emit
-                            // paths and never get this synthesis.
-                            if module.is_lambda_class(field_class) {
-                                return false;
-                            }
-                            // `c` is a non-lambda user class; user
-                            // properties named `label` DO get getters.
-                            c.fields.iter().any(|f| {
-                                f.name == *field_name
-                                    && !f.is_jvm_field
-                                    && f.name != "$stable"
-                                    && !f.name.starts_with('$')
+                    && (has_inherited_field
+                        || owning_class
+                            .map(|c| {
+                                if c.is_cross_file_stub {
+                                    return false;
+                                }
+                                if c.methods
+                                    .iter()
+                                    .any(|m| m.name == getter_name && m.params.len() == 1)
+                                {
+                                    return true;
+                                }
+                                // The field-existence fallback predicts the
+                                // getter synthesized by `compile_user_class`.
+                                // Lambda classes go through different emit
+                                // paths and never get this synthesis.
+                                if module.is_lambda_class(field_class) {
+                                    return false;
+                                }
+                                // `c` is a non-lambda user class; user
+                                // properties named `label` DO get getters.
+                                c.fields.iter().any(|f| {
+                                    f.name == *field_name
+                                        && !f.is_jvm_field
+                                        && f.name != "$stable"
+                                        && !f.name.starts_with('$')
+                                })
                             })
-                        })
-                        .unwrap_or(false);
+                            .unwrap_or(false));
                 if has_getter {
                     let getter_descriptor = format!("(){}", descriptor);
                     let mref = cp.methodref(field_class, &getter_name, &getter_descriptor);
@@ -18190,23 +18265,79 @@ fn walk_block(
                         // resolver fails at runtime with
                         // `NoSuchMethodError`.
                         let user_arity = args.len().saturating_sub(1);
-                        module
-                            .find_class(class_name)
-                            .and_then(|c| {
-                                c.methods.iter().find(|m| {
+                        // Walk the receiver class + its superclass chain so
+                        // that inherited methods (and inherited synthesized
+                        // property getters like `Tag.getChildren()`) are
+                        // resolved with their declaring class's signature.
+                        // Without this, an inherited synthesized getter
+                        // called via `H1.getChildren` had no MirFunction
+                        // match on H1 and the descriptor's return-type
+                        // fell through to `dest_ty` — which for unused
+                        // call results is `Ty::Any` → `Ljava/lang/Object;`.
+                        // That made the call site reference
+                        // `H1.getChildren:()Ljava/lang/Object;` while the
+                        // actual class declared `(...)Ljava/util/List;`,
+                        // producing NoSuchMethodError at runtime.
+                        let mut result: Option<(Vec<Ty>, Ty)> = None;
+                        let mut probe: Option<&str> = Some(class_name.as_str());
+                        let mut guard = 0;
+                        while let Some(name) = probe {
+                            if guard > 32 {
+                                break;
+                            }
+                            guard += 1;
+                            if let Some(c) = module.find_class(name) {
+                                if let Some(m) = c.methods.iter().find(|m| {
                                     m.name == *method_name
                                         && m.params.len().saturating_sub(1) == user_arity
-                                })
-                            })
-                            .map(|m| {
-                                let ptys: Vec<Ty> = m
-                                    .params
-                                    .iter()
-                                    .skip(1)
-                                    .map(|lid| m.locals[lid.0 as usize].clone())
-                                    .collect();
-                                (ptys, m.return_ty.clone())
-                            })
+                                }) {
+                                    let ptys: Vec<Ty> = m
+                                        .params
+                                        .iter()
+                                        .skip(1)
+                                        .map(|lid| m.locals[lid.0 as usize].clone())
+                                        .collect();
+                                    result = Some((ptys, m.return_ty.clone()));
+                                    break;
+                                }
+                                // Synthesized property-getter on a parent:
+                                // when method_name matches `get<Name>` and
+                                // a non-@JvmField property of that name
+                                // exists on this class (the field gets a
+                                // synthesized `getName():FieldTy` accessor
+                                // — see `emit_instance_property_getter`),
+                                // synthesize a (no-arg, FieldTy) signature
+                                // so the descriptor lookup picks the
+                                // declaring class's `:List` return type
+                                // instead of erasing to `Object`.
+                                if user_arity == 0 {
+                                    if let Some(field_name) =
+                                        method_name.strip_prefix("get").and_then(|rest| {
+                                            rest.chars().next().map(|first| {
+                                                let mut s = String::new();
+                                                s.extend(first.to_lowercase());
+                                                s.push_str(&rest[first.len_utf8()..]);
+                                                s
+                                            })
+                                        })
+                                    {
+                                        if let Some(f) = c.fields.iter().find(|f| {
+                                            f.name == field_name
+                                                && !f.is_jvm_field
+                                                && f.name != "$stable"
+                                                && !f.name.starts_with('$')
+                                        }) {
+                                            result = Some((Vec::new(), f.ty.clone()));
+                                            break;
+                                        }
+                                    }
+                                }
+                                probe = c.super_class.as_deref();
+                            } else {
+                                probe = None;
+                            }
+                        }
+                        result
                     };
                     // For Java collection interfaces whose user-facing
                     // generics erase to `Object`, force the param
