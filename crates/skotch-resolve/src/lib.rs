@@ -343,6 +343,23 @@ pub struct ExternalClassDecl {
     /// similar reasoning.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub has_init_blocks: bool,
+    /// Phase H4 cross-file metadata: true when the source declaration
+    /// carried both `@JvmInline` and the soft `value` modifier (the
+    /// Kotlin 1.5+ inline value-class shape). Consumers in other files
+    /// need this to route constructor calls through `box-impl` and
+    /// method calls through the static `<name>[-mangle]-impl` variants
+    /// instead of `invokevirtual` against the wrapper. Defaults to
+    /// false so existing fixtures are byte-stable.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub is_value_class: bool,
+    /// Phase H4 cross-file metadata: when [`Self::is_value_class`] is
+    /// true, this is the `Ty` of the single primary-ctor `val`
+    /// parameter (e.g. `Ty::Long` for `value class UserId(val raw:
+    /// Long)`). Consumers use it to build the erased descriptors
+    /// (`(J)LUserId;` for `box-impl`, `(J)J` for `doubled-impl`).
+    /// `None` when the class is not a value class.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value_underlying_ty: Option<Ty>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]

@@ -767,6 +767,47 @@ fn nested_classes<'a>(body: Option<KtClassBody<'a>>) -> Vec<KtClass<'a>> {
     out
 }
 
+/// Phase H4 cross-file metadata: detect whether a `KtClass` is a
+/// well-formed `@JvmInline value class V(val raw: T)` and return the
+/// underlying `Ty` of the single primary-ctor `val` parameter. Mirrors
+/// `skotch_mir_lower::detect_value_class_underlying` but lives here so
+/// the symbol-table gather can populate `ExternalClassDecl` directly
+/// (downstream consumers of the cross-file table don't depend on
+/// mir-lower's view of the source class).
+fn detect_value_class(
+    c: KtClass<'_>,
+    imports: &FxHashMap<String, String>,
+    aliases: &FxHashMap<String, AliasTarget>,
+) -> (bool, Option<Ty>) {
+    if !c.is_value() {
+        return (false, None);
+    }
+    if !c.annotation_names().contains(&"JvmInline") {
+        return (false, None);
+    }
+    let Some(pc) = c.primary_constructor() else {
+        return (false, None);
+    };
+    let Some(plist) = pc.value_parameter_list() else {
+        return (false, None);
+    };
+    let mut params_iter = plist.parameters();
+    let Some(p0) = params_iter.next() else {
+        return (false, None);
+    };
+    if params_iter.next().is_some() {
+        return (false, None);
+    }
+    if !p0.is_val() {
+        return (false, None);
+    }
+    let ty = match p0.type_reference() {
+        Some(tr) => type_ref_to_ty(tr, imports, aliases),
+        None => Ty::Any,
+    };
+    (true, Some(ty))
+}
+
 fn gather_class_recursive(
     c: KtClass<'_>,
     fq_outer: &str,
@@ -894,6 +935,7 @@ fn gather_class_recursive(
         .unwrap_or_default();
 
     let (super_class, iface_names) = collect_supertypes(c.super_type_list());
+    let (is_value_class, value_underlying_ty) = detect_value_class(c, imports, aliases);
     let ext = ExternalClassDecl {
         jvm_name: jvm_name_pre.clone(),
         kind,
@@ -918,6 +960,8 @@ fn gather_class_recursive(
             .body()
             .map(|b| b.anonymous_initializers().next().is_some())
             .unwrap_or(false),
+        is_value_class,
+        value_underlying_ty,
     };
     register_class(table, &simple_name, ext);
 
@@ -994,6 +1038,10 @@ fn gather_object(
             .body()
             .map(|b| b.anonymous_initializers().next().is_some())
             .unwrap_or(false),
+        // Objects can't be value classes — kotlinc rejects `@JvmInline
+        // value object`. Always false.
+        is_value_class: false,
+        value_underlying_ty: None,
     };
     register_class(table, name, ext);
 }
@@ -1055,6 +1103,9 @@ fn gather_interface(
             .map(|tpl| tpl.parameters().next().is_some())
             .unwrap_or(false),
         has_init_blocks: false,
+        // Interfaces can't be value classes. Always false.
+        is_value_class: false,
+        value_underlying_ty: None,
     };
     register_class(table, name, ext);
 }
@@ -1123,6 +1174,9 @@ fn gather_enum(
             .body()
             .map(|b| b.anonymous_initializers().next().is_some())
             .unwrap_or(false),
+        // Enums can't be value classes. Always false.
+        is_value_class: false,
+        value_underlying_ty: None,
     };
     register_class(table, name, ext);
 }
@@ -2218,5 +2272,74 @@ mod tests {
             Ty::Class(n) => assert_eq!(n, "com/x/A"),
             other => panic!("expected Class(com/x/A), got {other:?}"),
         }
+    }
+
+    // ── Phase H4 cross-file value-class metadata ────────────────────
+
+    #[test]
+    fn h4_value_class_is_recorded_with_underlying_ty() {
+        let p = parse("@JvmInline value class UserId(val raw: Long)");
+        let interner = Interner::new();
+        let table = gather_declarations(&[(p.file(), "TestKt")], &interner);
+        let c = table.classes.get("UserId").expect("class UserId");
+        assert!(c.is_value_class, "expected is_value_class=true");
+        assert_eq!(
+            c.value_underlying_ty,
+            Some(Ty::Long),
+            "expected value_underlying_ty=Some(Long)"
+        );
+    }
+
+    #[test]
+    fn h4_plain_class_not_a_value_class() {
+        // No `@JvmInline` annotation → not a value class even with
+        // `value` modifier alone (kotlinc treats this as an error
+        // diagnostic that we ignore here, leaving is_value_class=false).
+        let p = parse("class P(val x: Long)");
+        let interner = Interner::new();
+        let table = gather_declarations(&[(p.file(), "TestKt")], &interner);
+        let c = table.classes.get("P").expect("class P");
+        assert!(!c.is_value_class);
+        assert_eq!(c.value_underlying_ty, None);
+    }
+
+    #[test]
+    fn h4_value_class_with_string_underlying() {
+        let p = parse("@JvmInline value class Password(val raw: String)");
+        let interner = Interner::new();
+        let table = gather_declarations(&[(p.file(), "TestKt")], &interner);
+        let c = table.classes.get("Password").expect("class Password");
+        assert!(c.is_value_class);
+        assert_eq!(c.value_underlying_ty, Some(Ty::String));
+    }
+
+    #[test]
+    fn h4_object_singleton_never_value_class() {
+        let p = parse("object Singleton { fun greet() = \"hi\" }");
+        let interner = Interner::new();
+        let table = gather_declarations(&[(p.file(), "TestKt")], &interner);
+        let c = table.classes.get("Singleton").expect("Singleton object");
+        assert!(!c.is_value_class);
+        assert_eq!(c.value_underlying_ty, None);
+    }
+
+    #[test]
+    fn h4_interface_never_value_class() {
+        let p = parse("interface I { fun pretty(): String }");
+        let interner = Interner::new();
+        let table = gather_declarations(&[(p.file(), "TestKt")], &interner);
+        let c = table.classes.get("I").expect("interface I");
+        assert!(!c.is_value_class);
+        assert_eq!(c.value_underlying_ty, None);
+    }
+
+    #[test]
+    fn h4_enum_never_value_class() {
+        let p = parse("enum class Color { RED, GREEN, BLUE }");
+        let interner = Interner::new();
+        let table = gather_declarations(&[(p.file(), "TestKt")], &interner);
+        let c = table.classes.get("Color").expect("enum Color");
+        assert!(!c.is_value_class);
+        assert_eq!(c.value_underlying_ty, None);
     }
 }

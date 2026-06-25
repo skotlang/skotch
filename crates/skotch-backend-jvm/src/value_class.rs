@@ -1076,6 +1076,237 @@ fn class_simple_name(jvm_internal: &str) -> &str {
     jvm_internal.rsplit('/').next().unwrap_or(jvm_internal)
 }
 
+/// Build the kotlinc-shape static `-impl` method name for a user method
+/// on a value class. When at least one parameter is itself a value
+/// class, the name carries the KEEP-104 mangling suffix
+/// (`<name>-<hash>`); otherwise it's the plain `<name>-impl` form.
+///
+/// Examples (with `value class V(val x: Long)`):
+/// - `fun doubled(): Long` → `"doubled-impl"`
+/// - `fun combine(other: V): Long` → `"combine-<hash>"` (mangled)
+pub fn static_impl_name(name: &str, params: &[MangleParam]) -> String {
+    mangle_method_name(name, params).unwrap_or_else(|| format!("{name}-impl"))
+}
+
+/// Per-parameter descriptor for a user method on a value class —
+/// the shape needed to emit the static `-impl` forwarder.
+#[derive(Debug, Clone)]
+pub struct UserMethodParam {
+    /// JVM-descriptor of the parameter's source type at the call-site
+    /// level (e.g. `"I"`, `"Ljava/lang/String;"`, `"LV;"` for value
+    /// classes — i.e. the boxed form on call sites that go through the
+    /// instance method). The static `-impl` variant uses the same
+    /// descriptor (kotlinc does NOT erase value-class params on the
+    /// static variant — it still takes the wrapper `LV;`, only `this`
+    /// is replaced by the underlying value).
+    pub descriptor: String,
+    /// Slot width on the JVM stack — 2 for Long/Double, 1 otherwise.
+    pub slot_width: u16,
+    /// Load opcode for the parameter type (used to emit the forwarder
+    /// body that loads each arg before invoking the instance method).
+    pub load_op: u8,
+}
+
+/// Description of a user-declared method on a value class, used by
+/// [`emit_user_method_static_impl_forwarder`] to synthesize the
+/// kotlinc-shaped static `-impl` variant.
+#[derive(Debug, Clone)]
+pub struct UserMethodShape<'a> {
+    /// Source-level method name (`"doubled"`, `"combine"`, ...).
+    pub name: &'a str,
+    /// Parameter list (excluding the implicit `this`).
+    pub params: Vec<UserMethodParam>,
+    /// Return-type descriptor (`"V"` for Unit, `"J"` for Long, etc).
+    pub return_descriptor: String,
+    /// Return-opcode for the return type.
+    pub return_op: u8,
+    /// For each parameter position, the value-class info needed by
+    /// KEEP-104 mangling (`is_value=true` → name is mangled).
+    pub mangle_params: Vec<MangleParam>,
+}
+
+/// Phase H3: emit a static `<name>[-mangle]-impl(<U>, <params...>) →
+/// R` forwarder for each user-declared instance method on a value
+/// class. The body is the **inverse** of the instance method's body:
+/// it boxes the leading underlying-value argument via `box-impl` and
+/// dispatches to the instance method via `invokevirtual`.
+///
+/// This shape is what kotlinc-compiled external callers expect:
+/// they emit `invokestatic V.<method>[-hash]-impl(<U>, args)` rather
+/// than `box; invokevirtual V.<method>(args)`. Keeping the instance
+/// method untouched (it's still emitted by `emit_user_method`) means
+/// existing in-module call sites stay byte-stable; the H3 static
+/// variant is purely additive.
+///
+/// `class_name` — JVM internal name (e.g. `"V"`, `"com/foo/UserId"`).
+/// `underlying` — `Ty` of the single primary-ctor `val` parameter.
+/// `methods`    — every user-declared instance method.
+///
+/// Future H3 work: rewrite the **instance** method body to delegate
+/// to the static `-impl` (so the bytecode for the method lives in one
+/// place); for now we keep both, with the instance method shipping
+/// the real body. The two-method shape matches kotlinc's output
+/// (instance methods are kept as `invokevirtual` targets for Java
+/// interop).
+pub fn emit_user_method_static_impl_forwarders(
+    class_name: &str,
+    underlying: &Ty,
+    methods: &[UserMethodShape<'_>],
+    cp: &mut ConstantPool,
+    code_attr_name_idx: u16,
+) -> Vec<Vec<u8>> {
+    let u_desc = underlying_descriptor(underlying);
+    let u_slots = slot_width(underlying);
+    let mut blobs = Vec::with_capacity(methods.len());
+    for m in methods {
+        blobs.push(emit_one_static_impl_forwarder(
+            class_name,
+            underlying,
+            &u_desc,
+            u_slots,
+            m,
+            cp,
+            code_attr_name_idx,
+        ));
+    }
+    blobs
+}
+
+fn emit_one_static_impl_forwarder(
+    class_name: &str,
+    underlying: &Ty,
+    u_desc: &str,
+    u_slots: u16,
+    m: &UserMethodShape<'_>,
+    cp: &mut ConstantPool,
+    code_attr_name_idx: u16,
+) -> Vec<u8> {
+    // ── method header ──────────────────────────────────────────────
+    let mangled = static_impl_name(m.name, &m.mangle_params);
+    let mut sig = String::from("(");
+    sig.push_str(u_desc);
+    for p in &m.params {
+        sig.push_str(&p.descriptor);
+    }
+    sig.push(')');
+    sig.push_str(&m.return_descriptor);
+
+    // ── instance-method descriptor (target of invokevirtual) ───────
+    let mut inst_desc = String::from("(");
+    for p in &m.params {
+        inst_desc.push_str(&p.descriptor);
+    }
+    inst_desc.push(')');
+    inst_desc.push_str(&m.return_descriptor);
+
+    // Pre-register CP entries so dedup matches the H2 emitter order.
+    let box_mref = cp.methodref(class_name, "box-impl", &format!("({u_desc})L{class_name};"));
+    let invoke_mref = cp.methodref(class_name, m.name, &inst_desc);
+
+    // ── body: box the underlying, then push args + invokevirtual ───
+    //
+    //   <load arg0 (U)>                  ; slot 0
+    //   invokestatic V.box-impl(U)LV;    ; receiver now boxed
+    //   <load arg1 ... argN>             ; slot u_slots..u_slots+sum
+    //   invokevirtual V.<method>(args)R
+    //   <Xreturn>
+    let mut code = Vec::new();
+    emit_load(&mut code, underlying, 0);
+    code.push(0xB8); // invokestatic box-impl
+    code.write_u16::<BigEndian>(box_mref).unwrap();
+
+    let mut slot: u16 = u_slots;
+    let mut max_stack: i32 = 1; // box returns a single reference
+    let mut running_stack: i32 = 1;
+    for p in &m.params {
+        emit_load_raw(&mut code, p.load_op, slot as u8);
+        slot = slot.checked_add(p.slot_width).expect("slot overflow");
+        running_stack += p.slot_width as i32;
+        if running_stack > max_stack {
+            max_stack = running_stack;
+        }
+    }
+    code.push(0xB6); // invokevirtual <method>
+    code.write_u16::<BigEndian>(invoke_mref).unwrap();
+    // Stack after call: return-width values (drop receiver+args, push ret).
+    code.push(m.return_op);
+
+    // ── method blob ────────────────────────────────────────────────
+    let name_idx = cp.utf8(&mangled);
+    let desc_idx = cp.utf8(&sig);
+    // max_locals = underlying slots + sum(param slots)
+    let max_locals: u16 = u_slots + m.params.iter().map(|p| p.slot_width).sum::<u16>();
+    // max_stack: receiver (1) + sum(arg widths). The `box-impl`
+    // intermediate produced a single ref, so the running stack we
+    // computed above already represents the post-args invocation
+    // shape. Bound below by 1 (return-only methods need at least one
+    // slot for the return value).
+    let max_stack: u16 = (max_stack.max(u_slots as i32).max(1)) as u16;
+    build_method_blob(
+        ACC_PUBLIC | ACC_STATIC | ACC_FINAL,
+        name_idx,
+        desc_idx,
+        max_stack,
+        max_locals,
+        &code,
+        code_attr_name_idx,
+        None,
+    )
+}
+
+/// Raw load opcode variant of [`emit_load`] that takes a single
+/// pre-resolved opcode byte. The byte should be one of the regular
+/// `Xload` family (0x15 iload, 0x16 lload, 0x17 fload, 0x18 dload,
+/// 0x19 aload). For slots 0..=3 we emit the short form.
+fn emit_load_raw(code: &mut Vec<u8>, base_op: u8, slot: u8) {
+    let short_base: Option<u8> = match base_op {
+        0x15 => Some(0x1A), // iload_N
+        0x16 => Some(0x1E), // lload_N
+        0x17 => Some(0x22), // fload_N
+        0x18 => Some(0x26), // dload_N
+        0x19 => Some(0x2A), // aload_N
+        _ => None,
+    };
+    if slot <= 3 {
+        if let Some(s) = short_base {
+            code.push(s + slot);
+        } else {
+            code.push(base_op);
+            code.push(slot);
+        }
+    } else {
+        code.push(base_op);
+        code.push(slot);
+    }
+}
+
+/// Resolve the JVM load opcode for a `Ty`. Mirrors [`emit_load`]'s
+/// per-type opcode selection but returns the long form (callers pass
+/// it to [`emit_load_raw`] which then collapses to short forms for
+/// low slots).
+pub fn load_op_for(ty: &Ty) -> u8 {
+    match ty {
+        Ty::Bool | Ty::Byte | Ty::Short | Ty::Char | Ty::Int => 0x15,
+        Ty::Long => 0x16,
+        Ty::Float => 0x17,
+        Ty::Double => 0x18,
+        _ => 0x19,
+    }
+}
+
+/// Resolve the JVM return opcode for a `Ty`. Public so the class
+/// writer can build [`UserMethodShape`] entries without re-deriving
+/// the table.
+pub fn return_op_for(ty: &Ty) -> u8 {
+    return_op(ty)
+}
+
+/// Public re-export so callers can compute parameter slot widths
+/// without duplicating the category-1/2 table.
+pub fn slot_width_for(ty: &Ty) -> u16 {
+    slot_width(ty)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1225,5 +1456,152 @@ mod tests {
         assert_eq!(class_simple_name("com/foo/Bar"), "Bar");
         assert_eq!(class_simple_name("Bar"), "Bar");
         assert_eq!(class_simple_name(""), "");
+    }
+
+    // ── Phase H3: static `-impl` forwarder synthesis ────────────────
+
+    #[test]
+    fn static_impl_name_no_value_params_returns_plain_impl() {
+        // `fun doubled(): Long` on `value class V(val x: Long)` —
+        // zero params, no mangling, suffix is `-impl`.
+        assert_eq!(static_impl_name("doubled", &[]), "doubled-impl");
+        assert_eq!(
+            static_impl_name("describe", &[mp_plain(), mp_plain()]),
+            "describe-impl"
+        );
+    }
+
+    #[test]
+    fn static_impl_name_with_value_param_uses_mangling() {
+        // `fun combine(other: V): Long` → mangled name (matches the
+        // kotlinc-compiled `combine-Wv3fJ18`).
+        let name = static_impl_name("combine", &[mp_value("V")]);
+        assert_eq!(name, "combine-Wv3fJ18");
+    }
+
+    #[test]
+    fn h3_forwarder_with_no_user_params_descriptor_matches() {
+        // `value class V(val x: Long) { fun doubled(): Long = ... }`
+        // → static `doubled-impl(J)J`.
+        let mut cp = ConstantPool::new();
+        let code_attr = cp.utf8("Code");
+        let shapes = vec![UserMethodShape {
+            name: "doubled",
+            params: vec![],
+            return_descriptor: "J".to_string(),
+            return_op: 0xAD, // lreturn
+            mangle_params: vec![],
+        }];
+        let blobs =
+            emit_user_method_static_impl_forwarders("V", &Ty::Long, &shapes, &mut cp, code_attr);
+        assert_eq!(blobs.len(), 1);
+        // CP must now carry the new `doubled-impl` Utf8 + descriptor.
+        let mut full = Vec::new();
+        cp.write_to(&mut full);
+        let s = String::from_utf8_lossy(&full);
+        assert!(
+            s.contains("doubled-impl"),
+            "expected `doubled-impl` Utf8 entry"
+        );
+        assert!(s.contains("(J)J"), "expected `(J)J` descriptor Utf8 entry");
+        // The forwarder must invokestatic box-impl AND invokevirtual the
+        // instance method. Verify both methodrefs are interned.
+        assert!(
+            cp.lookup_methodref("V", "box-impl", "(J)LV;").is_some(),
+            "box-impl methodref should be present"
+        );
+        assert!(
+            cp.lookup_methodref("V", "doubled", "()J").is_some(),
+            "instance `doubled()J` methodref should be present"
+        );
+    }
+
+    #[test]
+    fn h3_forwarder_with_value_param_descriptor_and_mangled_name() {
+        // `fun combine(other: V): Long` → static `combine-Wv3fJ18(J,LV;)J`.
+        let mut cp = ConstantPool::new();
+        let code_attr = cp.utf8("Code");
+        let shapes = vec![UserMethodShape {
+            name: "combine",
+            params: vec![UserMethodParam {
+                descriptor: "LV;".to_string(),
+                slot_width: 1,
+                load_op: 0x19, // aload
+            }],
+            return_descriptor: "J".to_string(),
+            return_op: 0xAD,
+            mangle_params: vec![MangleParam {
+                fq_name: "V".to_string(),
+                is_value: true,
+                is_nullable: false,
+            }],
+        }];
+        let blobs =
+            emit_user_method_static_impl_forwarders("V", &Ty::Long, &shapes, &mut cp, code_attr);
+        assert_eq!(blobs.len(), 1);
+        let mut full = Vec::new();
+        cp.write_to(&mut full);
+        let s = String::from_utf8_lossy(&full);
+        assert!(s.contains("combine-Wv3fJ18"), "mangled name expected");
+        assert!(s.contains("(JLV;)J"), "static descriptor expected");
+    }
+
+    #[test]
+    fn h3_forwarder_with_int_underlying_uses_iload() {
+        // `value class W(val x: Int) { fun triple(): Int = x * 3 }`
+        // → static `triple-impl(I)I`.
+        let mut cp = ConstantPool::new();
+        let code_attr = cp.utf8("Code");
+        let shapes = vec![UserMethodShape {
+            name: "triple",
+            params: vec![],
+            return_descriptor: "I".to_string(),
+            return_op: 0xAC, // ireturn
+            mangle_params: vec![],
+        }];
+        let blobs =
+            emit_user_method_static_impl_forwarders("W", &Ty::Int, &shapes, &mut cp, code_attr);
+        assert_eq!(blobs.len(), 1);
+        let mut full = Vec::new();
+        cp.write_to(&mut full);
+        let s = String::from_utf8_lossy(&full);
+        assert!(s.contains("triple-impl"), "expected `triple-impl` Utf8");
+        assert!(s.contains("(I)I"), "expected `(I)I` descriptor");
+        assert!(
+            cp.lookup_methodref("W", "box-impl", "(I)LW;").is_some(),
+            "box-impl(I)LW; methodref should be present"
+        );
+    }
+
+    #[test]
+    fn h3_load_op_for_known_types() {
+        assert_eq!(load_op_for(&Ty::Int), 0x15); // iload
+        assert_eq!(load_op_for(&Ty::Long), 0x16); // lload
+        assert_eq!(load_op_for(&Ty::Float), 0x17); // fload
+        assert_eq!(load_op_for(&Ty::Double), 0x18); // dload
+        assert_eq!(load_op_for(&Ty::String), 0x19); // aload
+        assert_eq!(load_op_for(&Ty::Class("V".to_string())), 0x19);
+    }
+
+    #[test]
+    fn h3_slot_width_for_long_double_is_two() {
+        assert_eq!(slot_width_for(&Ty::Long), 2);
+        assert_eq!(slot_width_for(&Ty::Double), 2);
+        assert_eq!(slot_width_for(&Ty::Int), 1);
+        assert_eq!(slot_width_for(&Ty::String), 1);
+    }
+
+    #[test]
+    fn emit_load_raw_uses_short_form_for_slots_0_to_3() {
+        let mut code = Vec::new();
+        emit_load_raw(&mut code, 0x15, 0); // iload_0
+        assert_eq!(code, vec![0x1A]);
+        let mut code = Vec::new();
+        emit_load_raw(&mut code, 0x19, 3); // aload_3
+        assert_eq!(code, vec![0x2D]);
+        // Slot 4 → long form.
+        let mut code = Vec::new();
+        emit_load_raw(&mut code, 0x16, 4); // lload 4
+        assert_eq!(code, vec![0x16, 0x04]);
     }
 }
