@@ -26162,6 +26162,153 @@ fn lower_rich_expr_to_slot(
     use skotch_ast::KtExpr;
     use skotch_mir::{LocalId, Stmt as MStmt};
     let e = unwrap_parens(e);
+    // Annotated expression: peel the annotation entries and recurse on
+    // the wrapped target. Annotations on expressions (`@Suppress(...)
+    // expr`, `@OptIn(...) expr`, `@JvmStatic` on a declaration that the
+    // parser folded into an Annotated wrapper, etc.) are pure metadata
+    // — codegen is identical with or without them. Without this arm,
+    // the body walker bails kind=Annotated on every annotated stmt in a
+    // function body (kotlinx-stdlib uses `@Suppress` heavily inside
+    // suspend coroutine implementations and KotlinCrypto sprinkles
+    // `@OptIn(ExperimentalStdlibApi::class)` across its hash families,
+    // both of which were dropping whole functions to empty MIR).
+    if let KtExpr::Annotated(ann) = &e {
+        if let Some(inner_e) = skotch_ast::children(ann.syntax())
+            .iter()
+            .find_map(KtExpr::cast)
+        {
+            return lower_rich_expr_to_slot(
+                inner_e,
+                lookup_name,
+                fn_lookup,
+                next_slot,
+                pre_stmts,
+                extra_locals,
+                strings,
+            );
+        }
+    }
+    // `super.method(args)` and `super.field` dispatch. A bare `super`
+    // by itself has no value-level meaning — the only useful surfaces
+    // are method-dispatch (`super.foo(x)`) and field-load
+    // (`super.bar`). Both are matched here as DotQualified shapes
+    // whose receiver is `KtExpr::Super`; otherwise the generic
+    // DotQualified arm below would try to lower the Super receiver as
+    // a value and bail. The emitted call uses `CallKind::Super` which
+    // the JVM backend turns into `invokespecial Parent.method` so
+    // override-style chaining (`override fun foo() { super.foo() }`)
+    // dispatches through the parent's implementation rather than
+    // recursing back through the current class's overriding vtable
+    // slot.
+    if let KtExpr::DotQualified(dq) = &e {
+        let dq_exprs: Vec<KtExpr<'_>> = skotch_ast::children(dq.syntax())
+            .iter()
+            .filter_map(KtExpr::cast)
+            .collect();
+        if dq_exprs.len() == 2 && matches!(dq_exprs[0], KtExpr::Super(_)) {
+            // Walk to the parent class via CLASS_SUPER. The current
+            // class is keyed there by its simple name (Kotlin source
+            // form); lowering passes may carry the FQ form so try both.
+            let parent_class: Option<String> = current_class_name().and_then(|c| {
+                let simple = c.rsplit('/').next().unwrap_or(&c).to_string();
+                CLASS_SUPER
+                    .with(|t| t.borrow().get(&simple).cloned())
+                    .or_else(|| CLASS_SUPER.with(|t| t.borrow().get(&c).cloned()))
+            });
+            if let Some(parent_class) = parent_class {
+                // super.method(args)
+                if let KtExpr::Call(call) = &dq_exprs[1] {
+                    if let Some(KtExpr::Reference(meth_ref)) = call.callee() {
+                        if let Some(method_name) = meth_ref.name() {
+                            let mut arg_slots: Vec<LocalId> = vec![LocalId(0)];
+                            let mut all_ok = true;
+                            if let Some(arg_list) = call.value_argument_list() {
+                                for arg in arg_list.arguments() {
+                                    let Some(arg_e) = arg.expression() else {
+                                        all_ok = false;
+                                        break;
+                                    };
+                                    let Some(s) = lower_rich_expr_to_slot(
+                                        arg_e,
+                                        lookup_name,
+                                        fn_lookup,
+                                        next_slot,
+                                        pre_stmts,
+                                        extra_locals,
+                                        strings,
+                                    ) else {
+                                        all_ok = false;
+                                        break;
+                                    };
+                                    arg_slots.push(s);
+                                }
+                            }
+                            if all_ok {
+                                // Source-side arity excludes the `this`
+                                // receiver — pass `arg_slots.len() - 1`
+                                // to the classinfo lookup so JAR-owned
+                                // parents like `Digest` resolve.
+                                let src_arity = arg_slots.len() - 1;
+                                let ret_ty = class_method_return_ty(&parent_class, method_name)
+                                    .or_else(|| {
+                                        inherited_method_return_ty(
+                                            &parent_class,
+                                            method_name,
+                                            src_arity,
+                                        )
+                                    })
+                                    .unwrap_or(Ty::Unit);
+                                let result_slot = LocalId(*next_slot);
+                                *next_slot += 1;
+                                extra_locals.push(ret_ty);
+                                pre_stmts.push(MStmt::Assign {
+                                    dest: result_slot,
+                                    value: skotch_mir::Rvalue::Call {
+                                        kind: skotch_mir::CallKind::Super {
+                                            class_name: parent_class,
+                                            method_name: method_name.to_string(),
+                                        },
+                                        args: arg_slots,
+                                    },
+                                });
+                                return Some(result_slot);
+                            }
+                        }
+                    }
+                }
+                // super.field
+                if let KtExpr::Reference(prop_ref) = &dq_exprs[1] {
+                    if let Some(prop_name) = prop_ref.name() {
+                        let field_ty = lookup_class_fields(&parent_class)
+                            .and_then(|fs| {
+                                fs.iter()
+                                    .find(|(n, _)| n == prop_name)
+                                    .map(|(_, t)| t.clone())
+                            })
+                            .or_else(|| {
+                                lookup_inherited_class_fields(&parent_class)
+                                    .into_iter()
+                                    .find(|(_, n, _)| n == prop_name)
+                                    .map(|(_, _, t)| t)
+                            })
+                            .unwrap_or(Ty::Any);
+                        let result_slot = LocalId(*next_slot);
+                        *next_slot += 1;
+                        extra_locals.push(field_ty);
+                        pre_stmts.push(MStmt::Assign {
+                            dest: result_slot,
+                            value: skotch_mir::Rvalue::GetField {
+                                receiver: LocalId(0),
+                                class_name: parent_class,
+                                field_name: prop_name.to_string(),
+                            },
+                        });
+                        return Some(result_slot);
+                    }
+                }
+            }
+        }
+    }
     // Callable references: `obj::method` (bound) and `Class::method`
     // (unbound class-member). Kotlinc lowers each to a synthetic class
     // extending `FunctionReferenceImpl` / `PropertyReference1Impl`; for
