@@ -12001,6 +12001,133 @@ fn lower_loop_body(
         }
         // val/var declaration: `val y = expr`.
         if let Some(prop) = skotch_ast::KtProperty::cast(bn) {
+            // Destructuring declaration: `val (a, b) = expr`.
+            // Lower the RHS to a slot, then for each entry emit
+            //   slot = recv.componentN()
+            // (or `getFirst`/`getSecond`/`getThird` when the recv
+            // is `kotlin/Pair` / `kotlin/Triple`). On any shape we
+            // can't handle, drop to the bail-and-continue path —
+            // the rest of the body still gets walked so a single
+            // unhandled destructuring doesn't empty an entire
+            // long method (Phase W invariant).
+            if let Some(dest) = prop.destructuring() {
+                let entries: Vec<&str> = dest.entries().filter_map(|e| e.name()).collect();
+                let mut emitted: Option<Vec<(String, LocalId)>> = None;
+                let mut bail_reason: &'static str = "no_init";
+                if let Some(init) = prop.initializer() {
+                    let init = unwrap_parens(init);
+                    bail_reason = "rhs_lower_none";
+                    let snap = name_to_local.clone();
+                    let lookup = |n: &str| -> Option<LocalId> {
+                        snap.iter()
+                            .rev()
+                            .find(|(name, _)| name == n)
+                            .map(|(_, l)| *l)
+                    };
+                    if let Some(recv_slot) = lower_rich_expr_to_slot(
+                        init,
+                        &lookup,
+                        fn_lookup_ref,
+                        next_slot,
+                        &mut body_mstmts,
+                        local_tys,
+                        strings,
+                    ) {
+                        bail_reason = "rhs_not_class";
+                        let recv_ty = slot_ty_with_param_fallback(recv_slot.0, local_tys);
+                        if let Ty::Class(cls) = recv_ty {
+                            let is_pair = cls == "kotlin/Pair";
+                            let is_triple = cls == "kotlin/Triple";
+                            let mut emits: Vec<(String, LocalId)> =
+                                Vec::with_capacity(entries.len());
+                            let mut ok = true;
+                            for (i, ename) in entries.iter().enumerate() {
+                                let getter: String = if is_pair || is_triple {
+                                    match i {
+                                        0 => "getFirst".to_string(),
+                                        1 => "getSecond".to_string(),
+                                        2 => "getThird".to_string(),
+                                        _ => {
+                                            ok = false;
+                                            break;
+                                        }
+                                    }
+                                } else {
+                                    format!("component{}", i + 1)
+                                };
+                                // Prefer the user-class table
+                                // (data-class synthesized componentN
+                                // is registered there with its exact
+                                // return Ty). Fall back to classinfo
+                                // for JAR classes (e.g.
+                                // `Counter$Bit32$Final.component1`
+                                // from kotlincrypto/bits). When the
+                                // descriptor can't be located, emit
+                                // a synthetic `()Ljava/lang/Object;`
+                                // so the call site remains well-formed.
+                                let (ret_ty, descriptor) =
+                                    if let Some(rt) = class_method_return_ty(&cls, &getter) {
+                                        let d = match &rt {
+                                            Ty::Int => "()I".to_string(),
+                                            Ty::Long => "()J".to_string(),
+                                            Ty::Bool => "()Z".to_string(),
+                                            Ty::Byte => "()B".to_string(),
+                                            Ty::Short => "()S".to_string(),
+                                            Ty::Char => "()C".to_string(),
+                                            Ty::Float => "()F".to_string(),
+                                            Ty::Double => "()D".to_string(),
+                                            Ty::String => "()Ljava/lang/String;".to_string(),
+                                            Ty::Class(c) => format!("()L{};", c),
+                                            _ => "()Ljava/lang/Object;".to_string(),
+                                        };
+                                        (rt, d)
+                                    } else if let Some(d) =
+                                        skotch_classinfo::lookup_method_descriptor(&cls, &getter, 0)
+                                    {
+                                        let rt = d
+                                            .rsplit_once(')')
+                                            .and_then(|(_, r)| jvm_descriptor_to_ty(r))
+                                            .unwrap_or(Ty::Any);
+                                        (rt, d)
+                                    } else {
+                                        (Ty::Any, "()Ljava/lang/Object;".to_string())
+                                    };
+                                let slot = LocalId(*next_slot);
+                                *next_slot += 1;
+                                local_tys.push(ret_ty);
+                                body_mstmts.push(MStmt::Assign {
+                                    dest: slot,
+                                    value: skotch_mir::Rvalue::Call {
+                                        kind: skotch_mir::CallKind::VirtualJava {
+                                            class_name: cls.clone(),
+                                            method_name: getter,
+                                            descriptor,
+                                        },
+                                        args: vec![recv_slot],
+                                    },
+                                });
+                                emits.push((ename.to_string(), slot));
+                            }
+                            if ok && !emits.is_empty() {
+                                emitted = Some(emits);
+                            }
+                        }
+                    }
+                }
+                if let Some(emits) = emitted {
+                    for (n, s) in emits {
+                        name_to_local.push((n, s));
+                    }
+                    continue;
+                }
+                trace_bail!(
+                    "lower_loop_body val handler: destructuring init failed \
+                     to lower for `val ({}) = ...` (reason: {})",
+                    entries.join(", "),
+                    bail_reason
+                );
+                continue;
+            }
             let pname = prop.name()?;
             let init = prop.initializer()?;
             let init = unwrap_parens(init);
