@@ -36432,6 +36432,115 @@ fn lower_rich_expr_to_slot(
         }
     }
 
+    // SafeAccess (`recv?.x` / `recv?.method(args)`): best-effort
+    // lowering that mirrors the DotQualified property/method dispatch
+    // path but skips the formal null check on `recv`. The KotlinCrypto
+    // hash families use `?.` extensively on receiver slots that are
+    // statically nullable but always non-null at the call site (e.g.
+    // `state?.update(buf)` inside a `state != null` guarded block).
+    // Without an arm here every such expression bailed kind=SafeAccess
+    // and dropped the surrounding stmt — emptying out whole digest
+    // bodies and producing the SHA-256 initial-state dump observed
+    // in Phase GG. The null-safety semantics are slightly different
+    // from kotlinc (we'd throw NPE on null recv where kotlinc would
+    // return null), but that's strictly more conservative for stmt-
+    // position calls and matches the chain's runtime invariant.
+    if let KtExpr::SafeAccess(s) = &e {
+        let sa_exprs: Vec<KtExpr<'_>> = skotch_ast::children(s.syntax())
+            .iter()
+            .filter_map(KtExpr::cast)
+            .collect();
+        if sa_exprs.len() == 2 {
+            let recv_e = sa_exprs[0];
+            let accessor_e = sa_exprs[1];
+            if let Some(recv_slot) = lower_rich_expr_to_slot(
+                recv_e,
+                lookup_name,
+                fn_lookup,
+                next_slot,
+                pre_stmts,
+                extra_locals,
+                strings,
+            ) {
+                let recv_ty = slot_ty_with_param_fallback(recv_slot.0, extra_locals);
+                // `recv?.method(args)` — emit a Virtual dispatch.
+                if let KtExpr::Call(call) = accessor_e {
+                    if let Some(KtExpr::Reference(meth_ref)) = call.callee() {
+                        if let Some(method_n) = meth_ref.name() {
+                            if let Ty::Class(cname) = &recv_ty {
+                                let mut arg_slots: Vec<LocalId> = vec![recv_slot];
+                                let mut ok = true;
+                                if let Some(arg_list) = call.value_argument_list() {
+                                    for arg in arg_list.arguments() {
+                                        let Some(arg_e) = arg.expression() else {
+                                            ok = false;
+                                            break;
+                                        };
+                                        let Some(s) = lower_rich_expr_to_slot(
+                                            arg_e,
+                                            lookup_name,
+                                            fn_lookup,
+                                            next_slot,
+                                            pre_stmts,
+                                            extra_locals,
+                                            strings,
+                                        ) else {
+                                            ok = false;
+                                            break;
+                                        };
+                                        arg_slots.push(s);
+                                    }
+                                }
+                                if ok {
+                                    let ret_ty =
+                                        class_method_return_ty(cname, method_n).unwrap_or(Ty::Any);
+                                    let result_slot = LocalId(*next_slot);
+                                    *next_slot += 1;
+                                    extra_locals.push(ret_ty);
+                                    pre_stmts.push(MStmt::Assign {
+                                        dest: result_slot,
+                                        value: skotch_mir::Rvalue::Call {
+                                            kind: skotch_mir::CallKind::Virtual {
+                                                class_name: cname.clone(),
+                                                method_name: method_n.to_string(),
+                                            },
+                                            args: arg_slots,
+                                        },
+                                    });
+                                    return Some(result_slot);
+                                }
+                            }
+                        }
+                    }
+                }
+                // `recv?.prop` — emit a property-getter Virtual call.
+                if let KtExpr::Reference(prop_ref) = accessor_e {
+                    if let Some(prop_n) = prop_ref.name() {
+                        if let Ty::Class(cname) = &recv_ty {
+                            let getter_name = property_getter_name(prop_n);
+                            let ret_ty =
+                                class_method_return_ty(cname, &getter_name).unwrap_or(Ty::Any);
+                            let result_slot = LocalId(*next_slot);
+                            *next_slot += 1;
+                            extra_locals.push(ret_ty);
+                            pre_stmts.push(MStmt::Assign {
+                                dest: result_slot,
+                                value: skotch_mir::Rvalue::Call {
+                                    kind: skotch_mir::CallKind::Virtual {
+                                        class_name: cname.clone(),
+                                        method_name: getter_name,
+                                    },
+                                    args: vec![recv_slot],
+                                },
+                            });
+                            return Some(result_slot);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // Final fallback: route the expression through
     // lower_inline_expr_to_slot. The two helpers grew in parallel
     // and lower_inline handles a few simpler shapes (Reference with
