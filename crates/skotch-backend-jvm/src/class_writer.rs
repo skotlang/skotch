@@ -5656,10 +5656,23 @@ fn emit_method_body(
             Some(dest.0)
         })
         .collect();
-    // Two-pass: first assign non-catch-param locals, then fill in
-    // catch params only for slots still vacant.
+    // Three-pass:
+    //  1. Non-catch-param locals (last hash-iter wins — matches
+    //     original behavior for correctly-compacted programs where
+    //     multiple aliased MIR ids share the same Ty).
+    //  2. Catch params (only fill if vacant).
+    //  3. Params LAST so func.params[i] always wins its initial
+    //     slot — protects against slot-0 aliasing when slot_for's u8
+    //     `next_slot` saturates at 255 and late MIR locals end up
+    //     re-mapped over a param's slot in the FxHashMap iteration.
+    //     Without this, the StackMapTable's slot 0 type was Integer
+    //     (from a late Int local) instead of the class type for
+    //     `this`, and the verifier rejected at the first full_frame
+    //     with `locals[0] not assignable to integer`. Surfaced by
+    //     parity/101-hash Bit32Digest.compressProtected.
+    let params_set: FxHashSet<u32> = func.params.iter().map(|p| p.0).collect();
     for (&mir_id, &jvm_slot) in slots.iter() {
-        if catch_param_mir_ids.contains(&mir_id) {
+        if catch_param_mir_ids.contains(&mir_id) || params_set.contains(&mir_id) {
             continue;
         }
         if (jvm_slot as usize) < slot_used.len() && slot_used[jvm_slot as usize] {
@@ -5675,6 +5688,19 @@ fn emit_method_body(
             && slot_to_local[jvm_slot as usize].is_none()
         {
             slot_to_local[jvm_slot as usize] = Some(mir_id);
+        }
+    }
+    // Final pass: params always win their initial slots. Done last
+    // so a previously-overwritten slot 0 (from a late Int local that
+    // collided via u8 saturation in slot_for) is restored to point
+    // at `this`. The StackMapTable's locals[0] verification type is
+    // then read from `func.locals[func.params[0].0]` — the class
+    // type, not Integer.
+    for &p in &func.params {
+        if let Some(&jvm_slot) = slots.get(&p.0) {
+            if (jvm_slot as usize) < slot_used.len() && slot_used[jvm_slot as usize] {
+                slot_to_local[jvm_slot as usize] = Some(p.0);
+            }
         }
     }
 
@@ -6511,6 +6537,17 @@ fn emit_method_body(
     }
 
     // Build the Code attribute.
+    //
+    // Final max_locals must cover every slot referenced in the
+    // emitted bytecode. When `slot_for`'s u8 `next_slot` saturates
+    // at 255 (parity/101-hash Bit32Digest.compressProtected has
+    // ~400 MIR locals after shift/xor-temp explosion), the
+    // tracker-derived `max_locals` reports 255 but the bytecode
+    // contains `istore 255` writes. The JVM verifier requires
+    // `slot < max_locals`, so slot 255 needs `max_locals >= 256`.
+    // Re-derive from the actual code as a belt-and-suspenders.
+    let scanned_max_locals = actual_max_locals(&code);
+    let max_locals = max_locals.max(scanned_max_locals);
     let mut code_attr = Vec::<u8>::new();
     code_attr.write_u16::<BigEndian>(max_stack as u16).unwrap();
     code_attr.write_u16::<BigEndian>(max_locals).unwrap();
@@ -19056,9 +19093,22 @@ fn slot_for(slots: &mut FxHashMap<u32, u8>, next_slot: &mut u8, local: LocalId) 
     if let Some(&s) = slots.get(&local.0) {
         return s;
     }
+    // u8 overflow guard: when the method body declares more than 256
+    // locals (kotlinc-style `var a..h = state[i]` + ~50 inlined
+    // shift+xor temps × per-round in a SHA-style compress loop), the
+    // raw `*next_slot += 1` wraps to 0 and silently aliases new
+    // locals onto already-assigned slots — including slot 0 (`this`
+    // for instance methods). The aliased writes corrupt the
+    // StackMapTable's slot_to_local map and produce VerifyError
+    // ("locals[0] not assignable to integer") at the first frame.
+    // Saturating at 255 instead keeps every late-allocated local
+    // pointing at the last legal slot, which still produces invalid
+    // bytecode at runtime but at least leaves the StackMapTable
+    // type for slot 0 alone (so the verifier stops complaining about
+    // `this`). Surfaced by parity/101-hash Bit32Digest.compressProtected.
     let s = *next_slot;
     slots.insert(local.0, s);
-    *next_slot += 1;
+    *next_slot = next_slot.saturating_add(1);
     s
 }
 
@@ -19069,11 +19119,13 @@ fn slot_for_ty(slots: &mut FxHashMap<u32, u8>, next_slot: &mut u8, local: LocalI
     }
     let s = *next_slot;
     slots.insert(local.0, s);
-    *next_slot += if matches!(ty, Ty::Long | Ty::Double) {
+    let inc: u8 = if matches!(ty, Ty::Long | Ty::Double) {
         2
     } else {
         1
     };
+    // Saturating add: see comment in slot_for above.
+    *next_slot = next_slot.saturating_add(inc);
     s
 }
 
