@@ -4561,18 +4561,89 @@ pub fn lower_file(
     // unreachable from `class_field_lookup` during method-body
     // lowering — hence this dedicated pre-pass.
     let inherited_class_fields_table: rustc_hash::FxHashMap<String, Vec<(String, String, Ty)>> = {
+        // Step 0: gather every user class in the file — top-level AND
+        // nested inside another class's body — so that sealed/inner
+        // subclasses (e.g. BLAKE2Digest.Bit32) inherit fields from
+        // their enclosing parent. A flat `file.decls()` loop misses
+        // nested declarations and leaves `own`/`supers` empty for
+        // them, which in turn empties their inherited-fields entry
+        // and bails every `Reference` lookup of an inherited
+        // `@JvmField` (the dominant 101-hash bail shape).
+        //
+        // We also remember the dollar-separated *outer* path for each
+        // nested class so the same entry can be keyed under both the
+        // simple name (`Bit32`) and the dollar-qualified form
+        // (`BLAKE2Digest$Bit32`) — `class_field_lookup` is called with
+        // whichever form the current ClassMethodScope happens to
+        // carry.
+        fn collect_all_user_classes<'a>(
+            decls: impl IntoIterator<Item = KtDecl<'a>>,
+            outer_path: &str,
+            acc: &mut Vec<(skotch_ast::KtClass<'a>, String)>,
+        ) {
+            for decl in decls {
+                if let KtDecl::Class(c) = decl {
+                    acc.push((c, outer_path.to_string()));
+                    if let Some(body) = c.body() {
+                        let next_outer = match c.name() {
+                            Some(n) if outer_path.is_empty() => n.to_string(),
+                            Some(n) => format!("{outer_path}${n}"),
+                            None => outer_path.to_string(),
+                        };
+                        collect_all_user_classes(body.declarations(), &next_outer, acc);
+                    }
+                }
+            }
+        }
+        let mut all_user_classes: Vec<(skotch_ast::KtClass<'_>, String)> = Vec::new();
+        collect_all_user_classes(file.decls(), "", &mut all_user_classes);
+
+        // The file's package prefix in JVM internal form
+        // (`org/kotlincrypto/hash/blake2`) — used to build a fully
+        // qualified key so the table is reachable from
+        // `class_field_lookup`, which is invoked with whichever form
+        // the current ClassMethodScope carries (usually FQ via
+        // mir-lower's `class_jvm_name` plumbing).
+        let pkg_internal: String = file
+            .package_directive()
+            .map(|p| p.name().replace('.', "/"))
+            .unwrap_or_default();
+
+        // Helper: for a class with simple name `n` declared inside
+        // `outer_path`, return the keys to register under in the
+        // per-file tables. Always includes the simple name; for nested
+        // classes also the dollar-qualified form; and whenever the
+        // file has a package directive, also the FQ form (with `/`
+        // prefix).
+        let class_keys = |outer_path: &str, simple: &str| -> Vec<String> {
+            let mut keys: Vec<String> = Vec::with_capacity(4);
+            keys.push(simple.to_string());
+            let dollar = if outer_path.is_empty() {
+                simple.to_string()
+            } else {
+                format!("{outer_path}${simple}")
+            };
+            if dollar != simple {
+                keys.push(dollar.clone());
+            }
+            if !pkg_internal.is_empty() {
+                keys.push(format!("{pkg_internal}/{dollar}"));
+            }
+            keys
+        };
+
         // Step 1: own-fields per class via collect_class_fields, plus
         // cross-file own-fields from package_symbols.
         let mut own: rustc_hash::FxHashMap<String, Vec<(String, Ty)>> =
             rustc_hash::FxHashMap::default();
-        for decl in file.decls() {
-            if let KtDecl::Class(c) = decl {
-                let Some(cname) = c.name() else { continue };
-                let fields: Vec<(String, Ty)> = collect_class_fields(c)
-                    .into_iter()
-                    .map(|f| (f.name, f.ty))
-                    .collect();
-                own.insert(cname.to_string(), fields);
+        for (c, outer_path) in all_user_classes.iter().cloned() {
+            let Some(cname) = c.name() else { continue };
+            let fields: Vec<(String, Ty)> = collect_class_fields(c)
+                .into_iter()
+                .map(|f| (f.name, f.ty))
+                .collect();
+            for k in class_keys(&outer_path, cname) {
+                own.insert(k, fields.clone());
             }
         }
         if let Some(tbl) = package_symbols {
@@ -4585,12 +4656,12 @@ pub fn lower_file(
         }
         // Step 2: super-class map per user class.
         let mut supers: rustc_hash::FxHashMap<String, String> = rustc_hash::FxHashMap::default();
-        for decl in file.decls() {
-            if let KtDecl::Class(c) = decl {
-                let Some(cname) = c.name() else { continue };
-                let (super_class, _) = collect_class_super_iface_aware(c);
-                if let Some(sc) = super_class {
-                    supers.insert(cname.to_string(), sc);
+        for (c, outer_path) in all_user_classes.iter().cloned() {
+            let Some(cname) = c.name() else { continue };
+            let (super_class, _) = collect_class_super_iface_aware(c);
+            if let Some(sc) = super_class {
+                for k in class_keys(&outer_path, cname) {
+                    supers.insert(k, sc.clone());
                 }
             }
         }
@@ -4605,9 +4676,31 @@ pub fn lower_file(
             }
         }
         // Step 3: walk the chain for each class to build the
-        // inherited-fields list.
+        // inherited-fields list. `supers` values are produced by
+        // `collect_class_super_iface_aware`, which returns FQ form
+        // (`org/kotlincrypto/.../BLAKE2Digest$Bit32`) for in-package
+        // / classpath resolutions. `own` is keyed by both simple
+        // name (`Bit32`) and dollar-qualified outer-prefixed form
+        // (`BLAKE2Digest$Bit32`). Try the parent name directly first,
+        // then its post-last-`/` tail (simple/$-qualified form) so
+        // chain walking finds the parent's own-fields even when
+        // supers carries an FQ slash-prefixed path.
         let mut out: rustc_hash::FxHashMap<String, Vec<(String, String, Ty)>> =
             rustc_hash::FxHashMap::default();
+        let lookup_own_by_parent = |own: &rustc_hash::FxHashMap<String, Vec<(String, Ty)>>,
+                                    parent: &str|
+         -> Option<Vec<(String, Ty)>> {
+            if let Some(f) = own.get(parent) {
+                return Some(f.clone());
+            }
+            let tail = parent.rsplit('/').next().unwrap_or(parent);
+            if tail != parent {
+                if let Some(f) = own.get(tail) {
+                    return Some(f.clone());
+                }
+            }
+            None
+        };
         for cname in own.keys() {
             let mut chain: Vec<(String, String, Ty)> = Vec::new();
             let mut cur = cname.clone();
@@ -4615,14 +4708,26 @@ pub fn lower_file(
                 let Some(parent) = supers.get(&cur).cloned() else {
                     break;
                 };
-                if let Some(parent_fields) = own.get(&parent) {
-                    for (n, t) in parent_fields {
+                if let Some(parent_fields) = lookup_own_by_parent(&own, &parent) {
+                    for (n, t) in &parent_fields {
                         if !chain.iter().any(|(_, name, _)| name == n) {
                             chain.push((parent.clone(), n.clone(), t.clone()));
                         }
                     }
                 }
-                cur = parent;
+                // Normalize for the next supers lookup: try the FQ
+                // form first (matches the supers keys we just inserted
+                // when nested-aware), then fall back to the simple
+                // tail. supers is keyed by the simple/dollar-qualified
+                // forms from our pre-pass, but for cross-file parents
+                // we may also have an entry under the FQ name from
+                // package_symbols.
+                let parent_tail = parent.rsplit('/').next().unwrap_or(&parent).to_string();
+                cur = if supers.contains_key(&parent) {
+                    parent
+                } else {
+                    parent_tail
+                };
             }
             if !chain.is_empty() {
                 out.insert(cname.clone(), chain);
