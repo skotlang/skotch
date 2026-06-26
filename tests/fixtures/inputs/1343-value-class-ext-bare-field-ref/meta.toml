@@ -1,0 +1,4 @@
+name = "1343-value-class-ext-bare-field-ref"
+status = "supported"
+features = ["value-class-extension-fn", "implicit-this-field-ref", "class-method-ctx-scope"]
+reason = "Phase LL fix: `method_simple_body_full` now installs `ClassMethodScope` for the WHOLE body so the mini-walker / lower_rich → lower_inline fallback path sees `class_field_lookup` resolving bare-identifier reads in the body of a top-level extension function. Unblocks `inline fun V.method() { wrappedVal.foo() }` shapes on `@JvmInline value class V(val wrappedVal: U)` — KotlinCrypto/hash (parity/101-hash) BLAKE2/SHA-2/SHA-3 compression inner loops cascade through this idiom."

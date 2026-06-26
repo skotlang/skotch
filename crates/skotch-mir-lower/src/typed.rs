@@ -42142,6 +42142,18 @@ fn method_simple_body_full(
         }
     }
     let _early_param_scope = ParamTyScope::new(early_param_fallback);
+    // Phase LL: install the class-method context for the WHOLE body so
+    // the mini-walker / builder / lower_rich → lower_inline fallback
+    // paths see `class_field_lookup` resolving bare-identifier reads
+    // (e.g. `m` in `inline fun Bit32Message.fill() { m.fill(0) }` where
+    // `m` is the value-class underlying val passed via `field_names`).
+    // `try_lower_multi_stmt_block_with_offset` installs its own scope
+    // internally — RAII save/restore makes the nested install a no-op.
+    // Without this, top-level value-class extension fns with bare
+    // implicit-`this` field references inside `DotQualified(Reference,
+    // …)` shapes bail at `lower_inline_expr_to_slot::Reference` →
+    // cascade the whole body to empty MIR.
+    let _outer_class_scope = ClassMethodScope::new(class_name, field_names);
     // Install the extension-receiver `this` slot override BEFORE any
     // body lowering. Resolved by every `KtExpr::This(_)` arm via
     // `current_extension_this_slot()`. Slot 1 because slot 0 is the
