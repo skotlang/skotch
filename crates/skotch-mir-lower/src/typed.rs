@@ -572,6 +572,42 @@ fn lookup_class_companion_intarray(class_name: &str, val_name: &str) -> Option<V
     })
 }
 
+thread_local! {
+    /// Module-scoped registry of companion-object `[private] const val
+    /// X = LIT` declarations. Key: `(outer_class_name, val_name)`.
+    /// Value: the const value and its inferred Ty.
+    ///
+    /// Drives the bare-Ident-in-method-body resolution path for
+    /// companion `const val` of primitive type (`BLOCK_SIZE`,
+    /// `ROUND_COUNT`, `R1`-`R4`, etc.) — without this table, bare
+    /// references inside a class method body fall through every arm
+    /// (local lookup, class field, companion IntArray, cross-file val)
+    /// and bail. KotlinCrypto/hash (parity/101-hash) uses this idiom
+    /// densely inside MD5/SHA/Blake/Keccak compress loops; each bail
+    /// cascades to every DotQualified parent (`x[i - BLOCK_SIZE]`,
+    /// `buf.fill(0, 0, BLOCK_SIZE)`), causing whole methods to stub.
+    /// Inlining the literal at the use site mirrors kotlinc's own
+    /// constant-fold for `const val`.
+    ///
+    /// Populated by `register_class_companion_primconsts` BEFORE
+    /// `collect_class_methods` walks the method bodies — the data must
+    /// be in scope when each body's `lower_loop_body` is called.
+    static CLASS_COMPANION_PRIMCONST_LITERALS:
+        std::cell::RefCell<rustc_hash::FxHashMap<(String, String), (skotch_mir::MirConst, Ty)>> =
+        std::cell::RefCell::new(rustc_hash::FxHashMap::default());
+}
+
+fn lookup_class_companion_primconst(
+    class_name: &str,
+    val_name: &str,
+) -> Option<(skotch_mir::MirConst, Ty)> {
+    CLASS_COMPANION_PRIMCONST_LITERALS.with(|c| {
+        c.borrow()
+            .get(&(class_name.to_string(), val_name.to_string()))
+            .cloned()
+    })
+}
+
 /// Scan `c`'s companion-object body for `[private] val X =
 /// intArrayOf(LIT, LIT, ...)` declarations whose initializer is a Call
 /// to `intArrayOf` with only literal-int / negated-literal-int args.
@@ -639,6 +675,56 @@ fn register_class_companion_intarrays(c: skotch_ast::KtClass<'_>, class_name: &s
         CLASS_COMPANION_INTARRAY_LITERALS.with(|c| {
             c.borrow_mut()
                 .insert((class_name.to_string(), name.to_string()), values);
+        });
+    }
+}
+
+/// Scan `c`'s companion-object body for `[private] const val X = LIT`
+/// (or `val X = LIT` whose initializer is `literal_to_const`-able) and
+/// register each one in `CLASS_COMPANION_PRIMCONST_LITERALS` so the
+/// body walker can inline a bare `X` reference at the use site. Mirrors
+/// `register_class_companion_intarrays` for primitive-typed const vals.
+/// Skips String literals to avoid the shared-strings pool dependency
+/// (the ctor-delegation companion-consts path skips them for the same
+/// reason). Required to graduate parity/101-hash's Bit32Digest /
+/// Bit64Digest / MD5 / SHA1 / BLAKE2 / Keccak compress loops, which use
+/// `BLOCK_SIZE` / `ROUND_COUNT` / `R1`-`R4` densely as bare references
+/// inside method bodies.
+fn register_class_companion_primconsts(c: skotch_ast::KtClass<'_>, class_name: &str) {
+    let Some(body) = c.body() else { return };
+    let Some(companion) = body.declarations().find_map(|d| match d {
+        KtDecl::Object(o) if o.is_companion() => Some(o),
+        _ => None,
+    }) else {
+        return;
+    };
+    let Some(comp_body) = companion.body() else {
+        return;
+    };
+    for decl in comp_body.declarations() {
+        let KtDecl::Property(prop) = decl else {
+            continue;
+        };
+        let Some(name) = prop.name() else { continue };
+        let Some(init) = prop.initializer() else {
+            continue;
+        };
+        let init = unwrap_parens(init);
+        let mut scratch: Vec<String> = Vec::new();
+        let Some((mc, ty)) = literal_to_const(&init, &mut scratch) else {
+            continue;
+        };
+        // Skip String literals: they would require splicing into the
+        // module's shared strings pool with a fresh StringId, which the
+        // ctor-delegation `companion_consts` path also skips for the
+        // same reason (typed.rs:40546). Numeric / Bool / Char / Null
+        // are all safe to inline as a single `Const` rvalue.
+        if matches!(mc, skotch_mir::MirConst::String(_)) {
+            continue;
+        }
+        CLASS_COMPANION_PRIMCONST_LITERALS.with(|c| {
+            c.borrow_mut()
+                .insert((class_name.to_string(), name.to_string()), (mc, ty));
         });
     }
 }
@@ -4848,6 +4934,18 @@ pub fn lower_file(
             // collect_class_methods / constructor_from_primary so the
             // table is in scope when each body is lowered.
             register_class_companion_intarrays(c, &name);
+            // Companion `[private] const val X = LIT` hoist: scan the
+            // companion-object body for primitive-typed const vals (Int,
+            // Long, Bool, Char, etc.) and register them so the body
+            // walker can inline a bare `X` reference at use sites. Without
+            // this, references like `BLOCK_SIZE` / `ROUND_COUNT` /
+            // `R1`-`R4` inside method bodies bail through every arm
+            // (local lookup, class field, companion IntArray, cross-file
+            // val) and cascade their DotQualified arg parents to stub.
+            // Must happen BEFORE collect_class_methods so the table is in
+            // scope when each body is lowered. Required to graduate
+            // parity/101-hash's MD5/SHA*/Blake*/Keccak compress loops.
+            register_class_companion_primconsts(c, &name);
             let methods = collect_class_methods(
                 c,
                 &name,
@@ -25922,6 +26020,25 @@ fn lower_inline_expr_to_slot(
                         pre_stmts,
                         extra_locals,
                     ));
+                }
+                // Companion primitive `const val` inlining for bare
+                // `BLOCK_SIZE`/`ROUND_COUNT`/`R1` style references in
+                // class method bodies. Materializes the const as a
+                // fresh local slot so the existing arm logic (operator,
+                // ArrayAccess index, Call arg) consumes it as a normal
+                // primitive. Mirrors kotlinc's own constant-fold for
+                // `const val` access from the enclosing class —
+                // KotlinCrypto/hash (parity/101-hash) uses this idiom
+                // densely inside MD5/SHA/Blake/Keccak compress loops.
+                if let Some((mc, ty)) = lookup_class_companion_primconst(&cls, n) {
+                    let slot = LocalId(*next_slot);
+                    *next_slot += 1;
+                    extra_locals.push(ty);
+                    pre_stmts.push(MStmt::Assign {
+                        dest: slot,
+                        value: skotch_mir::Rvalue::Const(mc),
+                    });
+                    return Some(slot);
                 }
             }
             None
