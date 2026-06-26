@@ -19804,9 +19804,31 @@ fn recompute_max_stack_from_code_with_handlers(
             }
         }
     }
+    // Termination guards against pathological inputs (see parity/101-hash
+    // Bit64Digest::compressProtected): if upstream emission leaves a
+    // back-edge with a net-positive stack delta (e.g. a stray `getfield`
+    // that survives because a field name shadows a local that was assigned
+    // inside the loop body), the monotonic-grow update at the bottom of
+    // this loop re-pushes the back-edge target every iteration with an
+    // ever-larger `stack_out`, and the worklist never drains. The JVM
+    // spec caps `max_stack` at u16::MAX, so any depth exceeding that is
+    // already invalid bytecode — we bail out instead of looping forever
+    // so the verifier (or a downstream caller's sanity check) can reject
+    // the method cleanly. We also cap per-offset visits as a belt-and-
+    // suspenders defense for shapes that escalate more slowly.
+    const STACK_DEPTH_CEILING: i32 = u16::MAX as i32;
+    const MAX_VISITS_PER_OFFSET: u32 = 256;
+    let mut visits: Vec<u32> = vec![0; code.len()];
     while let Some(off) = work.pop() {
         if off >= code.len() {
             continue;
+        }
+        visits[off] = visits[off].saturating_add(1);
+        if visits[off] > MAX_VISITS_PER_OFFSET {
+            // Runaway dataflow — bail out with the largest depth seen so
+            // far. Any caller is free to clamp/reject; we just refuse to
+            // spin.
+            return max_stack.min(STACK_DEPTH_CEILING);
         }
         let stack_in = match depth_in[off] {
             Some(d) => d,
@@ -19815,12 +19837,18 @@ fn recompute_max_stack_from_code_with_handlers(
         if stack_in > max_stack {
             max_stack = stack_in;
         }
+        if stack_in >= STACK_DEPTH_CEILING {
+            return STACK_DEPTH_CEILING;
+        }
         let op = code[off];
         let len = instruction_len(code, off);
         let delta = stack_effect_of_op(code, cp, off);
-        let stack_out = (stack_in + delta).max(0);
+        let stack_out = (stack_in + delta).clamp(0, STACK_DEPTH_CEILING);
         if stack_out > max_stack {
             max_stack = stack_out;
+        }
+        if stack_out >= STACK_DEPTH_CEILING {
+            return STACK_DEPTH_CEILING;
         }
         // Determine successors based on opcode.
         let mut successors: Vec<usize> = Vec::new();
