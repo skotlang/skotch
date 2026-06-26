@@ -1029,9 +1029,17 @@ fn emit_equals_impl0(
     // the conditional branch; Int/Bool/Byte/Short/Char skip that and
     // branch via if_icmpne directly.
     let cmp_byte = matches!(underlying, Ty::Long | Ty::Float | Ty::Double) as u8;
-    let needs_smt = !matches!(
+    // Only primitive-typed arms emit a conditional branch; every other
+    // underlying (String, Class, Nullable, IntArray/LongArray/…, Any)
+    // falls through to the branch-free `invokevirtual equals; ireturn`
+    // shape and therefore must NOT carry a StackMapTable. Pre-fix this
+    // was an exclusion list (String|Class|Any|Nullable) that missed
+    // every array variant, so `value class V(val m: IntArray)` got a
+    // 2-frame SMT attached to 6 bytes of branch-free code → javap
+    // "Bytecode offset out of range" / VerifyError at class-load time.
+    let needs_smt = matches!(
         underlying,
-        Ty::String | Ty::Class(_) | Ty::Any | Ty::Nullable(_)
+        Ty::Bool | Ty::Byte | Ty::Short | Ty::Char | Ty::Int | Ty::Long | Ty::Float | Ty::Double
     );
     let smt = if needs_smt {
         // Branch target 1 (iconst_0): right after `load1; load2;
@@ -1589,6 +1597,52 @@ mod tests {
         assert_eq!(slot_width_for(&Ty::Double), 2);
         assert_eq!(slot_width_for(&Ty::Int), 1);
         assert_eq!(slot_width_for(&Ty::String), 1);
+    }
+
+    #[test]
+    fn equals_impl0_intarray_underlying_omits_stack_map_table() {
+        // Regression: pre-fix, `equals-impl0` on a value class with an
+        // array-typed underlying (IntArray/LongArray/…) emitted a
+        // branch-free `aload_0; aload_1; invokevirtual Object.equals;
+        // ireturn` body (6 bytes) but still attached the 2-frame
+        // StackMapTable used by the primitive branches. javap reported
+        // "Bytecode offset out of range" and class-load triggered a
+        // VerifyError. The `needs_smt` selector was an exclusion list
+        // (Ty::String|Ty::Class|Ty::Any|Ty::Nullable) that omitted every
+        // array variant; the fix flips it to an inclusion list of the
+        // primitive scalars that actually emit a conditional branch.
+        let mut cp = ConstantPool::new();
+        let code_attr = cp.utf8("Code");
+        let smt_name = cp.utf8("StackMapTable");
+        let blob = emit_equals_impl0(&Ty::IntArray, "[I", 1, &mut cp, code_attr, smt_name);
+        // The method blob structure starts with: access_flags(2) +
+        // name_idx(2) + desc_idx(2) + attr_count(2) + code_attr_name(2)
+        // + attr_len(4) + max_stack(2) + max_locals(2) + code_len(4) +
+        // code(6) + exception_table_length(2) + sub_attr_count(2).
+        // sub_attr_count must be 0; a non-zero value here would mean a
+        // StackMapTable sub-attribute was attached.
+        // sub_attr_count is at offset access(2)+name(2)+desc(2)+
+        // attr_cnt(2)+code_name(2)+attr_len(4)+max_stack(2)+
+        // max_locals(2)+code_len(4)+code(6)+exc_tbl_len(2) = 30.
+        let sub_attr_count = u16::from_be_bytes([blob[30], blob[31]]);
+        assert_eq!(
+            sub_attr_count, 0,
+            "value-class equals-impl0 on IntArray underlying must NOT attach a StackMapTable \
+             (the body is branch-free `invokevirtual Object.equals; ireturn`)"
+        );
+        // Sanity: the same emitter must still attach the SMT on Long.
+        let mut cp = ConstantPool::new();
+        let code_attr = cp.utf8("Code");
+        let smt_name = cp.utf8("StackMapTable");
+        let blob = emit_equals_impl0(&Ty::Long, "J", 2, &mut cp, code_attr, smt_name);
+        // For Long, code_len = lload_0 + lload_2 + lcmp + ifne(3) +
+        // iconst_1 + goto(3) + iconst_0 + ireturn = 12 bytes. The
+        // offset of sub_attr_count is 24 + code_len = 36.
+        let sub_attr_count = u16::from_be_bytes([blob[36], blob[37]]);
+        assert_eq!(
+            sub_attr_count, 1,
+            "Long-underlying equals-impl0 must still carry its SMT (the body branches on lcmp)"
+        );
     }
 
     #[test]
