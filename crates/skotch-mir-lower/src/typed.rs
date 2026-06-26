@@ -27015,6 +27015,93 @@ fn lower_rich_expr_to_slot(
             );
         }
     }
+    // Block expression in value position: `val x = { stmts...; lastE }`,
+    // `if (c) { ...; lastE } else ...`, etc. — anywhere the surrounding
+    // dispatcher reaches a Block via the rich-expr lowerer rather than
+    // through a specialized "arm body" peeler. Walk the block's children:
+    // register every `val` / `var` binding in a local name chain (chained
+    // to the outer `lookup_name` so references to enclosing-scope locals
+    // still resolve), lower every non-final KtExpr as a side-effect-only
+    // statement (its result slot is discarded), and recurse on the final
+    // KtExpr to produce the block's value slot.
+    //
+    // Destructuring `val (a, b) = e` is intentionally NOT handled here —
+    // the loop-body walker has the full destructuring path. Falling
+    // through on that shape keeps the surrounding caller's bail diagnostic
+    // accurate. KtFun (local-function decls) are skipped (mirrors
+    // `lower_loop_body`'s MVP behavior — call resolution happens later).
+    if let KtExpr::Block(bl) = &e {
+        let kids: Vec<&skotch_sil::SilNode> = skotch_ast::children(bl.syntax()).iter().collect();
+        // Locate the final KtExpr — that's the value-producing tail.
+        // An empty block (no KtExpr at all) has no result value; bail.
+        let last_idx = kids
+            .iter()
+            .enumerate()
+            .rev()
+            .find(|(_, c)| KtExpr::cast(c).is_some())
+            .map(|(i, _)| i)?;
+        let mut local_bindings: Vec<(String, LocalId)> = Vec::new();
+        let outer_lookup = lookup_name;
+        let mut result_slot: Option<LocalId> = None;
+        for (i, c) in kids.iter().enumerate().take(last_idx + 1) {
+            if let Some(prop) = skotch_ast::KtProperty::cast(c) {
+                // Skip the rare shape (destructuring, no init) so the
+                // outer bail diagnostic stays accurate.
+                if prop.destructuring().is_some() {
+                    return None;
+                }
+                let pname = prop.name()?.to_string();
+                let init = unwrap_parens(prop.initializer()?);
+                let bindings_snap = local_bindings.clone();
+                let lookup = |n: &str| -> Option<LocalId> {
+                    if let Some((_, l)) = bindings_snap.iter().rev().find(|(name, _)| name == n) {
+                        return Some(*l);
+                    }
+                    outer_lookup(n)
+                };
+                let slot = lower_rich_expr_to_slot(
+                    init,
+                    &lookup,
+                    fn_lookup,
+                    next_slot,
+                    pre_stmts,
+                    extra_locals,
+                    strings,
+                )?;
+                local_bindings.push((pname, slot));
+                continue;
+            }
+            if skotch_ast::KtFun::cast(c).is_some() {
+                // Local fn decl inside the block — match `lower_loop_body`
+                // and skip without bailing.
+                continue;
+            }
+            if let Some(stmt_e) = KtExpr::cast(c) {
+                let bindings_snap = local_bindings.clone();
+                let lookup = |n: &str| -> Option<LocalId> {
+                    if let Some((_, l)) = bindings_snap.iter().rev().find(|(name, _)| name == n) {
+                        return Some(*l);
+                    }
+                    outer_lookup(n)
+                };
+                let s = lower_rich_expr_to_slot(
+                    stmt_e,
+                    &lookup,
+                    fn_lookup,
+                    next_slot,
+                    pre_stmts,
+                    extra_locals,
+                    strings,
+                )?;
+                if i == last_idx {
+                    result_slot = Some(s);
+                }
+                continue;
+            }
+            // Trivia (whitespace, braces, semicolons, comments) — skip.
+        }
+        return result_slot;
+    }
     // `super.method(args)` and `super.field` dispatch. A bare `super`
     // by itself has no value-level meaning — the only useful surfaces
     // are method-dispatch (`super.foo(x)`) and field-load
