@@ -29215,6 +29215,160 @@ fn lower_rich_expr_to_slot(
             }
         }
     }
+    // Phase U: Kotlin `Int`/`Long` bitwise infix methods —
+    // `a and b`, `a or b`, `a xor b`, `a shl k`, `a shr k`, `a ushr
+    // k`. The backend already has a `$bitwise` pseudo-class arm
+    // (`class_writer.rs`'s StaticJava handler emits one of
+    // iand/ior/ixor/ishl/ishr/iushr/land/lor/lxor/lshl/lshr/lushr
+    // directly), but until this arm mir-lower never emitted such a
+    // call — `is_stdlib_infix` blocked the user-infix path below
+    // for `and`/`or`/etc., and no other Binary arm handled them.
+    // Without this, MD5/SHA2 `compressProtected` bodies — which
+    // multiply nested `(x and y) or (a.inv() and b)` chains — bail
+    // empty and the digest comes out all zeros.
+    //
+    // Operand promotion: if either side is Ty::Long the result is
+    // Long (l-prefixed opcode); otherwise Int. Shift ops always
+    // emit the receiver-typed opcode (`shl` on Long → lshl) but
+    // the shift amount must be Int (kotlinc enforces this; we just
+    // lower whatever slot we get).
+    if let KtExpr::Binary(b) = e {
+        let op_text = b.operation().map(|o| o.text()).unwrap_or_default();
+        let bit_kind: Option<&'static str> = match op_text.as_str() {
+            "and" => Some("and"),
+            "or" => Some("or"),
+            "xor" => Some("xor"),
+            "shl" => Some("shl"),
+            "shr" => Some("shr"),
+            "ushr" => Some("ushr"),
+            _ => None,
+        };
+        if let Some(kind) = bit_kind {
+            let lhs = b.lhs()?;
+            let rhs = b.rhs()?;
+            let lhs_slot = lower_rich_expr_to_slot(
+                lhs,
+                lookup_name,
+                fn_lookup,
+                next_slot,
+                pre_stmts,
+                extra_locals,
+                strings,
+            )?;
+            let rhs_slot = lower_rich_expr_to_slot(
+                rhs,
+                lookup_name,
+                fn_lookup,
+                next_slot,
+                pre_stmts,
+                extra_locals,
+                strings,
+            )?;
+            let lhs_ty = slot_ty_with_param_fallback(lhs_slot.0, extra_locals);
+            let rhs_ty = slot_ty_with_param_fallback(rhs_slot.0, extra_locals);
+            // Skip if either side is a user class — fall through
+            // to the user-infix arm below (a Class<T> with an
+            // `and` method overrides the stdlib intrinsic).
+            let is_class_recv = matches!(lhs_ty, Ty::Class(_));
+            if !is_class_recv {
+                let is_long = matches!(lhs_ty, Ty::Long) || matches!(rhs_ty, Ty::Long);
+                let (method_name, ret_ty, desc) = match (kind, is_long) {
+                    ("and", false) => ("iand", Ty::Int, "(II)I"),
+                    ("or", false) => ("ior", Ty::Int, "(II)I"),
+                    ("xor", false) => ("ixor", Ty::Int, "(II)I"),
+                    ("shl", false) => ("ishl", Ty::Int, "(II)I"),
+                    ("shr", false) => ("ishr", Ty::Int, "(II)I"),
+                    ("ushr", false) => ("iushr", Ty::Int, "(II)I"),
+                    ("and", true) => ("land", Ty::Long, "(JJ)J"),
+                    ("or", true) => ("lor", Ty::Long, "(JJ)J"),
+                    ("xor", true) => ("lxor", Ty::Long, "(JJ)J"),
+                    ("shl", true) => ("lshl", Ty::Long, "(JI)J"),
+                    ("shr", true) => ("lshr", Ty::Long, "(JI)J"),
+                    ("ushr", true) => ("lushr", Ty::Long, "(JI)J"),
+                    _ => unreachable!(),
+                };
+                let result_slot = LocalId(*next_slot);
+                *next_slot += 1;
+                extra_locals.push(ret_ty);
+                pre_stmts.push(MStmt::Assign {
+                    dest: result_slot,
+                    value: skotch_mir::Rvalue::Call {
+                        kind: skotch_mir::CallKind::StaticJava {
+                            class_name: "$bitwise".to_string(),
+                            method_name: method_name.to_string(),
+                            descriptor: desc.to_string(),
+                        },
+                        args: vec![lhs_slot, rhs_slot],
+                    },
+                });
+                return Some(result_slot);
+            }
+        }
+    }
+    // Phase U: Kotlin `Int.inv()` / `Long.inv()` bitwise-NOT. Emits
+    // as `iconst_m1; ixor` (or `lconst_-1; lxor`). The backend's
+    // `$bitwise` arm doesn't take a unary form, so we synthesize a
+    // (-1) const and lower as `x xor -1`. Without this, MD5 stage 1
+    // (`(b and c) or (b.inv() and d)`) bails because `.inv()`
+    // resolves to None as a method call on an Int/Long primitive.
+    if let KtExpr::DotQualified(dq) = e {
+        let dq_exprs: Vec<KtExpr<'_>> = skotch_ast::children(dq.syntax())
+            .iter()
+            .filter_map(KtExpr::cast)
+            .collect();
+        if dq_exprs.len() == 2 {
+            if let KtExpr::Call(call) = &dq_exprs[1] {
+                let method_n = match call.callee() {
+                    Some(KtExpr::Reference(r)) => r.name(),
+                    _ => None,
+                };
+                let arg_count = call
+                    .value_argument_list()
+                    .map(|al| al.arguments().count())
+                    .unwrap_or(0);
+                if method_n == Some("inv") && arg_count == 0 {
+                    let recv_slot = lower_rich_expr_to_slot(
+                        dq_exprs[0],
+                        lookup_name,
+                        fn_lookup,
+                        next_slot,
+                        pre_stmts,
+                        extra_locals,
+                        strings,
+                    )?;
+                    let recv_ty = slot_ty_with_param_fallback(recv_slot.0, extra_locals);
+                    let is_long = matches!(recv_ty, Ty::Long);
+                    let (const_val, ret_ty, method_name, desc) = if is_long {
+                        (skotch_mir::MirConst::Long(-1), Ty::Long, "lxor", "(JJ)J")
+                    } else {
+                        (skotch_mir::MirConst::Int(-1), Ty::Int, "ixor", "(II)I")
+                    };
+                    let minus_one_slot = LocalId(*next_slot);
+                    *next_slot += 1;
+                    extra_locals.push(ret_ty.clone());
+                    pre_stmts.push(MStmt::Assign {
+                        dest: minus_one_slot,
+                        value: skotch_mir::Rvalue::Const(const_val),
+                    });
+                    let result_slot = LocalId(*next_slot);
+                    *next_slot += 1;
+                    extra_locals.push(ret_ty);
+                    pre_stmts.push(MStmt::Assign {
+                        dest: result_slot,
+                        value: skotch_mir::Rvalue::Call {
+                            kind: skotch_mir::CallKind::StaticJava {
+                                class_name: "$bitwise".to_string(),
+                                method_name: method_name.to_string(),
+                                descriptor: desc.to_string(),
+                            },
+                            args: vec![recv_slot, minus_one_slot],
+                        },
+                    });
+                    return Some(result_slot);
+                }
+            }
+        }
+    }
     // User-defined infix method call: `a add b` → `a.add(b)`.
     // Triggers when the Binary operation is an alphanumeric
     // identifier (not a symbolic operator like `+`, `==`, etc.) AND
@@ -32259,6 +32413,89 @@ fn lower_rich_expr_to_slot(
                                 },
                             });
                             return Some(result_slot);
+                        }
+                    }
+                    // Phase U: KotlinCrypto bitops `leIntAt` /
+                    // `beIntAt` (and short/long sibling) read-ext
+                    // dispatch. Same JAR as Phase H6a/H6b
+                    // (`endian-jvm-0.3.0.jar`); the static signatures
+                    // are:
+                    //
+                    //   Endian$Little.leShortAt(byte[], int): short
+                    //   Endian$Little.leIntAt  (byte[], int): int
+                    //   Endian$Little.leLongAt (byte[], int): long
+                    //   Endian$Big   .beShortAt(byte[], int): short
+                    //   Endian$Big   .beIntAt  (byte[], int): int
+                    //   Endian$Big   .beLongAt (byte[], int): long
+                    //
+                    // Source-level call shape in MD5.kt:
+                    //   `input.leIntAt(offset = (i * Int.SIZE_BYTES) + offset)`
+                    // The cross-file ext-fn registry only covers
+                    // source decls, so on a precompiled JAR the
+                    // receiver-type dispatch returns None and the
+                    // outer `compressProtected` body bails empty.
+                    let is_le_at = matches!(method_n, "leShortAt" | "leIntAt" | "leLongAt");
+                    let is_be_at = matches!(method_n, "beShortAt" | "beIntAt" | "beLongAt");
+                    if (is_le_at || is_be_at) && matches!(recv_ty_candidate, Some(Ty::ByteArray)) {
+                        if let Some(arg_list) = call.value_argument_list() {
+                            // Single arg: positional or `offset = …`.
+                            let mut offset_e: Option<KtExpr<'_>> = None;
+                            for a in arg_list.arguments() {
+                                let Some(ae) = a.expression() else {
+                                    offset_e = None;
+                                    break;
+                                };
+                                match a.name() {
+                                    Some("offset") | None => offset_e = Some(ae),
+                                    Some(_) => {}
+                                }
+                            }
+                            if let Some(off_ae) = offset_e {
+                                let recv_slot = lower_rich_expr_to_slot(
+                                    dq_exprs[0],
+                                    lookup_name,
+                                    fn_lookup,
+                                    next_slot,
+                                    pre_stmts,
+                                    extra_locals,
+                                    strings,
+                                )?;
+                                let off_slot = lower_rich_expr_to_slot(
+                                    off_ae,
+                                    lookup_name,
+                                    fn_lookup,
+                                    next_slot,
+                                    pre_stmts,
+                                    extra_locals,
+                                    strings,
+                                )?;
+                                let (ret_desc, ret_ty) = match method_n {
+                                    "leShortAt" | "beShortAt" => ("S", Ty::Int),
+                                    "leLongAt" | "beLongAt" => ("J", Ty::Long),
+                                    _ => ("I", Ty::Int),
+                                };
+                                let class_name = if is_le_at {
+                                    "org/kotlincrypto/bitops/endian/Endian$Little"
+                                } else {
+                                    "org/kotlincrypto/bitops/endian/Endian$Big"
+                                };
+                                let desc = format!("([BI){}", ret_desc);
+                                let result_slot = LocalId(*next_slot);
+                                *next_slot += 1;
+                                extra_locals.push(ret_ty);
+                                pre_stmts.push(MStmt::Assign {
+                                    dest: result_slot,
+                                    value: skotch_mir::Rvalue::Call {
+                                        kind: skotch_mir::CallKind::StaticJava {
+                                            class_name: class_name.to_string(),
+                                            method_name: method_n.to_string(),
+                                            descriptor: desc,
+                                        },
+                                        args: vec![recv_slot, off_slot],
+                                    },
+                                });
+                                return Some(result_slot);
+                            }
                         }
                     }
                     if matches!(recv_ty_candidate, Some(Ty::String)) {
