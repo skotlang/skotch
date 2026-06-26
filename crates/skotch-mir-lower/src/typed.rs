@@ -13810,6 +13810,110 @@ fn lower_loop_body(
             }
             let lhs = b.lhs().map(unwrap_parens)?;
             let rhs = b.rhs().map(unwrap_parens)?;
+            // ArrayAccess LHS — `arr[idx] = rhs` / `arr[idx] op= rhs`.
+            // Pervasive in parity/101-hash MD5/SHA round-update tails
+            // like `state[0] += a`. Without this arm the
+            // `KtExpr::Reference(lref) = lhs` shape-check below
+            // returns None, taking the whole loop-body lowering down
+            // with it (and silently empties `compressProtected`).
+            if let KtExpr::ArrayAccess(aa) = &lhs {
+                let aa_children: Vec<&skotch_sil::SilNode> =
+                    skotch_ast::children(aa.syntax()).iter().collect();
+                let array_expr_opt = aa_children
+                    .iter()
+                    .find_map(|c| KtExpr::cast(c))
+                    .map(unwrap_parens);
+                let index_exprs: Vec<KtExpr<'_>> = aa_children
+                    .iter()
+                    .find_map(|c| {
+                        if c.kind == skotch_syntax::SyntaxKind::INDICES {
+                            Some(
+                                skotch_ast::children(c)
+                                    .iter()
+                                    .filter_map(KtExpr::cast)
+                                    .map(unwrap_parens)
+                                    .collect::<Vec<_>>(),
+                            )
+                        } else {
+                            None
+                        }
+                    })
+                    .unwrap_or_default();
+                if let (Some(array_expr), 1) = (array_expr_opt, index_exprs.len()) {
+                    let snap = name_to_local.clone();
+                    let lookup = |n: &str| -> Option<LocalId> {
+                        snap.iter()
+                            .rev()
+                            .find(|(name, _)| name == n)
+                            .map(|(_, l)| *l)
+                    };
+                    let a_slot = lower_rich_expr_to_slot(
+                        array_expr,
+                        &lookup,
+                        fn_lookup_ref,
+                        next_slot,
+                        &mut body_mstmts,
+                        local_tys,
+                        strings,
+                    )?;
+                    let i_slot = lower_rich_expr_to_slot(
+                        index_exprs[0],
+                        &lookup,
+                        fn_lookup_ref,
+                        next_slot,
+                        &mut body_mstmts,
+                        local_tys,
+                        strings,
+                    )?;
+                    let r_slot = lower_rich_expr_to_slot(
+                        rhs,
+                        &lookup,
+                        fn_lookup_ref,
+                        next_slot,
+                        &mut body_mstmts,
+                        local_tys,
+                        strings,
+                    )?;
+                    let store_value = if let Some(op) = compound_op {
+                        let old = LocalId(*next_slot);
+                        *next_slot += 1;
+                        local_tys.push(Ty::Int);
+                        body_mstmts.push(MStmt::Assign {
+                            dest: old,
+                            value: skotch_mir::Rvalue::ArrayLoad {
+                                array: a_slot,
+                                index: i_slot,
+                            },
+                        });
+                        let new_v = LocalId(*next_slot);
+                        *next_slot += 1;
+                        local_tys.push(Ty::Int);
+                        body_mstmts.push(MStmt::Assign {
+                            dest: new_v,
+                            value: skotch_mir::Rvalue::BinOp {
+                                op,
+                                lhs: old,
+                                rhs: r_slot,
+                            },
+                        });
+                        new_v
+                    } else {
+                        r_slot
+                    };
+                    let unused = LocalId(*next_slot);
+                    *next_slot += 1;
+                    local_tys.push(Ty::Unit);
+                    body_mstmts.push(MStmt::Assign {
+                        dest: unused,
+                        value: skotch_mir::Rvalue::ArrayStore {
+                            array: a_slot,
+                            index: i_slot,
+                            value: store_value,
+                        },
+                    });
+                    continue;
+                }
+            }
             let KtExpr::Reference(lref) = lhs else {
                 let _ = rhs;
                 return None;
@@ -42460,7 +42564,8 @@ fn method_simple_body_full(
                                 }
                             }
                         }
-                        // Path C: ArrayAccess LHS — `arr[idx] = rhs`.
+                        // Path C: ArrayAccess LHS — `arr[idx] = rhs` and
+                        // `arr[idx] op= rhs` for compound ops.
                         // Covers an instance-field IntArray assignment
                         // inside a class method body
                         // (`data[r * cols + c] = value` in
@@ -42472,7 +42577,14 @@ fn method_simple_body_full(
                         // None, silently dropping the body. The result
                         // was an empty `set` method, so subsequent
                         // `m[r, c]` reads returned the default 0.
-                        if op_text == "=" {
+                        //
+                        // Compound shape `state[0] += a` (pervasive in
+                        // parity/101-hash MD5/SHA round-update tails)
+                        // desugars to `state[0] = state[0] + a`; we
+                        // ArrayLoad the old value, BinOp, then
+                        // ArrayStore — without this every hash-round
+                        // tail bailed the whole `compressProtected`.
+                        if op_text == "=" || is_compound {
                             let lhs2 = b.lhs().map(unwrap_parens);
                             let rhs2 = b.rhs().map(unwrap_parens);
                             if let (Some(KtExpr::ArrayAccess(aa)), Some(rhs_e)) = (lhs2, rhs2) {
@@ -42621,6 +42733,47 @@ fn method_simple_body_full(
                                         } else {
                                             false
                                         };
+                                        // For `arr[idx] op= rhs`, compute
+                                        // `arr[idx] op rhs` and store back.
+                                        // ArrayLoad → BinOp → ArrayStore.
+                                        // Skip the List-field path here:
+                                        // compound on List requires get/set
+                                        // intrinsics and isn't a target
+                                        // shape in parity/101-hash today.
+                                        let store_value = if is_compound && !is_list_field {
+                                            let old = skotch_mir::LocalId(next_slot_inner);
+                                            next_slot_inner += 1;
+                                            extra_locals_inner.push(Ty::Int);
+                                            pre_stmts_inner.push(skotch_mir::Stmt::Assign {
+                                                dest: old,
+                                                value: skotch_mir::Rvalue::ArrayLoad {
+                                                    array: a,
+                                                    index: i,
+                                                },
+                                            });
+                                            let new_v = skotch_mir::LocalId(next_slot_inner);
+                                            next_slot_inner += 1;
+                                            extra_locals_inner.push(Ty::Int);
+                                            let mir_op = match op_text.as_str() {
+                                                "+=" => skotch_mir::BinOp::AddI,
+                                                "-=" => skotch_mir::BinOp::SubI,
+                                                "*=" => skotch_mir::BinOp::MulI,
+                                                "/=" => skotch_mir::BinOp::DivI,
+                                                "%=" => skotch_mir::BinOp::ModI,
+                                                _ => unreachable!(),
+                                            };
+                                            pre_stmts_inner.push(skotch_mir::Stmt::Assign {
+                                                dest: new_v,
+                                                value: skotch_mir::Rvalue::BinOp {
+                                                    op: mir_op,
+                                                    lhs: old,
+                                                    rhs: v,
+                                                },
+                                            });
+                                            new_v
+                                        } else {
+                                            v
+                                        };
                                         if is_list_field {
                                             // List.set returns Object (the
                                             // previous element). We don't
@@ -42637,7 +42790,7 @@ fn method_simple_body_full(
                                                         class_name: "java/util/List".to_string(),
                                                         method_name: "set".to_string(),
                                                     },
-                                                    args: vec![a, i, v],
+                                                    args: vec![a, i, store_value],
                                                 },
                                             });
                                             continue;
@@ -42650,7 +42803,7 @@ fn method_simple_body_full(
                                             value: skotch_mir::Rvalue::ArrayStore {
                                                 array: a,
                                                 index: i,
-                                                value: v,
+                                                value: store_value,
                                             },
                                         });
                                         continue;
