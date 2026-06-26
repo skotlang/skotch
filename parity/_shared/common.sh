@@ -509,16 +509,39 @@ compile_project_with() {
     # `[@]+` indirection sidesteps that — it expands to the array only
     # when the name is set, and to nothing otherwise. Apply to both
     # `cp_args` and `extra_args` (either may legitimately be empty).
+    #
+    # Project-mode compile timeout. Defaults higher than single-file
+    # (300s) because project mode compiles dozens of files in one
+    # invocation. Override via PARITY_PROJECT_COMPILE_TIMEOUT or fall
+    # back to PARITY_COMPILE_TIMEOUT for compatibility with callers
+    # that set the single-file knob expecting it to cover project mode.
+    # Without this guard, a skotch infinite loop on any project file
+    # wedges the bench for the CI job's overall timeout (typically
+    # 6 hours) — exactly what bit us on parity/101-hash.
+    local cc_to="${PARITY_PROJECT_COMPILE_TIMEOUT:-${PARITY_COMPILE_TIMEOUT:-300}}"
+    local timeout_bin=""
+    if command -v timeout >/dev/null 2>&1; then
+        timeout_bin="timeout"
+    elif command -v gtimeout >/dev/null 2>&1; then
+        timeout_bin="gtimeout"
+    fi
     case "$tool" in
         kotlinc)
             local kotlinc
             if ! kotlinc=$(find_kotlinc); then
                 echo "ERROR: kotlinc not found on PATH" >&2; return 1
             fi
-            time_cmd "$kotlinc" \
-                ${cp_args[@]+"${cp_args[@]}"} \
-                ${extra_args[@]+"${extra_args[@]}"} \
-                "${kt_args[@]}" -d "$lib_dir"
+            if [[ -n "$timeout_bin" ]]; then
+                time_cmd "$timeout_bin" --foreground "${cc_to}" "$kotlinc" \
+                    ${cp_args[@]+"${cp_args[@]}"} \
+                    ${extra_args[@]+"${extra_args[@]}"} \
+                    "${kt_args[@]}" -d "$lib_dir"
+            else
+                time_cmd "$kotlinc" \
+                    ${cp_args[@]+"${cp_args[@]}"} \
+                    ${extra_args[@]+"${extra_args[@]}"} \
+                    "${kt_args[@]}" -d "$lib_dir"
+            fi
             local rc=$?
             LAST_KOTLINC_MS=$TIMED_MS
             return $rc
@@ -536,10 +559,17 @@ compile_project_with() {
             # advanced (`-X`) flags it doesn't understand and accepts
             # known warn-only flags, so parity stays meaningful when a
             # project requires opt-ins that skotch has yet to honor.
-            time_cmd "$SKOTCH_BIN" kotlinc \
-                ${cp_args[@]+"${cp_args[@]}"} \
-                ${extra_args[@]+"${extra_args[@]}"} \
-                -d "$lib_dir" "${kt_args[@]}"
+            if [[ -n "$timeout_bin" ]]; then
+                time_cmd "$timeout_bin" --foreground "${cc_to}" "$SKOTCH_BIN" kotlinc \
+                    ${cp_args[@]+"${cp_args[@]}"} \
+                    ${extra_args[@]+"${extra_args[@]}"} \
+                    -d "$lib_dir" "${kt_args[@]}"
+            else
+                time_cmd "$SKOTCH_BIN" kotlinc \
+                    ${cp_args[@]+"${cp_args[@]}"} \
+                    ${extra_args[@]+"${extra_args[@]}"} \
+                    -d "$lib_dir" "${kt_args[@]}"
+            fi
             local rc=$?
             LAST_SKOTCH_MS=$TIMED_MS
             return $rc
