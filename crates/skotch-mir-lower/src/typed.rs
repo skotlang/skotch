@@ -28,6 +28,59 @@ thread_local! {
     /// fall back to this list to emit `this.field` GetField/PutField.
     static CLASS_METHOD_CTX: std::cell::RefCell<Option<(String, Vec<(String, Ty)>)>> =
         const { std::cell::RefCell::new(None) };
+
+    /// Slot ids that were populated by `prebind_class_fields` (i.e.
+    /// they hold a CACHE read of `this.field` for use later in the
+    /// body). When the assignment lowerer sees `name = expr` with
+    /// the lhs resolving to one of these slots, it must emit a
+    /// `putfield this.name` AND sync the local — the local is just
+    /// a cache. When the lhs is a REAL source-declared local (`var
+    /// name = …` shadowing a class field of the same name), the
+    /// slot is NOT in this set and the assignment lowers to a
+    /// plain `Assign` against the local slot only. Without this
+    /// distinction, `var h = state[7]; h = g` would emit
+    /// `putfield h:[J` against the class field even though `h` is
+    /// a method-local shadow (mismatched descriptor → stack-growing
+    /// VerifyError; the operand stack leaks across the loop
+    /// back-edge in fixtures like parity/101-hash Bit64Digest).
+    static PREBIND_FIELD_CACHE_SLOTS: std::cell::RefCell<rustc_hash::FxHashSet<u32>> =
+        std::cell::RefCell::new(rustc_hash::FxHashSet::default());
+}
+
+/// Record that `slot` is a prebind cache for a class field (i.e.
+/// the slot was materialized by `prebind_class_fields` as a
+/// `getfield this.<name>` read). See PREBIND_FIELD_CACHE_SLOTS doc.
+fn record_prebind_field_cache_slot(slot: u32) {
+    PREBIND_FIELD_CACHE_SLOTS.with(|c| {
+        c.borrow_mut().insert(slot);
+    });
+}
+
+/// Returns true when `slot` is a prebind cache for a class field.
+/// A real source-level `val`/`var`/loop-var/param slot returns false
+/// even when its name shadows a class field — so the assignment
+/// lowerer can write to the local instead of `putfield`-ing.
+fn is_prebind_field_cache_slot(slot: u32) -> bool {
+    PREBIND_FIELD_CACHE_SLOTS.with(|c| c.borrow().contains(&slot))
+}
+
+/// RAII guard that snapshots the prebind cache slot set on entry
+/// and restores it on drop. Installed at method-body entry so
+/// nested body walkers (lambdas, nested classes) don't see stale
+/// prebind slot ids from the outer scope.
+struct PrebindFieldCacheScope {
+    prev: rustc_hash::FxHashSet<u32>,
+}
+impl PrebindFieldCacheScope {
+    fn new() -> Self {
+        let prev = PREBIND_FIELD_CACHE_SLOTS.with(|c| std::mem::take(&mut *c.borrow_mut()));
+        Self { prev }
+    }
+}
+impl Drop for PrebindFieldCacheScope {
+    fn drop(&mut self) {
+        PREBIND_FIELD_CACHE_SLOTS.with(|c| *c.borrow_mut() = std::mem::take(&mut self.prev));
+    }
 }
 
 /// Install the class-method context for the duration of a body
@@ -13932,12 +13985,24 @@ fn lower_loop_body(
             // of the fixtures hit that shape against a cached field
             // yet, and the iload/iadd/istore form is what kotlinc
             // emits there anyway.
+            //
+            // Crucial exception: when `lhs_local` is a REAL
+            // source-level local (`var h = state[7]`) shadowing a
+            // class field of the same name, the write must go to
+            // the LOCAL only. Prebind cache slots are tracked in
+            // PREBIND_FIELD_CACHE_SLOTS — anything NOT in that
+            // set is a genuine shadow, so we suppress the
+            // class_field_lookup fallback.
             let lhs_local = name_to_local
                 .iter()
                 .rev()
                 .find(|(n, _)| n == lname)
                 .map(|(_, l)| *l);
-            let lhs_field = if compound_op.is_some() && lhs_local.is_some() {
+            let lhs_is_real_shadow = lhs_local
+                .map(|l| !is_prebind_field_cache_slot(l.0))
+                .unwrap_or(false);
+            let lhs_field = if (compound_op.is_some() && lhs_local.is_some()) || lhs_is_real_shadow
+            {
                 None
             } else {
                 class_field_lookup(lname)
@@ -18891,6 +18956,11 @@ fn try_lower_multi_stmt_block_with_offset(
     // writes in this body can fall back to `this.field` PutField /
     // GetField when they don't match a local. Restored on drop.
     let _class_scope = ClassMethodScope::new(class_name, field_names);
+    // Track which local slots are prebind caches for class fields
+    // (vs real source-declared `var`/`val`/loop-var locals
+    // shadowing a field). Scoped to this method body so nested
+    // walkers don't see stale slot ids from the outer scope.
+    let _prebind_cache_scope = PrebindFieldCacheScope::new();
     // Install cross-file val lookup so lower_rich can resolve bare
     // Reference to a top-level val as a GetStaticField on the file's
     // wrapper class.
@@ -24685,9 +24755,31 @@ fn try_lower_multi_stmt_block_with_offset(
                         // call sees a stale field). After PutField, sync
                         // any cached local so subsequent reads in the same
                         // body observe the new value.
-                        if let (Some(cname), Some((fname, _fty))) =
-                            (class_name, field_names.iter().find(|(n, _)| n == lname))
-                        {
+                        //
+                        // SHADOW EXCEPTION: when `lname` resolves to a
+                        // local that is NOT a prebind cache slot (i.e.
+                        // a real source-level `val`/`var`/loop-var
+                        // shadowing a class field of the same name), the
+                        // write must target the local instead of
+                        // putfield-ing onto the field. Without this, a
+                        // method like `fun compress() { var h = …; for
+                        // (…) { h = g } }` emits a stray
+                        // `putfield h:[J` against the class-field `h`
+                        // BEFORE the local store — leaving an extra
+                        // operand on the stack across the loop back-edge
+                        // and producing a stack-growing VerifyError.
+                        let lname_is_real_shadow = name_to_local
+                            .iter()
+                            .rev()
+                            .find(|(n, _)| n == lname)
+                            .map(|(_, l)| !is_prebind_field_cache_slot(l.0))
+                            .unwrap_or(false);
+                        let field_match = if lname_is_real_shadow {
+                            None
+                        } else {
+                            field_names.iter().find(|(n, _)| n == lname)
+                        };
+                        if let (Some(cname), Some((fname, _fty))) = (class_name, field_match) {
                             let snap = name_to_local.clone();
                             let lookup = |n: &str| -> Option<LocalId> {
                                 snap.iter()
@@ -26689,6 +26781,13 @@ fn prebind_class_fields(
                     if let Some(val_ty) = lookup_class_field_map_value_ty(cname, fname) {
                         record_map_value_ty(slot.0, val_ty);
                     }
+                    // Mark this slot as a field-cache so the
+                    // assignment lowerer prefers `putfield` for
+                    // writes to it. A real source-level `var`
+                    // shadow of the same name does NOT pass through
+                    // this path, so its slot stays out of the set
+                    // and the lowerer writes to the local only.
+                    record_prebind_field_cache_slot(slot.0);
                     name_to_local.push((n.to_string(), slot));
                 }
             }
@@ -41856,6 +41955,7 @@ fn collect_secondary_ctors(
                     // arm falls through `class_field_lookup(empty) → None`
                     // before reaching the new companion-intArray check.
                     let _ctor_scope = ClassMethodScope::new(Some(class_fq), &[]);
+                    let _ctor_prebind_scope = PrebindFieldCacheScope::new();
                     let rhs_slot = lower_rich_expr_to_slot(
                         rhs,
                         &lookup,
@@ -42154,6 +42254,7 @@ fn method_simple_body_full(
     // …)` shapes bail at `lower_inline_expr_to_slot::Reference` →
     // cascade the whole body to empty MIR.
     let _outer_class_scope = ClassMethodScope::new(class_name, field_names);
+    let _outer_prebind_scope = PrebindFieldCacheScope::new();
     // Install the extension-receiver `this` slot override BEFORE any
     // body lowering. Resolved by every `KtExpr::This(_)` arm via
     // `current_extension_this_slot()`. Slot 1 because slot 0 is the
@@ -45577,6 +45678,7 @@ fn method_from_fun_with_class(
     // identifier `height` inside a class method body fell through
     // class_field_lookup and produced empty MIR).
     let _outer_class_scope_method = ClassMethodScope::new(class_name, field_names);
+    let _outer_prebind_scope_method = PrebindFieldCacheScope::new();
     // Try to lower a simple literal body. method_simple_body lays
     // out: local 0 = this; locals 1..N+1 = user params; local N+2 =
     // result. Bodies that can't be lowered fall back to an empty
@@ -46060,6 +46162,7 @@ fn collect_class_methods(
             // lookup misses, so we don't need to preload fields
             // manually; the lookup closure below only binds `this`.
             let _scope = ClassMethodScope::new(Some(class_name), &field_names);
+            let _scope_prebind = PrebindFieldCacheScope::new();
 
             let this_slot = skotch_mir::LocalId(0);
             let mut next_slot: u32 = 1;
