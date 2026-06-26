@@ -31937,9 +31937,27 @@ fn lower_rich_expr_to_slot(
                         }
                         // Parenthesized expression: peek through to the
                         // inner shape. Common case is `(k % 10).toLong()`
-                        // where the inner Binary returns Int.
+                        // where the inner Binary returns Int — but for
+                        // `(vd xor va).rotateRight(R)` with Long operands
+                        // the binary result is Long. Sniff the LHS slot
+                        // Ty when it's a simple Reference and the operand
+                        // is Long/Int so rotateLeft/Right dispatches to
+                        // the right Integer-vs-Long intrinsic.
                         KtExpr::Parenthesized(_) => match unwrap_parens(dq_exprs[0]) {
-                            KtExpr::Binary(_) => Some(Ty::Int),
+                            KtExpr::Binary(b) => {
+                                let lhs_ty = b.lhs().map(unwrap_parens).and_then(|l| match l {
+                                    KtExpr::Reference(r) => r
+                                        .name()
+                                        .and_then(lookup_name)
+                                        .map(|s| slot_ty_with_param_fallback(s.0, extra_locals)),
+                                    _ => None,
+                                });
+                                match lhs_ty {
+                                    Some(Ty::Long) => Some(Ty::Long),
+                                    Some(Ty::Int) => Some(Ty::Int),
+                                    _ => Some(Ty::Int),
+                                }
+                            }
                             KtExpr::Reference(r) => r
                                 .name()
                                 .and_then(lookup_name)
@@ -32098,6 +32116,66 @@ fn lower_rich_expr_to_slot(
                                     descriptor,
                                 },
                                 args: vec![recv_slot],
+                            },
+                        });
+                        return Some(result_slot);
+                    }
+                    // `n.rotateLeft(bits)` / `n.rotateRight(bits)` stdlib
+                    // extension intrinsics on Int and Long receivers.
+                    // kotlinc desugars to
+                    //   invokestatic java/lang/Integer.rotateLeft(II)I
+                    //   invokestatic java/lang/Long.rotateLeft(JI)J
+                    // (and Right variants). Pervasive in SHA-1/2/3, MD5,
+                    // Blake bit-mixing inner loops in parity/101-hash —
+                    // without this arm every `(vd xor va).rotateRight(R)`
+                    // call bailed at DotQualified and the surrounding hash
+                    // round dropped to a zero result.
+                    if matches!(method_n, "rotateLeft" | "rotateRight")
+                        && matches!(&recv_ty_candidate, Some(Ty::Long) | Some(Ty::Int))
+                        && call
+                            .value_argument_list()
+                            .map(|al| al.arguments().count())
+                            .unwrap_or(0)
+                            == 1
+                    {
+                        let (class_name, descriptor, ret_ty) = match &recv_ty_candidate {
+                            Some(Ty::Long) => ("java/lang/Long", "(JI)J", Ty::Long),
+                            _ => ("java/lang/Integer", "(II)I", Ty::Int),
+                        };
+                        let recv_slot = lower_rich_expr_to_slot(
+                            dq_exprs[0],
+                            lookup_name,
+                            fn_lookup,
+                            next_slot,
+                            pre_stmts,
+                            extra_locals,
+                            strings,
+                        )?;
+                        let shift_e = call
+                            .value_argument_list()
+                            .and_then(|al| al.arguments().next())
+                            .and_then(|a| a.expression())?;
+                        let shift_slot = lower_rich_expr_to_slot(
+                            shift_e,
+                            lookup_name,
+                            fn_lookup,
+                            next_slot,
+                            pre_stmts,
+                            extra_locals,
+                            strings,
+                        )?;
+                        let result_slot = LocalId(*next_slot);
+                        *next_slot += 1;
+                        extra_locals.push(ret_ty);
+                        pre_stmts.push(MStmt::Assign {
+                            dest: result_slot,
+                            value: skotch_mir::Rvalue::Call {
+                                kind: skotch_mir::CallKind::StaticJava {
+                                    class_name: class_name.to_string(),
+                                    method_name: method_n.to_string(),
+                                    descriptor: descriptor.to_string(),
+                                },
+                                args: vec![recv_slot, shift_slot],
                             },
                         });
                         return Some(result_slot);
