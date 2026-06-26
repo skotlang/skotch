@@ -1503,6 +1503,13 @@ impl<'a> KtSecondaryConstructor<'a> {
     }
 }
 
+impl<'a> KtAnonymousInitializer<'a> {
+    /// The `{ ... }` block following the `init` keyword.
+    pub fn body(self) -> Option<KtBlock<'a>> {
+        first_typed_child(self.syntax())
+    }
+}
+
 impl<'a> KtConstructorDelegationCall<'a> {
     pub fn value_argument_list(self) -> Option<KtValueArgumentList<'a>> {
         first_typed_child(self.syntax())

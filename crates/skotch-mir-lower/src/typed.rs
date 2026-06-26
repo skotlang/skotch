@@ -39443,6 +39443,208 @@ fn constructor_from_primary_impl(
         }
     }
 
+    // 4. Anonymous init blocks. Walk each `init { ... }` after primary-
+    // ctor field initializers, lowering its statements into the
+    // constructor body so side effects (`x[i] = ...`) land before
+    // `<init>` returns. Without this pass, init-block writes were
+    // silently dropped and downstream reads observed the zero default
+    // — e.g. `class A { val x: IntArray = IntArray(4); init { x[0] =
+    // 7 } }` produced `a.x[0] == 0` at runtime.
+    //
+    // Only assignment-as-stmt (`arr[i] = v`) is handled as a dedicated
+    // arm; everything else routes through `lower_rich_expr_to_slot`
+    // and the result slot is discarded. Failed lowerings rewind any
+    // partial side effects, matching the property-init fallback's
+    // snapshot/restore discipline.
+    if let Some(body) = c.body() {
+        // Build (name, Ty) for primary-ctor val/var params + body
+        // properties. `prebind_class_fields` walks each stmt and
+        // pre-loads referenced fields via GetField into fresh locals
+        // so bare `x` inside the init block resolves to the loaded
+        // array slot.
+        let mut init_field_names: Vec<(String, Ty)> = Vec::new();
+        if let Some(pc) = c.primary_constructor() {
+            if let Some(plist) = pc.value_parameter_list() {
+                for p in plist.parameters() {
+                    if !p.is_val() && !p.is_var() {
+                        continue;
+                    }
+                    if let Some(n) = p.name() {
+                        let ty = p.type_reference().map(resolve_type_ref).unwrap_or(Ty::Any);
+                        init_field_names.push((n.to_string(), ty));
+                    }
+                }
+            }
+        }
+        for d in body.declarations() {
+            if let KtDecl::Property(p) = d {
+                if let Some(n) = p.name() {
+                    let ty = match p.type_reference() {
+                        Some(tr) => resolve_type_ref(tr),
+                        None => p
+                            .initializer()
+                            .map(unwrap_parens)
+                            .and_then(|i| infer_collection_factory_ty(&i))
+                            .unwrap_or(Ty::Any),
+                    };
+                    init_field_names.push((n.to_string(), ty));
+                }
+            }
+        }
+        // Seed name_to_local with primary-ctor params at slots 1..=N so
+        // `init { value > 0 }` (referencing a primary-ctor val/var arg
+        // by bare name) resolves directly rather than via prebind.
+        let mut init_name_to_local: Vec<(String, skotch_mir::LocalId)> = params_iter
+            .iter()
+            .enumerate()
+            .filter_map(|(i, p)| {
+                p.name()
+                    .map(|n| (n.to_string(), skotch_mir::LocalId((i + 1) as u32)))
+            })
+            .collect();
+        for init in body.anonymous_initializers() {
+            let Some(block) = init.body() else { continue };
+            for stmt_e in block.statements() {
+                let stmt_e = unwrap_parens(stmt_e);
+                let stmts_snap = stmts.len();
+                let locals_snap = locals.len();
+                let strings_snap = strings.len();
+                let next_slot_snap = next_slot;
+                let name_snap = init_name_to_local.clone();
+                prebind_class_fields(
+                    stmt_e,
+                    &mut init_name_to_local,
+                    &mut next_slot,
+                    &mut stmts,
+                    &mut locals,
+                    Some(class_name),
+                    &init_field_names,
+                );
+                // 4a. `arr[idx] = value` (Binary `=` with ArrayAccess
+                // lhs). `lower_rich_expr_to_slot` doesn't model
+                // assignment-as-stmt — it always returns a result slot
+                // and a bare `arr[i] = v` has Unit type. This dedicated
+                // arm runs first so the assignment becomes an explicit
+                // ArrayStore Rvalue (iastore at backend emit time when
+                // arr_ty is Ty::IntArray).
+                let mut emitted_arr_store = false;
+                if let skotch_ast::KtExpr::Binary(b) = stmt_e {
+                    let op = b.operation().map(|o| o.text()).unwrap_or_default();
+                    if op == "=" {
+                        let lhs_opt = b.lhs().map(unwrap_parens);
+                        let rhs_opt = b.rhs().map(unwrap_parens);
+                        if let (Some(skotch_ast::KtExpr::ArrayAccess(aa)), Some(rhs)) =
+                            (lhs_opt, rhs_opt)
+                        {
+                            let aa_children: Vec<&skotch_sil::SilNode> =
+                                skotch_ast::children(aa.syntax()).iter().collect();
+                            let arr_expr = aa_children
+                                .iter()
+                                .find_map(|c| skotch_ast::KtExpr::cast(c))
+                                .map(unwrap_parens);
+                            let idx_exprs: Vec<skotch_ast::KtExpr<'_>> = aa_children
+                                .iter()
+                                .find_map(|c| {
+                                    if c.kind == skotch_syntax::SyntaxKind::INDICES {
+                                        Some(
+                                            skotch_ast::children(c)
+                                                .iter()
+                                                .filter_map(skotch_ast::KtExpr::cast)
+                                                .map(unwrap_parens)
+                                                .collect::<Vec<_>>(),
+                                        )
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .unwrap_or_default();
+                            if let (Some(arr_expr), 1) = (arr_expr, idx_exprs.len()) {
+                                let snap = init_name_to_local.clone();
+                                let lookup = |n: &str| -> Option<skotch_mir::LocalId> {
+                                    snap.iter().rev().find(|(nm, _)| nm == n).map(|(_, l)| *l)
+                                };
+                                let arr_slot = lower_rich_expr_to_slot(
+                                    arr_expr,
+                                    &lookup,
+                                    fn_lookup,
+                                    &mut next_slot,
+                                    &mut stmts,
+                                    &mut locals,
+                                    strings,
+                                );
+                                let idx_slot = arr_slot.and_then(|_| {
+                                    lower_rich_expr_to_slot(
+                                        idx_exprs[0],
+                                        &lookup,
+                                        fn_lookup,
+                                        &mut next_slot,
+                                        &mut stmts,
+                                        &mut locals,
+                                        strings,
+                                    )
+                                });
+                                let val_slot = idx_slot.and_then(|_| {
+                                    lower_rich_expr_to_slot(
+                                        rhs,
+                                        &lookup,
+                                        fn_lookup,
+                                        &mut next_slot,
+                                        &mut stmts,
+                                        &mut locals,
+                                        strings,
+                                    )
+                                });
+                                if let (Some(a), Some(i), Some(v)) = (arr_slot, idx_slot, val_slot)
+                                {
+                                    let unused = skotch_mir::LocalId(next_slot);
+                                    next_slot += 1;
+                                    locals.push(Ty::Unit);
+                                    stmts.push(skotch_mir::Stmt::Assign {
+                                        dest: unused,
+                                        value: skotch_mir::Rvalue::ArrayStore {
+                                            array: a,
+                                            index: i,
+                                            value: v,
+                                        },
+                                    });
+                                    emitted_arr_store = true;
+                                }
+                            }
+                        }
+                    }
+                }
+                if emitted_arr_store {
+                    continue;
+                }
+                // 4b. Fallback: lower_rich_expr_to_slot and discard the
+                // result slot. Most init-block stmts (validation calls
+                // like `require(value > 0)`, simple property assignments
+                // that the rich lowerer handles, side-effect calls
+                // like `register(this)`) lower this way.
+                let snap = init_name_to_local.clone();
+                let lookup = |n: &str| -> Option<skotch_mir::LocalId> {
+                    snap.iter().rev().find(|(nm, _)| nm == n).map(|(_, l)| *l)
+                };
+                let result = lower_rich_expr_to_slot(
+                    stmt_e,
+                    &lookup,
+                    fn_lookup,
+                    &mut next_slot,
+                    &mut stmts,
+                    &mut locals,
+                    strings,
+                );
+                if result.is_none() {
+                    stmts.truncate(stmts_snap);
+                    locals.truncate(locals_snap);
+                    strings.truncate(strings_snap);
+                    next_slot = next_slot_snap;
+                    init_name_to_local = name_snap;
+                }
+            }
+        }
+    }
+
     MirFunction {
         id: FuncId(0),
         name: "<init>".to_string(),
