@@ -298,12 +298,30 @@ thread_local! {
 }
 
 fn lookup_class_method_param_names(class_name: &str, method_name: &str) -> Option<Vec<String>> {
-    CLASS_METHOD_PARAM_NAMES.with(|c| {
+    if let Some(v) = CLASS_METHOD_PARAM_NAMES.with(|c| {
         c.borrow()
             .get(class_name)
             .and_then(|m| m.get(method_name))
             .cloned()
-    })
+    }) {
+        return Some(v);
+    }
+    // JAR-class fallback: recover param names from the class's
+    // `@kotlin.Metadata` annotation. Without this, named-arg call sites
+    // against external Kotlin libraries (e.g.
+    // `count.final(additional = bufPos)` where `count: Counter.Bit32`
+    // is declared in kotlincrypto/bitops) bail at
+    // `reorder_named_call_args` because the in-module table is empty.
+    // Overload resolution by name only — first match wins, which is
+    // sufficient for the single-overload methods present in the
+    // KotlinCrypto/hash dependency surface.
+    let fi = skotch_classinfo::lookup_function_metadata(class_name, method_name)?;
+    let names: Vec<String> = fi.value_params.into_iter().map(|p| p.name).collect();
+    if names.is_empty() || names.iter().any(|n| n.is_empty()) {
+        None
+    } else {
+        Some(names)
+    }
 }
 
 struct ClassMethodParamNamesScope {
