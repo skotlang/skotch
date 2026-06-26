@@ -12389,7 +12389,16 @@ fn lower_loop_body(
                 pname,
                 kt_expr_kind(&init)
             );
-            return None;
+            // Phase W: skip the failed val instead of cascading-fail
+            // the whole function body. Previously `return None` here
+            // dropped every later stmt — including hash-method bodies
+            // like Bit32Digest.compressProtected that have ~30 vals
+            // and any one bail emptied the entire bytecode. Now the
+            // val is silently dropped (later refs to `pname` will
+            // also bail and skip via the unrecognized-stmt path at
+            // the bottom of this loop, leaving a partial body rather
+            // than an empty one).
+            continue;
         }
         // Local function declaration: `fun helper(...) { ... }`
         // declared inside another fn's body. MVP: skip the declaration
