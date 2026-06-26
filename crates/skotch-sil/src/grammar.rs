@@ -44,6 +44,44 @@ thread_local! {
     /// the class body as `inner { ... }` lambda call).
     static SUPPRESS_TRAILING_LAMBDA: std::cell::Cell<bool> =
         const { std::cell::Cell::new(false) };
+
+    /// Nesting depth of bracket pairs (`(`, `[`, value-arg lists) that
+    /// suppress newline-terminated infix chains. Kotlin's grammar
+    /// treats newlines as soft statement terminators for infix
+    /// operators (`a or\n b` is two statements), BUT inside parens /
+    /// brackets newlines are transparent — `(a or\n b)` is one
+    /// expression. `parse_infix_op` calls `has_newline_before_next_non_trivia`
+    /// to break the chain at newlines; that helper now consults this
+    /// counter and returns `false` when > 0. Without this guard,
+    /// real-world Kotlin like
+    ///   `this[0] = iv[0] xor (`
+    ///   `    (digestLength()  ) or`
+    ///   `    (keyLength shl  8) or`
+    ///   `    ...`
+    ///   `)`
+    /// parsed each `or` clause as a separate top-level statement
+    /// (the `or` token surfaced as a bare Reference stmt the body
+    /// walker couldn't lower), emptying the surrounding function body.
+    static NEWLINE_SUPPRESS_DEPTH: std::cell::Cell<u32> =
+        const { std::cell::Cell::new(0) };
+}
+
+/// RAII guard that bumps `NEWLINE_SUPPRESS_DEPTH` on construction and
+/// restores the prior value on drop, so a `?`-style early return out
+/// of the grammar can't leave the counter stuck above 0.
+struct NewlineSuppressGuard;
+
+impl NewlineSuppressGuard {
+    fn enter() -> Self {
+        NEWLINE_SUPPRESS_DEPTH.with(|d| d.set(d.get().saturating_add(1)));
+        NewlineSuppressGuard
+    }
+}
+
+impl Drop for NewlineSuppressGuard {
+    fn drop(&mut self) {
+        NEWLINE_SUPPRESS_DEPTH.with(|d| d.set(d.get().saturating_sub(1)));
+    }
 }
 
 pub fn parse_file_root(p: &mut Parser<'_, '_>) {
@@ -2539,6 +2577,9 @@ fn parse_value_parameter(p: &mut Parser<'_, '_>) {
 fn parse_value_argument_list(p: &mut Parser<'_, '_>) {
     let m = p.start();
     p.bump(); // (
+              // Inside `(...)` argument lists, newlines are transparent for
+              // the contained infix chains — see NEWLINE_SUPPRESS_DEPTH docs.
+    let _suppress = NewlineSuppressGuard::enter();
     skip_trivia(p);
     if !p.at(S::RPAR) {
         loop {
@@ -2804,7 +2845,12 @@ fn is_infix_function_position(p: &Parser<'_, '_>) -> bool {
     if !matches!(p.current(), S::WHITE_SPACE) {
         return false;
     }
-    if p.text_at(0).contains('\n') {
+    // Newlines normally end an infix chain, but inside a `(`/`[`
+    // pair newlines are transparent. NEWLINE_SUPPRESS_DEPTH is set
+    // by parse_parenthesized_or_function_literal / parse_indices /
+    // parse_value_argument_list / parse_collection_literal.
+    let newline_suppressed = NEWLINE_SUPPRESS_DEPTH.with(|d| d.get()) > 0;
+    if !newline_suppressed && p.text_at(0).contains('\n') {
         return false;
     }
     let after_ws = p.nth(1);
@@ -2851,10 +2897,11 @@ fn is_infix_function_position(p: &Parser<'_, '_>) -> bool {
     ) {
         return false;
     }
-    // Look past the IDENT for an expression-starter.
+    // Look past the IDENT for an expression-starter. Same newline
+    // rule as the leading WS: suppressed when inside `(`/`[`.
     let mut j = 2usize;
     while matches!(p.nth(j), S::WHITE_SPACE) {
-        if p.text_at(j).contains('\n') {
+        if !newline_suppressed && p.text_at(j).contains('\n') {
             return false;
         }
         j += 1;
@@ -3260,6 +3307,9 @@ fn looks_like_type_args(p: &Parser<'_, '_>) -> bool {
 fn parse_indices(p: &mut Parser<'_, '_>) {
     let m = p.start();
     p.bump(); // [
+              // Inside `[...]` newlines are transparent — same rationale as
+              // parse_parenthesized_or_function_literal.
+    let _suppress = NewlineSuppressGuard::enter();
     skip_trivia(p);
     if !p.at(S::RBRACKET) {
         loop {
@@ -3482,6 +3532,10 @@ fn parse_string_template(p: &mut Parser<'_, '_>) -> CompletedMarker {
 fn parse_parenthesized_or_function_literal(p: &mut Parser<'_, '_>) -> CompletedMarker {
     let m = p.start();
     p.bump(); // (
+              // Inside `(...)` newlines are transparent — suppress the
+              // infix-chain newline break so multi-line expressions like
+              // `(a or\n b or\n c)` parse as one Binary.
+    let _suppress = NewlineSuppressGuard::enter();
     skip_trivia(p);
     if !p.at(S::RPAR) {
         parse_expression(p);
@@ -3496,6 +3550,9 @@ fn parse_parenthesized_or_function_literal(p: &mut Parser<'_, '_>) -> CompletedM
 fn parse_collection_literal(p: &mut Parser<'_, '_>) -> CompletedMarker {
     let m = p.start();
     p.bump(); // [
+              // Inside `[...]` newlines are transparent — same rationale as
+              // parse_parenthesized_or_function_literal.
+    let _suppress = NewlineSuppressGuard::enter();
     skip_trivia(p);
     if !p.at(S::RBRACKET) {
         loop {
@@ -4087,7 +4144,14 @@ fn next_non_trivia_offset(p: &Parser<'_, '_>, mut offset: usize) -> usize {
 /// Used by infix/binary parsers to stop at a newline boundary —
 /// Kotlin's grammar treats newlines as soft statement terminators for
 /// infix operators like `in` and `is`.
+///
+/// Suppressed when `NEWLINE_SUPPRESS_DEPTH` > 0 — i.e. when the
+/// parser is inside a paren / bracket / value-arg list, where
+/// newlines are transparent (`(a or\n b)` is one expression).
 fn has_newline_before_next_non_trivia(p: &Parser<'_, '_>) -> bool {
+    if NEWLINE_SUPPRESS_DEPTH.with(|d| d.get()) > 0 {
+        return false;
+    }
     let mut offset = 0usize;
     loop {
         let k = p.nth(offset);
