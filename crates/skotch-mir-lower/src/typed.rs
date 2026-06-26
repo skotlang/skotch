@@ -2104,6 +2104,18 @@ fn ext_fn_receiver_jvm_class(ty: &Ty) -> Option<String> {
         Ty::Char => "java/lang/Character".to_string(),
         Ty::Byte => "java/lang/Byte".to_string(),
         Ty::Short => "java/lang/Short".to_string(),
+        // Phase GG: primitive-array receivers. Kotlin source-level
+        // `fun ByteArray.foo()` ext fns key the registry under the
+        // JVM descriptor form (`[B`, `[I`, …) so receive sides keyed
+        // on `Ty::ByteArray`/`Ty::IntArray` find their cross-file
+        // entries. Without this, the `endian-jvm` JAR's
+        // `leIntAt`/`bePackInto*` ext fns can't be registered AND
+        // can't be dispatched, so the surrounding hash body bails.
+        Ty::ByteArray => "[B".to_string(),
+        Ty::IntArray => "[I".to_string(),
+        Ty::LongArray => "[J".to_string(),
+        Ty::DoubleArray => "[D".to_string(),
+        Ty::BooleanArray => "[Z".to_string(),
         _ => return None,
     })
 }
@@ -32006,6 +32018,22 @@ fn lower_rich_expr_to_slot(
                         // non-existent class "Int").
                         KtExpr::This(_) => Some(slot_ty_with_param_fallback(0, extra_locals)),
                         KtExpr::String(_) => Some(Ty::String),
+                        // Phase GG: primitive-literal receivers like
+                        // `0x80.toByte()`. Without surfacing the literal
+                        // Ty here, the DotQualified arm bails when the
+                        // receiver is a bare numeric / character /
+                        // boolean constant. Long literal is detected by
+                        // peeking at the lexed child token (mirrors the
+                        // toString recv_is_int_like sniffer below).
+                        KtExpr::Integer(int_e) => {
+                            let is_long = skotch_ast::children(int_e.syntax())
+                                .iter()
+                                .any(|c| c.kind == skotch_syntax::SyntaxKind::LONG_LITERAL);
+                            Some(if is_long { Ty::Long } else { Ty::Int })
+                        }
+                        KtExpr::Float(_) => Some(Ty::Double),
+                        KtExpr::Boolean(_) => Some(Ty::Bool),
+                        KtExpr::Character(_) => Some(Ty::Char),
                         KtExpr::Call(c) => {
                             // listOf / mapOf / setOf chained call
                             // receivers return List / Map / Set. Peek
@@ -32406,6 +32434,17 @@ fn lower_rich_expr_to_slot(
                             // Character.valueOf — leave non-int recv
                             // for the StaticJava fallback below.
                             (Some("i"), "toChar") => Some(("i2c", "c", Ty::Char)),
+                            // Phase GG: Int.toByte() / Int.toShort()
+                            // narrowing conversions. Long.toByte() is
+                            // backed by an `l2b` synthetic that the
+                            // backend expands to `l2i + i2b`; toShort
+                            // from a Long similarly. f2/d2 narrowings
+                            // are deferred to the StaticJava fallback
+                            // since they go through int first and
+                            // kotlinc emits a longer pattern.
+                            (Some("i"), "toByte") => Some(("i2b", "b", Ty::Byte)),
+                            (Some("i"), "toShort") => Some(("i2s", "s", Ty::Short)),
+                            (Some("l"), "toByte") => Some(("l2b", "b", Ty::Byte)),
                             _ => None,
                         }
                     };
@@ -32432,6 +32471,8 @@ fn lower_rich_expr_to_slot(
                             "f" => "F",
                             "d" => "D",
                             "c" => "C",
+                            "b" => "B",
+                            "s" => "S",
                             _ => "I",
                         };
                         let descriptor = format!("({}){}", src_desc, dst_desc);
