@@ -453,6 +453,167 @@ impl Drop for ClassFieldsScope {
 }
 
 thread_local! {
+    /// Module-scoped registry of companion-object `private val X =
+    /// intArrayOf(LIT, LIT, ...)` declarations. Key: `(outer_class_name,
+    /// val_name)`. Value: the Vec<i32> the initializer evaluates to.
+    ///
+    /// Drives the bare-Ident-in-method-body resolution path for
+    /// non-const companion `intArrayOf` vals (`H.copyInto(state)`,
+    /// `state = H.copyOf()`, `val k = K`) — without this table they fall
+    /// through to the singleton-dispatch fallback (`getstatic
+    /// H.INSTANCE:LH;`), which crashes at link time with
+    /// NoClassDefFoundError because no such class exists. Inlining the
+    /// initializer at the use site (NewIntArray + iastore per element)
+    /// mirrors kotlinc's constant-fold for `private val` companion
+    /// arrays accessed from the enclosing class's method bodies.
+    ///
+    /// Populated by `register_class_companion_intarrays` BEFORE
+    /// `collect_class_methods` walks the method bodies — the data must
+    /// be in scope when each body's `lower_loop_body` is called.
+    /// Required to graduate parity/101-hash's MD5 (`H`/`K`/`S`) and
+    /// Bit32Digest (`K`).
+    static CLASS_COMPANION_INTARRAY_LITERALS:
+        std::cell::RefCell<rustc_hash::FxHashMap<(String, String), Vec<i32>>> =
+        std::cell::RefCell::new(rustc_hash::FxHashMap::default());
+}
+
+fn lookup_class_companion_intarray(class_name: &str, val_name: &str) -> Option<Vec<i32>> {
+    CLASS_COMPANION_INTARRAY_LITERALS.with(|c| {
+        c.borrow()
+            .get(&(class_name.to_string(), val_name.to_string()))
+            .cloned()
+    })
+}
+
+/// Scan `c`'s companion-object body for `[private] val X =
+/// intArrayOf(LIT, LIT, ...)` declarations whose initializer is a Call
+/// to `intArrayOf` with only literal-int / negated-literal-int args.
+/// Register each one in `CLASS_COMPANION_INTARRAY_LITERALS` so the
+/// body walker can inline the materialization at use sites. Silently
+/// skips any declaration whose initializer isn't a pure-literal
+/// `intArrayOf` call (a Reference / arithmetic / non-literal call
+/// would force runtime evaluation which isn't safe to inline).
+fn register_class_companion_intarrays(c: skotch_ast::KtClass<'_>, class_name: &str) {
+    use skotch_ast::KtExpr;
+    let Some(body) = c.body() else { return };
+    let Some(companion) = body.declarations().find_map(|d| match d {
+        KtDecl::Object(o) if o.is_companion() => Some(o),
+        _ => None,
+    }) else {
+        return;
+    };
+    let Some(comp_body) = companion.body() else {
+        return;
+    };
+    for decl in comp_body.declarations() {
+        let KtDecl::Property(prop) = decl else {
+            continue;
+        };
+        let Some(name) = prop.name() else { continue };
+        let Some(init) = prop.initializer() else {
+            continue;
+        };
+        let init = unwrap_parens(init);
+        let KtExpr::Call(call) = init else { continue };
+        let callee_is_intarray_of = match call.callee() {
+            Some(KtExpr::Reference(r)) => r.name() == Some("intArrayOf"),
+            _ => false,
+        };
+        if !callee_is_intarray_of {
+            continue;
+        }
+        let Some(arg_list) = call.value_argument_list() else {
+            continue;
+        };
+        let mut values: Vec<i32> = Vec::new();
+        let mut all_literal = true;
+        let mut scratch: Vec<String> = Vec::new();
+        for arg in arg_list.arguments() {
+            let Some(arg_e) = arg.expression() else {
+                all_literal = false;
+                break;
+            };
+            let arg_e = unwrap_parens(arg_e);
+            // Reuse `literal_to_const` so `Int` and prefix-`-`-Int both
+            // resolve uniformly. Anything else (Reference, arithmetic,
+            // non-literal Call) bails — those would need runtime eval,
+            // which we can't safely inline at the use site.
+            match literal_to_const(&arg_e, &mut scratch) {
+                Some((skotch_mir::MirConst::Int(v), _)) => values.push(v),
+                _ => {
+                    all_literal = false;
+                    break;
+                }
+            }
+        }
+        if !all_literal {
+            continue;
+        }
+        CLASS_COMPANION_INTARRAY_LITERALS.with(|c| {
+            c.borrow_mut()
+                .insert((class_name.to_string(), name.to_string()), values);
+        });
+    }
+}
+
+/// Emit a fresh primitive `int[]` slot populated with `values`,
+/// returning the new slot. Mirrors the `intArrayOf(LIT, LIT, ...)`
+/// lowering arm but takes pre-extracted literal data instead of a
+/// `KtExpr::Call`. Used by both the bare-Reference and the
+/// DotQualified-with-Reference-recv inlining paths for companion-val
+/// access in method bodies.
+fn materialize_companion_intarray(
+    values: &[i32],
+    next_slot: &mut u32,
+    pre_stmts: &mut Vec<skotch_mir::Stmt>,
+    extra_locals: &mut Vec<Ty>,
+) -> skotch_mir::LocalId {
+    use skotch_mir::{LocalId, Stmt as MStmt};
+    let size_slot = LocalId(*next_slot);
+    *next_slot += 1;
+    extra_locals.push(Ty::Int);
+    pre_stmts.push(MStmt::Assign {
+        dest: size_slot,
+        value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(values.len() as i32)),
+    });
+    let array_slot = LocalId(*next_slot);
+    *next_slot += 1;
+    extra_locals.push(Ty::IntArray);
+    pre_stmts.push(MStmt::Assign {
+        dest: array_slot,
+        value: skotch_mir::Rvalue::NewIntArray(size_slot),
+    });
+    for (i, v) in values.iter().enumerate() {
+        let val_slot = LocalId(*next_slot);
+        *next_slot += 1;
+        extra_locals.push(Ty::Int);
+        pre_stmts.push(MStmt::Assign {
+            dest: val_slot,
+            value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(*v)),
+        });
+        let idx_slot = LocalId(*next_slot);
+        *next_slot += 1;
+        extra_locals.push(Ty::Int);
+        pre_stmts.push(MStmt::Assign {
+            dest: idx_slot,
+            value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(i as i32)),
+        });
+        let unused_slot = LocalId(*next_slot);
+        *next_slot += 1;
+        extra_locals.push(Ty::Unit);
+        pre_stmts.push(MStmt::Assign {
+            dest: unused_slot,
+            value: skotch_mir::Rvalue::ArrayStore {
+                array: array_slot,
+                index: idx_slot,
+                value: val_slot,
+            },
+        });
+    }
+    array_slot
+}
+
+thread_local! {
     /// Module-scoped registry of class methods that take a trailing
     /// function-typed parameter. Key: `(class_name, method_name)`.
     /// Value: receiver-class name (Some when the param's type is a
@@ -4485,6 +4646,16 @@ pub fn lower_file(
                     }
                 }
             }
+            // Companion `private val X = intArrayOf(LIT, LIT, ...)`
+            // hoist: scan the companion-object body for pure-literal
+            // intArrayOf declarations and register them in the
+            // CLASS_COMPANION_INTARRAY_LITERALS table so the body
+            // walker can inline `H`-style references at use sites
+            // inside method bodies AND inside the primary-ctor body
+            // (`this.state = H.copyOf()`). Must happen BEFORE
+            // collect_class_methods / constructor_from_primary so the
+            // table is in scope when each body is lowered.
+            register_class_companion_intarrays(c, &name);
             let methods = collect_class_methods(
                 c,
                 &name,
@@ -25408,6 +25579,23 @@ fn lower_inline_expr_to_slot(
                 }
                 return Some(slot);
             }
+            // Companion-val IntArray inlining for bare `K`/`H`/`S`-style
+            // references in class method or primary-ctor bodies. Mirrors
+            // the DotQualified-with-Reference-recv arm in lower_rich so
+            // `val k = K` / `state = H.copyOf()` materializes a fresh
+            // int[] populated with the literal initializer values.
+            // Without this, the bare reference returns None — the val
+            // handler bails the whole body to a stub.
+            if let Some(cls) = current_class_name() {
+                if let Some(values) = lookup_class_companion_intarray(&cls, n) {
+                    return Some(materialize_companion_intarray(
+                        &values,
+                        next_slot,
+                        pre_stmts,
+                        extra_locals,
+                    ));
+                }
+            }
             None
         }
         KtExpr::Binary(b) => {
@@ -30972,10 +31160,27 @@ fn lower_rich_expr_to_slot(
                     // by name shape (DotQualified ending in a known
                     // String-returning method or top-level String).
                     let recv_ty_candidate = match &dq_exprs[0] {
-                        KtExpr::Reference(rr) => rr
-                            .name()
-                            .and_then(lookup_name)
-                            .map(|s| slot_ty_with_param_fallback(s.0, extra_locals)),
+                        KtExpr::Reference(rr) => rr.name().and_then(|n| {
+                            if let Some(s) = lookup_name(n) {
+                                return Some(slot_ty_with_param_fallback(s.0, extra_locals));
+                            }
+                            // Bare `H`-style companion intArrayOf
+                            // val reference inside a class-method
+                            // body: surface Ty::IntArray here so
+                            // the `arr.copyOf()` / `arr.fill(...)`
+                            // arms below pick up the recv Ty.
+                            // Without this, recv_ty_candidate is
+                            // None, those arms skip, and the
+                            // surrounding stmt bails via the
+                            // singleton-dispatch fallback (which
+                            // would emit `getstatic H.INSTANCE`).
+                            if let Some(cls) = current_class_name() {
+                                if lookup_class_companion_intarray(&cls, n).is_some() {
+                                    return Some(Ty::IntArray);
+                                }
+                            }
+                            None
+                        }),
                         // `this.<method>()` inside a class method or an
                         // extension fn — `this` is slot 0, whose Ty was
                         // installed in PARAM_TY_FALLBACK by the body
@@ -31481,6 +31686,100 @@ fn lower_rich_expr_to_slot(
                                 },
                             });
                             return Some(result_slot);
+                        }
+                    }
+                    // `arr.copyInto(dest)` stdlib intrinsic on
+                    // primitive-array receivers. Kotlin's full sig is
+                    // `copyInto(dest, destOffset=0, startIndex=0,
+                    //  endIndex=size)`; the common one-arg call shape
+                    // `H.copyInto(state)` (parity/101-hash MD5 +
+                    // Bit32Digest `resetProtected` body) routes to
+                    // `System.arraycopy(recv, 0, dest, 0, recv.length)`.
+                    // Mirrors `copyOf` shape just above; explicit
+                    // offset/range arms could be added but the only
+                    // call shapes the hash family uses are the no-arg
+                    // / single-dest form.
+                    if method_n == "copyInto"
+                        && call
+                            .value_argument_list()
+                            .map(|al| al.arguments().count())
+                            .unwrap_or(0)
+                            == 1
+                    {
+                        let arr_is_primitive = matches!(
+                            recv_ty_candidate,
+                            Some(
+                                Ty::IntArray
+                                    | Ty::LongArray
+                                    | Ty::DoubleArray
+                                    | Ty::ByteArray
+                                    | Ty::BooleanArray
+                            )
+                        );
+                        if arr_is_primitive {
+                            let recv_slot = lower_rich_expr_to_slot(
+                                dq_exprs[0],
+                                lookup_name,
+                                fn_lookup,
+                                next_slot,
+                                pre_stmts,
+                                extra_locals,
+                                strings,
+                            )?;
+                            let dest_e = call
+                                .value_argument_list()
+                                .and_then(|al| al.arguments().next())
+                                .and_then(|a| a.expression())?;
+                            let dest_slot = lower_rich_expr_to_slot(
+                                dest_e,
+                                lookup_name,
+                                fn_lookup,
+                                next_slot,
+                                pre_stmts,
+                                extra_locals,
+                                strings,
+                            )?;
+                            let zero_slot = LocalId(*next_slot);
+                            *next_slot += 1;
+                            extra_locals.push(Ty::Int);
+                            pre_stmts.push(MStmt::Assign {
+                                dest: zero_slot,
+                                value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(0)),
+                            });
+                            let zero_slot2 = LocalId(*next_slot);
+                            *next_slot += 1;
+                            extra_locals.push(Ty::Int);
+                            pre_stmts.push(MStmt::Assign {
+                                dest: zero_slot2,
+                                value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(0)),
+                            });
+                            let len_slot = LocalId(*next_slot);
+                            *next_slot += 1;
+                            extra_locals.push(Ty::Int);
+                            pre_stmts.push(MStmt::Assign {
+                                dest: len_slot,
+                                value: skotch_mir::Rvalue::ArrayLength(recv_slot),
+                            });
+                            let result_slot = LocalId(*next_slot);
+                            *next_slot += 1;
+                            extra_locals.push(Ty::Unit);
+                            pre_stmts.push(MStmt::Assign {
+                                dest: result_slot,
+                                value: skotch_mir::Rvalue::Call {
+                                    kind: skotch_mir::CallKind::StaticJava {
+                                        class_name: "java/lang/System".to_string(),
+                                        method_name: "arraycopy".to_string(),
+                                        descriptor: "(Ljava/lang/Object;ILjava/lang/Object;II)V"
+                                            .to_string(),
+                                    },
+                                    args: vec![
+                                        recv_slot, zero_slot, dest_slot, zero_slot2, len_slot,
+                                    ],
+                                },
+                            });
+                            // The source-level call returns the dest
+                            // array; surface that to consumers.
+                            return Some(dest_slot);
                         }
                     }
                     // Phase H5e: `arr.fill(v)` stdlib intrinsic on
@@ -39900,6 +40199,7 @@ fn collect_secondary_ctors(
             e: &skotch_ast::KtExpr<'_>,
             param_names: &[String],
             companion_consts: &[(String, skotch_mir::MirConst, Ty)],
+            outer_class: &str,
         ) -> bool {
             use skotch_ast::KtExpr;
             match e {
@@ -39908,6 +40208,11 @@ fn collect_secondary_ctors(
                     .map(|n| {
                         param_names.iter().any(|p| p == n)
                             || companion_consts.iter().any(|(cn, _, _)| cn == n)
+                            // Bare `H`-style same-class companion
+                            // intArrayOf val: bare `state = H` would
+                            // store the materialized IntArray slot via
+                            // the lower_inline Reference arm.
+                            || lookup_class_companion_intarray(outer_class, n).is_some()
                     })
                     .unwrap_or(false),
                 KtExpr::Call(call) => {
@@ -39945,7 +40250,9 @@ fn collect_secondary_ctors(
                     al.arguments().all(|arg| {
                         arg.expression()
                             .map(unwrap_parens)
-                            .map(|ae| rhs_is_whitelisted(&ae, param_names, companion_consts))
+                            .map(|ae| {
+                                rhs_is_whitelisted(&ae, param_names, companion_consts, outer_class)
+                            })
                             .unwrap_or(false)
                     })
                 }
@@ -39961,12 +40268,18 @@ fn collect_secondary_ctors(
                     // `other.h`, `h.copyOf()`) OR an imported-class
                     // qualifier (e.g. `Counter.Bit32(...)` where the
                     // new FQ-ctor arm in lower_rich_expr_to_slot emits
-                    // `new Counter$Bit32; invokespecial`).
+                    // `new Counter$Bit32; invokespecial`) OR a
+                    // same-class companion intArrayOf val (`H.copyOf()`
+                    // in MD5's ctor — lower_inline materializes H as
+                    // an IntArray slot, then the `arr.copyOf()` arm in
+                    // lower_rich emits `Arrays.copyOf`).
                     let recv_ok = matches!(&kids[0],
                         KtExpr::Reference(r) if r.name()
                             .map(|n| {
                                 param_names.iter().any(|p| p == n)
                                     || lookup_file_import(n).is_some()
+                                    || lookup_class_companion_intarray(outer_class, n)
+                                        .is_some()
                             })
                             .unwrap_or(false));
                     recv_ok && matches!(&kids[1], KtExpr::Call(_))
@@ -40087,7 +40400,10 @@ fn collect_secondary_ctors(
                             continue;
                         }
                     }
-                    if !rhs_is_whitelisted(&rhs, &param_names, &companion_consts) {
+                    // `CLASS_COMPANION_INTARRAY_LITERALS` is keyed by
+                    // the FQ class name (matches the
+                    // `register_class_companion_intarrays` key shape).
+                    if !rhs_is_whitelisted(&rhs, &param_names, &companion_consts, class_fq) {
                         continue;
                     }
                     let body_snap = body_stmts.len();
@@ -40100,6 +40416,16 @@ fn collect_secondary_ctors(
                             .copied()
                             .or_else(|| companion_name_to_slot.get(nm).copied())
                     };
+                    // Install CLASS_METHOD_CTX so the `H`-style
+                    // companion-intArray lookups inside
+                    // `lower_rich_expr_to_slot` / `lower_inline_expr_to_slot`
+                    // can recover the current class via
+                    // `current_class_name()`. Ctor bodies don't use the
+                    // implicit-this field fallback otherwise, so an
+                    // empty fields slice is safe — the bare-Reference
+                    // arm falls through `class_field_lookup(empty) → None`
+                    // before reaching the new companion-intArray check.
+                    let _ctor_scope = ClassMethodScope::new(Some(class_fq), &[]);
                     let rhs_slot = lower_rich_expr_to_slot(
                         rhs,
                         &lookup,
@@ -40109,6 +40435,7 @@ fn collect_secondary_ctors(
                         &mut locals,
                         shared_strings,
                     );
+                    drop(_ctor_scope);
                     let Some(rhs_slot) = rhs_slot else {
                         body_stmts.truncate(body_snap);
                         locals.truncate(locals_snap);
