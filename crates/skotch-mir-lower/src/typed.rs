@@ -201,16 +201,25 @@ fn inherited_method_return_ty(start: &str, method_name: &str, arity: usize) -> O
 /// (`sb.append("x").append("y")`) can determine the receiver Ty of the
 /// outer call from the inner call's return descriptor.
 ///
-/// Two layers:
+/// Three layers:
 ///   1. Fluent-self hardcode for known builder-style methods whose
 ///      classinfo descriptor advertises a wider supertype than the
 ///      runtime overload actually returns. `StringBuilder.append`
 ///      classinfo says `Appendable`, but every append overload returns
 ///      `StringBuilder` at runtime — matching the backend's
 ///      `fluent_self_ret` peephole (class_writer.rs ~17458).
-///   2. classinfo lookup → jvm_descriptor_to_ty mapping for everything
-///      else. Returns None when the return descriptor maps to
-///      `Ljava/lang/Object;` so callers preserve Ty::Any.
+///   2. classinfo lookup → jvm_descriptor_to_ty mapping. Returns None
+///      when the return descriptor maps to `Ljava/lang/Object;` so
+///      callers preserve Ty::Any.
+///   3. `@kotlin.Metadata` fallback (Phase AA). When the JVM
+///      descriptor's return type erases to Object — typical for a
+///      generic return on a Kotlin JAR class, or when overload
+///      resolution picked a bridge with a widened return — Kotlin
+///      metadata still carries the source-level class. Lets chained
+///      method calls on JAR classes keep the result slot typed as
+///      the declared concrete class (e.g. `count.final(I)` declares
+///      `Counter.Bit32.Final`, so the outer `.asBits()` dispatch can
+///      find the receiver class).
 ///
 /// `arity` is the source-side arg count (no receiver), matching what
 /// `lookup_method_descriptor` expects.
@@ -223,10 +232,70 @@ fn jdk_method_return_ty(class_name: &str, method_name: &str, arity: usize) -> Op
     if fluent_self {
         return Some(Ty::Class(class_name.to_string()));
     }
-    // Defer to classinfo lookup for everything else.
-    let desc = skotch_classinfo::lookup_method_descriptor(class_name, method_name, arity)?;
-    let ret = desc.rsplit_once(')').map(|(_, r)| r)?;
-    jvm_descriptor_to_ty(ret)
+    // Layer 2: classinfo descriptor lookup.
+    if let Some(desc) = skotch_classinfo::lookup_method_descriptor(class_name, method_name, arity) {
+        if let Some(ret) = desc.rsplit_once(')').map(|(_, r)| r) {
+            if let Some(t) = jvm_descriptor_to_ty(ret) {
+                return Some(t);
+            }
+        }
+    }
+    // Layer 3: `@kotlin.Metadata` return-type fallback. Mirrors the
+    // param-name @Metadata fallback installed by Phase Y for
+    // `CLASS_METHOD_PARAM_NAMES`; same data source, different field.
+    metadata_return_ty(class_name, method_name)
+}
+
+/// Recover a JAR-class method's source-level return type from its
+/// `@kotlin.Metadata`. Returns `None` when the class carries no
+/// metadata (plain Java) or declares no such function. Overload
+/// resolution by name only — first match wins, matching the existing
+/// param-name fallback (Phase Y, `lookup_class_method_param_names`).
+fn metadata_return_ty(class_name: &str, method_name: &str) -> Option<Ty> {
+    let fi = skotch_classinfo::lookup_function_metadata(class_name, method_name)?;
+    let raw = fi.return_type.as_ref()?.class_name.as_deref()?;
+    Some(metadata_class_name_to_ty(raw))
+}
+
+/// Map a Kotlin-`@Metadata` class name to a `Ty`. Metadata names use
+/// `/` for package separators and `.` for nested classes (per
+/// `JvmNameResolverBase.getString` operation 1 — see
+/// `crates/skotch-classinfo/src/kotlin_metadata.rs::NameResolver`). We
+/// translate dots back to `$` to land on the JVM internal name, then
+/// route Kotlin builtins (`kotlin/Int`, `kotlin/collections/List`, …)
+/// to their corresponding `Ty` / JDK-class form. Anything else is
+/// wrapped as `Ty::Class(jvm_internal)` — that's the form downstream
+/// dispatch arms in `lower_rich_expr_to_slot` already expect.
+fn metadata_class_name_to_ty(meta_name: &str) -> Ty {
+    let jvm = meta_name.replace('.', "$");
+    // Kotlin builtins by their simple name (`kotlin/Int` → "Int" → Ty::Int).
+    let simple = jvm.rsplit('/').next().unwrap_or(&jvm);
+    if jvm.starts_with("kotlin/") && !jvm.contains('$') {
+        if let Some(t) = skotch_types::ty_from_name(simple) {
+            return t;
+        }
+    }
+    // Kotlin collection / sequence aliases — match the JDK class the
+    // backend already routes to. Keep this list in sync with the
+    // resolver crate's analogous routing.
+    let aliased: Option<&'static str> = match jvm.as_str() {
+        "kotlin/collections/List"
+        | "kotlin/collections/MutableList"
+        | "kotlin/collections/ArrayList" => Some("java/util/List"),
+        "kotlin/collections/Set" | "kotlin/collections/MutableSet" => Some("java/util/Set"),
+        "kotlin/collections/Map" | "kotlin/collections/MutableMap" => Some("java/util/Map"),
+        "kotlin/collections/Iterable" => Some("java/lang/Iterable"),
+        "kotlin/collections/Iterator" | "kotlin/collections/MutableIterator" => {
+            Some("java/util/Iterator")
+        }
+        "kotlin/CharSequence" => Some("java/lang/CharSequence"),
+        "kotlin/Throwable" => Some("java/lang/Throwable"),
+        _ => None,
+    };
+    if let Some(jdk) = aliased {
+        return Ty::Class(jdk.to_string());
+    }
+    Ty::Class(jvm)
 }
 
 /// Search CLASS_METHODS for classes owning a method by that name.
