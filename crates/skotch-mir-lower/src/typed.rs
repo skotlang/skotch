@@ -4706,6 +4706,133 @@ pub fn lower_file(
     };
     let _class_methods_scope_early = ClassMethodsScope::new(class_method_returns_early);
 
+    // CLASS_METHOD_PARAM_NAMES scope must also be installed BEFORE class
+    // processing — otherwise named-arg call sites inside CLASS method
+    // bodies (e.g. `count.final(additional = bufPos)` inside MD5's
+    // `digestIntoProtected`) hit `reorder_named_call_args` while the
+    // table is empty and bail with "no param-name metadata", cascading
+    // the whole DotQualified to lower_rich's fell-through arm. The
+    // later (post-class-lowering) build at the bottom of `lower_file`
+    // already handles top-level fn bodies; this one duplicates its
+    // walk so class method bodies see the same data. Source walk only —
+    // no module.classes dependency, so the two phases produce the same
+    // table for user-declared methods.
+    let class_method_param_names_early: rustc_hash::FxHashMap<
+        String,
+        rustc_hash::FxHashMap<String, Vec<String>>,
+    > = {
+        let mut t: rustc_hash::FxHashMap<String, rustc_hash::FxHashMap<String, Vec<String>>> =
+            rustc_hash::FxHashMap::default();
+        let collect_fn_param_names = |f: &skotch_ast::KtFun<'_>| -> Vec<String> {
+            f.value_parameter_list()
+                .map(|pl| {
+                    pl.parameters()
+                        .map(|p| p.name().unwrap_or("").to_string())
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+        // Local interfaces — abstract methods carry param names too.
+        for decl in file.decls() {
+            if let KtDecl::Interface(i) = decl {
+                let Some(iname) = i.name() else { continue };
+                let mut methods: rustc_hash::FxHashMap<String, Vec<String>> =
+                    rustc_hash::FxHashMap::default();
+                if let Some(body) = i.body() {
+                    for d in body.declarations() {
+                        if let KtDecl::Fun(f) = d {
+                            if let Some(mname) = f.name() {
+                                methods.insert(mname.to_string(), collect_fn_param_names(&f));
+                            }
+                        }
+                    }
+                }
+                t.insert(iname.to_string(), methods);
+            }
+        }
+        // Local classes (body methods + companion).
+        for decl in file.decls() {
+            if let KtDecl::Class(c) = decl {
+                let Some(cname) = c.name() else { continue };
+                let mut methods: rustc_hash::FxHashMap<String, Vec<String>> =
+                    rustc_hash::FxHashMap::default();
+                if let Some(body) = c.body() {
+                    for d in body.declarations() {
+                        if let KtDecl::Fun(f) = d {
+                            if let Some(mname) = f.name() {
+                                methods.insert(mname.to_string(), collect_fn_param_names(&f));
+                            }
+                        }
+                    }
+                    for d in body.declarations() {
+                        if let KtDecl::Object(o) = d {
+                            if o.is_companion() {
+                                let comp_name = format!("{}$Companion", cname);
+                                let mut comp_methods: rustc_hash::FxHashMap<String, Vec<String>> =
+                                    rustc_hash::FxHashMap::default();
+                                if let Some(obody) = o.body() {
+                                    for od in obody.declarations() {
+                                        if let KtDecl::Fun(f) = od {
+                                            if let Some(mname) = f.name() {
+                                                comp_methods.insert(
+                                                    mname.to_string(),
+                                                    collect_fn_param_names(&f),
+                                                );
+                                            }
+                                        }
+                                    }
+                                }
+                                t.insert(comp_name, comp_methods);
+                            }
+                        }
+                    }
+                }
+                t.insert(cname.to_string(), methods);
+            }
+        }
+        // Cross-file classes from package symbols.
+        if let Some(tbl) = package_symbols {
+            for (simple_name, decl) in tbl.classes.iter() {
+                let mut methods: rustc_hash::FxHashMap<String, Vec<String>> =
+                    rustc_hash::FxHashMap::default();
+                for m in decl.methods.iter() {
+                    methods.insert(
+                        m.name.clone(),
+                        m.params.iter().map(|p| p.name.clone()).collect(),
+                    );
+                }
+                t.entry(simple_name.clone())
+                    .and_modify(|m| {
+                        for (k, v) in &methods {
+                            m.entry(k.clone()).or_insert_with(|| v.clone());
+                        }
+                    })
+                    .or_insert(methods);
+                if !decl.companion_methods.is_empty() {
+                    let comp_name = format!("{}$Companion", simple_name);
+                    let mut comp_methods: rustc_hash::FxHashMap<String, Vec<String>> =
+                        rustc_hash::FxHashMap::default();
+                    for m in decl.companion_methods.iter() {
+                        comp_methods.insert(
+                            m.name.clone(),
+                            m.params.iter().map(|p| p.name.clone()).collect(),
+                        );
+                    }
+                    t.entry(comp_name)
+                        .and_modify(|m| {
+                            for (k, v) in &comp_methods {
+                                m.entry(k.clone()).or_insert_with(|| v.clone());
+                            }
+                        })
+                        .or_insert(comp_methods);
+                }
+            }
+        }
+        t
+    };
+    let _class_method_param_names_scope_early =
+        ClassMethodParamNamesScope::new(class_method_param_names_early);
+
     // Per-file inherited-fields table: each user class maps to the
     // (defining-parent-class, field_name, field_ty) triples reachable
     // through its super chain. Built BEFORE the class methods loop so
