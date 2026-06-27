@@ -30027,6 +30027,97 @@ fn lower_rich_expr_to_slot(
                     );
                     return Some(result_slot);
                 }
+                // Long-typed branches: same box-then-unbox via Long.valueOf
+                // / Long.longValue. Mirrors the Int arm above. Without this,
+                // KeccakDigest.extract's `when { ... -> if (priorRem == 0L)
+                // 0L else 8L - priorRem ... }` arm body bails — the entire
+                // `extract` function body drops, SHA-3 returns a zero digest.
+                if matches!(then_ty, Ty::Long) && matches!(else_ty, Ty::Long) {
+                    let mut alloc = |ty: Ty, v: skotch_mir::Rvalue| -> LocalId {
+                        let s = LocalId(*next_slot);
+                        *next_slot += 1;
+                        extra_locals.push(ty);
+                        pre_stmts.push(MStmt::Assign { dest: s, value: v });
+                        s
+                    };
+                    let then_boxed = alloc(
+                        Ty::Class("java/lang/Long".to_string()),
+                        skotch_mir::Rvalue::Call {
+                            kind: skotch_mir::CallKind::StaticJava {
+                                class_name: "java/lang/Long".to_string(),
+                                method_name: "valueOf".to_string(),
+                                descriptor: "(J)Ljava/lang/Long;".to_string(),
+                            },
+                            args: vec![then_slot],
+                        },
+                    );
+                    let else_boxed = alloc(
+                        Ty::Class("java/lang/Long".to_string()),
+                        skotch_mir::Rvalue::Call {
+                            kind: skotch_mir::CallKind::StaticJava {
+                                class_name: "java/lang/Long".to_string(),
+                                method_name: "valueOf".to_string(),
+                                descriptor: "(J)Ljava/lang/Long;".to_string(),
+                            },
+                            args: vec![else_slot],
+                        },
+                    );
+                    let size_slot = alloc(
+                        Ty::Int,
+                        skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(2)),
+                    );
+                    let arr_slot = alloc(Ty::Any, skotch_mir::Rvalue::NewObjectArray(size_slot));
+                    let zero_idx = alloc(
+                        Ty::Int,
+                        skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(0)),
+                    );
+                    alloc(
+                        Ty::Unit,
+                        skotch_mir::Rvalue::ObjectArrayStore {
+                            array: arr_slot,
+                            index: zero_idx,
+                            value: else_boxed,
+                        },
+                    );
+                    let one_idx = alloc(
+                        Ty::Int,
+                        skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(1)),
+                    );
+                    alloc(
+                        Ty::Unit,
+                        skotch_mir::Rvalue::ObjectArrayStore {
+                            array: arr_slot,
+                            index: one_idx,
+                            value: then_boxed,
+                        },
+                    );
+                    let raw_slot = alloc(
+                        Ty::Any,
+                        skotch_mir::Rvalue::ArrayLoad {
+                            array: arr_slot,
+                            index: cond_slot,
+                        },
+                    );
+                    let cast_slot = alloc(
+                        Ty::Class("java/lang/Long".to_string()),
+                        skotch_mir::Rvalue::CheckCast {
+                            obj: raw_slot,
+                            target_class: "java/lang/Long".to_string(),
+                        },
+                    );
+                    let result_slot = alloc(
+                        Ty::Long,
+                        skotch_mir::Rvalue::Call {
+                            kind: skotch_mir::CallKind::VirtualJava {
+                                class_name: "java/lang/Long".to_string(),
+                                method_name: "longValue".to_string(),
+                                descriptor: "()J".to_string(),
+                            },
+                            args: vec![cast_slot],
+                        },
+                    );
+                    return Some(result_slot);
+                }
                 if is_ref(&then_ty) && is_ref(&else_ty) {
                     let result_ty = if then_ty == else_ty {
                         then_ty.clone()
@@ -37376,6 +37467,188 @@ fn lower_rich_expr_to_slot(
                     Ty::Nullable(inner) => (**inner).clone(),
                     _ => recv_ty_raw.clone(),
                 };
+                // `recv?.let { ... }` — kotlin stdlib's standard inline
+                // null-skip + scope-call. The accessor is a Call with
+                // callee `let`, no value args, and a single trailing
+                // lambda. Lower as: inline the lambda body's stmts with
+                // the lambda's `it` (or explicit param) bound to recv.
+                // Result is the body's last expression (or recv when the
+                // body is purely side-effecting). Same null-semantics
+                // deviation as the `?.method(args)` arm below: kotlinc
+                // would short-circuit on null recv and return null; we
+                // execute unconditionally and may NPE inside the body.
+                // For KeccakDigest.extract's `r?.let { it.value =
+                // spongeRem }` — the only fixture-blocking shape — recv
+                // is always non-null at the call site.
+                if let KtExpr::Call(call) = accessor_e {
+                    if let Some(KtExpr::Reference(meth_ref)) = call.callee() {
+                        if meth_ref.name() == Some("let")
+                            && call
+                                .value_argument_list()
+                                .map(|al| al.arguments().count() == 0)
+                                .unwrap_or(true)
+                        {
+                            if let Some(la) = call.lambda_argument() {
+                                if let Some(KtExpr::Lambda(lambda)) =
+                                    skotch_ast::children(la.syntax())
+                                        .iter()
+                                        .find_map(KtExpr::cast)
+                                {
+                                    if let Some(fl) = lambda.function_literal() {
+                                        if let Some(body) = fl.body() {
+                                            let kids = skotch_ast::children(body.syntax());
+                                            // Determine the lambda param name:
+                                            // explicit `{ name -> ... }` or
+                                            // implicit `it`.
+                                            let param_name: String = fl
+                                                .value_parameter_list()
+                                                .and_then(|pl| pl.parameters().next())
+                                                .and_then(|p| p.name().map(|s| s.to_string()))
+                                                .unwrap_or_else(|| "it".to_string());
+                                            // Compute the merged lookup
+                                            // chain so body expressions
+                                            // can resolve both outer-
+                                            // scope names AND the lambda
+                                            // param. Snapshot the
+                                            // OUTER lookup_name closure
+                                            // by passing it as the
+                                            // fallback.
+                                            let binding = (param_name, recv_slot);
+                                            let lookup = |n: &str| -> Option<LocalId> {
+                                                if n == binding.0 {
+                                                    return Some(binding.1);
+                                                }
+                                                lookup_name(n)
+                                            };
+                                            // Walk every KtExpr child:
+                                            // the last one's slot is
+                                            // the result, the rest are
+                                            // side-effecting stmts. If
+                                            // ANY child fails to lower,
+                                            // fall through to the next
+                                            // SafeAccess arm.
+                                            let mut last_slot: Option<LocalId> = None;
+                                            let mut ok = true;
+                                            for c in kids.iter() {
+                                                let Some(stmt_e) = KtExpr::cast(c) else {
+                                                    continue;
+                                                };
+                                                // Inline-handle `it.field = expr` (Binary `=`
+                                                // with DotQualified(it_ref, field_ref) lhs)
+                                                // as a PutField. lower_rich is rvalue-only
+                                                // and falls through assignment shapes;
+                                                // without this peephole the entire `?.let`
+                                                // arm rolls back and the SafeAccess fallback
+                                                // dispatches `let()` as a class method.
+                                                if let KtExpr::Binary(b) = &stmt_e {
+                                                    if b.operation().map(|o| o.text()).as_deref()
+                                                        == Some("=")
+                                                    {
+                                                        if let (
+                                                            Some(KtExpr::DotQualified(dq)),
+                                                            Some(rhs_e),
+                                                        ) = (
+                                                            b.lhs().map(unwrap_parens),
+                                                            b.rhs().map(unwrap_parens),
+                                                        ) {
+                                                            let dq_kids: Vec<KtExpr<'_>> =
+                                                                skotch_ast::children(dq.syntax())
+                                                                    .iter()
+                                                                    .filter_map(KtExpr::cast)
+                                                                    .collect();
+                                                            if dq_kids.len() == 2 {
+                                                                if let (
+                                                                    KtExpr::Reference(rcv_ref),
+                                                                    KtExpr::Reference(prop_ref),
+                                                                ) = (&dq_kids[0], &dq_kids[1])
+                                                                {
+                                                                    if let (
+                                                                        Some(rcv_n),
+                                                                        Some(prop_n),
+                                                                    ) = (
+                                                                        rcv_ref.name(),
+                                                                        prop_ref.name(),
+                                                                    ) {
+                                                                        if let Some(target_slot) =
+                                                                            lookup(rcv_n)
+                                                                        {
+                                                                            let target_ty = slot_ty_with_param_fallback(
+                                                                                target_slot.0,
+                                                                                extra_locals,
+                                                                            );
+                                                                            let target_ty_unwrapped = match &target_ty {
+                                                                                Ty::Nullable(inner) => (**inner).clone(),
+                                                                                other => other.clone(),
+                                                                            };
+                                                                            if let Ty::Class(
+                                                                                cname,
+                                                                            ) =
+                                                                                target_ty_unwrapped
+                                                                            {
+                                                                                if let Some(value_slot) = lower_rich_expr_to_slot(
+                                                                                    rhs_e,
+                                                                                    &lookup,
+                                                                                    fn_lookup,
+                                                                                    next_slot,
+                                                                                    pre_stmts,
+                                                                                    extra_locals,
+                                                                                    strings,
+                                                                                ) {
+                                                                                    let unused = LocalId(*next_slot);
+                                                                                    *next_slot += 1;
+                                                                                    extra_locals.push(Ty::Unit);
+                                                                                    pre_stmts.push(MStmt::Assign {
+                                                                                        dest: unused,
+                                                                                        value: skotch_mir::Rvalue::PutField {
+                                                                                            receiver: target_slot,
+                                                                                            class_name: cname,
+                                                                                            field_name: prop_n.to_string(),
+                                                                                            value: value_slot,
+                                                                                        },
+                                                                                    });
+                                                                                    last_slot = Some(unused);
+                                                                                    let _ = prop_n;
+                                                                                    continue;
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                match lower_rich_expr_to_slot(
+                                                    stmt_e,
+                                                    &lookup,
+                                                    fn_lookup,
+                                                    next_slot,
+                                                    pre_stmts,
+                                                    extra_locals,
+                                                    strings,
+                                                ) {
+                                                    Some(s) => last_slot = Some(s),
+                                                    None => {
+                                                        ok = false;
+                                                        break;
+                                                    }
+                                                }
+                                            }
+                                            if ok {
+                                                // No KtExpr child (empty
+                                                // lambda body): return
+                                                // the receiver slot
+                                                // unchanged so the caller
+                                                // still has a value.
+                                                return Some(last_slot.unwrap_or(recv_slot));
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 // `recv?.method(args)` — emit a Virtual dispatch.
                 if let KtExpr::Call(call) = accessor_e {
                     if let Some(KtExpr::Reference(meth_ref)) = call.callee() {
