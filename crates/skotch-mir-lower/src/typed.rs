@@ -15327,6 +15327,20 @@ fn lower_loop_body_blocks(
         WhenStmt,
         ThrowStmt,
         TryStmt,
+        /// Stmt-level `recv?.let { lambda body }` — the `lower_rich_expr_to_slot`
+        /// SafeAccess `?.let { ... }` arm executes the lambda body
+        /// unconditionally (it lowers `recv` to a slot then walks the body
+        /// without a null guard). For genuinely-nullable receivers (e.g.
+        /// `r: SpongeRemainder?`) this NPEs on `null` instead of skipping
+        /// the body. Emit a real 3-block null-guard CFG:
+        ///   cond: eval recv -> recv_slot; cmp = (recv_slot == null);
+        ///         Branch(cmp, join, body)
+        ///   body: bind it=recv_slot; lower lambda stmts; Goto(join)
+        ///   join: fall through
+        /// Unblocks SHA-3 in `parity/101-hash` whose KeccakDigest.extract
+        /// ends with `r?.let { it.value = spongeRem }` against a nullable
+        /// `r: SpongeRemainder?` param.
+        SafeAccessLetStmt,
     }
     let mut i: usize = 0;
     while i < body_children.len() {
@@ -15496,6 +15510,44 @@ fn lower_loop_body_blocks(
             if matches!(expr, KtExpr::When(_)) {
                 special_at = Some((j, Special::WhenStmt));
                 break;
+            }
+            // Stmt-level `recv?.let { ... }`. lower_rich's SafeAccess
+            // arm executes the lambda body unconditionally — NPE on a
+            // null receiver instead of the kotlinc skip-on-null shape.
+            // Detect at stmt position and route to SafeAccessLetStmt
+            // for the real 3-block null-guard CFG. Predicate is
+            // identical to the existing lower_rich peephole so the
+            // selection sets line up: callee `let`, no positional args,
+            // single trailing lambda.
+            if let KtExpr::SafeAccess(sa) = expr {
+                let sa_kids: Vec<KtExpr<'_>> = skotch_ast::children(sa.syntax())
+                    .iter()
+                    .filter_map(KtExpr::cast)
+                    .collect();
+                if sa_kids.len() == 2 {
+                    if let KtExpr::Call(call) = sa_kids[1] {
+                        let callee_is_let = matches!(
+                            call.callee(),
+                            Some(KtExpr::Reference(r)) if r.name() == Some("let")
+                        );
+                        let no_value_args = call
+                            .value_argument_list()
+                            .map(|al| al.arguments().count() == 0)
+                            .unwrap_or(true);
+                        let has_lambda = call
+                            .lambda_argument()
+                            .map(|la| {
+                                skotch_ast::children(la.syntax())
+                                    .iter()
+                                    .any(|c| matches!(KtExpr::cast(c), Some(KtExpr::Lambda(_))))
+                            })
+                            .unwrap_or(false);
+                        if callee_is_let && no_value_args && has_lambda {
+                            special_at = Some((j, Special::SafeAccessLetStmt));
+                            break;
+                        }
+                    }
+                }
             }
             if let KtExpr::If(if_e) = expr {
                 let then_arm = if_e.then_branch().and_then(|t| t.expression());
@@ -17900,6 +17952,128 @@ fn lower_loop_body_blocks(
                     terminator: Terminator::Goto(join_block_id),
                 });
                 name_to_local.push((pname.to_string(), prop_slot));
+                i = j + 1;
+                continue;
+            }
+            Some((j, Special::SafeAccessLetStmt)) => {
+                // Stmt-level `recv?.let { lambda body }` — emit a real
+                // null-guard CFG so a null receiver skips the body
+                // instead of NPE-ing inside `lower_rich_expr_to_slot`'s
+                // unguarded SafeAccess-let arm.
+                //
+                // Block layout:
+                //   cond: cur_stmts; eval recv -> recv_slot;
+                //         cmp = (recv_slot == null);
+                //         Branch(cmp, join, body)
+                //   body: lower lambda stmts (with `it` bound to recv);
+                //         Goto(join)
+                //   join: fall through to subsequent stmts.
+                let stmt_node = body_children[j];
+                let KtExpr::SafeAccess(sa) = KtExpr::cast(stmt_node)? else {
+                    return None;
+                };
+                let sa_kids: Vec<KtExpr<'_>> = skotch_ast::children(sa.syntax())
+                    .iter()
+                    .filter_map(KtExpr::cast)
+                    .collect();
+                if sa_kids.len() != 2 {
+                    return None;
+                }
+                let recv_e = sa_kids[0];
+                let KtExpr::Call(call) = sa_kids[1] else {
+                    return None;
+                };
+                let la = call.lambda_argument()?;
+                let KtExpr::Lambda(lambda) = skotch_ast::children(la.syntax())
+                    .iter()
+                    .find_map(KtExpr::cast)?
+                else {
+                    return None;
+                };
+                let fl = lambda.function_literal()?;
+                let body = fl.body()?;
+                // Determine the lambda's bound name: explicit
+                // `{ name -> ... }` or the implicit `it`.
+                let param_name: String = fl
+                    .value_parameter_list()
+                    .and_then(|pl| pl.parameters().next())
+                    .and_then(|p| p.name().map(|s| s.to_string()))
+                    .unwrap_or_else(|| "it".to_string());
+                let snap = name_to_local.clone();
+                let lookup = |n: &str| -> Option<LocalId> {
+                    snap.iter()
+                        .rev()
+                        .find(|(name, _)| name == n)
+                        .map(|(_, l)| *l)
+                };
+                // Lower the receiver into cur_stmts (cond block's prelude).
+                let recv_slot = lower_rich_expr_to_slot(
+                    recv_e,
+                    &lookup,
+                    fn_lookup_ref,
+                    next_slot,
+                    &mut cur_stmts,
+                    local_tys,
+                    strings,
+                )?;
+                // null-cmp: cmp_slot = (recv_slot == null).
+                let null_slot = LocalId(*next_slot);
+                *next_slot += 1;
+                local_tys.push(Ty::Nullable(Box::new(Ty::Any)));
+                cur_stmts.push(MStmt::Assign {
+                    dest: null_slot,
+                    value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Null),
+                });
+                let cmp_slot = LocalId(*next_slot);
+                *next_slot += 1;
+                local_tys.push(Ty::Bool);
+                cur_stmts.push(MStmt::Assign {
+                    dest: cmp_slot,
+                    value: skotch_mir::Rvalue::BinOp {
+                        op: skotch_mir::BinOp::CmpEq,
+                        lhs: recv_slot,
+                        rhs: null_slot,
+                    },
+                });
+                // Lower the lambda body via `lower_loop_body` with the
+                // lambda param name bound to recv_slot. lower_loop_body
+                // already handles `it.field = expr` (PutField on a
+                // Reference receiver), so this re-uses the existing
+                // stmt-level dispatch instead of re-implementing the
+                // peephole. Push the binding, lower, then pop so the
+                // name doesn't leak into the join block.
+                let body_kids: Vec<&skotch_sil::SilNode> =
+                    skotch_ast::children(body.syntax()).iter().collect();
+                name_to_local.push((param_name, recv_slot));
+                let body_stmts = lower_loop_body(
+                    &body_kids,
+                    name_to_local,
+                    next_slot,
+                    local_tys,
+                    strings,
+                    fn_lookup_ref,
+                    function_param_names,
+                );
+                name_to_local.pop();
+                let body_stmts = body_stmts?;
+                // Block ids.
+                let cond_block_id = block_offset + blocks.len() as u32;
+                let body_block_id = cond_block_id + 1;
+                let join_block_id = body_block_id + 1;
+                blocks.push(BasicBlock {
+                    stmts: std::mem::take(&mut cur_stmts),
+                    terminator: Terminator::Branch {
+                        cond: cmp_slot,
+                        // cmp is true => recv IS null => skip body.
+                        then_block: join_block_id,
+                        else_block: body_block_id,
+                    },
+                });
+                blocks.push(BasicBlock {
+                    stmts: body_stmts,
+                    terminator: Terminator::Goto(join_block_id),
+                });
+                let _ = cond_block_id;
                 i = j + 1;
                 continue;
             }
