@@ -11705,6 +11705,17 @@ fn emit_mir_segment(
                     .or_else(|| {
                         find_inherited_field(module, field_class, field_name)
                             .map(|(_, f)| f.ty.clone())
+                    })
+                    // Custom-getter-only property fallback — see the
+                    // main GetField path below for the full rationale.
+                    .or_else(|| {
+                        let probe = synthesize_getter_name(field_name);
+                        owning_class.and_then(|c| {
+                            c.methods
+                                .iter()
+                                .find(|m| m.name == probe && m.params.len() == 1)
+                                .map(|m| m.return_ty.clone())
+                        })
                     });
                 let dest_local_ty = &func.locals[dest.0 as usize];
                 let field_ty = declared_ty.as_ref().unwrap_or(dest_local_ty);
@@ -15983,6 +15994,27 @@ fn walk_block(
                     .or_else(|| {
                         find_inherited_field(module, field_class, field_name)
                             .map(|(_, f)| f.ty.clone())
+                    })
+                    // Custom-getter-only property: there is NO backing
+                    // field on the class (just `val area: Int get() = w * h`),
+                    // so neither the owning-class field lookup nor the
+                    // inherited-field walk above hit. Probe the owning
+                    // class's methods for a `getX` / `isX` accessor and
+                    // use its declared return type instead. Without
+                    // this, `dest_ty` (often `Ty::Any` since MIR-lower
+                    // typed the field-read slot as Any) is used as the
+                    // descriptor and the call site emits
+                    // `Rect.getArea:()Ljava/lang/Object;` against the
+                    // class's real `getArea:()I` — NoSuchMethodError
+                    // at runtime.
+                    .or_else(|| {
+                        let probe = synthesize_getter_name(field_name);
+                        owning_class.and_then(|c| {
+                            c.methods
+                                .iter()
+                                .find(|m| m.name == probe && m.params.len() == 1)
+                                .map(|m| m.return_ty.clone())
+                        })
                     });
                 let dest_ty = &func.locals[dest.0 as usize];
                 let field_ty = declared_ty.as_ref().unwrap_or(dest_ty);

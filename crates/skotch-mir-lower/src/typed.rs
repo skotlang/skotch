@@ -28632,9 +28632,24 @@ fn try_lower_multi_stmt_block_with_offset(
                                     else {
                                         return None;
                                     };
+                                    // Promote the field-read slot's Ty from
+                                    // Any to the property's declared type
+                                    // when CLASS_METHODS knows the matching
+                                    // `getX` getter. Without this, a
+                                    // custom-getter-only property like
+                                    // `val area: Int get() = w * h` typed
+                                    // the result slot as Any, and the
+                                    // downstream `println(...)` arm picked
+                                    // the Object overload — passing a raw
+                                    // primitive int on the stack into
+                                    // `println(Ljava/lang/Object;)V` →
+                                    // VerifyError.
+                                    let getter_name = property_getter_name(prop_n);
+                                    let slot_ty = class_method_return_ty(&cname, &getter_name)
+                                        .unwrap_or(Ty::Any);
                                     let slot = LocalId(next_slot);
                                     next_slot += 1;
-                                    local_tys.push(Ty::Any);
+                                    local_tys.push(slot_ty);
                                     stmts.push(MStmt::Assign {
                                         dest: slot,
                                         value: skotch_mir::Rvalue::GetField {
