@@ -5450,6 +5450,36 @@ fn emit_method_body(
                     &mut block_offsets,
                 );
             }
+            // CFG-aware liveness slot coalescer. Runs even when type-aliasing
+            // is detected — that's the failure mode we MUST fix (slot 255
+            // saturation packs multiple types into the same slot). The
+            // coalescer respects per-slot store-opcode kind, so it won't
+            // merge an I-stored slot into an A-stored slot. Gated at
+            // gate_min=200 so smaller methods (where everything fits in
+            // <256 slots cleanly) keep their existing byte-identity.
+            let mut named_slots_for_coalesce: FxHashSet<u8> = func
+                .named_locals
+                .iter()
+                .filter_map(|l| slots.get(&l.0).copied())
+                .collect();
+            for recv in destructuring_receivers(func) {
+                if let Some(&s) = slots.get(&recv.0) {
+                    named_slots_for_coalesce.insert(s);
+                }
+            }
+            if let Some(coalesced_max) = cfg_aware_liveness_coalesce(
+                func,
+                &mut code,
+                initial_param_slots,
+                &named_slots_for_coalesce,
+                &mut slots,
+                &block_offsets,
+                200,
+            ) {
+                if (coalesced_max as u16) < max_locals || has_type_aliasing {
+                    max_locals = coalesced_max as u16;
+                }
+            }
             // Authoritative recomputation. The emission tracker walks the MIR
             // linearly and can over-count when a comparison's iconst_1/iconst_0
             // materialization is later fused, leaving a tighter stack. The
@@ -29375,6 +29405,823 @@ fn try_compact_named_slots(
         i += instruction_len(code, i);
     }
     max_used
+}
+
+/// CFG-aware liveness-based slot coalescer. Unlike `liveness_reuse_slots`
+/// — which uses a linear "last load offset" walk that's wrong in the
+/// presence of loops — this pass walks the actual bytecode CFG and runs
+/// a fixed-point live-variable analysis. It then builds a per-slot
+/// interference graph (two slots interfere if they're both live at any
+/// program point) and greedy-colors slots into a smaller pool.
+///
+/// Used to rescue large methods (e.g. SHA-256 `compressProtected` with
+/// ~400 per-round temp locals) from u8 max_locals saturation. Only
+/// activated for methods that would otherwise blow past `gate_min`
+/// slots — the standard `compact_local_slots` is enough for everything
+/// smaller, and skipping this pass on small methods preserves the
+/// byte-identical baselines.
+///
+/// Byte-preserving: only renumbers slot indices. Preserves named
+/// slots, initial param slots, and the slot-kind pairing (a J/D wide
+/// pair stays together). Catches exception handler edges so a slot
+/// live across a try-region keeps interfering with handler-local
+/// stores.
+fn cfg_aware_liveness_coalesce(
+    func: &MirFunction,
+    code: &mut [u8],
+    initial_param_slots: u8,
+    named_slots: &FxHashSet<u8>,
+    slots: &mut FxHashMap<u32, u8>,
+    block_offsets: &[usize],
+    gate_min: u8,
+) -> Option<u8> {
+    // Quick scan: max slot referenced. Bail out if below gate_min so we
+    // don't perturb small methods (preserves byte-identity baselines).
+    let mut max_slot: u8 = initial_param_slots;
+    let mut any_wide = [false; 256];
+    let mut i = 0;
+    while i < code.len() {
+        if let Some((s, w)) = decode_slot_reference(code, i) {
+            let used = s.saturating_add(if w { 2 } else { 1 });
+            if used > max_slot {
+                max_slot = used;
+            }
+            if w {
+                any_wide[s as usize] = true;
+                if (s as usize) + 1 < 256 {
+                    any_wide[s as usize + 1] = true;
+                }
+            }
+        }
+        i += instruction_len(code, i);
+    }
+    if max_slot < gate_min {
+        return None;
+    }
+
+    // Determine each slot's "kind" — derived from BOTH the store opcode
+    // AND, for A-kind (reference) slots, the precise MIR Ty stored there.
+    // The JVM verifier type-checks load opcodes against the slot's
+    // tracked type; two A-stored slots holding `[I` and `Object` are
+    // NOT interchangeable (iaload expects [I, not Object). We use the
+    // MIR Ty (via the `slots` reverse map) as the source-of-truth content
+    // type. If multiple MIR types map to the same slot already, mark it
+    // as a kind-conflict (don't touch it).
+    //
+    // Encoding: 'I'/'J'/'F'/'D' for primitives; 'A' stays a generic
+    // reference kind only if the slot has a single A-typed Ty stored.
+    // We pack the content kind as a (char, u32) where the u32 is a
+    // hash of the Ty's source-level identity (we use func.locals's index
+    // for that — the Ty struct itself doesn't implement Hash, but the
+    // local index does).
+    //
+    // We only attempt to coalesce slots that:
+    //   - are not named,
+    //   - are >= initial_param_slots (never touch param slots),
+    //   - have a consistent store-opcode kind (every store agrees),
+    //   - if A-kind, all MIR-locals mapping to this slot share the
+    //     same Ty (per `func.locals`).
+    // Anything else is left at its original slot number.
+    let mut store_kind: [Option<char>; 256] = [None; 256];
+    let mut kind_conflict = [false; 256];
+    let mut i = 0;
+    while i < code.len() {
+        if let Some((s, _w)) = decode_store_reference(code, i) {
+            let op = code[i];
+            let k = match op {
+                0x3B..=0x3E | 0x36 => 'I',
+                0x3F..=0x42 | 0x37 => 'J',
+                0x43..=0x46 | 0x38 => 'F',
+                0x47..=0x4A | 0x39 => 'D',
+                0x4B..=0x4E | 0x3A => 'A',
+                _ => '?',
+            };
+            match store_kind[s as usize] {
+                None => store_kind[s as usize] = Some(k),
+                Some(existing) => {
+                    if existing != k {
+                        kind_conflict[s as usize] = true;
+                    }
+                }
+            }
+        }
+        i += instruction_len(code, i);
+    }
+    // For A-kind slots, derive the Ty fingerprint from the MIR-locals
+    // that map to this slot. If any A-slot holds multiple distinct Tys
+    // (e.g. [I and Object both go through slot 3), mark it as a content
+    // conflict and refuse to coalesce it.
+    //
+    // The fingerprint is built from the Ty's Debug repr — coarse but
+    // safe: same Debug → same JVM signature.
+    let mut slot_ty_fp: [Option<String>; 256] = std::array::from_fn(|_| None);
+    let mut content_conflict = [false; 256];
+    for (mir_id, &js) in slots.iter() {
+        let ty = match func.locals.get(*mir_id as usize) {
+            Some(t) => t,
+            None => continue,
+        };
+        // Only constrain A-kind slots; primitive slots are already
+        // fully discriminated by the I/J/F/D store opcode.
+        if !matches!(store_kind[js as usize], Some('A')) {
+            continue;
+        }
+        let fp = format!("{:?}", ty);
+        match &slot_ty_fp[js as usize] {
+            None => slot_ty_fp[js as usize] = Some(fp),
+            Some(existing) => {
+                if *existing != fp {
+                    content_conflict[js as usize] = true;
+                }
+            }
+        }
+    }
+    for s in 0..=255usize {
+        if content_conflict[s] {
+            kind_conflict[s] = true;
+        }
+    }
+
+    // Build successor edges for every instruction position. Handles
+    // unconditional and conditional branches, tableswitch / lookupswitch
+    // (each case + default), goto_w, returns/throws (no successor), and
+    // exception-handler edges (every instruction in a covered range has
+    // an extra edge to the handler entry).
+    let n = code.len();
+    let mut succ: Vec<Vec<usize>> = vec![Vec::new(); n];
+    let mut next_off: Vec<usize> = vec![0; n];
+    let mut valid: Vec<bool> = vec![false; n];
+    let mut i = 0;
+    while i < n {
+        valid[i] = true;
+        let len = instruction_len(code, i);
+        next_off[i] = i + len;
+        let op = code[i];
+        match op {
+            // goto
+            0xA7 => {
+                if i + 2 < n {
+                    let rel = i16::from_be_bytes([code[i + 1], code[i + 2]]) as i32;
+                    let tgt = i as i32 + rel;
+                    if tgt >= 0 && (tgt as usize) < n {
+                        succ[i].push(tgt as usize);
+                    }
+                }
+            }
+            // goto_w
+            0xC8 => {
+                if i + 4 < n {
+                    let rel =
+                        i32::from_be_bytes([code[i + 1], code[i + 2], code[i + 3], code[i + 4]]);
+                    let tgt = i as i32 + rel;
+                    if tgt >= 0 && (tgt as usize) < n {
+                        succ[i].push(tgt as usize);
+                    }
+                }
+            }
+            // conditional branches: branch + fall-through
+            0x99..=0xA6 | 0xC6 | 0xC7 => {
+                if i + 2 < n {
+                    let rel = i16::from_be_bytes([code[i + 1], code[i + 2]]) as i32;
+                    let tgt = i as i32 + rel;
+                    if tgt >= 0 && (tgt as usize) < n {
+                        succ[i].push(tgt as usize);
+                    }
+                }
+                if i + len < n {
+                    succ[i].push(i + len);
+                }
+            }
+            // returns / throw
+            0xAC..=0xB1 | 0xBF => {}
+            // tableswitch
+            0xAA => {
+                let pad = 3 - (i % 4);
+                let dflt_pos = i + 1 + pad;
+                if dflt_pos + 12 <= n {
+                    let default_rel = i32::from_be_bytes([
+                        code[dflt_pos],
+                        code[dflt_pos + 1],
+                        code[dflt_pos + 2],
+                        code[dflt_pos + 3],
+                    ]);
+                    let low = i32::from_be_bytes([
+                        code[dflt_pos + 4],
+                        code[dflt_pos + 5],
+                        code[dflt_pos + 6],
+                        code[dflt_pos + 7],
+                    ]);
+                    let high = i32::from_be_bytes([
+                        code[dflt_pos + 8],
+                        code[dflt_pos + 9],
+                        code[dflt_pos + 10],
+                        code[dflt_pos + 11],
+                    ]);
+                    let dt = i as i32 + default_rel;
+                    if dt >= 0 && (dt as usize) < n {
+                        succ[i].push(dt as usize);
+                    }
+                    let count = (high - low + 1).max(0) as usize;
+                    let cases_pos = dflt_pos + 12;
+                    for k in 0..count {
+                        let cp = cases_pos + k * 4;
+                        if cp + 4 > n {
+                            break;
+                        }
+                        let r = i32::from_be_bytes([
+                            code[cp],
+                            code[cp + 1],
+                            code[cp + 2],
+                            code[cp + 3],
+                        ]);
+                        let t = i as i32 + r;
+                        if t >= 0 && (t as usize) < n {
+                            succ[i].push(t as usize);
+                        }
+                    }
+                }
+            }
+            // lookupswitch
+            0xAB => {
+                let pad = 3 - (i % 4);
+                let dflt_pos = i + 1 + pad;
+                if dflt_pos + 8 <= n {
+                    let default_rel = i32::from_be_bytes([
+                        code[dflt_pos],
+                        code[dflt_pos + 1],
+                        code[dflt_pos + 2],
+                        code[dflt_pos + 3],
+                    ]);
+                    let npairs = i32::from_be_bytes([
+                        code[dflt_pos + 4],
+                        code[dflt_pos + 5],
+                        code[dflt_pos + 6],
+                        code[dflt_pos + 7],
+                    ])
+                    .max(0) as usize;
+                    let dt = i as i32 + default_rel;
+                    if dt >= 0 && (dt as usize) < n {
+                        succ[i].push(dt as usize);
+                    }
+                    let pairs_pos = dflt_pos + 8;
+                    for k in 0..npairs {
+                        let pp = pairs_pos + k * 8 + 4;
+                        if pp + 4 > n {
+                            break;
+                        }
+                        let r = i32::from_be_bytes([
+                            code[pp],
+                            code[pp + 1],
+                            code[pp + 2],
+                            code[pp + 3],
+                        ]);
+                        let t = i as i32 + r;
+                        if t >= 0 && (t as usize) < n {
+                            succ[i].push(t as usize);
+                        }
+                    }
+                }
+            }
+            // jsr / ret / wide / others: bail out (conservatively give up)
+            0xA8 | 0xA9 | 0xC4 => return None,
+            // Default: fall through
+            _ => {
+                if i + len < n {
+                    succ[i].push(i + len);
+                }
+            }
+        }
+        i += len;
+    }
+
+    // Exception handler edges: for each handler, every instruction in
+    // [start, end) has an extra successor at handler_pc.
+    for eh in &func.exception_handlers {
+        let h_bi = eh.handler_block as usize;
+        let Some(&h_off) = block_offsets.get(h_bi) else {
+            continue;
+        };
+        if h_off >= n {
+            continue;
+        }
+        let start_bi = eh.try_start_block as usize;
+        let end_bi = eh.try_end_block as usize;
+        let s_off = block_offsets.get(start_bi).copied().unwrap_or(0);
+        let e_off = block_offsets.get(end_bi).copied().unwrap_or(n);
+        let mut k = s_off;
+        while k < e_off && k < n {
+            if valid[k] && !succ[k].contains(&h_off) {
+                succ[k].push(h_off);
+            }
+            k = next_off[k].max(k + 1);
+        }
+    }
+
+    // Per-instruction USE/DEF sets (bitsets of 256 slots).
+    // USE = slots read by the instruction (including iinc).
+    // DEF = slots written by the instruction.
+    type Bits = [u64; 4];
+    let empty: Bits = [0; 4];
+    let set = |b: &mut Bits, s: u8| {
+        b[(s >> 6) as usize] |= 1u64 << (s & 63);
+    };
+    let or_into = |dst: &mut Bits, src: &Bits| -> bool {
+        let mut changed = false;
+        for i in 0..4 {
+            let new = dst[i] | src[i];
+            if new != dst[i] {
+                dst[i] = new;
+                changed = true;
+            }
+        }
+        changed
+    };
+    let sub_into = |dst: &mut Bits, src: &Bits| {
+        for i in 0..4 {
+            dst[i] &= !src[i];
+        }
+    };
+    let mut use_set: Vec<Bits> = vec![empty; n];
+    let mut def_set: Vec<Bits> = vec![empty; n];
+    let mut i = 0;
+    while i < n {
+        if valid[i] {
+            if let Some((s, w)) = decode_load_reference(code, i) {
+                set(&mut use_set[i], s);
+                if w {
+                    set(&mut use_set[i], s + 1);
+                }
+            }
+            if let Some((s, w)) = decode_store_reference(code, i) {
+                set(&mut def_set[i], s);
+                if w {
+                    set(&mut def_set[i], s + 1);
+                }
+            }
+            // iinc reads AND writes the slot.
+            if code[i] == 0x84 && i + 1 < n {
+                let s = code[i + 1];
+                set(&mut use_set[i], s);
+                set(&mut def_set[i], s);
+            }
+        }
+        i += instruction_len(code, i);
+    }
+
+    // Live-variable fixed point: live_in[i] = use[i] ∪ (live_out[i] − def[i]);
+    // live_out[i] = ⋃_{j ∈ succ[i]} live_in[j]. Iterate in reverse postorder
+    // until no change.
+    let mut live_in: Vec<Bits> = vec![empty; n];
+    let mut live_out: Vec<Bits> = vec![empty; n];
+    let mut work: Vec<usize> = Vec::new();
+    let mut i = 0;
+    while i < n {
+        if valid[i] {
+            work.push(i);
+        }
+        i += instruction_len(code, i);
+    }
+    work.reverse();
+    let mut iterations = 0u32;
+    let cap = (n as u32).saturating_mul(8).max(4096);
+    let mut on_work: Vec<bool> = vec![false; n];
+    for &i in &work {
+        on_work[i] = true;
+    }
+    while let Some(idx) = work.pop() {
+        if !valid[idx] {
+            continue;
+        }
+        on_work[idx] = false;
+        iterations += 1;
+        if iterations > cap {
+            // Bail out — preserves correctness because we just won't
+            // coalesce. The caller's compaction already ran.
+            return None;
+        }
+        let mut new_out = empty;
+        for &s in &succ[idx] {
+            if s < n && valid[s] {
+                or_into(&mut new_out, &live_in[s]);
+            }
+        }
+        let mut new_in = new_out;
+        sub_into(&mut new_in, &def_set[idx]);
+        or_into(&mut new_in, &use_set[idx]);
+        let in_changed = new_in != live_in[idx];
+        live_in[idx] = new_in;
+        live_out[idx] = new_out;
+        if in_changed {
+            // Reschedule predecessors: any instruction whose succ list
+            // contains idx. We scan the live succ array — n is small
+            // for the tracked methods (compressProtected ≈ 4 KB).
+            for k in 0..n {
+                if valid[k] && succ[k].contains(&idx) && !on_work[k] {
+                    work.push(k);
+                    on_work[k] = true;
+                }
+            }
+        }
+    }
+
+    // Initial-live: slots holding params are live on entry. Treat them
+    // as live-out of a virtual entry point — equivalent to a virtual
+    // first instruction whose live_in is initial_param_slots and whose
+    // succ is {0}. We add params to live_in[0] so the interference
+    // graph counts them.
+    for s in 0..initial_param_slots {
+        set(&mut live_in[0], s);
+    }
+
+    // Build slot interference graph. Two slots interfere if both appear
+    // in some live_in (or both appear in def ∪ live_out at the same
+    // instruction — capture the moment a store overwrites a slot while
+    // another is live).
+    let mut interfere: [Bits; 256] = [empty; 256];
+    let mut present = [false; 256];
+    let mark_pair = |interfere: &mut [Bits; 256], a: u8, b: u8| {
+        if a == b {
+            return;
+        }
+        interfere[a as usize][(b >> 6) as usize] |= 1u64 << (b & 63);
+        interfere[b as usize][(a >> 6) as usize] |= 1u64 << (a & 63);
+    };
+    let foreach_set = |b: &Bits, f: &mut dyn FnMut(u8)| {
+        for word in 0..4 {
+            let mut w = b[word];
+            while w != 0 {
+                let bit = w.trailing_zeros() as u8;
+                f((word * 64) as u8 + bit);
+                w &= w - 1;
+            }
+        }
+    };
+    let record = |b: &Bits, present: &mut [bool; 256]| {
+        foreach_set(b, &mut |s| {
+            present[s as usize] = true;
+        });
+    };
+    let mut i = 0;
+    while i < n {
+        if valid[i] {
+            record(&live_in[i], &mut present);
+            record(&live_out[i], &mut present);
+            // Collect all slots live AT THIS POINT (live_in) and mark
+            // pairwise interference.
+            let mut slots_here: Vec<u8> = Vec::with_capacity(16);
+            foreach_set(&live_in[i], &mut |s| slots_here.push(s));
+            for a in 0..slots_here.len() {
+                for b in (a + 1)..slots_here.len() {
+                    mark_pair(&mut interfere, slots_here[a], slots_here[b]);
+                }
+            }
+            // A def at i interferes with anything live-out at i
+            // (the def's new value is live, the others survive).
+            let mut defs: Vec<u8> = Vec::with_capacity(2);
+            foreach_set(&def_set[i], &mut |s| defs.push(s));
+            if !defs.is_empty() {
+                let mut outs: Vec<u8> = Vec::with_capacity(16);
+                foreach_set(&live_out[i], &mut |s| outs.push(s));
+                for &d in &defs {
+                    present[d as usize] = true;
+                    for &o in &outs {
+                        mark_pair(&mut interfere, d, o);
+                    }
+                }
+            }
+        }
+        i += instruction_len(code, i);
+    }
+
+    // Wide-slot constraint: a J/D wide slot S consumes both S and S+1.
+    // Mark interference between S+1 and everything S interferes with,
+    // so the coloring assigns S+1 alongside S.
+    for s in 0..255u8 {
+        if any_wide[s as usize] && present[s as usize] {
+            present[(s + 1) as usize] = true;
+            // Anything interfering with S also interferes with S+1.
+            let copy = interfere[s as usize];
+            for word in 0..4 {
+                interfere[(s + 1) as usize][word] |= copy[word];
+            }
+            // S and S+1 themselves interfere (must be distinct slots).
+            mark_pair(&mut interfere, s, s + 1);
+        }
+    }
+
+    // Greedy color. Slots in [0, initial_param_slots) keep their slot
+    // numbers (param slots). Named slots also keep their original
+    // numbers. Other slots get the lowest-numbered color compatible
+    // with their kind and not used by any interfering slot.
+    let mut color: [u8; 256] = [0; 256];
+    let mut color_kind: [Option<char>; 256] = [None; 256];
+    let mut fixed = [false; 256];
+    for s in 0..initial_param_slots {
+        color[s as usize] = s;
+        fixed[s as usize] = true;
+        if let Some(k) = store_kind[s as usize] {
+            color_kind[s as usize] = Some(k);
+        }
+    }
+    for &s in named_slots {
+        color[s as usize] = s;
+        fixed[s as usize] = true;
+        if let Some(k) = store_kind[s as usize] {
+            color_kind[s as usize] = Some(k);
+        }
+    }
+    // Slots with kind conflicts (mixed I/A stores into the same slot)
+    // are left untouched — coloring may produce verifier rejection.
+    for s in 0..=255u8 {
+        if kind_conflict[s as usize] {
+            color[s as usize] = s;
+            fixed[s as usize] = true;
+        }
+    }
+    // Wide second-halves: if S is wide, slot S+1 is the high half and
+    // gets the color S_color+1 automatically (handled by allocation).
+    // Mark them fixed-by-pair so we don't try to color them on their own.
+    let mut wide_high: [bool; 256] = [false; 256];
+    for s in 0..255u8 {
+        if any_wide[s as usize] {
+            wide_high[(s + 1) as usize] = true;
+        }
+    }
+
+    // Iterate slots in increasing order. For non-fixed, non-wide-high
+    // slots, find the lowest color k such that:
+    //   - if this slot is wide, slot k and k+1 are both free (no
+    //     interference and no kind conflict, and k+1 isn't a named slot)
+    //   - else slot k is free
+    let mut next_free_after_fixed: u8 = initial_param_slots;
+    for s in 0..=255u8 {
+        if fixed[s as usize] && s >= next_free_after_fixed {
+            next_free_after_fixed = s.saturating_add(1);
+        }
+    }
+    // Note: the strict invariant we want is "every slot reachable from
+    // 0..fixed gets a number ≤ original". For wide slots we color in
+    // strict slot order so a wide pair always uses 2 consecutive new
+    // numbers.
+    let any_wide_arr = any_wide;
+    // Returns true if assigning slot `this_slot` (of `kind`) to color
+    // `c` conflicts with an already-assigned slot. Two assignments
+    // conflict if (a) they interfere AND their colors overlap, OR
+    // (b) `c` is already assigned a value of a DIFFERENT kind — the
+    // JVM verifier types-check the slot's store opcode, and mixing
+    // kinds at the same slot index creates a type collision that
+    // confuses both the verifier and the SMT writer.
+    let assigned_color_used = |c: u8,
+                               kind: char,
+                               width: u8,
+                               this_slot: u8,
+                               color: &[u8; 256],
+                               color_kind: &[Option<char>; 256],
+                               interfere: &[Bits; 256]|
+     -> bool {
+        for other in 0..=255usize {
+            if other as u8 == this_slot {
+                continue;
+            }
+            let other_assigned = color_kind[other].is_some() || (other as u8) < initial_param_slots;
+            if !other_assigned {
+                continue;
+            }
+            let other_color = color[other];
+            let other_width: u8 = if any_wide_arr[other] { 2 } else { 1 };
+            let c_end = c.saturating_add(width);
+            let oc_end = other_color.saturating_add(other_width);
+            let overlap = c < oc_end && other_color < c_end;
+            if !overlap {
+                continue;
+            }
+            // Color overlap: now check whether the kinds are compatible.
+            // If different kinds, REJECT regardless of interference —
+            // mixing I and A stores into the same slot creates a type
+            // collision the verifier can't tolerate.
+            if let Some(other_k) = color_kind[other] {
+                if other_k != kind && other_k != '?' && kind != '?' {
+                    return true;
+                }
+            }
+            // Same kind: only conflict if live ranges overlap.
+            let bit = 1u64 << (this_slot & 63);
+            let word = (this_slot >> 6) as usize;
+            if interfere[other][word] & bit != 0 {
+                return true;
+            }
+        }
+        false
+    };
+    // Mark color_kind for fixed slots so the helper sees them.
+    for s in 0..=255u8 {
+        if fixed[s as usize] {
+            if color_kind[s as usize].is_none() {
+                color_kind[s as usize] = Some('?'); // sentinel = assigned
+            }
+        }
+    }
+
+    // Build a reverse map: new_color → fingerprint so we can refuse to
+    // merge a slot into a color whose content type differs. Seeded
+    // from EVERY original A-kind slot whose Ty fingerprint is known
+    // (not just fixed slots) — that way an Object-storing slot can't
+    // accidentally inherit the int-array type of slot 3 (`[I`) just
+    // because nothing else has claimed slot 3 yet.
+    let mut color_fp: std::collections::HashMap<u8, String> = std::collections::HashMap::new();
+    for s in 0..=255usize {
+        if let Some(fp) = &slot_ty_fp[s] {
+            color_fp.insert(s as u8, fp.clone());
+        }
+    }
+
+    // Process slots in original-slot order so colors stay close to original.
+    for s in 0..=255u8 {
+        if fixed[s as usize] || wide_high[s as usize] {
+            continue;
+        }
+        if !present[s as usize] {
+            continue;
+        }
+        if kind_conflict[s as usize] {
+            // Don't move slots whose stores have mixed kinds.
+            color[s as usize] = s;
+            color_kind[s as usize] = Some('?');
+            continue;
+        }
+        let kind = match store_kind[s as usize] {
+            Some(k) => k,
+            None => continue, // never stored — leave alone
+        };
+        let my_fp = slot_ty_fp[s as usize].clone();
+        let width: u8 = if any_wide[s as usize] { 2 } else { 1 };
+        let mut chosen: Option<u8> = None;
+        for c in initial_param_slots..=s {
+            if width == 2 && c == 255 {
+                break;
+            }
+            // Wide pair needs c+1 to be available too.
+            if !assigned_color_used(c, kind, width, s, &color, &color_kind, &interfere) {
+                if width == 2 {
+                    let c1 = c + 1;
+                    if fixed[c1 as usize] {
+                        continue;
+                    }
+                }
+                // Content-type compatibility: if `c` already holds a
+                // value with a known fingerprint, ours must match.
+                // For primitive kinds (I/J/F/D) the opcode kind alone
+                // is enough (no fingerprint required); A-kind has the
+                // strict per-Ty fingerprint constraint. Also: if `c`
+                // is a slot with mixed content types (content_conflict),
+                // refuse to use it — the verifier types-check via the
+                // FIRST store's type and any merged-in stores of a
+                // different type would fail the type lattice.
+                if kind == 'A' {
+                    if content_conflict[c as usize] {
+                        continue;
+                    }
+                    if let Some(existing_fp) = color_fp.get(&c) {
+                        if let Some(ours) = &my_fp {
+                            if existing_fp != ours {
+                                continue;
+                            }
+                        } else {
+                            // Unknown ours, fixed has known: be safe.
+                            continue;
+                        }
+                    }
+                }
+                chosen = Some(c);
+                break;
+            }
+        }
+        let new_c = chosen.unwrap_or(s);
+        color[s as usize] = new_c;
+        color_kind[s as usize] = Some(kind);
+        if let Some(fp) = &my_fp {
+            color_fp.entry(new_c).or_insert_with(|| fp.clone());
+        }
+        if width == 2 {
+            color[(s + 1) as usize] = new_c + 1;
+            color_kind[(s + 1) as usize] = Some(kind);
+        }
+    }
+
+    // Build remap: old_slot → new_slot.
+    let mut remap: FxHashMap<u8, u8> = FxHashMap::default();
+    let mut max_new: u8 = initial_param_slots;
+    for s in 0..=255u8 {
+        if !present[s as usize] && s >= initial_param_slots {
+            continue;
+        }
+        let new_s = color[s as usize];
+        if new_s != s {
+            remap.insert(s, new_s);
+        }
+        let width: u8 = if any_wide[s as usize] { 2 } else { 1 };
+        let span = new_s.saturating_add(width);
+        if span > max_new {
+            max_new = span;
+        }
+    }
+    if std::env::var("SKOTCH_DEBUG_COALESCE").is_ok() && remap.len() > 50 {
+        eprintln!(
+            "[coalesce] fn={} initial_param_slots={} max_orig={} max_new={} remap_len={} ",
+            func.name,
+            initial_param_slots,
+            max_slot,
+            max_new,
+            remap.len()
+        );
+    }
+    if remap.is_empty() {
+        // Nothing to do — but report the post-pass max.
+        return Some(max_new);
+    }
+
+    // Rewrite bytecode in place. `rewrite_slot_in_place` handles both
+    // compact and generic forms; it only shrinks/keeps the opcode (never
+    // grows length), which is what we need.
+    let mut i = 0;
+    while i < n {
+        rewrite_slot_in_place(code, i, &remap);
+        i += instruction_len(code, i);
+    }
+
+    // Update MIR-local → JVM-slot map so SMT emission stays accurate.
+    //
+    // First drop stale mir_id → slot entries: the MIR allocator can
+    // allocate a slot for a local that downstream peephole passes
+    // eliminate (e.g. cmp-temp fused into `if_icmp`, redundant copy
+    // collapsed). The MIR's local Ty may not match the slot's actual
+    // pre-coalesce bytecode content type. Drop any mir_id whose Ty's
+    // store-opcode kind disagrees with the slot's observed store kind.
+    //
+    // This is conservative — it only drops obvious mismatches (`Int`
+    // local at an A-stored slot, or `String` local at an I-stored
+    // slot). Same-kind aliasing (two A-typed mir_ids at a slot with
+    // different Tys) is then resolved by the FP check we already
+    // emitted into `content_conflict` / `slot_ty_fp`.
+    let ty_to_store_kind = |ty: &Ty| -> char {
+        match ty {
+            Ty::Int | Ty::Bool | Ty::Byte | Ty::Short | Ty::Char => 'I',
+            Ty::Long => 'J',
+            Ty::Float => 'F',
+            Ty::Double => 'D',
+            _ => 'A',
+        }
+    };
+    slots.retain(|mid, v| {
+        let Some(ty) = func.locals.get(*mid as usize) else {
+            return false;
+        };
+        let expected_kind = ty_to_store_kind(ty);
+        match store_kind[*v as usize] {
+            Some(observed) => observed == expected_kind,
+            None => {
+                // Slot never stored in body. Keep only if it's a param
+                // slot (these are "stored" by the JVM at method entry,
+                // not by any explicit opcode).
+                (*v as u8) < initial_param_slots
+            }
+        }
+    });
+    // Among A-kind slots, also drop mir_ids whose Ty fp disagrees with
+    // the slot's content_conflict-free fingerprint. (Surfaced by
+    // parity/101-hash compressProtected: slot 4 in PRE-coalesce
+    // bytecode held an `IntArray` (the field-cache astore_4), but the
+    // MIR allocator had also assigned slot 4 to an `Int` mir_id whose
+    // store was peephole-eliminated — kind 'A' for IntArray, 'I' for
+    // Int, so the kind filter above catches that case. Slot 5 held
+    // two distinct A-typed Tys (Object plus a class), and that case
+    // is caught here.)
+    slots.retain(|mid, v| {
+        if store_kind[*v as usize] != Some('A') {
+            return true;
+        }
+        if content_conflict[*v as usize] {
+            // A-slot has multi-FP mir_ids; trust the bytecode's actual
+            // type by keeping only mir_ids whose Ty matches the canonical
+            // slot_ty_fp.
+            let Some(ty) = func.locals.get(*mid as usize) else {
+                return false;
+            };
+            let our_fp = format!("{:?}", ty);
+            match &slot_ty_fp[*v as usize] {
+                Some(canon) => *canon == our_fp,
+                None => true,
+            }
+        } else {
+            true
+        }
+    });
+    for v in slots.values_mut() {
+        if let Some(&new) = remap.get(v) {
+            *v = new;
+        }
+    }
+    Some(max_new)
 }
 
 /// Try-expression phi-temp slot reuse: when a `try { … } catch (…) { … }`
