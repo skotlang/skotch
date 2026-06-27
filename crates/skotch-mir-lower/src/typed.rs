@@ -32027,6 +32027,47 @@ fn lower_rich_expr_to_slot(
                                     });
                                     return Some(result_slot);
                                 }
+                                // arr.lastIndex on every primitive array
+                                // type. kotlinc inlines the
+                                // `inline val ByteArray.lastIndex: Int
+                                //     get() = size - 1`
+                                // accessor to `arraylength; iconst_1;
+                                // isub`. Emit the same shape: ArrayLength
+                                // into a temp, then BinOp::SubI against
+                                // a Const(1).
+                                (Ty::IntArray, "lastIndex")
+                                | (Ty::LongArray, "lastIndex")
+                                | (Ty::DoubleArray, "lastIndex")
+                                | (Ty::ByteArray, "lastIndex") => {
+                                    let len_slot = LocalId(*next_slot);
+                                    *next_slot += 1;
+                                    extra_locals.push(Ty::Int);
+                                    pre_stmts.push(MStmt::Assign {
+                                        dest: len_slot,
+                                        value: skotch_mir::Rvalue::ArrayLength(recv_slot),
+                                    });
+                                    let one_slot = LocalId(*next_slot);
+                                    *next_slot += 1;
+                                    extra_locals.push(Ty::Int);
+                                    pre_stmts.push(MStmt::Assign {
+                                        dest: one_slot,
+                                        value: skotch_mir::Rvalue::Const(
+                                            skotch_mir::MirConst::Int(1),
+                                        ),
+                                    });
+                                    let result_slot = LocalId(*next_slot);
+                                    *next_slot += 1;
+                                    extra_locals.push(Ty::Int);
+                                    pre_stmts.push(MStmt::Assign {
+                                        dest: result_slot,
+                                        value: skotch_mir::Rvalue::BinOp {
+                                            op: skotch_mir::BinOp::SubI,
+                                            lhs: len_slot,
+                                            rhs: one_slot,
+                                        },
+                                    });
+                                    return Some(result_slot);
+                                }
                                 (Ty::Class(c), "first") if c == "kotlin/Pair" => Some((
                                     "kotlin/Pair",
                                     "getFirst",
