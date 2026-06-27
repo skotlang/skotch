@@ -8498,10 +8498,44 @@ pub fn lower_file(
                 use skotch_mir::{CallKind, Rvalue, Stmt as MStmt};
                 let self_fid = FuncId(local_fn_id_base + fn_id);
                 let param_set: rustc_hash::FxHashSet<u32> = params.iter().map(|p| p.0).collect();
+                // Pre-pass: identify "pass-through return" blocks — those
+                // whose only purpose is `ReturnValue(slot)`. Single-arm
+                // if-expression bodies produce a CFG where each arm
+                // assigns its result into a join slot then jumps to a
+                // shared trailing `ReturnValue(join_slot)` block. The
+                // recursive-call arm therefore looks like
+                // `Assign{join_slot, Call(self, args)}; Goto(join_block)`
+                // rather than the direct `Assign + ReturnValue(join_slot)`
+                // pattern below. Recognize both shapes.
+                let pure_return_block_slot: Vec<Option<u32>> = blocks
+                    .iter()
+                    .map(|b| {
+                        if b.stmts.is_empty() {
+                            if let Terminator::ReturnValue(slot) = &b.terminator {
+                                return Some(slot.0);
+                            }
+                        }
+                        None
+                    })
+                    .collect();
                 for block in blocks.iter_mut() {
-                    // Pattern: last stmt is self-call into `dest`,
-                    // terminator returns that same `dest`, and call args
-                    // contain no params (safety guard above).
+                    // Pattern A: last stmt is self-call into `dest`,
+                    // terminator returns that same `dest`.
+                    // Pattern B: last stmt is self-call into `dest`,
+                    // terminator is `Goto(j)` where block `j` is a
+                    // pure-return block returning `dest`.
+                    // Pattern C: the if-expression-body lowering inserts
+                    // an intermediate result-slot copy — last two stmts
+                    // are `Assign{call_dest, Call(self, args)}` then
+                    // `Assign{join, Local(call_dest)}`, with terminator
+                    // `Goto(j)` where `j` is a pure-return block on
+                    // `join`. Without recognizing C, expression-bodied
+                    // tailrec functions miss TCO and recurse on the
+                    // JVM stack.
+                    enum TcoPat {
+                        AB(Vec<skotch_mir::LocalId>),
+                        C(Vec<skotch_mir::LocalId>),
+                    }
                     let pattern = match (block.stmts.last(), &block.terminator) {
                         (
                             Some(MStmt::Assign {
@@ -8518,19 +8552,99 @@ pub fn lower_file(
                             && args.len() == params.len()
                             && !args.iter().any(|a| param_set.contains(&a.0)) =>
                         {
-                            Some(args.clone())
+                            Some(TcoPat::AB(args.clone()))
+                        }
+                        (
+                            Some(MStmt::Assign {
+                                dest,
+                                value:
+                                    Rvalue::Call {
+                                        kind: CallKind::Static(callee),
+                                        args,
+                                    },
+                            }),
+                            Terminator::Goto(target),
+                        ) if *callee == self_fid
+                            && (*target as usize) < pure_return_block_slot.len()
+                            && pure_return_block_slot[*target as usize] == Some(dest.0)
+                            && args.len() == params.len()
+                            && !args.iter().any(|a| param_set.contains(&a.0)) =>
+                        {
+                            Some(TcoPat::AB(args.clone()))
                         }
                         _ => None,
-                    };
-                    if let Some(arg_locals) = pattern {
-                        block.stmts.pop();
-                        for (i, arg_local) in arg_locals.iter().enumerate() {
-                            block.stmts.push(MStmt::Assign {
-                                dest: params[i],
-                                value: Rvalue::Local(*arg_local),
-                            });
+                    }
+                    .or_else(|| {
+                        // Pattern C: requires at least two stmts.
+                        if block.stmts.len() < 2 {
+                            return None;
                         }
-                        block.terminator = Terminator::Goto(0);
+                        let last = block.stmts.last()?;
+                        let prev = block.stmts.get(block.stmts.len() - 2)?;
+                        let (join_slot, call_dest_used) = match last {
+                            MStmt::Assign {
+                                dest,
+                                value: Rvalue::Local(src),
+                            } => (*dest, *src),
+                            _ => return None,
+                        };
+                        let (call_dest, args) = match prev {
+                            MStmt::Assign {
+                                dest,
+                                value:
+                                    Rvalue::Call {
+                                        kind: CallKind::Static(callee),
+                                        args,
+                                    },
+                            } if *callee == self_fid => (*dest, args.clone()),
+                            _ => return None,
+                        };
+                        if call_dest != call_dest_used {
+                            return None;
+                        }
+                        let target = match &block.terminator {
+                            Terminator::Goto(t) => *t,
+                            _ => return None,
+                        };
+                        if (target as usize) >= pure_return_block_slot.len() {
+                            return None;
+                        }
+                        if pure_return_block_slot[target as usize] != Some(join_slot.0) {
+                            return None;
+                        }
+                        if args.len() != params.len() {
+                            return None;
+                        }
+                        if args.iter().any(|a| param_set.contains(&a.0)) {
+                            return None;
+                        }
+                        Some(TcoPat::C(args))
+                    });
+                    match pattern {
+                        Some(TcoPat::AB(arg_locals)) => {
+                            block.stmts.pop();
+                            for (i, arg_local) in arg_locals.iter().enumerate() {
+                                block.stmts.push(MStmt::Assign {
+                                    dest: params[i],
+                                    value: Rvalue::Local(*arg_local),
+                                });
+                            }
+                            block.terminator = Terminator::Goto(0);
+                        }
+                        Some(TcoPat::C(arg_locals)) => {
+                            // Drop the trailing Assign{join, Local(call_dest)}
+                            // and the preceding Call into call_dest.
+                            block.stmts.pop();
+                            block.stmts.pop();
+                            for (i, arg_local) in arg_locals.iter().enumerate() {
+                                block.stmts.push(MStmt::Assign {
+                                    dest: params[i],
+                                    value: Rvalue::Local(*arg_local),
+                                });
+                            }
+                            block.terminator = Terminator::Goto(0);
+                        }
+                        None => {}
                     }
                 }
             }
@@ -13359,8 +13473,16 @@ fn try_lower_if_expression(
                 None
             }
             // Top-level fn call as an arm: `helper(x)` or `helper()`.
-            // Args resolve as param Reference (existing locals) or
-            // literal Const.
+            // Args resolve as param Reference (existing locals), literal
+            // Const, or — via `lower_inline_expr_to_slot` — Binary /
+            // Prefix / nested arithmetic over params. The fallback path
+            // is required for tailrec-shaped self-calls like
+            // `factorial(n - 1, acc * n)`; without it the if-expression
+            // bailed to the linear "compute both arms, select via
+            // Object[]" pattern in `lower_rich_expr_to_slot`, which both
+            // lost the CFG (so recursion always fired regardless of
+            // cond — instant StackOverflow) and defeated the tailrec
+            // TCO post-pass.
             KtExpr::Call(call) => {
                 let callee_name = match call.callee() {
                     Some(KtExpr::Reference(r)) => r.name()?,
@@ -13369,6 +13491,13 @@ fn try_lower_if_expression(
                 let (fid, ret_ty) = fn_lookup.get(callee_name)?;
                 let mut arg_slots: Vec<LocalId> = Vec::new();
                 if let Some(arg_list) = call.value_argument_list() {
+                    let snap_param_names = outer_param_names.clone();
+                    let arg_lookup = |n: &str| -> Option<LocalId> {
+                        snap_param_names
+                            .iter()
+                            .position(|p| p == n)
+                            .map(|i| LocalId(i as u32))
+                    };
                     for arg in arg_list.arguments() {
                         let arg_expr = arg.expression()?;
                         match unwrap_parens(arg_expr) {
@@ -13378,14 +13507,27 @@ fn try_lower_if_expression(
                                 arg_slots.push(LocalId(idx as u32));
                             }
                             other => {
-                                let (k, ty) = literal_to_const(&other, strings)?;
-                                let slot = LocalId(*next_slot);
-                                *next_slot += 1;
-                                extra_locals.push(ty);
-                                pre_stmts.push(MStmt::Assign {
-                                    dest: slot,
-                                    value: Rvalue::Const(k),
-                                });
+                                if let Some((k, ty)) = literal_to_const(&other, strings) {
+                                    let slot = LocalId(*next_slot);
+                                    *next_slot += 1;
+                                    extra_locals.push(ty);
+                                    pre_stmts.push(MStmt::Assign {
+                                        dest: slot,
+                                        value: Rvalue::Const(k),
+                                    });
+                                    arg_slots.push(slot);
+                                    continue;
+                                }
+                                // Fallback: Binary / Prefix / etc over
+                                // params via the inline lowerer.
+                                let slot = lower_inline_expr_to_slot(
+                                    other,
+                                    &arg_lookup,
+                                    next_slot,
+                                    pre_stmts,
+                                    extra_locals,
+                                    strings,
+                                )?;
                                 arg_slots.push(slot);
                             }
                         }
