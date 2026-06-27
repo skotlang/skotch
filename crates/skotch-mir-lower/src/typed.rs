@@ -4985,6 +4985,18 @@ pub fn lower_file(
                     Ty::Class(fq)
                 }),
                 None => {
+                    // Expression-body fn `fun f() = "..."` — inferred
+                    // return Ty is Ty::String. Without this, the early
+                    // CLASS_METHODS table records Ty::Unit; callers like
+                    // `arr[i].greet()` then dispatch with a `()V`
+                    // descriptor — the actual `()Ljava/lang/String;` body
+                    // discards its return on the operand stack, causing
+                    // VerifyError or wrong outputs downstream.
+                    if let Some(body) = f.body_expression() {
+                        if matches!(unwrap_parens(body), skotch_ast::KtExpr::String(_)) {
+                            return Ty::String;
+                        }
+                    }
                     if f.body_block().is_some() || f.body_expression().is_some() {
                         Ty::Unit
                     } else {
@@ -6881,6 +6893,18 @@ pub fn lower_file(
                     Ty::Class(fq)
                 }),
                 None => {
+                    // Expression-body fn `fun f() = "..."` — inferred
+                    // return Ty is Ty::String. Without this, the early
+                    // CLASS_METHODS table records Ty::Unit; callers like
+                    // `arr[i].greet()` then dispatch with a `()V`
+                    // descriptor — the actual `()Ljava/lang/String;` body
+                    // discards its return on the operand stack, causing
+                    // VerifyError or wrong outputs downstream.
+                    if let Some(body) = f.body_expression() {
+                        if matches!(unwrap_parens(body), skotch_ast::KtExpr::String(_)) {
+                            return Ty::String;
+                        }
+                    }
                     if f.body_block().is_some() || f.body_expression().is_some() {
                         Ty::Unit
                     } else {
@@ -32153,6 +32177,153 @@ fn lower_rich_expr_to_slot(
             }
         }
     }
+    // `arrayOf(a, b, c)` — typed reference-array literal. kotlinc emits
+    // `anewarray <ElemClass>` directly, then per-element `aastore`. The
+    // element class is inferred from the FIRST arg's slot Ty:
+    //   * Ty::Class(cls)  → anewarray <cls>
+    //   * Ty::String      → anewarray java/lang/String
+    //   * otherwise       → anewarray java/lang/Object (NewObjectArray)
+    //
+    // The array slot's Ty stays `Ty::Any` (matches NewObjectArray /
+    // NewTypedObjectArray's documented result Ty), but we record the
+    // element Ty in LIST_ELEMENT_TY so a subsequent `arr[i].method()`
+    // ArrayAccess produces a result slot typed as the element class —
+    // the DotQualified+Call arm then dispatches `.method()` on
+    // `Ty::Class(cls)` instead of bailing on an erased Ty::Any receiver.
+    if let KtExpr::Call(call) = e {
+        if let Some(KtExpr::Reference(rc)) = call.callee() {
+            if rc.name() == Some("arrayOf") {
+                let arg_exprs: Vec<KtExpr<'_>> = call
+                    .value_argument_list()
+                    .map(|al| al.arguments().filter_map(|a| a.expression()).collect())
+                    .unwrap_or_default();
+                let mut arg_slots: Vec<LocalId> = Vec::with_capacity(arg_exprs.len());
+                let mut all_args_ok = true;
+                for ae in arg_exprs {
+                    let Some(s) = lower_rich_expr_to_slot(
+                        ae,
+                        lookup_name,
+                        fn_lookup,
+                        next_slot,
+                        pre_stmts,
+                        extra_locals,
+                        strings,
+                    ) else {
+                        all_args_ok = false;
+                        break;
+                    };
+                    arg_slots.push(s);
+                }
+                if all_args_ok {
+                    // Infer element class from the first arg's Ty.
+                    // String → `java/lang/String`; class → that class;
+                    // anything else (primitives that we'd need to box,
+                    // or no args at all) falls back to Object[].
+                    let elem_class: Option<String> = arg_slots.first().and_then(|s| {
+                        match slot_ty_with_param_fallback(s.0, extra_locals) {
+                            Ty::Class(c) => Some(c),
+                            Ty::String => Some("java/lang/String".to_string()),
+                            _ => None,
+                        }
+                    });
+                    let n = arg_slots.len() as i32;
+                    let size_slot = LocalId(*next_slot);
+                    *next_slot += 1;
+                    extra_locals.push(Ty::Int);
+                    pre_stmts.push(MStmt::Assign {
+                        dest: size_slot,
+                        value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(n)),
+                    });
+                    let arr_slot = LocalId(*next_slot);
+                    *next_slot += 1;
+                    extra_locals.push(Ty::Any);
+                    let new_arr_rvalue = if let Some(ref ec) = elem_class {
+                        skotch_mir::Rvalue::NewTypedObjectArray {
+                            size: size_slot,
+                            element_class: ec.clone(),
+                        }
+                    } else {
+                        skotch_mir::Rvalue::NewObjectArray(size_slot)
+                    };
+                    pre_stmts.push(MStmt::Assign {
+                        dest: arr_slot,
+                        value: new_arr_rvalue,
+                    });
+                    // Record element Ty so ArrayAccess on this slot
+                    // returns a typed slot (Ty::Class / Ty::String).
+                    if let Some(ref ec) = elem_class {
+                        let elem_ty = if ec == "java/lang/String" {
+                            Ty::String
+                        } else {
+                            Ty::Class(ec.clone())
+                        };
+                        record_list_element_ty(arr_slot.0, elem_ty);
+                    }
+                    for (i, val_slot) in arg_slots.iter().enumerate() {
+                        // Box primitive values so aastore sees a ref.
+                        let val_ty = slot_ty_with_param_fallback(val_slot.0, extra_locals);
+                        let store_slot = match &val_ty {
+                            Ty::Int
+                            | Ty::Long
+                            | Ty::Float
+                            | Ty::Double
+                            | Ty::Bool
+                            | Ty::Byte
+                            | Ty::Short
+                            | Ty::Char => {
+                                let (cls, prim, boxed) = match &val_ty {
+                                    Ty::Int => ("java/lang/Integer", "I", "java/lang/Integer"),
+                                    Ty::Long => ("java/lang/Long", "J", "java/lang/Long"),
+                                    Ty::Float => ("java/lang/Float", "F", "java/lang/Float"),
+                                    Ty::Double => ("java/lang/Double", "D", "java/lang/Double"),
+                                    Ty::Bool => ("java/lang/Boolean", "Z", "java/lang/Boolean"),
+                                    Ty::Byte => ("java/lang/Byte", "B", "java/lang/Byte"),
+                                    Ty::Short => ("java/lang/Short", "S", "java/lang/Short"),
+                                    Ty::Char => ("java/lang/Character", "C", "java/lang/Character"),
+                                    _ => unreachable!(),
+                                };
+                                let boxed_slot = LocalId(*next_slot);
+                                *next_slot += 1;
+                                extra_locals.push(Ty::Class(boxed.to_string()));
+                                pre_stmts.push(MStmt::Assign {
+                                    dest: boxed_slot,
+                                    value: skotch_mir::Rvalue::Call {
+                                        kind: skotch_mir::CallKind::StaticJava {
+                                            class_name: cls.to_string(),
+                                            method_name: "valueOf".to_string(),
+                                            descriptor: format!("({})L{};", prim, boxed),
+                                        },
+                                        args: vec![*val_slot],
+                                    },
+                                });
+                                boxed_slot
+                            }
+                            _ => *val_slot,
+                        };
+                        let idx_slot = LocalId(*next_slot);
+                        *next_slot += 1;
+                        extra_locals.push(Ty::Int);
+                        pre_stmts.push(MStmt::Assign {
+                            dest: idx_slot,
+                            value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(i as i32)),
+                        });
+                        let store_dest = LocalId(*next_slot);
+                        *next_slot += 1;
+                        extra_locals.push(Ty::Unit);
+                        pre_stmts.push(MStmt::Assign {
+                            dest: store_dest,
+                            value: skotch_mir::Rvalue::ObjectArrayStore {
+                                array: arr_slot,
+                                index: idx_slot,
+                                value: store_slot,
+                            },
+                        });
+                    }
+                    return Some(arr_slot);
+                }
+            }
+        }
+    }
     // `mutableMapOf<K,V>()` / `mutableSetOf<T>()` — zero-arg builder
     // shapes that kotlinc lowers to a direct JDK constructor (NEW +
     // <init>) rather than a `CollectionsKt.mutableMapOf(...)` static
@@ -32625,12 +32796,21 @@ fn lower_rich_expr_to_slot(
                             return Some(result_slot);
                         }
                     }
+                    // Element-Ty: primitive arrays carry the element
+                    // shape in `array_ty`; for `Ty::Any` reference arrays
+                    // (e.g. `arrayOf(C("a"), …)` which emits
+                    // NewTypedObjectArray + Ty::Any slot), consult
+                    // LIST_ELEMENT_TY which was seeded at the
+                    // `arrayOf`/listOf builder. Without this, an
+                    // `arr[i].method()` chain ends with a
+                    // `Ty::Any`-typed slot and DotQualified dispatch
+                    // bails because no class is known.
                     let elem_ty = match &array_ty {
                         Ty::IntArray => Ty::Int,
                         Ty::LongArray => Ty::Long,
                         Ty::DoubleArray => Ty::Double,
                         Ty::ByteArray => Ty::Byte,
-                        _ => Ty::Any,
+                        _ => lookup_list_element_ty(array_slot.0).unwrap_or(Ty::Any),
                     };
                     let result_slot = LocalId(*next_slot);
                     *next_slot += 1;
@@ -47753,6 +47933,8 @@ fn method_from_fun_with_class(
     let body_expr_inferred_ret = || -> Option<Ty> {
         let e = f.body_expression()?;
         let e = unwrap_parens(e);
+        // `fun greet() = a` — return Ty matches the primary-ctor
+        // val/var field's Ty.
         if let skotch_ast::KtExpr::Reference(r) = e {
             let name = r.name()?;
             for (fn_name, fty) in field_names {
@@ -47760,6 +47942,14 @@ fn method_from_fun_with_class(
                     return Some(fty.clone());
                 }
             }
+        }
+        // `fun greet() = "hi $name"` / `fun s() = "x"` — string
+        // template body forces Ty::String. Without this, methods like
+        // `fun greet() = "hi $name"` collapse to `()V` and outer call
+        // sites (`println(arr[1].greet())`) consume the dropped result
+        // as void — VerifyError "Operand stack underflow" at runtime.
+        if matches!(e, skotch_ast::KtExpr::String(_)) {
+            return Some(Ty::String);
         }
         None
     };
