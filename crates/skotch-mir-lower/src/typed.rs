@@ -32228,11 +32228,39 @@ fn lower_rich_expr_to_slot(
                         // boolean constant. Long literal is detected by
                         // peeking at the lexed child token (mirrors the
                         // toString recv_is_int_like sniffer below).
+                        //
+                        // Phase UU: hex/bin/dec INTEGER_LITERAL whose
+                        // numeric value overflows i32 is implicitly Long
+                        // in Kotlin (`0x9ABCDEF0` = 2596069104 > Int.MAX
+                        // is typed `Long`, so `.toInt()` is `l2i`, not a
+                        // no-op). Without this, `recv_ty_candidate` was
+                        // `Ty::Int`, the `prim_conv` table below required
+                        // `p != "i"` for `toInt`, the arm skipped, and
+                        // the call bailed kind=DotQualified — breaking
+                        // SHA-3 / MD5 init helpers in parity/101-hash
+                        // that build their constants from
+                        // `0x….toInt()`.
                         KtExpr::Integer(int_e) => {
                             let is_long = skotch_ast::children(int_e.syntax())
                                 .iter()
                                 .any(|c| c.kind == skotch_syntax::SyntaxKind::LONG_LITERAL);
-                            Some(if is_long { Ty::Long } else { Ty::Int })
+                            if is_long {
+                                Some(Ty::Long)
+                            } else {
+                                let overflows_i32 = skotch_ast::children(int_e.syntax())
+                                    .iter()
+                                    .find_map(|c| {
+                                        if c.kind == skotch_syntax::SyntaxKind::INTEGER_LITERAL {
+                                            if let skotch_sil::SilData::Token { text } = &c.data {
+                                                return parse_integer_literal_value(text.as_str());
+                                            }
+                                        }
+                                        None
+                                    })
+                                    .map(|v| v > i32::MAX as i64 || v < i32::MIN as i64)
+                                    .unwrap_or(false);
+                                Some(if overflows_i32 { Ty::Long } else { Ty::Int })
+                            }
                         }
                         KtExpr::Float(_) => Some(Ty::Double),
                         KtExpr::Boolean(_) => Some(Ty::Bool),
@@ -36815,6 +36843,23 @@ fn try_lower_println_call(
     Some(blocks)
 }
 
+/// Parse the numeric value of an INTEGER_LITERAL / LONG_LITERAL
+/// source text. Supports hex (`0x`), binary (`0b`), underscores, and
+/// a trailing `L`/`l` suffix (callers should strip the suffix when
+/// they care about the long-vs-int distinction). Returns the value as
+/// `i64`; callers narrow / overflow-check.
+fn parse_integer_literal_value(text: &str) -> Option<i64> {
+    let s: String = text.chars().filter(|c| *c != '_').collect();
+    let s = s.trim_end_matches(['L', 'l']);
+    if let Some(hex) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
+        return i64::from_str_radix(hex, 16).ok();
+    }
+    if let Some(bin) = s.strip_prefix("0b").or_else(|| s.strip_prefix("0B")) {
+        return i64::from_str_radix(bin, 2).ok();
+    }
+    s.parse().ok()
+}
+
 /// Extract a `MirConst` from a literal-shaped `KtExpr`. Returns the
 /// const plus its `Ty`. Returns `None` for non-literal expressions
 /// or interpolated string templates.
@@ -36846,25 +36891,22 @@ fn literal_to_const(
                         }
                         _ => None,
                     })?;
-            // Parse text supporting hex (0x), binary (0b), underscores,
-            // and the trailing 'L' suffix.
-            let parse_int = |s: &str| -> Option<i64> {
-                let s = s.replace('_', "");
-                if let Some(hex) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
-                    return i64::from_str_radix(hex, 16).ok();
-                }
-                if let Some(bin) = s.strip_prefix("0b").or_else(|| s.strip_prefix("0B")) {
-                    return i64::from_str_radix(bin, 2).ok();
-                }
-                s.parse().ok()
-            };
             if is_long {
                 let trimmed = text.trim_end_matches(['L', 'l']);
-                let v = parse_int(trimmed)?;
+                let v = parse_integer_literal_value(trimmed)?;
                 Some((MirConst::Long(v), Ty::Long))
             } else {
-                let v = parse_int(&text)?;
-                Some((MirConst::Int(v as i32), Ty::Int))
+                let v = parse_integer_literal_value(&text)?;
+                // Phase UU: an INTEGER_LITERAL whose value overflows
+                // i32 is implicitly Long in Kotlin (`0x9ABCDEF0`,
+                // `0xFFFFFFFF`, etc). Promote here so receiver-Ty
+                // sniffers and consumers downstream see `Ty::Long` and
+                // pick the right narrowing path (`l2i` for `.toInt()`).
+                if v > i32::MAX as i64 || v < i32::MIN as i64 {
+                    Some((MirConst::Long(v), Ty::Long))
+                } else {
+                    Some((MirConst::Int(v as i32), Ty::Int))
+                }
             }
         }
         KtExpr::Prefix(p) => {
