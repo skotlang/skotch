@@ -33620,6 +33620,9 @@ fn lower_rich_expr_to_slot(
         }
     }
     // Infix `a to b` → kotlin.TuplesKt.to(Object, Object) → Pair.
+    // Both operands target `Object` so primitive slots are autoboxed
+    // before the call. Without the box, the verifier rejects the
+    // primitive on an Object operand slot.
     if let KtExpr::Binary(b) = e {
         let op_text = b.operation().map(|o| o.text()).unwrap_or_default();
         if op_text == "to" {
@@ -33641,6 +33644,53 @@ fn lower_rich_expr_to_slot(
                 extra_locals,
                 strings,
             )?;
+            let box_if_prim = |s: LocalId,
+                               extra_locals: &mut Vec<Ty>,
+                               pre_stmts: &mut Vec<MStmt>,
+                               next_slot: &mut u32|
+             -> LocalId {
+                let ty = slot_ty_with_param_fallback(s.0, extra_locals);
+                match &ty {
+                    Ty::Int
+                    | Ty::Long
+                    | Ty::Float
+                    | Ty::Double
+                    | Ty::Bool
+                    | Ty::Byte
+                    | Ty::Short
+                    | Ty::Char => {
+                        let (cls, prim) = match &ty {
+                            Ty::Int => ("java/lang/Integer", "I"),
+                            Ty::Long => ("java/lang/Long", "J"),
+                            Ty::Float => ("java/lang/Float", "F"),
+                            Ty::Double => ("java/lang/Double", "D"),
+                            Ty::Bool => ("java/lang/Boolean", "Z"),
+                            Ty::Byte => ("java/lang/Byte", "B"),
+                            Ty::Short => ("java/lang/Short", "S"),
+                            Ty::Char => ("java/lang/Character", "C"),
+                            _ => unreachable!(),
+                        };
+                        let bs = LocalId(*next_slot);
+                        *next_slot += 1;
+                        extra_locals.push(Ty::Class(cls.to_string()));
+                        pre_stmts.push(MStmt::Assign {
+                            dest: bs,
+                            value: skotch_mir::Rvalue::Call {
+                                kind: skotch_mir::CallKind::StaticJava {
+                                    class_name: cls.to_string(),
+                                    method_name: "valueOf".to_string(),
+                                    descriptor: format!("({})L{};", prim, cls),
+                                },
+                                args: vec![s],
+                            },
+                        });
+                        bs
+                    }
+                    _ => s,
+                }
+            };
+            let lhs_b = box_if_prim(lhs_slot, extra_locals, pre_stmts, next_slot);
+            let rhs_b = box_if_prim(rhs_slot, extra_locals, pre_stmts, next_slot);
             let result_slot = LocalId(*next_slot);
             *next_slot += 1;
             extra_locals.push(Ty::Class("kotlin/Pair".to_string()));
@@ -33653,7 +33703,7 @@ fn lower_rich_expr_to_slot(
                         descriptor: "(Ljava/lang/Object;Ljava/lang/Object;)Lkotlin/Pair;"
                             .to_string(),
                     },
-                    args: vec![lhs_slot, rhs_slot],
+                    args: vec![lhs_b, rhs_b],
                 },
             });
             return Some(result_slot);
@@ -34230,6 +34280,235 @@ fn lower_rich_expr_to_slot(
                                     class_name: "kotlin/collections/CollectionsKt".to_string(),
                                     method_name: method.to_string(),
                                     descriptor: "([Ljava/lang/Object;)Ljava/util/List;".to_string(),
+                                },
+                                args: vec![arr_slot],
+                            },
+                        });
+                        return Some(result_slot);
+                    }
+                }
+            }
+        }
+    }
+    // `setOf(a, b, c)` — structurally identical to `listOf(...)` but
+    // routes through `SetsKt.setOf([Object)Set`. Args are boxed
+    // primitives, stored into an Object[], then handed to the SetsKt
+    // facade. The runtime type is `java/util/LinkedHashSet` but
+    // kotlinc widens the static type to `java/util/Set`.
+    if let KtExpr::Call(call) = e {
+        if let Some(KtExpr::Reference(rc)) = call.callee() {
+            if let Some(name) = rc.name() {
+                if matches!(name, "setOf" | "mutableSetOf") {
+                    let arg_exprs: Vec<KtExpr<'_>> = call
+                        .value_argument_list()
+                        .map(|al| al.arguments().filter_map(|a| a.expression()).collect())
+                        .unwrap_or_default();
+                    let mut arg_slots: Vec<LocalId> = Vec::with_capacity(arg_exprs.len());
+                    let mut all_args_ok = true;
+                    for ae in arg_exprs {
+                        let Some(s) = lower_rich_expr_to_slot(
+                            ae,
+                            lookup_name,
+                            fn_lookup,
+                            next_slot,
+                            pre_stmts,
+                            extra_locals,
+                            strings,
+                        ) else {
+                            all_args_ok = false;
+                            break;
+                        };
+                        arg_slots.push(s);
+                    }
+                    if all_args_ok {
+                        let n = arg_slots.len() as i32;
+                        let size_slot = LocalId(*next_slot);
+                        *next_slot += 1;
+                        extra_locals.push(Ty::Int);
+                        pre_stmts.push(MStmt::Assign {
+                            dest: size_slot,
+                            value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(n)),
+                        });
+                        let arr_slot = LocalId(*next_slot);
+                        *next_slot += 1;
+                        extra_locals.push(Ty::Any);
+                        pre_stmts.push(MStmt::Assign {
+                            dest: arr_slot,
+                            value: skotch_mir::Rvalue::NewObjectArray(size_slot),
+                        });
+                        for (i, val_slot) in arg_slots.iter().enumerate() {
+                            let val_ty = slot_ty_with_param_fallback(val_slot.0, extra_locals);
+                            let store_slot = match &val_ty {
+                                Ty::Int
+                                | Ty::Long
+                                | Ty::Float
+                                | Ty::Double
+                                | Ty::Bool
+                                | Ty::Byte
+                                | Ty::Short
+                                | Ty::Char => {
+                                    let (cls, prim, boxed) = match &val_ty {
+                                        Ty::Int => ("java/lang/Integer", "I", "java/lang/Integer"),
+                                        Ty::Long => ("java/lang/Long", "J", "java/lang/Long"),
+                                        Ty::Float => ("java/lang/Float", "F", "java/lang/Float"),
+                                        Ty::Double => ("java/lang/Double", "D", "java/lang/Double"),
+                                        Ty::Bool => ("java/lang/Boolean", "Z", "java/lang/Boolean"),
+                                        Ty::Byte => ("java/lang/Byte", "B", "java/lang/Byte"),
+                                        Ty::Short => ("java/lang/Short", "S", "java/lang/Short"),
+                                        Ty::Char => {
+                                            ("java/lang/Character", "C", "java/lang/Character")
+                                        }
+                                        _ => unreachable!(),
+                                    };
+                                    let boxed_slot = LocalId(*next_slot);
+                                    *next_slot += 1;
+                                    extra_locals.push(Ty::Class(boxed.to_string()));
+                                    pre_stmts.push(MStmt::Assign {
+                                        dest: boxed_slot,
+                                        value: skotch_mir::Rvalue::Call {
+                                            kind: skotch_mir::CallKind::StaticJava {
+                                                class_name: cls.to_string(),
+                                                method_name: "valueOf".to_string(),
+                                                descriptor: format!("({})L{};", prim, boxed),
+                                            },
+                                            args: vec![*val_slot],
+                                        },
+                                    });
+                                    boxed_slot
+                                }
+                                _ => *val_slot,
+                            };
+                            let idx_slot = LocalId(*next_slot);
+                            *next_slot += 1;
+                            extra_locals.push(Ty::Int);
+                            pre_stmts.push(MStmt::Assign {
+                                dest: idx_slot,
+                                value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(
+                                    i as i32,
+                                )),
+                            });
+                            let store_dest = LocalId(*next_slot);
+                            *next_slot += 1;
+                            extra_locals.push(Ty::Unit);
+                            pre_stmts.push(MStmt::Assign {
+                                dest: store_dest,
+                                value: skotch_mir::Rvalue::ObjectArrayStore {
+                                    array: arr_slot,
+                                    index: idx_slot,
+                                    value: store_slot,
+                                },
+                            });
+                        }
+                        let (facade, method) = match name {
+                            "setOf" => ("kotlin/collections/SetsKt", "setOf"),
+                            "mutableSetOf" => ("kotlin/collections/SetsKt", "mutableSetOf"),
+                            _ => unreachable!(),
+                        };
+                        let result_slot = LocalId(*next_slot);
+                        *next_slot += 1;
+                        extra_locals.push(Ty::Class("java/util/Set".to_string()));
+                        pre_stmts.push(MStmt::Assign {
+                            dest: result_slot,
+                            value: skotch_mir::Rvalue::Call {
+                                kind: skotch_mir::CallKind::StaticJava {
+                                    class_name: facade.to_string(),
+                                    method_name: method.to_string(),
+                                    descriptor: "([Ljava/lang/Object;)Ljava/util/Set;".to_string(),
+                                },
+                                args: vec![arr_slot],
+                            },
+                        });
+                        return Some(result_slot);
+                    }
+                }
+            }
+        }
+    }
+    // `mapOf("a" to 1, "b" to 2)` — args are Pair-typed (infix `to`
+    // produces `Lkotlin/Pair;` via TuplesKt.to). Pack into a Pair[]
+    // and hand to `MapsKt.mapOf([Pair)Map`. Pair instances do not
+    // need boxing.
+    if let KtExpr::Call(call) = e {
+        if let Some(KtExpr::Reference(rc)) = call.callee() {
+            if let Some(name) = rc.name() {
+                if matches!(name, "mapOf" | "mutableMapOf") {
+                    let arg_exprs: Vec<KtExpr<'_>> = call
+                        .value_argument_list()
+                        .map(|al| al.arguments().filter_map(|a| a.expression()).collect())
+                        .unwrap_or_default();
+                    let mut arg_slots: Vec<LocalId> = Vec::with_capacity(arg_exprs.len());
+                    let mut all_args_ok = true;
+                    for ae in arg_exprs {
+                        let Some(s) = lower_rich_expr_to_slot(
+                            ae,
+                            lookup_name,
+                            fn_lookup,
+                            next_slot,
+                            pre_stmts,
+                            extra_locals,
+                            strings,
+                        ) else {
+                            all_args_ok = false;
+                            break;
+                        };
+                        arg_slots.push(s);
+                    }
+                    if all_args_ok {
+                        let n = arg_slots.len() as i32;
+                        let size_slot = LocalId(*next_slot);
+                        *next_slot += 1;
+                        extra_locals.push(Ty::Int);
+                        pre_stmts.push(MStmt::Assign {
+                            dest: size_slot,
+                            value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(n)),
+                        });
+                        let arr_slot = LocalId(*next_slot);
+                        *next_slot += 1;
+                        extra_locals.push(Ty::Class("kotlin/Pair".to_string()));
+                        pre_stmts.push(MStmt::Assign {
+                            dest: arr_slot,
+                            value: skotch_mir::Rvalue::NewTypedObjectArray {
+                                size: size_slot,
+                                element_class: "kotlin/Pair".to_string(),
+                            },
+                        });
+                        for (i, val_slot) in arg_slots.iter().enumerate() {
+                            let idx_slot = LocalId(*next_slot);
+                            *next_slot += 1;
+                            extra_locals.push(Ty::Int);
+                            pre_stmts.push(MStmt::Assign {
+                                dest: idx_slot,
+                                value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(
+                                    i as i32,
+                                )),
+                            });
+                            let store_dest = LocalId(*next_slot);
+                            *next_slot += 1;
+                            extra_locals.push(Ty::Unit);
+                            pre_stmts.push(MStmt::Assign {
+                                dest: store_dest,
+                                value: skotch_mir::Rvalue::ObjectArrayStore {
+                                    array: arr_slot,
+                                    index: idx_slot,
+                                    value: *val_slot,
+                                },
+                            });
+                        }
+                        let (facade, method) = match name {
+                            "mapOf" => ("kotlin/collections/MapsKt", "mapOf"),
+                            "mutableMapOf" => ("kotlin/collections/MapsKt", "mutableMapOf"),
+                            _ => unreachable!(),
+                        };
+                        let result_slot = LocalId(*next_slot);
+                        *next_slot += 1;
+                        extra_locals.push(Ty::Class("java/util/Map".to_string()));
+                        pre_stmts.push(MStmt::Assign {
+                            dest: result_slot,
+                            value: skotch_mir::Rvalue::Call {
+                                kind: skotch_mir::CallKind::StaticJava {
+                                    class_name: facade.to_string(),
+                                    method_name: method.to_string(),
+                                    descriptor: "([Lkotlin/Pair;)Ljava/util/Map;".to_string(),
                                 },
                                 args: vec![arr_slot],
                             },
@@ -39925,6 +40204,51 @@ fn lower_rich_expr_to_slot(
                                         "(Ljava/lang/Iterable;)Ljava/util/Set;",
                                         Ty::Class("java/util/Set".to_string()),
                                     )),
+                                    // Terminal aggregations on a chained
+                                    // collection receiver. Mirror entries
+                                    // in the bare-Reference arm above so
+                                    // `xs.filter{}.sum()` etc. route to
+                                    // the CollectionsKt static facade
+                                    // instead of falling through to an
+                                    // invokeinterface on a JDK method
+                                    // that does not exist
+                                    // (`List.sum()`/`List.max()` etc).
+                                    "sum" => Some((
+                                        "kotlin/collections/CollectionsKt",
+                                        "sumOfInt",
+                                        "(Ljava/lang/Iterable;)I",
+                                        Ty::Int,
+                                    )),
+                                    "max" => Some((
+                                        "kotlin/collections/CollectionsKt",
+                                        "max",
+                                        "(Ljava/lang/Iterable;)Ljava/lang/Comparable;",
+                                        Ty::Any,
+                                    )),
+                                    "min" => Some((
+                                        "kotlin/collections/CollectionsKt",
+                                        "min",
+                                        "(Ljava/lang/Iterable;)Ljava/lang/Comparable;",
+                                        Ty::Any,
+                                    )),
+                                    "average" => Some((
+                                        "kotlin/collections/CollectionsKt",
+                                        "averageOfInt",
+                                        "(Ljava/lang/Iterable;)D",
+                                        Ty::Double,
+                                    )),
+                                    "count" => {
+                                        if call.lambda_argument().is_some() {
+                                            None
+                                        } else {
+                                            Some((
+                                                "kotlin/collections/CollectionsKt",
+                                                "count",
+                                                "(Ljava/lang/Iterable;)I",
+                                                Ty::Int,
+                                            ))
+                                        }
+                                    }
                                     _ => None,
                                 };
                                 if let Some((cls, method, desc, ret_ty)) = mapped {
