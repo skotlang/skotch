@@ -18507,6 +18507,25 @@ fn lower_loop_body_blocks(
                 // the backend emits astore against a
                 // boxed result — VerifyError on later
                 // primitive use like `if (i < n)`).
+                // Detect a throwing arm: `if (cond) e else throw E(...)` (or
+                // mirror). The throwing arm doesn't produce a value — it
+                // diverges. We lower its inner exception expression and emit
+                // the arm block with `Terminator::Throw(slot)` instead of
+                // `Goto(join)`. The non-throwing arm still assigns prop_slot
+                // and `Goto(join)`. The prop_slot's static type is taken
+                // from the surviving arm; the throwing arm doesn't
+                // contribute to the join's type narrowing.
+                let arm_is_throw = |a: &KtExpr<'_>| matches!(unwrap_parens(*a), KtExpr::Throw(_));
+                let then_is_throw = arm_is_throw(&then_arm);
+                let else_is_throw = arm_is_throw(&else_arm);
+                // Snapshot `name_to_local` once so the throwing-arm
+                // lookup closures don't need to re-borrow it while
+                // `lower_arm` is alive (which holds a unique borrow).
+                let throw_name_snap: Vec<(String, LocalId)> = if then_is_throw || else_is_throw {
+                    name_to_local.clone()
+                } else {
+                    Vec::new()
+                };
                 let mut lower_arm = |arm: KtExpr<'_>,
                                      next_slot: &mut u32,
                                      local_tys: &mut Vec<Ty>,
@@ -18580,10 +18599,75 @@ fn lower_loop_body_blocks(
                     });
                     Some((stmts, value_slot))
                 };
-                let (then_stmts, then_value_slot) =
-                    lower_arm(then_arm, next_slot, local_tys, strings)?;
-                let (else_stmts, else_value_slot) =
-                    lower_arm(else_arm, next_slot, local_tys, strings)?;
+                // Lower a throwing arm inline: emit stmts that evaluate
+                // the exception instance, return (stmts, slot) for use
+                // as `Terminator::Throw(slot)`. Inlined (rather than a
+                // helper closure) so the mut borrow of `name_to_local`
+                // doesn't collide with `lower_arm`'s capture.
+                let (then_stmts, then_value_slot, then_throw_slot) = if then_is_throw {
+                    let mut stmts: Vec<MStmt> = Vec::new();
+                    let arm = unwrap_parens(then_arm);
+                    let KtExpr::Throw(t) = arm else {
+                        return None;
+                    };
+                    let inner = skotch_ast::children(t.syntax())
+                        .iter()
+                        .find_map(KtExpr::cast)
+                        .map(unwrap_parens)?;
+                    let snap2 = &throw_name_snap;
+                    let lookup2 = |n: &str| -> Option<LocalId> {
+                        snap2
+                            .iter()
+                            .rev()
+                            .find(|(name, _)| name == n)
+                            .map(|(_, l)| *l)
+                    };
+                    let slot = lower_rich_expr_to_slot(
+                        inner,
+                        &lookup2,
+                        fn_lookup_ref,
+                        next_slot,
+                        &mut stmts,
+                        local_tys,
+                        strings,
+                    )?;
+                    (stmts, LocalId(0), Some(slot))
+                } else {
+                    let (s, vs) = lower_arm(then_arm, next_slot, local_tys, strings)?;
+                    (s, vs, None)
+                };
+                let (else_stmts, else_value_slot, else_throw_slot) = if else_is_throw {
+                    let mut stmts: Vec<MStmt> = Vec::new();
+                    let arm = unwrap_parens(else_arm);
+                    let KtExpr::Throw(t) = arm else {
+                        return None;
+                    };
+                    let inner = skotch_ast::children(t.syntax())
+                        .iter()
+                        .find_map(KtExpr::cast)
+                        .map(unwrap_parens)?;
+                    let snap2 = &throw_name_snap;
+                    let lookup2 = |n: &str| -> Option<LocalId> {
+                        snap2
+                            .iter()
+                            .rev()
+                            .find(|(name, _)| name == n)
+                            .map(|(_, l)| *l)
+                    };
+                    let slot = lower_rich_expr_to_slot(
+                        inner,
+                        &lookup2,
+                        fn_lookup_ref,
+                        next_slot,
+                        &mut stmts,
+                        local_tys,
+                        strings,
+                    )?;
+                    (stmts, LocalId(0), Some(slot))
+                } else {
+                    let (s, vs) = lower_arm(else_arm, next_slot, local_tys, strings)?;
+                    (s, vs, None)
+                };
                 // Refine prop_slot's Ty when both arms produced the
                 // same type. Without this the slot stays Ty::Any, the
                 // backend emits the StackMapTable frame as Object, and
@@ -18592,23 +18676,70 @@ fn lower_loop_body_blocks(
                 // fails verification: stack[N] is Object, not assignable
                 // to String. Refining to the agreed-on Ty makes the
                 // stackmap declare the slot correctly.
-                let then_ty = slot_ty_with_param_fallback(then_value_slot.0, local_tys);
-                let else_ty = slot_ty_with_param_fallback(else_value_slot.0, local_tys);
-                let refined: Option<Ty> = if then_ty == else_ty
-                    && matches!(
-                        then_ty,
-                        Ty::Int
-                            | Ty::Bool
-                            | Ty::Long
-                            | Ty::Float
-                            | Ty::Double
-                            | Ty::Char
-                            | Ty::String
-                            | Ty::Class(_)
-                    ) {
-                    Some(then_ty)
-                } else {
-                    None
+                // Refine prop_slot's Ty from the non-throwing arms. A
+                // throwing arm doesn't contribute a value to the join, so
+                // the surviving arm's type determines the slot's static
+                // type. When both arms throw, prop_slot is unreachable —
+                // leave it as Ty::Any.
+                let refined: Option<Ty> = match (then_is_throw, else_is_throw) {
+                    (false, false) => {
+                        let then_ty = slot_ty_with_param_fallback(then_value_slot.0, local_tys);
+                        let else_ty = slot_ty_with_param_fallback(else_value_slot.0, local_tys);
+                        if then_ty == else_ty
+                            && matches!(
+                                then_ty,
+                                Ty::Int
+                                    | Ty::Bool
+                                    | Ty::Long
+                                    | Ty::Float
+                                    | Ty::Double
+                                    | Ty::Char
+                                    | Ty::String
+                                    | Ty::Class(_)
+                            )
+                        {
+                            Some(then_ty)
+                        } else {
+                            None
+                        }
+                    }
+                    (false, true) => {
+                        let t = slot_ty_with_param_fallback(then_value_slot.0, local_tys);
+                        if matches!(
+                            t,
+                            Ty::Int
+                                | Ty::Bool
+                                | Ty::Long
+                                | Ty::Float
+                                | Ty::Double
+                                | Ty::Char
+                                | Ty::String
+                                | Ty::Class(_)
+                        ) {
+                            Some(t)
+                        } else {
+                            None
+                        }
+                    }
+                    (true, false) => {
+                        let t = slot_ty_with_param_fallback(else_value_slot.0, local_tys);
+                        if matches!(
+                            t,
+                            Ty::Int
+                                | Ty::Bool
+                                | Ty::Long
+                                | Ty::Float
+                                | Ty::Double
+                                | Ty::Char
+                                | Ty::String
+                                | Ty::Class(_)
+                        ) {
+                            Some(t)
+                        } else {
+                            None
+                        }
+                    }
+                    (true, true) => None,
                 };
                 if let Some(refined_ty) = refined {
                     let prop_idx = prop_slot.0 as usize;
@@ -18630,13 +18761,21 @@ fn lower_loop_body_blocks(
                         else_block: else_block_id,
                     },
                 });
+                let then_term = match then_throw_slot {
+                    Some(s) => Terminator::Throw(s),
+                    None => Terminator::Goto(join_block_id),
+                };
                 blocks.push(BasicBlock {
                     stmts: then_stmts,
-                    terminator: Terminator::Goto(join_block_id),
+                    terminator: then_term,
                 });
+                let else_term = match else_throw_slot {
+                    Some(s) => Terminator::Throw(s),
+                    None => Terminator::Goto(join_block_id),
+                };
                 blocks.push(BasicBlock {
                     stmts: else_stmts,
-                    terminator: Terminator::Goto(join_block_id),
+                    terminator: else_term,
                 });
                 name_to_local.push((pname.to_string(), prop_slot));
                 i = j + 1;
