@@ -1739,13 +1739,29 @@ fn compile_class(class_name: &str, module: &MirModule) -> Vec<u8> {
                 emit_default_synthetic(func, module, class_name, &mut cp, code_attr_name_idx);
             method_blobs.push(default_blob);
         }
+    }
 
-        // For no-arg main(), kotlinc emits a synthetic bridge
-        // main([Ljava/lang/String;)V that just calls the no-arg version.
-        if func.name == "main" && func.params.is_empty() {
-            let bridge = emit_main_bridge(class_name, &mut cp, code_attr_name_idx);
-            method_blobs.push(bridge);
-        }
+    // For no-arg main(), kotlinc emits a synthetic bridge
+    // main([Ljava/lang/String;)V LAST — after every other method on the
+    // wrapper class. Phase MMM-item-4: move the bridge emit to AFTER the
+    // method loop so it appears at the end of the methods table, matching
+    // kotlinc's ordering. Previously we appended it immediately after the
+    // no-arg main()'s blob which placed it BEFORE every subsequent
+    // top-level fn (e.g. `greeting` in parity/01-hello-world).
+    //
+    // Apply the same skip-set the body loop uses (abstract / cross-file
+    // stub / enum helper) so we only emit the bridge if the no-arg
+    // main() itself was actually emitted into method_blobs above.
+    let main_emitted = module.functions.iter().enumerate().any(|(fn_idx, f)| {
+        f.name == "main"
+            && f.params.is_empty()
+            && !f.is_abstract
+            && !module.enum_entry_funcs.contains_key(&(fn_idx as u32))
+            && !module.cross_file_fn_stubs.contains_key(&(fn_idx as u32))
+    });
+    if main_emitted {
+        let bridge = emit_main_bridge(class_name, &mut cp, code_attr_name_idx);
+        method_blobs.push(bridge);
     }
 
     // Register attribute names LATE (after every method body's CP refs
