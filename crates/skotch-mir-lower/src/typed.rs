@@ -6439,7 +6439,34 @@ pub fn lower_file(
                     if let KtDecl::Class(nested) = d {
                         if let Some(nested_simple) = nested.name() {
                             let nested_qname = format!("{}${}", name, nested_simple);
-                            let nested_fields = collect_class_fields(nested);
+                            let mut nested_fields = collect_class_fields(nested);
+                            // Generic erasure for nested-class fields:
+                            // type params (e.g. `class Ok<T>(val v: T)`)
+                            // appear as Ty::Class("T"). Erase to Ty::Any
+                            // so descriptors come out as
+                            // `Ljava/lang/Object;` matching kotlinc.
+                            // Top-level classes get this erasure above
+                            // (line ~5441) — nested classes were skipped,
+                            // which left `v: LT;` in `Result$Ok` and
+                            // tripped a NoClassDefFoundError at the JVM
+                            // loading the class.
+                            let nested_type_param_names: std::collections::HashSet<String> = nested
+                                .type_parameter_list()
+                                .map(|tpl| {
+                                    tpl.parameters()
+                                        .filter_map(|tp| tp.name().map(String::from))
+                                        .collect()
+                                })
+                                .unwrap_or_default();
+                            if !nested_type_param_names.is_empty() {
+                                for fld in nested_fields.iter_mut() {
+                                    if let Ty::Class(n) = &fld.ty {
+                                        if nested_type_param_names.contains(n) {
+                                            fld.ty = Ty::Any;
+                                        }
+                                    }
+                                }
+                            }
                             let nested_methods = collect_class_methods(
                                 nested,
                                 &nested_qname,
@@ -7136,6 +7163,71 @@ pub fn lower_file(
                 }
             }
             class_fields.insert(name.to_string(), fields);
+            // Nested classes: same field collection, keyed by the
+            // JVM-style `Outer$Inner` name so that CLASS_FIELDS lookups
+            // from a smart-cast site (`is Result.Ok -> ...`) can find
+            // the sub-class's fields (e.g. Result$Ok.v) for the arm
+            // body's bare-identifier resolution.
+            if let Some(body) = c.body() {
+                for nested_decl in body.declarations() {
+                    if let KtDecl::Class(nested) = nested_decl {
+                        let Some(nested_simple) = nested.name() else {
+                            continue;
+                        };
+                        let nested_qname = format!("{}${}", name, nested_simple);
+                        // Per-nested-class type-param names — erase
+                        // field types matching one to "Any" so the
+                        // descriptor lookups in `class_field_lookup`
+                        // see the JVM-erased Ty (`Ljava/lang/Object;`)
+                        // matching what the field actually got written
+                        // as in the class layout.
+                        let nested_type_params: std::collections::HashSet<String> = nested
+                            .type_parameter_list()
+                            .map(|tpl| {
+                                tpl.parameters()
+                                    .filter_map(|tp| tp.name().map(String::from))
+                                    .collect()
+                            })
+                            .unwrap_or_default();
+                        let mut nested_fields_pairs: Vec<(String, String)> = Vec::new();
+                        if let Some(pc) = nested.primary_constructor() {
+                            if let Some(plist) = pc.value_parameter_list() {
+                                for p in plist.parameters() {
+                                    if !p.is_val() && !p.is_var() {
+                                        continue;
+                                    }
+                                    let Some(fname) = p.name() else { continue };
+                                    let mut type_name = p
+                                        .type_reference()
+                                        .and_then(tref_user_name)
+                                        .unwrap_or_else(|| "Any".to_string());
+                                    if nested_type_params.contains(&type_name) {
+                                        type_name = "Any".to_string();
+                                    }
+                                    nested_fields_pairs.push((fname.to_string(), type_name));
+                                }
+                            }
+                        }
+                        if let Some(nbody) = nested.body() {
+                            for nd in nbody.declarations() {
+                                if let KtDecl::Property(p) = nd {
+                                    if let Some(fname) = p.name() {
+                                        let mut type_name = p
+                                            .type_reference()
+                                            .and_then(tref_user_name)
+                                            .unwrap_or_else(|| "Any".to_string());
+                                        if nested_type_params.contains(&type_name) {
+                                            type_name = "Any".to_string();
+                                        }
+                                        nested_fields_pairs.push((fname.to_string(), type_name));
+                                    }
+                                }
+                            }
+                        }
+                        class_fields.insert(nested_qname, nested_fields_pairs);
+                    }
+                }
+            }
         }
     }
 
@@ -8672,6 +8764,41 @@ pub fn lower_file(
         fixup_cmp_unbox(&mut c.constructor);
     }
 
+    // Constructor-arg autobox fixup: when an in-module class's
+    // constructor declares its slot-N param as `Ty::Any` (because the
+    // declared param was a generic type-param erased via the
+    // `class_type_param_set` pass in `constructor_from_primary_impl`),
+    // but a caller's `CallKind::Constructor(...)` or
+    // `CallKind::ConstructorJava` passes a primitive-Ty slot, the
+    // backend builds the wrong descriptor (`(I)V` vs the actual
+    // `(Ljava/lang/Object;)V`) and the JVM dispatches with
+    // NoSuchMethodError. Pre-autobox the arg via
+    // `kotlin/coroutines/jvm/internal/Boxing.box*` (same intrinsic
+    // the rest of the pipeline uses) so the call-site descriptor
+    // matches the target ctor's erased shape.
+    //
+    // Mirrors what kotlinc does on `Result.Ok(7)` when `Ok<T>(val v:
+    // T)` is in scope: the int literal is autoboxed to Integer at the
+    // ctor call before the `invokespecial Result$Ok.<init>:(Object)V`.
+    let class_ctor_param_tys: rustc_hash::FxHashMap<String, Vec<Ty>> = module
+        .classes
+        .iter()
+        .map(|c| {
+            // Skip slot 0 (`this`); locals[1..=N] are the ctor's
+            // value-parameter Tys after erasure.
+            let tys: Vec<Ty> = c
+                .constructor
+                .locals
+                .iter()
+                .skip(1)
+                .take(c.constructor.params.len().saturating_sub(1))
+                .cloned()
+                .collect();
+            (c.name.clone(), tys)
+        })
+        .collect();
+    fixup_ctor_arg_autobox(&mut module, &class_ctor_param_tys);
+
     // Optional MIR dump for debugging. Gated on `SKOTCH_DUMP_MIR` env
     // var (one or more `Wrapper.method` patterns, comma-separated).
     // Same shape as the post-compose dump in skotch-compose; useful
@@ -8746,6 +8873,151 @@ fn emit_prim_widen(
         },
     });
     dst
+}
+
+/// Pre-autobox primitive args at constructor call sites where the
+/// target class's `<init>` declared the corresponding param as
+/// generic-erased `Ty::Any`. Without this, `Result.Ok(7)` lowers the
+/// arg slot as `Ty::Int`, the backend's `CallKind::Constructor` arm
+/// builds the descriptor `(I)V` from `func.locals[arg.0].ty`, and the
+/// dispatch fails with NoSuchMethodError at runtime because the actual
+/// ctor signature is `(Ljava/lang/Object;)V`.
+///
+/// The fixup walks every `CallKind::Constructor` / `CallKind::ConstructorJava`
+/// call in every function (top-level fns, class methods, ctors). For
+/// each arg slot whose Ty is primitive but the target ctor expects
+/// `Ty::Any`, we insert a `kotlin/coroutines/jvm/internal/Boxing.box*`
+/// static call right before the Constructor stmt and rewrite the arg
+/// to the boxed slot. This mirrors the same Boxing-helper convention
+/// the rest of the pipeline uses for autobox sites (see
+/// `fixup_cmp_unbox`, line ~8616).
+fn fixup_ctor_arg_autobox(
+    module: &mut skotch_mir::MirModule,
+    class_ctor_param_tys: &rustc_hash::FxHashMap<String, Vec<Ty>>,
+) {
+    use skotch_mir::{CallKind, LocalId, Rvalue, Stmt as MStmt};
+    let box_helper = |ty: &Ty| -> Option<(&'static str, &'static str)> {
+        match ty {
+            Ty::Int => Some(("boxInt", "(I)Ljava/lang/Integer;")),
+            Ty::Long => Some(("boxLong", "(J)Ljava/lang/Long;")),
+            Ty::Float => Some(("boxFloat", "(F)Ljava/lang/Float;")),
+            Ty::Double => Some(("boxDouble", "(D)Ljava/lang/Double;")),
+            Ty::Bool => Some(("boxBoolean", "(Z)Ljava/lang/Boolean;")),
+            Ty::Byte => Some(("boxByte", "(B)Ljava/lang/Byte;")),
+            Ty::Short => Some(("boxShort", "(S)Ljava/lang/Short;")),
+            Ty::Char => Some(("boxChar", "(C)Ljava/lang/Character;")),
+            _ => None,
+        }
+    };
+    let fix = |f: &mut MirFunction,
+               class_ctor_param_tys: &rustc_hash::FxHashMap<String, Vec<Ty>>| {
+        for block in f.blocks.iter_mut() {
+            let mut new_stmts: Vec<MStmt> = Vec::with_capacity(block.stmts.len());
+            for stmt in std::mem::take(&mut block.stmts) {
+                let MStmt::Assign { dest: _, value } = &stmt;
+                let target_class = match value {
+                    Rvalue::Call {
+                        kind: CallKind::Constructor(c),
+                        ..
+                    } => Some(c.clone()),
+                    Rvalue::Call {
+                        kind: CallKind::ConstructorJava { class_name, .. },
+                        ..
+                    } => Some(class_name.clone()),
+                    _ => None,
+                };
+                let Some(target_class) = target_class else {
+                    new_stmts.push(stmt);
+                    continue;
+                };
+                let Some(expected) = class_ctor_param_tys.get(&target_class) else {
+                    new_stmts.push(stmt);
+                    continue;
+                };
+                let MStmt::Assign { dest, value } = stmt;
+                let (mut kind, args) = match value {
+                    Rvalue::Call { kind, args } => (kind, args),
+                    other => {
+                        new_stmts.push(MStmt::Assign { dest, value: other });
+                        continue;
+                    }
+                };
+                let mut new_args: Vec<LocalId> = Vec::with_capacity(args.len());
+                let mut any_boxed = false;
+                for (i, arg_slot) in args.iter().enumerate() {
+                    let Some(arg_ty) = f.locals.get(arg_slot.0 as usize) else {
+                        new_args.push(*arg_slot);
+                        continue;
+                    };
+                    let Some(exp_ty) = expected.get(i) else {
+                        new_args.push(*arg_slot);
+                        continue;
+                    };
+                    let needs_box = matches!(exp_ty, Ty::Any) && box_helper(arg_ty).is_some();
+                    if !needs_box {
+                        new_args.push(*arg_slot);
+                        continue;
+                    }
+                    let (method, desc) = box_helper(arg_ty).unwrap();
+                    let boxed_slot = LocalId(f.locals.len() as u32);
+                    f.locals.push(Ty::Any);
+                    new_stmts.push(MStmt::Assign {
+                        dest: boxed_slot,
+                        value: Rvalue::Call {
+                            kind: CallKind::StaticJava {
+                                class_name: "kotlin/coroutines/jvm/internal/Boxing".to_string(),
+                                method_name: method.to_string(),
+                                descriptor: desc.to_string(),
+                            },
+                            args: vec![*arg_slot],
+                        },
+                    });
+                    new_args.push(boxed_slot);
+                    any_boxed = true;
+                }
+                // Rebuild the descriptor on `ConstructorJava` from
+                // the expected param Tys (now that we've ensured the
+                // new args match the erased shape). For `Constructor`,
+                // the backend infers the descriptor from arg slot Tys
+                // on each call site, so no rewrite is needed.
+                if any_boxed {
+                    if let CallKind::ConstructorJava {
+                        ref class_name,
+                        ref mut descriptor,
+                    } = kind
+                    {
+                        let mut new_desc = String::from("(");
+                        for ty in expected.iter() {
+                            new_desc.push_str(&ty_to_descriptor(ty));
+                        }
+                        new_desc.push_str(")V");
+                        let _ = class_name;
+                        *descriptor = new_desc;
+                    }
+                }
+                new_stmts.push(MStmt::Assign {
+                    dest,
+                    value: Rvalue::Call {
+                        kind,
+                        args: new_args,
+                    },
+                });
+            }
+            block.stmts = new_stmts;
+        }
+    };
+    for f in &mut module.functions {
+        fix(f, class_ctor_param_tys);
+    }
+    for c in &mut module.classes {
+        for m in &mut c.methods {
+            fix(m, class_ctor_param_tys);
+        }
+        fix(&mut c.constructor, class_ctor_param_tys);
+        for sc in &mut c.secondary_constructors {
+            fix(sc, class_ctor_param_tys);
+        }
+    }
 }
 
 /// Insert CHECKCAST java/lang/Number + INVOKEVIRTUAL <T>Value() before
@@ -12149,6 +12421,259 @@ fn try_lower_when_is_expression(
 
     let _ = val_lookup;
     let _ = wrapper_class;
+    Some((blocks, extra_locals))
+}
+
+/// Try to lower a method-body expression-bodied `when (this) { is X
+/// -> ...; is Y -> ... }` smart-cast cascade. Used for extension
+/// methods (`fun <T> Result<T>.describe() = when (this) { ... }`) and
+/// class methods whose `this` lives in slot 0.
+///
+/// Each arm:
+///   - tests `this instanceof X` (X may be a nested-class dotted name,
+///     `Result.Ok` → `Result$Ok`);
+///   - on match, CheckCasts `this` into a fresh slot;
+///   - pre-loads every declared field of the smart-cast subclass into
+///     a named local (driven off the file-scope `CLASS_FIELDS` table
+///     so bare-identifier references like `$v` in a string template
+///     find a slot — `lookup_name` is the only resolution path
+///     `SHORT_STRING_TEMPLATE_ENTRY` consults);
+///   - lowers the arm body with that local snapshot, stores the
+///     result, jumps to the join block.
+///
+/// When no arm matches and the source has no `else`, the synthetic
+/// `else` block throws `kotlin.NoWhenBranchMatchedException` (mirrors
+/// what kotlinc emits for sealed-class exhaustive `when`).
+#[allow(clippy::too_many_arguments)]
+fn try_lower_when_is_this_method_body(
+    when_e: &skotch_ast::KtWhen<'_>,
+    f: skotch_ast::KtFun<'_>,
+    strings: &mut Vec<String>,
+    fn_lookup: &rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)>,
+    this_slot_idx: u32,
+) -> Option<(Vec<BasicBlock>, Vec<Ty>)> {
+    use skotch_ast::KtExpr;
+    use skotch_mir::{LocalId, Rvalue, Stmt as MStmt};
+
+    // Subject must be `this` (slot 0 — or `this_slot_idx` for an
+    // extension method on a class).
+    let subject = when_e.subject().map(unwrap_parens)?;
+    if !matches!(subject, KtExpr::This(_)) {
+        return None;
+    }
+    let subj_slot = LocalId(this_slot_idx);
+
+    // Parse arms. Every arm must be `is TypeRef -> body`. Other shapes
+    // bail. Else arm is optional; sealed exhaustive when has no else
+    // and we synthesize a NoWhenBranchMatchedException throw.
+    let mut arms: Vec<(String, KtExpr<'_>)> = Vec::new();
+    let mut else_body: Option<KtExpr<'_>> = None;
+    for entry in when_e.entries() {
+        if entry.is_else() {
+            else_body = entry.body().map(unwrap_parens);
+            continue;
+        }
+        let conds = entry.conditions();
+        if conds.len() != 1 {
+            return None;
+        }
+        let cond = conds[0];
+        if cond.kind != skotch_syntax::SyntaxKind::WHEN_CONDITION_IS_PATTERN {
+            return None;
+        }
+        // Type-ref may be a dotted nested form (`Result.Ok`). Use the
+        // full dotted name and translate `.` to `$` for the JVM-side
+        // class name.
+        let class_name = skotch_ast::children(cond).iter().find_map(|cc| {
+            if cc.kind == skotch_syntax::SyntaxKind::TYPE_REFERENCE {
+                skotch_ast::KtTypeReference::cast(cc)
+                    .and_then(|tr| tr.user_type())
+                    .map(|u| u.dotted_name().replace('.', "$"))
+            } else {
+                None
+            }
+        })?;
+        let body = entry.body().map(unwrap_parens)?;
+        arms.push((class_name, body));
+    }
+    if arms.is_empty() {
+        return None;
+    }
+
+    // Slot layout: slot 0 = `this`; user params occupy 1..=N (none for
+    // an extension fn with no value params, like `describe()`).
+    let user_param_count = f
+        .value_parameter_list()
+        .map(|pl| pl.parameters().count())
+        .unwrap_or(0);
+    let mut next_slot = (this_slot_idx as usize + 1 + user_param_count) as u32;
+    let mut extra_locals: Vec<Ty> = Vec::new();
+
+    // Result slot — declared up front so all paths can store into it.
+    let result_slot = LocalId(next_slot);
+    next_slot += 1;
+    extra_locals.push(Ty::Any);
+
+    let n = arms.len();
+    // CFG layout:
+    //   cond_i  at base = 0..n           — each tests one arm's instanceof
+    //   arm_i   at base = n..2n          — each lowers an arm body
+    //   else    at base = 2n             — when-no-arm-matched (else body OR throw)
+    //   exit    at base = 2n + 1         — ReturnValue(result_slot)
+    let cond_base: u32 = 0;
+    let arm_base: u32 = n as u32;
+    let else_block: u32 = 2 * n as u32;
+    let exit_block: u32 = else_block + 1;
+
+    let mut blocks: Vec<BasicBlock> = Vec::new();
+
+    // Build cond cascade.
+    for (i, (class_name, _)) in arms.iter().enumerate() {
+        let test_slot = LocalId(next_slot);
+        next_slot += 1;
+        extra_locals.push(Ty::Bool);
+        let next_cond = if i + 1 < n {
+            cond_base + (i as u32) + 1
+        } else {
+            else_block
+        };
+        blocks.push(BasicBlock {
+            stmts: vec![MStmt::Assign {
+                dest: test_slot,
+                value: Rvalue::InstanceOf {
+                    obj: subj_slot,
+                    type_descriptor: class_name.clone(),
+                },
+            }],
+            terminator: Terminator::Branch {
+                cond: test_slot,
+                then_block: arm_base + i as u32,
+                else_block: next_cond,
+            },
+        });
+    }
+
+    // Arm body blocks.
+    for (class_name, arm_body) in arms.iter() {
+        let mut stmts: Vec<MStmt> = Vec::new();
+        // CheckCast `this` (slot 0) → ArmClass → cast_slot.
+        let cast_slot = LocalId(next_slot);
+        next_slot += 1;
+        extra_locals.push(Ty::Class(class_name.clone()));
+        stmts.push(MStmt::Assign {
+            dest: cast_slot,
+            value: Rvalue::CheckCast {
+                obj: subj_slot,
+                target_class: class_name.clone(),
+            },
+        });
+        // Pre-load each declared field of the smart-cast subclass into
+        // a fresh local. `lookup_name` (the snap-locals lookup used by
+        // the SHORT_STRING_TEMPLATE_ENTRY arm in lower_rich_expr_to_slot)
+        // is the ONLY resolution path string templates consult, so the
+        // bare `$v` inside `"ok:$v"` needs a snap_local binding to find
+        // a slot for `v`.
+        let mut snap_locals: Vec<(String, LocalId)> = Vec::new();
+        let arm_fields = lookup_class_fields(class_name).unwrap_or_default();
+        for (fname, fty) in arm_fields.iter() {
+            let fslot = LocalId(next_slot);
+            next_slot += 1;
+            extra_locals.push(fty.clone());
+            stmts.push(MStmt::Assign {
+                dest: fslot,
+                value: Rvalue::GetField {
+                    receiver: cast_slot,
+                    class_name: class_name.clone(),
+                    field_name: fname.clone(),
+                },
+            });
+            snap_locals.push((fname.clone(), fslot));
+        }
+        let snap = snap_locals.clone();
+        let lookup = |n: &str| -> Option<LocalId> {
+            snap.iter().rev().find(|(nm, _)| nm == n).map(|(_, l)| *l)
+        };
+        let Some(value_slot) = lower_rich_expr_to_slot(
+            *arm_body,
+            &lookup,
+            fn_lookup,
+            &mut next_slot,
+            &mut stmts,
+            &mut extra_locals,
+            strings,
+        ) else {
+            return None;
+        };
+        stmts.push(MStmt::Assign {
+            dest: result_slot,
+            value: Rvalue::Local(value_slot),
+        });
+        blocks.push(BasicBlock {
+            stmts,
+            terminator: Terminator::Goto(exit_block),
+        });
+    }
+
+    // Else block. Either lower the user's else arm or throw
+    // NoWhenBranchMatchedException (mirrors kotlinc for sealed
+    // exhaustive when).
+    if let Some(else_body) = else_body {
+        let mut stmts: Vec<MStmt> = Vec::new();
+        let snap_locals: Vec<(String, LocalId)> = Vec::new();
+        let lookup = |_: &str| -> Option<LocalId> { None };
+        let _ = snap_locals;
+        let Some(value_slot) = lower_rich_expr_to_slot(
+            else_body,
+            &lookup,
+            fn_lookup,
+            &mut next_slot,
+            &mut stmts,
+            &mut extra_locals,
+            strings,
+        ) else {
+            return None;
+        };
+        stmts.push(MStmt::Assign {
+            dest: result_slot,
+            value: Rvalue::Local(value_slot),
+        });
+        blocks.push(BasicBlock {
+            stmts,
+            terminator: Terminator::Goto(exit_block),
+        });
+    } else {
+        // NoWhenBranchMatchedException — kotlinc shape. Constructor
+        // args do NOT include the receiver; the backend's
+        // `CallKind::Constructor` arm emits load(dest) then args then
+        // `invokespecial <init>(args)`, with `dest` overwriting the
+        // prior `NewInstance` reference in place.
+        let exc_class = "kotlin/NoWhenBranchMatchedException".to_string();
+        let exc_slot = LocalId(next_slot);
+        extra_locals.push(Ty::Class(exc_class.clone()));
+        blocks.push(BasicBlock {
+            stmts: vec![
+                MStmt::Assign {
+                    dest: exc_slot,
+                    value: Rvalue::NewInstance(exc_class.clone()),
+                },
+                MStmt::Assign {
+                    dest: exc_slot,
+                    value: Rvalue::Call {
+                        kind: skotch_mir::CallKind::Constructor(exc_class),
+                        args: Vec::new(),
+                    },
+                },
+            ],
+            terminator: Terminator::Throw(exc_slot),
+        });
+    }
+
+    // Exit.
+    blocks.push(BasicBlock {
+        stmts: Vec::new(),
+        terminator: Terminator::ReturnValue(result_slot),
+    });
+
     Some((blocks, extra_locals))
 }
 
@@ -48198,6 +48723,36 @@ fn method_simple_body_full(
             terminator: Terminator::ReturnValue(result_slot),
         }];
         return (blocks, vec![ty]);
+    }
+
+    // Expression-body `= when (this) { is X -> body_X; is Y -> body_Y }`
+    // for class methods / extension fns. The receiver / `this` lives in
+    // slot 0 (or slot 1 if the surrounding class method has an
+    // extension receiver appended at `extra_param_slots`). Each `is X`
+    // arm CheckCasts slot 0 to X, pre-loads X's declared fields so the
+    // arm body's bare-identifier references (`$v` inside a string
+    // template) resolve through the snap-locals lookup, and stores the
+    // arm's result into a join slot. The else / no-match path throws
+    // `kotlin.NoWhenBranchMatchedException` (sealed-exhaustive shape).
+    //
+    // Without this, expression-bodied extension fns with a
+    // `when (this) { is …  }` body bailed at `lower_rich_expr_to_slot`'s
+    // generic fallthrough → produced empty MIR → silently no-op'd at
+    // runtime (or worse, tripped JVM verifier errors when the wrong
+    // descriptor slipped through). Required to graduate
+    // parity/54-return-when-is and any other shape in the
+    // sealed-class smart-cast family that uses a `this` subject.
+    if let KtExpr::When(when_e) = &body_expr {
+        let this_slot_idx = extra_param_slots;
+        if let Some((blocks, extra_locals)) =
+            try_lower_when_is_this_method_body(when_e, f, strings, fn_lookup, this_slot_idx)
+        {
+            // The function's `locals` Vec gets prepended with the
+            // declared param Tys by the caller; here we only emit the
+            // body-local Tys. Mirrors what try_lower_when_is_expression
+            // returns for top-level fns.
+            return (blocks, extra_locals);
+        }
     }
 
     // Generic fallback: route the body through lower_rich_expr_to_slot.
