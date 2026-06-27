@@ -12658,7 +12658,25 @@ fn lower_loop_body(
     // an `inline fun` whose lambda escapes via Runnable, Callable, etc.).
     let must_box_vars = collect_vars_mutated_by_trailing_lambdas(body_children);
     for bn in body_children {
-        let bn: &skotch_sil::SilNode = bn;
+        let mut bn: &skotch_sil::SilNode = bn;
+        // Peel an annotated-statement wrapper at the stmt level: a stmt
+        // like `@OptIn(...) return e` or `@Suppress("UNCHECKED_CAST")
+        // val x = ...` parses as ANNOTATED_EXPRESSION containing the
+        // real stmt (RETURN, PROPERTY, …). The expression-level peel in
+        // `lower_rich_expr_to_slot` only catches the value-producing
+        // expression case; when the wrapped child is a control-flow
+        // stmt the recursion lands on a node `lower_rich_expr_to_slot`
+        // has no arm for and the whole function bails. Re-bind `bn` to
+        // the first non-annotation, non-trivia child so the regular
+        // dispatch arms below (`KtProperty`, `KtReturn`, the generic
+        // KtExpr fallback) see the underlying stmt.
+        if bn.kind == skotch_syntax::SyntaxKind::ANNOTATED_EXPRESSION {
+            if let Some(inner) = skotch_ast::children(bn).iter().find(|c| {
+                !c.kind.is_trivia() && c.kind != skotch_syntax::SyntaxKind::ANNOTATION_ENTRY
+            }) {
+                bn = inner;
+            }
+        }
         // Pre-flush: if this iteration is NOT a `val name = launch{...}`
         // binding, drain any pending launch regions in sorted order so
         // subsequent stmts (println, .join() no-ops, return, …) see
@@ -15152,6 +15170,28 @@ fn lower_loop_body_blocks(
 ) -> Option<Vec<BasicBlock>> {
     use skotch_ast::KtExpr;
     use skotch_mir::{LocalId, Stmt as MStmt};
+    // Peel any stmt-level ANNOTATED_EXPRESSION wrappers (`@OptIn(...)
+    // return e`, `@Suppress("...") if (...)`, etc.) before the
+    // jump-classifier scans below run. Without this, an annotated
+    // `return` parses as ANNOTATED_EXPRESSION whose body is a RETURN —
+    // not a shape any of the Special::* arms recognize — and the
+    // function bails to None instead of completing as a return-stmt.
+    let peeled_storage: Vec<&skotch_sil::SilNode> = body_children
+        .iter()
+        .map(|&bn| {
+            if bn.kind == skotch_syntax::SyntaxKind::ANNOTATED_EXPRESSION {
+                skotch_ast::children(bn)
+                    .iter()
+                    .find(|c| {
+                        !c.kind.is_trivia() && c.kind != skotch_syntax::SyntaxKind::ANNOTATION_ENTRY
+                    })
+                    .unwrap_or(bn)
+            } else {
+                bn
+            }
+        })
+        .collect();
+    let body_children: &[&skotch_sil::SilNode] = &peeled_storage;
     let mut blocks: Vec<BasicBlock> = Vec::new();
     let mut cur_stmts: Vec<MStmt> = Vec::new();
 
