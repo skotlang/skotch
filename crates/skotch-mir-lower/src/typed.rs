@@ -32508,6 +32508,45 @@ fn lower_rich_expr_to_slot(
                         }
                     }
                 }
+                // String interpolation: walk SHORT/LONG template
+                // entries so `"hello, $name"`-shaped object-literal
+                // method bodies record `name` as a free reference.
+                // Without this, the ObjectLit's capture set was empty
+                // and the method-body String arm bailed when it
+                // couldn't resolve `$name`.
+                KtExpr::String(_) => {
+                    use skotch_syntax::SyntaxKind as S;
+                    for child in skotch_ast::children(e.syntax()) {
+                        match child.kind {
+                            S::SHORT_STRING_TEMPLATE_ENTRY => {
+                                for cc in skotch_ast::children(child) {
+                                    if cc.kind == S::REFERENCE_EXPRESSION {
+                                        for id in skotch_ast::children(cc) {
+                                            if id.kind == S::IDENTIFIER {
+                                                if let skotch_sil::SilData::Token { text } =
+                                                    &id.data
+                                                {
+                                                    let n = text.as_str().to_string();
+                                                    if !params.contains(&n) && !out.contains(&n) {
+                                                        out.push(n);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            S::LONG_STRING_TEMPLATE_ENTRY => {
+                                if let Some(inner) =
+                                    skotch_ast::children(child).iter().find_map(KtExpr::cast)
+                                {
+                                    collect_refs(inner, params, out);
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
                 _ => {}
             }
         }
