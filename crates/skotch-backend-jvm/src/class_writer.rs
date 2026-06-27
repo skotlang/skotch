@@ -3885,6 +3885,21 @@ fn emit_method_body(
         }
     }
 
+    // MIR-level liveness-aware slot pre-allocation. Gated on
+    // `func.locals.len() >= 192` so small methods stay byte-identical
+    // to today's parity baselines. For large methods (e.g. SHA-256
+    // `compressProtected` with ~400 inlined temps) this rescues us
+    // from the saturating u8 `slot_for` allocator that would otherwise
+    // alias hundreds of distinct locals onto slot 255 and corrupt the
+    // bytecode. When it returns `Some`, every LocalId has a valid u8
+    // slot in `slots`; downstream `slot_for` calls become pure
+    // lookups. On `None` we fall through to the saturating allocator.
+    if func.locals.len() >= 192 {
+        if let Some(new_next) = mir_preallocate_slots(func, &mut slots, next_slot) {
+            next_slot = new_next;
+        }
+    }
+
     // ── Two-pass multi-block codegen ─────────────────────────────────
     //
     // Pass 1: emit each block's statements + terminator into `code`.
@@ -19136,10 +19151,310 @@ fn slot_for(slots: &mut FxHashMap<u32, u8>, next_slot: &mut u8, local: LocalId) 
     // bytecode at runtime but at least leaves the StackMapTable
     // type for slot 0 alone (so the verifier stops complaining about
     // `this`). Surfaced by parity/101-hash Bit32Digest.compressProtected.
+    // The fix for the underlying overflow is `mir_preallocate_slots`,
+    // a MIR-level liveness-aware register allocator that pre-seeds
+    // every LocalId into `slots` before `walk_block` runs.
     let s = *next_slot;
     slots.insert(local.0, s);
     *next_slot = next_slot.saturating_add(1);
     s
+}
+
+/// Walk every Rvalue operand and call `f` with each `LocalId` read.
+/// Used by the MIR-level liveness pre-pass to compute per-statement
+/// USE sets without emitting any bytecode.
+fn for_each_rvalue_use(value: &Rvalue, mut f: impl FnMut(LocalId)) {
+    match value {
+        Rvalue::Const(_) | Rvalue::GetStaticField { .. } | Rvalue::NewInstance(_) => {}
+        Rvalue::Local(l) => f(*l),
+        Rvalue::BinOp { lhs, rhs, .. } => {
+            f(*lhs);
+            f(*rhs);
+        }
+        Rvalue::GetField { receiver, .. } => f(*receiver),
+        Rvalue::PutField {
+            receiver, value, ..
+        } => {
+            f(*receiver);
+            f(*value);
+        }
+        Rvalue::PutStaticField { value, .. } => f(*value),
+        Rvalue::Call { args, .. } => {
+            for &a in args {
+                f(a);
+            }
+        }
+        Rvalue::InstanceOf { obj, .. } => f(*obj),
+        Rvalue::NewIntArray(s) | Rvalue::NewObjectArray(s) | Rvalue::ArrayLength(s) => f(*s),
+        Rvalue::NewTypedObjectArray { size, .. } => f(*size),
+        Rvalue::ArrayLoad { array, index } => {
+            f(*array);
+            f(*index);
+        }
+        Rvalue::ArrayStore {
+            array,
+            index,
+            value,
+        }
+        | Rvalue::ObjectArrayStore {
+            array,
+            index,
+            value,
+        } => {
+            f(*array);
+            f(*index);
+            f(*value);
+        }
+        Rvalue::CheckCast { obj, .. } => f(*obj),
+    }
+}
+
+/// MIR-level liveness-aware slot allocator. Linear-scan register
+/// allocation on per-LocalId live intervals derived from a flat
+/// (block-index × stmt-index) program order; back-edges extend each
+/// live local's `last_use` to the loop region's end. Two LocalIds may
+/// share a slot only when intervals don't overlap AND their JVM "slot
+/// kinds" (I/J/F/D/A) plus reference Ty fingerprint match (JVM
+/// verifier rejects mixed-kind stores+loads). Wide types (Long/Double)
+/// consume 2 contiguous slots. Returns the new `next_slot` on success,
+/// or `None` if the allocation would still exceed u8::MAX (caller then
+/// falls back to the saturating `slot_for`).
+fn mir_preallocate_slots(
+    func: &MirFunction,
+    slots: &mut FxHashMap<u32, u8>,
+    initial_next_slot: u8,
+) -> Option<u8> {
+    // Flatten (block_idx, stmt_idx) into a linear program-counter
+    // index. Terminators get the stmt_idx position past the last
+    // stmt of their block.
+    let mut block_pc: Vec<usize> = Vec::with_capacity(func.blocks.len() + 1);
+    let mut pc = 0usize;
+    for blk in &func.blocks {
+        block_pc.push(pc);
+        pc += blk.stmts.len() + 1; // +1 for the terminator
+    }
+    block_pc.push(pc);
+    let total_pcs = pc;
+    if total_pcs == 0 {
+        return Some(initial_next_slot);
+    }
+
+    // Collect (first_def, last_use) per LocalId. Params are already
+    // in `slots` — treat their first_def as 0 and last_use as
+    // total_pcs - 1 so they're never reassigned.
+    let mut first_def: FxHashMap<u32, usize> = FxHashMap::default();
+    let mut last_use: FxHashMap<u32, usize> = FxHashMap::default();
+    let bump_def = |m: &mut FxHashMap<u32, usize>, id: u32, p: usize| {
+        m.entry(id).and_modify(|v| *v = (*v).min(p)).or_insert(p);
+    };
+    let bump_use = |m: &mut FxHashMap<u32, usize>, id: u32, p: usize| {
+        m.entry(id).and_modify(|v| *v = (*v).max(p)).or_insert(p);
+    };
+    for (&pid, _) in slots.iter() {
+        first_def.insert(pid, 0);
+        last_use.insert(pid, total_pcs.saturating_sub(1));
+    }
+    for (bi, blk) in func.blocks.iter().enumerate() {
+        let base = block_pc[bi];
+        for (si, Stmt::Assign { dest, value }) in blk.stmts.iter().enumerate() {
+            let p = base + si;
+            bump_def(&mut first_def, dest.0, p);
+            bump_use(&mut last_use, dest.0, p);
+            for_each_rvalue_use(value, |u| {
+                bump_use(&mut last_use, u.0, p);
+            });
+        }
+        let tp = base + blk.stmts.len();
+        match &blk.terminator {
+            Terminator::ReturnValue(l) | Terminator::Throw(l) => {
+                bump_use(&mut last_use, l.0, tp);
+            }
+            Terminator::Branch { cond, .. } => {
+                bump_use(&mut last_use, cond.0, tp);
+            }
+            Terminator::Return | Terminator::Goto(_) => {}
+        }
+    }
+
+    // Loop extension: for every back-edge (a terminator whose target
+    // block has a lower index than the source block), every local
+    // whose live range straddles the back-edge needs its `last_use`
+    // extended to the end of the loop region (the source block's
+    // terminator). This is a conservative over-approximation that
+    // avoids needing a full CFG-aware live-variable fixed point.
+    for (bi, blk) in func.blocks.iter().enumerate() {
+        let backedge_targets: Vec<u32> = match &blk.terminator {
+            Terminator::Goto(t) if (*t as usize) <= bi => vec![*t],
+            Terminator::Branch {
+                then_block,
+                else_block,
+                ..
+            } => {
+                let mut v = Vec::new();
+                if (*then_block as usize) <= bi {
+                    v.push(*then_block);
+                }
+                if (*else_block as usize) <= bi {
+                    v.push(*else_block);
+                }
+                v
+            }
+            _ => Vec::new(),
+        };
+        if backedge_targets.is_empty() {
+            continue;
+        }
+        let loop_end_pc = block_pc[bi] + blk.stmts.len();
+        for &tgt in &backedge_targets {
+            let loop_start_pc = block_pc[tgt as usize];
+            // Extend any local whose first_def < loop_start AND
+            // last_use >= loop_start (live across the back-edge).
+            for (&id, &fd) in &first_def {
+                if fd >= loop_start_pc {
+                    continue;
+                }
+                if let Some(lu) = last_use.get(&id).copied() {
+                    if lu >= loop_start_pc && lu < loop_end_pc {
+                        last_use.insert(id, loop_end_pc);
+                    }
+                }
+            }
+        }
+    }
+
+    // Compute each local's slot kind. Two locals can share a slot
+    // only when their kinds match (and, for A-kind, their Ty
+    // fingerprints match — different reference types can't alias).
+    let kind_of = |ty: &Ty| -> char {
+        match ty {
+            Ty::Int | Ty::Bool | Ty::Byte | Ty::Short | Ty::Char => 'I',
+            Ty::Long => 'J',
+            Ty::Float => 'F',
+            Ty::Double => 'D',
+            _ => 'A',
+        }
+    };
+    let mut local_kind: FxHashMap<u32, (char, String)> = FxHashMap::default();
+    for &id in first_def.keys() {
+        let ty = match func.locals.get(id as usize) {
+            Some(t) => t,
+            None => return None, // malformed MIR — fall back to the saturating allocator
+        };
+        let k = kind_of(ty);
+        let fp = if k == 'A' {
+            format!("{:?}", ty)
+        } else {
+            String::new()
+        };
+        local_kind.insert(id, (k, fp));
+    }
+
+    // Build a list of intervals to allocate (skip params — already in
+    // `slots`). Sort by first_def for linear-scan order.
+    let param_ids: FxHashSet<u32> = slots.keys().copied().collect();
+    let mut intervals: Vec<(u32, usize, usize)> = first_def
+        .iter()
+        .filter(|(id, _)| !param_ids.contains(id))
+        .map(|(&id, &fd)| (id, fd, last_use.get(&id).copied().unwrap_or(fd)))
+        .collect();
+    intervals.sort_by_key(|t| (t.1, t.0));
+
+    // Per-slot occupancy: each slot tracks the highest `last_use` of
+    // a local currently assigned to it plus that local's (kind, ty_fp).
+    // A new local at first_def `fd` can take slot `s` iff
+    // occupied[s].last_use < fd AND occupied[s].kind+fp matches the
+    // new local's. For wide types, slot `s+1` must also be free.
+    struct Occ {
+        last_use: usize,
+        kind: char,
+        fp: String,
+    }
+    let init = initial_next_slot as usize;
+    let mut occupied: Vec<Option<Occ>> = (0..init).map(|_| None).collect();
+    // Param slots remain "permanently occupied" by their param Ty.
+    for (&pid, &slot) in slots.iter() {
+        if let Some(ty) = func.locals.get(pid as usize) {
+            let k = kind_of(ty);
+            let fp = if k == 'A' {
+                format!("{:?}", ty)
+            } else {
+                String::new()
+            };
+            let s = slot as usize;
+            if s < occupied.len() {
+                occupied[s] = Some(Occ {
+                    last_use: usize::MAX,
+                    kind: k,
+                    fp: fp.clone(),
+                });
+            }
+            if matches!(ty, Ty::Long | Ty::Double) && s + 1 < occupied.len() {
+                occupied[s + 1] = Some(Occ {
+                    last_use: usize::MAX,
+                    kind: k,
+                    fp,
+                });
+            }
+        }
+    }
+
+    for (id, fd, lu) in intervals {
+        let ty = &func.locals[id as usize];
+        let wide = matches!(ty, Ty::Long | Ty::Double);
+        let (k, fp) = local_kind.get(&id).cloned().unwrap_or(('A', String::new()));
+        let need_pair = if wide { 2 } else { 1 };
+        // Try to reuse an existing slot.
+        let mut chosen: Option<usize> = None;
+        let mut s = init; // never reuse param slots
+        while s + need_pair <= occupied.len() {
+            let s0_ok = match &occupied[s] {
+                None => true,
+                Some(o) => o.last_use < fd && o.kind == k && o.fp == fp,
+            };
+            let s1_ok = if wide {
+                match occupied.get(s + 1).and_then(|o| o.as_ref()) {
+                    None => true,
+                    Some(o) => o.last_use < fd && o.kind == k && o.fp == fp,
+                }
+            } else {
+                true
+            };
+            if s0_ok && s1_ok {
+                chosen = Some(s);
+                break;
+            }
+            s += 1;
+        }
+        let s = match chosen {
+            Some(s) => s,
+            None => {
+                let s = occupied.len();
+                occupied.push(None);
+                if wide {
+                    occupied.push(None);
+                }
+                s
+            }
+        };
+        if s + need_pair > 256 {
+            return None; // would still overflow — caller falls back
+        }
+        slots.insert(id, s as u8);
+        occupied[s] = Some(Occ {
+            last_use: lu,
+            kind: k,
+            fp: fp.clone(),
+        });
+        if wide && s + 1 < occupied.len() {
+            occupied[s + 1] = Some(Occ {
+                last_use: lu,
+                kind: k,
+                fp,
+            });
+        }
+    }
+
+    Some(occupied.len() as u8)
 }
 
 /// Like slot_for but accounts for wide types (Long/Double take 2 slots).
