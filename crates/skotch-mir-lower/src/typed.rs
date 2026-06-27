@@ -26641,50 +26641,82 @@ fn try_lower_multi_stmt_block_with_offset(
                             // Inner call: top-level fn dispatched via
                             // fn_lookup. Args resolve as Reference
                             // (local) or literal.
-                            let callee_name = match inner_call.callee() {
-                                Some(KtExpr::Reference(r)) => r.name(),
-                                _ => None,
-                            }?;
-                            let (fid, ret_ty) = fn_lookup.get(callee_name)?;
-                            let mut inner_args: Vec<LocalId> = Vec::new();
-                            if let Some(arg_list) = inner_call.value_argument_list() {
-                                for arg in arg_list.arguments() {
-                                    let arg_e = arg.expression()?;
-                                    match unwrap_parens(arg_e) {
-                                        KtExpr::Reference(rr) => {
-                                            let an = rr.name()?;
-                                            let slot = name_to_local
-                                                .iter()
-                                                .rev()
-                                                .find(|(name, _)| name == an)
-                                                .map(|(_, l)| *l)?;
-                                            inner_args.push(slot);
-                                        }
-                                        other => {
-                                            let (k, ty) = literal_to_const(&other, strings)?;
-                                            let slot = LocalId(next_slot);
-                                            next_slot += 1;
-                                            local_tys.push(ty);
-                                            stmts.push(MStmt::Assign {
-                                                dest: slot,
-                                                value: skotch_mir::Rvalue::Const(k),
-                                            });
-                                            inner_args.push(slot);
+                            //
+                            // Trailing-lambda HOF: `println(runIt { 42 })`,
+                            // `println(result.map { it + 1 })`. This
+                            // arm's Reference/literal-only loop drops
+                            // `inner_call.lambda_argument()` silently,
+                            // producing a no-arg `static#fid()` call
+                            // that VerifyErrors at the JVM. Route
+                            // through `lower_rich_expr_to_slot` which
+                            // already handles trailing lambdas via the
+                            // typed-invoke bridge (#359 lambda
+                            // framework). Same fall-through used by
+                            // the `other` arm below for non-trivial
+                            // arg shapes.
+                            if inner_call.lambda_argument().is_some() {
+                                let snap = name_to_local.clone();
+                                let lookup = |n: &str| -> Option<LocalId> {
+                                    snap.iter()
+                                        .rev()
+                                        .find(|(name, _)| name == n)
+                                        .map(|(_, l)| *l)
+                                };
+                                lower_rich_expr_to_slot(
+                                    KtExpr::Call(*inner_call),
+                                    &lookup,
+                                    fn_lookup,
+                                    &mut next_slot,
+                                    &mut stmts,
+                                    &mut local_tys,
+                                    strings,
+                                )?
+                            } else {
+                                let callee_name = match inner_call.callee() {
+                                    Some(KtExpr::Reference(r)) => r.name(),
+                                    _ => None,
+                                }?;
+                                let (fid, ret_ty) = fn_lookup.get(callee_name)?;
+                                let mut inner_args: Vec<LocalId> = Vec::new();
+                                if let Some(arg_list) = inner_call.value_argument_list() {
+                                    for arg in arg_list.arguments() {
+                                        let arg_e = arg.expression()?;
+                                        match unwrap_parens(arg_e) {
+                                            KtExpr::Reference(rr) => {
+                                                let an = rr.name()?;
+                                                let slot = name_to_local
+                                                    .iter()
+                                                    .rev()
+                                                    .find(|(name, _)| name == an)
+                                                    .map(|(_, l)| *l)?;
+                                                inner_args.push(slot);
+                                            }
+                                            other => {
+                                                let (k, ty) = literal_to_const(&other, strings)?;
+                                                let slot = LocalId(next_slot);
+                                                next_slot += 1;
+                                                local_tys.push(ty);
+                                                stmts.push(MStmt::Assign {
+                                                    dest: slot,
+                                                    value: skotch_mir::Rvalue::Const(k),
+                                                });
+                                                inner_args.push(slot);
+                                            }
                                         }
                                     }
                                 }
+                                let slot = LocalId(next_slot);
+                                next_slot += 1;
+                                local_tys.push(ret_ty.clone());
+                                stmts.push(MStmt::Assign {
+                                    dest: slot,
+                                    value: skotch_mir::Rvalue::Call {
+                                        kind: skotch_mir::CallKind::Static(*fid),
+                                        args: inner_args,
+                                    },
+                                });
+                                slot
                             }
-                            let slot = LocalId(next_slot);
-                            next_slot += 1;
-                            local_tys.push(ret_ty.clone());
-                            stmts.push(MStmt::Assign {
-                                dest: slot,
-                                value: skotch_mir::Rvalue::Call {
-                                    kind: skotch_mir::CallKind::Static(*fid),
-                                    args: inner_args,
-                                },
-                            });
-                            slot
                         }
                         other => {
                             if let Some((k, ty)) = literal_to_const(other, strings) {
@@ -36637,13 +36669,28 @@ fn lower_rich_expr_to_slot(
                                     _ => None,
                                 };
                                 if let Some((cname, result_ty)) = dispatch {
-                                    // Bail when there's a trailing lambda — the naive Virtual
-                                    // dispatch below only iterates `value_argument_list()` and
-                                    // would drop the lambda, producing a descriptor missing
-                                    // the lambda param. Stdlib calls like `xs.fold(0.0) { acc, x -> ... }`
-                                    // need the CollectionsKt static-dispatch path (which knows
-                                    // the canonical Function2 lambda param).
-                                    if call.lambda_argument().is_some() {
+                                    // Trailing-lambda receiver-method dispatch:
+                                    // `box.mapIt { it * 2 }` where Box.mapIt
+                                    // takes `(Int) -> Int`. Lower the lambda
+                                    // via lower_rich (#359 typed-invoke
+                                    // bridge), then append the slot to
+                                    // `arg_slots` so the Virtual call carries
+                                    // the FunctionN instance.
+                                    //
+                                    // Skip the recv-method-lambda path when
+                                    // the recv has named/copy args — those
+                                    // dispatch paths don't yet thread the
+                                    // lambda; fall through to bail so the
+                                    // separate stdlib-static path (CollectionsKt
+                                    // .fold etc.) can still match.
+                                    let has_named = call
+                                        .value_argument_list()
+                                        .map(arg_list_has_named)
+                                        .unwrap_or(false);
+                                    let recv_method_lambda_ok = call.lambda_argument().is_some()
+                                        && !has_named
+                                        && method_n != "copy";
+                                    if call.lambda_argument().is_some() && !recv_method_lambda_ok {
                                         trace_bail!(
                                             "DotQualified Virtual fallback bails on trailing lambda (method={}, class={})",
                                             method_n, cname
@@ -36760,6 +36807,31 @@ fn lower_rich_expr_to_slot(
                                                 )?;
                                                 arg_slots.push(s);
                                             }
+                                        }
+                                    }
+                                    // Trailing-lambda HOF on a user/Java class
+                                    // method: synthesize the lambda as a
+                                    // Function0/N instance and append to
+                                    // arg_slots. The Lambda$N lowering in
+                                    // lower_rich's KtExpr::Lambda arm picks
+                                    // arity from the param list (or implicit
+                                    // `it`), so no per-call hint needed for
+                                    // the common case.
+                                    if let Some(la) = call.lambda_argument() {
+                                        if let Some(le) = skotch_ast::children(la.syntax())
+                                            .iter()
+                                            .find_map(KtExpr::cast)
+                                        {
+                                            let slot = lower_rich_expr_to_slot(
+                                                le,
+                                                lookup_name,
+                                                fn_lookup,
+                                                next_slot,
+                                                pre_stmts,
+                                                extra_locals,
+                                                strings,
+                                            )?;
+                                            arg_slots.push(slot);
                                         }
                                     }
                                     let result_slot = LocalId(*next_slot);
