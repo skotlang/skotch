@@ -37366,7 +37366,16 @@ fn lower_rich_expr_to_slot(
                 extra_locals,
                 strings,
             ) {
-                let recv_ty = slot_ty_with_param_fallback(recv_slot.0, extra_locals);
+                let recv_ty_raw = slot_ty_with_param_fallback(recv_slot.0, extra_locals);
+                // `r: SpongeRemainder?` materializes as Ty::Nullable(Class(..)).
+                // Peel the Nullable wrapper so the Ty::Class arms below fire
+                // for nullable params (the SafeAccess `?.` already encodes the
+                // null-guard at the source level — we treat the unwrapped
+                // class as the receiver type for member resolution).
+                let recv_ty = match &recv_ty_raw {
+                    Ty::Nullable(inner) => (**inner).clone(),
+                    _ => recv_ty_raw.clone(),
+                };
                 // `recv?.method(args)` — emit a Virtual dispatch.
                 if let KtExpr::Call(call) = accessor_e {
                     if let Some(KtExpr::Reference(meth_ref)) = call.callee() {
