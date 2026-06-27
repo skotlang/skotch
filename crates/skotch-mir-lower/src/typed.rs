@@ -3270,6 +3270,30 @@ macro_rules! trace_bail {
     };
 }
 
+/// Does the value-argument list contain at least one named argument
+/// (either as a proper `VALUE_ARGUMENT_NAME` or recovered from a
+/// `Binary(lhs = name, "=", rhs = expr)` shape — see the parser-
+/// recovery branch in `reorder_named_call_args`).
+fn arg_list_has_named(arg_list: skotch_ast::KtValueArgumentList<'_>) -> bool {
+    arg_list.arguments().any(|a| {
+        if a.name().is_some() {
+            return true;
+        }
+        let Some(ae) = a.expression() else {
+            return false;
+        };
+        if let skotch_ast::KtExpr::Binary(b) = ae {
+            let op = b.operation().map(|o| o.text()).unwrap_or_default();
+            if op == "=" {
+                if let Some(skotch_ast::KtExpr::Reference(_)) = b.lhs() {
+                    return true;
+                }
+            }
+        }
+        false
+    })
+}
+
 /// Reorder a call's named/positional args into the target's declared
 /// positional order. Used by the DotQualified Virtual dispatch sites
 /// (Reference- and non-Reference-receiver arms) so a named-arg call
@@ -3310,8 +3334,35 @@ fn reorder_named_call_args<'a>(
             );
             return None;
         };
-        if let Some(n) = a.name() {
-            named_map.insert(n.to_string(), ae);
+        // Parser recovery: when only the FIRST named arg gets a proper
+        // VALUE_ARGUMENT_NAME wrapper and subsequent ones are flattened
+        // into a `Binary(lhs = name, op = "=", rhs = expr)` shape (a
+        // known SIL bug — see the stmt-context `addData(index=APos++,
+        // data=...)` repro), recover the (name, expr) pair from the
+        // Binary so the reorder doesn't silently treat it as a
+        // positional arg in the wrong slot.
+        let (name_opt, ae) = if let Some(n) = a.name() {
+            (Some(n.to_string()), ae)
+        } else if let skotch_ast::KtExpr::Binary(b) = ae {
+            let op = b.operation().map(|o| o.text()).unwrap_or_default();
+            if op == "=" {
+                if let (Some(skotch_ast::KtExpr::Reference(lref)), Some(rhs)) = (b.lhs(), b.rhs()) {
+                    if let Some(n) = lref.name() {
+                        (Some(n.to_string()), rhs)
+                    } else {
+                        (None, ae)
+                    }
+                } else {
+                    (None, ae)
+                }
+            } else {
+                (None, ae)
+            }
+        } else {
+            (None, ae)
+        };
+        if let Some(n) = name_opt {
+            named_map.insert(n, ae);
         } else {
             positional.push(ae);
         }
@@ -14711,69 +14762,130 @@ fn lower_loop_body(
                             if let Ty::Class(cname) = recv_ty {
                                 let mut arg_slots: Vec<LocalId> = vec![recv_slot];
                                 let mut ok = true;
-                                if let Some(arg_list) = call.value_argument_list() {
-                                    for arg in arg_list.arguments() {
-                                        let Some(arg_e) = arg.expression() else {
-                                            ok = false;
-                                            break;
-                                        };
-                                        let inner_lookup = |n: &str| -> Option<LocalId> {
-                                            name_to_local
-                                                .iter()
-                                                .rev()
-                                                .find(|(name, _)| name == n)
-                                                .map(|(_, l)| *l)
-                                        };
-                                        match unwrap_parens(arg_e) {
-                                            KtExpr::Reference(rr) => {
-                                                let Some(an) = rr.name() else {
-                                                    ok = false;
-                                                    break;
-                                                };
-                                                if let Some(s) = name_to_local
-                                                    .iter()
-                                                    .rev()
-                                                    .find(|(n, _)| n == an)
-                                                    .map(|(_, l)| *l)
-                                                {
-                                                    arg_slots.push(s);
-                                                } else {
-                                                    ok = false;
-                                                    break;
-                                                }
+                                // Stmt-context Virtual dispatch needs to
+                                // reorder named args into the target's
+                                // declared positional order before lowering
+                                // — mirrors the value-context arm at
+                                // ~36006. Without this, a stmt-line like
+                                // `A.addData(index = APos++, data = ...)`
+                                // emits arg side-effects in source order
+                                // (which happens to match here) but more
+                                // importantly bails the whole call below
+                                // when `unwrap_parens` sees a named-arg
+                                // shape it can't handle, dropping the
+                                // invokevirtual after the side-effects ran.
+                                let has_named = call
+                                    .value_argument_list()
+                                    .map(arg_list_has_named)
+                                    .unwrap_or(false);
+                                let reordered_args: Option<Vec<KtExpr<'_>>> = if has_named {
+                                    if let Some(arg_list) = call.value_argument_list() {
+                                        reorder_named_call_args(arg_list, &cname, method_n)
+                                    } else {
+                                        None
+                                    }
+                                } else {
+                                    None
+                                };
+                                if has_named && reordered_args.is_none() {
+                                    // Reorder failed (no metadata / unknown
+                                    // name / partial fill). Don't emit a
+                                    // wrong-order call.
+                                    ok = false;
+                                }
+                                let inner_lookup = |n: &str| -> Option<LocalId> {
+                                    name_to_local
+                                        .iter()
+                                        .rev()
+                                        .find(|(name, _)| name == n)
+                                        .map(|(_, l)| *l)
+                                };
+                                if ok {
+                                    if let Some(reordered) = reordered_args {
+                                        for arg_e in reordered {
+                                            let other = unwrap_parens(arg_e);
+                                            if let Some((k, ty)) = literal_to_const(&other, strings)
+                                            {
+                                                let s = LocalId(*next_slot);
+                                                *next_slot += 1;
+                                                local_tys.push(ty);
+                                                body_mstmts.push(MStmt::Assign {
+                                                    dest: s,
+                                                    value: skotch_mir::Rvalue::Const(k),
+                                                });
+                                                arg_slots.push(s);
+                                            } else if let Some(s) = lower_rich_expr_to_slot(
+                                                other,
+                                                &inner_lookup,
+                                                fn_lookup_ref,
+                                                next_slot,
+                                                &mut body_mstmts,
+                                                local_tys,
+                                                strings,
+                                            ) {
+                                                arg_slots.push(s);
+                                            } else {
+                                                ok = false;
+                                                break;
                                             }
-                                            other => {
-                                                // Try literal first (fast
-                                                // path for `sb.append(' ')`);
-                                                // otherwise fall back to the
-                                                // rich-expr lowerer so we
-                                                // accept Call (e.g.
-                                                // `sb.append(symbolAt(i))`),
-                                                // Field, ArrayAccess, etc.
-                                                if let Some((k, ty)) =
-                                                    literal_to_const(&other, strings)
-                                                {
-                                                    let s = LocalId(*next_slot);
-                                                    *next_slot += 1;
-                                                    local_tys.push(ty);
-                                                    body_mstmts.push(MStmt::Assign {
-                                                        dest: s,
-                                                        value: skotch_mir::Rvalue::Const(k),
-                                                    });
-                                                    arg_slots.push(s);
-                                                } else if let Some(s) = lower_rich_expr_to_slot(
-                                                    other,
-                                                    &inner_lookup,
-                                                    fn_lookup_ref,
-                                                    next_slot,
-                                                    &mut body_mstmts,
-                                                    local_tys,
-                                                    strings,
-                                                ) {
-                                                    arg_slots.push(s);
-                                                } else {
-                                                    ok = false;
-                                                    break;
+                                        }
+                                    } else if let Some(arg_list) = call.value_argument_list() {
+                                        for arg in arg_list.arguments() {
+                                            let Some(arg_e) = arg.expression() else {
+                                                ok = false;
+                                                break;
+                                            };
+                                            match unwrap_parens(arg_e) {
+                                                KtExpr::Reference(rr) => {
+                                                    let Some(an) = rr.name() else {
+                                                        ok = false;
+                                                        break;
+                                                    };
+                                                    if let Some(s) = name_to_local
+                                                        .iter()
+                                                        .rev()
+                                                        .find(|(n, _)| n == an)
+                                                        .map(|(_, l)| *l)
+                                                    {
+                                                        arg_slots.push(s);
+                                                    } else {
+                                                        ok = false;
+                                                        break;
+                                                    }
+                                                }
+                                                other => {
+                                                    // Try literal first (fast
+                                                    // path for `sb.append(' ')`);
+                                                    // otherwise fall back to the
+                                                    // rich-expr lowerer so we
+                                                    // accept Call (e.g.
+                                                    // `sb.append(symbolAt(i))`),
+                                                    // Field, ArrayAccess, etc.
+                                                    if let Some((k, ty)) =
+                                                        literal_to_const(&other, strings)
+                                                    {
+                                                        let s = LocalId(*next_slot);
+                                                        *next_slot += 1;
+                                                        local_tys.push(ty);
+                                                        body_mstmts.push(MStmt::Assign {
+                                                            dest: s,
+                                                            value: skotch_mir::Rvalue::Const(k),
+                                                        });
+                                                        arg_slots.push(s);
+                                                    } else if let Some(s) = lower_rich_expr_to_slot(
+                                                        other,
+                                                        &inner_lookup,
+                                                        fn_lookup_ref,
+                                                        next_slot,
+                                                        &mut body_mstmts,
+                                                        local_tys,
+                                                        strings,
+                                                    ) {
+                                                        arg_slots.push(s);
+                                                    } else {
+                                                        ok = false;
+                                                        break;
+                                                    }
                                                 }
                                             }
                                         }
@@ -35479,8 +35591,7 @@ fn lower_rich_expr_to_slot(
                                         // name + fill omitted positions via
                                         // `GetField(this, field_i)`. Matches
                                         // kotlinc's copy$default shim observably.
-                                        let has_named =
-                                            arg_list.arguments().any(|a| a.name().is_some());
+                                        let has_named = arg_list_has_named(arg_list);
                                         let fields_for_copy = if method_n == "copy" {
                                             lookup_class_fields(&cname)
                                         } else {
@@ -36016,7 +36127,7 @@ fn lower_rich_expr_to_slot(
                                 // miss the real `(III)…` method.
                                 let has_named = call
                                     .value_argument_list()
-                                    .map(|al| al.arguments().any(|a| a.name().is_some()))
+                                    .map(arg_list_has_named)
                                     .unwrap_or(false);
                                 let reordered_args: Option<Vec<KtExpr<'_>>> = if has_named {
                                     let arg_list = call.value_argument_list()?;
