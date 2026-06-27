@@ -299,6 +299,27 @@ fn jdk_method_return_ty(class_name: &str, method_name: &str, arity: usize) -> Op
     metadata_return_ty(class_name, method_name)
 }
 
+/// Map a boxed-primitive class name (`java/lang/Long`, etc.) to its
+/// underlying primitive Ty + unbox method-name + descriptor. Used by
+/// ArrayAccess/DotQualified sites that get a boxed return from a JAR
+/// method whose Kotlin source declared a primitive — `@kotlin.Metadata`
+/// is the source of truth here, the JVM signature is the post-erasure
+/// shape (e.g. `State<Long, F1600>` erases get's return to
+/// `Ljava/lang/Long;` even though Kotlin source says `: Long`).
+fn boxed_primitive_unbox(class_name: &str) -> Option<(Ty, &'static str, &'static str)> {
+    Some(match class_name {
+        "java/lang/Long" => (Ty::Long, "longValue", "()J"),
+        "java/lang/Integer" => (Ty::Int, "intValue", "()I"),
+        "java/lang/Short" => (Ty::Short, "shortValue", "()S"),
+        "java/lang/Byte" => (Ty::Byte, "byteValue", "()B"),
+        "java/lang/Float" => (Ty::Float, "floatValue", "()F"),
+        "java/lang/Double" => (Ty::Double, "doubleValue", "()D"),
+        "java/lang/Boolean" => (Ty::Bool, "booleanValue", "()Z"),
+        "java/lang/Character" => (Ty::Char, "charValue", "()C"),
+        _ => return None,
+    })
+}
+
 /// Recover a JAR-class method's source-level return type from its
 /// `@kotlin.Metadata`. Returns `None` when the class carries no
 /// metadata (plain Java) or declares no such function. Overload
@@ -29823,10 +29844,15 @@ fn lower_rich_expr_to_slot(
     // `java/util/Objects.requireNonNullElse(Object, Object): Object`.
     // Doesn't match kotlinc's IFNONNULL CFG shape byte-for-byte but
     // produces the same runtime value for parity (the lhs when non-
-    // null, rhs otherwise). Both operands are boxed Object slots so
-    // primitives need to be autoboxed by callers — currently scoped
-    // to reference operands (the common `nullable.message ?: "x"`
-    // shape).
+    // null, rhs otherwise).
+    //
+    // Primitive operands (`r?.value ?: alt` where `.value: Int`)
+    // are autoboxed via `Integer.valueOf` etc. before the call and
+    // unboxed back via `Number.intValue()` after the result CheckCast.
+    // Without this, a primitive `r?.value ?: spongeSize` (Int) would
+    // call `requireNonNullElse(Object, Object)Object` with raw `int`s
+    // on the operand stack and the verifier rejects the whole method
+    // (KeccakDigest.extract regressed SHA-3 to zeros).
     if let KtExpr::Binary(b) = &e {
         if b.operation().map(|o| o.text()).as_deref() == Some("?:") {
             let lhs = b.lhs()?;
@@ -29850,6 +29876,74 @@ fn lower_rich_expr_to_slot(
                 strings,
             )?;
             let lhs_ty = slot_ty_with_param_fallback(lhs_slot.0, extra_locals);
+            let rhs_ty = slot_ty_with_param_fallback(rhs_slot.0, extra_locals);
+            // Decide if either operand is a JVM primitive and pick the
+            // effective primitive Ty (lhs first, then rhs) so we can
+            // autobox + unbox around the Object-typed
+            // `requireNonNullElse` call.
+            fn prim_box(ty: &Ty) -> Option<(&'static str, &'static str, &'static str)> {
+                Some(match ty {
+                    Ty::Int => ("java/lang/Integer", "I", "intValue"),
+                    Ty::Long => ("java/lang/Long", "J", "longValue"),
+                    Ty::Float => ("java/lang/Float", "F", "floatValue"),
+                    Ty::Double => ("java/lang/Double", "D", "doubleValue"),
+                    Ty::Bool => ("java/lang/Boolean", "Z", "booleanValue"),
+                    Ty::Byte => ("java/lang/Byte", "B", "byteValue"),
+                    Ty::Short => ("java/lang/Short", "S", "shortValue"),
+                    Ty::Char => ("java/lang/Character", "C", "charValue"),
+                    _ => return None,
+                })
+            }
+            let prim = prim_box(&lhs_ty).or_else(|| prim_box(&rhs_ty));
+            // For primitive Elvis, autobox both operand slots so the
+            // Object-typed call verifies. Helper that boxes via the
+            // explicit primitive class (handles slots whose tracked Ty
+            // is `Ty::Any` because `class_method_return_ty` didn't
+            // surface a return for the call backing the slot — the
+            // backend still emits the primitive descriptor, so we MUST
+            // box anyway, regardless of what the slot's tracked Ty
+            // says).
+            fn force_box(
+                slot: LocalId,
+                box_cls: &str,
+                desc: &str,
+                extra_locals: &mut Vec<Ty>,
+                pre_stmts: &mut Vec<MStmt>,
+                next_slot: &mut u32,
+            ) -> LocalId {
+                let boxed = LocalId(*next_slot);
+                *next_slot += 1;
+                extra_locals.push(Ty::Class(box_cls.to_string()));
+                pre_stmts.push(MStmt::Assign {
+                    dest: boxed,
+                    value: skotch_mir::Rvalue::Call {
+                        kind: skotch_mir::CallKind::StaticJava {
+                            class_name: box_cls.to_string(),
+                            method_name: "valueOf".to_string(),
+                            descriptor: format!("({})L{};", desc, box_cls),
+                        },
+                        args: vec![slot],
+                    },
+                });
+                boxed
+            }
+            let (call_lhs, call_rhs) = if let Some((box_cls, desc, _unbox)) = prim {
+                let need_lhs = prim_box(&lhs_ty).is_some() || matches!(lhs_ty, Ty::Any);
+                let need_rhs = prim_box(&rhs_ty).is_some() || matches!(rhs_ty, Ty::Any);
+                let bl = if need_lhs {
+                    force_box(lhs_slot, box_cls, desc, extra_locals, pre_stmts, next_slot)
+                } else {
+                    lhs_slot
+                };
+                let br = if need_rhs {
+                    force_box(rhs_slot, box_cls, desc, extra_locals, pre_stmts, next_slot)
+                } else {
+                    rhs_slot
+                };
+                (bl, br)
+            } else {
+                (lhs_slot, rhs_slot)
+            };
             // Intermediate Object slot from the call.
             let obj_slot = LocalId(*next_slot);
             *next_slot += 1;
@@ -29863,14 +29957,65 @@ fn lower_rich_expr_to_slot(
                         descriptor: "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;"
                             .to_string(),
                     },
-                    args: vec![lhs_slot, rhs_slot],
+                    args: vec![call_lhs, call_rhs],
                 },
             });
             // CheckCast back to the lhs's specific reference type so
             // downstream consumers (string concat, virtual calls)
             // verify against the right type. For Ty::String we cast
-            // to java/lang/String; for other reference types we use
-            // their class name.
+            // to java/lang/String; for primitive Elvis we cast to the
+            // box class and then unbox via `Number.intValue()` etc.
+            if let Some((box_cls, _desc, unbox_method)) = prim {
+                // CheckCast Object → box class so the verifier accepts
+                // the unbox virtual call.
+                let cast_slot = LocalId(*next_slot);
+                *next_slot += 1;
+                extra_locals.push(Ty::Class(box_cls.to_string()));
+                pre_stmts.push(MStmt::Assign {
+                    dest: cast_slot,
+                    value: skotch_mir::Rvalue::CheckCast {
+                        obj: obj_slot,
+                        target_class: box_cls.to_string(),
+                    },
+                });
+                let prim_ty = match box_cls {
+                    "java/lang/Integer" => Ty::Int,
+                    "java/lang/Long" => Ty::Long,
+                    "java/lang/Float" => Ty::Float,
+                    "java/lang/Double" => Ty::Double,
+                    "java/lang/Boolean" => Ty::Bool,
+                    "java/lang/Byte" => Ty::Byte,
+                    "java/lang/Short" => Ty::Short,
+                    "java/lang/Character" => Ty::Char,
+                    _ => Ty::Any,
+                };
+                let unbox_desc = match box_cls {
+                    "java/lang/Integer" => "()I",
+                    "java/lang/Long" => "()J",
+                    "java/lang/Float" => "()F",
+                    "java/lang/Double" => "()D",
+                    "java/lang/Boolean" => "()Z",
+                    "java/lang/Byte" => "()B",
+                    "java/lang/Short" => "()S",
+                    "java/lang/Character" => "()C",
+                    _ => "()Ljava/lang/Object;",
+                };
+                let result = LocalId(*next_slot);
+                *next_slot += 1;
+                extra_locals.push(prim_ty);
+                pre_stmts.push(MStmt::Assign {
+                    dest: result,
+                    value: skotch_mir::Rvalue::Call {
+                        kind: skotch_mir::CallKind::VirtualJava {
+                            class_name: box_cls.to_string(),
+                            method_name: unbox_method.to_string(),
+                            descriptor: unbox_desc.to_string(),
+                        },
+                        args: vec![cast_slot],
+                    },
+                });
+                return Some(result);
+            }
             let (target_class, result_ty) = match &lhs_ty {
                 Ty::String => ("java/lang/String".to_string(), Ty::String),
                 Ty::Class(c) => (c.clone(), Ty::Class(c.clone())),
@@ -31572,7 +31717,7 @@ fn lower_rich_expr_to_slot(
                         if let Some(ret_ty) = ret_ty {
                             let result_slot = LocalId(*next_slot);
                             *next_slot += 1;
-                            extra_locals.push(ret_ty);
+                            extra_locals.push(ret_ty.clone());
                             pre_stmts.push(MStmt::Assign {
                                 dest: result_slot,
                                 value: skotch_mir::Rvalue::Call {
@@ -31583,6 +31728,47 @@ fn lower_rich_expr_to_slot(
                                     args: vec![array_slot, index_slot],
                                 },
                             });
+                            // Generic-erasure unbox: a Kotlin class
+                            // extending a parameterized supertype
+                            // (`F1600 extends State<Long, F1600>`)
+                            // emits its `operator fun get(i: Int): Long`
+                            // with a boxed JVM return `Ljava/lang/Long;`
+                            // even though the Kotlin source declares
+                            // primitive `Long`. When @kotlin.Metadata
+                            // confirms the source-level primitive, emit
+                            // an unbox via `Long.longValue()J` so the
+                            // result slot lands as primitive Long for
+                            // downstream operand-stack arithmetic
+                            // (`lane ushr 8` etc.). Without this, the
+                            // `extract` body in KeccakDigest bails and
+                            // SHA-3 hashes to zeros.
+                            if let Ty::Class(box_cls) = &ret_ty {
+                                if let Some((prim_ty, unbox_name, unbox_desc)) =
+                                    boxed_primitive_unbox(box_cls)
+                                {
+                                    if let Some(meta_ty) = metadata_return_ty(cname, "get") {
+                                        if std::mem::discriminant(&meta_ty)
+                                            == std::mem::discriminant(&prim_ty)
+                                        {
+                                            let unboxed_slot = LocalId(*next_slot);
+                                            *next_slot += 1;
+                                            extra_locals.push(prim_ty);
+                                            pre_stmts.push(MStmt::Assign {
+                                                dest: unboxed_slot,
+                                                value: skotch_mir::Rvalue::Call {
+                                                    kind: skotch_mir::CallKind::VirtualJava {
+                                                        class_name: box_cls.clone(),
+                                                        method_name: unbox_name.to_string(),
+                                                        descriptor: unbox_desc.to_string(),
+                                                    },
+                                                    args: vec![result_slot],
+                                                },
+                                            });
+                                            return Some(unboxed_slot);
+                                        }
+                                    }
+                                }
+                            }
                             return Some(result_slot);
                         }
                     }
