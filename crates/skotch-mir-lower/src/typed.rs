@@ -1545,7 +1545,9 @@ fn clear_local_helper_captures() {
 /// `CompoundAssignToCapture { op_text, capture_name, user_param_name }`
 /// captures helpers shaped exactly like
 ///
-///     fun helper(p: T) { cap OP= p }
+/// ```text
+/// fun helper(p: T) { cap OP= p }
+/// ```
 ///
 /// where `cap` is one of the helper's outer-scope captures and `p` is
 /// the helper's sole user param. At each call site we can splice the
