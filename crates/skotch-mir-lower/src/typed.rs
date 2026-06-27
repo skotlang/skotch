@@ -31461,6 +31461,40 @@ fn lower_rich_expr_to_slot(
                         });
                         return Some(result_slot);
                     }
+                    // Single-index `recv[i]` on a class with an
+                    // `operator fun get(i): T` — dispatch through to the
+                    // method so the result slot carries `T`. Without
+                    // this, the fallthrough below tags the result `Ty::Any`
+                    // and emits `aaload`, which both produces a VerifyError
+                    // at runtime AND loses the return-type Ty for any
+                    // downstream typed op (e.g. `lane ushr bits` would pick
+                    // the int path instead of long when receiver is
+                    // KotlinCrypto F1600 in parity/101-hash). The
+                    // multi-index arm above (`m[r, c]`) already does the
+                    // same dispatch but only for in-file classes — extend
+                    // to JAR classes via inherited_method_return_ty,
+                    // which falls through to classinfo and @Metadata.
+                    if let Ty::Class(cname) = &array_ty {
+                        let ret_ty = class_method_return_ty(cname, "get")
+                            .or_else(|| inherited_method_return_ty(cname, "get", 1))
+                            .or_else(|| jdk_method_return_ty(cname, "get", 1));
+                        if let Some(ret_ty) = ret_ty {
+                            let result_slot = LocalId(*next_slot);
+                            *next_slot += 1;
+                            extra_locals.push(ret_ty);
+                            pre_stmts.push(MStmt::Assign {
+                                dest: result_slot,
+                                value: skotch_mir::Rvalue::Call {
+                                    kind: skotch_mir::CallKind::Virtual {
+                                        class_name: cname.clone(),
+                                        method_name: "get".to_string(),
+                                    },
+                                    args: vec![array_slot, index_slot],
+                                },
+                            });
+                            return Some(result_slot);
+                        }
+                    }
                     let elem_ty = match &array_ty {
                         Ty::IntArray => Ty::Int,
                         Ty::LongArray => Ty::Long,
