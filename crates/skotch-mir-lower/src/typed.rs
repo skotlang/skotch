@@ -18166,15 +18166,53 @@ fn lower_loop_body_blocks(
                     skotch_mir::BinOp,
                     i32,
                 ) = if let KtExpr::Binary(rb) = &range_expr {
-                    let inner_range_op_text = rb.operation().map(|o| o.text()).unwrap_or_default();
-                    let (op, st): (skotch_mir::BinOp, i32) = match inner_range_op_text.as_str() {
+                    // `lo..hi step N` (and `lo downTo hi step N`) parses as
+                    // `Binary("step", Binary(..|downTo, lo, hi), N)`. Peel
+                    // the outer step wrapper to extract the inner range
+                    // and the (integer-literal) step multiplier. Negative
+                    // / runtime-resolved steps fall through to bail; we
+                    // only accept Int literals as the step magnitude (the
+                    // common idiom in benchmark / DSL fixtures).
+                    let outer_op_text = rb.operation().map(|o| o.text()).unwrap_or_default();
+                    let (range_b, step_mult): (skotch_ast::KtBinaryExpression<'_>, i32) =
+                        if outer_op_text == "step" {
+                            let step_lit_rhs = rb.rhs().map(unwrap_parens);
+                            let step_val: Option<i32> = match step_lit_rhs {
+                                Some(KtExpr::Integer(i)) => {
+                                    skotch_ast::children(i.syntax()).iter().find_map(|c| {
+                                        if let skotch_sil::SilData::Token { text } = &c.data {
+                                            text.parse::<i32>().ok()
+                                        } else {
+                                            None
+                                        }
+                                    })
+                                }
+                                _ => None,
+                            };
+                            let step_val = step_val?;
+                            if step_val <= 0 {
+                                return None;
+                            }
+                            let inner = rb.lhs().map(unwrap_parens)?;
+                            let KtExpr::Binary(inner_b) = inner else {
+                                return None;
+                            };
+                            (inner_b, step_val)
+                        } else {
+                            (*rb, 1)
+                        };
+                    let inner_range_op_text =
+                        range_b.operation().map(|o| o.text()).unwrap_or_default();
+                    let (op, base_st): (skotch_mir::BinOp, i32) = match inner_range_op_text.as_str()
+                    {
                         ".." => (skotch_mir::BinOp::CmpLe, 1),
                         "until" => (skotch_mir::BinOp::CmpLt, 1),
                         "downTo" => (skotch_mir::BinOp::CmpGe, -1),
                         _ => return None,
                     };
+                    let st = base_st * step_mult;
                     let lo = lower_inline_expr_to_slot(
-                        rb.lhs()?,
+                        range_b.lhs()?,
                         &lookup,
                         next_slot,
                         &mut cur_stmts,
@@ -18182,7 +18220,7 @@ fn lower_loop_body_blocks(
                         strings,
                     )?;
                     let hi = lower_inline_expr_to_slot(
-                        rb.rhs()?,
+                        range_b.rhs()?,
                         &lookup,
                         next_slot,
                         &mut cur_stmts,
@@ -18779,11 +18817,14 @@ fn lower_loop_body_blocks(
                 } else {
                     skotch_mir::BinOp::SubI
                 };
+                let inner_step_mag = inner_step.unsigned_abs() as i32;
                 blocks.push(BasicBlock {
                     stmts: vec![
                         MStmt::Assign {
                             dest: one_slot,
-                            value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(1)),
+                            value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(
+                                inner_step_mag,
+                            )),
                         },
                         MStmt::Assign {
                             dest: i_slot,
