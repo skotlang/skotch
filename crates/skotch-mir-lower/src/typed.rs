@@ -1250,6 +1250,51 @@ impl Drop for FnLambdaParamTysScope {
     }
 }
 
+/// Signature record for a top-level fn in the current file. Populated
+/// in `lower_file` so a receiver-less callable reference (`::square`)
+/// can synthesize a `Lambda$N` that dispatches via `Static(FuncId)`.
+#[derive(Clone)]
+struct TopLevelFnSig {
+    func_id: skotch_mir::FuncId,
+    param_tys: Vec<Ty>,
+    return_ty: Ty,
+}
+
+thread_local! {
+    /// `name → TopLevelFnSig` for every top-level fn whose `FuncId` is
+    /// known after the lower_file pre-pass + cross-file stub rebase.
+    /// Looked up by the CallableRef arm in `lower_rich_expr_to_slot` to
+    /// synthesize a Lambda$N for `::topLevelFn` references.
+    static FN_SIG_LOOKUP:
+        std::cell::RefCell<rustc_hash::FxHashMap<String, TopLevelFnSig>> =
+        std::cell::RefCell::new(rustc_hash::FxHashMap::default());
+}
+
+fn record_fn_sig(name: &str, sig: TopLevelFnSig) {
+    FN_SIG_LOOKUP.with(|c| {
+        c.borrow_mut().insert(name.to_string(), sig);
+    });
+}
+
+fn lookup_fn_sig(name: &str) -> Option<TopLevelFnSig> {
+    FN_SIG_LOOKUP.with(|c| c.borrow().get(name).cloned())
+}
+
+struct FnSigLookupScope {
+    prev: rustc_hash::FxHashMap<String, TopLevelFnSig>,
+}
+impl FnSigLookupScope {
+    fn new() -> Self {
+        let prev = FN_SIG_LOOKUP.with(|c| std::mem::take(&mut *c.borrow_mut()));
+        Self { prev }
+    }
+}
+impl Drop for FnSigLookupScope {
+    fn drop(&mut self) {
+        FN_SIG_LOOKUP.with(|c| *c.borrow_mut() = std::mem::take(&mut self.prev));
+    }
+}
+
 thread_local! {
     /// `(fn_name, param_idx) → receiver_class_name` for top-level
     /// fn parameters typed `T.() -> R` (extension function type).
@@ -4054,6 +4099,36 @@ pub fn lower_file(
     for (name, per_file_idx) in &local_fn_order {
         if let Some(slot) = fn_lookup.get_mut(name) {
             slot.0 = FuncId(local_fn_id_base + per_file_idx);
+        }
+    }
+
+    // File-scoped signature lookup for receiver-less callable refs
+    // (`::square`). Indexed by source-level name → (rebased FuncId,
+    // param Tys, return Ty) so the Lambda$N synthesizer can emit
+    // `Call { kind: Static(FuncId), args }` against a top-level fn.
+    let _fn_sig_lookup_scope = FnSigLookupScope::new();
+    {
+        let mut idx = 0u32;
+        for decl in file.decls() {
+            if let KtDecl::Fun(f) = decl {
+                if let Some(name) = f.name() {
+                    let typed_fn = typed.functions.iter().find(|tf| tf.name_index == idx);
+                    let param_tys: Vec<Ty> =
+                        typed_fn.map(|tf| tf.param_tys.clone()).unwrap_or_default();
+                    let return_ty = typed_fn.map(|tf| tf.return_ty.clone()).unwrap_or(Ty::Unit);
+                    if let Some((fid, _)) = fn_lookup.get(name) {
+                        record_fn_sig(
+                            name,
+                            TopLevelFnSig {
+                                func_id: *fid,
+                                param_tys,
+                                return_ty,
+                            },
+                        );
+                    }
+                }
+                idx += 1;
+            }
         }
     }
 
@@ -28332,6 +28407,259 @@ fn try_lower_callable_ref(
     Some(result)
 }
 
+/// Receiver-less callable reference: `::topLevelFn`. Synthesizes a
+/// `Lambda$N` implementing `kotlin/jvm/functions/Function<arity>` whose
+/// `invoke(Object…)Object` unboxes each arg into the top-level fn's
+/// declared param Ty, dispatches via `Static(FuncId)`, then boxes the
+/// result. The synthesized class has zero captures and zero fields —
+/// matches the shape of an unbound class-member reference but routes
+/// through `Static` instead of `Virtual`.
+fn try_lower_top_level_fn_ref(
+    fn_name: &str,
+    next_slot: &mut u32,
+    pre_stmts: &mut Vec<skotch_mir::Stmt>,
+    extra_locals: &mut Vec<Ty>,
+) -> Option<skotch_mir::LocalId> {
+    use skotch_mir::{LocalId, Stmt as MStmt};
+    let sig = lookup_fn_sig(fn_name)?;
+    let arity = sig.param_tys.len();
+    let lambda_name = format!("Lambda${}", next_lambda_idx());
+    // Invoke body locals: [this, p0, p1, ...] all typed Ty::Any
+    // (Function<N>.invoke erases each param to Object).
+    let mut invoke_locals: Vec<Ty> = vec![Ty::Class(lambda_name.clone())];
+    for _ in 0..arity {
+        invoke_locals.push(Ty::Any);
+    }
+    let mut invoke_stmts: Vec<MStmt> = Vec::new();
+    let mut next_inv: u32 = invoke_locals.len() as u32;
+    let mut alloc_slot = |ty: Ty, locals: &mut Vec<Ty>| -> LocalId {
+        let s = LocalId(next_inv);
+        next_inv += 1;
+        locals.push(ty);
+        s
+    };
+    // Per-arg unbox / checkcast into the declared param Ty. For
+    // primitives we CheckCast to the boxed class then VirtualJava the
+    // unbox method (`Integer.intValue()`, `Long.longValue()`, …). For
+    // class params we emit a single CheckCast.
+    let mut call_args: Vec<LocalId> = Vec::with_capacity(arity);
+    for (i, pty) in sig.param_tys.iter().enumerate() {
+        let raw_slot = LocalId((i + 1) as u32);
+        match pty {
+            Ty::Int | Ty::Long | Ty::Float | Ty::Double | Ty::Bool => {
+                let (unbox_method, unbox_desc, boxed_class): (&str, &str, &str) = match pty {
+                    Ty::Int => ("intValue", "()I", "java/lang/Integer"),
+                    Ty::Long => ("longValue", "()J", "java/lang/Long"),
+                    Ty::Float => ("floatValue", "()F", "java/lang/Float"),
+                    Ty::Double => ("doubleValue", "()D", "java/lang/Double"),
+                    Ty::Bool => ("booleanValue", "()Z", "java/lang/Boolean"),
+                    _ => unreachable!(),
+                };
+                let cast_slot = alloc_slot(Ty::Class(boxed_class.to_string()), &mut invoke_locals);
+                invoke_stmts.push(MStmt::Assign {
+                    dest: cast_slot,
+                    value: skotch_mir::Rvalue::CheckCast {
+                        obj: raw_slot,
+                        target_class: boxed_class.to_string(),
+                    },
+                });
+                let unboxed = alloc_slot(pty.clone(), &mut invoke_locals);
+                invoke_stmts.push(MStmt::Assign {
+                    dest: unboxed,
+                    value: skotch_mir::Rvalue::Call {
+                        kind: skotch_mir::CallKind::VirtualJava {
+                            class_name: boxed_class.to_string(),
+                            method_name: unbox_method.to_string(),
+                            descriptor: unbox_desc.to_string(),
+                        },
+                        args: vec![cast_slot],
+                    },
+                });
+                call_args.push(unboxed);
+            }
+            Ty::Class(c) => {
+                let cast_slot = alloc_slot(Ty::Class(c.clone()), &mut invoke_locals);
+                invoke_stmts.push(MStmt::Assign {
+                    dest: cast_slot,
+                    value: skotch_mir::Rvalue::CheckCast {
+                        obj: raw_slot,
+                        target_class: c.clone(),
+                    },
+                });
+                call_args.push(cast_slot);
+            }
+            _ => {
+                // Ty::Any / Nullable / etc. — pass the raw boxed slot
+                // through; the callee accepts Object.
+                call_args.push(raw_slot);
+            }
+        }
+    }
+    let call_dest = alloc_slot(sig.return_ty.clone(), &mut invoke_locals);
+    invoke_stmts.push(MStmt::Assign {
+        dest: call_dest,
+        value: skotch_mir::Rvalue::Call {
+            kind: skotch_mir::CallKind::Static(sig.func_id),
+            args: call_args,
+        },
+    });
+    // Box-or-Unit-singleton return for `invoke(...)Object`.
+    let return_slot = match &sig.return_ty {
+        Ty::Int | Ty::Long | Ty::Float | Ty::Double | Ty::Bool => {
+            let (box_method, box_desc): (&str, &str) = match &sig.return_ty {
+                Ty::Int => ("boxInt", "(I)Ljava/lang/Integer;"),
+                Ty::Long => ("boxLong", "(J)Ljava/lang/Long;"),
+                Ty::Float => ("boxFloat", "(F)Ljava/lang/Float;"),
+                Ty::Double => ("boxDouble", "(D)Ljava/lang/Double;"),
+                Ty::Bool => ("boxBoolean", "(Z)Ljava/lang/Boolean;"),
+                _ => unreachable!(),
+            };
+            let boxed = alloc_slot(Ty::Any, &mut invoke_locals);
+            invoke_stmts.push(MStmt::Assign {
+                dest: boxed,
+                value: skotch_mir::Rvalue::Call {
+                    kind: skotch_mir::CallKind::StaticJava {
+                        class_name: "kotlin/coroutines/jvm/internal/Boxing".to_string(),
+                        method_name: box_method.to_string(),
+                        descriptor: box_desc.to_string(),
+                    },
+                    args: vec![call_dest],
+                },
+            });
+            boxed
+        }
+        Ty::Unit => {
+            let unit_slot = alloc_slot(Ty::Class("kotlin/Unit".to_string()), &mut invoke_locals);
+            invoke_stmts.push(MStmt::Assign {
+                dest: unit_slot,
+                value: skotch_mir::Rvalue::GetStaticField {
+                    class_name: "kotlin/Unit".to_string(),
+                    field_name: "INSTANCE".to_string(),
+                    descriptor: "Lkotlin/Unit;".to_string(),
+                },
+            });
+            unit_slot
+        }
+        _ => call_dest,
+    };
+    let invoke_param_names: Vec<String> = (0..arity).map(|i| format!("p{}", i)).collect();
+    let invoke_method = MirFunction {
+        id: FuncId(0),
+        name: "invoke".to_string(),
+        params: (0..=arity).map(|i| LocalId(i as u32)).collect(),
+        locals: invoke_locals,
+        blocks: vec![BasicBlock {
+            stmts: invoke_stmts,
+            terminator: Terminator::ReturnValue(return_slot),
+        }],
+        return_ty: Ty::Any,
+        required_params: invoke_param_names.len(),
+        param_names: invoke_param_names,
+        param_receiver_types: Vec::new(),
+        param_defaults: Vec::new(),
+        is_abstract: false,
+        vararg_index: None,
+        exception_handlers: Vec::new(),
+        is_suspend: false,
+        is_inline: false,
+        is_tailrec: false,
+        has_type_params: false,
+        suspend_original_return_ty: None,
+        suspend_state_machine: None,
+        annotations: Vec::new(),
+        named_locals: Vec::new(),
+        is_private: false,
+        is_static: false,
+        default_call_masks: Vec::new(),
+        needs_leading_nop: false,
+        local_generic_args: rustc_hash::FxHashMap::default(),
+        is_value_class_extension: None,
+    };
+    // No-capture constructor: just super().
+    let ctor_this = LocalId(0);
+    let ctor_locals: Vec<Ty> = vec![Ty::Class(lambda_name.clone())];
+    let ctor_stmts: Vec<MStmt> = vec![MStmt::Assign {
+        dest: ctor_this,
+        value: skotch_mir::Rvalue::Call {
+            kind: skotch_mir::CallKind::Constructor("java/lang/Object".to_string()),
+            args: vec![ctor_this],
+        },
+    }];
+    let constructor = MirFunction {
+        id: FuncId(0),
+        name: "<init>".to_string(),
+        params: vec![ctor_this],
+        locals: ctor_locals,
+        blocks: vec![BasicBlock {
+            stmts: ctor_stmts,
+            terminator: Terminator::Return,
+        }],
+        return_ty: Ty::Unit,
+        required_params: 0,
+        param_names: Vec::new(),
+        param_receiver_types: Vec::new(),
+        param_defaults: Vec::new(),
+        is_abstract: false,
+        vararg_index: None,
+        exception_handlers: Vec::new(),
+        is_suspend: false,
+        is_inline: false,
+        is_tailrec: false,
+        has_type_params: false,
+        suspend_original_return_ty: None,
+        suspend_state_machine: None,
+        annotations: Vec::new(),
+        named_locals: Vec::new(),
+        is_private: false,
+        is_static: false,
+        default_call_masks: Vec::new(),
+        needs_leading_nop: false,
+        local_generic_args: rustc_hash::FxHashMap::default(),
+        is_value_class_extension: None,
+    };
+    register_lambda_class(skotch_mir::MirClass {
+        name: lambda_name.clone(),
+        super_class: Some("java/lang/Object".to_string()),
+        is_open: false,
+        is_abstract: false,
+        is_interface: false,
+        interfaces: vec![format!("kotlin/jvm/functions/Function{}", arity)],
+        fields: Vec::new(),
+        methods: vec![invoke_method],
+        constructor,
+        secondary_constructors: Vec::new(),
+        has_explicit_primary_ctor: true,
+        is_suspend_lambda: false,
+        is_lambda: true,
+        is_cross_file_stub: false,
+        annotations: Vec::new(),
+        has_type_params: false,
+        is_object_singleton: false,
+        companion_class_name: None,
+        static_fields: Vec::new(),
+        clinit: None,
+        is_value_class: false,
+        value_underlying_field: None,
+        value_underlying_ty: None,
+    });
+    // Allocation at the call site: NewInstance + Constructor (no args).
+    let result = LocalId(*next_slot);
+    *next_slot += 1;
+    extra_locals.push(Ty::Class(lambda_name.clone()));
+    pre_stmts.push(MStmt::Assign {
+        dest: result,
+        value: skotch_mir::Rvalue::NewInstance(lambda_name.clone()),
+    });
+    pre_stmts.push(MStmt::Assign {
+        dest: result,
+        value: skotch_mir::Rvalue::Call {
+            kind: skotch_mir::CallKind::Constructor(lambda_name),
+            args: Vec::new(),
+        },
+    });
+    Some(result)
+}
+
 fn lower_rich_expr_to_slot(
     e: skotch_ast::KtExpr<'_>,
     lookup_name: &dyn Fn(&str) -> Option<skotch_mir::LocalId>,
@@ -28614,6 +28942,22 @@ fn lower_rich_expr_to_slot(
                         pre_stmts,
                         extra_locals,
                     ) {
+                        return Some(slot);
+                    }
+                }
+            }
+        }
+        // Receiver-less callable reference: `::topLevelFn`. Resolves
+        // via the file-scoped FN_SIG_LOOKUP (populated in `lower_file`)
+        // and synthesizes a `Lambda$N` implementing
+        // `kotlin/jvm/functions/Function<arity>` whose `invoke` body
+        // dispatches the top-level fn via `Static(FuncId)`.
+        if cref_kids.len() == 1 {
+            if let Some(KtExpr::Reference(rhs_ref)) = cref_kids.first().cloned() {
+                if let Some(fn_name) = rhs_ref.name() {
+                    if let Some(slot) =
+                        try_lower_top_level_fn_ref(fn_name, next_slot, pre_stmts, extra_locals)
+                    {
                         return Some(slot);
                     }
                 }
