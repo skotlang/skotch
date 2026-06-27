@@ -29889,6 +29889,104 @@ fn lower_rich_expr_to_slot(
                 let else_ty = slot_ty_with_param_fallback(else_slot.0, extra_locals);
                 let is_ref =
                     |t: &Ty| matches!(t, Ty::String | Ty::Class(_) | Ty::Any | Ty::Nullable(_));
+                // Primitive-typed branches (Int/Long/Bool): box-then-unbox
+                // through the Object[2] indexed-load trick. Without this,
+                // a `val x = when {...}` whose multi-stmt block arm body
+                // ends in `if (c) 0 else 8 - n` bails kind=If from
+                // lower_rich_expr_to_slot and drops the whole enclosing
+                // `extract`-style function body. KeccakDigest.extract in
+                // KotlinCrypto's sha3 family is the canonical failure —
+                // the bail makes SHA-3 emit an all-zero digest.
+                if matches!(then_ty, Ty::Int) && matches!(else_ty, Ty::Int) {
+                    let mut alloc = |ty: Ty, v: skotch_mir::Rvalue| -> LocalId {
+                        let s = LocalId(*next_slot);
+                        *next_slot += 1;
+                        extra_locals.push(ty);
+                        pre_stmts.push(MStmt::Assign { dest: s, value: v });
+                        s
+                    };
+                    // Box both branches via Integer.valueOf(I)Integer.
+                    let then_boxed = alloc(
+                        Ty::Class("java/lang/Integer".to_string()),
+                        skotch_mir::Rvalue::Call {
+                            kind: skotch_mir::CallKind::StaticJava {
+                                class_name: "java/lang/Integer".to_string(),
+                                method_name: "valueOf".to_string(),
+                                descriptor: "(I)Ljava/lang/Integer;".to_string(),
+                            },
+                            args: vec![then_slot],
+                        },
+                    );
+                    let else_boxed = alloc(
+                        Ty::Class("java/lang/Integer".to_string()),
+                        skotch_mir::Rvalue::Call {
+                            kind: skotch_mir::CallKind::StaticJava {
+                                class_name: "java/lang/Integer".to_string(),
+                                method_name: "valueOf".to_string(),
+                                descriptor: "(I)Ljava/lang/Integer;".to_string(),
+                            },
+                            args: vec![else_slot],
+                        },
+                    );
+                    let size_slot = alloc(
+                        Ty::Int,
+                        skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(2)),
+                    );
+                    let arr_slot = alloc(Ty::Any, skotch_mir::Rvalue::NewObjectArray(size_slot));
+                    let zero_idx = alloc(
+                        Ty::Int,
+                        skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(0)),
+                    );
+                    alloc(
+                        Ty::Unit,
+                        skotch_mir::Rvalue::ObjectArrayStore {
+                            array: arr_slot,
+                            index: zero_idx,
+                            value: else_boxed,
+                        },
+                    );
+                    let one_idx = alloc(
+                        Ty::Int,
+                        skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(1)),
+                    );
+                    alloc(
+                        Ty::Unit,
+                        skotch_mir::Rvalue::ObjectArrayStore {
+                            array: arr_slot,
+                            index: one_idx,
+                            value: then_boxed,
+                        },
+                    );
+                    let raw_slot = alloc(
+                        Ty::Any,
+                        skotch_mir::Rvalue::ArrayLoad {
+                            array: arr_slot,
+                            index: cond_slot,
+                        },
+                    );
+                    // CheckCast to Integer so the verifier accepts the
+                    // virtual `intValue()` call against the narrowed type.
+                    let cast_slot = alloc(
+                        Ty::Class("java/lang/Integer".to_string()),
+                        skotch_mir::Rvalue::CheckCast {
+                            obj: raw_slot,
+                            target_class: "java/lang/Integer".to_string(),
+                        },
+                    );
+                    // Unbox via Integer.intValue()I → Ty::Int result.
+                    let result_slot = alloc(
+                        Ty::Int,
+                        skotch_mir::Rvalue::Call {
+                            kind: skotch_mir::CallKind::VirtualJava {
+                                class_name: "java/lang/Integer".to_string(),
+                                method_name: "intValue".to_string(),
+                                descriptor: "()I".to_string(),
+                            },
+                            args: vec![cast_slot],
+                        },
+                    );
+                    return Some(result_slot);
+                }
                 if is_ref(&then_ty) && is_ref(&else_ty) {
                     let result_ty = if then_ty == else_ty {
                         then_ty.clone()
