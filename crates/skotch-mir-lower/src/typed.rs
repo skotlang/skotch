@@ -5166,9 +5166,27 @@ pub fn lower_file(
                     // descriptor — the actual `()Ljava/lang/String;` body
                     // discards its return on the operand stack, causing
                     // VerifyError or wrong outputs downstream.
+                    //
+                    // Extended via `infer_method_body_expr_ret_ty` to
+                    // also handle Binary expressions (`fun double(x:
+                    // Int) = x * 2` ⇒ Ty::Int). Required for the
+                    // outer chained-call site at `a.b.c.double(7)` to
+                    // know the chain produces Int, so `println(...)`
+                    // dispatches `(I)V` instead of `(Object)V` against
+                    // a primitive-int stack (parity 55).
                     if let Some(body) = f.body_expression() {
-                        if matches!(unwrap_parens(body), skotch_ast::KtExpr::String(_)) {
-                            return Ty::String;
+                        let mut params = rustc_hash::FxHashMap::default();
+                        if let Some(pl) = f.value_parameter_list() {
+                            for p in pl.parameters() {
+                                if let Some(n) = p.name() {
+                                    let ty =
+                                        p.type_reference().map(resolve_type_ref).unwrap_or(Ty::Any);
+                                    params.insert(n.to_string(), ty);
+                                }
+                            }
+                        }
+                        if let Some(t) = infer_method_body_expr_ret_ty(&body, &[], &params) {
+                            return t;
                         }
                     }
                     if f.body_block().is_some() || f.body_expression().is_some() {
@@ -7264,9 +7282,26 @@ pub fn lower_file(
                     // descriptor — the actual `()Ljava/lang/String;` body
                     // discards its return on the operand stack, causing
                     // VerifyError or wrong outputs downstream.
+                    //
+                    // Extended via `infer_method_body_expr_ret_ty` to
+                    // also handle Binary expressions (`fun double(x:
+                    // Int) = x * 2` ⇒ Ty::Int). Mirrors the earlier
+                    // class_method_returns_early walk so the late
+                    // CLASS_METHODS table agrees on Binary-body return
+                    // Tys (parity 55).
                     if let Some(body) = f.body_expression() {
-                        if matches!(unwrap_parens(body), skotch_ast::KtExpr::String(_)) {
-                            return Ty::String;
+                        let mut params = rustc_hash::FxHashMap::default();
+                        if let Some(pl) = f.value_parameter_list() {
+                            for p in pl.parameters() {
+                                if let Some(n) = p.name() {
+                                    let ty =
+                                        p.type_reference().map(resolve_type_ref).unwrap_or(Ty::Any);
+                                    params.insert(n.to_string(), ty);
+                                }
+                            }
+                        }
+                        if let Some(t) = infer_method_body_expr_ret_ty(&body, &[], &params) {
+                            return t;
                         }
                     }
                     if f.body_block().is_some() || f.body_expression().is_some() {
@@ -9898,6 +9933,106 @@ fn fixup_binop_variants(f: &mut MirFunction) {
         if let Some(local) = f.locals.get_mut(slot as usize) {
             *local = ty;
         }
+    }
+}
+
+/// Infer the static return Ty of a class-method expression body.
+/// Used by `method_from_fun_with_class`'s `body_expr_inferred_ret`
+/// closure so call sites get the right descriptor (e.g. `(I)I` for
+/// `fun twice(x: Int) = x * 2`) instead of the historical `()V`
+/// default. Returns `None` on shapes we can't classify, in which
+/// case the caller falls back to `Ty::Unit`.
+///
+/// Resolves `Reference` nodes against the method's params first
+/// (Kotlin scoping rules: params shadow class fields), then against
+/// the primary-ctor `val`/`var` field list. Binary arithmetic
+/// unifies operand Tys via numeric widening; comparison/logical ops
+/// yield `Ty::Bool`; `String + X` (or `X + String`) is concat
+/// (Ty::String). Parenthesized expressions pass through.
+fn infer_method_body_expr_ret_ty(
+    e: &skotch_ast::KtExpr<'_>,
+    field_names: &[(String, Ty)],
+    params: &rustc_hash::FxHashMap<String, Ty>,
+) -> Option<Ty> {
+    method_body_ret_ty_inner(*e, field_names, params)
+}
+
+fn method_body_ret_ty_inner(
+    e: skotch_ast::KtExpr<'_>,
+    field_names: &[(String, Ty)],
+    params: &rustc_hash::FxHashMap<String, Ty>,
+) -> Option<Ty> {
+    use skotch_ast::KtExpr;
+    let e = unwrap_parens(e);
+    match e {
+        KtExpr::Integer(_) => Some(Ty::Int),
+        KtExpr::Float(_) => Some(Ty::Double),
+        KtExpr::Boolean(_) => Some(Ty::Bool),
+        KtExpr::Character(_) => Some(Ty::Char),
+        KtExpr::String(_) => Some(Ty::String),
+        KtExpr::Reference(r) => {
+            let name = r.name()?;
+            if let Some(t) = params.get(name) {
+                return Some(t.clone());
+            }
+            for (fn_name, fty) in field_names {
+                if fn_name == name {
+                    return Some(fty.clone());
+                }
+            }
+            None
+        }
+        KtExpr::Binary(b) => {
+            let op = b.operation().map(|o| o.text()).unwrap_or_default();
+            match op.as_str() {
+                "==" | "!=" | "<" | ">" | "<=" | ">=" | "&&" | "||" | "===" | "!==" => {
+                    Some(Ty::Bool)
+                }
+                "+" | "-" | "*" | "/" | "%" => {
+                    let lhs = b
+                        .lhs()
+                        .and_then(|x| method_body_ret_ty_inner(x, field_names, params));
+                    let rhs = b
+                        .rhs()
+                        .and_then(|x| method_body_ret_ty_inner(x, field_names, params));
+                    if matches!(lhs, Some(Ty::String)) || matches!(rhs, Some(Ty::String)) {
+                        return Some(Ty::String);
+                    }
+                    Some(method_body_numeric_widen(lhs, rhs))
+                }
+                _ => None,
+            }
+        }
+        _ => None,
+    }
+}
+
+/// Numeric widening for `method_body_ret_ty_inner`. Matches Kotlin's
+/// arithmetic promotion: Double > Float > Long > Int. Falls back to
+/// `Ty::Int` when both sides are unknown (the common case `x * 2`
+/// where the literal is Int and the operand Ty couldn't be inferred).
+fn method_body_numeric_widen(lhs: Option<Ty>, rhs: Option<Ty>) -> Ty {
+    fn rank(t: &Ty) -> u8 {
+        match t {
+            Ty::Double => 4,
+            Ty::Float => 3,
+            Ty::Long => 2,
+            Ty::Int => 1,
+            _ => 0,
+        }
+    }
+    match (lhs, rhs) {
+        (Some(l), Some(r)) => {
+            if rank(&l) >= rank(&r) && rank(&l) > 0 {
+                l
+            } else if rank(&r) > 0 {
+                r
+            } else {
+                Ty::Int
+            }
+        }
+        (Some(t), None) | (None, Some(t)) if rank(&t) > 0 => t,
+        _ => Ty::Int,
     }
 }
 
@@ -48966,28 +49101,25 @@ fn method_from_fun_with_class(
     // `()I` (or whatever the field is) instead of `()V` — destructuring
     // dispatch at the call site builds an `()I` methodref against the
     // class, and a `()V` actual method would fail `NoSuchMethodError`.
-    let body_expr_inferred_ret = || -> Option<Ty> {
-        let e = f.body_expression()?;
-        let e = unwrap_parens(e);
-        // `fun greet() = a` — return Ty matches the primary-ctor
-        // val/var field's Ty.
-        if let skotch_ast::KtExpr::Reference(r) = e {
-            let name = r.name()?;
-            for (fn_name, fty) in field_names {
-                if fn_name == name {
-                    return Some(fty.clone());
+    // Param-name → declared Ty map for body-expr inference. Without
+    // this, `fun twice(x: Int) = x * 2` can't resolve `x` to Int and
+    // the Binary arm below falls back to None.
+    let param_ty_lookup = || -> rustc_hash::FxHashMap<String, Ty> {
+        let mut m = rustc_hash::FxHashMap::default();
+        if let Some(pl) = f.value_parameter_list() {
+            for p in pl.parameters() {
+                if let Some(n) = p.name() {
+                    let ty = p.type_reference().map(resolve_type_ref).unwrap_or(Ty::Any);
+                    m.insert(n.to_string(), ty);
                 }
             }
         }
-        // `fun greet() = "hi $name"` / `fun s() = "x"` — string
-        // template body forces Ty::String. Without this, methods like
-        // `fun greet() = "hi $name"` collapse to `()V` and outer call
-        // sites (`println(arr[1].greet())`) consume the dropped result
-        // as void — VerifyError "Operand stack underflow" at runtime.
-        if matches!(e, skotch_ast::KtExpr::String(_)) {
-            return Some(Ty::String);
-        }
-        None
+        m
+    };
+    let body_expr_inferred_ret = || -> Option<Ty> {
+        let e = f.body_expression()?;
+        let params = param_ty_lookup();
+        infer_method_body_expr_ret_ty(&e, field_names, &params)
     };
     let return_ty = erase_generic(
         f.return_type()
