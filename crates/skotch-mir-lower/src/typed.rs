@@ -1077,6 +1077,91 @@ fn current_extension_this_slot() -> Option<skotch_mir::LocalId> {
     EXTENSION_THIS_SLOT.with(|c| *c.borrow())
 }
 
+thread_local! {
+    /// Maps a value-parameter slot inside the current fn body to the
+    /// slot that should be passed as the implicit receiver when the
+    /// param is invoked without explicit user arguments. Populated by
+    /// `method_simple_body_full` when an extension fn declares a
+    /// receiver-style function-typed param like `block: T.() -> R`,
+    /// where `block()` inside the body must lower to
+    /// `block.invoke(this)`. The mapping is read by the FunctionInvoke
+    /// arm in `lower_rich_expr_to_slot` so a 0-arg call against the
+    /// stored slot prepends the receiver slot (typically `LocalId(0)`,
+    /// the extension `this`).
+    static RECEIVER_STYLE_PARAM_SLOTS:
+        std::cell::RefCell<rustc_hash::FxHashMap<u32, skotch_mir::LocalId>> =
+        std::cell::RefCell::new(rustc_hash::FxHashMap::default());
+}
+
+fn receiver_style_param_recv(slot: u32) -> Option<skotch_mir::LocalId> {
+    RECEIVER_STYLE_PARAM_SLOTS.with(|c| c.borrow().get(&slot).cloned())
+}
+
+fn register_receiver_style_param(slot: u32, recv: skotch_mir::LocalId) {
+    RECEIVER_STYLE_PARAM_SLOTS.with(|c| {
+        c.borrow_mut().insert(slot, recv);
+    });
+}
+
+struct ReceiverStyleParamScope {
+    prev: rustc_hash::FxHashMap<u32, skotch_mir::LocalId>,
+}
+impl ReceiverStyleParamScope {
+    fn new() -> Self {
+        let prev = RECEIVER_STYLE_PARAM_SLOTS.with(|c| std::mem::take(&mut *c.borrow_mut()));
+        Self { prev }
+    }
+}
+impl Drop for ReceiverStyleParamScope {
+    fn drop(&mut self) {
+        RECEIVER_STYLE_PARAM_SLOTS.with(|c| *c.borrow_mut() = std::mem::take(&mut self.prev));
+    }
+}
+
+thread_local! {
+    /// Marker installed by a trailing-lambda call site whose declared
+    /// param type is `T.() -> R` with `T` a type parameter (no concrete
+    /// receiver class). The lambda synthesizer reads this flag to:
+    ///   1. Skip the CheckCast prologue (target class "T" doesn't
+    ///      exist at runtime), and
+    ///   2. Install an `ExtensionThisScope::new(Some(LocalId(1)))` so
+    ///      `KtExpr::This` inside the body resolves to slot 1 of the
+    ///      lambda invoke (the receiver arg) instead of slot 0 (the
+    ///      Lambda$N instance).
+    /// Set by the in-file extension fn dispatch site and consumed
+    /// (taken) at the top of `KtExpr::Lambda` lowering.
+    static LAMBDA_RECEIVER_IS_TYPE_PARAM: std::cell::RefCell<bool> =
+        const { std::cell::RefCell::new(false) };
+}
+
+fn take_lambda_receiver_is_type_param() -> bool {
+    LAMBDA_RECEIVER_IS_TYPE_PARAM.with(|c| {
+        let v = *c.borrow();
+        *c.borrow_mut() = false;
+        v
+    })
+}
+
+struct LambdaReceiverIsTypeParamScope {
+    prev: bool,
+}
+impl LambdaReceiverIsTypeParamScope {
+    fn new(active: bool) -> Self {
+        let prev = LAMBDA_RECEIVER_IS_TYPE_PARAM.with(|c| {
+            let p = *c.borrow();
+            *c.borrow_mut() = active;
+            p
+        });
+        Self { prev }
+    }
+}
+impl Drop for LambdaReceiverIsTypeParamScope {
+    fn drop(&mut self) {
+        let prev = self.prev;
+        LAMBDA_RECEIVER_IS_TYPE_PARAM.with(|c| *c.borrow_mut() = prev);
+    }
+}
+
 struct ExtensionThisScope {
     prev: Option<skotch_mir::LocalId>,
 }
@@ -1236,12 +1321,25 @@ fn fn_param_lambda_tys_from_decl(f: skotch_ast::KtFun<'_>, param_idx: usize) -> 
     ft.return_type()?;
     let pl = ft.parameter_list()?;
     let mut out: Vec<Ty> = Vec::new();
-    if let Some(rty) = ft
-        .receiver()
-        .and_then(|r| r.type_reference())
-        .map(resolve_type_ref)
-    {
-        out.push(rty);
+    // Extension function type: `T.() -> R`. The parser sometimes wraps
+    // the receiver's user type in a TYPE_REFERENCE node and sometimes
+    // places the USER_TYPE directly under FUNCTION_TYPE_RECEIVER. The
+    // companion helper `fn_param_lambda_receiver_class` already handles
+    // both shapes; mirror that fallback here so the receiver Ty isn't
+    // dropped on the second shape — without this fallback,
+    // `lookup_fn_lambda_param_tys("run", 0)` for
+    // `fun T.run(block: T.() -> R)` returned `Some(vec![])` instead of
+    // `Some(vec![Ty::Class("T")])`, defaulting the synthesized lambda
+    // arity to 0 (Function0) instead of 1 (Function1) at the call site.
+    if let Some(recv) = ft.receiver() {
+        let recv_ty = recv.type_reference().map(resolve_type_ref).or_else(|| {
+            skotch_ast::first_typed_child::<skotch_ast::KtUserType<'_>>(recv.syntax())
+                .and_then(|u| u.name())
+                .map(resolve_user_ty)
+        });
+        if let Some(rty) = recv_ty {
+            out.push(rty);
+        }
     }
     for p in pl.parameters() {
         out.push(p.type_reference().map(resolve_type_ref).unwrap_or(Ty::Any));
@@ -1357,6 +1455,45 @@ fn record_fn_lambda_receiver_class(name: &str, param_idx: usize, recv_class: Str
 
 fn lookup_fn_lambda_receiver_class(name: &str, param_idx: usize) -> Option<String> {
     FN_LAMBDA_RECEIVER_CLASS.with(|c| c.borrow().get(&(name.to_string(), param_idx)).cloned())
+}
+
+thread_local! {
+    /// `fn_name → [type-parameter names]` for top-level fns in the
+    /// current file. Used by call sites to filter out type-parameter
+    /// names that look like class names (`T`, `R`, …) when copying a
+    /// lambda receiver-class hint — without the filter, a callee like
+    /// `fun <T, R> T.run(block: T.() -> R)` would install
+    /// `LambdaReceiverHintScope::new(Some("T"))`, causing downstream
+    /// member dispatch in the lambda body to look up methods on a
+    /// non-existent class "T".
+    static FN_TYPE_PARAM_NAMES:
+        std::cell::RefCell<rustc_hash::FxHashMap<String, Vec<String>>> =
+        std::cell::RefCell::new(rustc_hash::FxHashMap::default());
+}
+
+fn record_fn_type_param_names(name: &str, tps: Vec<String>) {
+    FN_TYPE_PARAM_NAMES.with(|c| {
+        c.borrow_mut().insert(name.to_string(), tps);
+    });
+}
+
+fn lookup_fn_type_param_names(name: &str) -> Option<Vec<String>> {
+    FN_TYPE_PARAM_NAMES.with(|c| c.borrow().get(name).cloned())
+}
+
+struct FnTypeParamNamesScope {
+    prev: rustc_hash::FxHashMap<String, Vec<String>>,
+}
+impl FnTypeParamNamesScope {
+    fn new() -> Self {
+        let prev = FN_TYPE_PARAM_NAMES.with(|c| std::mem::take(&mut *c.borrow_mut()));
+        Self { prev }
+    }
+}
+impl Drop for FnTypeParamNamesScope {
+    fn drop(&mut self) {
+        FN_TYPE_PARAM_NAMES.with(|c| *c.borrow_mut() = std::mem::take(&mut self.prev));
+    }
 }
 
 struct FnLambdaReceiverClassScope {
@@ -3903,6 +4040,7 @@ pub fn lower_file(
     // BEFORE bodies lower so call sites can look them up.
     let _fn_lambda_param_tys_scope = FnLambdaParamTysScope::new();
     let _fn_lambda_receiver_class_scope = FnLambdaReceiverClassScope::new();
+    let _fn_type_param_names_scope = FnTypeParamNamesScope::new();
     for decl in file.decls() {
         if let KtDecl::Fun(f) = decl {
             if let Some(name) = f.name() {
@@ -3914,6 +4052,15 @@ pub fn lower_file(
                         if let Some(rc) = fn_param_lambda_receiver_class(f, i) {
                             record_fn_lambda_receiver_class(name, i, rc);
                         }
+                    }
+                }
+                if let Some(tpl) = f.type_parameter_list() {
+                    let tps: Vec<String> = tpl
+                        .parameters()
+                        .filter_map(|tp| tp.name().map(String::from))
+                        .collect();
+                    if !tps.is_empty() {
+                        record_fn_type_param_names(name, tps);
                     }
                 }
             }
@@ -29136,6 +29283,13 @@ fn lower_rich_expr_to_slot(
         // an implicit receiver to LocalId(1) (the first lambda param)
         // for bare member dispatch (`greet()` → `recv.greet()`).
         let lambda_receiver_hint: Option<String> = take_lambda_receiver_hint();
+        // Type-parameter-receiver marker. Companion to
+        // `lambda_receiver_hint` for the case where the source
+        // declared `T.() -> R` with `T` a type parameter — there's no
+        // concrete receiver class to install a hint for, but the body
+        // still needs `this` to bind to slot 1 of invoke (the receiver
+        // arg) rather than slot 0 (the Lambda$N instance).
+        let receiver_is_type_param = take_lambda_receiver_is_type_param();
         // Consume caller's SAM hint. When set, the synthesized
         // Lambda$N class implements the named interface (e.g.
         // `java/lang/Runnable`) with the SAM method name
@@ -29500,6 +29654,18 @@ fn lower_rich_expr_to_slot(
         let _lambda_implicit_recv = match (&lambda_receiver_hint, recv_cast_slot) {
             (Some(cls), Some(cs)) => Some(ImplicitReceiverScope::new(Some((cs, cls.clone())))),
             _ => None,
+        };
+        // Receiver-style lambda whose source-level receiver was a
+        // type parameter (`T.() -> R`): bind `this` inside the body
+        // to slot 1 of invoke (the receiver arg). No CheckCast is
+        // emitted (T isn't a real class), so this consumes the raw
+        // erased Object slot directly. The
+        // `LambdaReceiverIsTypeParamScope` was set by the in-file ext
+        // fn dispatch site at the call site.
+        let _lambda_ext_this = if receiver_is_type_param && arity >= 1 {
+            Some(ExtensionThisScope::new(Some(LocalId(1))))
+        } else {
+            None
         };
         // The body block: single-statement expression body is the
         // common case (`{ it % 2 == 0 }`).
@@ -33302,6 +33468,25 @@ fn lower_rich_expr_to_slot(
                     if let Some(arity) = arity {
                         let func_class = format!("kotlin/jvm/functions/Function{}", arity);
                         let mut arg_slots: Vec<LocalId> = vec![slot];
+                        // Receiver-style function-typed param invoked
+                        // without explicit args: prepend the implicit
+                        // receiver (the slot registered by
+                        // `method_simple_body_full` for `T.() -> R`-
+                        // typed params). Lets
+                        // `fun T.run(block: T.() -> R) = block()` lower
+                        // to `block.invoke(this)` instead of the no-arg
+                        // `Function1.invoke()` the verifier rejects.
+                        let value_arg_count = call
+                            .value_argument_list()
+                            .map(|al| al.arguments().count())
+                            .unwrap_or(0);
+                        if value_arg_count == 0 {
+                            if let Some(recv_slot) = receiver_style_param_recv(slot.0) {
+                                if (arity as usize) == 1 {
+                                    arg_slots.push(recv_slot);
+                                }
+                            }
+                        }
                         let mut all_ok = true;
                         if let Some(arg_list) = call.value_argument_list() {
                             for arg in arg_list.arguments() {
@@ -36210,6 +36395,95 @@ fn lower_rich_expr_to_slot(
                                 let arg_e = arg.expression()?;
                                 let slot = lower_rich_expr_to_slot(
                                     arg_e,
+                                    lookup_name,
+                                    fn_lookup,
+                                    next_slot,
+                                    pre_stmts,
+                                    extra_locals,
+                                    strings,
+                                )?;
+                                arg_slots.push(slot);
+                            }
+                        }
+                        // Trailing-lambda extension-fn HOF:
+                        // `7.run { this + 3 }`. The lambda lives in
+                        // `call.lambda_argument()`, not in
+                        // `value_argument_list`. Without pulling it
+                        // in, the emitted `invokestatic
+                        // run:(Object;Function1)Object` would only
+                        // see the receiver on the stack → VerifyError
+                        // "operand stack underflow". The lambda's
+                        // source-level param index excludes the
+                        // extension receiver, so look up hints under
+                        // `arg_slots.len() - 1` (subtracting the
+                        // receiver slot we already pushed).
+                        if let Some(la) = call.lambda_argument() {
+                            if let Some(le) = skotch_ast::children(la.syntax())
+                                .iter()
+                                .find_map(KtExpr::cast)
+                            {
+                                let lambda_param_idx = arg_slots.len().saturating_sub(1);
+                                let recv_class_hint =
+                                    lookup_fn_lambda_receiver_class(method_n, lambda_param_idx);
+                                let param_ty_hint =
+                                    lookup_fn_lambda_param_tys(method_n, lambda_param_idx);
+                                // Type-parameter receiver names
+                                // (e.g. `T` in `fun T.run(block: T.()
+                                // -> R)`) aren't real classes; using
+                                // them as the lambda receiver-class
+                                // hint would make downstream dispatch
+                                // try to resolve methods on a class
+                                // called "T". When the receiver name
+                                // matches a declared type parameter,
+                                // (1) drop the receiver-class hint so
+                                // the lambda synth doesn't emit a
+                                // bogus `checkcast T`; (2) swap the
+                                // erased `Ty::Class("T")` slot at the
+                                // head of the param-ty hint to
+                                // `Ty::Any` so the synth picks the
+                                // Object-shaped invoke descriptor;
+                                // (3) raise the type-param-receiver
+                                // marker so the synth still installs
+                                // `ExtensionThisScope` for the body —
+                                // `this + 3` inside the lambda must
+                                // resolve to slot 1 of invoke (the
+                                // arg), not slot 0 (the Lambda$N
+                                // instance).
+                                let is_type_param_receiver = recv_class_hint
+                                    .as_ref()
+                                    .map(|rc| {
+                                        lookup_fn_type_param_names(method_n)
+                                            .map(|tps| tps.iter().any(|t| t == rc))
+                                            .unwrap_or(false)
+                                    })
+                                    .unwrap_or(false);
+                                let recv_class_hint = if is_type_param_receiver {
+                                    None
+                                } else {
+                                    recv_class_hint
+                                };
+                                let param_ty_hint = if is_type_param_receiver {
+                                    param_ty_hint.map(|tys| {
+                                        tys.into_iter()
+                                            .enumerate()
+                                            .map(|(i, t)| if i == 0 { Ty::Any } else { t })
+                                            .collect()
+                                    })
+                                } else {
+                                    param_ty_hint
+                                };
+                                let final_hint = recv_class_hint
+                                    .as_ref()
+                                    .map(|rc| vec![Ty::Class(rc.clone())])
+                                    .or(param_ty_hint);
+                                let _ty_hint = LambdaParamTyHintScope::new(final_hint);
+                                let _recv_hint = recv_class_hint
+                                    .as_ref()
+                                    .map(|rc| LambdaReceiverHintScope::new(Some(rc.clone())));
+                                let _type_param_recv =
+                                    LambdaReceiverIsTypeParamScope::new(is_type_param_receiver);
+                                let slot = lower_rich_expr_to_slot(
+                                    le,
                                     lookup_name,
                                     fn_lookup,
                                     next_slot,
@@ -44669,6 +44943,41 @@ fn method_simple_body_full(
     } else {
         None
     };
+    // Register every value-param whose declared type is a
+    // receiver-style function type (`T.() -> R`) so a 0-arg invocation
+    // inside the body — e.g. `block()` in
+    // `fun <T, R> T.run(block: T.() -> R): R = block()` — lowers to
+    // `block.invoke(this)` rather than the no-arg
+    // `Function1.invoke():Object` that the verifier rejects.
+    let _receiver_style_param_scope = ReceiverStyleParamScope::new();
+    {
+        let ext_this_slot = if extra_param_slots > 0 {
+            skotch_mir::LocalId(1)
+        } else {
+            // Top-level extension fn: the dispatch receiver IS the
+            // extension `this` and lives in slot 0.
+            skotch_mir::LocalId(0)
+        };
+        // Only register receiver-style params when the surrounding fn
+        // itself is an extension (top-level or member-extension); plain
+        // top-level fns with `(T) -> R` params shouldn't inject `this`.
+        let is_in_extension = extra_param_slots > 0 || f.receiver_type().is_some();
+        if is_in_extension {
+            if let Some(pl) = f.value_parameter_list() {
+                for (i, p) in pl.parameters().enumerate() {
+                    let has_receiver = p
+                        .type_reference()
+                        .and_then(|tr| tr.function_type())
+                        .and_then(|ft| ft.receiver())
+                        .is_some();
+                    if has_receiver {
+                        let slot_idx = (1 + extra_param_slots + i as u32) as u32;
+                        register_receiver_style_param(slot_idx, ext_this_slot);
+                    }
+                }
+            }
+        }
+    }
 
     let body_expr = match f.body_expression() {
         Some(e) => e,
@@ -47582,10 +47891,33 @@ fn method_simple_body_full(
                 // dispatches. The generic fallback below routes them
                 // through lower_rich's constructor heuristic, which
                 // emits NewInstance + Constructor.
+                //
+                // Also skip when `name` is a function-typed value
+                // parameter (e.g. `block: T.() -> R`). Without this
+                // guard, an extension fn body like
+                // `fun <T, R> T.run(block: T.() -> R): R = block()`
+                // would emit a phantom `invokevirtual T.block:()Object`
+                // (treating the param invocation as a virtual method
+                // dispatch on the receiver class). Fall through to the
+                // generic `lower_rich_expr_to_slot` path which carries
+                // a FunctionInvoke arm keyed on the slot's
+                // `kotlin/jvm/functions/FunctionN` Ty.
+                let is_function_typed_param = f
+                    .value_parameter_list()
+                    .map(|pl| {
+                        pl.parameters().any(|p| {
+                            p.name() == Some(name)
+                                && p.type_reference()
+                                    .map(|tr| tr.function_type().is_some())
+                                    .unwrap_or(false)
+                        })
+                    })
+                    .unwrap_or(false);
                 if name != "println"
                     && name != "print"
                     && !name.starts_with(char::is_uppercase)
                     && !fn_lookup.contains_key(name)
+                    && !is_function_typed_param
                 {
                     if let Some(cname) = class_name {
                         let this_slot = skotch_mir::LocalId(0);
