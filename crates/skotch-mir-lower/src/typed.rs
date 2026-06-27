@@ -22432,7 +22432,39 @@ fn try_lower_multi_stmt_block_with_offset(
                                         );
                                         let bail_to_lower_rich =
                                             is_jdk_collection_recv && !is_jdk_direct_method;
-                                        if call.lambda_argument().is_some() || bail_to_lower_rich {
+                                        // Data-class `.copy(...)` with named args
+                                        // (or omitted positions) must reorder by name
+                                        // and fill missing fields from the receiver.
+                                        // The fast-path below treats every arg as
+                                        // positional, so `p.copy(y = 99)` would emit
+                                        // `Point.copy(I)LPoint;` — but the synthesized
+                                        // method is `copy(III...Strings)LPoint;` with
+                                        // every field. Bail to lower_rich which has
+                                        // the named-arg-aware copy path.
+                                        let copy_needs_reorder = method_n == "copy" && {
+                                            let recv_cls_opt: Option<String> =
+                                                match local_tys.get(recv_slot.0 as usize) {
+                                                    Some(Ty::Class(c)) => Some(c.clone()),
+                                                    _ => None,
+                                                };
+                                            let arg_list_opt = call.value_argument_list();
+                                            let mut has_named = false;
+                                            let mut arg_cnt = 0usize;
+                                            if let Some(al) = arg_list_opt {
+                                                has_named = arg_list_has_named(al);
+                                                arg_cnt = al.arguments().count();
+                                            }
+                                            let field_cnt = recv_cls_opt
+                                                .as_deref()
+                                                .and_then(lookup_class_fields)
+                                                .map(|fs| fs.len())
+                                                .unwrap_or(0);
+                                            field_cnt > 0 && (has_named || arg_cnt < field_cnt)
+                                        };
+                                        if call.lambda_argument().is_some()
+                                            || bail_to_lower_rich
+                                            || copy_needs_reorder
+                                        {
                                             // skip this Reference+Call arm; fall through to
                                             // the `_ => {}` arm and onward to the lower_rich
                                             // final fallback at the bottom of the property
@@ -30971,6 +31003,147 @@ fn lower_rich_expr_to_slot(
                             },
                         });
                         return Some(result_slot);
+                    }
+                }
+            }
+        }
+    }
+    // Data-class `.copy(...)` with named args: route through the
+    // shared lowerer that reorders by name and fills omitted positions
+    // via `GetField(recv, field_i)` so the emitted `invokevirtual
+    // <C>.copy(<all field tys>)L<C>;` matches the synthesized
+    // `copy(...)` method's full signature. Without this early
+    // intercept, val-init shapes like `val q = p.copy(y = 99)` fall
+    // through the rich-expr cascade and emit `Point.copy(I)LPoint;`
+    // — a NoSuchMethodError at run time because the receiving class
+    // declares the 3-arg version. Mirrors the path at line ~39722
+    // which is reached only when `lower_loop_body`'s val handler
+    // falls into the rich-expr fallback for ValDecls whose initializer
+    // is a DotQualified-with-Call to `.copy()`.
+    if let KtExpr::DotQualified(dq) = &e {
+        let dq_exprs: Vec<KtExpr<'_>> = skotch_ast::children(dq.syntax())
+            .iter()
+            .filter_map(KtExpr::cast)
+            .collect();
+        if dq_exprs.len() == 2 {
+            if let (KtExpr::Reference(recv_ref), KtExpr::Call(call)) = (&dq_exprs[0], &dq_exprs[1])
+            {
+                let method_n = match call.callee() {
+                    Some(KtExpr::Reference(r)) => r.name(),
+                    _ => None,
+                };
+                if method_n == Some("copy") {
+                    if let Some(recv_n) = recv_ref.name() {
+                        if let Some(recv_slot) = lookup_name(recv_n) {
+                            let recv_ty = slot_ty_with_param_fallback(recv_slot.0, extra_locals);
+                            if let Ty::Class(cname) = &recv_ty {
+                                if let Some(fields) = lookup_class_fields(cname) {
+                                    if let Some(arg_list) = call.value_argument_list() {
+                                        let has_named = arg_list_has_named(arg_list);
+                                        let arg_count = arg_list.arguments().count();
+                                        if has_named || arg_count < fields.len() {
+                                            // Reorder + fill. Map named args
+                                            // by name; consume positional args
+                                            // in order; fill the rest from
+                                            // `GetField(recv, field_i)`.
+                                            let mut named_map: rustc_hash::FxHashMap<
+                                                String,
+                                                KtExpr<'_>,
+                                            > = rustc_hash::FxHashMap::default();
+                                            let mut positional: Vec<KtExpr<'_>> = Vec::new();
+                                            let mut bail = false;
+                                            for a in arg_list.arguments() {
+                                                let Some(ae) = a.expression() else {
+                                                    bail = true;
+                                                    break;
+                                                };
+                                                if let Some(n) = a.name() {
+                                                    named_map.insert(n.to_string(), ae);
+                                                } else if let KtExpr::Binary(b) = ae {
+                                                    let op = b
+                                                        .operation()
+                                                        .map(|o| o.text())
+                                                        .unwrap_or_default();
+                                                    if op == "=" {
+                                                        if let (
+                                                            Some(KtExpr::Reference(lhs_r)),
+                                                            Some(rhs),
+                                                        ) = (b.lhs(), b.rhs())
+                                                        {
+                                                            if let Some(n) = lhs_r.name() {
+                                                                named_map
+                                                                    .insert(n.to_string(), rhs);
+                                                                continue;
+                                                            }
+                                                        }
+                                                    }
+                                                    positional.push(ae);
+                                                } else {
+                                                    positional.push(ae);
+                                                }
+                                            }
+                                            if !bail {
+                                                let mut arg_slots: Vec<LocalId> = vec![recv_slot];
+                                                let mut all_ok = true;
+                                                for (i, (fname, fty)) in fields.iter().enumerate() {
+                                                    let arg_e_opt = named_map
+                                                        .get(fname)
+                                                        .copied()
+                                                        .or_else(|| positional.get(i).copied());
+                                                    let s = if let Some(arg_e) = arg_e_opt {
+                                                        match lower_rich_expr_to_slot(
+                                                            arg_e,
+                                                            lookup_name,
+                                                            fn_lookup,
+                                                            next_slot,
+                                                            pre_stmts,
+                                                            extra_locals,
+                                                            strings,
+                                                        ) {
+                                                            Some(s) => s,
+                                                            None => {
+                                                                all_ok = false;
+                                                                break;
+                                                            }
+                                                        }
+                                                    } else {
+                                                        let gf_slot = LocalId(*next_slot);
+                                                        *next_slot += 1;
+                                                        extra_locals.push(fty.clone());
+                                                        pre_stmts.push(MStmt::Assign {
+                                                            dest: gf_slot,
+                                                            value: skotch_mir::Rvalue::GetField {
+                                                                receiver: recv_slot,
+                                                                class_name: cname.clone(),
+                                                                field_name: fname.clone(),
+                                                            },
+                                                        });
+                                                        gf_slot
+                                                    };
+                                                    arg_slots.push(s);
+                                                }
+                                                if all_ok {
+                                                    let result_slot = LocalId(*next_slot);
+                                                    *next_slot += 1;
+                                                    extra_locals.push(Ty::Class(cname.clone()));
+                                                    pre_stmts.push(MStmt::Assign {
+                                                        dest: result_slot,
+                                                        value: skotch_mir::Rvalue::Call {
+                                                            kind: skotch_mir::CallKind::Virtual {
+                                                                class_name: cname.clone(),
+                                                                method_name: "copy".to_string(),
+                                                            },
+                                                            args: arg_slots,
+                                                        },
+                                                    });
+                                                    return Some(result_slot);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
