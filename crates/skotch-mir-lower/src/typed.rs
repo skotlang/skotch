@@ -6996,9 +6996,10 @@ pub fn lower_file(
                 .and_then(|tr| tr.user_type())
                 .and_then(|u| u.name())
                 .and_then(skotch_types::ty_from_name);
-            let init_const = p
-                .initializer()
-                .and_then(|i| lower_const_or_string_init(i, &mut module.strings));
+            let init_const = p.initializer().and_then(|i| {
+                lower_const_or_string_init(i, &mut module.strings)
+                    .or_else(|| lower_passthrough_hof_init(i, file, &mut module.strings))
+            });
             let inferred_ty = match &init_const {
                 Some(skotch_mir::MirConst::String(_)) => Some(skotch_types::Ty::String),
                 Some(skotch_mir::MirConst::Int(_)) => Some(skotch_types::Ty::Int),
@@ -49899,8 +49900,111 @@ fn lower_const_init_typed(e: skotch_ast::KtExpr<'_>) -> Option<skotch_mir::MirCo
         KtExpr::Parenthesized(p) => skotch_ast::children(p.syntax())
             .iter()
             .find_map(|c| KtExpr::cast(c).and_then(lower_const_init_typed)),
+        // Constant-fold simple binary arithmetic on numeric literals.
+        // Lets a top-level `val cached: Int = 42 + 1` resolve to
+        // MirConst::Int(43) instead of falling through to the manual
+        // <clinit> path (which currently doesn't lower non-const inits
+        // and would emit `aconst_null; putstatic` against an Int field).
+        KtExpr::Binary(b) => {
+            let lhs = b.lhs().and_then(lower_const_init_typed)?;
+            let rhs = b.rhs().and_then(lower_const_init_typed)?;
+            let op = b.operation()?.text();
+            match (lhs, rhs) {
+                (MirConst::Int(a), MirConst::Int(c)) => match op.as_str() {
+                    "+" => Some(MirConst::Int(a.wrapping_add(c))),
+                    "-" => Some(MirConst::Int(a.wrapping_sub(c))),
+                    "*" => Some(MirConst::Int(a.wrapping_mul(c))),
+                    "/" if c != 0 => Some(MirConst::Int(a.wrapping_div(c))),
+                    _ => None,
+                },
+                (MirConst::Long(a), MirConst::Long(c)) => match op.as_str() {
+                    "+" => Some(MirConst::Long(a.wrapping_add(c))),
+                    "-" => Some(MirConst::Long(a.wrapping_sub(c))),
+                    "*" => Some(MirConst::Long(a.wrapping_mul(c))),
+                    "/" if c != 0 => Some(MirConst::Long(a.wrapping_div(c))),
+                    _ => None,
+                },
+                _ => None,
+            }
+        }
         _ => None,
     }
+}
+
+/// Recognize a top-level val initializer of the form
+/// `CALLEE { CONST_BODY }` where `CALLEE` is a same-file pass-through
+/// helper of the shape `fun <T> CALLEE(b: () -> T): T = b()` and
+/// `CONST_BODY` is a constant expression (e.g. `42 + 1`).
+///
+/// kotlinc lowers this to invokedynamic + LambdaMetafactory + a static
+/// helper `CALLEE$lambda$0()` whose return is unboxed in `<clinit>`.
+/// The skotch backend does not yet emit that full HOF pipeline, so this
+/// helper takes the constant-folding shortcut: if the helper is provably
+/// a no-op pass-through, the initializer reduces to the lambda body's
+/// constant value. This is a narrow byte-divergent path — stdout still
+/// matches kotlinc.
+fn lower_passthrough_hof_init<'a>(
+    init: skotch_ast::KtExpr<'a>,
+    file: skotch_ast::KtFile<'a>,
+    strings: &mut Vec<String>,
+) -> Option<skotch_mir::MirConst> {
+    use skotch_ast::KtExpr;
+    // Strip parentheses around the whole initializer.
+    let mut e = init;
+    while let KtExpr::Parenthesized(p) = e {
+        e = skotch_ast::children(p.syntax())
+            .iter()
+            .find_map(KtExpr::cast)?;
+    }
+    let KtExpr::Call(call) = e else {
+        return None;
+    };
+    let KtExpr::Reference(rf) = call.callee()? else {
+        return None;
+    };
+    let fn_name = rf.name()?;
+    // Find the matching top-level fun decl in the same file.
+    let fun_decl = file.decls().find_map(|d| match d {
+        skotch_ast::KtDecl::Fun(f) if f.name() == Some(fn_name) => Some(f),
+        _ => None,
+    })?;
+    // Helper body must be `= b()` with `b` the sole value parameter.
+    let body_expr = fun_decl.body_expression()?;
+    let param = fun_decl.value_parameter_list()?.parameters().next()?;
+    let param_name = param.name()?;
+    let body_call = match body_expr {
+        KtExpr::Call(c) => c,
+        _ => return None,
+    };
+    let KtExpr::Reference(body_rf) = body_call.callee()? else {
+        return None;
+    };
+    if body_rf.name() != Some(param_name) {
+        return None;
+    }
+    let body_argc = body_call
+        .value_argument_list()
+        .map(|al| al.arguments().count())
+        .unwrap_or(0);
+    if body_argc != 0 || body_call.lambda_argument().is_some() {
+        return None;
+    }
+    // Extract the trailing lambda from the OUTER call.
+    let la = call.lambda_argument()?;
+    let lambda_expr = skotch_ast::children(la.syntax())
+        .iter()
+        .find_map(KtExpr::cast)?;
+    let KtExpr::Lambda(lam) = lambda_expr else {
+        return None;
+    };
+    let body = lam.function_literal()?.body()?;
+    // The lambda body block must hold a single statement that lowers to
+    // a constant.
+    let stmts: Vec<KtExpr<'_>> = body.statements().collect();
+    if stmts.len() != 1 {
+        return None;
+    }
+    lower_const_or_string_init(stmts[0], strings)
 }
 
 /// Like [`lower_const_init_typed`] but also handles plain string

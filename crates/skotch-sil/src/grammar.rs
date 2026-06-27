@@ -1640,8 +1640,13 @@ fn parse_fun_body(p: &mut Parser<'_, '_>) {
     // back to plain-name on failure.
     if has_receiver_prefix(p) {
         parse_receiver_then_name(p);
-    } else if p.at(S::IDENTIFIER) || is_soft_keyword(p.current()) {
+    } else if p.at(S::IDENTIFIER) {
         p.bump();
+    } else if is_soft_keyword(p.current()) {
+        // Reclassify the soft keyword as IDENTIFIER so KtFun::name
+        // (which looks for an IDENTIFIER child) finds the fn name.
+        // Kotlin permits `fun init() { ... }`, `fun data() { ... }`, etc.
+        p.bump_as(S::IDENTIFIER);
     }
     skip_trivia(p);
     if p.at(S::LPAR) {
