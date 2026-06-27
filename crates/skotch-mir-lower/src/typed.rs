@@ -15301,6 +15301,17 @@ fn lower_loop_body_blocks(
         /// either branches to a ReturnValue terminator or falls through with
         /// the name bound to the (now non-null) lhs slot.
         PropertyWithElvisReturn,
+        /// `val|var name = recv?.field ?: alt` (or `recv?.method(args) ?: alt`).
+        /// The SafeAccess `?.` formal semantics require short-circuiting when
+        /// `recv` is null and emitting the Elvis RHS instead. The
+        /// `lower_rich_expr_to_slot` SafeAccess arm unconditionally invokes
+        /// the property getter / method even on a null recv, NPE-ing before
+        /// the Elvis RHS can be selected. Detect this shape at property-init
+        /// position and lower it as a real if-null CFG so the alt path
+        /// actually runs when recv is null. Unblocks SHA-3 in
+        /// `parity/101-hash` whose KeccakDigest.extract opens with
+        /// `var spongeRem = r?.value ?: spongeSize`.
+        PropertyWithSafeAccessElvis,
         /// `val name: T? = recv.firstOfType()` against a reified-T
         /// type-filter ext fn; emit inline iteration with concrete T.
         PropertyWithReifiedTypeFilter,
@@ -15345,6 +15356,21 @@ fn lower_loop_body_blocks(
                                     .unwrap_or(false) =>
                         {
                             special_at = Some((j, Special::PropertyWithElvisReturn));
+                            break;
+                        }
+                        // Safe-access Elvis: `val|var name = recv?.x ?: alt`
+                        // (or `recv?.method(args) ?: alt`). lower_rich's
+                        // SafeAccess arm unconditionally invokes the getter
+                        // / method without a null guard, NPE-ing before
+                        // Elvis can select `alt`. Detect at property-init
+                        // position and lower as an if-null CFG.
+                        KtExpr::Binary(b)
+                            if b.operation().map(|o| o.text()).as_deref() == Some("?:")
+                                && b.lhs()
+                                    .map(|l| matches!(unwrap_parens(l), KtExpr::SafeAccess(_)))
+                                    .unwrap_or(false) =>
+                        {
+                            special_at = Some((j, Special::PropertyWithSafeAccessElvis));
                             break;
                         }
                         // `val x: T? = recv.firstOfType()` — explicit
@@ -17630,6 +17656,253 @@ fn lower_loop_body_blocks(
                 i = j + 1;
                 continue;
             }
+            Some((j, Special::PropertyWithSafeAccessElvis)) => {
+                // `val|var name = recv?.field ?: alt`  (or `recv?.method(args) ?: alt`).
+                //
+                // Block layout (extends PropertyWithIfInit's pattern):
+                //   cond:   cur_stmts; eval recv -> recv_slot;
+                //           null-cmp -> cmp; Branch(cmp, alt_block, then_block)
+                //   then:   invokevirtual recv.field()/method(args) -> v;
+                //           prop_slot = v; Goto(join)
+                //   alt:    eval alt -> v; prop_slot = v; Goto(join)
+                //   join:   bind name -> prop_slot; fall through
+                let prop_node = body_children[j];
+                let prop = skotch_ast::KtProperty::cast(prop_node)?;
+                let pname = prop.name()?;
+                let init = prop.initializer().map(unwrap_parens)?;
+                let KtExpr::Binary(b) = init else {
+                    return None;
+                };
+                let lhs_expr = b.lhs().map(unwrap_parens)?;
+                let rhs_expr = b.rhs().map(unwrap_parens)?;
+                let KtExpr::SafeAccess(sa) = lhs_expr else {
+                    return None;
+                };
+                let sa_kids: Vec<KtExpr<'_>> = skotch_ast::children(sa.syntax())
+                    .iter()
+                    .filter_map(KtExpr::cast)
+                    .collect();
+                if sa_kids.len() != 2 {
+                    return None;
+                }
+                let recv_e = sa_kids[0];
+                let accessor_e = sa_kids[1];
+                let snap = name_to_local.clone();
+                let lookup = |n: &str| -> Option<LocalId> {
+                    snap.iter()
+                        .rev()
+                        .find(|(name, _)| name == n)
+                        .map(|(_, l)| *l)
+                };
+                // Lower recv into cur_stmts.
+                let recv_slot = lower_rich_expr_to_slot(
+                    recv_e,
+                    &lookup,
+                    fn_lookup_ref,
+                    next_slot,
+                    &mut cur_stmts,
+                    local_tys,
+                    strings,
+                )?;
+                // Peel one Nullable layer so member-resolution sees the
+                // class type. Mirrors the SafeAccess arm in
+                // lower_rich_expr_to_slot.
+                let recv_ty_raw = slot_ty_with_param_fallback(recv_slot.0, local_tys);
+                let recv_ty = match &recv_ty_raw {
+                    Ty::Nullable(inner) => (**inner).clone(),
+                    other => other.clone(),
+                };
+                let Ty::Class(cname) = recv_ty else {
+                    return None;
+                };
+                // null-cmp: cmp = (recv_slot == null).
+                let null_slot = LocalId(*next_slot);
+                *next_slot += 1;
+                local_tys.push(Ty::Nullable(Box::new(Ty::Any)));
+                cur_stmts.push(MStmt::Assign {
+                    dest: null_slot,
+                    value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Null),
+                });
+                let cmp_slot = LocalId(*next_slot);
+                *next_slot += 1;
+                local_tys.push(Ty::Bool);
+                cur_stmts.push(MStmt::Assign {
+                    dest: cmp_slot,
+                    value: skotch_mir::Rvalue::BinOp {
+                        op: skotch_mir::BinOp::CmpEq,
+                        lhs: recv_slot,
+                        rhs: null_slot,
+                    },
+                });
+                // Allocate the property slot once; both branches write to it.
+                let prop_slot = LocalId(*next_slot);
+                *next_slot += 1;
+                local_tys.push(Ty::Any);
+                // Build the THEN block (recv is non-null): invoke the
+                // property getter or method.
+                let mut then_stmts: Vec<MStmt> = Vec::new();
+                let then_value_slot: LocalId = match accessor_e {
+                    KtExpr::Reference(prop_ref) => {
+                        let prop_n = prop_ref.name()?;
+                        let getter_name = property_getter_name(prop_n);
+                        let ret_ty =
+                            class_method_return_ty(&cname, &getter_name).unwrap_or(Ty::Any);
+                        let result_slot = LocalId(*next_slot);
+                        *next_slot += 1;
+                        local_tys.push(ret_ty);
+                        then_stmts.push(MStmt::Assign {
+                            dest: result_slot,
+                            value: skotch_mir::Rvalue::Call {
+                                kind: skotch_mir::CallKind::Virtual {
+                                    class_name: cname.clone(),
+                                    method_name: getter_name,
+                                },
+                                args: vec![recv_slot],
+                            },
+                        });
+                        result_slot
+                    }
+                    KtExpr::Call(call) => {
+                        let KtExpr::Reference(meth_ref) = call.callee()? else {
+                            return None;
+                        };
+                        let method_n = meth_ref.name()?;
+                        let mut arg_slots: Vec<LocalId> = vec![recv_slot];
+                        if let Some(arg_list) = call.value_argument_list() {
+                            for arg in arg_list.arguments() {
+                                let arg_e = arg.expression()?;
+                                let s = lower_rich_expr_to_slot(
+                                    arg_e,
+                                    &lookup,
+                                    fn_lookup_ref,
+                                    next_slot,
+                                    &mut then_stmts,
+                                    local_tys,
+                                    strings,
+                                )?;
+                                arg_slots.push(s);
+                            }
+                        }
+                        let ret_ty = class_method_return_ty(&cname, method_n).unwrap_or(Ty::Any);
+                        let result_slot = LocalId(*next_slot);
+                        *next_slot += 1;
+                        local_tys.push(ret_ty);
+                        then_stmts.push(MStmt::Assign {
+                            dest: result_slot,
+                            value: skotch_mir::Rvalue::Call {
+                                kind: skotch_mir::CallKind::Virtual {
+                                    class_name: cname.clone(),
+                                    method_name: method_n.to_string(),
+                                },
+                                args: arg_slots,
+                            },
+                        });
+                        result_slot
+                    }
+                    _ => return None,
+                };
+                then_stmts.push(MStmt::Assign {
+                    dest: prop_slot,
+                    value: skotch_mir::Rvalue::Local(then_value_slot),
+                });
+                // Build the ALT block: evaluate the Elvis RHS.
+                let mut alt_stmts: Vec<MStmt> = Vec::new();
+                let alt_value_slot = lower_rich_expr_to_slot(
+                    rhs_expr,
+                    &lookup,
+                    fn_lookup_ref,
+                    next_slot,
+                    &mut alt_stmts,
+                    local_tys,
+                    strings,
+                )?;
+                alt_stmts.push(MStmt::Assign {
+                    dest: prop_slot,
+                    value: skotch_mir::Rvalue::Local(alt_value_slot),
+                });
+                // Refine prop_slot's Ty so the StackMapTable frame at the
+                // join doesn't collapse to Object — without it `var
+                // spongeRem: Int = r?.value ?: spongeSize` would be
+                // boxed at the join and a later `spongeRem - i` (which
+                // emits `iload spongeRem; isub`) would VerifyError. Two
+                // refinement sources: (a) both arms agree on a primitive
+                // (mirrors PropertyWithIfInit); (b) the THEN-arm return
+                // Ty was `Ty::Any` (the getter / method's return type
+                // wasn't in CLASS_METHODS) but the ALT arm is a concrete
+                // primitive — Kotlin's `?:` typing guarantees they agree,
+                // so adopt the ALT's primitive. (b) is essential because
+                // `class_method_return_ty` returns None for cross-JAR
+                // getters like SpongeRemainder.getValue, leaving the
+                // THEN slot Ty::Any.
+                let then_ty = slot_ty_with_param_fallback(then_value_slot.0, local_tys);
+                let alt_ty = slot_ty_with_param_fallback(alt_value_slot.0, local_tys);
+                let is_concrete = |t: &Ty| {
+                    matches!(
+                        t,
+                        Ty::Int
+                            | Ty::Bool
+                            | Ty::Long
+                            | Ty::Float
+                            | Ty::Double
+                            | Ty::Char
+                            | Ty::String
+                            | Ty::Class(_)
+                    )
+                };
+                let refined: Option<Ty> = if then_ty == alt_ty && is_concrete(&then_ty) {
+                    Some(then_ty.clone())
+                } else if matches!(then_ty, Ty::Any) && is_concrete(&alt_ty) {
+                    // Backpatch the then_value_slot's Ty too so the
+                    // backend descriptor for the getter / method call
+                    // returns the primitive (otherwise the call gets an
+                    // Object-typed result on the stack and the astore
+                    // mismatches the refined prop_slot).
+                    Some(alt_ty.clone())
+                } else {
+                    None
+                };
+                if let Some(refined_ty) = refined {
+                    let param_count = PARAM_TY_FALLBACK.with(|c| c.borrow().len());
+                    let refine_slot_ty = |slot: LocalId, local_tys: &mut Vec<Ty>| {
+                        let idx = (slot.0 as usize).saturating_sub(param_count);
+                        if idx < local_tys.len() {
+                            local_tys[idx] = refined_ty.clone();
+                        }
+                    };
+                    refine_slot_ty(prop_slot, local_tys);
+                    // Only backpatch the then-value slot when its current
+                    // Ty is Any (case (b)) — never overwrite a concrete
+                    // type the THEN-arm already resolved.
+                    if matches!(then_ty, Ty::Any) {
+                        refine_slot_ty(then_value_slot, local_tys);
+                    }
+                }
+                // Emit the three blocks.
+                let cond_block_id = block_offset + blocks.len() as u32;
+                let then_block_id = cond_block_id + 1;
+                let alt_block_id = then_block_id + 1;
+                let join_block_id = alt_block_id + 1;
+                blocks.push(BasicBlock {
+                    stmts: std::mem::take(&mut cur_stmts),
+                    terminator: Terminator::Branch {
+                        cond: cmp_slot,
+                        // cmp is true => recv IS null => go to alt.
+                        then_block: alt_block_id,
+                        else_block: then_block_id,
+                    },
+                });
+                blocks.push(BasicBlock {
+                    stmts: then_stmts,
+                    terminator: Terminator::Goto(join_block_id),
+                });
+                blocks.push(BasicBlock {
+                    stmts: alt_stmts,
+                    terminator: Terminator::Goto(join_block_id),
+                });
+                name_to_local.push((pname.to_string(), prop_slot));
+                i = j + 1;
+                continue;
+            }
             Some((j, Special::PropertyWithReifiedTypeFilter)) => {
                 // `val name: T? = recv.firstOfType()`: 7-block inline
                 // iteration (entry/cond/check/next/match/null/cont) with
@@ -19456,6 +19729,36 @@ fn try_lower_multi_stmt_block_with_offset(
                 .unwrap_or(false)
     });
     if body_has_reified_first_of_type {
+        return None;
+    }
+
+    // Bail to the builder path when any top-level KtProperty's init is
+    // `recv?.field ?: alt` (or `recv?.method(args) ?: alt`). The legacy
+    // linear walker dispatches the SafeAccess via `lower_rich_expr_to_slot`
+    // which has no null-guard and unconditionally invokes the getter /
+    // method — NPE-ing before Elvis can pick `alt`. The builder path's
+    // `lower_loop_body_blocks` recognizes
+    // `Special::PropertyWithSafeAccessElvis` and emits a real if-null
+    // CFG. Unblocks SHA-3's `var spongeRem = r?.value ?: spongeSize`
+    // in KeccakDigest.extract.
+    let body_has_safe_access_elvis = block_children.iter().any(|c| {
+        let Some(prop) = skotch_ast::KtProperty::cast(c) else {
+            return false;
+        };
+        let Some(init) = prop.initializer() else {
+            return false;
+        };
+        let KtExpr::Binary(b) = unwrap_parens(init) else {
+            return false;
+        };
+        if b.operation().map(|o| o.text()).as_deref() != Some("?:") {
+            return false;
+        }
+        b.lhs()
+            .map(|l| matches!(unwrap_parens(l), KtExpr::SafeAccess(_)))
+            .unwrap_or(false)
+    });
+    if body_has_safe_access_elvis {
         return None;
     }
 
