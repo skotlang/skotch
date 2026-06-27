@@ -37848,8 +37848,17 @@ fn lower_rich_expr_to_slot(
                         // (descriptor, ret_ty, method_jvm_name) — None means
                         // re-route to a Kotlin → JVM-named method.
                         let str_method: Option<(&str, Ty, &str)> = match (method_n, arg_count) {
-                            ("uppercase", 0) => Some(("()Ljava/lang/String;", Ty::String, "uppercase")),
-                            ("lowercase", 0) => Some(("()Ljava/lang/String;", Ty::String, "lowercase")),
+                            // Kotlin's `String.uppercase()` / `lowercase()` are
+                            // stdlib extensions; kotlinc inlines them to
+                            // `String.toUpperCase(Locale.ROOT)` /
+                            // `String.toLowerCase(Locale.ROOT)`. Java's
+                            // `String` has no `uppercase()` / `lowercase()`
+                            // method, so map to the JVM `toUpperCase` /
+                            // `toLowerCase` (no-arg) form — stdout-equivalent
+                            // for ASCII; byte-identity to kotlinc's
+                            // Locale.ROOT form is a separate concern.
+                            ("uppercase", 0) => Some(("()Ljava/lang/String;", Ty::String, "toUpperCase")),
+                            ("lowercase", 0) => Some(("()Ljava/lang/String;", Ty::String, "toLowerCase")),
                             ("isEmpty", 0) => Some(("()Z", Ty::Bool, "isEmpty")),
                             ("isNotEmpty", 0) => Some(("()Z", Ty::Bool, "isNotEmpty")),
                             ("isBlank", 0) => Some(("()Z", Ty::Bool, "isBlank")),
