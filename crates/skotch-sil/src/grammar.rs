@@ -2898,10 +2898,27 @@ fn is_infix_function_position(p: &Parser<'_, '_>) -> bool {
         return false;
     }
     // Look past the IDENT for an expression-starter. Same newline
-    // rule as the leading WS: suppressed when inside `(`/`[`.
+    // rule as the leading WS: suppressed when inside `(`/`[`. We
+    // additionally treat the known stdlib infix-bitwise/range names
+    // (`and`/`or`/`xor`/`shl`/`shr`/`ushr`/`to`/`until`/`downTo`/
+    // `step`) as "operator-at-end-of-line" continuations — Kotlin's
+    // lexical rule says an infix operator at the END of a line keeps
+    // the expression open. Without this carve-out, real-world Kotlin
+    // like SHA-2's `compressProtected`
+    //   val s0 = ((a ushr 2) or (a shl 30)) xor
+    //            ((a ushr 13) or (a shl 19)) xor
+    //            ((a ushr 22) or (a shl 10))
+    // parses only the first sub-expression — the trailing `xor` at
+    // line end gets dropped and the remaining lines become stray
+    // top-level statements the body walker silently skips, emptying
+    // the digest body.
+    let is_stdlib_infix_name = matches!(
+        ident_text,
+        "and" | "or" | "xor" | "shl" | "shr" | "ushr" | "to" | "until" | "downTo" | "step"
+    );
     let mut j = 2usize;
     while matches!(p.nth(j), S::WHITE_SPACE) {
-        if !newline_suppressed && p.text_at(j).contains('\n') {
+        if !newline_suppressed && !is_stdlib_infix_name && p.text_at(j).contains('\n') {
             return false;
         }
         j += 1;
