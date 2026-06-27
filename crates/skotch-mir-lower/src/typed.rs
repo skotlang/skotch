@@ -33426,15 +33426,13 @@ fn lower_rich_expr_to_slot(
                     // the canonical call shape in `-Message.kt` uses
                     // `destOffset = 0, sourceIndexStart = …,
                     //  sourceIndexEnd = …` with `dest` positional.
-                    if method_n == "lePackIntoUnsafe"
-                        && matches!(recv_ty_candidate, Some(Ty::ByteArray))
-                    {
+                    if method_n == "lePackIntoUnsafe" {
+                        let mut dest_e: Option<KtExpr<'_>> = None;
+                        let mut dest_off_e: Option<KtExpr<'_>> = None;
+                        let mut src_start_e: Option<KtExpr<'_>> = None;
+                        let mut src_end_e: Option<KtExpr<'_>> = None;
+                        let mut positional: Vec<KtExpr<'_>> = Vec::new();
                         if let Some(arg_list) = call.value_argument_list() {
-                            let mut dest_e: Option<KtExpr<'_>> = None;
-                            let mut dest_off_e: Option<KtExpr<'_>> = None;
-                            let mut src_start_e: Option<KtExpr<'_>> = None;
-                            let mut src_end_e: Option<KtExpr<'_>> = None;
-                            let mut positional: Vec<KtExpr<'_>> = Vec::new();
                             for a in arg_list.arguments() {
                                 let Some(ae) = a.expression() else {
                                     positional.clear();
@@ -33449,108 +33447,209 @@ fn lower_rich_expr_to_slot(
                                     None => positional.push(ae),
                                 }
                             }
-                            // Fill any unset slots from positional list
-                            // in dest, destOffset, sourceIndexStart,
-                            // sourceIndexEnd order — handles the
-                            // `b.lePackIntoUnsafe(m, 0, off, end)`
-                            // shape as well as the canonical
-                            // `b.lePackIntoUnsafe(m, destOffset=0, …)`
-                            // shape in -Message.kt.
-                            let mut pos_iter = positional.into_iter();
-                            if dest_e.is_none() {
-                                dest_e = pos_iter.next();
-                            }
-                            if dest_off_e.is_none() {
-                                dest_off_e = pos_iter.next();
-                            }
-                            if src_start_e.is_none() {
-                                src_start_e = pos_iter.next();
-                            }
-                            if src_end_e.is_none() {
-                                src_end_e = pos_iter.next();
-                            }
-                            if let (
-                                Some(dest_ae),
-                                Some(dest_off_ae),
-                                Some(src_start_ae),
-                                Some(src_end_ae),
-                            ) = (dest_e, dest_off_e, src_start_e, src_end_e)
-                            {
-                                let recv_slot = lower_rich_expr_to_slot(
-                                    dq_exprs[0],
-                                    lookup_name,
-                                    fn_lookup,
-                                    next_slot,
-                                    pre_stmts,
-                                    extra_locals,
-                                    strings,
-                                )?;
-                                let dest_slot = lower_rich_expr_to_slot(
-                                    dest_ae,
-                                    lookup_name,
-                                    fn_lookup,
-                                    next_slot,
-                                    pre_stmts,
-                                    extra_locals,
-                                    strings,
-                                )?;
-                                let dest_off_slot = lower_rich_expr_to_slot(
-                                    dest_off_ae,
-                                    lookup_name,
-                                    fn_lookup,
-                                    next_slot,
-                                    pre_stmts,
-                                    extra_locals,
-                                    strings,
-                                )?;
-                                let src_start_slot = lower_rich_expr_to_slot(
-                                    src_start_ae,
-                                    lookup_name,
-                                    fn_lookup,
-                                    next_slot,
-                                    pre_stmts,
-                                    extra_locals,
-                                    strings,
-                                )?;
-                                let src_end_slot = lower_rich_expr_to_slot(
-                                    src_end_ae,
-                                    lookup_name,
-                                    fn_lookup,
-                                    next_slot,
-                                    pre_stmts,
-                                    extra_locals,
-                                    strings,
-                                )?;
-                                let dest_ty =
-                                    slot_ty_with_param_fallback(dest_slot.0, extra_locals);
-                                let (desc, ret_ty) = match dest_ty {
-                                    Ty::LongArray => ("([B[JIII)[J", Ty::LongArray),
-                                    _ => ("([B[IIII)[I", Ty::IntArray),
+                        }
+                        // Fill any unset slots from positional list in
+                        // dest, destOffset, sourceIndexStart,
+                        // sourceIndexEnd order — handles both the
+                        // `b.lePackIntoUnsafe(m, 0, off, end)` and
+                        // `b.lePackIntoUnsafe(m, destOffset=0, …)`
+                        // shapes.
+                        let mut pos_iter = positional.into_iter();
+                        if dest_e.is_none() {
+                            dest_e = pos_iter.next();
+                        }
+                        if dest_off_e.is_none() {
+                            dest_off_e = pos_iter.next();
+                        }
+                        if src_start_e.is_none() {
+                            src_start_e = pos_iter.next();
+                        }
+                        if src_end_e.is_none() {
+                            src_end_e = pos_iter.next();
+                        }
+
+                        // Mirror Phase H6b: dispatch by receiver shape.
+                        // Int/Long scalar receivers (MD5
+                        // `bitsLo.lePackIntoUnsafe(buf, destOffset=56)`,
+                        // SHAKE `A[i].lePackIntoUnsafe(newOut,
+                        // destOffset = i*Long.SIZE_BYTES)`) only carry
+                        // 2 trailing args (dest, dO); array receivers
+                        // carry the range form (dest, dO, sIS, sIE).
+                        //
+                        // The JAR only exposes a 3-arg static form for
+                        // the scalar receivers (Int/Long); IntArray
+                        // and LongArray have no 3-arg overload. When
+                        // the source call uses `state.lePackIntoUnsafe(
+                        // dest=dest, destOffset=destOffset)` with an
+                        // array receiver, kotlinc inlines defaults of
+                        // sIS=0 and sIE=recv.size — match that.
+                        let recv_is_byte_arr = matches!(recv_ty_candidate, Some(Ty::ByteArray));
+                        let recv_is_int_arr = matches!(recv_ty_candidate, Some(Ty::IntArray));
+                        let recv_is_long_arr = matches!(recv_ty_candidate, Some(Ty::LongArray));
+                        let recv_is_int = matches!(recv_ty_candidate, Some(Ty::Int));
+                        let recv_is_long = matches!(recv_ty_candidate, Some(Ty::Long));
+                        let recv_is_array = recv_is_byte_arr || recv_is_int_arr || recv_is_long_arr;
+                        let user_have_range = src_start_e.is_some() || src_end_e.is_some();
+                        // Array-receiver scalar shape has no JAR static
+                        // form — force range emit with defaults so the
+                        // existing `($recv$dest III)` descriptor lines
+                        // up with `lePackIntoUnsafe(I[BIII)[B` etc.
+                        let have_range_args = user_have_range || recv_is_array;
+
+                        if (recv_is_byte_arr
+                            || recv_is_int_arr
+                            || recv_is_long_arr
+                            || recv_is_int
+                            || recv_is_long)
+                            && dest_e.is_some()
+                            && dest_off_e.is_some()
+                        {
+                            let recv_slot = lower_rich_expr_to_slot(
+                                dq_exprs[0],
+                                lookup_name,
+                                fn_lookup,
+                                next_slot,
+                                pre_stmts,
+                                extra_locals,
+                                strings,
+                            )?;
+                            let dest_slot = lower_rich_expr_to_slot(
+                                dest_e.unwrap(),
+                                lookup_name,
+                                fn_lookup,
+                                next_slot,
+                                pre_stmts,
+                                extra_locals,
+                                strings,
+                            )?;
+                            let dest_off_slot = lower_rich_expr_to_slot(
+                                dest_off_e.unwrap(),
+                                lookup_name,
+                                fn_lookup,
+                                next_slot,
+                                pre_stmts,
+                                extra_locals,
+                                strings,
+                            )?;
+
+                            let mut args = vec![recv_slot, dest_slot, dest_off_slot];
+                            if have_range_args {
+                                let src_start_slot = if let Some(e) = src_start_e {
+                                    lower_rich_expr_to_slot(
+                                        e,
+                                        lookup_name,
+                                        fn_lookup,
+                                        next_slot,
+                                        pre_stmts,
+                                        extra_locals,
+                                        strings,
+                                    )?
+                                } else {
+                                    let s = LocalId(*next_slot);
+                                    *next_slot += 1;
+                                    extra_locals.push(Ty::Int);
+                                    pre_stmts.push(MStmt::Assign {
+                                        dest: s,
+                                        value: skotch_mir::Rvalue::Const(
+                                            skotch_mir::MirConst::Int(0),
+                                        ),
+                                    });
+                                    s
                                 };
-                                let result_slot = LocalId(*next_slot);
-                                *next_slot += 1;
-                                extra_locals.push(ret_ty);
-                                pre_stmts.push(MStmt::Assign {
-                                    dest: result_slot,
-                                    value: skotch_mir::Rvalue::Call {
-                                        kind: skotch_mir::CallKind::StaticJava {
-                                            class_name:
-                                                "org/kotlincrypto/bitops/endian/Endian$Little"
-                                                    .to_string(),
-                                            method_name: "lePackIntoUnsafe".to_string(),
-                                            descriptor: desc.to_string(),
-                                        },
-                                        args: vec![
-                                            recv_slot,
-                                            dest_slot,
-                                            dest_off_slot,
-                                            src_start_slot,
-                                            src_end_slot,
-                                        ],
-                                    },
-                                });
-                                return Some(result_slot);
+                                let src_end_slot = if let Some(e) = src_end_e {
+                                    lower_rich_expr_to_slot(
+                                        e,
+                                        lookup_name,
+                                        fn_lookup,
+                                        next_slot,
+                                        pre_stmts,
+                                        extra_locals,
+                                        strings,
+                                    )?
+                                } else if recv_is_array {
+                                    // Default sIE = recv.length (matches
+                                    // the inline-fn body kotlinc emits
+                                    // for `arr.lePackIntoUnsafe(dest,
+                                    // destOffset = …)` with no range
+                                    // args — sIS=0, sIE=this.size).
+                                    let s = LocalId(*next_slot);
+                                    *next_slot += 1;
+                                    extra_locals.push(Ty::Int);
+                                    pre_stmts.push(MStmt::Assign {
+                                        dest: s,
+                                        value: skotch_mir::Rvalue::ArrayLength(recv_slot),
+                                    });
+                                    s
+                                } else {
+                                    let s = LocalId(*next_slot);
+                                    *next_slot += 1;
+                                    extra_locals.push(Ty::Int);
+                                    pre_stmts.push(MStmt::Assign {
+                                        dest: s,
+                                        value: skotch_mir::Rvalue::Const(
+                                            skotch_mir::MirConst::Int(0),
+                                        ),
+                                    });
+                                    s
+                                };
+                                args.push(src_start_slot);
+                                args.push(src_end_slot);
                             }
+
+                            let dest_ty = slot_ty_with_param_fallback(dest_slot.0, extra_locals);
+                            let recv_desc: &str = if recv_is_byte_arr {
+                                "[B"
+                            } else if recv_is_int_arr {
+                                "[I"
+                            } else if recv_is_long_arr {
+                                "[J"
+                            } else if recv_is_int {
+                                "I"
+                            } else {
+                                "J"
+                            };
+                            let dest_desc: &str = if matches!(dest_ty, Ty::ByteArray) {
+                                "[B"
+                            } else if matches!(dest_ty, Ty::IntArray) {
+                                "[I"
+                            } else if matches!(dest_ty, Ty::LongArray) {
+                                "[J"
+                            } else if recv_is_byte_arr {
+                                // ByteArray.lePack with unresolved
+                                // dest type — match Bit32Message's
+                                // `b.lePackIntoUnsafe(m, …)` where
+                                // `m` is an IntArray field.
+                                "[I"
+                            } else {
+                                "[B"
+                            };
+                            let (ret_desc, ret_ty) = if recv_is_byte_arr {
+                                if dest_desc == "[J" {
+                                    ("[J", Ty::LongArray)
+                                } else {
+                                    ("[I", Ty::IntArray)
+                                }
+                            } else {
+                                ("[B", Ty::ByteArray)
+                            };
+                            let trail = if have_range_args { "III" } else { "I" };
+                            let desc = format!("({}{}{}){}", recv_desc, dest_desc, trail, ret_desc);
+                            let result_slot = LocalId(*next_slot);
+                            *next_slot += 1;
+                            extra_locals.push(ret_ty);
+                            pre_stmts.push(MStmt::Assign {
+                                dest: result_slot,
+                                value: skotch_mir::Rvalue::Call {
+                                    kind: skotch_mir::CallKind::StaticJava {
+                                        class_name: "org/kotlincrypto/bitops/endian/Endian$Little"
+                                            .to_string(),
+                                        method_name: "lePackIntoUnsafe".to_string(),
+                                        descriptor: desc,
+                                    },
+                                    args,
+                                },
+                            });
+                            return Some(result_slot);
                         }
                     }
                     // Phase H6b: KotlinCrypto bitops `bePackIntoUnsafe`
