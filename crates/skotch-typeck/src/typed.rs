@@ -195,6 +195,48 @@ pub fn type_check(
     }
     let _ = package_symbols; // future: thread cross-file aliases
 
+    // Same-file class/interface/object/enum simple names — used by
+    // `infer_return_ty` to recognize body shapes like
+    // `fun box() = Box(7, 11)` as constructor calls returning the
+    // class type instead of falling through to `Ty::Any`. Mirrors the
+    // same-file population added to `imports` above; we keep this set
+    // separate so it stays a tight allow-list of *class* names
+    // (function names from the same file would otherwise pollute it).
+    let mut class_names: FxHashMap<String, String> = FxHashMap::default();
+    for d in file.decls() {
+        match d {
+            KtDecl::Class(c) => {
+                if let Some(n) = c.name() {
+                    class_names
+                        .entry(n.to_string())
+                        .or_insert_with(|| n.to_string());
+                }
+            }
+            KtDecl::Interface(i) => {
+                if let Some(n) = i.name() {
+                    class_names
+                        .entry(n.to_string())
+                        .or_insert_with(|| n.to_string());
+                }
+            }
+            KtDecl::Object(o) => {
+                if let Some(n) = o.name() {
+                    class_names
+                        .entry(n.to_string())
+                        .or_insert_with(|| n.to_string());
+                }
+            }
+            KtDecl::EnumClass(e) => {
+                if let Some(n) = e.name() {
+                    class_names
+                        .entry(n.to_string())
+                        .or_insert_with(|| n.to_string());
+                }
+            }
+            _ => {}
+        }
+    }
+
     // ── TypeEnv: walk class/interface/enum/object decls ─────────────
     let env = build_type_env(file, &imports, &aliases);
 
@@ -224,7 +266,7 @@ pub fn type_check(
                 let return_ty = f
                     .return_type()
                     .map(|tr| type_ref_to_ty(tr, &imports, &aliases))
-                    .unwrap_or_else(|| infer_return_ty(f));
+                    .unwrap_or_else(|| infer_return_ty_with_classes(f, &class_names));
                 let sig = Signature {
                     params: param_tys.clone(),
                     ret: return_ty.clone(),
@@ -277,7 +319,7 @@ pub fn type_check(
                 let ret = f
                     .return_type()
                     .map(|tr| type_ref_to_ty(tr, &imports, &aliases))
-                    .unwrap_or_else(|| infer_return_ty(f));
+                    .unwrap_or_else(|| infer_return_ty_with_classes(f, &class_names));
                 fn_returns.insert(name.to_string(), ret);
             }
         }
@@ -1307,10 +1349,21 @@ fn collect_param_tys(
 /// `: Type` annotation. Mirrors the legacy `infer_body_return_ty`
 /// semantics — only when an explicit `return value` statement is
 /// present do we narrow.
+///
+/// `class_names`, when non-empty, lets `Call(Reference(Name))` shapes
+/// where `Name` matches a known class/object/enum simple name recover
+/// `Ty::Class(Name)` — required so a body like
+/// `fun box() = Box(7, 11)` infers `: Box` instead of falling through
+/// to `Ty::Any`. Downstream destructuring (`val (lo, hi) = box()`)
+/// relies on this Class type to resolve `component1`/`component2`.
 fn infer_return_ty(f: KtFun<'_>) -> Ty {
+    infer_return_ty_with_classes(f, &FxHashMap::default())
+}
+
+fn infer_return_ty_with_classes(f: KtFun<'_>, class_names: &FxHashMap<String, String>) -> Ty {
     use skotch_ast::KtExpr;
     if let Some(e) = f.body_expression() {
-        return literal_ty(&e);
+        return literal_ty_with_classes(&e, class_names);
     }
     let Some(block) = f.body_block() else {
         return Ty::Unit;
@@ -1325,10 +1378,15 @@ fn infer_return_ty(f: KtFun<'_>) -> Ty {
             }
         }
     }
-    returned.map(|e| literal_ty(&e)).unwrap_or(Ty::Unit)
+    returned
+        .map(|e| literal_ty_with_classes(&e, class_names))
+        .unwrap_or(Ty::Unit)
 }
 
-fn literal_ty(e: &skotch_ast::KtExpr<'_>) -> Ty {
+fn literal_ty_with_classes(
+    e: &skotch_ast::KtExpr<'_>,
+    class_names: &FxHashMap<String, String>,
+) -> Ty {
     use skotch_ast::KtExpr;
     match e {
         KtExpr::Boolean(_) => Ty::Bool,
@@ -1348,8 +1406,23 @@ fn literal_ty(e: &skotch_ast::KtExpr<'_>) -> Ty {
         KtExpr::Parenthesized(p) => skotch_ast::children(p.syntax())
             .iter()
             .find_map(KtExpr::cast)
-            .map(|inner| literal_ty(&inner))
+            .map(|inner| literal_ty_with_classes(&inner, class_names))
             .unwrap_or(Ty::Any),
+        // `Call(Reference(N))` where N is a known class simple name —
+        // treat as a constructor call returning Ty::Class(N). Required
+        // so `fun box() = Box(7, 11)` infers a Class return type that
+        // downstream destructuring (`val (a, b) = box()`) can dispatch
+        // `component1`/`component2` against.
+        KtExpr::Call(c) => {
+            if let Some(KtExpr::Reference(r)) = c.callee() {
+                if let Some(name) = r.name() {
+                    if let Some(fq) = class_names.get(name) {
+                        return Ty::Class(fq.clone());
+                    }
+                }
+            }
+            Ty::Any
+        }
         _ => Ty::Any,
     }
 }

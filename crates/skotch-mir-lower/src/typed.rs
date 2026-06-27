@@ -12751,21 +12751,58 @@ fn lower_loop_body(
                                 // descriptor can't be located, emit
                                 // a synthetic `()Ljava/lang/Object;`
                                 // so the call site remains well-formed.
+                                //
+                                // For a user class whose `componentN`
+                                // is registered as `Ty::Unit`/`Ty::Any`
+                                // (the body-expr return-Ty inference
+                                // collapses any non-literal RHS to one
+                                // of those), fall back to looking up
+                                // the N-th primary-ctor `val`/`var`
+                                // field type so `operator fun
+                                // component1() = a` (where `a: Int`)
+                                // emits descriptor `()I` instead of
+                                // `()Ljava/lang/Object;`. Without this,
+                                // the call lowers as Object, the
+                                // surrounding `lo + hi` integer add
+                                // fails StackMap verification, and the
+                                // class loader rejects MainKt with
+                                // VerifyError.
+                                let ty_to_desc = |t: &Ty| -> String {
+                                    match t {
+                                        Ty::Int => "()I".to_string(),
+                                        Ty::Long => "()J".to_string(),
+                                        Ty::Bool => "()Z".to_string(),
+                                        Ty::Byte => "()B".to_string(),
+                                        Ty::Short => "()S".to_string(),
+                                        Ty::Char => "()C".to_string(),
+                                        Ty::Float => "()F".to_string(),
+                                        Ty::Double => "()D".to_string(),
+                                        Ty::String => "()Ljava/lang/String;".to_string(),
+                                        Ty::Class(c) => format!("()L{};", c),
+                                        _ => "()Ljava/lang/Object;".to_string(),
+                                    }
+                                };
+                                // Primary-ctor val/var field at index
+                                // `i` (None when `cls` isn't a known
+                                // user class with collected fields).
+                                let component_field_ty: Option<Ty> = (!is_pair && !is_triple)
+                                    .then(|| {
+                                        lookup_class_fields(&cls)
+                                            .and_then(|fs| fs.get(i).map(|(_, t)| t.clone()))
+                                    })
+                                    .flatten();
                                 let (ret_ty, descriptor) =
                                     if let Some(rt) = class_method_return_ty(&cls, &getter) {
-                                        let d = match &rt {
-                                            Ty::Int => "()I".to_string(),
-                                            Ty::Long => "()J".to_string(),
-                                            Ty::Bool => "()Z".to_string(),
-                                            Ty::Byte => "()B".to_string(),
-                                            Ty::Short => "()S".to_string(),
-                                            Ty::Char => "()C".to_string(),
-                                            Ty::Float => "()F".to_string(),
-                                            Ty::Double => "()D".to_string(),
-                                            Ty::String => "()Ljava/lang/String;".to_string(),
-                                            Ty::Class(c) => format!("()L{};", c),
-                                            _ => "()Ljava/lang/Object;".to_string(),
+                                        // Promote stale Unit/Any (typeck
+                                        // default for body-expr methods
+                                        // without explicit return type)
+                                        // to the matching field Ty when
+                                        // it's a componentN getter.
+                                        let rt = match (&rt, &component_field_ty) {
+                                            (Ty::Unit | Ty::Any, Some(ft)) => ft.clone(),
+                                            _ => rt,
                                         };
+                                        let d = ty_to_desc(&rt);
                                         (rt, d)
                                     } else if let Some(d) =
                                         skotch_classinfo::lookup_method_descriptor(&cls, &getter, 0)
@@ -12775,6 +12812,9 @@ fn lower_loop_body(
                                             .and_then(|(_, r)| jvm_descriptor_to_ty(r))
                                             .unwrap_or(Ty::Any);
                                         (rt, d)
+                                    } else if let Some(ft) = component_field_ty {
+                                        let d = ty_to_desc(&ft);
+                                        (ft, d)
                                     } else {
                                         (Ty::Any, "()Ljava/lang/Object;".to_string())
                                     };
@@ -46071,7 +46111,32 @@ fn method_from_fun_with_class(
                 .collect()
         })
         .unwrap_or_default();
-    let return_ty = erase_generic(f.return_type().map(resolve_type_ref).unwrap_or(Ty::Unit));
+    // Body-expression return-type inference: when the user wrote
+    // `operator fun component1() = a` with no `: T` annotation, infer
+    // `T` from `a`'s declared type (primary-ctor val/var) instead of
+    // defaulting to `Ty::Unit`. Required so `componentN` getters emit
+    // `()I` (or whatever the field is) instead of `()V` — destructuring
+    // dispatch at the call site builds an `()I` methodref against the
+    // class, and a `()V` actual method would fail `NoSuchMethodError`.
+    let body_expr_inferred_ret = || -> Option<Ty> {
+        let e = f.body_expression()?;
+        let e = unwrap_parens(e);
+        if let skotch_ast::KtExpr::Reference(r) = e {
+            let name = r.name()?;
+            for (fn_name, fty) in field_names {
+                if fn_name == name {
+                    return Some(fty.clone());
+                }
+            }
+        }
+        None
+    };
+    let return_ty = erase_generic(
+        f.return_type()
+            .map(resolve_type_ref)
+            .or_else(body_expr_inferred_ret)
+            .unwrap_or(Ty::Unit),
+    );
     let has_body = f.body_block().is_some() || f.body_expression().is_some();
     let is_abstract = f.is_abstract() || (is_abstract_default && !has_body);
     // Install the class context for the entire body lowering — both
