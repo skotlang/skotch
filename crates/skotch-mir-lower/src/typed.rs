@@ -8110,6 +8110,23 @@ pub fn lower_file(
                 })
                 .unwrap_or(0);
             let _ = param_names;
+            // Vararg detection: locate the (at most one) vararg parameter
+            // and rewrite its slot Ty so the JVM descriptor becomes the
+            // array variant (`Ty::Int` → `Ty::IntArray`, i.e. `I` → `[I`).
+            // Also record `vararg_index_v` for the MirFunction so the
+            // backend sets ACC_VARARGS and a post-process pass below
+            // packs call-site args into a fresh `int[]` per-call.
+            let vararg_index_v: Option<usize> = f
+                .value_parameter_list()
+                .and_then(|pl| pl.parameters().position(|p| p.is_vararg()))
+                .map(|i| i + if is_extension { 1 } else { 0 });
+            if let Some(vi) = vararg_index_v {
+                if let Some(slot_ty) = param_tys.get_mut(vi) {
+                    if matches!(slot_ty, Ty::Int) {
+                        *slot_ty = Ty::IntArray;
+                    }
+                }
+            }
             // Body lowering: expression-bodied fns with a literal
             // expression now emit MStmt::Assign + ReturnValue. Block
             // bodies and non-literal expression bodies still emit an
@@ -8432,7 +8449,7 @@ pub fn lower_file(
                 param_receiver_types: Vec::new(),
                 param_defaults: param_defaults_v,
                 is_abstract: false,
-                vararg_index: None,
+                vararg_index: vararg_index_v,
                 exception_handlers,
                 is_suspend,
                 is_inline: f.is_inline(),
@@ -8707,6 +8724,140 @@ pub fn lower_file(
             fixup_default_calls(m, &fn_param_shape);
         }
         fixup_default_calls(&mut c.constructor, &fn_param_shape);
+    }
+
+    // Vararg call-site pack: snapshot `(vararg_index, vararg_elem_ty)`
+    // for every callable that declared a vararg parameter, then walk
+    // every `Stmt::Assign { value: Rvalue::Call { kind:
+    // CallKind::Static(fid), args } }` whose target has a vararg slot.
+    // When the actual arg count > vararg_index, we pack the trailing
+    // args into a fresh `int[]` (the only vararg width currently
+    // supported — `vararg xs: Int` → `[I` descriptor). When the
+    // actual arg count == vararg_index, an empty array is allocated
+    // (matches kotlinc `sum()` → `iconst_0; newarray int`).
+    //
+    // The pack appends `NewIntArray(size_slot) + size-many ArrayStore`
+    // statements ahead of the call, then replaces args[vi..] with the
+    // newly-allocated array slot. Without this, `sum(1, 2, 3)` emits
+    // `invokestatic sum(III)I` against a callee declared as
+    // `sum([I)I` → VerifyError ("expected reference, got integer").
+    let fn_vararg_shape: rustc_hash::FxHashMap<u32, usize> = module
+        .functions
+        .iter()
+        .filter_map(|f| f.vararg_index.map(|vi| (f.id.0, vi)))
+        .collect();
+    if !fn_vararg_shape.is_empty() {
+        let pack_vararg_calls =
+            |f: &mut MirFunction, fn_vararg_shape: &rustc_hash::FxHashMap<u32, usize>| {
+                for block in f.blocks.iter_mut() {
+                    let mut new_stmts: Vec<skotch_mir::Stmt> =
+                        Vec::with_capacity(block.stmts.len());
+                    for stmt in std::mem::take(&mut block.stmts) {
+                        let skotch_mir::Stmt::Assign { dest, value } = stmt;
+                        match value {
+                            skotch_mir::Rvalue::Call {
+                                kind: skotch_mir::CallKind::Static(target_fid),
+                                args,
+                            } if fn_vararg_shape.contains_key(&target_fid.0) => {
+                                let vi = fn_vararg_shape[&target_fid.0];
+                                // Only pack when the call site passed
+                                // individual ints (one slot per arg). If
+                                // args.len() == vi + 1 and that arg is
+                                // already a `Ty::IntArray` slot, leave it
+                                // alone — caller already produced a packed
+                                // array (covers `intArrayOf(...)` directly
+                                // forwarded into a vararg slot, even if
+                                // spread `*arr` lowering is still future
+                                // work).
+                                let leading: Vec<skotch_mir::LocalId> =
+                                    args.iter().take(vi).copied().collect();
+                                let trailing: Vec<skotch_mir::LocalId> =
+                                    args.iter().skip(vi).copied().collect();
+                                let already_packed = trailing.len() == 1
+                                    && matches!(
+                                        f.locals
+                                            .get(trailing[0].0 as usize)
+                                            .cloned()
+                                            .unwrap_or(Ty::Any),
+                                        Ty::IntArray
+                                    );
+                                if already_packed {
+                                    new_stmts.push(skotch_mir::Stmt::Assign {
+                                        dest,
+                                        value: skotch_mir::Rvalue::Call {
+                                            kind: skotch_mir::CallKind::Static(target_fid),
+                                            args,
+                                        },
+                                    });
+                                    continue;
+                                }
+                                // size_slot = <trailing.len()>
+                                let size_slot = skotch_mir::LocalId(f.locals.len() as u32);
+                                f.locals.push(Ty::Int);
+                                new_stmts.push(skotch_mir::Stmt::Assign {
+                                    dest: size_slot,
+                                    value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(
+                                        trailing.len() as i32,
+                                    )),
+                                });
+                                // arr_slot = NewIntArray(size_slot)
+                                let arr_slot = skotch_mir::LocalId(f.locals.len() as u32);
+                                f.locals.push(Ty::IntArray);
+                                new_stmts.push(skotch_mir::Stmt::Assign {
+                                    dest: arr_slot,
+                                    value: skotch_mir::Rvalue::NewIntArray(size_slot),
+                                });
+                                // arr_slot[i] = trailing[i]
+                                for (i, val_slot) in trailing.iter().enumerate() {
+                                    let idx_slot = skotch_mir::LocalId(f.locals.len() as u32);
+                                    f.locals.push(Ty::Int);
+                                    new_stmts.push(skotch_mir::Stmt::Assign {
+                                        dest: idx_slot,
+                                        value: skotch_mir::Rvalue::Const(
+                                            skotch_mir::MirConst::Int(i as i32),
+                                        ),
+                                    });
+                                    // ArrayStore is a side-effecting stmt
+                                    // whose `dest` is unused; route through
+                                    // a fresh sink slot.
+                                    let sink_slot = skotch_mir::LocalId(f.locals.len() as u32);
+                                    f.locals.push(Ty::Unit);
+                                    new_stmts.push(skotch_mir::Stmt::Assign {
+                                        dest: sink_slot,
+                                        value: skotch_mir::Rvalue::ArrayStore {
+                                            array: arr_slot,
+                                            index: idx_slot,
+                                            value: *val_slot,
+                                        },
+                                    });
+                                }
+                                let mut new_args = leading;
+                                new_args.push(arr_slot);
+                                new_stmts.push(skotch_mir::Stmt::Assign {
+                                    dest,
+                                    value: skotch_mir::Rvalue::Call {
+                                        kind: skotch_mir::CallKind::Static(target_fid),
+                                        args: new_args,
+                                    },
+                                });
+                            }
+                            other => {
+                                new_stmts.push(skotch_mir::Stmt::Assign { dest, value: other })
+                            }
+                        }
+                    }
+                    block.stmts = new_stmts;
+                }
+            };
+        for f in &mut module.functions {
+            pack_vararg_calls(f, &fn_vararg_shape);
+        }
+        for c in &mut module.classes {
+            for m in &mut c.methods {
+                pack_vararg_calls(m, &fn_vararg_shape);
+            }
+            pack_vararg_calls(&mut c.constructor, &fn_vararg_shape);
+        }
     }
 
     // Drain accumulated lambda classes from the file-scoped registry
@@ -17897,6 +18048,14 @@ fn lower_loop_body_blocks(
                 // set to the receiver slot so the body-preamble can emit
                 // `elem_slot = list.get(i)`; remains None for IntRange.
                 let mut list_recv: Option<LocalId> = None;
+                // When set, the for-in is over a primitive `int[]` slot.
+                // The body-preamble emits `elem_slot = arr[i]` via
+                // `Rvalue::ArrayLoad` instead of going through the boxed
+                // `java/util/List.get(I)` path. Drives the
+                // `for (x in xs)` lowering on vararg `Int` parameters
+                // (which are typed as `Ty::IntArray` after the vararg
+                // param-Ty rewrite) and on any direct `IntArray` slot.
+                let mut int_arr_recv: Option<LocalId> = None;
                 // When set, the for-in dispatches via the user-iterator
                 // protocol: `iter = recv.iterator()`, cond uses
                 // `iter.hasNext()`, body prepends `elem = iter.next()`.
@@ -18034,6 +18193,31 @@ fn lower_loop_body_blocks(
                                 },
                                 args: vec![range_slot],
                             },
+                        });
+                        (lo, hi, skotch_mir::BinOp::CmpLt, 1)
+                    } else if matches!(&range_ty, Ty::IntArray) {
+                        // `for (x in arr)` where `arr: IntArray` (or a
+                        // vararg `Int` param, which we rewrite to
+                        // `Ty::IntArray` upstream). kotlinc emits:
+                        //   i = 0
+                        //   hi = arr.length
+                        //   while (i < hi) { x = arr[i]; <body>; i++ }
+                        // Mirror that shape via `Rvalue::ArrayLength` +
+                        // a body-preamble `Rvalue::ArrayLoad`.
+                        int_arr_recv = Some(range_slot);
+                        let lo = LocalId(*next_slot);
+                        *next_slot += 1;
+                        local_tys.push(Ty::Int);
+                        cur_stmts.push(MStmt::Assign {
+                            dest: lo,
+                            value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(0)),
+                        });
+                        let hi = LocalId(*next_slot);
+                        *next_slot += 1;
+                        local_tys.push(Ty::Int);
+                        cur_stmts.push(MStmt::Assign {
+                            dest: hi,
+                            value: skotch_mir::Rvalue::ArrayLength(range_slot),
                         });
                         (lo, hi, skotch_mir::BinOp::CmpLt, 1)
                     } else {
@@ -18207,6 +18391,14 @@ fn lower_loop_body_blocks(
                         lookup_list_element_ty(recv.0).unwrap_or(Ty::Any)
                     };
                     local_tys.push(elem_ty);
+                    Some(s)
+                } else if int_arr_recv.is_some() {
+                    // IntArray for-in: each element is `Ty::Int`. The
+                    // body-prepend below emits `elem_slot = arr[i]`
+                    // via `Rvalue::ArrayLoad`.
+                    let s = LocalId(*next_slot);
+                    *next_slot += 1;
+                    local_tys.push(Ty::Int);
                     Some(s)
                 } else {
                     None
@@ -18425,6 +18617,22 @@ fn lower_loop_body_blocks(
                                 },
                             });
                         }
+                        prepend.append(&mut first_body.stmts);
+                        first_body.stmts = prepend;
+                    }
+                } else if let (Some(recv), Some(elem)) = (int_arr_recv, elem_slot_opt) {
+                    // IntArray for-in body prepend: bind the loop variable
+                    // to `arr[i]` via `Rvalue::ArrayLoad` so the body sees
+                    // an `Int`-typed slot.
+                    if let Some(first_body) = inner_body_blocks.first_mut() {
+                        let mut prepend: Vec<MStmt> = Vec::new();
+                        prepend.push(MStmt::Assign {
+                            dest: elem,
+                            value: skotch_mir::Rvalue::ArrayLoad {
+                                array: recv,
+                                index: i_slot,
+                            },
+                        });
                         prepend.append(&mut first_body.stmts);
                         first_body.stmts = prepend;
                     }
@@ -21104,6 +21312,17 @@ fn try_lower_function_body_via_blocks(
                         ty = Ty::Any;
                     }
                 }
+            }
+            // Vararg rewrite: `vararg xs: Int` becomes an `IntArray`
+            // slot. Reference vararg (`vararg xs: String`) erases to
+            // `Object[]` (Ty::Any); only the Int specialization is
+            // covered here. Without this rewrite, the body's
+            // `for (x in xs)` falls through to the IntRange path and
+            // the param descriptor stays `I` instead of `[I` → both
+            // the call-site array-pack and the for-in iteration go
+            // wrong (parity/63-vararg-call).
+            if p.is_vararg() && matches!(ty, Ty::Int) {
+                ty = Ty::IntArray;
             }
             param_fallback_tys.push(ty);
         }
