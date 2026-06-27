@@ -1541,6 +1541,58 @@ fn clear_local_helper_captures() {
     LOCAL_HELPER_CAPTURES.with(|c| c.borrow_mut().clear());
 }
 
+/// A recognized inline-able pattern for a lifted local helper.
+/// `CompoundAssignToCapture { op_text, capture_name, user_param_name }`
+/// captures helpers shaped exactly like
+///
+///     fun helper(p: T) { cap OP= p }
+///
+/// where `cap` is one of the helper's outer-scope captures and `p` is
+/// the helper's sole user param. At each call site we can splice the
+/// effect inline (`cap = cap OP arg`) so the caller's `cap` slot is
+/// actually mutated — bypassing the by-value capture limitation of the
+/// otherwise-correct out-of-line helper dispatch.
+///
+/// This narrow shape covers the canonical "accumulator" closure pattern
+/// (`fun add(x) { sum += x }`) without needing a full closure-env or
+/// Ref$IntRef rewrite. Anything more general falls back to the existing
+/// out-of-line dispatch (which is byte-shape-correct for non-mutating
+/// captures and the standard error for mutating captures of vars).
+#[derive(Clone, Debug)]
+struct LocalHelperInlinePattern {
+    /// One of "+=", "-=", "*=", "/=", "%=".
+    op_text: String,
+    capture_name: String,
+    /// Retained for diagnostics / future generalization to multi-param
+    /// helpers; intentionally not used yet by the splice path (which
+    /// trusts the single-arg shape recognized at registration time).
+    #[allow(dead_code)]
+    user_param_name: String,
+}
+
+thread_local! {
+    /// File-scoped side table mapping a lifted local-fn name to its
+    /// recognized inline-pattern (if any). Cleared together with
+    /// `LOCAL_HELPER_CAPTURES`.
+    static LOCAL_HELPER_INLINE:
+        std::cell::RefCell<rustc_hash::FxHashMap<String, LocalHelperInlinePattern>> =
+        std::cell::RefCell::new(rustc_hash::FxHashMap::default());
+}
+
+fn register_local_helper_inline(name: &str, pat: LocalHelperInlinePattern) {
+    LOCAL_HELPER_INLINE.with(|c| {
+        c.borrow_mut().insert(name.to_string(), pat);
+    });
+}
+
+fn local_helper_inline(name: &str) -> Option<LocalHelperInlinePattern> {
+    LOCAL_HELPER_INLINE.with(|c| c.borrow().get(name).cloned())
+}
+
+fn clear_local_helper_inline() {
+    LOCAL_HELPER_INLINE.with(|c| c.borrow_mut().clear());
+}
+
 /// Metadata for a cross-file user-defined extension function. Carries
 /// enough information to emit a `StaticJava` call against the declared
 /// wrapper class (e.g. `PipelineKt.countWhere(Iterable, Function1)I`)
@@ -4473,6 +4525,7 @@ pub fn lower_file(
     // (one nesting level). Collision on helper name across outer fns
     // is rejected so the global fn_lookup stays unambiguous.
     clear_local_helper_captures();
+    clear_local_helper_inline();
     let mut local_helper_specs: Vec<LocalHelperSpec<'_>> = Vec::new();
     let mut seen_helper_names: rustc_hash::FxHashSet<String> = rustc_hash::FxHashSet::default();
     {
@@ -4587,7 +4640,53 @@ pub fn lower_file(
                     .unwrap_or(Ty::Unit);
                 let fid = FuncId(helper_fid_base + local_helper_specs.len() as u32);
                 fn_lookup.insert(helper_name.to_string(), (fid, return_ty.clone()));
-                register_local_helper_captures(helper_name, captured_names);
+                register_local_helper_captures(helper_name, captured_names.clone());
+                // Recognize the "accumulator" inline pattern:
+                //
+                //   fun helper(p: T) { cap OP= p }
+                //
+                // where `cap` is one of the helper's outer-scope captures
+                // and `p` is the helper's sole user param. Call sites
+                // can splice the effect inline so the caller's `cap`
+                // slot is actually mutated (out-of-line dispatch passes
+                // captures by value — see `LocalHelperInlinePattern`).
+                {
+                    let kids = skotch_ast::children(helper_block.syntax());
+                    let only_stmt = kids
+                        .iter()
+                        .filter_map(|c| skotch_ast::KtExpr::cast(c))
+                        .next();
+                    if let Some(skotch_ast::KtExpr::Binary(b)) = only_stmt {
+                        let op_text = b.operation().map(|o| o.text()).unwrap_or_default();
+                        let is_compound =
+                            matches!(op_text.as_str(), "+=" | "-=" | "*=" | "/=" | "%=");
+                        if is_compound && user_params.len() == 1 {
+                            let lhs = b.lhs().map(unwrap_parens);
+                            let rhs = b.rhs().map(unwrap_parens);
+                            if let (
+                                Some(skotch_ast::KtExpr::Reference(lref)),
+                                Some(skotch_ast::KtExpr::Reference(rref)),
+                            ) = (lhs, rhs)
+                            {
+                                if let (Some(lname), Some(rname)) = (lref.name(), rref.name()) {
+                                    let lhs_is_capture = captured_names.iter().any(|c| c == lname);
+                                    let user_p = &user_params[0].0;
+                                    let rhs_is_user_param = rname == user_p;
+                                    if lhs_is_capture && rhs_is_user_param {
+                                        register_local_helper_inline(
+                                            helper_name,
+                                            LocalHelperInlinePattern {
+                                                op_text: op_text.to_string(),
+                                                capture_name: lname.to_string(),
+                                                user_param_name: user_p.clone(),
+                                            },
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 seen_helper_names.insert(helper_name.to_string());
                 let outer_name = outer_fn.name().unwrap_or("<anon>").to_string();
                 local_helper_specs.push(LocalHelperSpec {
@@ -27831,79 +27930,196 @@ fn try_lower_multi_stmt_block_with_offset(
                         });
                         continue;
                     }
+                    // Inlineable local helper: when `helper(arg)`
+                    // matches the recognized accumulator pattern
+                    // `fun helper(p) { cap OP= p }`, splice the
+                    // mutation inline at the call site so the
+                    // caller's `cap` slot is actually updated. The
+                    // out-of-line dispatch (below) passes captures
+                    // by value, which is byte-shape-correct for
+                    // non-mutating captures but silently drops
+                    // writes to mutable outer vars.
+                    if let Some(pat) = local_helper_inline(name) {
+                        let lhs_slot_opt = name_to_local
+                            .iter()
+                            .rev()
+                            .find(|(n, _)| n == &pat.capture_name)
+                            .map(|(_, l)| *l);
+                        let arg_exprs: Vec<KtExpr<'_>> = call
+                            .value_argument_list()
+                            .map(|al| {
+                                al.arguments()
+                                    .filter_map(|a| a.expression())
+                                    .map(unwrap_parens)
+                                    .collect()
+                            })
+                            .unwrap_or_default();
+                        if let (Some(lhs_slot), 1) = (lhs_slot_opt, arg_exprs.len()) {
+                            let rhs_slot_opt: Option<LocalId> = match arg_exprs.into_iter().next() {
+                                Some(KtExpr::Reference(rr)) => rr.name().and_then(|an| {
+                                    name_to_local
+                                        .iter()
+                                        .rev()
+                                        .find(|(n, _)| n == an)
+                                        .map(|(_, l)| *l)
+                                }),
+                                Some(other) => {
+                                    if let Some((k, ty)) = literal_to_const(&other, strings) {
+                                        let slot = LocalId(next_slot);
+                                        next_slot += 1;
+                                        local_tys.push(ty);
+                                        stmts.push(MStmt::Assign {
+                                            dest: slot,
+                                            value: skotch_mir::Rvalue::Const(k),
+                                        });
+                                        Some(slot)
+                                    } else {
+                                        None
+                                    }
+                                }
+                                None => None,
+                            };
+                            if let Some(rhs_slot) = rhs_slot_opt {
+                                let op = match pat.op_text.as_str() {
+                                    "+=" => skotch_mir::BinOp::AddI,
+                                    "-=" => skotch_mir::BinOp::SubI,
+                                    "*=" => skotch_mir::BinOp::MulI,
+                                    "/=" => skotch_mir::BinOp::DivI,
+                                    "%=" => skotch_mir::BinOp::ModI,
+                                    _ => unreachable!("op_text validated at registration"),
+                                };
+                                stmts.push(MStmt::Assign {
+                                    dest: lhs_slot,
+                                    value: skotch_mir::Rvalue::BinOp {
+                                        op,
+                                        lhs: lhs_slot,
+                                        rhs: rhs_slot,
+                                    },
+                                });
+                                continue;
+                            }
+                        }
+                    }
                     // Top-level fn call as a statement (result discarded).
                     if let Some((fid, ret)) = fn_lookup.get(name) {
                         let mut arg_slots: Vec<LocalId> = Vec::new();
                         let mut ok = true;
-                        if let Some(arg_list) = call.value_argument_list() {
-                            for arg in arg_list.arguments() {
-                                let Some(arg_e) = arg.expression() else {
+                        // Lifted local helper: prepend captured outer-
+                        // scope slot loads so the call matches the
+                        // helper's synthesized `(captures...,
+                        // user_args...)` signature. Without this, a
+                        // Stmt-position call like `add(3)` where `add`
+                        // closes over outer `var sum` would emit only
+                        // the user-arg `3` — the capture position
+                        // then receives `valueOf(3)` boxed as Object
+                        // and the `x` int slot is missing → VerifyError
+                        // "Bad type on operand stack". Captures resolve
+                        // against `name_to_local` first (outer-fn
+                        // params or block-scoped val/var), then against
+                        // `val_lookup` as a top-level val emitted via
+                        // GetStaticField. Mirrors the capture-prepend
+                        // path in lower_loop_body and the
+                        // try_lower_function_body single-call path.
+                        if let Some(cap_names) = local_helper_captures(name) {
+                            for cn in &cap_names {
+                                if let Some(s) = name_to_local
+                                    .iter()
+                                    .rev()
+                                    .find(|(n, _)| n == cn)
+                                    .map(|(_, l)| *l)
+                                {
+                                    arg_slots.push(s);
+                                } else if let Some(val_ty) = val_lookup.get(cn) {
+                                    let slot = LocalId(next_slot);
+                                    next_slot += 1;
+                                    local_tys.push(val_ty.clone());
+                                    stmts.push(MStmt::Assign {
+                                        dest: slot,
+                                        value: skotch_mir::Rvalue::GetStaticField {
+                                            class_name: wrapper_class.to_string(),
+                                            field_name: cn.to_string(),
+                                            descriptor: ty_to_descriptor(val_ty),
+                                        },
+                                    });
+                                    arg_slots.push(slot);
+                                } else {
                                     ok = false;
                                     break;
-                                };
-                                match unwrap_parens(arg_e) {
-                                    KtExpr::Reference(rr) => {
-                                        let Some(an) = rr.name() else {
-                                            ok = false;
-                                            break;
-                                        };
-                                        if let Some(slot) = name_to_local
-                                            .iter()
-                                            .rev()
-                                            .find(|(n, _)| n == an)
-                                            .map(|(_, l)| *l)
-                                        {
-                                            arg_slots.push(slot);
-                                        } else if let Some(val_ty) = val_lookup.get(an) {
-                                            let slot = LocalId(next_slot);
-                                            next_slot += 1;
-                                            local_tys.push(val_ty.clone());
-                                            stmts.push(MStmt::Assign {
-                                                dest: slot,
-                                                value: skotch_mir::Rvalue::GetStaticField {
-                                                    class_name: wrapper_class.to_string(),
-                                                    field_name: an.to_string(),
-                                                    descriptor: ty_to_descriptor(val_ty),
-                                                },
-                                            });
-                                            arg_slots.push(slot);
-                                        } else {
-                                            ok = false;
-                                            break;
-                                        }
-                                    }
-                                    other => {
-                                        if let Some((k, ty)) = literal_to_const(&other, strings) {
-                                            let slot = LocalId(next_slot);
-                                            next_slot += 1;
-                                            local_tys.push(ty);
-                                            stmts.push(MStmt::Assign {
-                                                dest: slot,
-                                                value: skotch_mir::Rvalue::Const(k),
-                                            });
-                                            arg_slots.push(slot);
-                                        } else {
-                                            let snap = name_to_local.clone();
-                                            let lookup = |n: &str| -> Option<LocalId> {
-                                                snap.iter()
-                                                    .rev()
-                                                    .find(|(name, _)| name == n)
-                                                    .map(|(_, l)| *l)
+                                }
+                            }
+                        }
+                        if ok {
+                            if let Some(arg_list) = call.value_argument_list() {
+                                for arg in arg_list.arguments() {
+                                    let Some(arg_e) = arg.expression() else {
+                                        ok = false;
+                                        break;
+                                    };
+                                    match unwrap_parens(arg_e) {
+                                        KtExpr::Reference(rr) => {
+                                            let Some(an) = rr.name() else {
+                                                ok = false;
+                                                break;
                                             };
-                                            let s = lower_rich_expr_to_slot(
-                                                other,
-                                                &lookup,
-                                                fn_lookup,
-                                                &mut next_slot,
-                                                &mut stmts,
-                                                &mut local_tys,
-                                                strings,
-                                            );
-                                            if let Some(s) = s {
-                                                arg_slots.push(s);
+                                            if let Some(slot) = name_to_local
+                                                .iter()
+                                                .rev()
+                                                .find(|(n, _)| n == an)
+                                                .map(|(_, l)| *l)
+                                            {
+                                                arg_slots.push(slot);
+                                            } else if let Some(val_ty) = val_lookup.get(an) {
+                                                let slot = LocalId(next_slot);
+                                                next_slot += 1;
+                                                local_tys.push(val_ty.clone());
+                                                stmts.push(MStmt::Assign {
+                                                    dest: slot,
+                                                    value: skotch_mir::Rvalue::GetStaticField {
+                                                        class_name: wrapper_class.to_string(),
+                                                        field_name: an.to_string(),
+                                                        descriptor: ty_to_descriptor(val_ty),
+                                                    },
+                                                });
+                                                arg_slots.push(slot);
                                             } else {
                                                 ok = false;
                                                 break;
+                                            }
+                                        }
+                                        other => {
+                                            if let Some((k, ty)) = literal_to_const(&other, strings)
+                                            {
+                                                let slot = LocalId(next_slot);
+                                                next_slot += 1;
+                                                local_tys.push(ty);
+                                                stmts.push(MStmt::Assign {
+                                                    dest: slot,
+                                                    value: skotch_mir::Rvalue::Const(k),
+                                                });
+                                                arg_slots.push(slot);
+                                            } else {
+                                                let snap = name_to_local.clone();
+                                                let lookup = |n: &str| -> Option<LocalId> {
+                                                    snap.iter()
+                                                        .rev()
+                                                        .find(|(name, _)| name == n)
+                                                        .map(|(_, l)| *l)
+                                                };
+                                                let s = lower_rich_expr_to_slot(
+                                                    other,
+                                                    &lookup,
+                                                    fn_lookup,
+                                                    &mut next_slot,
+                                                    &mut stmts,
+                                                    &mut local_tys,
+                                                    strings,
+                                                );
+                                                if let Some(s) = s {
+                                                    arg_slots.push(s);
+                                                } else {
+                                                    ok = false;
+                                                    break;
+                                                }
                                             }
                                         }
                                     }
