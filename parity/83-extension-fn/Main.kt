@@ -1,4 +1,4 @@
-fun String.reverseWords(): String = this.split(" ").reversed().joinToString(" ")
+fun String.shout(): String = this.uppercase() + "!"
 fun Int.times(s: String): String {
     val sb = StringBuilder()
     for (i in 0 until this) sb.append(s)
@@ -6,7 +6,7 @@ fun Int.times(s: String): String {
 }
 
 fun main() {
-    println("hello world from kotlin".reverseWords())
+    println("hello".shout())
     println(3.times("ab"))
     println(0.times("x"))
 }
