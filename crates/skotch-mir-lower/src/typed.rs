@@ -911,10 +911,34 @@ thread_local! {
     /// at end-of-file so the map doesn't leak across modules.
     static TYPEALIAS_MAP: std::cell::RefCell<rustc_hash::FxHashMap<String, Ty>> =
         std::cell::RefCell::new(rustc_hash::FxHashMap::default());
+
+    /// File-scoped enum class registry: JVM internal name (e.g.
+    /// `"Color"` or `"com/x/Color"`). Populated during enum class
+    /// emission in `lower_file` so DotQualified handlers (e.g.
+    /// `Color.entries`) can detect enum receivers and emit the
+    /// proper `entries` field descriptor (`Ljava/util/List;`)
+    /// instead of the default `L<ClassName>;` fallback. Cleared on
+    /// the next `lower_file` via `reset_enum_classes`.
+    static ENUM_CLASSES: std::cell::RefCell<rustc_hash::FxHashSet<String>> =
+        std::cell::RefCell::new(rustc_hash::FxHashSet::default());
 }
 
 fn resolve_typealias(name: &str) -> Option<Ty> {
     TYPEALIAS_MAP.with(|t| t.borrow().get(name).cloned())
+}
+
+fn is_enum_class(name: &str) -> bool {
+    ENUM_CLASSES.with(|s| s.borrow().contains(name))
+}
+
+fn register_enum_class(name: &str) {
+    ENUM_CLASSES.with(|s| {
+        s.borrow_mut().insert(name.to_string());
+    });
+}
+
+fn reset_enum_classes() {
+    ENUM_CLASSES.with(|s| s.borrow_mut().clear());
 }
 
 struct TypeAliasScope {
@@ -3736,6 +3760,9 @@ pub fn lower_file(
     // flag) so the toggle reaches mir-lower without re-plumbing every
     // call site through the workspace.
     let strict = std::env::var_os("SKOTCH_STRICT").is_some();
+    // Reset file-scoped enum-class registry so `Color.entries` in a
+    // later file doesn't see stale enums from a previous file.
+    reset_enum_classes();
     // Apply package prefix to the wrapper-class JVM internal name so
     // `package com.foo.bar` in `Hello.kt` produces `com/foo/bar/HelloKt`
     // (matches kotlinc). With no package directive, this is a no-op
@@ -6484,7 +6511,7 @@ pub fn lower_file(
                         .collect()
                 })
                 .unwrap_or_default();
-            let static_fields: Vec<skotch_mir::MirField> = entry_names
+            let mut static_fields: Vec<skotch_mir::MirField> = entry_names
                 .iter()
                 .map(|entry_name| skotch_mir::MirField {
                     name: entry_name.clone(),
@@ -6492,6 +6519,21 @@ pub fn lower_file(
                     is_jvm_field: false,
                 })
                 .collect();
+            // Synthesize an `entries: List` static field that holds the
+            // immutable list of all enum entries. kotlinc emits this as
+            // `$ENTRIES: kotlin/enums/EnumEntries`, but we use a plain
+            // `java/util/List` (initialized via `Arrays.asList(Color[])`)
+            // so we don't need the kotlin.enums runtime. Source-level
+            // `Color.entries` references load this field. Only added when
+            // the enum actually has entries — otherwise `<clinit>` has
+            // nothing to populate.
+            if !entry_names.is_empty() {
+                static_fields.push(skotch_mir::MirField {
+                    name: "entries".to_string(),
+                    ty: Ty::Class("java/util/List".to_string()),
+                    is_jvm_field: false,
+                });
+            }
             // Synthesize enum <init>(String, int) that calls
             // super(name, ordinal) on java/lang/Enum. The shape mirrors
             // empty_constructor_super except for the additional name+ord
@@ -6601,6 +6643,88 @@ pub fn lower_file(
                     },
                 });
             }
+            // Populate the synthesized `entries` static field:
+            //   arr = new EnumClass[N]
+            //   arr[i] = getstatic EnumClass.<entry_i>  for each i
+            //   list = Arrays.asList(arr)
+            //   putstatic EnumClass.entries:Ljava/util/List;
+            if !entry_names.is_empty() {
+                let size_slot = skotch_mir::LocalId(next_slot);
+                next_slot += 1;
+                clinit_locals.push(Ty::Int);
+                clinit_stmts.push(skotch_mir::Stmt::Assign {
+                    dest: size_slot,
+                    value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(
+                        entry_names.len() as i32
+                    )),
+                });
+                let arr_slot = skotch_mir::LocalId(next_slot);
+                next_slot += 1;
+                clinit_locals.push(Ty::Any);
+                clinit_stmts.push(skotch_mir::Stmt::Assign {
+                    dest: arr_slot,
+                    value: skotch_mir::Rvalue::NewTypedObjectArray {
+                        size: size_slot,
+                        element_class: name.clone(),
+                    },
+                });
+                for (idx, entry_name) in entry_names.iter().enumerate() {
+                    let idx_slot = skotch_mir::LocalId(next_slot);
+                    next_slot += 1;
+                    clinit_locals.push(Ty::Int);
+                    clinit_stmts.push(skotch_mir::Stmt::Assign {
+                        dest: idx_slot,
+                        value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(idx as i32)),
+                    });
+                    let entry_slot = skotch_mir::LocalId(next_slot);
+                    next_slot += 1;
+                    clinit_locals.push(Ty::Class(name.clone()));
+                    clinit_stmts.push(skotch_mir::Stmt::Assign {
+                        dest: entry_slot,
+                        value: skotch_mir::Rvalue::GetStaticField {
+                            class_name: name.clone(),
+                            field_name: entry_name.clone(),
+                            descriptor: descriptor.clone(),
+                        },
+                    });
+                    let unused2 = skotch_mir::LocalId(next_slot);
+                    next_slot += 1;
+                    clinit_locals.push(Ty::Unit);
+                    clinit_stmts.push(skotch_mir::Stmt::Assign {
+                        dest: unused2,
+                        value: skotch_mir::Rvalue::ObjectArrayStore {
+                            array: arr_slot,
+                            index: idx_slot,
+                            value: entry_slot,
+                        },
+                    });
+                }
+                let list_slot = skotch_mir::LocalId(next_slot);
+                next_slot += 1;
+                clinit_locals.push(Ty::Class("java/util/List".to_string()));
+                clinit_stmts.push(skotch_mir::Stmt::Assign {
+                    dest: list_slot,
+                    value: skotch_mir::Rvalue::Call {
+                        kind: skotch_mir::CallKind::StaticJava {
+                            class_name: "java/util/Arrays".to_string(),
+                            method_name: "asList".to_string(),
+                            descriptor: "([Ljava/lang/Object;)Ljava/util/List;".to_string(),
+                        },
+                        args: vec![arr_slot],
+                    },
+                });
+                let unused3 = skotch_mir::LocalId(next_slot);
+                clinit_locals.push(Ty::Unit);
+                clinit_stmts.push(skotch_mir::Stmt::Assign {
+                    dest: unused3,
+                    value: skotch_mir::Rvalue::PutStaticField {
+                        class_name: name.clone(),
+                        field_name: "entries".to_string(),
+                        descriptor: "Ljava/util/List;".to_string(),
+                        value: list_slot,
+                    },
+                });
+            }
             let clinit_fn = if entry_names.is_empty() {
                 None
             } else {
@@ -6663,6 +6787,7 @@ pub fn lower_file(
                 value_underlying_ty: None,
             };
             module.push_class(mir_class);
+            register_enum_class(&name);
             module.enum_names.insert(name);
         }
     }
@@ -33507,6 +33632,30 @@ fn lower_rich_expr_to_slot(
                     let is_class_namespace =
                         cls.starts_with(char::is_uppercase) && lookup_name(cls).is_none();
                     if is_class_namespace {
+                        // Special-case `<EnumName>.entries`: the enum
+                        // class emission synthesizes a static `entries`
+                        // field of type `java/util/List` populated in
+                        // `<clinit>` with Arrays.asList of all entries.
+                        // The default `L<ClassName>;` descriptor would
+                        // refer to a non-existent field at runtime
+                        // (kotlinc names this `$ENTRIES` and exposes it
+                        // via a `getEntries()` accessor returning
+                        // `kotlin/enums/EnumEntries`; we use a plain
+                        // `List` to avoid the kotlin.enums runtime).
+                        if prop == "entries" && is_enum_class(cls) {
+                            let slot = LocalId(*next_slot);
+                            *next_slot += 1;
+                            extra_locals.push(Ty::Class("java/util/List".to_string()));
+                            pre_stmts.push(MStmt::Assign {
+                                dest: slot,
+                                value: skotch_mir::Rvalue::GetStaticField {
+                                    class_name: cls.to_string(),
+                                    field_name: "entries".to_string(),
+                                    descriptor: "Ljava/util/List;".to_string(),
+                                },
+                            });
+                            return Some(slot);
+                        }
                         let slot = LocalId(*next_slot);
                         *next_slot += 1;
                         extra_locals.push(Ty::Class(cls.to_string()));
@@ -49235,12 +49384,22 @@ mod tests {
         let module = lower("enum class Color { RED, GREEN, BLUE }", "TestKt");
         let c = &module.classes[0];
         let entry_names: Vec<&str> = c.static_fields.iter().map(|f| f.name.as_str()).collect();
-        assert_eq!(entry_names, vec!["RED", "GREEN", "BLUE"]);
-        // Each entry's type is the enum class itself.
+        // `entries` is a synthesized `List` field populated in
+        // `<clinit>` so `Color.entries` references resolve at runtime.
+        assert_eq!(entry_names, vec!["RED", "GREEN", "BLUE", "entries"]);
+        // Each per-entry static field's type is the enum class itself;
+        // the trailing `entries` field is `java/util/List`.
         for f in &c.static_fields {
-            match &f.ty {
-                Ty::Class(n) => assert_eq!(n, "Color"),
-                other => panic!("expected Ty::Class(Color), got {other:?}"),
+            if f.name == "entries" {
+                match &f.ty {
+                    Ty::Class(n) => assert_eq!(n, "java/util/List"),
+                    other => panic!("expected Ty::Class(java/util/List), got {other:?}"),
+                }
+            } else {
+                match &f.ty {
+                    Ty::Class(n) => assert_eq!(n, "Color"),
+                    other => panic!("expected Ty::Class(Color), got {other:?}"),
+                }
             }
         }
     }
