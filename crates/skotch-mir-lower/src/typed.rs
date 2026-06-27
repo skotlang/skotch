@@ -41862,8 +41862,29 @@ fn lower_rich_expr_to_slot(
                     if let Some(prop_n) = prop_ref.name() {
                         if let Ty::Class(cname) = &recv_ty {
                             let getter_name = property_getter_name(prop_n);
-                            let ret_ty =
+                            // First try the intrinsic getter return-type
+                            // table; if that doesn't surface a type (true
+                            // for every user class), fall back to looking
+                            // up the field type in the class's field
+                            // registry. Without this fallback, chained
+                            // SafeAccess on user-class fields (`o?.inner
+                            // ?.v`) produces a `Ty::Any` slot at the
+                            // inner step, which makes the outer step's
+                            // `Ty::Class` guard fail and the whole chain
+                            // bails. Preserving the field's true type
+                            // keeps the outer SafeAccess on a Class
+                            // receiver so it can dispatch.
+                            let mut ret_ty =
                                 class_method_return_ty(cname, &getter_name).unwrap_or(Ty::Any);
+                            if matches!(ret_ty, Ty::Any) {
+                                if let Some(fields) = lookup_class_fields(cname) {
+                                    if let Some((_, fty)) =
+                                        fields.iter().find(|(fname, _)| fname == prop_n)
+                                    {
+                                        ret_ty = fty.clone();
+                                    }
+                                }
+                            }
                             let result_slot = LocalId(*next_slot);
                             *next_slot += 1;
                             extra_locals.push(ret_ty);
@@ -45003,6 +45024,463 @@ fn lower_simple_body(
             }
         }
     }
+    // SafeAccess-chain + Elvis expression body:
+    //   `fun depth(o: Outer?): Int = o?.inner?.v ?: -1`
+    //
+    // `lower_rich_expr_to_slot`'s SafeAccess arm and Elvis arm are both
+    // straight-line: the SafeAccess arm unconditionally invokes the
+    // getter/method without a null guard, and the Elvis arm routes through
+    // `requireNonNullElse(Object, Object)` which always evaluates the LHS.
+    // For a chained `recv?.f1?.f2` on user-class fields the inner step
+    // returns `null` at runtime when its receiver was null AND the outer
+    // step then NPEs against that null because no short-circuit was emitted.
+    //
+    // Emit a proper short-circuiting CFG instead:
+    //   block 0: load base param;
+    //            recv0_null = (base == null); Branch -> alt | step1
+    //   step k:  vk = vk-1.fk;
+    //            vk_null = (vk == null); Branch -> alt | step k+1
+    //   final:   read = result_slot = v_final; Goto join
+    //   alt:     eval rhs -> alt_slot; result_slot = alt_slot; Goto join
+    //   join:    ReturnValue(result_slot)
+    //
+    // Scope: base is a Reference to a single function param whose declared
+    // type is a user class in `class_lookup`; every chain step is a
+    // SafeAccess Reference (`?.field`) whose field name resolves through
+    // `class_fields`. RHS is lowered through `lower_rich_expr_to_slot`
+    // (literal, Prefix, top-level call, etc).
+    if let KtExpr::Binary(elvis_b) = &body_expr {
+        if elvis_b.operation().map(|o| o.text()).as_deref() == Some("?:") {
+            if let (Some(lhs_raw), Some(rhs_raw)) = (elvis_b.lhs(), elvis_b.rhs()) {
+                let lhs_e = unwrap_parens(lhs_raw);
+                let rhs_e = unwrap_parens(rhs_raw);
+                if let KtExpr::SafeAccess(_) = lhs_e {
+                    // Walk the SafeAccess chain right-to-left collecting
+                    // (field_name, accessor_kind=Ref). Each accessor must
+                    // be a bare Reference for this arm — chained method
+                    // calls (`recv?.method(args)?.f`) are out of scope.
+                    let mut cursor: KtExpr<'_> = lhs_e;
+                    let mut chain: Vec<String> = Vec::new();
+                    let base_ref_opt = loop {
+                        match cursor {
+                            KtExpr::SafeAccess(s) => {
+                                let kids: Vec<KtExpr<'_>> = skotch_ast::children(s.syntax())
+                                    .iter()
+                                    .filter_map(KtExpr::cast)
+                                    .collect();
+                                if kids.len() != 2 {
+                                    break None;
+                                }
+                                let acc = kids[1];
+                                let KtExpr::Reference(prop_ref) = acc else {
+                                    break None;
+                                };
+                                let Some(pname) = prop_ref.name() else {
+                                    break None;
+                                };
+                                chain.push(pname.to_string());
+                                cursor = unwrap_parens(kids[0]);
+                            }
+                            KtExpr::Reference(rr) => break Some(rr),
+                            _ => break None,
+                        }
+                    };
+                    if let Some(base_ref) = base_ref_opt {
+                        chain.reverse();
+                        if !chain.is_empty() {
+                            if let Some(base_name) = base_ref.name() {
+                                let params: Vec<skotch_ast::KtValueParameter<'_>> = f
+                                    .value_parameter_list()
+                                    .map(|pl| pl.parameters().collect())
+                                    .unwrap_or_default();
+                                if let Some((base_idx, base_param)) = params
+                                    .iter()
+                                    .enumerate()
+                                    .find(|(_, p)| p.name() == Some(base_name))
+                                {
+                                    // Resolve the base param's declared
+                                    // class name (peel `?` via
+                                    // nullable_type).
+                                    let base_class_opt =
+                                        base_param.type_reference().and_then(|tr| {
+                                            if let Some(u) = tr.user_type() {
+                                                u.name().map(String::from)
+                                            } else if let Some(nt) = tr.nullable_type() {
+                                                nt.inner_user_type()
+                                                    .and_then(|u| u.name())
+                                                    .map(String::from)
+                                            } else {
+                                                None
+                                            }
+                                        });
+                                    if let Some(base_class) = base_class_opt {
+                                        if class_lookup.contains_key(&base_class) {
+                                            // Walk the chain to determine
+                                            // each step's containing
+                                            // class and the final field's
+                                            // type. Bail if any step
+                                            // can't be resolved against
+                                            // `class_fields`.
+                                            let mut step_classes: Vec<String> = Vec::new();
+                                            let mut current_cls = base_class.clone();
+                                            let mut final_ty: Option<Ty> = None;
+                                            let mut walk_ok = true;
+                                            for (step_i, fname) in chain.iter().enumerate() {
+                                                step_classes.push(current_cls.clone());
+                                                let Some(fields) = class_fields.get(&current_cls)
+                                                else {
+                                                    walk_ok = false;
+                                                    break;
+                                                };
+                                                let Some((_, type_name)) =
+                                                    fields.iter().find(|(n, _)| n == fname)
+                                                else {
+                                                    walk_ok = false;
+                                                    break;
+                                                };
+                                                let is_last = step_i + 1 == chain.len();
+                                                if is_last {
+                                                    final_ty = Some(
+                                                        skotch_types::ty_from_name(type_name)
+                                                            .unwrap_or_else(|| {
+                                                                Ty::Class(type_name.clone())
+                                                            }),
+                                                    );
+                                                } else {
+                                                    // Next class must
+                                                    // also be a known
+                                                    // user class so we
+                                                    // can keep walking.
+                                                    if !class_lookup.contains_key(type_name) {
+                                                        walk_ok = false;
+                                                        break;
+                                                    }
+                                                    current_cls = type_name.clone();
+                                                }
+                                            }
+                                            if walk_ok && final_ty.is_some() {
+                                                let field_ty = final_ty.unwrap();
+                                                // Result Ty: use the
+                                                // function's declared
+                                                // return type when
+                                                // present, else fall back
+                                                // to the field's Ty.
+                                                let result_ty = f
+                                                    .return_type()
+                                                    .and_then(|tr| tr.user_type())
+                                                    .and_then(|u| u.name())
+                                                    .and_then(skotch_types::ty_from_name)
+                                                    .unwrap_or_else(|| field_ty.clone());
+                                                let n_steps = chain.len();
+                                                let param_count = params.len();
+                                                let mut next_slot = param_count as u32;
+                                                let mut extra_locals: Vec<Ty> = Vec::new();
+                                                // Slot allocation:
+                                                //  - One field-load slot
+                                                //    per step.
+                                                //  - One null-cmp slot
+                                                //    per non-final step
+                                                //    (or all steps when
+                                                //    the final field's
+                                                //    Ty is a reference).
+                                                //  - One null-const slot
+                                                //    PER null cmp — each
+                                                //    null literal must
+                                                //    be single-use so
+                                                //    the backend's
+                                                //    INLINABLE_CONSTS
+                                                //    pass picks it up and
+                                                //    emits `if_acmpeq` /
+                                                //    `if_acmpne`. A shared
+                                                //    null slot would be
+                                                //    materialized via
+                                                //    `Object.equals(null)`
+                                                //    which NPEs at the
+                                                //    very call site we're
+                                                //    trying to guard.
+                                                //  - One result slot.
+                                                //  - RHS slots are
+                                                //    allocated inside
+                                                //    `lower_rich_expr_to_slot`.
+                                                let base_null_const_slot =
+                                                    skotch_mir::LocalId(next_slot);
+                                                next_slot += 1;
+                                                extra_locals.push(Ty::Nullable(Box::new(Ty::Any)));
+                                                let field_slots: Vec<skotch_mir::LocalId> = (0
+                                                    ..n_steps)
+                                                    .map(|i| {
+                                                        let s = skotch_mir::LocalId(
+                                                            next_slot + i as u32,
+                                                        );
+                                                        // Each step's
+                                                        // loaded value Ty:
+                                                        // the next step's
+                                                        // class for non-
+                                                        // final steps, the
+                                                        // field's Ty for
+                                                        // the final step.
+                                                        let step_ty = if i + 1 < n_steps {
+                                                            Ty::Class(step_classes[i + 1].clone())
+                                                        } else {
+                                                            field_ty.clone()
+                                                        };
+                                                        extra_locals.push(step_ty);
+                                                        s
+                                                    })
+                                                    .collect();
+                                                next_slot += n_steps as u32;
+                                                // Per-step null const +
+                                                // cmp slots. Allocate one
+                                                // null const + one cmp
+                                                // bool per step.
+                                                let step_null_const_slots: Vec<
+                                                    skotch_mir::LocalId,
+                                                > = (0..n_steps)
+                                                    .map(|_| {
+                                                        let s = skotch_mir::LocalId(next_slot);
+                                                        next_slot += 1;
+                                                        extra_locals
+                                                            .push(Ty::Nullable(Box::new(Ty::Any)));
+                                                        s
+                                                    })
+                                                    .collect();
+                                                let cmp_slots: Vec<skotch_mir::LocalId> = (0
+                                                    ..n_steps)
+                                                    .map(|_| {
+                                                        let s = skotch_mir::LocalId(next_slot);
+                                                        next_slot += 1;
+                                                        extra_locals.push(Ty::Bool);
+                                                        s
+                                                    })
+                                                    .collect();
+                                                let base_null_cmp = skotch_mir::LocalId(next_slot);
+                                                next_slot += 1;
+                                                extra_locals.push(Ty::Bool);
+                                                let result_slot = skotch_mir::LocalId(next_slot);
+                                                next_slot += 1;
+                                                extra_locals.push(result_ty.clone());
+
+                                                // Block layout:
+                                                //  block 0: null const + base-null cmp + Branch
+                                                //  block 1..=n_steps: step k field load + cmp + Branch
+                                                //  block n_steps+1 (final): result := last field slot; Goto join
+                                                //  block n_steps+2 (alt): eval rhs -> alt_slot; result := alt_slot; Goto join
+                                                //  block n_steps+3 (join): ReturnValue(result)
+                                                let final_block_id = (n_steps + 1) as u32;
+                                                let alt_block_id = (n_steps + 2) as u32;
+                                                let join_block_id = (n_steps + 3) as u32;
+
+                                                let mut blocks: Vec<BasicBlock> = Vec::new();
+                                                // Block 0: load null + cmp base.
+                                                let base_slot =
+                                                    skotch_mir::LocalId(base_idx as u32);
+                                                let b0_stmts = vec![
+                                                    skotch_mir::Stmt::Assign {
+                                                        dest: base_null_const_slot,
+                                                        value: skotch_mir::Rvalue::Const(
+                                                            skotch_mir::MirConst::Null,
+                                                        ),
+                                                    },
+                                                    skotch_mir::Stmt::Assign {
+                                                        dest: base_null_cmp,
+                                                        value: skotch_mir::Rvalue::BinOp {
+                                                            op: skotch_mir::BinOp::CmpEq,
+                                                            lhs: base_slot,
+                                                            rhs: base_null_const_slot,
+                                                        },
+                                                    },
+                                                ];
+                                                blocks.push(BasicBlock {
+                                                    stmts: b0_stmts,
+                                                    terminator: Terminator::Branch {
+                                                        cond: base_null_cmp,
+                                                        // cmp true => null => alt
+                                                        then_block: alt_block_id,
+                                                        else_block: 1,
+                                                    },
+                                                });
+                                                // Step blocks.
+                                                let mut prev_slot = base_slot;
+                                                for (i, fname) in chain.iter().enumerate() {
+                                                    let cls_for_step = step_classes[i].clone();
+                                                    let field_slot = field_slots[i];
+                                                    let cmp_slot = cmp_slots[i];
+                                                    let mut stmts: Vec<skotch_mir::Stmt> =
+                                                        Vec::new();
+                                                    stmts.push(skotch_mir::Stmt::Assign {
+                                                        dest: field_slot,
+                                                        value: skotch_mir::Rvalue::GetField {
+                                                            receiver: prev_slot,
+                                                            class_name: cls_for_step,
+                                                            field_name: fname.clone(),
+                                                        },
+                                                    });
+                                                    let is_last = i + 1 == n_steps;
+                                                    let next_block_id = if is_last {
+                                                        final_block_id
+                                                    } else {
+                                                        (i + 2) as u32
+                                                    };
+                                                    // Only emit a null
+                                                    // cmp + branch when
+                                                    // the loaded value
+                                                    // is a reference type
+                                                    // (class). Primitive
+                                                    // final values
+                                                    // (Int/Long/...) are
+                                                    // autoboxed by
+                                                    // GetField on a
+                                                    // primitive-field
+                                                    // slot? No — for user
+                                                    // class fields of
+                                                    // primitive type the
+                                                    // backend emits the
+                                                    // primitive descriptor
+                                                    // and the value is
+                                                    // never null, so for
+                                                    // the FINAL step
+                                                    // unconditionally
+                                                    // goto the final
+                                                    // block when the
+                                                    // field Ty is
+                                                    // primitive.
+                                                    // Determine the step's
+                                                    // loaded value Ty
+                                                    // (intermediate steps
+                                                    // are always class
+                                                    // refs by walk_ok
+                                                    // construction; the
+                                                    // FINAL step's Ty is
+                                                    // `field_ty` which
+                                                    // may be primitive).
+                                                    let step_field_ty = if is_last {
+                                                        field_ty.clone()
+                                                    } else {
+                                                        Ty::Class(step_classes[i + 1].clone())
+                                                    };
+                                                    let is_prim = matches!(
+                                                        step_field_ty,
+                                                        Ty::Int
+                                                            | Ty::Long
+                                                            | Ty::Float
+                                                            | Ty::Double
+                                                            | Ty::Bool
+                                                            | Ty::Byte
+                                                            | Ty::Short
+                                                            | Ty::Char
+                                                    );
+                                                    if is_last && is_prim {
+                                                        blocks.push(BasicBlock {
+                                                            stmts,
+                                                            terminator: Terminator::Goto(
+                                                                next_block_id,
+                                                            ),
+                                                        });
+                                                    } else {
+                                                        let null_step_slot =
+                                                            step_null_const_slots[i];
+                                                        stmts.push(skotch_mir::Stmt::Assign {
+                                                            dest: null_step_slot,
+                                                            value: skotch_mir::Rvalue::Const(
+                                                                skotch_mir::MirConst::Null,
+                                                            ),
+                                                        });
+                                                        stmts.push(skotch_mir::Stmt::Assign {
+                                                            dest: cmp_slot,
+                                                            value: skotch_mir::Rvalue::BinOp {
+                                                                op: skotch_mir::BinOp::CmpEq,
+                                                                lhs: field_slot,
+                                                                rhs: null_step_slot,
+                                                            },
+                                                        });
+                                                        blocks.push(BasicBlock {
+                                                            stmts,
+                                                            terminator: Terminator::Branch {
+                                                                cond: cmp_slot,
+                                                                then_block: alt_block_id,
+                                                                else_block: next_block_id,
+                                                            },
+                                                        });
+                                                    }
+                                                    prev_slot = field_slot;
+                                                }
+                                                // Final block: result :=
+                                                // last field slot.
+                                                blocks.push(BasicBlock {
+                                                    stmts: vec![skotch_mir::Stmt::Assign {
+                                                        dest: result_slot,
+                                                        value: skotch_mir::Rvalue::Local(
+                                                            *field_slots.last().unwrap(),
+                                                        ),
+                                                    }],
+                                                    terminator: Terminator::Goto(join_block_id),
+                                                });
+                                                // Alt block: lower RHS
+                                                // through lower_rich.
+                                                let outer_param_names: Vec<String> = params
+                                                    .iter()
+                                                    .map(|p| p.name().unwrap_or("").to_string())
+                                                    .collect();
+                                                let snap_locals: Vec<(String, LocalId)> =
+                                                    outer_param_names
+                                                        .iter()
+                                                        .enumerate()
+                                                        .map(|(i, n)| {
+                                                            (n.clone(), LocalId(i as u32))
+                                                        })
+                                                        .collect();
+                                                let snap = snap_locals.clone();
+                                                let lookup = |n: &str| -> Option<LocalId> {
+                                                    snap.iter()
+                                                        .rev()
+                                                        .find(|(nm, _)| nm == n)
+                                                        .map(|(_, l)| *l)
+                                                };
+                                                let mut alt_stmts: Vec<skotch_mir::Stmt> =
+                                                    Vec::new();
+                                                let Some(alt_slot) = lower_rich_expr_to_slot(
+                                                    rhs_e,
+                                                    &lookup,
+                                                    fn_lookup,
+                                                    &mut next_slot,
+                                                    &mut alt_stmts,
+                                                    &mut extra_locals,
+                                                    strings,
+                                                ) else {
+                                                    // RHS didn't lower —
+                                                    // fall through to the
+                                                    // generic catch-all
+                                                    // below.
+                                                    return make_placeholder();
+                                                };
+                                                alt_stmts.push(skotch_mir::Stmt::Assign {
+                                                    dest: result_slot,
+                                                    value: skotch_mir::Rvalue::Local(alt_slot),
+                                                });
+                                                blocks.push(BasicBlock {
+                                                    stmts: alt_stmts,
+                                                    terminator: Terminator::Goto(join_block_id),
+                                                });
+                                                // Join block.
+                                                blocks.push(BasicBlock {
+                                                    stmts: Vec::new(),
+                                                    terminator: Terminator::ReturnValue(
+                                                        result_slot,
+                                                    ),
+                                                });
+                                                return (blocks, extra_locals);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     if let Some((c, ty)) = literal_to_const(&body_expr, strings) {
         // Decide the result local slot. With no params, the result lives
         // in local 0; otherwise it's the next slot after the params.
