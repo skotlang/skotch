@@ -9833,6 +9833,183 @@ fn lower_return_when_chain<'a>(
     Some(out)
 }
 
+/// `return try { e } catch (e1: T1) { c1 } catch (e2: T2) { c2 } ...` —
+/// counterpart of [`lower_return_if_chain`] / [`lower_return_when_chain`]
+/// for `try` expressions in tail position. Each arm body is a single
+/// expression lowered via `lower_rich_expr_to_slot`, terminated with
+/// `ReturnValue(slot)`. Each catch registers an `ExceptionHandler` for
+/// the same try block, mirroring kotlinc's multi-catch shape:
+///
+///   pre        -> Goto(try_id)
+///   try        -> lower try-expr to slot, ReturnValue(slot)
+///   handler_0  -> astore e_slot, lower catch_0 expr to slot, ReturnValue
+///   handler_1  -> astore e_slot, lower catch_1 expr to slot, ReturnValue
+///   ...
+///
+/// `finally` and catch bodies with more than a single expression
+/// statement bail (return None), so the caller can fall back to its
+/// pre-existing error path.
+#[allow(clippy::too_many_arguments)]
+fn lower_return_try<'a>(
+    t: skotch_ast::KtTry<'a>,
+    pre_blocks: Vec<BasicBlock>,
+    cur_stmts: Vec<skotch_mir::Stmt>,
+    name_to_local: &mut Vec<(String, skotch_mir::LocalId)>,
+    next_slot: &mut u32,
+    local_tys: &mut Vec<Ty>,
+    strings: &mut Vec<String>,
+    fn_lookup: &rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)>,
+    _function_param_names: &[String],
+    block_offset: u32,
+) -> Option<Vec<BasicBlock>> {
+    use skotch_ast::KtExpr;
+    use skotch_mir::{LocalId, Stmt as MStmt};
+
+    if t.finally().is_some() {
+        return None;
+    }
+    let try_body = t.try_block()?;
+    let catches: Vec<_> = t.catches().collect();
+    if catches.is_empty() {
+        return None;
+    }
+
+    // Extract the single result expression from a body block. Accepts
+    // either `{ e }` or `{ return e }`.
+    fn body_result<'a>(block: skotch_ast::KtBlock<'a>) -> Option<KtExpr<'a>> {
+        let stmts: Vec<KtExpr<'a>> = block.statements().collect();
+        if stmts.len() != 1 {
+            return None;
+        }
+        match unwrap_parens(stmts[0]) {
+            KtExpr::Return(r) => skotch_ast::children(r.syntax())
+                .iter()
+                .find_map(KtExpr::cast)
+                .map(unwrap_parens),
+            other => Some(other),
+        }
+    }
+    let try_expr = body_result(try_body)?;
+
+    // Per-catch: (catch_param_name, jvm_internal_name, body_expr).
+    let mut catch_specs: Vec<(String, String, KtExpr<'_>)> = Vec::new();
+    for c in &catches {
+        let param = c.parameter()?;
+        let pname = param.name()?.to_string();
+        let tyname = param
+            .type_reference()
+            .and_then(|tr| tr.user_type())
+            .and_then(|u| u.name())
+            .unwrap_or("Exception");
+        let internal = skotch_types::intrinsics::kotlin_exception_class(tyname)
+            .map(|s| s.to_string())
+            .or_else(|| {
+                skotch_types::intrinsics::kotlin_to_jvm_class(tyname).map(|s| s.to_string())
+            })
+            .unwrap_or_else(|| tyname.to_string());
+        let body_block = c.body()?;
+        let body_expr = body_result(body_block)?;
+        catch_specs.push((pname, internal, body_expr));
+    }
+
+    let lookup_in = |snap: &[(String, LocalId)]| {
+        let snap: Vec<_> = snap.to_vec();
+        move |n: &str| -> Option<LocalId> {
+            snap.iter()
+                .rev()
+                .find(|(name, _)| name == n)
+                .map(|(_, l)| *l)
+        }
+    };
+
+    // Snapshot state so we can roll back on a sub-lower failure (mirrors
+    // the Special::TryStmt path's safety rule).
+    let snap_next_slot = *next_slot;
+    let snap_local_tys = local_tys.len();
+    let snap_strings = strings.len();
+    let snap_names = name_to_local.len();
+
+    let mut out: Vec<BasicBlock> = pre_blocks;
+    let base = block_offset + out.len() as u32;
+    let pre_id = base;
+    let try_id = pre_id + 1;
+    // handler_i = try_id + 1 + i
+
+    // Block: pre (cur_stmts) -> Goto(try_id).
+    out.push(BasicBlock {
+        stmts: cur_stmts,
+        terminator: Terminator::Goto(try_id),
+    });
+
+    // Block: try -> ReturnValue(slot).
+    let mut try_stmts: Vec<MStmt> = Vec::new();
+    let try_slot_opt = lower_rich_expr_to_slot(
+        try_expr,
+        &lookup_in(name_to_local),
+        fn_lookup,
+        next_slot,
+        &mut try_stmts,
+        local_tys,
+        strings,
+    );
+    let Some(try_slot) = try_slot_opt else {
+        *next_slot = snap_next_slot;
+        local_tys.truncate(snap_local_tys);
+        strings.truncate(snap_strings);
+        name_to_local.truncate(snap_names);
+        return None;
+    };
+    out.push(BasicBlock {
+        stmts: try_stmts,
+        terminator: Terminator::ReturnValue(try_slot),
+    });
+
+    // One handler block per catch. Register an ExceptionHandler for each.
+    for (i, (pname, internal, body_expr)) in catch_specs.iter().enumerate() {
+        let e_slot = LocalId(*next_slot);
+        *next_slot += 1;
+        local_tys.push(Ty::Class(internal.clone()));
+        name_to_local.push((pname.clone(), e_slot));
+
+        let mut handler_stmts: Vec<MStmt> = vec![MStmt::Assign {
+            dest: e_slot,
+            value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Null),
+        }];
+        let body_slot_opt = lower_rich_expr_to_slot(
+            *body_expr,
+            &lookup_in(name_to_local),
+            fn_lookup,
+            next_slot,
+            &mut handler_stmts,
+            local_tys,
+            strings,
+        );
+        // Drop catch param scope before checking failure so we leave a
+        // clean snapshot if we bail.
+        name_to_local.truncate(snap_names);
+        let Some(body_slot) = body_slot_opt else {
+            *next_slot = snap_next_slot;
+            local_tys.truncate(snap_local_tys);
+            strings.truncate(snap_strings);
+            return None;
+        };
+
+        let handler_id = try_id + 1 + i as u32;
+        out.push(BasicBlock {
+            stmts: handler_stmts,
+            terminator: Terminator::ReturnValue(body_slot),
+        });
+        register_exception_handler(skotch_mir::ExceptionHandler {
+            try_start_block: try_id,
+            try_end_block: try_id + 1,
+            handler_block: handler_id,
+            catch_type: Some(internal.clone()),
+        });
+    }
+
+    Some(out)
+}
+
 fn fixup_getfield_locals(
     f: &mut MirFunction,
     class_fields: &rustc_hash::FxHashMap<String, rustc_hash::FxHashMap<String, Ty>>,
@@ -16716,6 +16893,28 @@ fn lower_loop_body_blocks(
                 if let Some(KtExpr::When(w)) = ret_expr_inner {
                     if let Some(out) = lower_return_when_chain(
                         w,
+                        std::mem::take(&mut blocks),
+                        std::mem::take(&mut cur_stmts),
+                        name_to_local,
+                        next_slot,
+                        local_tys,
+                        strings,
+                        fn_lookup_ref,
+                        function_param_names,
+                        block_offset,
+                    ) {
+                        return Some(out);
+                    }
+                    return None;
+                }
+                // `return try { e } catch (e: T) { c } ...` — multi-
+                // catch friendly. Each arm becomes a block whose
+                // terminator is ReturnValue(arm_slot). lower_rich can't
+                // express the exception-handler edges, so we lift the
+                // try/catch into the CFG here.
+                if let Some(KtExpr::Try(t)) = ret_expr_inner {
+                    if let Some(out) = lower_return_try(
+                        t,
                         std::mem::take(&mut blocks),
                         std::mem::take(&mut cur_stmts),
                         name_to_local,
