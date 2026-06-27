@@ -2207,6 +2207,159 @@ fn lookup_cross_file_ext_fn_compat(method: &str, recv_class: &str) -> Option<Cro
     None
 }
 
+/// Cross-file extension fn dispatch for JAR-sourced top-level fns the
+/// user imported by simple name. Handles the `recv.method()` shape with
+/// zero user args by looking up `<Facade>Kt.<method>$default` in the
+/// import-mapped FQ path's package and emitting an `invokestatic` with
+/// the all-defaults bitmask. Returns the result slot when emission
+/// succeeds, `None` to fall through to the existing virtual-dispatch
+/// path so source-class methods (which legitimately bind `recv.method()`
+/// to an instance method) aren't intercepted.
+///
+/// Restricts itself to the no-user-args shape because that's the only
+/// kotlinc convention that's strictly mechanical: every defaulted user
+/// param is omitted, so the bitmask is `(1 << user_param_count) - 1` and
+/// each param slot can be filled with a typed zero/null. Calls with
+/// user-supplied args fall back to existing paths.
+#[allow(clippy::too_many_arguments)]
+fn try_emit_jar_ext_fn_no_arg_default(
+    method_n: &str,
+    recv_class: &str,
+    recv_slot: skotch_mir::LocalId,
+    call: &skotch_ast::KtCallExpression<'_>,
+    pre_stmts: &mut Vec<skotch_mir::Stmt>,
+    extra_locals: &mut Vec<Ty>,
+    next_slot: &mut u32,
+) -> Option<skotch_mir::LocalId> {
+    use skotch_mir::{LocalId, MirConst, Stmt as MStmt};
+    // Restrict to zero user args + no trailing lambda. Calls with args
+    // can't use the all-defaults mask and need named/positional matching
+    // against the JAR-source param names, which we don't have without
+    // reading the `@kotlin.Metadata` proto blob on the facade.
+    let has_args = call
+        .value_argument_list()
+        .map(|al| al.arguments().count() > 0)
+        .unwrap_or(false);
+    if has_args || call.lambda_argument().is_some() {
+        return None;
+    }
+    // Resolve `method_n` → FQ path via the file's import map, then drop
+    // the last segment to get the package. `import org.kotlincrypto.…
+    // keccak.keccakP` resolves to `org/kotlincrypto/sponges/keccak/keccakP`,
+    // so the package is `org/kotlincrypto/sponges/keccak` and the facade
+    // we look for is something like `KeccakPKt`.
+    let fq = lookup_file_import(method_n)?;
+    let (pkg, last) = fq.rsplit_once('/')?;
+    if last != method_n {
+        return None;
+    }
+    let facade = skotch_classinfo::find_wrapper_class_for_function(pkg, method_n)?;
+    // Find a static `<method_n>$default` whose first param descriptor is
+    // `Lrecv_class;`. Prefer `$default` so the all-defaults bitmask is
+    // honored; if no `$default` exists, the source ext fn declared no
+    // defaulted params and we'd need the non-`$default` form — but then
+    // the call site would have provided every arg, contradicting
+    // `has_args == false`. Skip in that case.
+    let default_name = format!("{method_n}$default");
+    let recv_desc = format!("L{recv_class};");
+    let methods = skotch_classinfo::iter_class_methods(&facade);
+    let chosen = methods.into_iter().find(|(name, desc)| {
+        name == &default_name
+            && parse_descriptor_params(desc)
+                .first()
+                .is_some_and(|p| p == &recv_desc)
+    })?;
+    let (chosen_name, chosen_desc) = chosen;
+    let param_descs = parse_descriptor_params(&chosen_desc);
+    // `$default` always trails `I Ljava/lang/Object;` (mask + marker).
+    // Anything in between recv and mask is a user-visible param that
+    // takes a zero/null default.
+    if param_descs.len() < 3 {
+        return None;
+    }
+    let user_param_count = param_descs.len() - 3; // exclude recv, mask, marker
+    let mut arg_slots: Vec<LocalId> = vec![recv_slot];
+    // Fill each defaulted user param with a typed zero / null.
+    for desc in &param_descs[1..param_descs.len() - 2] {
+        let (ty, mc) = match desc.as_str() {
+            "Z" | "B" | "S" | "I" | "C" => (Ty::Int, MirConst::Int(0)),
+            "J" => (Ty::Long, MirConst::Long(0)),
+            "F" => (Ty::Float, MirConst::Float(0.0)),
+            "D" => (Ty::Double, MirConst::Double(0.0)),
+            d if d.starts_with('L') && d.ends_with(';') => {
+                (Ty::Class(d[1..d.len() - 1].to_string()), MirConst::Null)
+            }
+            _ => return None,
+        };
+        let s = LocalId(*next_slot);
+        *next_slot += 1;
+        extra_locals.push(ty);
+        pre_stmts.push(MStmt::Assign {
+            dest: s,
+            value: skotch_mir::Rvalue::Const(mc),
+        });
+        arg_slots.push(s);
+    }
+    // mask: every user param is defaulted → (1 << n) - 1
+    let mask = if user_param_count >= 32 {
+        i32::MAX
+    } else {
+        (1i32 << user_param_count) - 1
+    };
+    let mask_slot = LocalId(*next_slot);
+    *next_slot += 1;
+    extra_locals.push(Ty::Int);
+    pre_stmts.push(MStmt::Assign {
+        dest: mask_slot,
+        value: skotch_mir::Rvalue::Const(MirConst::Int(mask)),
+    });
+    arg_slots.push(mask_slot);
+    // marker (always null)
+    let marker_slot = LocalId(*next_slot);
+    *next_slot += 1;
+    extra_locals.push(Ty::Class("java/lang/Object".to_string()));
+    pre_stmts.push(MStmt::Assign {
+        dest: marker_slot,
+        value: skotch_mir::Rvalue::Const(MirConst::Null),
+    });
+    arg_slots.push(marker_slot);
+    // Result type: parse the descriptor's return half. Void → push a
+    // dummy slot anchored to Ty::Any so callers that ignore the result
+    // remain well-formed.
+    let ret_desc = chosen_desc
+        .rsplit_once(')')
+        .map(|(_, r)| r.to_string())
+        .unwrap_or_default();
+    let ret_ty = match ret_desc.as_str() {
+        "V" => Ty::Any,
+        "Z" => Ty::Bool,
+        "B" => Ty::Byte,
+        "S" => Ty::Short,
+        "I" => Ty::Int,
+        "J" => Ty::Long,
+        "F" => Ty::Float,
+        "D" => Ty::Double,
+        "C" => Ty::Char,
+        d if d.starts_with('L') && d.ends_with(';') => Ty::Class(d[1..d.len() - 1].to_string()),
+        _ => Ty::Any,
+    };
+    let result_slot = LocalId(*next_slot);
+    *next_slot += 1;
+    extra_locals.push(ret_ty);
+    pre_stmts.push(MStmt::Assign {
+        dest: result_slot,
+        value: skotch_mir::Rvalue::Call {
+            kind: skotch_mir::CallKind::StaticJava {
+                class_name: facade,
+                method_name: chosen_name,
+                descriptor: chosen_desc,
+            },
+            args: arg_slots,
+        },
+    });
+    Some(result_slot)
+}
+
 struct CrossFileExtFnsScope {
     prev: rustc_hash::FxHashMap<(String, String), CrossFileExtFn>,
 }
@@ -14534,6 +14687,27 @@ fn lower_loop_body(
                                 }
                             }
                             let recv_ty = slot_ty_with_param_fallback(recv_slot.0, local_tys);
+                            // JAR-sourced top-level extension fn dispatch for
+                            // the stmt-context `recv.method()` shape (see the
+                            // matching arm in `lower_rich_expr_to_slot` for
+                            // the value-context variant). Without this, a
+                            // stmt-line like `A.keccakP()` (where `keccakP`
+                            // is imported from a dependency JAR) emits
+                            // `invokevirtual F1600.keccakP:()Object` →
+                            // NoSuchMethodError at run time.
+                            if let Ty::Class(ref cname_for_jar) = recv_ty {
+                                if let Some(_rs) = try_emit_jar_ext_fn_no_arg_default(
+                                    method_n,
+                                    cname_for_jar,
+                                    recv_slot,
+                                    call,
+                                    &mut body_mstmts,
+                                    local_tys,
+                                    next_slot,
+                                ) {
+                                    continue;
+                                }
+                            }
                             if let Ty::Class(cname) = recv_ty {
                                 let mut arg_slots: Vec<LocalId> = vec![recv_slot];
                                 let mut ok = true;
@@ -35216,6 +35390,42 @@ fn lower_rich_expr_to_slot(
                                             });
                                             return Some(result_slot);
                                         }
+                                    }
+                                    // JAR-sourced top-level extension fn
+                                    // dispatch. The cross-file ext-fn
+                                    // registry only carries entries from
+                                    // the current source compilation unit;
+                                    // a top-level ext fn declared inside a
+                                    // dependency JAR (e.g.
+                                    // `fun F1600.keccakP(rounds: Byte = N)`
+                                    // in `keccak-jvm-0.5.0.jar`) isn't in
+                                    // it. Without this fallback, a source
+                                    // line like `A.keccakP()` (where the
+                                    // user has `import org.kotlincrypto.…
+                                    // keccak.keccakP`) falls through to
+                                    // virtual dispatch and emits
+                                    // `invokevirtual F1600.keccakP:()L…
+                                    // Object;` → NoSuchMethodError at run
+                                    // time. Mirror kotlinc by emitting
+                                    // `invokestatic <Facade>Kt.<name>$default
+                                    // (<recv>;<rest>;ILjava/lang/Object;)V`
+                                    // with the all-defaults bitmask when:
+                                    //   (1) the call has zero user args,
+                                    //   (2) the file imports `<name>`
+                                    //       under an FQ that resolves to a
+                                    //       `*Kt` facade containing a
+                                    //       static `<name>$default` whose
+                                    //       first param is `recv_class`.
+                                    if let Some(result_slot) = try_emit_jar_ext_fn_no_arg_default(
+                                        method_n,
+                                        recv_class,
+                                        slot,
+                                        call,
+                                        pre_stmts,
+                                        extra_locals,
+                                        next_slot,
+                                    ) {
+                                        return Some(result_slot);
                                     }
                                 }
                                 // Determine the dispatch class. If
