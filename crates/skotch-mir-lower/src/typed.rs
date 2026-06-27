@@ -16326,6 +16326,14 @@ fn lower_loop_body_blocks(
         },
         PropertyWithIfInit,
         PropertyWithWhenInit,
+        /// `val|var name = try { body } catch (e: T) { default }`.
+        /// Try-as-expression at val/var initializer position — the
+        /// rich-expr lowerer has no Try arm (only Try-as-stmt is
+        /// covered by Special::TryStmt). Lower as a try/catch CFG that
+        /// stores both the try-arm result and each catch-arm result
+        /// into the property slot, then binds the property name to
+        /// that slot in the join block.
+        PropertyWithTryInit,
         /// `val name = <lhs> ?: return [RET_EXPR]`. The Elvis operator's
         /// RHS is itself a `return` expression — a control-flow shape that
         /// `lower_rich_expr_to_slot` cannot represent (the requireNonNullElse
@@ -16390,6 +16398,10 @@ fn lower_loop_body_blocks(
                         }
                         KtExpr::When(_) => {
                             special_at = Some((j, Special::PropertyWithWhenInit));
+                            break;
+                        }
+                        KtExpr::Try(_) => {
+                            special_at = Some((j, Special::PropertyWithTryInit));
                             break;
                         }
                         // Elvis-then-return: `val h = lhs ?: return [RET]`.
@@ -18626,6 +18638,291 @@ fn lower_loop_body_blocks(
                     stmts: else_stmts,
                     terminator: Terminator::Goto(join_block_id),
                 });
+                name_to_local.push((pname.to_string(), prop_slot));
+                i = j + 1;
+                continue;
+            }
+            Some((j, Special::PropertyWithTryInit)) => {
+                // `val|var name = try { body } catch (e: T) { default }`.
+                // CFG layout (mirrors Special::TryStmt):
+                //   pre:     cur_stmts; Goto(try_id)
+                //   try:     lower body; assign result -> prop_slot;
+                //            Goto(join)
+                //   handler: catch-param placeholder (Assign{e_slot,Null});
+                //            lower catch body; assign result -> prop_slot;
+                //            Goto(join)
+                //   join:    fall through with `name` bound to prop_slot.
+                // Registers an ExceptionHandler over [try_id, try_id+1).
+                let prop_node = body_children[j];
+                let prop = skotch_ast::KtProperty::cast(prop_node)?;
+                let pname = prop.name()?;
+                let init = prop.initializer().map(unwrap_parens)?;
+                let KtExpr::Try(t) = init else {
+                    trace_bail!("PropertyWithTryInit: init wasn't Try");
+                    return None;
+                };
+                let try_block_ast = match t.try_block() {
+                    Some(b) => b,
+                    None => {
+                        trace_bail!("PropertyWithTryInit: no try block");
+                        return None;
+                    }
+                };
+                let catches: Vec<_> = t.catches().collect();
+                if catches.is_empty() {
+                    trace_bail!("PropertyWithTryInit: no catch clauses");
+                    return None;
+                }
+                if t.finally().is_some() {
+                    trace_bail!("PropertyWithTryInit: finally not supported");
+                    return None;
+                }
+
+                // Helper: lower a try/catch arm body block into a stmt
+                // sequence whose final value is computed into a slot.
+                // Returns (stmts, value_slot). The arm block may have
+                // multiple statements; only the final KtExpr produces
+                // the arm's value.
+                let lower_arm_block = |arm_block: skotch_ast::KtBlock<'_>,
+                                       name_to_local: &mut Vec<(String, LocalId)>,
+                                       next_slot: &mut u32,
+                                       local_tys: &mut Vec<Ty>,
+                                       strings: &mut Vec<String>|
+                 -> Option<(Vec<MStmt>, LocalId)> {
+                    let kids: Vec<&skotch_sil::SilNode> =
+                        skotch_ast::children(arm_block.syntax()).iter().collect();
+                    let last_idx = kids
+                        .iter()
+                        .enumerate()
+                        .rev()
+                        .find_map(|(i, c)| KtExpr::cast(c).map(|_| i))?;
+                    let mut stmts: Vec<MStmt> = Vec::new();
+                    if last_idx > 0 {
+                        let pre = &kids[..last_idx];
+                        let pre_stmts = lower_loop_body(
+                            pre,
+                            name_to_local,
+                            next_slot,
+                            local_tys,
+                            strings,
+                            fn_lookup_ref,
+                            function_param_names,
+                        )?;
+                        stmts.extend(pre_stmts);
+                    }
+                    let last_expr = KtExpr::cast(kids[last_idx])?;
+                    // Peel a trailing `return e` so `try { return e }`
+                    // and `try { e }` behave the same at val-init.
+                    let last_expr = match unwrap_parens(last_expr) {
+                        KtExpr::Return(r) => skotch_ast::children(r.syntax())
+                            .iter()
+                            .find_map(KtExpr::cast)
+                            .map(unwrap_parens)?,
+                        other => other,
+                    };
+                    let snap = name_to_local.clone();
+                    let lookup = |n: &str| -> Option<LocalId> {
+                        snap.iter()
+                            .rev()
+                            .find(|(name, _)| name == n)
+                            .map(|(_, l)| *l)
+                    };
+                    let value_slot = lower_rich_expr_to_slot(
+                        last_expr,
+                        &lookup,
+                        fn_lookup_ref,
+                        next_slot,
+                        &mut stmts,
+                        local_tys,
+                        strings,
+                    )?;
+                    Some((stmts, value_slot))
+                };
+
+                // Snapshot state so we can roll back on inner failure.
+                let snap_next_slot = *next_slot;
+                let snap_local_tys = local_tys.len();
+                let snap_strings = strings.len();
+                let snap_names = name_to_local.len();
+
+                // Allocate the property slot up front so both arms can
+                // store into it.
+                let prop_slot = LocalId(*next_slot);
+                *next_slot += 1;
+                local_tys.push(Ty::Any);
+
+                // Lower the try body.
+                let (mut try_stmts, try_value_slot) = match lower_arm_block(
+                    try_block_ast,
+                    name_to_local,
+                    next_slot,
+                    local_tys,
+                    strings,
+                ) {
+                    Some(v) => v,
+                    None => {
+                        trace_bail!("PropertyWithTryInit: try-body arm lowering returned None");
+                        *next_slot = snap_next_slot;
+                        local_tys.truncate(snap_local_tys);
+                        strings.truncate(snap_strings);
+                        name_to_local.truncate(snap_names);
+                        return None;
+                    }
+                };
+                try_stmts.push(MStmt::Assign {
+                    dest: prop_slot,
+                    value: skotch_mir::Rvalue::Local(try_value_slot),
+                });
+
+                // Lower each catch body. The catch param is bound to a
+                // fresh slot whose first stmt is the placeholder Assign
+                // {e_slot, Null} — the backend turns the placeholder
+                // into an `astore` against the exception on the stack
+                // at handler entry.
+                let mut catch_arms: Vec<(Option<String>, Vec<MStmt>, LocalId)> = Vec::new();
+                let mut all_arms_same_ty = true;
+                // Initially seed with the try value's Ty.
+                let try_ty = slot_ty_with_param_fallback(try_value_slot.0, local_tys);
+                let mut any_arm_ty: Option<Ty> = Some(try_ty.clone());
+                for cat in &catches {
+                    let (Some(catch_param), Some(catch_body_ast)) = (cat.parameter(), cat.body())
+                    else {
+                        trace_bail!("PropertyWithTryInit: catch missing parameter or body");
+                        *next_slot = snap_next_slot;
+                        local_tys.truncate(snap_local_tys);
+                        strings.truncate(snap_strings);
+                        name_to_local.truncate(snap_names);
+                        return None;
+                    };
+                    let Some(catch_param_name) = catch_param.name() else {
+                        trace_bail!("PropertyWithTryInit: catch param has no name");
+                        *next_slot = snap_next_slot;
+                        local_tys.truncate(snap_local_tys);
+                        strings.truncate(snap_strings);
+                        name_to_local.truncate(snap_names);
+                        return None;
+                    };
+                    let catch_param_name = catch_param_name.to_string();
+                    let catch_ty_name = catch_param
+                        .type_reference()
+                        .and_then(|tr| tr.user_type())
+                        .and_then(|u| u.name())
+                        .unwrap_or("Exception")
+                        .to_string();
+                    let catch_internal =
+                        skotch_types::intrinsics::kotlin_exception_class(&catch_ty_name)
+                            .map(|s| s.to_string())
+                            .or_else(|| {
+                                skotch_types::intrinsics::kotlin_to_jvm_class(&catch_ty_name)
+                                    .map(|s| s.to_string())
+                            })
+                            .unwrap_or_else(|| catch_ty_name.clone());
+
+                    let e_slot = LocalId(*next_slot);
+                    *next_slot += 1;
+                    local_tys.push(Ty::Class(catch_internal.clone()));
+                    name_to_local.push((catch_param_name.clone(), e_slot));
+                    let (catch_stmts, catch_value_slot) = match lower_arm_block(
+                        catch_body_ast,
+                        name_to_local,
+                        next_slot,
+                        local_tys,
+                        strings,
+                    ) {
+                        Some(v) => v,
+                        None => {
+                            trace_bail!(
+                                "PropertyWithTryInit: catch-body arm lowering returned None"
+                            );
+                            *next_slot = snap_next_slot;
+                            local_tys.truncate(snap_local_tys);
+                            strings.truncate(snap_strings);
+                            name_to_local.truncate(snap_names);
+                            return None;
+                        }
+                    };
+                    name_to_local.truncate(snap_names);
+                    let catch_ty = slot_ty_with_param_fallback(catch_value_slot.0, local_tys);
+                    if let Some(prev) = &any_arm_ty {
+                        if prev != &catch_ty {
+                            all_arms_same_ty = false;
+                        }
+                    } else {
+                        any_arm_ty = Some(catch_ty.clone());
+                    }
+                    let mut full_catch_stmts: Vec<MStmt> = vec![MStmt::Assign {
+                        dest: e_slot,
+                        value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Null),
+                    }];
+                    full_catch_stmts.extend(catch_stmts);
+                    full_catch_stmts.push(MStmt::Assign {
+                        dest: prop_slot,
+                        value: skotch_mir::Rvalue::Local(catch_value_slot),
+                    });
+                    catch_arms.push((Some(catch_internal), full_catch_stmts, e_slot));
+                }
+
+                // Refine prop_slot's Ty when every arm produced the
+                // same concrete primitive / class type. Without this,
+                // a primitive try-as-expr (Int / Bool / …) leaves the
+                // slot at Ty::Any and later use-as-primitive (e.g.
+                // `return r` where the fn's return type is `: Int`)
+                // walks an Object stackmap slot — VerifyError. Mirrors
+                // PropertyWithIfInit's two-arm refinement.
+                if all_arms_same_ty {
+                    if let Some(t) = any_arm_ty {
+                        if matches!(
+                            t,
+                            Ty::Int
+                                | Ty::Bool
+                                | Ty::Long
+                                | Ty::Float
+                                | Ty::Double
+                                | Ty::Char
+                                | Ty::String
+                                | Ty::Class(_)
+                        ) {
+                            let prop_idx = prop_slot.0 as usize;
+                            let param_count = PARAM_TY_FALLBACK.with(|c| c.borrow().len());
+                            let local_idx = prop_idx.saturating_sub(param_count);
+                            if local_idx < local_tys.len() {
+                                local_tys[local_idx] = t;
+                            }
+                        }
+                    }
+                }
+
+                // Reserve block ids: pre, try, then 1 handler per
+                // catch, then join.
+                let pre_id = block_offset + blocks.len() as u32;
+                let try_id = pre_id + 1;
+                let first_handler_id = try_id + 1;
+                let join_id = first_handler_id + catches.len() as u32;
+
+                blocks.push(BasicBlock {
+                    stmts: std::mem::take(&mut cur_stmts),
+                    terminator: Terminator::Goto(try_id),
+                });
+                blocks.push(BasicBlock {
+                    stmts: try_stmts,
+                    terminator: Terminator::Goto(join_id),
+                });
+                for (ci, (catch_internal, full_catch_stmts, _e_slot)) in
+                    catch_arms.iter().enumerate()
+                {
+                    let handler_id = first_handler_id + ci as u32;
+                    blocks.push(BasicBlock {
+                        stmts: full_catch_stmts.clone(),
+                        terminator: Terminator::Goto(join_id),
+                    });
+                    register_exception_handler(skotch_mir::ExceptionHandler {
+                        try_start_block: try_id,
+                        try_end_block: try_id + 1,
+                        handler_block: handler_id,
+                        catch_type: catch_internal.clone(),
+                    });
+                }
+
                 name_to_local.push((pname.to_string(), prop_slot));
                 i = j + 1;
                 continue;
