@@ -18548,6 +18548,28 @@ fn lower_loop_body_blocks(
         /// `parity/143-short-circuit` whose four `check(name, b)` calls
         /// each print "eval $name" before returning.
         CallStmtShortCircuit,
+        /// Stmt-level `println(recv?.let { lambda } ?: alt)` /
+        /// `print(...)`. The `lower_rich_expr_to_slot` Elvis arm
+        /// evaluates BOTH operands eagerly (via
+        /// `Objects.requireNonNullElse`), and the SafeAccess `?.let`
+        /// arm executes the lambda body unconditionally (it inlines
+        /// the body with `it=recv_slot` and never null-guards). So
+        /// for a genuinely-null `recv`, the lambda runs with `it=null`
+        /// and produces e.g. `"ok=null"` — masking the elvis `alt`.
+        /// Emit a real 4-block CFG so the lambda runs only on a
+        /// non-null recv and `alt` is selected otherwise:
+        ///   pre:   cur_stmts; eval recv -> recv_slot;
+        ///          cmp = (recv_slot == null);
+        ///          Branch(cmp, alt_block, then_block)
+        ///   then:  bind it=recv_slot; lower lambda body stmts ->
+        ///          (then_stmts, body_last_slot);
+        ///          println(body_last_slot); Goto(join)
+        ///   alt:   eval alt -> alt_slot; println(alt_slot);
+        ///          Goto(join)
+        ///   join:  fall through (cur_stmts continues there)
+        /// Unblocks `parity/142-nullable-return` whose final line is
+        /// `println(safeDivide(7, 0)?.let { "ok=$it" } ?: "err")`.
+        PrintlnSafeAccessLetElvis,
     }
     let mut i: usize = 0;
     while i < body_children.len() {
@@ -18926,6 +18948,56 @@ fn lower_loop_body_blocks(
                                 if rhs_is_call {
                                     special_at = Some((j, Special::CallStmtShortCircuit));
                                     break;
+                                }
+                            }
+                            // `println(recv?.let { lambda } ?: alt)`
+                            // — Elvis with a SafeAccess+let LHS in
+                            // a println/print arg slot. Detected here
+                            // so the special handler can emit a real
+                            // null-guard 4-block CFG that only runs
+                            // the lambda on non-null recv. Without
+                            // this peephole, the rich-expr Elvis arm
+                            // forces eager evaluation of the SafeAccess
+                            // `?.let` arm (which is itself unguarded),
+                            // and a null recv produces a non-null
+                            // string like "ok=null" — masking the
+                            // intended `alt` selection.
+                            if op_text == "?:" {
+                                let lhs_is_safe_let = b
+                                    .lhs()
+                                    .map(|l| matches!(unwrap_parens(l), KtExpr::SafeAccess(_)))
+                                    .unwrap_or(false);
+                                if lhs_is_safe_let {
+                                    // Only fire when the SafeAccess
+                                    // accessor is a `let { … }` call.
+                                    let KtExpr::SafeAccess(sa) = unwrap_parens(b.lhs().unwrap())
+                                    else {
+                                        unreachable!()
+                                    };
+                                    let sa_kids: Vec<KtExpr<'_>> =
+                                        skotch_ast::children(sa.syntax())
+                                            .iter()
+                                            .filter_map(KtExpr::cast)
+                                            .collect();
+                                    if sa_kids.len() == 2 {
+                                        if let KtExpr::Call(inner_call) = sa_kids[1] {
+                                            let is_let = matches!(
+                                                inner_call.callee(),
+                                                Some(KtExpr::Reference(r))
+                                                    if r.name() == Some("let")
+                                            );
+                                            let no_val_args = inner_call
+                                                .value_argument_list()
+                                                .map(|al| al.arguments().count() == 0)
+                                                .unwrap_or(true);
+                                            let has_lambda = inner_call.lambda_argument().is_some();
+                                            if is_let && no_val_args && has_lambda {
+                                                special_at =
+                                                    Some((j, Special::PrintlnSafeAccessLetElvis));
+                                                break;
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -23557,6 +23629,243 @@ fn lower_loop_body_blocks(
                 i = j + 1;
                 continue;
             }
+            Some((j, Special::PrintlnSafeAccessLetElvis)) => {
+                // `println(recv?.let { lambda body } ?: alt)` /
+                // `print(...)`. 4-block CFG so the lambda only runs
+                // when recv is non-null; otherwise alt is selected.
+                //   pre:   cur_stmts; eval recv; cmp = (recv == null);
+                //          Branch(cmp, alt, then)
+                //   then:  bind it=recv; lower lambda body stmts;
+                //          println(body_last_slot); Goto(join)
+                //   alt:   eval alt; println(alt_slot); Goto(join)
+                //   join:  fall through
+                let stmt_node = body_children[j];
+                let KtExpr::Call(call) = KtExpr::cast(stmt_node)? else {
+                    return None;
+                };
+                let is_println = matches!(
+                    call.callee(),
+                    Some(KtExpr::Reference(r)) if r.name() == Some("println")
+                );
+                let arg_exprs: Vec<KtExpr<'_>> = call
+                    .value_argument_list()
+                    .map(|al| al.arguments().filter_map(|a| a.expression()).collect())
+                    .unwrap_or_default();
+                if arg_exprs.len() != 1 {
+                    return None;
+                }
+                let KtExpr::Binary(bin) = unwrap_parens(arg_exprs[0]) else {
+                    return None;
+                };
+                if bin.operation().map(|o| o.text()).as_deref() != Some("?:") {
+                    return None;
+                }
+                let lhs_e = bin.lhs().map(unwrap_parens)?;
+                let alt_e = bin.rhs().map(unwrap_parens)?;
+                let KtExpr::SafeAccess(sa) = lhs_e else {
+                    return None;
+                };
+                let sa_kids: Vec<KtExpr<'_>> = skotch_ast::children(sa.syntax())
+                    .iter()
+                    .filter_map(KtExpr::cast)
+                    .collect();
+                if sa_kids.len() != 2 {
+                    return None;
+                }
+                let recv_e = sa_kids[0];
+                let KtExpr::Call(let_call) = sa_kids[1] else {
+                    return None;
+                };
+                let la = let_call.lambda_argument()?;
+                let KtExpr::Lambda(lambda) = skotch_ast::children(la.syntax())
+                    .iter()
+                    .find_map(KtExpr::cast)?
+                else {
+                    return None;
+                };
+                let fl = lambda.function_literal()?;
+                let body = fl.body()?;
+                let param_name: String = fl
+                    .value_parameter_list()
+                    .and_then(|pl| pl.parameters().next())
+                    .and_then(|p| p.name().map(|s| s.to_string()))
+                    .unwrap_or_else(|| "it".to_string());
+
+                let snap = name_to_local.clone();
+                let lookup = |n: &str| -> Option<LocalId> {
+                    snap.iter()
+                        .rev()
+                        .find(|(name, _)| name == n)
+                        .map(|(_, l)| *l)
+                };
+                // Lower recv into cur_stmts (pre-block).
+                let recv_slot = lower_rich_expr_to_slot(
+                    recv_e,
+                    &lookup,
+                    fn_lookup_ref,
+                    next_slot,
+                    &mut cur_stmts,
+                    local_tys,
+                    strings,
+                )?;
+                // null-cmp: cmp = (recv_slot != null). Branch
+                // semantics swap accordingly — cmp true => recv is
+                // NON-null => then branch. Using `CmpNe` (lowers to
+                // `if_acmpne` / `ifnonnull`) instead of `CmpEq` keeps
+                // the backend from triggering
+                // `peephole_elvis_to_dup_with_use`, which only matches
+                // `aload X; ifnull L; aload X; <use>; goto` and emits
+                // a stackmap frame at the wrong byte offset for
+                // SafeAccess+let CFGs whose use is a 12-byte
+                // invokedynamic-makeConcat. The semantics are the
+                // same; only the opcode flavor differs.
+                let null_slot = LocalId(*next_slot);
+                *next_slot += 1;
+                local_tys.push(Ty::Nullable(Box::new(Ty::Any)));
+                cur_stmts.push(MStmt::Assign {
+                    dest: null_slot,
+                    value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Null),
+                });
+                let cmp_slot = LocalId(*next_slot);
+                *next_slot += 1;
+                local_tys.push(Ty::Bool);
+                cur_stmts.push(MStmt::Assign {
+                    dest: cmp_slot,
+                    value: skotch_mir::Rvalue::BinOp {
+                        op: skotch_mir::BinOp::CmpRefNe,
+                        lhs: recv_slot,
+                        rhs: null_slot,
+                    },
+                });
+
+                // Allocate a shared result slot that both branches
+                // write into; the println in the join block reads
+                // from it. Sharing the result slot keeps the printed
+                // value's type stable on the join block's frame so
+                // the backend's StackMapTable for the convergence
+                // point doesn't widen to Object unnecessarily.
+                let result_slot = LocalId(*next_slot);
+                *next_slot += 1;
+                local_tys.push(Ty::Any);
+
+                // THEN block: bind it=recv; lower the lambda body
+                // expr-by-expr; the last expr's slot writes the value
+                // into result_slot.
+                let mut then_stmts: Vec<MStmt> = Vec::new();
+                let binding = (param_name.clone(), recv_slot);
+                let snap_then = name_to_local.clone();
+                let then_lookup = |n: &str| -> Option<LocalId> {
+                    if n == binding.0 {
+                        return Some(binding.1);
+                    }
+                    snap_then
+                        .iter()
+                        .rev()
+                        .find(|(name, _)| name == n)
+                        .map(|(_, l)| *l)
+                };
+                let body_kids = skotch_ast::children(body.syntax());
+                let last_idx = body_kids
+                    .iter()
+                    .enumerate()
+                    .rev()
+                    .find(|(_, c)| KtExpr::cast(c).is_some())
+                    .map(|(i, _)| i)?;
+                let mut then_result_slot: Option<LocalId> = None;
+                for (k, c) in body_kids.iter().enumerate().take(last_idx + 1) {
+                    let Some(stmt_e) = KtExpr::cast(c) else {
+                        continue;
+                    };
+                    let s = lower_rich_expr_to_slot(
+                        stmt_e,
+                        &then_lookup,
+                        fn_lookup_ref,
+                        next_slot,
+                        &mut then_stmts,
+                        local_tys,
+                        strings,
+                    )?;
+                    if k == last_idx {
+                        then_result_slot = Some(s);
+                    }
+                }
+                let then_result_slot = then_result_slot?;
+                then_stmts.push(MStmt::Assign {
+                    dest: result_slot,
+                    value: skotch_mir::Rvalue::Local(then_result_slot),
+                });
+
+                // ALT block: evaluate alt and write into result_slot.
+                let mut alt_stmts: Vec<MStmt> = Vec::new();
+                let snap_alt = name_to_local.clone();
+                let alt_lookup = |n: &str| -> Option<LocalId> {
+                    snap_alt
+                        .iter()
+                        .rev()
+                        .find(|(name, _)| name == n)
+                        .map(|(_, l)| *l)
+                };
+                let alt_slot = lower_rich_expr_to_slot(
+                    alt_e,
+                    &alt_lookup,
+                    fn_lookup_ref,
+                    next_slot,
+                    &mut alt_stmts,
+                    local_tys,
+                    strings,
+                )?;
+                alt_stmts.push(MStmt::Assign {
+                    dest: result_slot,
+                    value: skotch_mir::Rvalue::Local(alt_slot),
+                });
+
+                // Block IDs: pre = current blocks.len(); then = pre+1;
+                // alt = pre+2; join = pre+3.
+                let pre_block_id = block_offset + blocks.len() as u32;
+                let then_block_id = pre_block_id + 1;
+                let alt_block_id = pre_block_id + 2;
+                let join_block_id = pre_block_id + 3;
+                blocks.push(BasicBlock {
+                    stmts: std::mem::take(&mut cur_stmts),
+                    terminator: Terminator::Branch {
+                        cond: cmp_slot,
+                        // cmp = CmpRefNe => true when recv is NON-null
+                        // => take the then (lambda) branch.
+                        then_block: then_block_id,
+                        else_block: alt_block_id,
+                    },
+                });
+                blocks.push(BasicBlock {
+                    stmts: then_stmts,
+                    terminator: Terminator::Goto(join_block_id),
+                });
+                blocks.push(BasicBlock {
+                    stmts: alt_stmts,
+                    terminator: Terminator::Goto(join_block_id),
+                });
+                // Join block: println(result_slot) goes into cur_stmts
+                // so the next iteration's stmts append after it (mirrors
+                // the CallStmtShortCircuit handler's tail emission).
+                let print_ret = LocalId(*next_slot);
+                *next_slot += 1;
+                local_tys.push(Ty::Unit);
+                let call_kind = if is_println {
+                    skotch_mir::CallKind::Println
+                } else {
+                    skotch_mir::CallKind::Print
+                };
+                cur_stmts.push(MStmt::Assign {
+                    dest: print_ret,
+                    value: skotch_mir::Rvalue::Call {
+                        kind: call_kind,
+                        args: vec![result_slot],
+                    },
+                });
+                let _ = pre_block_id;
+                let _ = join_block_id;
+                i = j + 1;
+                continue;
+            }
             Some((j, Special::PropertyWithReifiedTypeFilter)) => {
                 // `val name: T? = recv.firstOfType()`: 7-block inline
                 // iteration (entry/cond/check/next/match/null/cont) with
@@ -25424,6 +25733,70 @@ fn try_lower_multi_stmt_block_with_offset(
             .unwrap_or(false)
     });
     if body_has_safe_access_elvis {
+        return None;
+    }
+
+    // Bail when any stmt is `println(recv?.let { lambda } ?: alt)` (or
+    // `print(...)`). The legacy linear walker dispatches the Elvis-arm
+    // via `lower_rich_expr_to_slot`, which lowers the SafeAccess+let
+    // arm unconditionally (no null guard) and folds it with the alt
+    // via `Objects.requireNonNullElse` — so on a genuinely-null recv
+    // the lambda body still runs (with `it=null`) and produces a
+    // non-null result like "ok=null", masking `alt`. The builder
+    // path's `lower_loop_body_blocks` recognizes
+    // `Special::PrintlnSafeAccessLetElvis` and emits a real 4-block
+    // CFG that only runs the lambda when recv is non-null. Unblocks
+    // `parity/142-nullable-return`.
+    let body_has_println_safe_let_elvis = block_children.iter().any(|c| {
+        let Some(KtExpr::Call(call)) = KtExpr::cast(c) else {
+            return false;
+        };
+        let callee_name = match call.callee() {
+            Some(KtExpr::Reference(r)) => r.name(),
+            _ => None,
+        };
+        if !matches!(callee_name, Some("println") | Some("print")) {
+            return false;
+        }
+        let arg_exprs: Vec<KtExpr<'_>> = call
+            .value_argument_list()
+            .map(|al| al.arguments().filter_map(|a| a.expression()).collect())
+            .unwrap_or_default();
+        if arg_exprs.len() != 1 {
+            return false;
+        }
+        let KtExpr::Binary(b) = unwrap_parens(arg_exprs[0]) else {
+            return false;
+        };
+        if b.operation().map(|o| o.text()).as_deref() != Some("?:") {
+            return false;
+        }
+        let Some(lhs) = b.lhs() else { return false };
+        let KtExpr::SafeAccess(sa) = unwrap_parens(lhs) else {
+            return false;
+        };
+        let sa_kids: Vec<KtExpr<'_>> = skotch_ast::children(sa.syntax())
+            .iter()
+            .filter_map(KtExpr::cast)
+            .collect();
+        if sa_kids.len() != 2 {
+            return false;
+        }
+        let KtExpr::Call(inner_call) = sa_kids[1] else {
+            return false;
+        };
+        let is_let = matches!(
+            inner_call.callee(),
+            Some(KtExpr::Reference(r)) if r.name() == Some("let")
+        );
+        let no_val_args = inner_call
+            .value_argument_list()
+            .map(|al| al.arguments().count() == 0)
+            .unwrap_or(true);
+        let has_lambda = inner_call.lambda_argument().is_some();
+        is_let && no_val_args && has_lambda
+    });
+    if body_has_println_safe_let_elvis {
         return None;
     }
 
