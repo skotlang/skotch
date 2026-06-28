@@ -17228,6 +17228,20 @@ fn lower_loop_body_blocks(
         /// ends with `r?.let { it.value = spongeRem }` against a nullable
         /// `r: SpongeRemainder?` param.
         SafeAccessLetStmt,
+        /// `val|var name = operand as? T`. The safe-cast result is null
+        /// when the runtime type doesn't match, otherwise the value cast
+        /// to T. `lower_rich_expr_to_slot` doesn't have CFG to express the
+        /// branch (its BinaryWithTypeRhs arm only covers the unconditional
+        /// `as` form), so we lift the property-init into a 4-block CFG:
+        ///   cond: cur_stmts; eval operand -> obj; inst = InstanceOf(obj, T);
+        ///         Branch(inst, cast_block, null_block)
+        ///   cast: prop_slot = CheckCast(obj, T); Goto(join)
+        ///   null: prop_slot = Const(null);       Goto(join)
+        ///   join: bind name -> prop_slot; fall through
+        /// Unblocks `parity/79-safe-cast`, whose `describe` body opens
+        /// with `val d = a as? Dog` followed by a `d != null` guarded
+        /// return.
+        PropertyWithAsSafe,
     }
     let mut i: usize = 0;
     while i < body_children.len() {
@@ -17277,6 +17291,42 @@ fn lower_loop_body_blocks(
                         {
                             special_at = Some((j, Special::PropertyWithSafeAccessElvis));
                             break;
+                        }
+                        // `val|var name = operand as? T` — safe cast.
+                        // The unconditional `as` form is handled inline
+                        // in lower_rich_expr_to_slot, but the safe form
+                        // needs an InstanceOf + Branch + Null CFG that
+                        // straight-line lowering can't express. Detect
+                        // here so the property-init lifts into a
+                        // 4-block CFG via Special::PropertyWithAsSafe.
+                        KtExpr::BinaryWithTypeRhs(bw) => {
+                            // Scan the OP_REF child for AS_SAFE. Note that
+                            // some grammars wrap the operator in a deeper
+                            // child structure — match both direct child
+                            // tokens and grandchildren so the detection is
+                            // robust to either shape.
+                            let mut has_as_safe = false;
+                            for c in skotch_ast::children(bw.syntax()).iter() {
+                                if c.kind == skotch_syntax::SyntaxKind::AS_SAFE {
+                                    has_as_safe = true;
+                                    break;
+                                }
+                                if c.kind == skotch_syntax::SyntaxKind::OPERATION_REFERENCE {
+                                    for cc in skotch_ast::children(c).iter() {
+                                        if cc.kind == skotch_syntax::SyntaxKind::AS_SAFE {
+                                            has_as_safe = true;
+                                            break;
+                                        }
+                                    }
+                                    if has_as_safe {
+                                        break;
+                                    }
+                                }
+                            }
+                            if has_as_safe {
+                                special_at = Some((j, Special::PropertyWithAsSafe));
+                                break;
+                            }
                         }
                         // `val x: T? = recv.firstOfType()` — explicit
                         // type ref carries the concrete T.
@@ -17598,6 +17648,210 @@ fn lower_loop_body_blocks(
                         return Some(out);
                     }
                     return None;
+                }
+                // `return recv?.let { lambda body } ?: alt` — null-safe
+                // dispatch into the lambda, falling back to `alt` when
+                // recv is null. The lower_rich SafeAccess `?.let` arm
+                // executes the lambda body unconditionally (no null guard)
+                // and the result-then-Elvis-default is computed eagerly,
+                // so a null recv NPEs inside the lambda body before
+                // Elvis can pick `alt`. Lift this shape into a 3-block
+                // null-guard CFG that mirrors PropertyWithSafeAccessElvis.
+                //
+                // Detect the shape: Binary(?:, SafeAccess(recv, Call(let, [], { lambda })), alt).
+                if let Some(KtExpr::Binary(elvis_b)) = ret_expr_inner {
+                    if elvis_b.operation().map(|o| o.text()).as_deref() == Some("?:") {
+                        let lhs = elvis_b.lhs().map(unwrap_parens);
+                        let rhs = elvis_b.rhs().map(unwrap_parens);
+                        if let (Some(KtExpr::SafeAccess(sa)), Some(alt_expr)) = (lhs, rhs) {
+                            let sa_kids: Vec<KtExpr<'_>> = skotch_ast::children(sa.syntax())
+                                .iter()
+                                .filter_map(KtExpr::cast)
+                                .collect();
+                            if sa_kids.len() == 2 {
+                                let recv_e = sa_kids[0];
+                                let accessor_e = sa_kids[1];
+                                // Match `?.let { lambda }`: a Call with
+                                // callee Reference("let"), no value-arg
+                                // list (or empty), and a trailing lambda.
+                                let is_let_lambda = if let KtExpr::Call(call) = accessor_e {
+                                    let callee_is_let = matches!(
+                                        call.callee(),
+                                        Some(KtExpr::Reference(r)) if r.name() == Some("let")
+                                    );
+                                    let no_value_args = call
+                                        .value_argument_list()
+                                        .map(|al| al.arguments().count() == 0)
+                                        .unwrap_or(true);
+                                    let has_lambda = call.lambda_argument().is_some();
+                                    callee_is_let && no_value_args && has_lambda
+                                } else {
+                                    false
+                                };
+                                if is_let_lambda {
+                                    // Pull the lambda body and param name.
+                                    let KtExpr::Call(call) = accessor_e else {
+                                        return None;
+                                    };
+                                    let la = call.lambda_argument()?;
+                                    let KtExpr::Lambda(lambda) = skotch_ast::children(la.syntax())
+                                        .iter()
+                                        .find_map(KtExpr::cast)?
+                                    else {
+                                        return None;
+                                    };
+                                    let fl = lambda.function_literal()?;
+                                    let body = fl.body()?;
+                                    let param_name: String = fl
+                                        .value_parameter_list()
+                                        .and_then(|pl| pl.parameters().next())
+                                        .and_then(|p| p.name().map(|s| s.to_string()))
+                                        .unwrap_or_else(|| "it".to_string());
+                                    let snap = name_to_local.clone();
+                                    let lookup = |n: &str| -> Option<LocalId> {
+                                        snap.iter()
+                                            .rev()
+                                            .find(|(name, _)| name == n)
+                                            .map(|(_, l)| *l)
+                                    };
+                                    // Lower the receiver into cur_stmts.
+                                    let recv_slot = lower_rich_expr_to_slot(
+                                        recv_e,
+                                        &lookup,
+                                        fn_lookup_ref,
+                                        next_slot,
+                                        &mut cur_stmts,
+                                        local_tys,
+                                        strings,
+                                    )?;
+                                    // null-cmp: cmp = (recv_slot == null).
+                                    let null_slot = LocalId(*next_slot);
+                                    *next_slot += 1;
+                                    local_tys.push(Ty::Nullable(Box::new(Ty::Any)));
+                                    cur_stmts.push(MStmt::Assign {
+                                        dest: null_slot,
+                                        value: skotch_mir::Rvalue::Const(
+                                            skotch_mir::MirConst::Null,
+                                        ),
+                                    });
+                                    let cmp_slot = LocalId(*next_slot);
+                                    *next_slot += 1;
+                                    local_tys.push(Ty::Bool);
+                                    cur_stmts.push(MStmt::Assign {
+                                        dest: cmp_slot,
+                                        value: skotch_mir::Rvalue::BinOp {
+                                            op: skotch_mir::BinOp::CmpEq,
+                                            lhs: recv_slot,
+                                            rhs: null_slot,
+                                        },
+                                    });
+                                    // THEN block (recv non-null): lower
+                                    // the lambda body with `it` bound to
+                                    // recv_slot; return the result.
+                                    let mut then_stmts: Vec<MStmt> = Vec::new();
+                                    let binding = (param_name, recv_slot);
+                                    let body_kids = skotch_ast::children(body.syntax());
+                                    let last_idx = body_kids
+                                        .iter()
+                                        .enumerate()
+                                        .rev()
+                                        .find(|(_, c)| KtExpr::cast(c).is_some())
+                                        .map(|(i, _)| i)?;
+                                    // Helper lookup binding the lambda
+                                    // param + outer scope. Built fresh
+                                    // for each invocation.
+                                    let snap2 = name_to_local.clone();
+                                    let body_lookup = |n: &str| -> Option<LocalId> {
+                                        if n == binding.0 {
+                                            return Some(binding.1);
+                                        }
+                                        snap2
+                                            .iter()
+                                            .rev()
+                                            .find(|(name, _)| name == n)
+                                            .map(|(_, l)| *l)
+                                    };
+                                    // Non-final children: side-effect
+                                    // stmts. Lower via lower_rich and
+                                    // discard the slot.
+                                    let mut then_result_slot: Option<LocalId> = None;
+                                    let mut ok = true;
+                                    for (k, c) in body_kids.iter().enumerate().take(last_idx + 1) {
+                                        let Some(stmt_e) = KtExpr::cast(c) else {
+                                            continue;
+                                        };
+                                        let s = lower_rich_expr_to_slot(
+                                            stmt_e,
+                                            &body_lookup,
+                                            fn_lookup_ref,
+                                            next_slot,
+                                            &mut then_stmts,
+                                            local_tys,
+                                            strings,
+                                        );
+                                        match s {
+                                            Some(slot) => {
+                                                if k == last_idx {
+                                                    then_result_slot = Some(slot);
+                                                }
+                                            }
+                                            None => {
+                                                ok = false;
+                                                break;
+                                            }
+                                        }
+                                    }
+                                    if !ok {
+                                        return None;
+                                    }
+                                    let then_slot = then_result_slot?;
+                                    // ALT block: evaluate alt -> slot.
+                                    let mut alt_stmts: Vec<MStmt> = Vec::new();
+                                    let snap3 = name_to_local.clone();
+                                    let alt_lookup = |n: &str| -> Option<LocalId> {
+                                        snap3
+                                            .iter()
+                                            .rev()
+                                            .find(|(name, _)| name == n)
+                                            .map(|(_, l)| *l)
+                                    };
+                                    let alt_slot = lower_rich_expr_to_slot(
+                                        alt_expr,
+                                        &alt_lookup,
+                                        fn_lookup_ref,
+                                        next_slot,
+                                        &mut alt_stmts,
+                                        local_tys,
+                                        strings,
+                                    )?;
+                                    // Emit the 3-block CFG: cond (Branch
+                                    // on cmp), then (ReturnValue then_slot),
+                                    // alt (ReturnValue alt_slot).
+                                    let cond_block_id = block_offset + blocks.len() as u32;
+                                    let then_block_id = cond_block_id + 1;
+                                    let alt_block_id = then_block_id + 1;
+                                    blocks.push(BasicBlock {
+                                        stmts: std::mem::take(&mut cur_stmts),
+                                        terminator: Terminator::Branch {
+                                            cond: cmp_slot,
+                                            // cmp is true => recv IS null => alt branch
+                                            then_block: alt_block_id,
+                                            else_block: then_block_id,
+                                        },
+                                    });
+                                    blocks.push(BasicBlock {
+                                        stmts: then_stmts,
+                                        terminator: Terminator::ReturnValue(then_slot),
+                                    });
+                                    blocks.push(BasicBlock {
+                                        stmts: alt_stmts,
+                                        terminator: Terminator::ReturnValue(alt_slot),
+                                    });
+                                    return Some(blocks);
+                                }
+                            }
+                        }
+                    }
                 }
                 let terminator = match ret_expr_inner {
                     None => Terminator::Return,
@@ -20384,6 +20638,122 @@ fn lower_loop_body_blocks(
                 });
                 blocks.push(BasicBlock {
                     stmts: alt_stmts,
+                    terminator: Terminator::Goto(join_block_id),
+                });
+                name_to_local.push((pname.to_string(), prop_slot));
+                i = j + 1;
+                continue;
+            }
+            Some((j, Special::PropertyWithAsSafe)) => {
+                // `val|var name = operand as? T` — safe cast.
+                //
+                // Block layout:
+                //   cond:   cur_stmts; eval operand -> obj_slot;
+                //           inst_slot = InstanceOf(obj_slot, T);
+                //           Branch(inst_slot, cast_block, null_block)
+                //   cast:   prop_slot = CheckCast(obj_slot, T); Goto(join)
+                //   null:   prop_slot = Const(null);            Goto(join)
+                //   join:   bind name -> prop_slot; fall through
+                //
+                // The prop_slot's static type is Nullable(T) so a
+                // later `if (name != null) return name.member` and
+                // `name?.let { ... }` resolve member access against
+                // the wrapped class type.
+                let prop_node = body_children[j];
+                let prop = skotch_ast::KtProperty::cast(prop_node)?;
+                let pname = prop.name()?;
+                let init = prop.initializer().map(unwrap_parens)?;
+                let KtExpr::BinaryWithTypeRhs(bw) = init else {
+                    return None;
+                };
+                let bw_children: Vec<_> = skotch_ast::children(bw.syntax()).iter().collect();
+                let operand = bw_children
+                    .iter()
+                    .find_map(|c| KtExpr::cast(c))
+                    .map(unwrap_parens)?;
+                let type_name = bw_children.iter().find_map(|c| {
+                    if c.kind == skotch_syntax::SyntaxKind::TYPE_REFERENCE {
+                        if let Some(tr) = skotch_ast::KtTypeReference::cast(c) {
+                            return tr.user_type().and_then(|u| u.name()).map(String::from);
+                        }
+                    }
+                    None
+                })?;
+                let snap = name_to_local.clone();
+                let lookup = |n: &str| -> Option<LocalId> {
+                    snap.iter()
+                        .rev()
+                        .find(|(name, _)| name == n)
+                        .map(|(_, l)| *l)
+                };
+                let obj_slot = lower_rich_expr_to_slot(
+                    operand,
+                    &lookup,
+                    fn_lookup_ref,
+                    next_slot,
+                    &mut cur_stmts,
+                    local_tys,
+                    strings,
+                )?;
+                let target_class = skotch_types::intrinsics::kotlin_to_jvm_class(&type_name)
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| type_name.clone());
+                // Bind the property slot to the unwrapped class type
+                // (not Nullable) so downstream `if (d != null) ... d.name`
+                // dispatches `name` against `Ty::Class(Dog)` through the
+                // normal DotQualified arm. The JVM verifier accepts
+                // `null` stored into a reference-typed slot, so the
+                // nullability is conveyed through the actual runtime
+                // value rather than the static slot Ty.
+                let class_ty = skotch_types::ty_from_name(&type_name)
+                    .unwrap_or_else(|| Ty::Class(target_class.clone()));
+                // InstanceOf result.
+                let inst_slot = LocalId(*next_slot);
+                *next_slot += 1;
+                local_tys.push(Ty::Bool);
+                cur_stmts.push(MStmt::Assign {
+                    dest: inst_slot,
+                    value: skotch_mir::Rvalue::InstanceOf {
+                        obj: obj_slot,
+                        type_descriptor: target_class.clone(),
+                    },
+                });
+                // Allocate the property slot once; both branches write
+                // to it. Slot Ty is plain Class(T) (see above for why).
+                let prop_slot = LocalId(*next_slot);
+                *next_slot += 1;
+                local_tys.push(class_ty);
+                // CAST block.
+                let cast_stmts = vec![MStmt::Assign {
+                    dest: prop_slot,
+                    value: skotch_mir::Rvalue::CheckCast {
+                        obj: obj_slot,
+                        target_class: target_class.clone(),
+                    },
+                }];
+                // NULL block.
+                let null_stmts = vec![MStmt::Assign {
+                    dest: prop_slot,
+                    value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Null),
+                }];
+                let cond_block_id = block_offset + blocks.len() as u32;
+                let cast_block_id = cond_block_id + 1;
+                let null_block_id = cast_block_id + 1;
+                let join_block_id = null_block_id + 1;
+                blocks.push(BasicBlock {
+                    stmts: std::mem::take(&mut cur_stmts),
+                    terminator: Terminator::Branch {
+                        cond: inst_slot,
+                        then_block: cast_block_id,
+                        else_block: null_block_id,
+                    },
+                });
+                blocks.push(BasicBlock {
+                    stmts: cast_stmts,
+                    terminator: Terminator::Goto(join_block_id),
+                });
+                blocks.push(BasicBlock {
+                    stmts: null_stmts,
                     terminator: Terminator::Goto(join_block_id),
                 });
                 name_to_local.push((pname.to_string(), prop_slot));
