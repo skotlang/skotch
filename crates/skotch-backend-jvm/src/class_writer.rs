@@ -18246,6 +18246,20 @@ fn walk_block(
                         ) && matches!(method_name, "get" | "remove"))
                             && !is_function_invoke
                             && module.find_class(class_name).is_none();
+                    // `java/util/List.set(int, Object) -> Object` has a
+                    // MIXED-type signature: the index is positional `int`
+                    // while the value is erased `Object`. The general
+                    // `force_object_args_load` flag would box BOTH args.
+                    // Track this separately so we only box arg index 2
+                    // (the value), leaving arg index 1 (the index) as a
+                    // raw int. Same shape needed for the descriptor below.
+                    let list_set_method = matches!(
+                        class_name.as_str(),
+                        "java/util/List" | "java/util/ArrayList" | "java/util/LinkedList"
+                    ) && method_name == "set"
+                        && args.len() == 3
+                        && !is_function_invoke
+                        && module.find_class(class_name).is_none();
                     // Load receiver (first arg) then remaining args.
                     // For FunctionN.invoke, box primitive args inline
                     // so the descriptor matches `(Object^N)Object`
@@ -18258,7 +18272,14 @@ fn walk_block(
                         // Autobox primitive arg → wrapper when the
                         // descriptor forces Object (collection erased
                         // methods).
-                        if i > 0 && force_object_args_load {
+                        // For `List.set(int, Object)` only the value arg
+                        // (i == 2) needs boxing — the index (i == 1) is a
+                        // positional int. `force_object_args_load` boxes
+                        // all user args (i > 0); `list_set_method` boxes
+                        // only the value (i == 2).
+                        let box_this_arg =
+                            (i > 0 && force_object_args_load) || (list_set_method && i == 2);
+                        if box_this_arg {
                             let arg_ty = &func.locals[a.0 as usize];
                             let box_info: Option<(&str, &str)> = match arg_ty {
                                 Ty::Int | Ty::Byte | Ty::Short => {
@@ -18588,6 +18609,13 @@ fn walk_block(
                         && !is_function_invoke
                         && target_method_sig.is_none())
                         || (map_erased_arg_method && target_method_sig.is_none());
+                    // `List.set(int, Object)` — mixed signature. Index at
+                    // user-pos 0 stays `I`; value at user-pos 1 becomes
+                    // `Ljava/lang/Object;`. Only applies when no
+                    // `target_method_sig` was resolved (i.e. the receiver
+                    // is the JDK interface, not a user class with its own
+                    // `set`).
+                    let list_set_desc = list_set_method && target_method_sig.is_none();
                     let mut descriptor = String::from("(");
                     // Skip first arg (receiver) in descriptor
                     for (i, a) in args.iter().skip(1).enumerate() {
@@ -18604,6 +18632,13 @@ fn walk_block(
                             } else {
                                 let ty = &func.locals[a.0 as usize];
                                 descriptor.push_str(&jvm_param_type_string(ty));
+                            }
+                        } else if list_set_desc {
+                            // user-pos 0 = index (I), user-pos 1 = value (Object)
+                            if i == 0 {
+                                descriptor.push('I');
+                            } else {
+                                descriptor.push_str("Ljava/lang/Object;");
                             }
                         } else if force_object_args {
                             descriptor.push_str("Ljava/lang/Object;");
