@@ -34826,6 +34826,47 @@ fn lower_rich_expr_to_slot(
             .iter()
             .find_map(KtExpr::cast)
             .map(unwrap_parens)?;
+        // Prefix `++name` / `--name`: bump the local in place and
+        // return a snapshot of the NEW value. Done BEFORE the
+        // unconditional inner_slot eval below because we need the
+        // writable slot from lookup_name(name), not a fresh
+        // snapshot slot.
+        if op_text == "++" || op_text == "--" {
+            if let KtExpr::Reference(rr) = &inner {
+                if let Some(name) = rr.name() {
+                    if let Some(slot) = lookup_name(name) {
+                        let mir_op = if op_text == "++" {
+                            skotch_mir::BinOp::AddI
+                        } else {
+                            skotch_mir::BinOp::SubI
+                        };
+                        let one_slot = LocalId(*next_slot);
+                        *next_slot += 1;
+                        extra_locals.push(Ty::Int);
+                        pre_stmts.push(MStmt::Assign {
+                            dest: one_slot,
+                            value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(1)),
+                        });
+                        pre_stmts.push(MStmt::Assign {
+                            dest: slot,
+                            value: skotch_mir::Rvalue::BinOp {
+                                op: mir_op,
+                                lhs: slot,
+                                rhs: one_slot,
+                            },
+                        });
+                        let new_slot = LocalId(*next_slot);
+                        *next_slot += 1;
+                        extra_locals.push(Ty::Int);
+                        pre_stmts.push(MStmt::Assign {
+                            dest: new_slot,
+                            value: skotch_mir::Rvalue::Local(slot),
+                        });
+                        return Some(new_slot);
+                    }
+                }
+            }
+        }
         let inner_slot = lower_rich_expr_to_slot(
             inner,
             lookup_name,
