@@ -1575,29 +1575,45 @@ fn overload_ty_compatible(want: &Ty, got: &Ty) -> bool {
 }
 
 thread_local! {
-    /// FIFO queue of (target_func_id, args_len, mask) tuples recorded
+    /// FIFO queue of (target_func_id, args_slots, mask) tuples recorded
     /// by the named-arg reorder arm in `lower_rich_expr_to_slot`. The
     /// default-arg fixup pass walks every `CallKind::Static` stmt and
-    /// pops the matching head entry when its target/arg-count line
-    /// up — that way we can plumb a precomputed mask through without
-    /// needing to know the block/stmt index at the lowering site.
+    /// pops the matching head entry when its target + arg-slot-sequence
+    /// line up — that way we can plumb a precomputed mask through
+    /// without needing to know the block/stmt index at the lowering
+    /// site. Keying on the full slot sequence (not just arg count)
+    /// disambiguates same-target same-arity calls — e.g. when one site
+    /// is `add(1, 2, 3)` (fully filled, no mask needed) and another is
+    /// `add(1, c=50)` (lowered to `[1, null, 50]` with mask=2), both
+    /// have the same `(fid, args_len)` fingerprint, so length-only
+    /// keying would cause the fixup pass to mis-attribute the mask.
     /// The queue is drained per `MirFunction` so order matches the
     /// fixup pass's traversal order (same as lowering order).
     static PENDING_NAMED_DEFAULT_MASKS:
-        std::cell::RefCell<std::collections::VecDeque<(u32, u32, u32)>> =
+        std::cell::RefCell<std::collections::VecDeque<(u32, Vec<u32>, u32)>> =
         const { std::cell::RefCell::new(std::collections::VecDeque::new()) };
 }
 
-fn push_pending_named_default_mask(fid: skotch_mir::FuncId, args_len: u32, mask: u32) {
-    PENDING_NAMED_DEFAULT_MASKS.with(|q| q.borrow_mut().push_back((fid.0, args_len, mask)));
+fn push_pending_named_default_mask(
+    fid: skotch_mir::FuncId,
+    arg_slots: &[skotch_mir::LocalId],
+    mask: u32,
+) {
+    let slots: Vec<u32> = arg_slots.iter().map(|s| s.0).collect();
+    PENDING_NAMED_DEFAULT_MASKS.with(|q| q.borrow_mut().push_back((fid.0, slots, mask)));
 }
 
-fn take_pending_named_default_mask(fid: skotch_mir::FuncId, args_len: u32) -> Option<u32> {
+fn take_pending_named_default_mask(
+    fid: skotch_mir::FuncId,
+    arg_slots: &[skotch_mir::LocalId],
+) -> Option<u32> {
     PENDING_NAMED_DEFAULT_MASKS.with(|q| {
         let mut q = q.borrow_mut();
-        let pos = q
-            .iter()
-            .position(|(f, n, _)| *f == fid.0 && *n == args_len)?;
+        let pos = q.iter().position(|(f, s, _)| {
+            *f == fid.0
+                && s.len() == arg_slots.len()
+                && s.iter().zip(arg_slots.iter()).all(|(a, b)| *a == b.0)
+        })?;
         let (_, _, m) = q.remove(pos)?;
         Some(m)
     })
@@ -9617,12 +9633,13 @@ pub fn lower_file(
                     // Named-arg reorder path: if the lowerer pre-recorded
                     // a mask for this call site (args fully filled with
                     // a null dummy in hole positions), pop it and emit.
-                    // The fingerprint is (target_fid, args.len()) — calls
-                    // are popped in lowering order so first-match works
-                    // for repeated identical-shape calls.
+                    // The fingerprint is (target_fid, args slot-sequence) —
+                    // matching on the exact slot list (not just args.len())
+                    // disambiguates fully-positional calls like `add(1,2,3)`
+                    // from same-target same-arity named-with-holes calls
+                    // like `add(1, c=50)` lowered to `[1, null, 50]`.
                     if args.len() == *total {
-                        if let Some(named_mask) =
-                            take_pending_named_default_mask(*target_fid, args.len() as u32)
+                        if let Some(named_mask) = take_pending_named_default_mask(*target_fid, args)
                         {
                             f.default_call_masks.push((
                                 block_idx as u32,
@@ -41143,9 +41160,7 @@ fn lower_rich_expr_to_slot(
                                     }
                                     if hole_mask != 0 {
                                         push_pending_named_default_mask(
-                                            *fid,
-                                            arg_slots.len() as u32,
-                                            hole_mask,
+                                            *fid, &arg_slots, hole_mask,
                                         );
                                     }
                                     handled = true;
