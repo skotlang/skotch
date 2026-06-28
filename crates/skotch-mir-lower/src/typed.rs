@@ -15215,6 +15215,46 @@ fn lower_loop_body(
                 continue;
             }
             let pname = prop.name()?;
+            // Deferred initialization: `val a: Int` (no `=` rhs).
+            // kotlinc emits a zero-init for each such slot (`iconst_0;
+            // istore_a`) so the slot is well-defined before the later
+            // `a = 1` reassignment. Requires an explicit type annotation
+            // — without one we'd have to guess the slot Ty. We allocate
+            // the slot, emit the zero Const, register the name, and let
+            // the subsequent var-reassign Binary handler observe it via
+            // `name_to_local`. Note: even though the source is `val`,
+            // the slot needs to be writable post-decl so we route the
+            // later `=` through the existing reassign path; this is
+            // exactly the shape kotlinc compiles to.
+            if prop.initializer().is_none() {
+                let Some(tr) = prop.type_reference() else {
+                    trace_bail!(
+                        "lower_loop_body val handler: `val {}` has no initializer \
+                         and no type annotation",
+                        pname
+                    );
+                    return None;
+                };
+                let ty = resolve_type_ref(tr);
+                let (zero_k, zero_ty) = match &ty {
+                    Ty::Int | Ty::Byte | Ty::Short | Ty::Char | Ty::Bool => {
+                        (skotch_mir::MirConst::Int(0), ty.clone())
+                    }
+                    Ty::Long => (skotch_mir::MirConst::Long(0), Ty::Long),
+                    Ty::Float => (skotch_mir::MirConst::Float(0.0), Ty::Float),
+                    Ty::Double => (skotch_mir::MirConst::Double(0.0), Ty::Double),
+                    _ => (skotch_mir::MirConst::Null, ty.clone()),
+                };
+                let slot = LocalId(*next_slot);
+                *next_slot += 1;
+                local_tys.push(zero_ty);
+                body_mstmts.push(MStmt::Assign {
+                    dest: slot,
+                    value: skotch_mir::Rvalue::Const(zero_k),
+                });
+                name_to_local.push((pname.to_string(), slot));
+                continue;
+            }
             let init = prop.initializer()?;
             let init = unwrap_parens(init);
             if let Some((k, ty)) = literal_to_const(&init, strings) {
@@ -15711,11 +15751,20 @@ fn lower_loop_body(
                 // own mutable slot — otherwise later reassignments
                 // (`x = …`) would overwrite the source slot (an
                 // outer param or local) instead of x. For `val x =
-                // <expr>`, aliasing to the source slot is safe and
-                // matches kotlinc's slot-reuse pattern when the
-                // initializer is a pure reference, so we keep that
-                // behavior for val.
-                let final_slot = if prop.is_var() {
+                // <expr>` we also need a fresh slot when the RHS is
+                // a bare Reference to an existing local: aliasing to
+                // the source slot is incorrect if the source is a
+                // `var` that gets reassigned later (the classic swap
+                // `val tmp = x; x = y; y = tmp` then reads the
+                // post-`x = y` value of x into y, defeating the swap).
+                // kotlinc always materializes `val tmp = ref` as
+                // `iload ref; istore tmp` — a dedicated slot. We
+                // mirror that whenever the val's initializer is a
+                // pure Reference, regardless of source mutability,
+                // since the copy is cheap and the alias is unsound
+                // for the var-source case.
+                let init_is_reference = matches!(init, KtExpr::Reference(_));
+                let final_slot = if prop.is_var() || init_is_reference {
                     // Resolve the rhs slot's Ty via the param-fallback
                     // helper — for a Reference init like `var k = q`
                     // (q a param), the param fallback returns Int,
