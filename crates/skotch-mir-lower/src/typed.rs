@@ -31879,6 +31879,26 @@ fn lower_rich_expr_to_slot(
                     snap_locals.retain(|(n, _)| n != p_name);
                     snap_locals.push((p_name.clone(), cast_slot));
                 }
+            } else if matches!(&hint_ty, Ty::String) {
+                // String-typed hint with erased Object descriptor.
+                // Without the CheckCast prologue, `acc.length` /
+                // `acc.isEmpty()` inside a `fold("") { acc, x -> ... }`
+                // body hits `invokevirtual String.length()` against an
+                // Object-typed slot → verifier rejects with
+                // "Type 'java/lang/Object' is not assignable to
+                // 'java/lang/String'".
+                let cast_slot = LocalId(next_slot_inv);
+                next_slot_inv += 1;
+                extra_locals_inv.push(Ty::String);
+                pre_stmts_inv.push(MStmt::Assign {
+                    dest: cast_slot,
+                    value: skotch_mir::Rvalue::CheckCast {
+                        obj: param_slot,
+                        target_class: "java/lang/String".to_string(),
+                    },
+                });
+                snap_locals.retain(|(n, _)| n != p_name);
+                snap_locals.push((p_name.clone(), cast_slot));
             }
         }
         let snap = snap_locals.clone();
@@ -39958,10 +39978,22 @@ fn lower_rich_expr_to_slot(
                                                                 | "groupBy",
                                                                 Some(t),
                                                             ) => Some(vec![t.clone()]),
-                                                            ("fold", Some(t)) => {
+                                                            ("fold", _) => {
                                                                 // Initial value is the 2nd slot in
                                                                 // arg_slots (after receiver). Its Ty
                                                                 // is R; if unknown, fall back to Any.
+                                                                // The element Ty `T` is what `lookup_
+                                                                // list_element_ty` returns; when the
+                                                                // list-of literal didn't register its
+                                                                // element Ty (e.g. anonymous receiver
+                                                                // from a chained call), fall back to
+                                                                // Ty::Any for the second lambda param
+                                                                // so the FIRST param (acc) still gets
+                                                                // its narrowed Ty hint — needed so
+                                                                // `acc.length` (et al.) inside the
+                                                                // body dispatches on the right
+                                                                // receiver class instead of bailing
+                                                                // through the Ty::Any fallback.
                                                                 let acc_ty = arg_slots
                                                                     .get(1)
                                                                     .map(|s| {
@@ -39971,7 +40003,10 @@ fn lower_rich_expr_to_slot(
                                                                         )
                                                                     })
                                                                     .unwrap_or(Ty::Any);
-                                                                Some(vec![acc_ty, t.clone()])
+                                                                let elem_t = elem_ty
+                                                                    .clone()
+                                                                    .unwrap_or(Ty::Any);
+                                                                Some(vec![acc_ty, elem_t])
                                                             }
                                                             _ => None,
                                                         };
