@@ -32964,6 +32964,10 @@ fn try_lower_multi_stmt_block_with_offset(
                                             | "singleOrNull"
                                             | "chunked"
                                             | "windowed"
+                                            | "zipWithNext"
+                                            | "minByOrNull"
+                                            | "maxByOrNull"
+                                            | "partition"
                                     );
                                     if is_jdk_collection && is_kotlin_collection_ext {
                                         return None;
@@ -45691,6 +45695,106 @@ fn lower_rich_expr_to_slot(
                                             "(Ljava/lang/Iterable;)Ljava/lang/Comparable;",
                                             Ty::Any,
                                         )),
+                                        // `xs.minByOrNull { sel }` /
+                                        // `xs.maxByOrNull { sel }` route to the
+                                        // public static facade
+                                        //   CollectionsKt.{min,max}ByOrNull(
+                                        //     Iterable, Function1): Object
+                                        // kotlinc INLINES these at the call
+                                        // site (iterator + best-so-far loop)
+                                        // but the static facade still exists
+                                        // for cross-language callers, so the
+                                        // runtime-correct routing is byte-
+                                        // divergent — same tradeoff as
+                                        // `takeWhile` / `flatMap`. parity/159.
+                                        "minByOrNull"
+                                            if call.lambda_argument().is_some() =>
+                                        {
+                                            Some((
+                                                "kotlin/collections/CollectionsKt",
+                                                "minByOrNull",
+                                                "(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Ljava/lang/Object;",
+                                                Ty::Any,
+                                            ))
+                                        }
+                                        "maxByOrNull"
+                                            if call.lambda_argument().is_some() =>
+                                        {
+                                            Some((
+                                                "kotlin/collections/CollectionsKt",
+                                                "maxByOrNull",
+                                                "(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Ljava/lang/Object;",
+                                                Ty::Any,
+                                            ))
+                                        }
+                                        // `xs.partition { pred }` →
+                                        //   CollectionsKt.partition(
+                                        //     Iterable, Function1): kotlin/Pair
+                                        // (Pair<List<T>, List<T>>). Same
+                                        // inline-but-facade-exists situation
+                                        // as the *ByOrNull arms. parity/159.
+                                        "partition"
+                                            if call.lambda_argument().is_some() =>
+                                        {
+                                            Some((
+                                                "kotlin/collections/CollectionsKt",
+                                                "partition",
+                                                "(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Lkotlin/Pair;",
+                                                Ty::Class("kotlin/Pair".to_string()),
+                                            ))
+                                        }
+                                        // `xs.zipWithNext()` no-arg →
+                                        //   CollectionsKt.zipWithNext(Iterable): List<Pair<T,T>>
+                                        // kotlinc emits this exact static call;
+                                        // the lambda variant
+                                        // `zipWithNext { a, b -> }` routes
+                                        // through Function2 (matches kotlinc
+                                        // shape for the facade — kotlinc
+                                        // inlines the lambda variant but the
+                                        // facade survives). parity/159.
+                                        "zipWithNext"
+                                            if call.lambda_argument().is_none()
+                                                && call
+                                                    .value_argument_list()
+                                                    .map(|al| al.arguments().count())
+                                                    .unwrap_or(0)
+                                                    == 0 =>
+                                        {
+                                            Some((
+                                                "kotlin/collections/CollectionsKt",
+                                                "zipWithNext",
+                                                "(Ljava/lang/Iterable;)Ljava/util/List;",
+                                                Ty::Class("java/util/List".to_string()),
+                                            ))
+                                        }
+                                        // `xs.windowed(size)` single-Int-arg →
+                                        // route to the 4-param overload
+                                        //   windowed(Iterable, int, int, boolean): List
+                                        // with default step=1 and
+                                        // partialWindows=false synthesized as
+                                        // trailing args. kotlinc emits
+                                        // `windowed$default(Iterable, I, I, Z, I, Object)`
+                                        // with placeholder zeros + bitmask=6
+                                        // (`0b110`), but the direct 4-arg
+                                        // overload is also a public stdlib
+                                        // facade — runtime-correct and saves
+                                        // a multi-arg $default plumbing arm.
+                                        // parity/159.
+                                        "windowed"
+                                            if call.lambda_argument().is_none()
+                                                && call
+                                                    .value_argument_list()
+                                                    .map(|al| al.arguments().count())
+                                                    .unwrap_or(0)
+                                                    == 1 =>
+                                        {
+                                            Some((
+                                                "kotlin/collections/CollectionsKt",
+                                                "windowed",
+                                                "(Ljava/lang/Iterable;IIZ)Ljava/util/List;",
+                                                Ty::Class("java/util/List".to_string()),
+                                            ))
+                                        }
                                         "average" => Some((
                                             "kotlin/collections/CollectionsKt",
                                             "averageOfInt",
@@ -45997,6 +46101,38 @@ fn lower_rich_expr_to_slot(
                                                 next_param_idx += 1;
                                             }
                                         }
+                                        // `xs.windowed(size)` routes to the
+                                        // 4-arg `windowed(Iterable, int, int,
+                                        // boolean)` overload — synthesize the
+                                        // trailing step=1 / partialWindows=false
+                                        // defaults the user omitted. parity/159.
+                                        if all_ok
+                                            && method == "windowed"
+                                            && cls == "kotlin/collections/CollectionsKt"
+                                            && desc == "(Ljava/lang/Iterable;IIZ)Ljava/util/List;"
+                                            && arg_slots.len() == 2
+                                        {
+                                            let step_slot = LocalId(*next_slot);
+                                            *next_slot += 1;
+                                            extra_locals.push(Ty::Int);
+                                            pre_stmts.push(MStmt::Assign {
+                                                dest: step_slot,
+                                                value: skotch_mir::Rvalue::Const(
+                                                    skotch_mir::MirConst::Int(1),
+                                                ),
+                                            });
+                                            arg_slots.push(step_slot);
+                                            let part_slot = LocalId(*next_slot);
+                                            *next_slot += 1;
+                                            extra_locals.push(Ty::Bool);
+                                            pre_stmts.push(MStmt::Assign {
+                                                dest: part_slot,
+                                                value: skotch_mir::Rvalue::Const(
+                                                    skotch_mir::MirConst::Bool(false),
+                                                ),
+                                            });
+                                            arg_slots.push(part_slot);
+                                        }
                                         if all_ok {
                                             if let Some(la) = call.lambda_argument() {
                                                 if let Some(le) = skotch_ast::children(la.syntax())
@@ -46025,7 +46161,9 @@ fn lower_rich_expr_to_slot(
                                                             (
                                                                 "filter" | "map" | "forEach"
                                                                 | "any" | "all" | "none" | "count"
-                                                                | "groupBy" | "flatMap",
+                                                                | "groupBy" | "flatMap"
+                                                                | "minByOrNull" | "maxByOrNull"
+                                                                | "partition",
                                                                 Some(t),
                                                             ) => Some(vec![t.clone()]),
                                                             ("fold", _) => {
@@ -47230,6 +47368,40 @@ fn lower_rich_expr_to_slot(
                                                 Ty::Class("java/util/List".to_string()),
                                             ))
                                         }
+                                    }
+                                    // Chained-receiver `xs.foo().take(n)` etc.
+                                    // Mirror the bare-Reference entries so a
+                                    // collection-result chained method routes
+                                    // to the static CollectionsKt facade
+                                    // rather than `List.take(int)` which
+                                    // doesn't exist on the JDK List interface.
+                                    // parity/159.
+                                    "take" => Some((
+                                        "kotlin/collections/CollectionsKt",
+                                        "take",
+                                        "(Ljava/lang/Iterable;I)Ljava/util/List;",
+                                        Ty::Class("java/util/List".to_string()),
+                                    )),
+                                    "drop" => Some((
+                                        "kotlin/collections/CollectionsKt",
+                                        "drop",
+                                        "(Ljava/lang/Iterable;I)Ljava/util/List;",
+                                        Ty::Class("java/util/List".to_string()),
+                                    )),
+                                    "zipWithNext"
+                                        if call.lambda_argument().is_none()
+                                            && call
+                                                .value_argument_list()
+                                                .map(|al| al.arguments().count())
+                                                .unwrap_or(0)
+                                                == 0 =>
+                                    {
+                                        Some((
+                                            "kotlin/collections/CollectionsKt",
+                                            "zipWithNext",
+                                            "(Ljava/lang/Iterable;)Ljava/util/List;",
+                                            Ty::Class("java/util/List".to_string()),
+                                        ))
                                     }
                                     _ => None,
                                 };
