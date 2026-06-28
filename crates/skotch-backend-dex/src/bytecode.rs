@@ -123,7 +123,9 @@ pub fn lower_function(
                         | MBinOp::CmpLt
                         | MBinOp::CmpGe
                         | MBinOp::CmpGt
-                        | MBinOp::CmpLe,
+                        | MBinOp::CmpLe
+                        | MBinOp::CmpRefEq
+                        | MBinOp::CmpRefNe,
                     ..
                 }
             )
@@ -832,7 +834,9 @@ fn emit_binop(
         | MBinOp::CmpLt
         | MBinOp::CmpGt
         | MBinOp::CmpLe
-        | MBinOp::CmpGe => {
+        | MBinOp::CmpGe
+        | MBinOp::CmpRefEq
+        | MBinOp::CmpRefNe => {
             // DEX integer comparison: if-<op> vA, vB, +offset
             // If true → set dest=1; else dest=0.
             //
@@ -843,13 +847,17 @@ fn emit_binop(
             // Format 22t requires 4-bit registers.  When comparison
             // operands are >= 16, move them into dedicated comparison
             // scratch registers (guaranteed < 16) first.
+            //
+            // CmpRefEq/CmpRefNe use the same if-eq/if-ne opcodes as
+            // CmpEq/CmpNe — DEX has a single opcode family that the
+            // verifier accepts for both primitive int and object refs.
             let cond_op: u8 = match op {
-                MBinOp::CmpEq => 0x32, // if-eq
-                MBinOp::CmpNe => 0x33, // if-ne
-                MBinOp::CmpLt => 0x34, // if-lt
-                MBinOp::CmpGe => 0x35, // if-ge
-                MBinOp::CmpGt => 0x36, // if-gt
-                MBinOp::CmpLe => 0x37, // if-le
+                MBinOp::CmpEq | MBinOp::CmpRefEq => 0x32, // if-eq
+                MBinOp::CmpNe | MBinOp::CmpRefNe => 0x33, // if-ne
+                MBinOp::CmpLt => 0x34,                    // if-lt
+                MBinOp::CmpGe => 0x35,                    // if-ge
+                MBinOp::CmpGt => 0x36,                    // if-gt
+                MBinOp::CmpLe => 0x37,                    // if-le
                 _ => unreachable!(),
             };
 

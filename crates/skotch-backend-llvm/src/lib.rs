@@ -626,6 +626,8 @@ impl<'a> BlockWalker<'a> {
                             | MBinOp::CmpGt
                             | MBinOp::CmpLe
                             | MBinOp::CmpGe
+                            | MBinOp::CmpRefEq
+                            | MBinOp::CmpRefNe
                     )
                 {
                     let ext = self.fresh();
@@ -642,6 +644,8 @@ impl<'a> BlockWalker<'a> {
                             | MBinOp::CmpGt
                             | MBinOp::CmpLe
                             | MBinOp::CmpGe
+                            | MBinOp::CmpRefEq
+                            | MBinOp::CmpRefNe
                     )
                 {
                     let ext = self.fresh();
@@ -719,6 +723,27 @@ impl<'a> BlockWalker<'a> {
                         let dst = self.fresh();
                         writeln!(self.out, "  {dst} = {opcode} float {l}, {r}").unwrap();
                         self.ssa_for_local[dest.0 as usize] = Some(dst);
+                    }
+                    MBinOp::CmpRefEq | MBinOp::CmpRefNe => {
+                        // Pointer-identity comparison (`===` / `!==`):
+                        // emit a single icmp on the SSA values as
+                        // pointers. The LLVM backend currently produces
+                        // i32 SSA names; for a pure-LLVM target the
+                        // identity test against ptr-typed operands is
+                        // sufficient as long as both operands trace
+                        // back to a pointer-shaped value at the IR
+                        // level. This arm exists primarily to keep
+                        // the match exhaustive — the JVM backend is
+                        // the real consumer of `===` parity.
+                        let pred = if matches!(op, MBinOp::CmpRefEq) {
+                            "eq"
+                        } else {
+                            "ne"
+                        };
+                        let dst = self.fresh();
+                        writeln!(self.out, "  {dst} = icmp {pred} ptr {l}, {r}").unwrap();
+                        self.ssa_for_local[dest.0 as usize] = Some(dst);
+                        self.is_i1_local[dest.0 as usize] = true;
                     }
                     MBinOp::CmpEq
                     | MBinOp::CmpNe

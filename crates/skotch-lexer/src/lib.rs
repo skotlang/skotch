@@ -308,6 +308,19 @@ impl<'a> Lexer<'a> {
             return;
         }
 
+        // Punctuation. Three-character forms first (===, !==) so they
+        // don't get lexed as `==` + `=` / `!=` + `=`.
+        let three = (b, self.peek_at(1), self.peek_at(2));
+        let three_kind = match three {
+            (b'=', Some(b'='), Some(b'=')) => Some((TokenKind::EqEqEq, 3)),
+            (b'!', Some(b'='), Some(b'=')) => Some((TokenKind::NotEqEq, 3)),
+            _ => None,
+        };
+        if let Some((k, n)) = three_kind {
+            self.pos += n;
+            self.emit(k, start, self.pos, None);
+            return;
+        }
         // Punctuation. Multi-character forms first.
         let two = (b, self.peek_at(1));
         let kind = match two {

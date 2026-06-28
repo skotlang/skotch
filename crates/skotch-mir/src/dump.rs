@@ -276,6 +276,8 @@ fn format_binop(op: &BinOp) -> &'static str {
         BinOp::CmpGt => ">",
         BinOp::CmpLe => "<=",
         BinOp::CmpGe => ">=",
+        BinOp::CmpRefEq => "===",
+        BinOp::CmpRefNe => "!==",
     }
 }
 

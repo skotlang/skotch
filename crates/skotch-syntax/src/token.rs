@@ -123,7 +123,9 @@ pub enum TokenKind {
     // ─── multi-character punctuation ─────────────────────────────────────
     Arrow,       // ->
     EqEq,        // ==
+    EqEqEq,      // ===
     NotEq,       // !=
+    NotEqEq,     // !==
     Lt,          // <
     Gt,          // >
     LtEq,        // <=

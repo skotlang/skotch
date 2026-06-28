@@ -32884,6 +32884,46 @@ fn lower_inline_expr_to_slot(
         KtExpr::Binary(b) => {
             let op_text = b.operation().map(|o| o.text()).unwrap_or_default();
             let is_cmp_op = matches!(op_text.as_str(), "==" | "!=" | "<" | ">" | "<=" | ">=");
+            let is_ref_cmp_op = matches!(op_text.as_str(), "===" | "!==");
+            // Reference-identity (`===`/`!==`): lower lhs/rhs as refs and
+            // emit a dedicated CmpRefEq/CmpRefNe BinOp. The JVM backend
+            // lowers these to `if_acmp{eq,ne}` regardless of operand types,
+            // matching kotlinc's shape.
+            if is_ref_cmp_op {
+                let lhs = lower_inline_expr_to_slot(
+                    b.lhs()?,
+                    lookup_name,
+                    next_slot,
+                    pre_stmts,
+                    extra_locals,
+                    strings,
+                )?;
+                let rhs = lower_inline_expr_to_slot(
+                    b.rhs()?,
+                    lookup_name,
+                    next_slot,
+                    pre_stmts,
+                    extra_locals,
+                    strings,
+                )?;
+                let mir_op = if op_text == "===" {
+                    skotch_mir::BinOp::CmpRefEq
+                } else {
+                    skotch_mir::BinOp::CmpRefNe
+                };
+                let slot = LocalId(*next_slot);
+                *next_slot += 1;
+                extra_locals.push(Ty::Bool);
+                pre_stmts.push(MStmt::Assign {
+                    dest: slot,
+                    value: skotch_mir::Rvalue::BinOp {
+                        op: mir_op,
+                        lhs,
+                        rhs,
+                    },
+                });
+                return Some(slot);
+            }
             // Operator-overload deferral: if `+`/`-`/`*`/`/`/`%` and
             // the lhs resolves to a Ty::Class whose CLASS_METHODS
             // table has the corresponding operator method (`plus`
@@ -46200,6 +46240,7 @@ fn lower_rich_expr_to_slot(
     if let KtExpr::Binary(b) = e {
         let op_text = b.operation().map(|o| o.text()).unwrap_or_default();
         let is_cmp_op = matches!(op_text.as_str(), "==" | "!=" | "<" | ">" | "<=" | ">=");
+        let is_ref_cmp_op = matches!(op_text.as_str(), "===" | "!==");
         let lhs_slot = lower_rich_expr_to_slot(
             b.lhs()?,
             lookup_name,
@@ -46218,6 +46259,25 @@ fn lower_rich_expr_to_slot(
             extra_locals,
             strings,
         )?;
+        if is_ref_cmp_op {
+            let mir_op = if op_text == "===" {
+                skotch_mir::BinOp::CmpRefEq
+            } else {
+                skotch_mir::BinOp::CmpRefNe
+            };
+            let slot = LocalId(*next_slot);
+            *next_slot += 1;
+            extra_locals.push(Ty::Bool);
+            pre_stmts.push(MStmt::Assign {
+                dest: slot,
+                value: skotch_mir::Rvalue::BinOp {
+                    op: mir_op,
+                    lhs: lhs_slot,
+                    rhs: rhs_slot,
+                },
+            });
+            return Some(slot);
+        }
         // Use slot_ty_with_param_fallback rather than direct
         // `extra_locals[slot]` so the body-local-shifted indexing
         // (extra_locals[i] = slot id param_count + i) AND the

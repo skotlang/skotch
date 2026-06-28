@@ -2701,7 +2701,10 @@ fn parse_conjunction(p: &mut Parser<'_, '_>) -> CompletedMarker {
 fn parse_equality(p: &mut Parser<'_, '_>) -> CompletedMarker {
     let mut lhs = parse_comparison(p);
     loop {
-        if !matches!(next_non_trivia(p, 0), S::EQEQ | S::EXCLEQ) {
+        if !matches!(
+            next_non_trivia(p, 0),
+            S::EQEQ | S::EXCLEQ | S::EQEQEQ | S::EXCLEQEQ
+        ) {
             break;
         }
         skip_ws(p);

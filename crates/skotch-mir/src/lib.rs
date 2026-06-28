@@ -271,6 +271,12 @@ pub enum BinOp {
     CmpGt,
     CmpLe,
     CmpGe,
+    /// Reference identity (`===` / `!==`): always `if_acmpeq`/`if_acmpne`,
+    /// regardless of operand types. Distinct from `CmpEq` which dispatches
+    /// `Object.equals` / `Intrinsics.areEqual` / `if_icmp` based on operand
+    /// types. Produces a `Bool` local.
+    CmpRefEq,
+    CmpRefNe,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

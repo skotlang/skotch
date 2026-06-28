@@ -4523,6 +4523,8 @@ fn emit_method_body(
                                 | MBinOp::CmpGt
                                 | MBinOp::CmpLe
                                 | MBinOp::CmpGe
+                                | MBinOp::CmpRefEq
+                                | MBinOp::CmpRefNe
                         ),
                         Rvalue::Const(c) => matches!(
                             c,
@@ -11369,7 +11371,9 @@ fn emit_mir_segment(
                         | MBinOp::CmpLt
                         | MBinOp::CmpGt
                         | MBinOp::CmpLe
-                        | MBinOp::CmpGe => {
+                        | MBinOp::CmpGe
+                        | MBinOp::CmpRefEq
+                        | MBinOp::CmpRefNe => {
                             // lhs and rhs already loaded by the outer code above.
                             let cmp_op: u8 = match op {
                                 MBinOp::CmpEq => 0x9F,
@@ -11378,6 +11382,8 @@ fn emit_mir_segment(
                                 MBinOp::CmpGe => 0xA2,
                                 MBinOp::CmpGt => 0xA3,
                                 MBinOp::CmpLe => 0xA4,
+                                MBinOp::CmpRefEq => 0xA5, // if_acmpeq
+                                MBinOp::CmpRefNe => 0xA6, // if_acmpne
                                 _ => unreachable!(),
                             };
                             code.push(cmp_op);
@@ -15519,6 +15525,42 @@ fn walk_block(
                         };
                         code.push(opcode);
                         bump(stack, max_stack, -1); // two floats in, one float out
+                    }
+                    MBinOp::CmpRefEq | MBinOp::CmpRefNe => {
+                        // Kotlin reference-identity operators `===` / `!==`
+                        // — always lower to `if_acmp{eq,ne}` regardless of
+                        // operand types. The lhs and rhs have already been
+                        // loaded onto the stack above. Materialize the
+                        // boolean result via the standard inverted-branch
+                        // pattern that kotlinc uses.
+                        let branch_op: u8 = if matches!(op, MBinOp::CmpRefEq) {
+                            0xA6 // if_acmpne (inverse of ===)
+                        } else {
+                            0xA5 // if_acmpeq (inverse of !==)
+                        };
+                        let cmp_start = code.len();
+                        code.push(branch_op);
+                        code.write_i16::<BigEndian>(7).unwrap();
+                        bump(stack, max_stack, -2); // pops both refs
+                        code.push(0x04); // iconst_1 (TRUE — fall-through)
+                        bump(stack, max_stack, 1);
+                        code.push(0xA7); // goto L_end
+                        code.write_i16::<BigEndian>(4).unwrap();
+                        code.push(0x03); // iconst_0 (FALSE — branch target)
+                        cmp_targets.push(CmpBranchTarget {
+                            offset: cmp_start + 7,
+                            stack_count: 0,
+                            cmp_start,
+                            block_idx,
+                        });
+                        cmp_targets.push(CmpBranchTarget {
+                            offset: cmp_start + 8,
+                            stack_count: 1,
+                            cmp_start,
+                            block_idx,
+                        });
+                        store_local(code, stack, slots, next_slot, *dest, &func.locals);
+                        continue;
                     }
                     MBinOp::CmpEq
                     | MBinOp::CmpNe
