@@ -43729,6 +43729,24 @@ fn lower_rich_expr_to_slot(
                                 Ty::String,
                                 "@StringsKt.repeat",
                             )),
+                            // `s.padStart(15, '*')` / `s.padEnd(15, '!')` —
+                            // Kotlin stdlib extensions on CharSequence/String
+                            // that kotlinc lowers to a static
+                            // `StringsKt.padStart(String, I, C) String` call
+                            // (resp. `padEnd`). The receiver is passed
+                            // directly (no CharSequence cast — kotlinc's
+                            // own bytecode uses the `(Ljava/lang/String;IC)…`
+                            // overload). Sub-tested by parity/147-string-tests.
+                            ("padStart", 2) => Some((
+                                "(Ljava/lang/String;IC)Ljava/lang/String;",
+                                Ty::String,
+                                "@StringsKt.padStart",
+                            )),
+                            ("padEnd", 2) => Some((
+                                "(Ljava/lang/String;IC)Ljava/lang/String;",
+                                Ty::String,
+                                "@StringsKt.padEnd",
+                            )),
                             ("trimIndent", 0) => Some((
                                 "(Ljava/lang/String;)Ljava/lang/String;",
                                 Ty::String,
