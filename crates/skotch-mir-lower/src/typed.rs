@@ -14775,6 +14775,157 @@ fn lower_loop_body(
                                         continue;
                                     }
                                 }
+                                // JDK-collection / Iterator protocol on
+                                // a local: `val it = xs.iterator()`,
+                                // `val s = it.next()`. The receiver
+                                // carries a JDK collection Ty (set up by
+                                // `listOf` / `mapOf` / `setOf` or a
+                                // prior `iterator()` call); the method
+                                // is one of the direct JDK interface
+                                // methods (no lambda arg, no copy
+                                // reorder). Result Ty is refined per
+                                // method shape so chained calls (`it.
+                                // hasNext()` after `val it = xs.
+                                // iterator()`) dispatch correctly. The
+                                // element-Ty side-channel propagates
+                                // from List → Iterator so `it.next()`
+                                // can CheckCast to the concrete element
+                                // class (`String` for `listOf("a",
+                                // "b", "c")`). Without this arm,
+                                // `val s = it.next()` falls through to
+                                // the rich-expr fallback which doesn't
+                                // know how to dispatch
+                                // `Iterator.next()` and bails the val,
+                                // leaving `s` unbound and the trailing
+                                // `println("$s:${s.length}")` empty
+                                // — runtime VerifyError. Mirrors the
+                                // path in
+                                // `try_lower_multi_stmt_block_with_offset`.
+                                let is_jdk_collection_recv = matches!(
+                                    local_tys.get(recv_slot.0 as usize),
+                                    Some(Ty::Class(c)) if matches!(
+                                        c.as_str(),
+                                        "java/util/List"
+                                            | "java/util/Set"
+                                            | "java/util/Map"
+                                            | "java/util/Collection"
+                                            | "java/lang/Iterable"
+                                            | "java/util/ArrayList"
+                                            | "java/util/HashMap"
+                                            | "java/util/HashSet"
+                                            | "java/util/Iterator"
+                                    )
+                                );
+                                let is_jdk_direct_method = matches!(
+                                    method_n,
+                                    "iterator" | "hasNext" | "next" | "size" | "isEmpty"
+                                );
+                                let no_lambda_arg = call.lambda_argument().is_none();
+                                if is_jdk_collection_recv && is_jdk_direct_method && no_lambda_arg {
+                                    if let Some(Ty::Class(cname)) =
+                                        local_tys.get(recv_slot.0 as usize).cloned()
+                                    {
+                                        let mut arg_slots: Vec<LocalId> = vec![recv_slot];
+                                        let mut ok = true;
+                                        if let Some(arg_list) = call.value_argument_list() {
+                                            for arg in arg_list.arguments() {
+                                                let Some(arg_e) = arg.expression() else {
+                                                    ok = false;
+                                                    break;
+                                                };
+                                                let snap = name_to_local.clone();
+                                                let lookup = |n: &str| -> Option<LocalId> {
+                                                    snap.iter()
+                                                        .rev()
+                                                        .find(|(name, _)| name == n)
+                                                        .map(|(_, l)| *l)
+                                                };
+                                                let s = lower_rich_expr_to_slot(
+                                                    arg_e,
+                                                    &lookup,
+                                                    fn_lookup_ref,
+                                                    next_slot,
+                                                    &mut body_mstmts,
+                                                    local_tys,
+                                                    strings,
+                                                );
+                                                if let Some(s) = s {
+                                                    arg_slots.push(s);
+                                                } else {
+                                                    ok = false;
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                        if ok {
+                                            let mut result_ty = match method_n {
+                                                "iterator" => {
+                                                    Ty::Class("java/util/Iterator".to_string())
+                                                }
+                                                "hasNext" | "isEmpty" => Ty::Bool,
+                                                "size" => Ty::Int,
+                                                _ => Ty::Any,
+                                            };
+                                            let propagated_elem_ty = if method_n == "iterator" {
+                                                lookup_list_element_ty(recv_slot.0)
+                                            } else {
+                                                None
+                                            };
+                                            let next_cast_target: Option<String> = if method_n
+                                                == "next"
+                                                && cname == "java/util/Iterator"
+                                            {
+                                                match lookup_list_element_ty(recv_slot.0) {
+                                                    Some(Ty::Class(c)) => {
+                                                        result_ty = Ty::Class(c.clone());
+                                                        Some(c)
+                                                    }
+                                                    Some(Ty::String) => {
+                                                        result_ty = Ty::String;
+                                                        Some("java/lang/String".to_string())
+                                                    }
+                                                    _ => None,
+                                                }
+                                            } else {
+                                                None
+                                            };
+                                            let slot = LocalId(*next_slot);
+                                            *next_slot += 1;
+                                            local_tys.push(result_ty.clone());
+                                            body_mstmts.push(MStmt::Assign {
+                                                dest: slot,
+                                                value: skotch_mir::Rvalue::Call {
+                                                    kind: skotch_mir::CallKind::Virtual {
+                                                        class_name: cname,
+                                                        method_name: method_n.to_string(),
+                                                    },
+                                                    args: arg_slots,
+                                                },
+                                            });
+                                            let final_slot = if let Some(target) = next_cast_target
+                                            {
+                                                let cs = LocalId(*next_slot);
+                                                *next_slot += 1;
+                                                local_tys.push(result_ty);
+                                                body_mstmts.push(MStmt::Assign {
+                                                    dest: cs,
+                                                    value: skotch_mir::Rvalue::CheckCast {
+                                                        obj: slot,
+                                                        target_class: target,
+                                                    },
+                                                });
+                                                cs
+                                            } else {
+                                                slot
+                                            };
+                                            if let Some(et) = propagated_elem_ty {
+                                                record_list_element_ty(final_slot.0, et);
+                                            }
+                                            name_to_local.push((pname.to_string(), final_slot));
+                                            continue;
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -22666,6 +22817,7 @@ fn try_lower_multi_stmt_block_with_offset(
                                                     | "java/util/ArrayList"
                                                     | "java/util/HashMap"
                                                     | "java/util/HashSet"
+                                                    | "java/util/Iterator"
                                             )
                                         );
                                         let is_jdk_direct_method = matches!(
@@ -22785,9 +22937,101 @@ fn try_lower_multi_stmt_block_with_offset(
                                                 }
                                             }
                                             if ok {
+                                                // Refine the result Ty by JDK
+                                                // method shape: `iterator()` →
+                                                // `java/util/Iterator`,
+                                                // `hasNext()` → `Bool`,
+                                                // `isEmpty()` → `Bool`,
+                                                // `size()/indexOf()` → `Int`.
+                                                // Without this, the call slot
+                                                // was `Ty::Any` and downstream
+                                                // chained dispatch
+                                                // (`it.hasNext()`,
+                                                // `it.next()`) bailed because
+                                                // the recv didn't surface a
+                                                // `Ty::Class`. The narrow
+                                                // list keeps the fast-path
+                                                // semantics for non-protocol
+                                                // calls (return Ty::Any for
+                                                // generic-erased `get`/`next`
+                                                // — the consumer site handles
+                                                // those via element-Ty
+                                                // checkcast).
+                                                let mut result_ty = match (cname.as_str(), method_n)
+                                                {
+                                                    (_, "iterator") => {
+                                                        Ty::Class("java/util/Iterator".to_string())
+                                                    }
+                                                    (_, "hasNext")
+                                                    | (_, "isEmpty")
+                                                    | (_, "contains")
+                                                    | (_, "containsKey")
+                                                    | (_, "containsValue")
+                                                    | (_, "add")
+                                                    | (_, "remove")
+                                                    | (_, "addAll")
+                                                    | (_, "removeAll")
+                                                    | (_, "retainAll") => Ty::Bool,
+                                                    (_, "size")
+                                                    | (_, "indexOf")
+                                                    | (_, "lastIndexOf") => Ty::Int,
+                                                    ("java/util/Map", "keys")
+                                                    | ("java/util/HashMap", "keys") => {
+                                                        Ty::Class("java/util/Set".to_string())
+                                                    }
+                                                    ("java/util/Map", "values")
+                                                    | ("java/util/HashMap", "values") => Ty::Class(
+                                                        "java/util/Collection".to_string(),
+                                                    ),
+                                                    ("java/util/Map", "entries")
+                                                    | ("java/util/HashMap", "entries") => {
+                                                        Ty::Class("java/util/Set".to_string())
+                                                    }
+                                                    _ => Ty::Any,
+                                                };
+                                                // Element-Ty propagation:
+                                                //   xs: List<T> → xs.iterator(): Iterator<T>
+                                                // Carry the source list's
+                                                // element Ty onto the iterator
+                                                // slot so a follow-up
+                                                // `it.next()` can CheckCast
+                                                // its `Object` return to T.
+                                                let propagated_elem_ty = if method_n == "iterator" {
+                                                    lookup_list_element_ty(recv_slot.0)
+                                                } else {
+                                                    None
+                                                };
+                                                // `it.next()`: when the
+                                                // iterator slot carries an
+                                                // element Ty, narrow the
+                                                // result to that class and
+                                                // emit a CheckCast bridge so
+                                                // chained `.length` / method
+                                                // calls dispatch via the
+                                                // concrete element class.
+                                                let next_cast_target: Option<String> = if method_n
+                                                    == "next"
+                                                    && cname == "java/util/Iterator"
+                                                {
+                                                    if let Some(Ty::Class(c)) =
+                                                        lookup_list_element_ty(recv_slot.0)
+                                                    {
+                                                        result_ty = Ty::Class(c.clone());
+                                                        Some(c)
+                                                    } else if let Some(Ty::String) =
+                                                        lookup_list_element_ty(recv_slot.0)
+                                                    {
+                                                        result_ty = Ty::String;
+                                                        Some("java/lang/String".to_string())
+                                                    } else {
+                                                        None
+                                                    }
+                                                } else {
+                                                    None
+                                                };
                                                 let slot = LocalId(next_slot);
                                                 next_slot += 1;
-                                                local_tys.push(Ty::Any);
+                                                local_tys.push(result_ty.clone());
                                                 stmts.push(MStmt::Assign {
                                                     dest: slot,
                                                     value: skotch_mir::Rvalue::Call {
@@ -22798,7 +23042,26 @@ fn try_lower_multi_stmt_block_with_offset(
                                                         args: arg_slots,
                                                     },
                                                 });
-                                                name_to_local.push((name.to_string(), slot));
+                                                let final_slot =
+                                                    if let Some(target) = next_cast_target {
+                                                        let cs = LocalId(next_slot);
+                                                        next_slot += 1;
+                                                        local_tys.push(result_ty);
+                                                        stmts.push(MStmt::Assign {
+                                                            dest: cs,
+                                                            value: skotch_mir::Rvalue::CheckCast {
+                                                                obj: slot,
+                                                                target_class: target,
+                                                            },
+                                                        });
+                                                        cs
+                                                    } else {
+                                                        slot
+                                                    };
+                                                if let Some(et) = propagated_elem_ty {
+                                                    record_list_element_ty(final_slot.0, et);
+                                                }
+                                                name_to_local.push((name.to_string(), final_slot));
                                                 continue;
                                             }
                                         }
@@ -31329,6 +31592,158 @@ fn lower_rich_expr_to_slot(
             }
         }
     }
+    // JDK collection / Iterator protocol direct method call on a
+    // local: `it.hasNext()`, `it.next()`, `xs.iterator()`,
+    // `xs.size()`. The receiver carries a known JDK collection /
+    // Iterator Ty (set up by the val handler from `listOf` /
+    // `iterator()` / `mapOf` / `setOf` etc.); the method is one of
+    // the JDK-direct interface methods (no lambda arg). Result Ty is
+    // refined per method shape and the element-Ty side channel
+    // bridges `List<T>.iterator(): Iterator<T>` → `.next(): T` via a
+    // CheckCast. Without this arm, `it.hasNext()` evaluated as a
+    // while-condition operand falls through every other arm (the
+    // recv is a fresh local, not a class field / `this`, etc.) and
+    // bails kind=DotQualified, dropping the entire condition's cmp
+    // block + cascading the function body to empty MIR. Placed
+    // BEFORE the data-class `.copy()` arm because the call-shape
+    // tests share `(Reference, Call)` matching but only this arm
+    // recognizes JDK collection receivers.
+    if let KtExpr::DotQualified(dq) = &e {
+        let dq_exprs: Vec<KtExpr<'_>> = skotch_ast::children(dq.syntax())
+            .iter()
+            .filter_map(KtExpr::cast)
+            .collect();
+        if dq_exprs.len() == 2 {
+            if let (KtExpr::Reference(recv_ref), KtExpr::Call(call)) = (&dq_exprs[0], &dq_exprs[1])
+            {
+                let method_n = match call.callee() {
+                    Some(KtExpr::Reference(r)) => r.name(),
+                    _ => None,
+                };
+                let recv_n = recv_ref.name();
+                if let (Some(recv_n), Some(method_n)) = (recv_n, method_n) {
+                    if call.lambda_argument().is_none()
+                        && matches!(
+                            method_n,
+                            "iterator" | "hasNext" | "next" | "size" | "isEmpty"
+                        )
+                    {
+                        if let Some(recv_slot) = lookup_name(recv_n) {
+                            if let Some(Ty::Class(cname)) =
+                                extra_locals.get(recv_slot.0 as usize).cloned().or_else(|| {
+                                    Some(slot_ty_with_param_fallback(recv_slot.0, extra_locals))
+                                })
+                            {
+                                let is_jdk_collection_recv = matches!(
+                                    cname.as_str(),
+                                    "java/util/List"
+                                        | "java/util/Set"
+                                        | "java/util/Map"
+                                        | "java/util/Collection"
+                                        | "java/lang/Iterable"
+                                        | "java/util/ArrayList"
+                                        | "java/util/HashMap"
+                                        | "java/util/HashSet"
+                                        | "java/util/Iterator"
+                                );
+                                if is_jdk_collection_recv {
+                                    let mut arg_slots: Vec<LocalId> = vec![recv_slot];
+                                    let mut ok = true;
+                                    if let Some(arg_list) = call.value_argument_list() {
+                                        for arg in arg_list.arguments() {
+                                            let Some(arg_e) = arg.expression() else {
+                                                ok = false;
+                                                break;
+                                            };
+                                            let s = lower_rich_expr_to_slot(
+                                                arg_e,
+                                                lookup_name,
+                                                fn_lookup,
+                                                next_slot,
+                                                pre_stmts,
+                                                extra_locals,
+                                                strings,
+                                            );
+                                            if let Some(s) = s {
+                                                arg_slots.push(s);
+                                            } else {
+                                                ok = false;
+                                                break;
+                                            }
+                                        }
+                                    }
+                                    if ok {
+                                        let mut result_ty = match method_n {
+                                            "iterator" => {
+                                                Ty::Class("java/util/Iterator".to_string())
+                                            }
+                                            "hasNext" | "isEmpty" => Ty::Bool,
+                                            "size" => Ty::Int,
+                                            _ => Ty::Any,
+                                        };
+                                        let next_cast_target: Option<String> = if method_n == "next"
+                                            && cname == "java/util/Iterator"
+                                        {
+                                            match lookup_list_element_ty(recv_slot.0) {
+                                                Some(Ty::Class(c)) => {
+                                                    result_ty = Ty::Class(c.clone());
+                                                    Some(c)
+                                                }
+                                                Some(Ty::String) => {
+                                                    result_ty = Ty::String;
+                                                    Some("java/lang/String".to_string())
+                                                }
+                                                _ => None,
+                                            }
+                                        } else {
+                                            None
+                                        };
+                                        let propagated_elem_ty = if method_n == "iterator" {
+                                            lookup_list_element_ty(recv_slot.0)
+                                        } else {
+                                            None
+                                        };
+                                        let slot = LocalId(*next_slot);
+                                        *next_slot += 1;
+                                        extra_locals.push(result_ty.clone());
+                                        pre_stmts.push(MStmt::Assign {
+                                            dest: slot,
+                                            value: skotch_mir::Rvalue::Call {
+                                                kind: skotch_mir::CallKind::Virtual {
+                                                    class_name: cname,
+                                                    method_name: method_n.to_string(),
+                                                },
+                                                args: arg_slots,
+                                            },
+                                        });
+                                        let final_slot = if let Some(target) = next_cast_target {
+                                            let cs = LocalId(*next_slot);
+                                            *next_slot += 1;
+                                            extra_locals.push(result_ty);
+                                            pre_stmts.push(MStmt::Assign {
+                                                dest: cs,
+                                                value: skotch_mir::Rvalue::CheckCast {
+                                                    obj: slot,
+                                                    target_class: target,
+                                                },
+                                            });
+                                            cs
+                                        } else {
+                                            slot
+                                        };
+                                        if let Some(et) = propagated_elem_ty {
+                                            record_list_element_ty(final_slot.0, et);
+                                        }
+                                        return Some(final_slot);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
     // Data-class `.copy(...)` with named args: route through the
     // shared lowerer that reorders by name and fills omitted positions
     // via `GetField(recv, field_i)` so the emitted `invokevirtual
@@ -34839,6 +35254,44 @@ fn lower_rich_expr_to_slot(
                                 args: vec![arr_slot],
                             },
                         });
+                        // Propagate the array's element Ty to the
+                        // returned List slot so downstream
+                        // `.iterator() / .next()` chains can recover
+                        // `T` for the per-iteration element. Without
+                        // this, the List slot loses the element Ty
+                        // recorded on the temporary Object[] arr_slot
+                        // and `it.next()` falls back to Ty::Any.
+                        let arr_elem_ty: Option<Ty> =
+                            lookup_list_element_ty(arr_slot.0).or_else(|| {
+                                // Fallback: derive a common element Ty
+                                // from the arg slots. All args sharing
+                                // the same Ty::String or Ty::Class lets
+                                // `xs.iterator().next()` checkcast to
+                                // the concrete element class.
+                                if arg_slots.is_empty() {
+                                    return None;
+                                }
+                                let first =
+                                    slot_ty_with_param_fallback(arg_slots[0].0, extra_locals);
+                                let all_same = arg_slots.iter().all(|s| {
+                                    let t = slot_ty_with_param_fallback(s.0, extra_locals);
+                                    match (&first, &t) {
+                                        (Ty::String, Ty::String) => true,
+                                        (Ty::Class(a), Ty::Class(b)) => a == b,
+                                        _ => false,
+                                    }
+                                });
+                                if !all_same {
+                                    return None;
+                                }
+                                match first {
+                                    Ty::String | Ty::Class(_) => Some(first),
+                                    _ => None,
+                                }
+                            });
+                        if let Some(et) = arr_elem_ty {
+                            record_list_element_ty(result_slot.0, et);
+                        }
                         return Some(result_slot);
                     }
                 }
