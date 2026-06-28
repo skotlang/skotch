@@ -30955,7 +30955,25 @@ fn try_lower_println_template_with_rich_lookup(
             flatten(KtExpr::Binary(*b), &mut parts);
             // Need at least one String operand to treat this as
             // string concat (otherwise it's plain integer addition).
-            let has_string = parts.iter().any(|p| matches!(p, KtExpr::String(_)));
+            // A literal `KtExpr::String` is always String. A
+            // `KtExpr::Reference` whose looked-up slot has Ty::String
+            // is also String — that catches `val a = "x"; println(a + b)`,
+            // where `b` is a non-String operand and the chain still
+            // needs makeConcatWithConstants instead of `iadd`.
+            let is_string_part = |p: &KtExpr<'_>| -> bool {
+                match p {
+                    KtExpr::String(_) => true,
+                    KtExpr::Reference(r) => r
+                        .name()
+                        .and_then(lookup_name)
+                        .map(|s| {
+                            matches!(slot_ty_with_param_fallback(s.0, extra_locals), Ty::String)
+                        })
+                        .unwrap_or(false),
+                    _ => false,
+                }
+            };
+            let has_string = parts.iter().any(&is_string_part);
             if has_string && !parts.is_empty() {
                 let mut part_slots: Vec<LocalId> = Vec::new();
                 for p in parts {
