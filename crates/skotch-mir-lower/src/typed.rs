@@ -31231,6 +31231,75 @@ fn try_lower_multi_stmt_block_with_offset(
                                     else {
                                         return None;
                                     };
+                                    // Bail when receiver is a Java collection /
+                                    // map / iterable AND method is a Kotlin
+                                    // stdlib extension that has no JDK
+                                    // interface backing. Emitting Virtual on
+                                    // `java/util/List` for these produces
+                                    // `invokeinterface List.first():Object`
+                                    // which throws NoSuchMethodError at run
+                                    // time. The deeper `lower_rich_expr_to_slot`
+                                    // arm routes them to
+                                    // `CollectionsKt.first(Iterable)Object`.
+                                    let is_jdk_collection = matches!(
+                                        cname.as_str(),
+                                        "java/util/List"
+                                            | "java/util/Set"
+                                            | "java/util/Collection"
+                                            | "java/util/Map"
+                                            | "java/lang/Iterable"
+                                    );
+                                    let is_kotlin_collection_ext = matches!(
+                                        method_n,
+                                        "first"
+                                            | "last"
+                                            | "firstOrNull"
+                                            | "lastOrNull"
+                                            | "min"
+                                            | "max"
+                                            | "minOrNull"
+                                            | "maxOrNull"
+                                            | "average"
+                                            | "sum"
+                                            | "sorted"
+                                            | "sortedDescending"
+                                            | "reversed"
+                                            | "distinct"
+                                            | "toList"
+                                            | "toSet"
+                                            | "toMutableList"
+                                            | "toMutableSet"
+                                            | "filter"
+                                            | "filterNot"
+                                            | "filterNotNull"
+                                            | "map"
+                                            | "mapNotNull"
+                                            | "flatMap"
+                                            | "flatten"
+                                            | "fold"
+                                            | "reduce"
+                                            | "forEach"
+                                            | "any"
+                                            | "all"
+                                            | "none"
+                                            | "count"
+                                            | "groupBy"
+                                            | "associateBy"
+                                            | "associateWith"
+                                            | "zip"
+                                            | "take"
+                                            | "drop"
+                                            | "takeWhile"
+                                            | "dropWhile"
+                                            | "joinToString"
+                                            | "single"
+                                            | "singleOrNull"
+                                            | "chunked"
+                                            | "windowed"
+                                    );
+                                    if is_jdk_collection && is_kotlin_collection_ext {
+                                        return None;
+                                    }
                                     let mut arg_slots: Vec<LocalId> = vec![recv_slot];
                                     if let Some(arg_list) = call.value_argument_list() {
                                         for arg in arg_list.arguments() {
@@ -43249,11 +43318,29 @@ fn lower_rich_expr_to_slot(
                                             "(Ljava/lang/Iterable;)Ljava/lang/Comparable;",
                                             Ty::Any,
                                         )),
+                                        "maxOrNull" => Some((
+                                            "kotlin/collections/CollectionsKt",
+                                            "maxOrNull",
+                                            "(Ljava/lang/Iterable;)Ljava/lang/Comparable;",
+                                            Ty::Any,
+                                        )),
+                                        "minOrNull" => Some((
+                                            "kotlin/collections/CollectionsKt",
+                                            "minOrNull",
+                                            "(Ljava/lang/Iterable;)Ljava/lang/Comparable;",
+                                            Ty::Any,
+                                        )),
                                         "average" => Some((
                                             "kotlin/collections/CollectionsKt",
                                             "averageOfInt",
                                             "(Ljava/lang/Iterable;)D",
                                             Ty::Double,
+                                        )),
+                                        "distinct" => Some((
+                                            "kotlin/collections/CollectionsKt",
+                                            "distinct",
+                                            "(Ljava/lang/Iterable;)Ljava/util/List;",
+                                            Ty::Class("java/util/List".to_string()),
                                         )),
                                         "size" => Some((
                                             "kotlin/collections/CollectionsKt",
@@ -44571,11 +44658,29 @@ fn lower_rich_expr_to_slot(
                                         "(Ljava/lang/Iterable;)Ljava/lang/Comparable;",
                                         Ty::Any,
                                     )),
+                                    "maxOrNull" => Some((
+                                        "kotlin/collections/CollectionsKt",
+                                        "maxOrNull",
+                                        "(Ljava/lang/Iterable;)Ljava/lang/Comparable;",
+                                        Ty::Any,
+                                    )),
+                                    "minOrNull" => Some((
+                                        "kotlin/collections/CollectionsKt",
+                                        "minOrNull",
+                                        "(Ljava/lang/Iterable;)Ljava/lang/Comparable;",
+                                        Ty::Any,
+                                    )),
                                     "average" => Some((
                                         "kotlin/collections/CollectionsKt",
                                         "averageOfInt",
                                         "(Ljava/lang/Iterable;)D",
                                         Ty::Double,
+                                    )),
+                                    "distinct" => Some((
+                                        "kotlin/collections/CollectionsKt",
+                                        "distinct",
+                                        "(Ljava/lang/Iterable;)Ljava/util/List;",
+                                        Ty::Class("java/util/List".to_string()),
                                     )),
                                     "count" => {
                                         if call.lambda_argument().is_some() {
