@@ -42557,6 +42557,56 @@ fn lower_rich_expr_to_slot(
                                         | "java/util/Iterator"
                                 );
                                 if is_jdk_collection {
+                                    // Kotlin extension properties on Map →
+                                    // direct JDK interface calls. `m.entries`
+                                    // → `entrySet()Ljava/util/Set;`,
+                                    // `m.keys`    → `keySet()Ljava/util/Set;`,
+                                    // `m.values`  → `values()Ljava/util/Collection;`.
+                                    // Mirrors kotlinc's
+                                    // `invokeinterface java/util/Map.entrySet`
+                                    // (etc.) byte shape.
+                                    let map_prop_dispatch: Option<(&str, &str, Ty)> = if matches!(
+                                        cname.as_str(),
+                                        "java/util/Map" | "java/util/HashMap"
+                                    ) {
+                                        match prop_name {
+                                            "entries" => Some((
+                                                "entrySet",
+                                                "()Ljava/util/Set;",
+                                                Ty::Class("java/util/Set".to_string()),
+                                            )),
+                                            "keys" => Some((
+                                                "keySet",
+                                                "()Ljava/util/Set;",
+                                                Ty::Class("java/util/Set".to_string()),
+                                            )),
+                                            "values" => Some((
+                                                "values",
+                                                "()Ljava/util/Collection;",
+                                                Ty::Class("java/util/Collection".to_string()),
+                                            )),
+                                            _ => None,
+                                        }
+                                    } else {
+                                        None
+                                    };
+                                    if let Some((mname, desc, rty)) = map_prop_dispatch {
+                                        let result_slot = LocalId(*next_slot);
+                                        *next_slot += 1;
+                                        extra_locals.push(rty);
+                                        pre_stmts.push(MStmt::Assign {
+                                            dest: result_slot,
+                                            value: skotch_mir::Rvalue::Call {
+                                                kind: skotch_mir::CallKind::VirtualJava {
+                                                    class_name: "java/util/Map".to_string(),
+                                                    method_name: mname.to_string(),
+                                                    descriptor: desc.to_string(),
+                                                },
+                                                args: vec![recv_slot],
+                                            },
+                                        });
+                                        return Some(result_slot);
+                                    }
                                     let (m, d, t) = match prop_name {
                                         "size" => Some(("size", "()I", Ty::Int)),
                                         "isEmpty" | "empty" => Some(("isEmpty", "()Z", Ty::Bool)),
