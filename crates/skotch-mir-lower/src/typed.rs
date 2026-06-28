@@ -36028,21 +36028,29 @@ fn lower_rich_expr_to_slot(
     if let KtExpr::Binary(b) = &e {
         if b.operation().map(|o| o.text()).as_deref() == Some("+") {
             let mut parts: Vec<KtExpr<'_>> = Vec::new();
-            fn flatten<'a>(e: KtExpr<'a>, out: &mut Vec<KtExpr<'a>>) {
+            // `is_root` controls paren-unwrapping. The outer `e` may be
+            // wrapped in trivial parens that should still be flattened
+            // (rare but legal). But recursive children that are
+            // `Parenthesized` MUST be treated as opaque leaves —
+            // otherwise `"a" + (x + y)` where x,y are Int would
+            // incorrectly flatten to `"a" + x + y` and concat as
+            // strings instead of evaluating `x + y` as integer
+            // addition first. parity/125-string-concat-bigexpr.
+            fn flatten<'a>(e: KtExpr<'a>, out: &mut Vec<KtExpr<'a>>, is_root: bool) {
                 use skotch_ast::KtExpr;
-                let e = unwrap_parens(e);
+                let e = if is_root { unwrap_parens(e) } else { e };
                 if let KtExpr::Binary(bb) = e {
                     if bb.operation().map(|o| o.text()).as_deref() == Some("+") {
                         if let (Some(l), Some(r)) = (bb.lhs(), bb.rhs()) {
-                            flatten(l, out);
-                            flatten(r, out);
+                            flatten(l, out, false);
+                            flatten(r, out, false);
                             return;
                         }
                     }
                 }
                 out.push(e);
             }
-            flatten(e, &mut parts);
+            flatten(e, &mut parts, true);
             // Detect String-typed parts. A literal `KtExpr::String` is
             // always String. A `KtExpr::Reference` whose name resolves
             // (via `lookup_name`) to a slot already typed `Ty::String`
