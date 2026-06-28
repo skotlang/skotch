@@ -9366,7 +9366,7 @@ pub fn lower_file(
     // Mirrors what kotlinc does on `Result.Ok(7)` when `Ok<T>(val v:
     // T)` is in scope: the int literal is autoboxed to Integer at the
     // ctor call before the `invokespecial Result$Ok.<init>:(Object)V`.
-    let class_ctor_param_tys: rustc_hash::FxHashMap<String, Vec<Ty>> = module
+    let mut class_ctor_param_tys: rustc_hash::FxHashMap<String, Vec<Ty>> = module
         .classes
         .iter()
         .map(|c| {
@@ -9383,6 +9383,13 @@ pub fn lower_file(
             (c.name.clone(), tys)
         })
         .collect();
+    // Stdlib tuple classes — kotlin/Pair<A,B> / kotlin/Triple<A,B,C>
+    // erase their ctor params to Object,Object[,Object]. We pre-register
+    // them so primitive args (`Pair(7, 11)`) get autoboxed via
+    // `kotlin/coroutines/jvm/internal/Boxing` like any other Object-
+    // typed ctor arg.
+    class_ctor_param_tys.insert("kotlin/Pair".to_string(), vec![Ty::Any, Ty::Any]);
+    class_ctor_param_tys.insert("kotlin/Triple".to_string(), vec![Ty::Any, Ty::Any, Ty::Any]);
     fixup_ctor_arg_autobox(&mut module, &class_ctor_param_tys);
 
     // Optional MIR dump for debugging. Gated on `SKOTCH_DUMP_MIR` env
@@ -37813,6 +37820,24 @@ fn lower_rich_expr_to_slot(
                                 (Ty::Class(c), "second") if c == "kotlin/Pair" => Some((
                                     "kotlin/Pair",
                                     "getSecond",
+                                    "()Ljava/lang/Object;",
+                                    Ty::Any,
+                                )),
+                                (Ty::Class(c), "first") if c == "kotlin/Triple" => Some((
+                                    "kotlin/Triple",
+                                    "getFirst",
+                                    "()Ljava/lang/Object;",
+                                    Ty::Any,
+                                )),
+                                (Ty::Class(c), "second") if c == "kotlin/Triple" => Some((
+                                    "kotlin/Triple",
+                                    "getSecond",
+                                    "()Ljava/lang/Object;",
+                                    Ty::Any,
+                                )),
+                                (Ty::Class(c), "third") if c == "kotlin/Triple" => Some((
+                                    "kotlin/Triple",
+                                    "getThird",
                                     "()Ljava/lang/Object;",
                                     Ty::Any,
                                 )),
