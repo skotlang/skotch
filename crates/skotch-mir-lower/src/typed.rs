@@ -11396,6 +11396,7 @@ fn try_lower_when_subjectless(
     val_lookup: &rustc_hash::FxHashMap<String, Ty>,
     wrapper_class: &str,
     param_slot_offset: u32,
+    fn_lookup: &rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)>,
 ) -> Option<(Vec<BasicBlock>, Vec<Ty>)> {
     use skotch_ast::KtExpr;
     use skotch_mir::{LocalId, Rvalue, Stmt as MStmt};
@@ -11420,11 +11421,30 @@ fn try_lower_when_subjectless(
         None
     };
 
-    // Collect arms. Each arm's `cond_expr` is classified into a
-    // `(CondShape, Vec<KtExpr>)` tuple: AllAnd (`a && b && c`), AnyOr
-    // (`a || b || c`), or Single. The shape decides the cmp-block
-    // branch wiring at lowering time.
-    let mut arms: Vec<(CondShape, Vec<KtExpr<'_>>, KtExpr<'_>)> = Vec::new();
+    // Arm classification.
+    // `Expr` arms carry a chain of expression conditions (Single /
+    // AllAnd / AnyOr) — the original boolean-cond shape.
+    // `Is` arms come from `x is T` written inside a subjectless
+    // `when {}` (kotlinc's smart-cast over an `Any` parameter). The
+    // arm body is lowered with `x` rebound to a CheckCast slot so
+    // member access on the narrowed class works (e.g. `(x as List).size`).
+    enum ArmKind<'a> {
+        Expr(CondShape, Vec<KtExpr<'a>>),
+        Is {
+            param_idx: usize,
+            param_name: String,
+            // JVM internal name used for `instanceof` and `checkcast`.
+            // Primitives (`Int` → `java/lang/Integer`, `List` →
+            // `java/util/List`, …) go through
+            // `runtime_check_jvm_class`; user classes fall through
+            // verbatim and the backend resolves them via the class
+            // table.
+            jvm_internal: String,
+        },
+    }
+
+    // Collect arms.
+    let mut arms: Vec<(ArmKind<'_>, KtExpr<'_>)> = Vec::new();
     let mut else_arm: Option<KtExpr<'_>> = None;
     for entry in w.entries() {
         if entry.is_else() {
@@ -11443,8 +11463,55 @@ fn try_lower_when_subjectless(
             .find_map(KtExpr::cast)
             .map(unwrap_parens)?;
         let body = entry.body().map(unwrap_parens)?;
+        // Detect `x is T` (smart-cast arm). Negated `!is` is left
+        // for the standard Expr path so it falls through to lower_inline.
+        if let KtExpr::Is(is_e) = cond_expr {
+            if !is_negated_is_expr(is_e) {
+                let is_children = skotch_ast::children(is_e.syntax());
+                let lhs_name: Option<String> = is_children
+                    .iter()
+                    .find_map(|c| KtExpr::cast(c))
+                    .map(unwrap_parens)
+                    .and_then(|e| {
+                        if let KtExpr::Reference(r) = e {
+                            r.name().map(String::from)
+                        } else {
+                            None
+                        }
+                    });
+                let type_name: Option<String> = is_children.iter().find_map(|c| {
+                    if c.kind == skotch_syntax::SyntaxKind::TYPE_REFERENCE {
+                        if let Some(tr) = skotch_ast::KtTypeReference::cast(c) {
+                            return tr.user_type().and_then(|u| u.name()).map(String::from);
+                        }
+                    }
+                    None
+                });
+                if let (Some(name), Some(tname)) = (lhs_name, type_name) {
+                    if let Some(idx) = outer_param_names.iter().position(|p| p == &name) {
+                        let jvm = skotch_types::intrinsics::runtime_check_jvm_class(&tname)
+                            .map(|s| s.to_string())
+                            .or_else(|| {
+                                skotch_types::intrinsics::kotlin_to_jvm_class(&tname)
+                                    .map(|s| s.to_string())
+                            })
+                            .unwrap_or_else(|| tname.clone());
+                        let _ = tname; // simple class name unused after JVM lookup
+                        arms.push((
+                            ArmKind::Is {
+                                param_idx: idx,
+                                param_name: name,
+                                jvm_internal: jvm,
+                            },
+                            body,
+                        ));
+                        continue;
+                    }
+                }
+            }
+        }
         let (shape, parts) = classify_cond_chain(cond_expr);
-        arms.push((shape, parts, body));
+        arms.push((ArmKind::Expr(shape, parts), body));
     }
     let else_body = else_arm.map(unwrap_parens)?;
 
@@ -11475,12 +11542,19 @@ fn try_lower_when_subjectless(
 
     let n_arms = arms.len();
     // Per-arm block counts: every cond gets a cmp block (so arm with K
-    // conjuncts needs K cmp blocks) + 1 then-block. With N arms the
+    // conjuncts needs K cmp blocks) + 1 then-block. `Is` arms use a
+    // single cmp block (instanceof + branch). With N arms the
     // shape becomes:
     //   block 0: pre (phantom subject)
     //   block 1..: arm0's cmp blocks then arm0's then block, then arm1's, ...
     //   else block, join block
-    let arm_block_counts: Vec<u32> = arms.iter().map(|(_, c, _)| c.len() as u32 + 1).collect();
+    let arm_block_counts: Vec<u32> = arms
+        .iter()
+        .map(|(k, _)| match k {
+            ArmKind::Expr(_, conds) => conds.len() as u32 + 1,
+            ArmKind::Is { .. } => 2,
+        })
+        .collect();
     let arm_block_starts: Vec<u32> = {
         let mut starts = Vec::with_capacity(n_arms);
         let mut acc = 1u32; // pre-block is index 0
@@ -11515,79 +11589,152 @@ fn try_lower_when_subjectless(
             .map(|i| LocalId(i as u32 + param_slot_offset))
     };
 
-    for (i, (shape, conds, body)) in arms.iter().enumerate() {
+    for (i, (kind, body)) in arms.iter().enumerate() {
         let next_arm_or_else = if i + 1 < n_arms {
             arm_block_starts[i + 1]
         } else {
             else_block_idx
         };
         let arm_start = arm_block_starts[i];
-        // Each operand emits a cmp block. Wiring depends on `shape`:
-        //   AllAnd: on_true → next operand (or then), on_false → next_arm
-        //   AnyOr:  on_true → then, on_false → next operand (or next_arm)
-        //   Single: on_true → then, on_false → next_arm
-        let then_block_idx = arm_start + conds.len() as u32;
-        let n_operands = conds.len() as u32;
-        for (j, cond_expr) in conds.iter().enumerate() {
-            let mut cmp_stmts: Vec<MStmt> = Vec::new();
-            let cmp_slot = lower_inline_expr_to_slot(
-                *cond_expr,
-                &lookup,
-                &mut next_slot,
-                &mut cmp_stmts,
-                &mut extra_locals,
-                strings,
-            )?;
-            let is_last = (j as u32 + 1) >= n_operands;
-            let next_operand_id = arm_start + (j as u32 + 1);
-            let (on_true, on_false) = match shape {
-                CondShape::Single => (then_block_idx, next_arm_or_else),
-                CondShape::AllAnd => {
-                    let t = if is_last {
-                        then_block_idx
-                    } else {
-                        next_operand_id
+        match kind {
+            ArmKind::Expr(shape, conds) => {
+                // Each operand emits a cmp block. Wiring depends on `shape`:
+                //   AllAnd: on_true → next operand (or then), on_false → next_arm
+                //   AnyOr:  on_true → then, on_false → next operand (or next_arm)
+                //   Single: on_true → then, on_false → next_arm
+                let then_block_idx = arm_start + conds.len() as u32;
+                let n_operands = conds.len() as u32;
+                for (j, cond_expr) in conds.iter().enumerate() {
+                    let mut cmp_stmts: Vec<MStmt> = Vec::new();
+                    let cmp_slot = lower_inline_expr_to_slot(
+                        *cond_expr,
+                        &lookup,
+                        &mut next_slot,
+                        &mut cmp_stmts,
+                        &mut extra_locals,
+                        strings,
+                    )?;
+                    let is_last = (j as u32 + 1) >= n_operands;
+                    let next_operand_id = arm_start + (j as u32 + 1);
+                    let (on_true, on_false) = match shape {
+                        CondShape::Single => (then_block_idx, next_arm_or_else),
+                        CondShape::AllAnd => {
+                            let t = if is_last {
+                                then_block_idx
+                            } else {
+                                next_operand_id
+                            };
+                            (t, next_arm_or_else)
+                        }
+                        CondShape::AnyOr => {
+                            let f = if is_last {
+                                next_arm_or_else
+                            } else {
+                                next_operand_id
+                            };
+                            (then_block_idx, f)
+                        }
                     };
-                    (t, next_arm_or_else)
+                    blocks.push(BasicBlock {
+                        stmts: cmp_stmts,
+                        terminator: Terminator::Branch {
+                            cond: cmp_slot,
+                            then_block: on_true,
+                            else_block: on_false,
+                        },
+                    });
                 }
-                CondShape::AnyOr => {
-                    let f = if is_last {
-                        next_arm_or_else
-                    } else {
-                        next_operand_id
-                    };
-                    (then_block_idx, f)
-                }
-            };
-            blocks.push(BasicBlock {
-                stmts: cmp_stmts,
-                terminator: Terminator::Branch {
-                    cond: cmp_slot,
-                    then_block: on_true,
-                    else_block: on_false,
-                },
-            });
+                // Arm body block: kotlinc shape is `tmp = <rvalue>; result =
+                // Local(tmp)`. The Rvalue is either a Const (literal body) or
+                // a Local of the matching param slot (Reference body).
+                let mut arm_stmts: Vec<MStmt> = Vec::new();
+                let (arm_rvalue, ty) = arm_body_value(body, strings)?;
+                let tmp_slot = LocalId(next_slot);
+                next_slot += 1;
+                extra_locals.push(ty);
+                arm_stmts.push(MStmt::Assign {
+                    dest: tmp_slot,
+                    value: arm_rvalue,
+                });
+                arm_stmts.push(MStmt::Assign {
+                    dest: result_slot,
+                    value: skotch_mir::Rvalue::Local(tmp_slot),
+                });
+                blocks.push(BasicBlock {
+                    stmts: arm_stmts,
+                    terminator: Terminator::Goto(join_block_idx),
+                });
+            }
+            ArmKind::Is {
+                param_idx,
+                param_name,
+                jvm_internal,
+            } => {
+                // cmp block: instanceof against the param slot.
+                let then_block_idx = arm_start + 1;
+                let param_slot = LocalId(*param_idx as u32 + param_slot_offset);
+                let cmp_slot = LocalId(next_slot);
+                next_slot += 1;
+                extra_locals.push(Ty::Bool);
+                let cmp_stmts = vec![MStmt::Assign {
+                    dest: cmp_slot,
+                    value: Rvalue::InstanceOf {
+                        obj: param_slot,
+                        type_descriptor: jvm_internal.clone(),
+                    },
+                }];
+                blocks.push(BasicBlock {
+                    stmts: cmp_stmts,
+                    terminator: Terminator::Branch {
+                        cond: cmp_slot,
+                        then_block: then_block_idx,
+                        else_block: next_arm_or_else,
+                    },
+                });
+                // then block: checkcast + lower body with the
+                // smart-cast slot rebound to the param name.
+                let mut then_stmts: Vec<MStmt> = Vec::new();
+                let cast_slot = LocalId(next_slot);
+                next_slot += 1;
+                extra_locals.push(Ty::Class(jvm_internal.clone()));
+                then_stmts.push(MStmt::Assign {
+                    dest: cast_slot,
+                    value: Rvalue::CheckCast {
+                        obj: param_slot,
+                        target_class: jvm_internal.clone(),
+                    },
+                });
+                let outer_param_names_owned: Vec<String> = outer_param_names.to_vec();
+                let rebound_name = param_name.clone();
+                let rebound_slot = cast_slot;
+                let body_lookup = move |n: &str| -> Option<LocalId> {
+                    if n == rebound_name {
+                        return Some(rebound_slot);
+                    }
+                    outer_param_names_owned
+                        .iter()
+                        .position(|p| p == n)
+                        .map(|i| LocalId(i as u32 + param_slot_offset))
+                };
+                let body_slot = lower_rich_expr_to_slot(
+                    *body,
+                    &body_lookup,
+                    fn_lookup,
+                    &mut next_slot,
+                    &mut then_stmts,
+                    &mut extra_locals,
+                    strings,
+                )?;
+                then_stmts.push(MStmt::Assign {
+                    dest: result_slot,
+                    value: Rvalue::Local(body_slot),
+                });
+                blocks.push(BasicBlock {
+                    stmts: then_stmts,
+                    terminator: Terminator::Goto(join_block_idx),
+                });
+            }
         }
-        // Arm body block: kotlinc shape is `tmp = <rvalue>; result =
-        // Local(tmp)`. The Rvalue is either a Const (literal body) or
-        // a Local of the matching param slot (Reference body).
-        let mut arm_stmts: Vec<MStmt> = Vec::new();
-        let (arm_rvalue, ty) = arm_body_value(body, strings)?;
-        let tmp_slot = LocalId(next_slot);
-        next_slot += 1;
-        extra_locals.push(ty);
-        arm_stmts.push(MStmt::Assign {
-            dest: tmp_slot,
-            value: arm_rvalue,
-        });
-        arm_stmts.push(MStmt::Assign {
-            dest: result_slot,
-            value: skotch_mir::Rvalue::Local(tmp_slot),
-        });
-        blocks.push(BasicBlock {
-            stmts: arm_stmts,
-            terminator: Terminator::Goto(join_block_idx),
-        });
     }
 
     // Else block: also uses temp-slot copy-back. Accepts the same
@@ -11694,6 +11841,7 @@ fn try_lower_when_expression(
                 val_lookup,
                 wrapper_class,
                 param_slot_offset,
+                fn_lookup,
             );
         }
     };
