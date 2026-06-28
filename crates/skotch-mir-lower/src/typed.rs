@@ -18052,10 +18052,44 @@ fn lower_loop_body_blocks(
                         // / method without a null guard, NPE-ing before
                         // Elvis can select `alt`. Detect at property-init
                         // position and lower as an if-null CFG.
+                        //
+                        // Skip when the accessor is a `.let { lambda }` —
+                        // PropertyWithSafeAccessElvis only models
+                        // property-getter / non-lambda method dispatch and
+                        // would drop the lambda body. The lambda-inlining
+                        // `?.let` shape is handled by lower_rich's
+                        // SafeAccess+let arm via the straight-line Elvis
+                        // path, which composes correctly for primitive
+                        // recv types (`Int?`, etc.) where the CFG handler
+                        // bails on the missing Ty::Class.
                         KtExpr::Binary(b)
                             if b.operation().map(|o| o.text()).as_deref() == Some("?:")
                                 && b.lhs()
-                                    .map(|l| matches!(unwrap_parens(l), KtExpr::SafeAccess(_)))
+                                    .map(|l| {
+                                        if let KtExpr::SafeAccess(sa) = unwrap_parens(l) {
+                                            let kids: Vec<KtExpr<'_>> =
+                                                skotch_ast::children(sa.syntax())
+                                                    .iter()
+                                                    .filter_map(KtExpr::cast)
+                                                    .collect();
+                                            if kids.len() != 2 {
+                                                return false;
+                                            }
+                                            if let KtExpr::Call(call) = &kids[1] {
+                                                let is_let = matches!(
+                                                    call.callee(),
+                                                    Some(KtExpr::Reference(r))
+                                                        if r.name() == Some("let")
+                                                );
+                                                if is_let && call.lambda_argument().is_some() {
+                                                    return false;
+                                                }
+                                            }
+                                            true
+                                        } else {
+                                            false
+                                        }
+                                    })
                                     .unwrap_or(false) =>
                         {
                             special_at = Some((j, Special::PropertyWithSafeAccessElvis));
@@ -45277,6 +45311,97 @@ fn lower_rich_expr_to_slot(
                     },
                 });
                 return Some(result_slot);
+            }
+        }
+    }
+
+    // Non-safe-access `recv.let { lambda body }` — kotlinc inlines
+    // the lambda body with the lambda parameter (explicit name or
+    // implicit `it`) bound to `recv`, and the let-call evaluates to
+    // the lambda body's last expression. Mirrors the
+    // SafeAccess `recv?.let { ... }` arm below but without the
+    // null-skip (recv is statically non-null here). Without this arm
+    // `val len = s.let { it.length }` bails kind=DotQualified at the
+    // val initializer, cascading the entire enclosing fn body to
+    // empty MIR (fixtures parity/128-let-with-also and any chain
+    // that uses non-null `.let` as a value-producing scope fn).
+    if let KtExpr::DotQualified(dq) = &e {
+        let dq_exprs: Vec<KtExpr<'_>> = skotch_ast::children(dq.syntax())
+            .iter()
+            .filter_map(KtExpr::cast)
+            .collect();
+        if dq_exprs.len() == 2 {
+            let recv_e = dq_exprs[0];
+            let accessor_e = dq_exprs[1];
+            if let KtExpr::Call(call) = accessor_e {
+                if let Some(KtExpr::Reference(meth_ref)) = call.callee() {
+                    if meth_ref.name() == Some("let")
+                        && call
+                            .value_argument_list()
+                            .map(|al| al.arguments().count() == 0)
+                            .unwrap_or(true)
+                    {
+                        if let Some(la) = call.lambda_argument() {
+                            if let Some(KtExpr::Lambda(lambda)) = skotch_ast::children(la.syntax())
+                                .iter()
+                                .find_map(KtExpr::cast)
+                            {
+                                if let Some(fl) = lambda.function_literal() {
+                                    if let Some(body) = fl.body() {
+                                        if let Some(recv_slot) = lower_rich_expr_to_slot(
+                                            recv_e,
+                                            lookup_name,
+                                            fn_lookup,
+                                            next_slot,
+                                            pre_stmts,
+                                            extra_locals,
+                                            strings,
+                                        ) {
+                                            let kids = skotch_ast::children(body.syntax());
+                                            let param_name: String = fl
+                                                .value_parameter_list()
+                                                .and_then(|pl| pl.parameters().next())
+                                                .and_then(|p| p.name().map(|s| s.to_string()))
+                                                .unwrap_or_else(|| "it".to_string());
+                                            let binding = (param_name, recv_slot);
+                                            let lookup = |n: &str| -> Option<LocalId> {
+                                                if n == binding.0 {
+                                                    return Some(binding.1);
+                                                }
+                                                lookup_name(n)
+                                            };
+                                            let mut last_slot: Option<LocalId> = None;
+                                            let mut ok = true;
+                                            for c in kids.iter() {
+                                                let Some(stmt_e) = KtExpr::cast(c) else {
+                                                    continue;
+                                                };
+                                                match lower_rich_expr_to_slot(
+                                                    stmt_e,
+                                                    &lookup,
+                                                    fn_lookup,
+                                                    next_slot,
+                                                    pre_stmts,
+                                                    extra_locals,
+                                                    strings,
+                                                ) {
+                                                    Some(s) => last_slot = Some(s),
+                                                    None => {
+                                                        ok = false;
+                                                        break;
+                                                    }
+                                                }
+                                            }
+                                            if ok {
+                                                return Some(last_slot.unwrap_or(recv_slot));
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
