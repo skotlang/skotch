@@ -43396,6 +43396,17 @@ fn lower_rich_expr_to_slot(
                                 Ty::Bool,
                                 "@StringsKt.isNotBlank",
                             )),
+                            // `s.toList()` on a String is the Kotlin
+                            // stdlib extension `StringsKt.toList(CharSequence)
+                            //   : List<Char>`. kotlinc inlines this when the
+                            // call site is itself the lambda body of a
+                            // flatMap, but the static facade survives in
+                            // kotlin-stdlib; routing here is runtime-correct.
+                            ("toList", 0) => Some((
+                                "(Ljava/lang/CharSequence;)Ljava/util/List;",
+                                Ty::Class("java/util/List".to_string()),
+                                "@StringsKt.toList",
+                            )),
                             ("toInt", 0) => Some((
                                 "(Ljava/lang/String;)I",
                                 Ty::Int,
@@ -44894,6 +44905,32 @@ fn lower_rich_expr_to_slot(
                                             "(Ljava/lang/Iterable;)Ljava/util/List;",
                                             Ty::Class("java/util/List".to_string()),
                                         )),
+                                        // `xs.flatMap { ... }` →
+                                        //   `CollectionsKt.flatMap(Iterable, Function1)List`.
+                                        // kotlinc INLINES this at the call
+                                        // site (ArrayList + addAll loop) but
+                                        // the static facade still survives in
+                                        // kotlin-stdlib for cross-language
+                                        // callers; routing here is runtime-
+                                        // correct and byte-divergent — same
+                                        // tradeoff as the `takeWhile` /
+                                        // `dropWhile` arms above.
+                                        "flatMap" => Some((
+                                            "kotlin/collections/CollectionsKt",
+                                            "flatMap",
+                                            "(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Ljava/util/List;",
+                                            Ty::Class("java/util/List".to_string()),
+                                        )),
+                                        // `xss.flatten()` →
+                                        //   `CollectionsKt.flatten(Iterable)List`
+                                        // when the receiver is a
+                                        // List<List<T>> / Iterable<Iterable<T>>.
+                                        "flatten" => Some((
+                                            "kotlin/collections/CollectionsKt",
+                                            "flatten",
+                                            "(Ljava/lang/Iterable;)Ljava/util/List;",
+                                            Ty::Class("java/util/List".to_string()),
+                                        )),
                                         "size" => Some((
                                             "kotlin/collections/CollectionsKt",
                                             "getSize",
@@ -45161,7 +45198,7 @@ fn lower_rich_expr_to_slot(
                                                             (
                                                                 "filter" | "map" | "forEach"
                                                                 | "any" | "all" | "count"
-                                                                | "groupBy",
+                                                                | "groupBy" | "flatMap",
                                                                 Some(t),
                                                             ) => Some(vec![t.clone()]),
                                                             ("fold", _) => {
