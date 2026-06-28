@@ -30110,10 +30110,17 @@ fn try_lower_multi_stmt_block_with_offset(
                     let cmp_slot = LocalId(next_slot);
                     // next_slot increment dropped (dead store)
                     local_tys.push(Ty::Bool);
+                    // Mirror the single-stmt for-range path: when the
+                    // outer range is `..` with a literal upper bound,
+                    // `range_cmp_op` has already been normalized to
+                    // `CmpLt` against `end_slot = hi + 1`. Using a
+                    // hardcoded `CmpLe` here ran the loop one
+                    // iteration too many (parity 156 — `for (n in
+                    // 2..30) { if (...) ... }` iterated n=2..31).
                     let cond_stmt = MStmt::Assign {
                         dest: cmp_slot,
                         value: skotch_mir::Rvalue::BinOp {
-                            op: skotch_mir::BinOp::CmpLe,
+                            op: range_cmp_op,
                             lhs: i_slot,
                             rhs: end_slot,
                         },
@@ -30950,6 +30957,29 @@ fn try_lower_multi_stmt_block_with_offset(
                             None => trailing_children.to_vec(),
                         }
                     };
+                    // Bail to the builder path when `before_ret` contains
+                    // a control-flow stmt that the linear `lower_loop_body`
+                    // silently drops (While / DoWhile / For). Without this,
+                    // an if-chain followed by a while-loop and a trailing
+                    // return would emit the if-chain + return only —
+                    // skipping the loop body entirely (parity 156's
+                    // `isPrime` returned `true` for all odd inputs because
+                    // the `while (i * i <= n) { ... }` trial-division
+                    // loop was dropped).
+                    let before_ret_has_loop = before_ret.iter().any(|c| {
+                        if let Some(e) = KtExpr::cast(c) {
+                            matches!(e, KtExpr::While(_) | KtExpr::DoWhile(_) | KtExpr::For(_))
+                        } else {
+                            false
+                        }
+                    });
+                    if before_ret_has_loop {
+                        trace_bail!(
+                            "try_lower_multi_stmt_block_with_offset: if-chain \
+                             trailing has loop stmt, bailing to builder path"
+                        );
+                        return None;
+                    }
                     let mut exit_stmts = if before_ret.is_empty() {
                         Vec::new()
                     } else {
