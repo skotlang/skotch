@@ -112,6 +112,8 @@ pub static STDLIB_EXTENSIONS: &[StdlibExtension] = &[
     // chosen, producing the wrong call descriptor.
     StdlibExtension { receiver: "Sequence", method: "none", facade_class: "kotlin/sequences/SequencesKt", jvm_method: "none", descriptor: "(Lkotlin/sequences/Sequence;)Z", return_ty: || Ty::Bool },
     StdlibExtension { receiver: "Sequence", method: "none", facade_class: "kotlin/sequences/SequencesKt", jvm_method: "none", descriptor: "(Lkotlin/sequences/Sequence;Lkotlin/jvm/functions/Function1;)Z", return_ty: || Ty::Bool },
+    // `seq.toList()` dispatches to SequencesKt.toList, not CollectionsKt.toList.
+    StdlibExtension { receiver: "Sequence", method: "toList", facade_class: "kotlin/sequences/SequencesKt", jvm_method: "toList", descriptor: "(Lkotlin/sequences/Sequence;)Ljava/util/List;", return_ty: ty_list },
     StdlibExtension { receiver: "List", method: "first", facade_class: "kotlin/collections/CollectionsKt", jvm_method: "first", descriptor: "(Ljava/util/List;)Ljava/lang/Object;", return_ty: || Ty::Any },
     StdlibExtension { receiver: "List", method: "last", facade_class: "kotlin/collections/CollectionsKt", jvm_method: "last", descriptor: "(Ljava/util/List;)Ljava/lang/Object;", return_ty: || Ty::Any },
     StdlibExtension { receiver: "List", method: "firstOrNull", facade_class: "kotlin/collections/CollectionsKt", jvm_method: "firstOrNull", descriptor: "(Ljava/util/List;)Ljava/lang/Object;", return_ty: || Ty::Any },

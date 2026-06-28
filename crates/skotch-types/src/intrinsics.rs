@@ -251,6 +251,7 @@ pub fn fallback_collection_builder_class(name: &str) -> Option<&'static str> {
         "setOf" | "mutableSetOf" | "hashSetOf" | "linkedSetOf" => "kotlin/collections/Set",
         "arrayOf" => "kotlin/Array",
         "mapOf" | "mutableMapOf" | "hashMapOf" | "linkedMapOf" => "kotlin/collections/Map",
+        "sequenceOf" => "kotlin/sequences/Sequence",
         // Compose state holders that look like collection builders
         // from the inferrer's perspective (one arg, returns
         // `Wrapper<T>`).
@@ -599,6 +600,7 @@ pub const STDLIB_TOP_LEVEL_NAMES: &[&str] = &[
     "ByteArray",
     "buildString",
     "sequence",
+    "sequenceOf",
     "buildList",
     "buildMap",
     "buildSet",

@@ -33571,6 +33571,15 @@ fn try_lower_multi_stmt_block_with_offset(
                                             | "java/util/Collection"
                                             | "java/util/Map"
                                             | "java/lang/Iterable"
+                                            // Sequence is not strictly a JDK
+                                            // collection but the same routing
+                                            // applies: `seq.toList()` /
+                                            // `seq.map { … }` must dispatch
+                                            // through `SequencesKt.*` static
+                                            // facades, not invokeinterface
+                                            // on Sequence (which has no
+                                            // `toList`).
+                                            | "kotlin/sequences/Sequence"
                                     );
                                     let is_kotlin_collection_ext = matches!(
                                         method_n,
@@ -40537,6 +40546,135 @@ fn lower_rich_expr_to_slot(
             }
         }
     }
+    // `sequenceOf(a, b, c)` — structurally identical to `listOf(...)`
+    // but the static dispatch target is
+    // `kotlin/sequences/SequencesKt.sequenceOf([Object;)Lkotlin/sequences/Sequence;`.
+    // kotlinc widens the static type to `kotlin/sequences/Sequence`.
+    if let KtExpr::Call(call) = e {
+        if let Some(KtExpr::Reference(rc)) = call.callee() {
+            if let Some(name) = rc.name() {
+                if name == "sequenceOf" {
+                    let arg_exprs: Vec<KtExpr<'_>> = call
+                        .value_argument_list()
+                        .map(|al| al.arguments().filter_map(|a| a.expression()).collect())
+                        .unwrap_or_default();
+                    let mut arg_slots: Vec<LocalId> = Vec::with_capacity(arg_exprs.len());
+                    let mut all_args_ok = true;
+                    for ae in arg_exprs {
+                        let Some(s) = lower_rich_expr_to_slot(
+                            ae,
+                            lookup_name,
+                            fn_lookup,
+                            next_slot,
+                            pre_stmts,
+                            extra_locals,
+                            strings,
+                        ) else {
+                            all_args_ok = false;
+                            break;
+                        };
+                        arg_slots.push(s);
+                    }
+                    if all_args_ok {
+                        let n = arg_slots.len() as i32;
+                        let size_slot = LocalId(*next_slot);
+                        *next_slot += 1;
+                        extra_locals.push(Ty::Int);
+                        pre_stmts.push(MStmt::Assign {
+                            dest: size_slot,
+                            value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(n)),
+                        });
+                        let arr_slot = LocalId(*next_slot);
+                        *next_slot += 1;
+                        extra_locals.push(Ty::Any);
+                        pre_stmts.push(MStmt::Assign {
+                            dest: arr_slot,
+                            value: skotch_mir::Rvalue::NewObjectArray(size_slot),
+                        });
+                        for (i, val_slot) in arg_slots.iter().enumerate() {
+                            let val_ty = slot_ty_with_param_fallback(val_slot.0, extra_locals);
+                            let store_slot = match &val_ty {
+                                Ty::Int
+                                | Ty::Long
+                                | Ty::Float
+                                | Ty::Double
+                                | Ty::Bool
+                                | Ty::Byte
+                                | Ty::Short
+                                | Ty::Char => {
+                                    let (cls, prim, boxed) = match &val_ty {
+                                        Ty::Int => ("java/lang/Integer", "I", "java/lang/Integer"),
+                                        Ty::Long => ("java/lang/Long", "J", "java/lang/Long"),
+                                        Ty::Float => ("java/lang/Float", "F", "java/lang/Float"),
+                                        Ty::Double => ("java/lang/Double", "D", "java/lang/Double"),
+                                        Ty::Bool => ("java/lang/Boolean", "Z", "java/lang/Boolean"),
+                                        Ty::Byte => ("java/lang/Byte", "B", "java/lang/Byte"),
+                                        Ty::Short => ("java/lang/Short", "S", "java/lang/Short"),
+                                        Ty::Char => {
+                                            ("java/lang/Character", "C", "java/lang/Character")
+                                        }
+                                        _ => unreachable!(),
+                                    };
+                                    let boxed_slot = LocalId(*next_slot);
+                                    *next_slot += 1;
+                                    extra_locals.push(Ty::Class(boxed.to_string()));
+                                    pre_stmts.push(MStmt::Assign {
+                                        dest: boxed_slot,
+                                        value: skotch_mir::Rvalue::Call {
+                                            kind: skotch_mir::CallKind::StaticJava {
+                                                class_name: cls.to_string(),
+                                                method_name: "valueOf".to_string(),
+                                                descriptor: format!("({})L{};", prim, boxed),
+                                            },
+                                            args: vec![*val_slot],
+                                        },
+                                    });
+                                    boxed_slot
+                                }
+                                _ => *val_slot,
+                            };
+                            let idx_slot = LocalId(*next_slot);
+                            *next_slot += 1;
+                            extra_locals.push(Ty::Int);
+                            pre_stmts.push(MStmt::Assign {
+                                dest: idx_slot,
+                                value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(
+                                    i as i32,
+                                )),
+                            });
+                            let store_dest = LocalId(*next_slot);
+                            *next_slot += 1;
+                            extra_locals.push(Ty::Unit);
+                            pre_stmts.push(MStmt::Assign {
+                                dest: store_dest,
+                                value: skotch_mir::Rvalue::ObjectArrayStore {
+                                    array: arr_slot,
+                                    index: idx_slot,
+                                    value: store_slot,
+                                },
+                            });
+                        }
+                        let result_slot = LocalId(*next_slot);
+                        *next_slot += 1;
+                        extra_locals.push(Ty::Class("kotlin/sequences/Sequence".to_string()));
+                        pre_stmts.push(MStmt::Assign {
+                            dest: result_slot,
+                            value: skotch_mir::Rvalue::Call {
+                                kind: skotch_mir::CallKind::StaticJava {
+                                    class_name: "kotlin/sequences/SequencesKt".to_string(),
+                                    method_name: "sequenceOf".to_string(),
+                                    descriptor: "([Ljava/lang/Object;)Lkotlin/sequences/Sequence;"
+                                        .to_string(),
+                                },
+                                args: vec![arr_slot],
+                            },
+                        });
+                        return Some(result_slot);
+                    }
+                }
+            }
+        }
+    }
     // `mapOf("a" to 1, "b" to 2)` — args are Pair-typed (infix `to`
     // produces `Lkotlin/Pair;` via TuplesKt.to). Pack into a Pair[]
     // and hand to `MapsKt.mapOf([Pair)Map`. Pair instances do not
@@ -45970,6 +46108,54 @@ fn lower_rich_expr_to_slot(
                         if let Some(rn) = rcv_ref.name() {
                             if let Some(slot) = lookup_name(rn) {
                                 let recv_ty = slot_ty_with_param_fallback(slot.0, extra_locals);
+                                // Sequence receivers route to SequencesKt
+                                // static facades, not CollectionsKt. The
+                                // simplest call shape that survives kotlinc
+                                // output is `.toList()` (sequenceOf chain
+                                // terminus). Without this arm a bare-Reference
+                                // receiver of `Ty::Class(kotlin/sequences/Sequence)`
+                                // would fall through to an `invokeinterface
+                                // Sequence.toList()` virtual call — but
+                                // `kotlin.sequences.Sequence` has no `toList`
+                                // method, so a `NoSuchMethodError` is thrown
+                                // at run time.
+                                let is_sequence = matches!(
+                                    &recv_ty,
+                                    Ty::Class(c) if c == "kotlin/sequences/Sequence"
+                                );
+                                if is_sequence {
+                                    let arg_count = call
+                                        .value_argument_list()
+                                        .map(|al| al.arguments().count())
+                                        .unwrap_or(0);
+                                    let mapped: Option<(&str, &str, &str, Ty)> =
+                                        match (method_n, arg_count) {
+                                            ("toList", 0) => Some((
+                                                "kotlin/sequences/SequencesKt",
+                                                "toList",
+                                                "(Lkotlin/sequences/Sequence;)Ljava/util/List;",
+                                                Ty::Class("java/util/List".to_string()),
+                                            )),
+                                            _ => None,
+                                        };
+                                    if let Some((cls, m, desc, ret_ty)) = mapped {
+                                        let result_slot = LocalId(*next_slot);
+                                        *next_slot += 1;
+                                        extra_locals.push(ret_ty);
+                                        pre_stmts.push(MStmt::Assign {
+                                            dest: result_slot,
+                                            value: skotch_mir::Rvalue::Call {
+                                                kind: skotch_mir::CallKind::StaticJava {
+                                                    class_name: cls.to_string(),
+                                                    method_name: m.to_string(),
+                                                    descriptor: desc.to_string(),
+                                                },
+                                                args: vec![slot],
+                                            },
+                                        });
+                                        return Some(result_slot);
+                                    }
+                                }
                                 let is_collection = matches!(
                                     &recv_ty,
                                     Ty::Class(c) if matches!(
@@ -47952,6 +48138,47 @@ fn lower_rich_expr_to_slot(
                                         | "java/lang/Iterable"
                                 )
                             );
+                            // Chained-receiver Sequence — dispatch via
+                            // SequencesKt static facade rather than
+                            // invokeinterface on the Sequence type, which
+                            // doesn't expose `toList` directly.
+                            let recv_is_sequence = matches!(
+                                &recv_ty,
+                                Ty::Class(c) if c == "kotlin/sequences/Sequence"
+                            );
+                            if recv_is_sequence {
+                                let arg_count = call
+                                    .value_argument_list()
+                                    .map(|al| al.arguments().count())
+                                    .unwrap_or(0);
+                                let mapped: Option<(&str, &str, &str, Ty)> =
+                                    match (method_n, arg_count) {
+                                        ("toList", 0) => Some((
+                                            "kotlin/sequences/SequencesKt",
+                                            "toList",
+                                            "(Lkotlin/sequences/Sequence;)Ljava/util/List;",
+                                            Ty::Class("java/util/List".to_string()),
+                                        )),
+                                        _ => None,
+                                    };
+                                if let Some((cls, m, desc, ret_ty)) = mapped {
+                                    let result_slot = LocalId(*next_slot);
+                                    *next_slot += 1;
+                                    extra_locals.push(ret_ty);
+                                    pre_stmts.push(MStmt::Assign {
+                                        dest: result_slot,
+                                        value: skotch_mir::Rvalue::Call {
+                                            kind: skotch_mir::CallKind::StaticJava {
+                                                class_name: cls.to_string(),
+                                                method_name: m.to_string(),
+                                                descriptor: desc.to_string(),
+                                            },
+                                            args: vec![recv_slot],
+                                        },
+                                    });
+                                    return Some(result_slot);
+                                }
+                            }
                             // Chained-receiver `joinToString` — same
                             // $default shape as the Reference-receiver
                             // arm above. See emit_join_to_string_default.
