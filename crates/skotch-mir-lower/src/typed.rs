@@ -1455,6 +1455,125 @@ fn lookup_fn_sig(name: &str) -> Option<TopLevelFnSig> {
     FN_SIG_LOOKUP.with(|c| c.borrow().get(name).cloned())
 }
 
+// Per-name overload set for top-level fns. Populated only when a name
+// has more than one declaration in the current file (`fun describe(x:
+// Int)` and `fun describe(x: String)` both at top level). The
+// `fn_lookup` map is name-keyed and otherwise drops all but the last
+// declaration — this side table preserves every overload so the
+// call-site arm can pick by argument Ty.
+thread_local! {
+    static FN_OVERLOADS:
+        std::cell::RefCell<rustc_hash::FxHashMap<String, Vec<TopLevelFnSig>>> =
+        std::cell::RefCell::new(rustc_hash::FxHashMap::default());
+}
+
+fn record_fn_overload(name: &str, sig: TopLevelFnSig) {
+    FN_OVERLOADS.with(|c| {
+        c.borrow_mut()
+            .entry(name.to_string())
+            .or_default()
+            .push(sig);
+    });
+}
+
+fn lookup_fn_overloads(name: &str) -> Option<Vec<TopLevelFnSig>> {
+    FN_OVERLOADS.with(|c| c.borrow().get(name).filter(|v| v.len() > 1).cloned())
+}
+
+struct FnOverloadsScope {
+    prev: rustc_hash::FxHashMap<String, Vec<TopLevelFnSig>>,
+}
+impl FnOverloadsScope {
+    fn new() -> Self {
+        let prev = FN_OVERLOADS.with(|c| std::mem::take(&mut *c.borrow_mut()));
+        Self { prev }
+    }
+}
+impl Drop for FnOverloadsScope {
+    fn drop(&mut self) {
+        FN_OVERLOADS.with(|c| *c.borrow_mut() = std::mem::take(&mut self.prev));
+    }
+}
+
+/// Pick the overload of `name` whose param Tys best match the
+/// argument-slot Tys. Returns `None` when:
+/// - `name` has only one declaration (caller uses fn_lookup default)
+/// - no overload has the requested arity
+/// - more than one overload matches with the same score (ambiguous;
+///   caller falls back to fn_lookup default rather than guessing)
+///
+/// "Match" scoring: +2 per exact-Ty match, +1 per Ty::Any (Object)
+/// fallback. Wrong primitive (Int vs Bool etc.) is a hard reject.
+fn pick_fn_overload(
+    name: &str,
+    arg_slots: &[skotch_mir::LocalId],
+    extra_locals: &[Ty],
+) -> Option<(skotch_mir::FuncId, Ty)> {
+    let overloads = lookup_fn_overloads(name)?;
+    let arg_tys: Vec<Ty> = arg_slots
+        .iter()
+        .map(|s| slot_ty_with_param_fallback(s.0, extra_locals))
+        .collect();
+    let mut best: Option<(i32, &TopLevelFnSig)> = None;
+    let mut tied = false;
+    for ov in &overloads {
+        if ov.param_tys.len() != arg_tys.len() {
+            continue;
+        }
+        let mut score: i32 = 0;
+        let mut ok = true;
+        for (pt, at) in ov.param_tys.iter().zip(arg_tys.iter()) {
+            if pt == at {
+                score += 2;
+            } else if matches!(pt, Ty::Any) || matches!(at, Ty::Any) {
+                score += 1;
+            } else if overload_ty_compatible(pt, at) {
+                // Class-to-Class subtype-ish bridge (e.g. String at
+                // an Any-class slot, or Nullable wrap/unwrap). Keep
+                // score low so an exact match always wins.
+                score += 1;
+            } else {
+                ok = false;
+                break;
+            }
+        }
+        if !ok {
+            continue;
+        }
+        match best {
+            None => best = Some((score, ov)),
+            Some((b, _)) if score > b => {
+                best = Some((score, ov));
+                tied = false;
+            }
+            Some((b, _)) if score == b => {
+                tied = true;
+            }
+            _ => {}
+        }
+    }
+    if tied {
+        return None;
+    }
+    best.map(|(_, ov)| (ov.func_id, ov.return_ty.clone()))
+}
+
+/// Loose compatibility check used only by `pick_fn_overload` — too lax
+/// to use as a generic type assignability predicate. Treats nullable
+/// wrappers as compatible with their inner Ty, and identical Class
+/// names as compatible. The caller relies on tie-breaking + exact-Ty
+/// scoring to disambiguate when multiple overloads pass this check.
+fn overload_ty_compatible(want: &Ty, got: &Ty) -> bool {
+    use Ty::*;
+    match (want, got) {
+        (a, b) if a == b => true,
+        (Nullable(a), b) => overload_ty_compatible(a, b),
+        (a, Nullable(b)) => overload_ty_compatible(a, b),
+        (Class(a), Class(b)) => a == b,
+        _ => false,
+    }
+}
+
 thread_local! {
     /// FIFO queue of (target_func_id, args_len, mask) tuples recorded
     /// by the named-arg reorder arm in `lower_rich_expr_to_slot`. The
@@ -4489,6 +4608,11 @@ pub fn lower_file(
     // param Tys, return Ty) so the Lambda$N synthesizer can emit
     // `Call { kind: Static(FuncId), args }` against a top-level fn.
     let _fn_sig_lookup_scope = FnSigLookupScope::new();
+    // Per-name overload set for top-level fns. Populated alongside the
+    // FN_SIG_LOOKUP so that call sites with multiple `fun foo(...)`
+    // declarations sharing a name can pick the right FuncId by
+    // argument Ty (overload resolution).
+    let _fn_overloads_scope = FnOverloadsScope::new();
     {
         let mut idx = 0u32;
         for decl in file.decls() {
@@ -4506,6 +4630,21 @@ pub fn lower_file(
                                 .collect()
                         })
                         .unwrap_or_default();
+                    // Each decl's rebased FuncId = local_fn_id_base + idx.
+                    let this_fid = FuncId(local_fn_id_base + idx);
+                    // Record this decl as one overload entry for the
+                    // name regardless of whether it's the last one
+                    // surviving in `fn_lookup`. `lookup_fn_overloads`
+                    // returns the vector only when len > 1.
+                    record_fn_overload(
+                        name,
+                        TopLevelFnSig {
+                            func_id: this_fid,
+                            param_tys: param_tys.clone(),
+                            return_ty: return_ty.clone(),
+                            param_names: param_names.clone(),
+                        },
+                    );
                     if let Some((fid, _)) = fn_lookup.get(name) {
                         record_fn_sig(
                             name,
@@ -32227,13 +32366,25 @@ fn try_lower_multi_stmt_block_with_offset(
                                         }
                                     }
                                 }
+                                // Overload resolution: when callee has
+                                // multiple top-level decls sharing this
+                                // name, `fn_lookup` only kept the LAST.
+                                // Re-pick by matching arg-slot Tys.
+                                let (call_fid, call_ret) = match pick_fn_overload(
+                                    callee_name,
+                                    &inner_args,
+                                    local_tys.as_slice(),
+                                ) {
+                                    Some(picked) => picked,
+                                    None => (*fid, ret_ty.clone()),
+                                };
                                 let slot = LocalId(next_slot);
                                 next_slot += 1;
-                                local_tys.push(ret_ty.clone());
+                                local_tys.push(call_ret);
                                 stmts.push(MStmt::Assign {
                                     dest: slot,
                                     value: skotch_mir::Rvalue::Call {
-                                        kind: skotch_mir::CallKind::Static(*fid),
+                                        kind: skotch_mir::CallKind::Static(call_fid),
                                         args: inner_args,
                                     },
                                 });
@@ -40100,13 +40251,22 @@ fn lower_rich_expr_to_slot(
                             arg_slots.push(slot);
                         }
                     }
+                    // Overload resolution: when `name` has more than
+                    // one top-level decl, `fn_lookup` only retained the
+                    // LAST one. Re-dispatch by matching arg-slot Tys
+                    // against every overload's declared param Tys.
+                    let (call_fid, call_ret) =
+                        match pick_fn_overload(name, &arg_slots, extra_locals) {
+                            Some(picked) => picked,
+                            None => (*fid, ret_ty.clone()),
+                        };
                     let result_slot = LocalId(*next_slot);
                     *next_slot += 1;
-                    extra_locals.push(ret_ty.clone());
+                    extra_locals.push(call_ret);
                     pre_stmts.push(MStmt::Assign {
                         dest: result_slot,
                         value: skotch_mir::Rvalue::Call {
-                            kind: skotch_mir::CallKind::Static(*fid),
+                            kind: skotch_mir::CallKind::Static(call_fid),
                             args: arg_slots,
                         },
                     });
