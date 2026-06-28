@@ -921,6 +921,16 @@ thread_local! {
     /// the next `lower_file` via `reset_enum_classes`.
     static ENUM_CLASSES: std::cell::RefCell<rustc_hash::FxHashSet<String>> =
         std::cell::RefCell::new(rustc_hash::FxHashSet::default());
+
+    /// File-scoped enum-entry → owning-class map. Keyed by entry name
+    /// (e.g. `"ADD"`), value is the JVM internal name of the owning
+    /// enum (e.g. `"Op"`). Populated during enum-class emission, used
+    /// by the bare-Reference arm in `lower_rich_expr_to_slot` so a
+    /// when-arm cond like `ADD ->` resolves to `getstatic Op.ADD :LOp;`
+    /// instead of falling through to the `getstatic ADD.INSTANCE`
+    /// singleton fallback (which crashes at link-time).
+    static ENUM_ENTRY_OWNERS: std::cell::RefCell<rustc_hash::FxHashMap<String, String>> =
+        std::cell::RefCell::new(rustc_hash::FxHashMap::default());
 }
 
 fn resolve_typealias(name: &str) -> Option<Ty> {
@@ -939,6 +949,18 @@ fn register_enum_class(name: &str) {
 
 fn reset_enum_classes() {
     ENUM_CLASSES.with(|s| s.borrow_mut().clear());
+    ENUM_ENTRY_OWNERS.with(|s| s.borrow_mut().clear());
+}
+
+fn register_enum_entry_owner(entry_name: &str, owner_class: &str) {
+    ENUM_ENTRY_OWNERS.with(|s| {
+        s.borrow_mut()
+            .insert(entry_name.to_string(), owner_class.to_string());
+    });
+}
+
+fn find_enum_entry_owner(entry_name: &str) -> Option<String> {
+    ENUM_ENTRY_OWNERS.with(|s| s.borrow().get(entry_name).cloned())
 }
 
 struct TypeAliasScope {
@@ -6944,6 +6966,94 @@ pub fn lower_file(
                         .collect()
                 })
                 .unwrap_or_default();
+            // Register enum-entry → owner mapping EARLY so that
+            // `collect_class_methods` (called below) can resolve
+            // bare-Ident arm conds like `ADD ->` in `when (this) {...}`
+            // through `find_enum_entry_owner` rather than falling
+            // through to the singleton-INSTANCE fallback that crashes
+            // at link-time with NoClassDefFoundError.
+            register_enum_class(&name);
+            for ent in &entry_names {
+                register_enum_entry_owner(ent, &name);
+            }
+            // User-declared primary-ctor val/var properties on the enum.
+            // For `enum class Op(val sym: String) { ADD("+"), ... }` we
+            // collect `[("sym", Ty::String)]` and: (a) emit a per-property
+            // MirField (so the backend synthesizes `getSym()`); (b) extend
+            // the enum's `<init>` to accept the extra param after `name,
+            // ord` and PutField it into `this.sym` after the super-call;
+            // (c) thread the per-entry value-argument-list literal into
+            // the clinit constructor invocation. Limited to literal
+            // arguments per entry (the common shape) — non-literal entry
+            // args still fall through to the bail path.
+            let user_ctor_props: Vec<(String, Ty)> = e
+                .primary_constructor()
+                .and_then(|pc| pc.value_parameter_list())
+                .map(|pl| {
+                    pl.parameters()
+                        .filter(|p| p.is_val() || p.is_var())
+                        .filter_map(|p| {
+                            let pname = p.name()?;
+                            let pty = p.type_reference().map(resolve_type_ref).unwrap_or(Ty::Any);
+                            Some((pname.to_string(), pty))
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            // Per-entry user-ctor args, lowered to MirConsts. Returns
+            // None when shape doesn't match (mismatched arity, non-literal
+            // arg) and the caller falls back to the no-user-arg shape.
+            let entry_user_args: Option<Vec<Vec<skotch_mir::MirConst>>> =
+                if user_ctor_props.is_empty() {
+                    Some(entry_names.iter().map(|_| Vec::new()).collect())
+                } else {
+                    let mut all: Vec<Vec<skotch_mir::MirConst>> = Vec::new();
+                    let mut ok = true;
+                    if let Some(body) = e.body() {
+                        for entry in body.enum_entries() {
+                            let Some(arg_list) = entry.value_argument_list() else {
+                                ok = false;
+                                break;
+                            };
+                            let mut ce: Vec<skotch_mir::MirConst> = Vec::new();
+                            for a in arg_list.arguments() {
+                                let Some(ae) = a.expression() else {
+                                    ok = false;
+                                    break;
+                                };
+                                let Some(c) = lower_const_or_string_init(ae, &mut module.strings)
+                                else {
+                                    ok = false;
+                                    break;
+                                };
+                                ce.push(c);
+                            }
+                            if !ok {
+                                break;
+                            }
+                            if ce.len() != user_ctor_props.len() {
+                                ok = false;
+                                break;
+                            }
+                            all.push(ce);
+                        }
+                    }
+                    if ok {
+                        Some(all)
+                    } else {
+                        None
+                    }
+                };
+            // If extraction failed, fall back to no-user-arg lowering so
+            // we still emit *something* for the enum (entries, entries
+            // list, basic ctor) rather than dropping the whole class.
+            let user_ctor_props_eff: Vec<(String, Ty)> = if entry_user_args.is_some() {
+                user_ctor_props.clone()
+            } else {
+                Vec::new()
+            };
+            let entry_user_args_eff: Vec<Vec<skotch_mir::MirConst>> =
+                entry_user_args.unwrap_or_else(|| entry_names.iter().map(|_| Vec::new()).collect());
             let mut static_fields: Vec<skotch_mir::MirField> = entry_names
                 .iter()
                 .map(|entry_name| skotch_mir::MirField {
@@ -6977,24 +7087,53 @@ pub fn lower_file(
             let ctor_this = skotch_mir::LocalId(0);
             let ctor_name = skotch_mir::LocalId(1);
             let ctor_ord = skotch_mir::LocalId(2);
+            // Extra parameter slots for user-ctor props. Slot 3..N hold
+            // the user values (e.g. `val sym: String`); both the param
+            // list and the locals table must include them, and each
+            // gets a PutField after the super-call.
+            let mut ctor_params: Vec<skotch_mir::LocalId> = vec![ctor_this, ctor_name, ctor_ord];
+            let mut ctor_locals: Vec<Ty> = vec![Ty::Class(name.clone()), Ty::String, Ty::Int];
+            let mut ctor_param_names: Vec<String> = vec!["name".to_string(), "ordinal".to_string()];
+            let mut user_param_slots: Vec<skotch_mir::LocalId> = Vec::new();
+            for (i, (pname, pty)) in user_ctor_props_eff.iter().enumerate() {
+                let slot = skotch_mir::LocalId(3 + i as u32);
+                ctor_params.push(slot);
+                ctor_locals.push(pty.clone());
+                ctor_param_names.push(pname.clone());
+                user_param_slots.push(slot);
+            }
+            let mut ctor_stmts: Vec<skotch_mir::Stmt> = vec![skotch_mir::Stmt::Assign {
+                dest: ctor_this,
+                value: skotch_mir::Rvalue::Call {
+                    kind: skotch_mir::CallKind::Constructor("java/lang/Enum".to_string()),
+                    args: vec![ctor_this, ctor_name, ctor_ord],
+                },
+            }];
+            for ((pname, _pty), pslot) in user_ctor_props_eff.iter().zip(user_param_slots.iter()) {
+                let unused = skotch_mir::LocalId(ctor_locals.len() as u32);
+                ctor_locals.push(Ty::Unit);
+                ctor_stmts.push(skotch_mir::Stmt::Assign {
+                    dest: unused,
+                    value: skotch_mir::Rvalue::PutField {
+                        receiver: ctor_this,
+                        class_name: name.clone(),
+                        field_name: pname.clone(),
+                        value: *pslot,
+                    },
+                });
+            }
             let constructor = MirFunction {
                 id: FuncId(0),
                 name: "<init>".to_string(),
-                params: vec![ctor_this, ctor_name, ctor_ord],
-                locals: vec![Ty::Class(name.clone()), Ty::String, Ty::Int],
+                params: ctor_params,
+                locals: ctor_locals,
                 blocks: vec![BasicBlock {
-                    stmts: vec![skotch_mir::Stmt::Assign {
-                        dest: ctor_this,
-                        value: skotch_mir::Rvalue::Call {
-                            kind: skotch_mir::CallKind::Constructor("java/lang/Enum".to_string()),
-                            args: vec![ctor_this, ctor_name, ctor_ord],
-                        },
-                    }],
+                    stmts: ctor_stmts,
                     terminator: Terminator::Return,
                 }],
                 return_ty: Ty::Unit,
-                required_params: 2,
-                param_names: vec!["name".to_string(), "ordinal".to_string()],
+                required_params: 2 + user_ctor_props_eff.len(),
+                param_names: ctor_param_names,
                 param_receiver_types: Vec::new(),
                 param_defaults: Vec::new(),
                 is_abstract: false,
@@ -7059,11 +7198,35 @@ pub fn lower_file(
                     dest: ord_slot,
                     value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(ord as i32)),
                 });
+                // Allocate one slot per user-ctor prop and load its
+                // literal value (e.g. `"+"` for `ADD("+")`).
+                let mut user_arg_slots: Vec<skotch_mir::LocalId> = Vec::new();
+                let this_entry_consts: &Vec<skotch_mir::MirConst> = entry_user_args_eff
+                    .get(ord)
+                    .map(|v| v as &Vec<_>)
+                    .unwrap_or_else(|| panic!("entry args index"));
+                for (j, ucval) in this_entry_consts.iter().enumerate() {
+                    let s = skotch_mir::LocalId(next_slot);
+                    next_slot += 1;
+                    clinit_locals.push(
+                        user_ctor_props_eff
+                            .get(j)
+                            .map(|p| p.1.clone())
+                            .unwrap_or(Ty::Any),
+                    );
+                    user_arg_slots.push(s);
+                    clinit_stmts.push(skotch_mir::Stmt::Assign {
+                        dest: s,
+                        value: skotch_mir::Rvalue::Const(ucval.clone()),
+                    });
+                }
+                let mut ctor_args: Vec<skotch_mir::LocalId> = vec![name_slot, ord_slot];
+                ctor_args.extend(user_arg_slots);
                 clinit_stmts.push(skotch_mir::Stmt::Assign {
                     dest: obj_slot,
                     value: skotch_mir::Rvalue::Call {
                         kind: skotch_mir::CallKind::Constructor(name.clone()),
-                        args: vec![name_slot, ord_slot],
+                        args: ctor_args,
                     },
                 });
                 clinit_stmts.push(skotch_mir::Stmt::Assign {
@@ -7194,6 +7357,32 @@ pub fn lower_file(
                     is_value_class_extension: None,
                 })
             };
+            // User-ctor props emit as MirField; the backend synthesizes
+            // `getSym()`-style accessors for each.
+            let fields: Vec<skotch_mir::MirField> = user_ctor_props_eff
+                .iter()
+                .map(|(pname, pty)| skotch_mir::MirField {
+                    name: pname.clone(),
+                    ty: pty.clone(),
+                    is_jvm_field: false,
+                })
+                .collect();
+            // Lower user-defined enum-class methods (`fun apply(...)
+            // = when (this) { ... }`). KtEnumClass and KtClass share
+            // the same CLASS SilNode shape, so reinterpret via the
+            // `from_class_node` helper to reuse `collect_class_methods`.
+            let methods: Vec<MirFunction> = skotch_ast::KtClass::from_class_node(e.syntax())
+                .map(|kc| {
+                    collect_class_methods(
+                        kc,
+                        &name,
+                        &mut module.strings,
+                        &fn_lookup,
+                        &val_lookup,
+                        &module.wrapper_class,
+                    )
+                })
+                .unwrap_or_default();
             let mir_class = skotch_mir::MirClass {
                 name: name.clone(),
                 super_class: Some("java/lang/Enum".to_string()),
@@ -7201,8 +7390,8 @@ pub fn lower_file(
                 is_abstract: false,
                 is_interface: false,
                 interfaces: Vec::new(),
-                fields: Vec::new(),
-                methods: Vec::new(),
+                fields,
+                methods,
                 constructor,
                 secondary_constructors: Vec::new(),
                 has_explicit_primary_ctor: true,
@@ -7220,7 +7409,6 @@ pub fn lower_file(
                 value_underlying_ty: None,
             };
             module.push_class(mir_class);
-            register_enum_class(&name);
             module.enum_names.insert(name);
         }
     }
@@ -8149,6 +8337,39 @@ pub fn lower_file(
     };
     let _class_super_scope = ClassSuperScope::new(class_super_table);
 
+    // Inject enum-class user-ctor val/var props into `class_fields`
+    // so the resolved table below sees them too. Enum lowering ran
+    // before this point but its props weren't recorded (since the
+    // enum-class loop ran before `class_fields` even existed at the
+    // top of class-decl handling). Walk file decls again and stamp
+    // each enum's ctor val/var as a field pair `(fname, type_name)`.
+    for decl in file.decls() {
+        if let KtDecl::EnumClass(e) = decl {
+            let Some(simple) = e.name() else { continue };
+            let qname = format!("{pkg_prefix}{simple}");
+            let mut fld_pairs: Vec<(String, String)> = Vec::new();
+            if let Some(pc) = e.primary_constructor() {
+                if let Some(plist) = pc.value_parameter_list() {
+                    for p in plist.parameters() {
+                        if !p.is_val() && !p.is_var() {
+                            continue;
+                        }
+                        let Some(fname) = p.name() else { continue };
+                        let type_name = p
+                            .type_reference()
+                            .and_then(|tr| tr.user_type())
+                            .and_then(|u| u.name())
+                            .map(|s| s.to_string())
+                            .unwrap_or_else(|| "Any".to_string());
+                        fld_pairs.push((fname.to_string(), type_name));
+                    }
+                }
+            }
+            if !fld_pairs.is_empty() {
+                class_fields.insert(qname, fld_pairs);
+            }
+        }
+    }
     // Build CLASS_FIELDS table; cross-file seed first then local-file
     // overrides (matches resolver precedence).
     let mut class_fields_resolved: rustc_hash::FxHashMap<String, Vec<(String, Ty)>> =
@@ -11846,13 +12067,17 @@ fn try_lower_when_expression(
         }
     };
 
-    // Subject must be a Reference to a parameter.
+    // Subject must be a Reference to a parameter, or `this` (subject
+    // slot = 0 inside class methods, requires param_slot_offset >= 1).
+    // `when (this)` is the canonical enum-class dispatch shape (see
+    // `enum class Op { fun apply(...) = when (this) { ADD -> ... } }`).
     let (subject_param_slot, subject_source_name) = match &subject {
         KtExpr::Reference(r) => {
             let n = r.name()?;
             let idx = outer_param_names.iter().position(|p| p == n)?;
             (LocalId(idx as u32 + param_slot_offset), n.to_string())
         }
+        KtExpr::This(_) if param_slot_offset >= 1 => (LocalId(0), "this".to_string()),
         _ => return None,
     };
 
@@ -42826,6 +43051,13 @@ fn lower_rich_expr_to_slot(
                                         descriptor: "Ljava/util/List;".to_string(),
                                     },
                                 });
+                                // Record the element Ty so `for (op in Op.values())`
+                                // gets `Ty::Class("Op")` on its loop-var slot. Without
+                                // this, the elem_slot lands at Ty::Any and
+                                // DotQualified `op.sym` / `op.apply(...)` fall through
+                                // (the field/method resolver needs Ty::Class to find
+                                // the user-class member).
+                                record_list_element_ty(slot.0, Ty::Class(rn.to_string()));
                                 return Some(slot);
                             }
                             if is_class_namespace {
@@ -43109,6 +43341,29 @@ fn lower_rich_expr_to_slot(
                         }
                         return Some(slot);
                     }
+                }
+            }
+            // Bare uppercase ident inside an enum class with this entry
+            // name (e.g. arm cond `ADD ->` in `when (this) { ADD -> ...
+            // }`). The arm-cond lowerer routes here for non-literal
+            // conds and the kotlinc shape is `getstatic Op.ADD LOp;`
+            // rather than `getstatic ADD.INSTANCE LADD;`. Search the
+            // registered enum classes for one owning this entry; if
+            // exactly one matches, emit the per-entry getstatic.
+            if name.starts_with(char::is_uppercase) {
+                if let Some(owner) = find_enum_entry_owner(name) {
+                    let slot = LocalId(*next_slot);
+                    *next_slot += 1;
+                    extra_locals.push(Ty::Class(owner.clone()));
+                    pre_stmts.push(MStmt::Assign {
+                        dest: slot,
+                        value: skotch_mir::Rvalue::GetStaticField {
+                            class_name: owner.clone(),
+                            field_name: name.to_string(),
+                            descriptor: format!("L{};", owner),
+                        },
+                    });
+                    return Some(slot);
                 }
             }
             // Capitalized name with no local match → likely an

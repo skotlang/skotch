@@ -110,6 +110,21 @@ impl<'a> AstNode<'a> for KtClass<'a> {
     }
 }
 
+impl<'a> KtClass<'a> {
+    /// Reinterpret a `CLASS` SilNode as a `KtClass` regardless of `enum`
+    /// modifier. Used by enum-class lowering to share the body-method
+    /// collection helpers (`collect_class_methods`) which structurally
+    /// work the same way on enum classes — both expose
+    /// `primary_constructor` + `body` over an identical CLASS node.
+    pub fn from_class_node(node: &'a SilNode) -> Option<Self> {
+        if node.kind == SyntaxKind::CLASS {
+            Some(Self(node))
+        } else {
+            None
+        }
+    }
+}
+
 #[derive(Copy, Clone, Debug)]
 pub struct KtInterface<'a>(&'a SilNode);
 impl<'a> AstNode<'a> for KtInterface<'a> {
