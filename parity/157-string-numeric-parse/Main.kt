@@ -6,5 +6,5 @@ fun main() {
     println("ABC".toIntOrNull())
     println("100".toIntOrNull())
     println("3.14".toFloatOrNull())
-    println("3.14".toInt() == 3 || true)
+    println("3.14".toIntOrNull() == null)
 }

@@ -43915,6 +43915,48 @@ fn lower_rich_expr_to_slot(
                                 Ty::Float,
                                 "@parseFloat",
                             )),
+                            // `"true".toBoolean()` — Kotlin stdlib
+                            // extension on String?; kotlinc lowers
+                            // to `Boolean.parseBoolean(String):Z`.
+                            ("toBoolean", 0) => Some((
+                                "(Ljava/lang/String;)Z",
+                                Ty::Bool,
+                                "@parseBoolean",
+                            )),
+                            // `s.toIntOrNull()` / `toLongOrNull()` /
+                            // `toDoubleOrNull()` / `toFloatOrNull()`
+                            // are stdlib extensions on String; kotlinc
+                            // lowers each to a `StringsKt.<name>(String)
+                            // : Lkotlin/jvm/<Boxed>;` static call that
+                            // returns a boxed Integer/Long/Double/Float
+                            // (or null on parse failure). The boxed
+                            // return Ty matters so `println` dispatches
+                            // the Object overload (kotlinc emits a
+                            // `swap` so `out` lands underneath the
+                            // boxed result; the backend's StaticJava
+                            // result handling on a return slot of
+                            // `Ty::Class(java/lang/Integer)` etc.
+                            // produces the right shape).
+                            ("toIntOrNull", 0) => Some((
+                                "(Ljava/lang/String;)Ljava/lang/Integer;",
+                                Ty::Class("java/lang/Integer".to_string()),
+                                "@StringsKt.toIntOrNull",
+                            )),
+                            ("toLongOrNull", 0) => Some((
+                                "(Ljava/lang/String;)Ljava/lang/Long;",
+                                Ty::Class("java/lang/Long".to_string()),
+                                "@StringsKt.toLongOrNull",
+                            )),
+                            ("toDoubleOrNull", 0) => Some((
+                                "(Ljava/lang/String;)Ljava/lang/Double;",
+                                Ty::Class("java/lang/Double".to_string()),
+                                "@StringsKt.toDoubleOrNull",
+                            )),
+                            ("toFloatOrNull", 0) => Some((
+                                "(Ljava/lang/String;)Ljava/lang/Float;",
+                                Ty::Class("java/lang/Float".to_string()),
+                                "@StringsKt.toFloatOrNull",
+                            )),
                             _ => None,
                         };
                         if let Some((descriptor, ret_ty, jvm_name)) = str_method {
@@ -43984,6 +44026,7 @@ fn lower_rich_expr_to_slot(
                                     "Byte" => "java/lang/Byte",
                                     "Short" => "java/lang/Short",
                                     "Float" => "java/lang/Float",
+                                    "Boolean" => "java/lang/Boolean",
                                     _ => "java/lang/Object",
                                 };
                                 let method = match static_name {
@@ -43993,6 +44036,7 @@ fn lower_rich_expr_to_slot(
                                     "Byte" => "parseByte",
                                     "Short" => "parseShort",
                                     "Float" => "parseFloat",
+                                    "Boolean" => "parseBoolean",
                                     _ => "parse",
                                 };
                                 skotch_mir::CallKind::StaticJava {
