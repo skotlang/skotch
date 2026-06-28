@@ -15706,6 +15706,78 @@ fn walk_block(
                             continue;
                         }
 
+                        // Ordered reference comparison (`<`, `>`, `<=`, `>=`)
+                        // on a generic-erased / boxed / Comparable operand:
+                        // dispatch via `Comparable.compareTo(Object):I` then
+                        // branch on the result vs 0. Without this arm, the
+                        // generic `<T : Comparable<T>>` body falls through to
+                        // the `is_ref` integer branch table further below,
+                        // which hard-codes `if_acmpne` for non-EQ/NE ops —
+                        // i.e. reduces `a > b` to reference inequality.
+                        // That's correct for nothing; for `T : Comparable<T>`
+                        // we must call compareTo. Required for kotlinc parity
+                        // on `<T : Comparable<T>> max(a, b)`-shaped fns.
+                        //
+                        // Skip Ty::Class(String): the string-equality arm
+                        // above already handled CmpEq/Ne; for ordered ops
+                        // on strings, `String` *is* Comparable so this also
+                        // works (it dispatches `Comparable.compareTo(Object)`).
+                        if matches!(
+                            op,
+                            MBinOp::CmpLt | MBinOp::CmpGt | MBinOp::CmpLe | MBinOp::CmpGe
+                        ) && matches!(
+                            lhs_ty,
+                            Ty::Any | Ty::Nullable(_) | Ty::Class(_) | Ty::String
+                        ) && matches!(
+                            func.locals.get(rhs.0 as usize),
+                            Some(Ty::Any | Ty::Nullable(_) | Ty::Class(_) | Ty::String)
+                        ) {
+                            // Stack: [lhs_ref, rhs_ref]
+                            // invokeinterface Comparable.compareTo(Object):I.
+                            let compare_to = cp.interface_methodref(
+                                "java/lang/Comparable",
+                                "compareTo",
+                                "(Ljava/lang/Object;)I",
+                            );
+                            code.push(0xB9); // invokeinterface
+                            code.write_u16::<BigEndian>(compare_to).unwrap();
+                            code.push(2); // count: receiver + 1 ref arg
+                            code.push(0);
+                            bump(stack, max_stack, -1); // pops 2 refs, pushes 1 int
+                                                        // Inverted single-operand branch vs 0 (like the
+                                                        // `rhs_is_zero` fast path further below).
+                            let branch_op: u8 = match op {
+                                MBinOp::CmpLt => 0x9C, // ifge (inverse of <)
+                                MBinOp::CmpGe => 0x9B, // iflt (inverse of >=)
+                                MBinOp::CmpGt => 0x9E, // ifle (inverse of >)
+                                MBinOp::CmpLe => 0x9D, // ifgt (inverse of <=)
+                                _ => unreachable!(),
+                            };
+                            let cmp_start = code.len();
+                            code.push(branch_op);
+                            code.write_i16::<BigEndian>(7).unwrap();
+                            bump(stack, max_stack, -1); // pops the int result
+                            code.push(0x04); // iconst_1 (TRUE — fall-through)
+                            bump(stack, max_stack, 1);
+                            code.push(0xA7); // goto L_end
+                            code.write_i16::<BigEndian>(4).unwrap();
+                            code.push(0x03); // iconst_0 (FALSE — branch target)
+                            cmp_targets.push(CmpBranchTarget {
+                                offset: cmp_start + 7,
+                                stack_count: 0,
+                                cmp_start,
+                                block_idx,
+                            });
+                            cmp_targets.push(CmpBranchTarget {
+                                offset: cmp_start + 8,
+                                stack_count: 1,
+                                cmp_start,
+                                block_idx,
+                            });
+                            store_local(code, stack, slots, next_slot, *dest, &func.locals);
+                            continue;
+                        }
+
                         // Comparison → push 0 or 1 (bool).
                         let rhs_ty = &func.locals[rhs.0 as usize];
                         let is_ref = matches!(lhs_ty, Ty::Nullable(_) | Ty::Any);
