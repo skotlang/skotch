@@ -10987,8 +10987,13 @@ fn fixup_binop_variants(f: &mut MirFunction) {
     // and the backend's `xstore` opcode picks `istore` for a `ladd`
     // result, blowing up the verifier.
     let mut dest_ty_updates: Vec<(u32, Ty)> = Vec::new();
-    for blk in &mut f.blocks {
-        for stmt in &mut blk.stmts {
+    // Char arith fixups: when lhs is Ty::Char and op is integer
+    // Add/Sub, kotlinc emits `iadd; i2c` so the result narrows back
+    // to a Char. Track (block_index, stmt_index_after_binop, dest_slot)
+    // so we can inject a `$convert.i2c` Rvalue::Call after the binop.
+    let mut char_narrow_inserts: Vec<(usize, usize, skotch_mir::LocalId)> = Vec::new();
+    for (bi, blk) in f.blocks.iter_mut().enumerate() {
+        for (si, stmt) in blk.stmts.iter_mut().enumerate() {
             let Stmt::Assign { dest, value } = stmt;
             if let Rvalue::BinOp { op, lhs, rhs } = value {
                 let ty = resolve_ty(*lhs).unwrap_or(Ty::Any);
@@ -11035,6 +11040,16 @@ fn fixup_binop_variants(f: &mut MirFunction) {
                         _ => Ty::Int,
                     };
                     dest_ty_updates.push((dest.0, res_ty));
+                } else if matches!(ty, Ty::Char)
+                    && matches!(*op, BinOp::AddI | BinOp::SubI)
+                    && matches!(rhs_ty, Ty::Int | Ty::Byte | Ty::Short | Ty::Char)
+                {
+                    // Char + Int / Char - Int: kotlinc emits
+                    //   iadd / isub; i2c
+                    // and the result Ty is Char. Record an insertion
+                    // request; we'll splice a `$convert.i2c` Call
+                    // after the binop in a second pass.
+                    char_narrow_inserts.push((bi, si + 1, *dest));
                 }
             }
         }
@@ -11042,6 +11057,31 @@ fn fixup_binop_variants(f: &mut MirFunction) {
     for (slot, ty) in dest_ty_updates {
         if let Some(local) = f.locals.get_mut(slot as usize) {
             *local = ty;
+        }
+    }
+    // Second pass: splice `$convert.i2c` after each Char-arith binop.
+    // Insert from the back so earlier indices stay valid.
+    for (bi, si, dest) in char_narrow_inserts.into_iter().rev() {
+        // Re-tag the dest slot Ty to Char so downstream consumers
+        // (println dispatch, store opcode selection) see a Char.
+        if let Some(local) = f.locals.get_mut(dest.0 as usize) {
+            *local = Ty::Char;
+        }
+        let narrow_stmt = skotch_mir::Stmt::Assign {
+            dest,
+            value: skotch_mir::Rvalue::Call {
+                kind: skotch_mir::CallKind::StaticJava {
+                    class_name: "$convert".to_string(),
+                    method_name: "i2c".to_string(),
+                    descriptor: "(I)C".to_string(),
+                },
+                args: vec![dest],
+            },
+        };
+        if let Some(blk) = f.blocks.get_mut(bi) {
+            if si <= blk.stmts.len() {
+                blk.stmts.insert(si, narrow_stmt);
+            }
         }
     }
 }
@@ -39639,6 +39679,78 @@ fn lower_rich_expr_to_slot(
                             },
                         });
                         return Some(result_slot);
+                    }
+                    // Char instance-method intrinsics. kotlinc lowers
+                    //   c.lowercaseChar()  → invokestatic java/lang/Character.toLowerCase(C)C
+                    //   c.uppercaseChar()  → invokestatic java/lang/Character.toUpperCase(C)C
+                    //   c.isLetter()       → invokestatic java/lang/Character.isLetter(C)Z
+                    //   c.isDigit()        → invokestatic java/lang/Character.isDigit(C)Z
+                    //   c.isWhitespace()   → invokestatic java/lang/Character.isWhitespace(C)Z
+                    //   c.isLetterOrDigit()→ invokestatic java/lang/Character.isLetterOrDigit(C)Z
+                    //   c.isUpperCase()    → invokestatic java/lang/Character.isUpperCase(C)Z
+                    //   c.isLowerCase()    → invokestatic java/lang/Character.isLowerCase(C)Z
+                    //   c.digitToInt()     → invokestatic kotlin/text/CharsKt.digitToInt(C)I
+                    if matches!(&recv_ty_candidate, Some(Ty::Char))
+                        && call
+                            .value_argument_list()
+                            .map(|al| al.arguments().count())
+                            .unwrap_or(0)
+                            == 0
+                    {
+                        let char_intrinsic: Option<(&str, &str, &str, Ty)> = match method_n {
+                            "lowercaseChar" => {
+                                Some(("java/lang/Character", "toLowerCase", "(C)C", Ty::Char))
+                            }
+                            "uppercaseChar" => {
+                                Some(("java/lang/Character", "toUpperCase", "(C)C", Ty::Char))
+                            }
+                            "isLetter" => {
+                                Some(("java/lang/Character", "isLetter", "(C)Z", Ty::Bool))
+                            }
+                            "isDigit" => Some(("java/lang/Character", "isDigit", "(C)Z", Ty::Bool)),
+                            "isWhitespace" => {
+                                Some(("java/lang/Character", "isWhitespace", "(C)Z", Ty::Bool))
+                            }
+                            "isLetterOrDigit" => {
+                                Some(("java/lang/Character", "isLetterOrDigit", "(C)Z", Ty::Bool))
+                            }
+                            "isUpperCase" => {
+                                Some(("java/lang/Character", "isUpperCase", "(C)Z", Ty::Bool))
+                            }
+                            "isLowerCase" => {
+                                Some(("java/lang/Character", "isLowerCase", "(C)Z", Ty::Bool))
+                            }
+                            "digitToInt" => {
+                                Some(("kotlin/text/CharsKt", "digitToInt", "(C)I", Ty::Int))
+                            }
+                            _ => None,
+                        };
+                        if let Some((class_name, mname, descriptor, ret_ty)) = char_intrinsic {
+                            let recv_slot = lower_rich_expr_to_slot(
+                                dq_exprs[0],
+                                lookup_name,
+                                fn_lookup,
+                                next_slot,
+                                pre_stmts,
+                                extra_locals,
+                                strings,
+                            )?;
+                            let result_slot = LocalId(*next_slot);
+                            *next_slot += 1;
+                            extra_locals.push(ret_ty);
+                            pre_stmts.push(MStmt::Assign {
+                                dest: result_slot,
+                                value: skotch_mir::Rvalue::Call {
+                                    kind: skotch_mir::CallKind::StaticJava {
+                                        class_name: class_name.to_string(),
+                                        method_name: mname.to_string(),
+                                        descriptor: descriptor.to_string(),
+                                    },
+                                    args: vec![recv_slot],
+                                },
+                            });
+                            return Some(result_slot);
+                        }
                     }
                     // `n.rotateLeft(bits)` / `n.rotateRight(bits)` stdlib
                     // extension intrinsics on Int and Long receivers.
