@@ -18534,6 +18534,20 @@ fn lower_loop_body_blocks(
         /// else n * 2` — without this arm the whole try-stmt's body
         /// lower returns None and the function emits no MIR.
         AssignWithIfThrow,
+        /// Stmt-level `println(<lhs> && <rhs>)` / `print(<lhs> || <rhs>)`
+        /// where lowering naively via `lower_rich_expr_to_slot` collapses
+        /// the operands to a single MulI/AddI slot — losing short-circuit
+        /// semantics so a side-effecting rhs runs even when the lhs
+        /// already decides the result. Emit a real 4-block CFG (pre /
+        /// then / else / call) that branches on the lhs and only
+        /// evaluates the rhs on the path where it actually matters.
+        ///
+        /// Detected only when the rhs (after `unwrap_parens`) is a Call
+        /// expression — pure compare-chain operands like `i < n && x == 1`
+        /// still go through the cheap straight-line path. Unblocks
+        /// `parity/143-short-circuit` whose four `check(name, b)` calls
+        /// each print "eval $name" before returning.
+        CallStmtShortCircuit,
     }
     let mut i: usize = 0;
     while i < body_children.len() {
@@ -18881,6 +18895,39 @@ fn lower_loop_body_blocks(
                         if callee_is_let && no_value_args && has_lambda {
                             special_at = Some((j, Special::SafeAccessLetStmt));
                             break;
+                        }
+                    }
+                }
+            }
+            // Stmt-level `println(<&&-or-||-binary>)` /
+            // `print(<&&-or-||-binary>)` with a side-effecting (Call)
+            // rhs. Without this branch lower_rich_expr_to_slot collapses
+            // both operands into MulI/AddI slots — eager evaluation that
+            // breaks short-circuit semantics (rhs runs even when lhs has
+            // already decided the result). Route to a 4-block CFG below.
+            if let KtExpr::Call(call) = expr {
+                let callee_name = match call.callee() {
+                    Some(KtExpr::Reference(r)) => r.name(),
+                    _ => None,
+                };
+                if matches!(callee_name, Some("println") | Some("print")) {
+                    let arg_exprs: Vec<KtExpr<'_>> = call
+                        .value_argument_list()
+                        .map(|al| al.arguments().filter_map(|a| a.expression()).collect())
+                        .unwrap_or_default();
+                    if arg_exprs.len() == 1 {
+                        if let KtExpr::Binary(b) = unwrap_parens(arg_exprs[0]) {
+                            let op_text = b.operation().map(|o| o.text()).unwrap_or_default();
+                            if op_text == "&&" || op_text == "||" {
+                                let rhs_is_call = b
+                                    .rhs()
+                                    .map(|r| matches!(unwrap_parens(r), KtExpr::Call(_)))
+                                    .unwrap_or(false);
+                                if rhs_is_call {
+                                    special_at = Some((j, Special::CallStmtShortCircuit));
+                                    break;
+                                }
+                            }
                         }
                     }
                 }
@@ -23156,6 +23203,151 @@ fn lower_loop_body_blocks(
                     terminator: Terminator::Goto(join_block_id),
                 });
                 let _ = cond_block_id;
+                i = j + 1;
+                continue;
+            }
+            Some((j, Special::CallStmtShortCircuit)) => {
+                // `println(<lhs> && <rhs>)` / `print(<lhs> || <rhs>)`
+                // where the rhs has side effects. Lower as a 4-block CFG:
+                //   pre:   cur_stmts; eval lhs -> lhs_slot;
+                //          Branch(lhs_slot, then_block, else_block)
+                //   then:  for `&&`: eval rhs -> rhs_slot; result = rhs_slot
+                //          for `||`: result = Const(true)
+                //          Goto(call_block)
+                //   else:  for `&&`: result = Const(false)
+                //          for `||`: eval rhs -> rhs_slot; result = rhs_slot
+                //          Goto(call_block)
+                //   call:  println/print(result); becomes the new
+                //          accumulation block for subsequent stmts.
+                let stmt_node = body_children[j];
+                let KtExpr::Call(call) = KtExpr::cast(stmt_node)? else {
+                    return None;
+                };
+                let is_println = matches!(
+                    call.callee(),
+                    Some(KtExpr::Reference(r)) if r.name() == Some("println")
+                );
+                let arg_exprs: Vec<KtExpr<'_>> = call
+                    .value_argument_list()
+                    .map(|al| al.arguments().filter_map(|a| a.expression()).collect())
+                    .unwrap_or_default();
+                if arg_exprs.len() != 1 {
+                    return None;
+                }
+                let KtExpr::Binary(bin) = unwrap_parens(arg_exprs[0]) else {
+                    return None;
+                };
+                let op_text = bin.operation().map(|o| o.text()).unwrap_or_default();
+                if op_text != "&&" && op_text != "||" {
+                    return None;
+                }
+                let lhs_e = bin.lhs().map(unwrap_parens)?;
+                let rhs_e = bin.rhs().map(unwrap_parens)?;
+                let snap = name_to_local.clone();
+                let lookup = |n: &str| -> Option<LocalId> {
+                    snap.iter()
+                        .rev()
+                        .find(|(name, _)| name == n)
+                        .map(|(_, l)| *l)
+                };
+                // LHS evaluated in the pre-block (current cur_stmts).
+                let lhs_slot = lower_rich_expr_to_slot(
+                    lhs_e,
+                    &lookup,
+                    fn_lookup_ref,
+                    next_slot,
+                    &mut cur_stmts,
+                    local_tys,
+                    strings,
+                )?;
+                // Allocate the result slot.
+                let result_slot = LocalId(*next_slot);
+                *next_slot += 1;
+                local_tys.push(Ty::Bool);
+                // Block IDs.
+                let pre_block_id = block_offset + blocks.len() as u32;
+                let then_block_id = pre_block_id + 1;
+                let else_block_id = pre_block_id + 2;
+                let call_block_id = pre_block_id + 3;
+                // THEN block stmts.
+                let mut then_stmts: Vec<MStmt> = Vec::new();
+                if op_text == "&&" {
+                    let rhs_slot = lower_rich_expr_to_slot(
+                        rhs_e,
+                        &lookup,
+                        fn_lookup_ref,
+                        next_slot,
+                        &mut then_stmts,
+                        local_tys,
+                        strings,
+                    )?;
+                    then_stmts.push(MStmt::Assign {
+                        dest: result_slot,
+                        value: skotch_mir::Rvalue::Local(rhs_slot),
+                    });
+                } else {
+                    then_stmts.push(MStmt::Assign {
+                        dest: result_slot,
+                        value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Bool(true)),
+                    });
+                }
+                // ELSE block stmts.
+                let mut else_stmts: Vec<MStmt> = Vec::new();
+                if op_text == "||" {
+                    let rhs_slot = lower_rich_expr_to_slot(
+                        rhs_e,
+                        &lookup,
+                        fn_lookup_ref,
+                        next_slot,
+                        &mut else_stmts,
+                        local_tys,
+                        strings,
+                    )?;
+                    else_stmts.push(MStmt::Assign {
+                        dest: result_slot,
+                        value: skotch_mir::Rvalue::Local(rhs_slot),
+                    });
+                } else {
+                    else_stmts.push(MStmt::Assign {
+                        dest: result_slot,
+                        value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Bool(false)),
+                    });
+                }
+                // Push pre-block (taking cur_stmts).
+                blocks.push(BasicBlock {
+                    stmts: std::mem::take(&mut cur_stmts),
+                    terminator: Terminator::Branch {
+                        cond: lhs_slot,
+                        then_block: then_block_id,
+                        else_block: else_block_id,
+                    },
+                });
+                blocks.push(BasicBlock {
+                    stmts: then_stmts,
+                    terminator: Terminator::Goto(call_block_id),
+                });
+                blocks.push(BasicBlock {
+                    stmts: else_stmts,
+                    terminator: Terminator::Goto(call_block_id),
+                });
+                // call_block stmts go into the now-empty cur_stmts so
+                // subsequent statements continue accumulating there.
+                let call_kind = if is_println {
+                    skotch_mir::CallKind::Println
+                } else {
+                    skotch_mir::CallKind::Print
+                };
+                let call_ret_slot = LocalId(*next_slot);
+                *next_slot += 1;
+                local_tys.push(Ty::Unit);
+                cur_stmts.push(MStmt::Assign {
+                    dest: call_ret_slot,
+                    value: skotch_mir::Rvalue::Call {
+                        kind: call_kind,
+                        args: vec![result_slot],
+                    },
+                });
+                let _ = call_block_id;
                 i = j + 1;
                 continue;
             }
