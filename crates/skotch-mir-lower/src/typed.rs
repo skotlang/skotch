@@ -14188,6 +14188,253 @@ fn try_lower_when_is_this_method_body(
     Some((blocks, extra_locals))
 }
 
+/// Recursively resolve an if-arm operand expression into a slot.
+/// Handles Reference (param / top-level val), Call (top-level fn,
+/// including recursive self-calls — drives the fib/fact idiom),
+/// Binary (numeric arithmetic / cmp / String concat), Prefix (unary
+/// minus / `!`), and literal Const fallback.
+///
+/// Picks BinOp variant from the *resolved* slot types (via
+/// `slot_ty_with_param_fallback`) rather than AST-only
+/// `operand_numeric_ty`, so that `n: Int * fact(n-1): Long` correctly
+/// promotes to MulL (the backend then emits the i2l promotion).
+///
+/// `f` is threaded purely for symmetry with sibling helpers that
+/// inspect param/return-type metadata via the KtFun.
+#[allow(clippy::too_many_arguments, clippy::only_used_in_recursion)]
+fn resolve_if_arm_operand_rec(
+    e: skotch_ast::KtExpr<'_>,
+    f: skotch_ast::KtFun<'_>,
+    param_names: &[String],
+    val_lookup: &rustc_hash::FxHashMap<String, Ty>,
+    fn_lookup: &rustc_hash::FxHashMap<String, (skotch_mir::FuncId, Ty)>,
+    wrapper_class: &str,
+    next_slot: &mut u32,
+    pre_stmts: &mut Vec<skotch_mir::Stmt>,
+    extra_locals: &mut Vec<Ty>,
+    strings: &mut Vec<String>,
+) -> Option<skotch_mir::LocalId> {
+    use skotch_ast::KtExpr;
+    use skotch_mir::{LocalId, Rvalue, Stmt as MStmt};
+    let e = unwrap_parens(e);
+    // Literal fast path.
+    if let Some((k, ty)) = literal_to_const(&e, strings) {
+        let slot = LocalId(*next_slot);
+        *next_slot += 1;
+        extra_locals.push(ty);
+        pre_stmts.push(MStmt::Assign {
+            dest: slot,
+            value: Rvalue::Const(k),
+        });
+        return Some(slot);
+    }
+    match e {
+        KtExpr::Reference(r) => {
+            let n = r.name()?;
+            if let Some(idx) = param_names.iter().position(|p| p == n) {
+                return Some(LocalId(idx as u32));
+            }
+            if let Some(val_ty) = val_lookup.get(n) {
+                let slot = LocalId(*next_slot);
+                *next_slot += 1;
+                extra_locals.push(val_ty.clone());
+                pre_stmts.push(MStmt::Assign {
+                    dest: slot,
+                    value: Rvalue::GetStaticField {
+                        class_name: wrapper_class.to_string(),
+                        field_name: n.to_string(),
+                        descriptor: ty_to_descriptor(val_ty),
+                    },
+                });
+                return Some(slot);
+            }
+            None
+        }
+        KtExpr::Call(call) => {
+            let callee_name = match call.callee() {
+                Some(KtExpr::Reference(r)) => r.name()?,
+                _ => return None,
+            };
+            let (fid, ret_ty) = fn_lookup.get(callee_name)?;
+            let mut arg_slots: Vec<LocalId> = Vec::new();
+            if let Some(arg_list) = call.value_argument_list() {
+                for arg in arg_list.arguments() {
+                    let arg_expr = arg.expression()?;
+                    let slot = resolve_if_arm_operand_rec(
+                        arg_expr,
+                        f,
+                        param_names,
+                        val_lookup,
+                        fn_lookup,
+                        wrapper_class,
+                        next_slot,
+                        pre_stmts,
+                        extra_locals,
+                        strings,
+                    )?;
+                    arg_slots.push(slot);
+                }
+            }
+            let result_slot = LocalId(*next_slot);
+            *next_slot += 1;
+            extra_locals.push(ret_ty.clone());
+            pre_stmts.push(MStmt::Assign {
+                dest: result_slot,
+                value: Rvalue::Call {
+                    kind: skotch_mir::CallKind::Static(*fid),
+                    args: arg_slots,
+                },
+            });
+            Some(result_slot)
+        }
+        KtExpr::Binary(b) => {
+            let op_text = b.operation().map(|o| o.text()).unwrap_or_default();
+            let lhs = resolve_if_arm_operand_rec(
+                b.lhs()?,
+                f,
+                param_names,
+                val_lookup,
+                fn_lookup,
+                wrapper_class,
+                next_slot,
+                pre_stmts,
+                extra_locals,
+                strings,
+            )?;
+            let rhs = resolve_if_arm_operand_rec(
+                b.rhs()?,
+                f,
+                param_names,
+                val_lookup,
+                fn_lookup,
+                wrapper_class,
+                next_slot,
+                pre_stmts,
+                extra_locals,
+                strings,
+            )?;
+            // Promote from the *resolved* slot Tys — this captures
+            // Call return types (e.g. `fact(n-1): Long`), which the
+            // AST-only `operand_numeric_ty` would miss.
+            let lhs_ty = slot_ty_with_param_fallback(lhs.0, extra_locals);
+            let rhs_ty = slot_ty_with_param_fallback(rhs.0, extra_locals);
+            let promoted = promote_numeric(&lhs_ty, &rhs_ty);
+            let is_cmp = matches!(op_text.as_str(), "==" | "!=" | "<" | ">" | "<=" | ">=");
+            let mir_op = if is_cmp {
+                match op_text.as_str() {
+                    "==" => Some(skotch_mir::BinOp::CmpEq),
+                    "!=" => Some(skotch_mir::BinOp::CmpNe),
+                    "<" => Some(skotch_mir::BinOp::CmpLt),
+                    ">" => Some(skotch_mir::BinOp::CmpGt),
+                    "<=" => Some(skotch_mir::BinOp::CmpLe),
+                    ">=" => Some(skotch_mir::BinOp::CmpGe),
+                    _ => None,
+                }
+            } else {
+                match (op_text.as_str(), &promoted) {
+                    ("+", Ty::Long) => Some(skotch_mir::BinOp::AddL),
+                    ("-", Ty::Long) => Some(skotch_mir::BinOp::SubL),
+                    ("*", Ty::Long) => Some(skotch_mir::BinOp::MulL),
+                    ("/", Ty::Long) => Some(skotch_mir::BinOp::DivL),
+                    ("%", Ty::Long) => Some(skotch_mir::BinOp::ModL),
+                    ("+", Ty::Double) => Some(skotch_mir::BinOp::AddD),
+                    ("-", Ty::Double) => Some(skotch_mir::BinOp::SubD),
+                    ("*", Ty::Double) => Some(skotch_mir::BinOp::MulD),
+                    ("/", Ty::Double) => Some(skotch_mir::BinOp::DivD),
+                    ("%", Ty::Double) => Some(skotch_mir::BinOp::ModD),
+                    ("+", Ty::Float) => Some(skotch_mir::BinOp::AddF),
+                    ("-", Ty::Float) => Some(skotch_mir::BinOp::SubF),
+                    ("*", Ty::Float) => Some(skotch_mir::BinOp::MulF),
+                    ("/", Ty::Float) => Some(skotch_mir::BinOp::DivF),
+                    ("%", Ty::Float) => Some(skotch_mir::BinOp::ModF),
+                    ("+", _) => Some(skotch_mir::BinOp::AddI),
+                    ("-", _) => Some(skotch_mir::BinOp::SubI),
+                    ("*", _) => Some(skotch_mir::BinOp::MulI),
+                    ("/", _) => Some(skotch_mir::BinOp::DivI),
+                    ("%", _) => Some(skotch_mir::BinOp::ModI),
+                    _ => None,
+                }
+            }?;
+            let slot = LocalId(*next_slot);
+            *next_slot += 1;
+            extra_locals.push(if is_cmp { Ty::Bool } else { promoted });
+            pre_stmts.push(MStmt::Assign {
+                dest: slot,
+                value: Rvalue::BinOp {
+                    op: mir_op,
+                    lhs,
+                    rhs,
+                },
+            });
+            Some(slot)
+        }
+        KtExpr::Prefix(p) => {
+            let op_text = skotch_ast::children(p.syntax())
+                .iter()
+                .find_map(|c| {
+                    if c.kind == skotch_syntax::SyntaxKind::OPERATION_REFERENCE {
+                        skotch_ast::KtOperationReference::cast(c).map(|o| o.text())
+                    } else {
+                        None
+                    }
+                })
+                .unwrap_or_default();
+            if op_text != "-" {
+                return None;
+            }
+            let inner = skotch_ast::children(p.syntax())
+                .iter()
+                .find_map(KtExpr::cast)
+                .map(unwrap_parens)?;
+            let inner_slot = resolve_if_arm_operand_rec(
+                inner,
+                f,
+                param_names,
+                val_lookup,
+                fn_lookup,
+                wrapper_class,
+                next_slot,
+                pre_stmts,
+                extra_locals,
+                strings,
+            )?;
+            let inner_ty = slot_ty_with_param_fallback(inner_slot.0, extra_locals);
+            let (zero_const, op) = match inner_ty {
+                Ty::Long => (skotch_mir::MirConst::Long(0), skotch_mir::BinOp::SubL),
+                Ty::Float => (skotch_mir::MirConst::Float(0.0), skotch_mir::BinOp::SubF),
+                Ty::Double => (skotch_mir::MirConst::Double(0.0), skotch_mir::BinOp::SubD),
+                _ => (skotch_mir::MirConst::Int(0), skotch_mir::BinOp::SubI),
+            };
+            let zero_slot = LocalId(*next_slot);
+            *next_slot += 1;
+            let zero_ty = match &op {
+                skotch_mir::BinOp::SubL => Ty::Long,
+                skotch_mir::BinOp::SubF => Ty::Float,
+                skotch_mir::BinOp::SubD => Ty::Double,
+                _ => Ty::Int,
+            };
+            extra_locals.push(zero_ty.clone());
+            pre_stmts.push(MStmt::Assign {
+                dest: zero_slot,
+                value: Rvalue::Const(zero_const),
+            });
+            let res_slot = LocalId(*next_slot);
+            *next_slot += 1;
+            extra_locals.push(zero_ty);
+            pre_stmts.push(MStmt::Assign {
+                dest: res_slot,
+                value: Rvalue::BinOp {
+                    op,
+                    lhs: zero_slot,
+                    rhs: inner_slot,
+                },
+            });
+            Some(res_slot)
+        }
+        _ => None,
+    }
+}
+
 /// Try to lower a simple `if (cond) then-arm else else-arm` expression
 /// body. Returns None when the if's condition / arms / else are not
 /// simple binary-comparison + literal/ref arms.
@@ -14701,15 +14948,42 @@ fn try_lower_if_expression(
     };
     extra_locals.push(arm_ty.clone());
 
-    // Build the then arm.
+    // Build the then arm. Try the recursive resolver first (handles
+    // top-level Binary with nested Call — drives the
+    // `fib(n-1) + fib(n-2)` and `n * fact(n-1)` idioms); fall back to
+    // the closure-based resolve_operand for simple shapes (Reference,
+    // single Call, Prefix, literal, String template). On fallback we
+    // snapshot+restore next_slot / extra_locals so partial allocs
+    // from the recursive attempt don't leak into the closure path.
     let mut b1_stmts: Vec<MStmt> = Vec::new();
-    let then_slot = resolve_operand(
+    let saved_next = next_slot;
+    let saved_extra_len = extra_locals.len();
+    let then_slot = match resolve_if_arm_operand_rec(
         then_expr,
+        f,
+        &outer_param_names,
+        val_lookup,
+        fn_lookup,
+        wrapper_class,
         &mut next_slot,
         &mut b1_stmts,
         &mut extra_locals,
         strings,
-    )?;
+    ) {
+        Some(s) => s,
+        None => {
+            b1_stmts.clear();
+            next_slot = saved_next;
+            extra_locals.truncate(saved_extra_len);
+            resolve_operand(
+                then_expr,
+                &mut next_slot,
+                &mut b1_stmts,
+                &mut extra_locals,
+                strings,
+            )?
+        }
+    };
     b1_stmts.push(MStmt::Assign {
         dest: result_slot,
         value: Rvalue::Local(then_slot),
@@ -14717,13 +14991,34 @@ fn try_lower_if_expression(
 
     // Build the else arm.
     let mut b2_stmts: Vec<MStmt> = Vec::new();
-    let else_slot = resolve_operand(
+    let saved_next2 = next_slot;
+    let saved_extra_len2 = extra_locals.len();
+    let else_slot = match resolve_if_arm_operand_rec(
         else_expr,
+        f,
+        &outer_param_names,
+        val_lookup,
+        fn_lookup,
+        wrapper_class,
         &mut next_slot,
         &mut b2_stmts,
         &mut extra_locals,
         strings,
-    )?;
+    ) {
+        Some(s) => s,
+        None => {
+            b2_stmts.clear();
+            next_slot = saved_next2;
+            extra_locals.truncate(saved_extra_len2);
+            resolve_operand(
+                else_expr,
+                &mut next_slot,
+                &mut b2_stmts,
+                &mut extra_locals,
+                strings,
+            )?
+        }
+    };
     b2_stmts.push(MStmt::Assign {
         dest: result_slot,
         value: Rvalue::Local(else_slot),
