@@ -31696,21 +31696,49 @@ fn try_lower_multi_stmt_block_with_offset(
                                     // primitive int on the stack into
                                     // `println(Ljava/lang/Object;)V` →
                                     // VerifyError.
-                                    let getter_name = property_getter_name(prop_n);
-                                    let slot_ty = class_method_return_ty(&cname, &getter_name)
-                                        .unwrap_or(Ty::Any);
-                                    let slot = LocalId(next_slot);
-                                    next_slot += 1;
-                                    local_tys.push(slot_ty);
-                                    stmts.push(MStmt::Assign {
-                                        dest: slot,
-                                        value: skotch_mir::Rvalue::GetField {
-                                            receiver: recv_slot,
-                                            class_name: cname,
-                                            field_name: prop_n.to_string(),
-                                        },
-                                    });
-                                    slot
+                                    // StringBuilder/StringBuffer `.length`
+                                    // is a Kotlin property whose JVM
+                                    // backing is `length()I`. Emit a
+                                    // VirtualJava call so the fast-path
+                                    // doesn't generate a raw GetField
+                                    // against `length:Ljava/lang/Object;`
+                                    // (which the JDK class doesn't have).
+                                    if prop_n == "length"
+                                        && (cname == "java/lang/StringBuilder"
+                                            || cname == "java/lang/StringBuffer")
+                                    {
+                                        let slot = LocalId(next_slot);
+                                        next_slot += 1;
+                                        local_tys.push(Ty::Int);
+                                        stmts.push(MStmt::Assign {
+                                            dest: slot,
+                                            value: skotch_mir::Rvalue::Call {
+                                                kind: skotch_mir::CallKind::VirtualJava {
+                                                    class_name: cname,
+                                                    method_name: "length".to_string(),
+                                                    descriptor: "()I".to_string(),
+                                                },
+                                                args: vec![recv_slot],
+                                            },
+                                        });
+                                        slot
+                                    } else {
+                                        let getter_name = property_getter_name(prop_n);
+                                        let slot_ty = class_method_return_ty(&cname, &getter_name)
+                                            .unwrap_or(Ty::Any);
+                                        let slot = LocalId(next_slot);
+                                        next_slot += 1;
+                                        local_tys.push(slot_ty);
+                                        stmts.push(MStmt::Assign {
+                                            dest: slot,
+                                            value: skotch_mir::Rvalue::GetField {
+                                                receiver: recv_slot,
+                                                class_name: cname,
+                                                field_name: prop_n.to_string(),
+                                            },
+                                        });
+                                        slot
+                                    }
                                 }
                                 (KtExpr::Reference(recv_ref), KtExpr::Call(call)) => {
                                     let recv_n = recv_ref.name()?;
@@ -40339,6 +40367,8 @@ fn lower_rich_expr_to_slot(
                                     | "kotlin/Pair"
                                     | "kotlin/Triple"
                                     | "kotlin/ranges/IntRange"
+                                    | "java/lang/StringBuilder"
+                                    | "java/lang/StringBuffer"
                             ) && !cname.starts_with('[')
                             {
                                 // Smart-cast CheckCast bridge: when the
@@ -40613,6 +40643,18 @@ fn lower_rich_expr_to_slot(
                             match (&recv_ty, prop_name) {
                                 (Ty::String, "length") => {
                                     Some(("java/lang/String", "length", "()I", Ty::Int))
+                                }
+                                // StringBuilder/StringBuffer `.length`
+                                // is a Kotlin property whose JVM lowering
+                                // is `length()I`. Without this arm the
+                                // outer DotQualified falls through to
+                                // GetField against `length` and fails at
+                                // runtime with NoSuchFieldError.
+                                (Ty::Class(c), "length")
+                                    if c == "java/lang/StringBuilder"
+                                        || c == "java/lang/StringBuffer" =>
+                                {
+                                    Some((c.as_str(), "length", "()I", Ty::Int))
                                 }
                                 (Ty::Char, "code") => {
                                     // Char.code is just the underlying int.
