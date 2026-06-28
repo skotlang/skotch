@@ -20904,6 +20904,11 @@ fn lower_loop_body_blocks(
                 // carries `Ty::String`/`Ty::Class(_)` for downstream
                 // virtual dispatch (`s.uppercase()` etc.).
                 let mut obj_arr_recv: Option<(LocalId, Ty)> = None;
+                // When set, the for-in is over a String receiver: kotlinc
+                // emits `i=0; hi=s.length(); while (i<hi) { c=s.charAt(i);
+                // <body>; i++ }`. The body-preamble emits `c =
+                // s.charAt(i)` as an invokevirtual returning Char.
+                let mut string_recv: Option<LocalId> = None;
                 // When set, the for-in dispatches via the user-iterator
                 // protocol: `iter = recv.iterator()`, cond uses
                 // `iter.hasNext()`, body prepends `elem = iter.next()`.
@@ -21104,6 +21109,36 @@ fn lower_loop_body_blocks(
                         cur_stmts.push(MStmt::Assign {
                             dest: hi,
                             value: skotch_mir::Rvalue::ArrayLength(range_slot),
+                        });
+                        (lo, hi, skotch_mir::BinOp::CmpLt, 1)
+                    } else if matches!(&range_ty, Ty::String) {
+                        // `for (c in s)` where `s: String`. kotlinc emits:
+                        //   i = 0
+                        //   hi = s.length()
+                        //   while (i < hi) { c = s.charAt(i); <body>; i++ }
+                        // The body-preamble below emits `c = s.charAt(i)`
+                        // via Virtual call so the loop variable carries
+                        // `Ty::Char`.
+                        string_recv = Some(range_slot);
+                        let lo = LocalId(*next_slot);
+                        *next_slot += 1;
+                        local_tys.push(Ty::Int);
+                        cur_stmts.push(MStmt::Assign {
+                            dest: lo,
+                            value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(0)),
+                        });
+                        let hi = LocalId(*next_slot);
+                        *next_slot += 1;
+                        local_tys.push(Ty::Int);
+                        cur_stmts.push(MStmt::Assign {
+                            dest: hi,
+                            value: skotch_mir::Rvalue::Call {
+                                kind: skotch_mir::CallKind::Virtual {
+                                    class_name: "java/lang/String".to_string(),
+                                    method_name: "length".to_string(),
+                                },
+                                args: vec![range_slot],
+                            },
                         });
                         (lo, hi, skotch_mir::BinOp::CmpLt, 1)
                     } else if matches!(&range_ty, Ty::Class(c) if c.starts_with('[')) {
@@ -21391,6 +21426,14 @@ fn lower_loop_body_blocks(
                     let s = LocalId(*next_slot);
                     *next_slot += 1;
                     local_tys.push(Ty::Int);
+                    Some(s)
+                } else if string_recv.is_some() {
+                    // String for-in: each element is `Ty::Char`. The
+                    // body-prepend below emits `elem_slot = s.charAt(i)`
+                    // via an invokevirtual returning Char.
+                    let s = LocalId(*next_slot);
+                    *next_slot += 1;
+                    local_tys.push(Ty::Char);
                     Some(s)
                 } else if let Some((_, ref obj_elem_ty)) = obj_arr_recv {
                     // Object-array for-in: each element's slot Ty comes
@@ -21696,6 +21739,26 @@ fn lower_loop_body_blocks(
                             value: skotch_mir::Rvalue::ArrayLoad {
                                 array: recv,
                                 index: i_slot,
+                            },
+                        });
+                        prepend.append(&mut first_body.stmts);
+                        first_body.stmts = prepend;
+                    }
+                } else if let (Some(recv), Some(elem)) = (string_recv, elem_slot_opt) {
+                    // String for-in body prepend: bind the loop variable
+                    // to `s.charAt(i)` so the body sees a `Char`-typed
+                    // slot. Mirrors kotlinc's invokevirtual
+                    // String.charAt(I)C.
+                    if let Some(first_body) = inner_body_blocks.first_mut() {
+                        let mut prepend: Vec<MStmt> = Vec::new();
+                        prepend.push(MStmt::Assign {
+                            dest: elem,
+                            value: skotch_mir::Rvalue::Call {
+                                kind: skotch_mir::CallKind::Virtual {
+                                    class_name: "java/lang/String".to_string(),
+                                    method_name: "charAt".to_string(),
+                                },
+                                args: vec![recv, i_slot],
                             },
                         });
                         prepend.append(&mut first_body.stmts);
