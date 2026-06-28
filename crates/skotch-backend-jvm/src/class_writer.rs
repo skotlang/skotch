@@ -7177,7 +7177,16 @@ fn has_use_before_def(func: &MirFunction) -> bool {
             defs_in_block[i].insert(dest.0);
         }
     }
-    // Predecessor map.
+    // Predecessor map. Normal Goto/Branch edges plus exception edges:
+    // the handler block can be entered from ANY instruction in the
+    // protected try range (the verifier checks the handler's entry
+    // state against the intersection over every potential throw
+    // site), so as a conservative approximation we treat each block
+    // inside [try_start, try_end) as a predecessor of the handler.
+    // Without this, a handler that reads a local assigned before the
+    // try region is flagged as use-before-def — the synthesized
+    // catch-all rethrow handler for finally produces exactly that
+    // shape.
     let mut preds: Vec<Vec<usize>> = vec![Default::default(); n];
     for (i, b) in func.blocks.iter().enumerate() {
         match &b.terminator {
@@ -7191,6 +7200,17 @@ fn has_use_before_def(func: &MirFunction) -> bool {
                 preds[*else_block as usize].push(i);
             }
             _ => {}
+        }
+    }
+    for eh in &func.exception_handlers {
+        let h = eh.handler_block as usize;
+        if h >= n {
+            continue;
+        }
+        let start = eh.try_start_block as usize;
+        let end = (eh.try_end_block as usize).min(n);
+        for tb in start..end {
+            preds[h].push(tb);
         }
     }
     // Compute reachability from entry. Unreachable preds shouldn't

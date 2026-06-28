@@ -18381,6 +18381,20 @@ fn lower_loop_body_blocks(
         /// leaving the array zero-initialized. Lower as a counted-loop
         /// CFG so the lambda body actually populates each element.
         PropertyWithPrimArrayInitLambda,
+        /// `name = if (cond) <throw E> else value` (or the mirror).
+        /// The if-expr's RHS contains a throwing arm — neither the
+        /// `lower_rich_expr_to_slot` If arm (both branches must produce
+        /// a slot) nor the linear assignment paths in `lower_loop_body`
+        /// can express the diverging control flow. Lower as a CFG:
+        ///   pre:   cur_stmts; eval cond -> cmp; Branch(cmp, then, else)
+        ///   throw: eval throw expr -> slot; Terminator::Throw(slot)
+        ///   value: eval value -> v; lhs = v; Goto(join)
+        ///   join:  fall through
+        /// Unblocks `parity/135-try-finally` whose try-body opens with
+        /// `result = if (n < 0) throw IllegalArgumentException("neg")
+        /// else n * 2` — without this arm the whole try-stmt's body
+        /// lower returns None and the function emits no MIR.
+        AssignWithIfThrow,
     }
     let mut i: usize = 0;
     while i < body_children.len() {
@@ -18620,6 +18634,38 @@ fn lower_loop_body_blocks(
             if matches!(expr, KtExpr::Try(_)) {
                 special_at = Some((j, Special::TryStmt));
                 break;
+            }
+            // `name = if (cond) <throw> else value` (or mirror) — the
+            // if-RHS has a throwing arm; rich-expr lowering can't model
+            // the diverging branch in a single slot. Detect and lower
+            // via Special::AssignWithIfThrow as a 3-block CFG.
+            if let KtExpr::Binary(b) = expr {
+                if b.operation().map(|o| o.text()).as_deref() == Some("=") {
+                    if let (Some(KtExpr::Reference(_)), Some(rhs)) =
+                        (b.lhs().map(unwrap_parens), b.rhs().map(unwrap_parens))
+                    {
+                        if let KtExpr::If(if_e) = rhs {
+                            let then_arm = if_e
+                                .then_branch()
+                                .and_then(|t| t.expression())
+                                .map(unwrap_parens);
+                            let else_arm = if_e
+                                .else_branch()
+                                .and_then(|e| e.expression())
+                                .map(unwrap_parens);
+                            let arm_is_throw = |a: &Option<KtExpr<'_>>| -> bool {
+                                matches!(a.map(unwrap_parens), Some(KtExpr::Throw(_)))
+                            };
+                            if (arm_is_throw(&then_arm) || arm_is_throw(&else_arm))
+                                && then_arm.is_some()
+                                && else_arm.is_some()
+                            {
+                                special_at = Some((j, Special::AssignWithIfThrow));
+                                break;
+                            }
+                        }
+                    }
+                }
             }
             if matches!(expr, KtExpr::While(_)) {
                 special_at = Some((j, Special::NestedWhile));
@@ -19126,6 +19172,183 @@ fn lower_loop_body_blocks(
                 });
                 return Some(blocks);
             }
+            Some((j, Special::AssignWithIfThrow)) => {
+                // `name = if (cond) <throw> else value` (or mirror).
+                // CFG layout (mirrors PropertyWithIfInit's throw-arm
+                // path but writes into an EXISTING `name` slot rather
+                // than allocating a fresh prop slot):
+                //   pre:   cur_stmts; eval cond -> cmp;
+                //          Branch(cmp, then_block, else_block)
+                //   throw: eval throw expr -> slot; Terminator::Throw(slot)
+                //   value: eval value -> v; lhs = v; Goto(join)
+                //   join:  fall through
+                let stmt_node = body_children[j];
+                let KtExpr::Binary(b) = KtExpr::cast(stmt_node)? else {
+                    return None;
+                };
+                let lhs_ref = match b.lhs().map(unwrap_parens) {
+                    Some(KtExpr::Reference(r)) => r,
+                    _ => return None,
+                };
+                let lhs_name = lhs_ref.name()?;
+                let lhs_slot = name_to_local
+                    .iter()
+                    .rev()
+                    .find(|(n, _)| n == lhs_name)
+                    .map(|(_, l)| *l)?;
+                let rhs = b.rhs().map(unwrap_parens)?;
+                let KtExpr::If(if_e) = rhs else {
+                    return None;
+                };
+                let cond_expr = if_e
+                    .condition()
+                    .and_then(|c| c.expression())
+                    .map(unwrap_parens)?;
+                let then_arm = if_e
+                    .then_branch()
+                    .and_then(|t| t.expression())
+                    .map(unwrap_parens)?;
+                let else_arm = if_e
+                    .else_branch()
+                    .and_then(|e| e.expression())
+                    .map(unwrap_parens)?;
+                let then_is_throw = matches!(then_arm, KtExpr::Throw(_));
+                let else_is_throw = matches!(else_arm, KtExpr::Throw(_));
+                if !then_is_throw && !else_is_throw {
+                    return None;
+                }
+                let snap = name_to_local.clone();
+                let lookup = |n: &str| -> Option<LocalId> {
+                    snap.iter()
+                        .rev()
+                        .find(|(name, _)| name == n)
+                        .map(|(_, l)| *l)
+                };
+                let cmp_slot = lower_rich_expr_to_slot(
+                    cond_expr,
+                    &lookup,
+                    fn_lookup_ref,
+                    next_slot,
+                    &mut cur_stmts,
+                    local_tys,
+                    strings,
+                )?;
+
+                // Lower an arm. Returns either (stmts, Throw slot) or
+                // (stmts, Value slot, store-to-lhs marker).
+                let lower_throw_arm = |arm: KtExpr<'_>,
+                                       name_snap: &[(String, LocalId)],
+                                       next_slot: &mut u32,
+                                       local_tys: &mut Vec<Ty>,
+                                       strings: &mut Vec<String>|
+                 -> Option<(Vec<MStmt>, LocalId)> {
+                    let KtExpr::Throw(t) = arm else {
+                        return None;
+                    };
+                    let inner = skotch_ast::children(t.syntax())
+                        .iter()
+                        .find_map(KtExpr::cast)
+                        .map(unwrap_parens)?;
+                    let mut stmts: Vec<MStmt> = Vec::new();
+                    let lookup2 = |n: &str| -> Option<LocalId> {
+                        name_snap
+                            .iter()
+                            .rev()
+                            .find(|(name, _)| name == n)
+                            .map(|(_, l)| *l)
+                    };
+                    let slot = lower_rich_expr_to_slot(
+                        inner,
+                        &lookup2,
+                        fn_lookup_ref,
+                        next_slot,
+                        &mut stmts,
+                        local_tys,
+                        strings,
+                    )?;
+                    Some((stmts, slot))
+                };
+                let lower_value_arm = |arm: KtExpr<'_>,
+                                       name_snap: &[(String, LocalId)],
+                                       next_slot: &mut u32,
+                                       local_tys: &mut Vec<Ty>,
+                                       strings: &mut Vec<String>|
+                 -> Option<Vec<MStmt>> {
+                    let mut stmts: Vec<MStmt> = Vec::new();
+                    let lookup2 = |n: &str| -> Option<LocalId> {
+                        name_snap
+                            .iter()
+                            .rev()
+                            .find(|(name, _)| name == n)
+                            .map(|(_, l)| *l)
+                    };
+                    let v = lower_rich_expr_to_slot(
+                        arm,
+                        &lookup2,
+                        fn_lookup_ref,
+                        next_slot,
+                        &mut stmts,
+                        local_tys,
+                        strings,
+                    )?;
+                    stmts.push(MStmt::Assign {
+                        dest: lhs_slot,
+                        value: skotch_mir::Rvalue::Local(v),
+                    });
+                    Some(stmts)
+                };
+
+                let name_snap = name_to_local.clone();
+                let (then_stmts, then_term) = if then_is_throw {
+                    let (s, slot) =
+                        lower_throw_arm(then_arm, &name_snap, next_slot, local_tys, strings)?;
+                    (s, Terminator::Throw(slot))
+                } else {
+                    let s = lower_value_arm(then_arm, &name_snap, next_slot, local_tys, strings)?;
+                    // Placeholder terminator — wired to join below.
+                    (s, Terminator::Goto(0))
+                };
+                let (else_stmts, else_term) = if else_is_throw {
+                    let (s, slot) =
+                        lower_throw_arm(else_arm, &name_snap, next_slot, local_tys, strings)?;
+                    (s, Terminator::Throw(slot))
+                } else {
+                    let s = lower_value_arm(else_arm, &name_snap, next_slot, local_tys, strings)?;
+                    (s, Terminator::Goto(0))
+                };
+
+                let cond_block_id = block_offset + blocks.len() as u32;
+                let then_block_id = cond_block_id + 1;
+                let else_block_id = then_block_id + 1;
+                let join_block_id = else_block_id + 1;
+                blocks.push(BasicBlock {
+                    stmts: std::mem::take(&mut cur_stmts),
+                    terminator: Terminator::Branch {
+                        cond: cmp_slot,
+                        then_block: then_block_id,
+                        else_block: else_block_id,
+                    },
+                });
+                let then_term_wired = match then_term {
+                    Terminator::Goto(_) => Terminator::Goto(join_block_id),
+                    other => other,
+                };
+                blocks.push(BasicBlock {
+                    stmts: then_stmts,
+                    terminator: then_term_wired,
+                });
+                let else_term_wired = match else_term {
+                    Terminator::Goto(_) => Terminator::Goto(join_block_id),
+                    other => other,
+                };
+                blocks.push(BasicBlock {
+                    stmts: else_stmts,
+                    terminator: else_term_wired,
+                });
+                let _ = join_block_id;
+                i = j + 1;
+                continue;
+            }
             Some((j, Special::TryStmt)) => {
                 // `try { try_body } catch (e: T) { catch_body }` as
                 // a statement. Build a 4-block CFG:
@@ -19190,9 +19413,23 @@ fn lower_loop_body_blocks(
                 let snap_strings = strings.len();
                 let snap_names = name_to_local.len();
 
-                // Pre-lower the try-body and catch-body OFF-LINE
-                // (without modifying `blocks` yet), so we can bail
-                // safely if either fails.
+                // Pre-lower the try-body OFF-LINE (without modifying
+                // `blocks` yet), so we can bail safely if it fails.
+                // Try the flat lowering first (most try-bodies have no
+                // internal control flow); fall back to the CFG-aware
+                // `lower_loop_body_blocks` when the flat path bails on
+                // a CFG-shaped statement (e.g. `result = if (c) throw
+                // E else value` — that statement IS expressible by
+                // `lower_loop_body_blocks` via Special::AssignWithIfThrow
+                // but not by the flat `lower_loop_body`).
+                //
+                // `try_body_blocks` is Some(vec) when we're using the
+                // CFG path: in that case `try_stmts` is the FIRST
+                // block's stmts (which becomes our `try` block) and
+                // `try_body_blocks` carries any extra blocks that
+                // must be appended after the try block. The exception
+                // table is widened to cover the full range. The final
+                // block in the CFG falls through to `join_id`.
                 let try_children: Vec<&skotch_sil::SilNode> =
                     skotch_ast::children(try_block_ast.syntax())
                         .iter()
@@ -19206,20 +19443,52 @@ fn lower_loop_body_blocks(
                     fn_lookup_ref,
                     function_param_names,
                 );
-                let try_stmts = match try_stmts_opt {
-                    Some(v) => v,
+                // When `try_stmts_opt` is Some, the entire try body is
+                // a single block's worth of flat statements. When None,
+                // we attempt the CFG-aware lowering: the result is a
+                // Vec<BasicBlock> where the last block's sentinel
+                // terminator marks "fall through to join". We carry
+                // the full vec through to layout time.
+                let try_body_cfg: Option<Vec<BasicBlock>> = match &try_stmts_opt {
+                    Some(_) => None,
                     None => {
-                        trace_bail!(
-                            "TryStmt: try-body lower_loop_body returned None — skipping try-catch"
+                        const SENT_JOIN_TRY: u32 = 0xfffffffc;
+                        let provisional_offset = block_offset + blocks.len() as u32 + 1;
+                        let r = lower_loop_body_blocks(
+                            &try_children,
+                            name_to_local,
+                            next_slot,
+                            local_tys,
+                            strings,
+                            fn_lookup_ref,
+                            function_param_names,
+                            provisional_offset,
+                            SENT_JOIN_TRY,
+                            SENT_JOIN_TRY,
                         );
-                        *next_slot = snap_next_slot;
-                        local_tys.truncate(snap_local_tys);
-                        strings.truncate(snap_strings);
-                        name_to_local.truncate(snap_names);
-                        i = j + 1;
-                        continue;
+                        let Some(blks) = r else {
+                            trace_bail!(
+                                "TryStmt: try-body lower returned None — skipping try-catch"
+                            );
+                            *next_slot = snap_next_slot;
+                            local_tys.truncate(snap_local_tys);
+                            strings.truncate(snap_strings);
+                            name_to_local.truncate(snap_names);
+                            i = j + 1;
+                            continue;
+                        };
+                        if blks.is_empty() {
+                            *next_slot = snap_next_slot;
+                            local_tys.truncate(snap_local_tys);
+                            strings.truncate(snap_strings);
+                            name_to_local.truncate(snap_names);
+                            i = j + 1;
+                            continue;
+                        }
+                        Some(blks)
                     }
                 };
+                let try_stmts = try_stmts_opt.unwrap_or_default();
 
                 let e_slot = LocalId(*next_slot);
                 *next_slot += 1;
@@ -19254,27 +19523,164 @@ fn lower_loop_body_blocks(
                 };
                 name_to_local.truncate(snap_names);
 
-                // Block IDs (we'll push 3 blocks: pre, try_body, handler;
-                // the join block becomes whatever the next iteration of
-                // the outer while-loop produces).
+                // Optional `finally` block — pre-lower three times so
+                // we can inline a copy at end-of-try, end-of-catch, and
+                // inside the synthetic catch-all rethrow handler. Each
+                // invocation gets its own fresh slot allocation (the
+                // finally body may declare locals); when finally is
+                // absent each variant is `None` and is treated as an
+                // empty stmt list.
+                //
+                // Finally lowering uses `lower_loop_body` (flat) for
+                // each copy. If any copy fails we fall back to the
+                // pre-feature behavior of silently skipping the entire
+                // try-catch — keeps a not-yet-handled finally shape
+                // from killing the enclosing function.
+                let finally_block_ast = t.finally().and_then(|f| f.body());
+                let lower_finally_copy = |name_to_local: &mut Vec<(String, LocalId)>,
+                                          next_slot: &mut u32,
+                                          local_tys: &mut Vec<Ty>,
+                                          strings: &mut Vec<String>|
+                 -> Option<Vec<MStmt>> {
+                    let Some(blk) = finally_block_ast else {
+                        return Some(Vec::new());
+                    };
+                    let kids: Vec<&skotch_sil::SilNode> =
+                        skotch_ast::children(blk.syntax()).iter().collect();
+                    let snap_names_local = name_to_local.len();
+                    let r = lower_loop_body(
+                        &kids,
+                        name_to_local,
+                        next_slot,
+                        local_tys,
+                        strings,
+                        fn_lookup_ref,
+                        function_param_names,
+                    );
+                    name_to_local.truncate(snap_names_local);
+                    r
+                };
+                let mut try_finally_stmts: Vec<MStmt> = Vec::new();
+                let mut catch_finally_stmts: Vec<MStmt> = Vec::new();
+                let mut rethrow_finally_stmts: Vec<MStmt> = Vec::new();
+                let has_finally = finally_block_ast.is_some();
+                if has_finally {
+                    let v1 = match lower_finally_copy(name_to_local, next_slot, local_tys, strings)
+                    {
+                        Some(v) => v,
+                        None => {
+                            trace_bail!(
+                                "TryStmt: finally-body lower (try-fallthrough copy) returned None"
+                            );
+                            *next_slot = snap_next_slot;
+                            local_tys.truncate(snap_local_tys);
+                            strings.truncate(snap_strings);
+                            name_to_local.truncate(snap_names);
+                            i = j + 1;
+                            continue;
+                        }
+                    };
+                    let v2 = match lower_finally_copy(name_to_local, next_slot, local_tys, strings)
+                    {
+                        Some(v) => v,
+                        None => {
+                            trace_bail!(
+                                "TryStmt: finally-body lower (catch-fallthrough copy) returned None"
+                            );
+                            *next_slot = snap_next_slot;
+                            local_tys.truncate(snap_local_tys);
+                            strings.truncate(snap_strings);
+                            name_to_local.truncate(snap_names);
+                            i = j + 1;
+                            continue;
+                        }
+                    };
+                    let v3 = match lower_finally_copy(name_to_local, next_slot, local_tys, strings)
+                    {
+                        Some(v) => v,
+                        None => {
+                            trace_bail!(
+                                "TryStmt: finally-body lower (catchall copy) returned None"
+                            );
+                            *next_slot = snap_next_slot;
+                            local_tys.truncate(snap_local_tys);
+                            strings.truncate(snap_strings);
+                            name_to_local.truncate(snap_names);
+                            i = j + 1;
+                            continue;
+                        }
+                    };
+                    try_finally_stmts = v1;
+                    catch_finally_stmts = v2;
+                    rethrow_finally_stmts = v3;
+                }
+
+                // Block IDs. The base layout is (pre, try_body[, extra
+                // try blocks if CFG fallback was used], handler[,
+                // catchall_rethrow if finally]). Join becomes whatever
+                // the next iteration of the outer while-loop produces.
+                let cfg_block_count = try_body_cfg.as_ref().map(|v| v.len() as u32).unwrap_or(0);
+                let try_total_blocks = if try_body_cfg.is_some() {
+                    cfg_block_count
+                } else {
+                    1
+                };
                 let pre_id = block_offset + blocks.len() as u32;
                 let try_id = pre_id + 1;
-                let handler_id = pre_id + 2;
-                let join_id = pre_id + 3;
+                let try_end_excl = try_id + try_total_blocks;
+                let handler_id = try_end_excl;
+                let catchall_id = if has_finally {
+                    handler_id + 1
+                } else {
+                    u32::MAX
+                };
+                let join_id = if has_finally {
+                    catchall_id + 1
+                } else {
+                    handler_id + 1
+                };
 
                 blocks.push(BasicBlock {
                     stmts: std::mem::take(&mut cur_stmts),
                     terminator: Terminator::Goto(try_id),
                 });
-                blocks.push(BasicBlock {
-                    stmts: try_stmts,
-                    terminator: Terminator::Goto(join_id),
-                });
+
+                const SENT_JOIN_TRY: u32 = 0xfffffffc;
+                if let Some(cfg_blks) = try_body_cfg {
+                    // Walk every CFG block, rewriting sentinel
+                    // fall-through terminators to Goto(join_id) and
+                    // appending the finally code BEFORE the goto in
+                    // each fall-through block. Real terminators
+                    // (Throw, ReturnValue, internal Branch / Goto
+                    // into other CFG blocks) are preserved as-is.
+                    for b in cfg_blks {
+                        let mut stmts = b.stmts;
+                        let term = match b.terminator {
+                            Terminator::Goto(t) if t == SENT_JOIN_TRY => {
+                                stmts.extend(try_finally_stmts.iter().cloned());
+                                Terminator::Goto(join_id)
+                            }
+                            other => other,
+                        };
+                        blocks.push(BasicBlock {
+                            stmts,
+                            terminator: term,
+                        });
+                    }
+                } else {
+                    let mut full_try_stmts = try_stmts;
+                    full_try_stmts.extend(try_finally_stmts);
+                    blocks.push(BasicBlock {
+                        stmts: full_try_stmts,
+                        terminator: Terminator::Goto(join_id),
+                    });
+                }
                 let mut handler_stmts: Vec<MStmt> = vec![MStmt::Assign {
                     dest: e_slot,
                     value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Null),
                 }];
                 handler_stmts.extend(catch_stmts);
+                handler_stmts.extend(catch_finally_stmts);
                 blocks.push(BasicBlock {
                     stmts: handler_stmts,
                     terminator: Terminator::Goto(join_id),
@@ -19282,10 +19688,54 @@ fn lower_loop_body_blocks(
 
                 register_exception_handler(skotch_mir::ExceptionHandler {
                     try_start_block: try_id,
-                    try_end_block: try_id + 1,
+                    try_end_block: try_end_excl,
                     handler_block: handler_id,
                     catch_type: Some(catch_internal),
                 });
+
+                if has_finally {
+                    // Catch-all rethrow handler: astore the throwable,
+                    // run the finally code, then rethrow. The placeholder
+                    // Assign{slot, Null} pattern (same shape as the
+                    // typed catch handler) tells the backend to emit
+                    // `astore <slot>` at handler entry to consume the
+                    // throwable left on the stack.
+                    let throwable_slot = LocalId(*next_slot);
+                    *next_slot += 1;
+                    local_tys.push(Ty::Class("java/lang/Throwable".to_string()));
+                    let mut rethrow_stmts: Vec<MStmt> = vec![MStmt::Assign {
+                        dest: throwable_slot,
+                        value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Null),
+                    }];
+                    rethrow_stmts.extend(rethrow_finally_stmts);
+                    blocks.push(BasicBlock {
+                        stmts: rethrow_stmts,
+                        terminator: Terminator::Throw(throwable_slot),
+                    });
+                    // Catch-all spans BOTH the try-body and the typed
+                    // catch handler (so a throw inside the catch arm
+                    // still runs finally). It also covers itself
+                    // (self-loop) — mirrors the kotlinc exception
+                    // table shape from the parity reference.
+                    register_exception_handler(skotch_mir::ExceptionHandler {
+                        try_start_block: try_id,
+                        try_end_block: try_end_excl,
+                        handler_block: catchall_id,
+                        catch_type: None,
+                    });
+                    register_exception_handler(skotch_mir::ExceptionHandler {
+                        try_start_block: handler_id,
+                        try_end_block: handler_id + 1,
+                        handler_block: catchall_id,
+                        catch_type: None,
+                    });
+                    register_exception_handler(skotch_mir::ExceptionHandler {
+                        try_start_block: catchall_id,
+                        try_end_block: catchall_id + 1,
+                        handler_block: catchall_id,
+                        catch_type: None,
+                    });
+                }
 
                 i = j + 1;
                 continue;
