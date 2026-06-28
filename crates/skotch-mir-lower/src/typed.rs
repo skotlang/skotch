@@ -1380,6 +1380,12 @@ struct TopLevelFnSig {
     func_id: skotch_mir::FuncId,
     param_tys: Vec<Ty>,
     return_ty: Ty,
+    /// Parameter names. Empty when the source-side AST didn't expose
+    /// names (cross-file stubs without metadata, lambdas). Used by the
+    /// top-level fn call arm in `lower_rich_expr_to_slot` to reorder
+    /// named-arg call sites like `greet(count = 3)` into the target's
+    /// declared positional order before defaulting fixup runs.
+    param_names: Vec<String>,
 }
 
 thread_local! {
@@ -1400,6 +1406,35 @@ fn record_fn_sig(name: &str, sig: TopLevelFnSig) {
 
 fn lookup_fn_sig(name: &str) -> Option<TopLevelFnSig> {
     FN_SIG_LOOKUP.with(|c| c.borrow().get(name).cloned())
+}
+
+thread_local! {
+    /// FIFO queue of (target_func_id, args_len, mask) tuples recorded
+    /// by the named-arg reorder arm in `lower_rich_expr_to_slot`. The
+    /// default-arg fixup pass walks every `CallKind::Static` stmt and
+    /// pops the matching head entry when its target/arg-count line
+    /// up — that way we can plumb a precomputed mask through without
+    /// needing to know the block/stmt index at the lowering site.
+    /// The queue is drained per `MirFunction` so order matches the
+    /// fixup pass's traversal order (same as lowering order).
+    static PENDING_NAMED_DEFAULT_MASKS:
+        std::cell::RefCell<std::collections::VecDeque<(u32, u32, u32)>> =
+        const { std::cell::RefCell::new(std::collections::VecDeque::new()) };
+}
+
+fn push_pending_named_default_mask(fid: skotch_mir::FuncId, args_len: u32, mask: u32) {
+    PENDING_NAMED_DEFAULT_MASKS.with(|q| q.borrow_mut().push_back((fid.0, args_len, mask)));
+}
+
+fn take_pending_named_default_mask(fid: skotch_mir::FuncId, args_len: u32) -> Option<u32> {
+    PENDING_NAMED_DEFAULT_MASKS.with(|q| {
+        let mut q = q.borrow_mut();
+        let pos = q
+            .iter()
+            .position(|(f, n, _)| *f == fid.0 && *n == args_len)?;
+        let (_, _, m) = q.remove(pos)?;
+        Some(m)
+    })
 }
 
 struct FnSigLookupScope {
@@ -4344,6 +4379,14 @@ pub fn lower_file(
                     let param_tys: Vec<Ty> =
                         typed_fn.map(|tf| tf.param_tys.clone()).unwrap_or_default();
                     let return_ty = typed_fn.map(|tf| tf.return_ty.clone()).unwrap_or(Ty::Unit);
+                    let param_names: Vec<String> = f
+                        .value_parameter_list()
+                        .map(|pl| {
+                            pl.parameters()
+                                .map(|p| p.name().unwrap_or("").to_string())
+                                .collect()
+                        })
+                        .unwrap_or_default();
                     if let Some((fid, _)) = fn_lookup.get(name) {
                         record_fn_sig(
                             name,
@@ -4351,6 +4394,7 @@ pub fn lower_file(
                                 func_id: *fid,
                                 param_tys,
                                 return_ty,
+                                param_names,
                             },
                         );
                     }
@@ -8190,6 +8234,10 @@ pub fn lower_file(
             // missing args at the call site. Non-literal defaults
             // (function calls, complex exprs) stay as None — the
             // backend currently falls through to a 0/null fill.
+            // String literal defaults route through
+            // `lower_const_or_string_init` so the StringId is interned
+            // into `module.strings` and the synthetic shim can emit
+            // `ldc <const>` for `String = "world"`-style defaults.
             let param_defaults_v: Vec<Option<skotch_mir::MirConst>> = f
                 .value_parameter_list()
                 .map(|pl| {
@@ -8197,7 +8245,7 @@ pub fn lower_file(
                         .map(|p| {
                             p.default_value()
                                 .map(unwrap_parens)
-                                .and_then(lower_const_init_typed)
+                                .and_then(|e| lower_const_or_string_init(e, &mut module.strings))
                         })
                         .collect()
                 })
@@ -8904,7 +8952,25 @@ pub fn lower_file(
                     let Some((total, has_default)) = fn_param_shape.get(&target_fid.0) else {
                         continue;
                     };
-                    if args.len() >= *total {
+                    // Named-arg reorder path: if the lowerer pre-recorded
+                    // a mask for this call site (args fully filled with
+                    // a null dummy in hole positions), pop it and emit.
+                    // The fingerprint is (target_fid, args.len()) — calls
+                    // are popped in lowering order so first-match works
+                    // for repeated identical-shape calls.
+                    if args.len() == *total {
+                        if let Some(named_mask) =
+                            take_pending_named_default_mask(*target_fid, args.len() as u32)
+                        {
+                            f.default_call_masks.push((
+                                block_idx as u32,
+                                stmt_idx as u32,
+                                named_mask,
+                            ));
+                        }
+                        continue;
+                    }
+                    if args.len() > *total {
                         continue;
                     }
                     let missing_start = args.len();
@@ -8940,6 +9006,11 @@ pub fn lower_file(
         }
         fixup_default_calls(&mut c.constructor, &fn_param_shape);
     }
+    // Drop any stragglers — the lowerer pushes one entry per named-arg
+    // default call; if a downstream `?` bailed without the fixup pass
+    // seeing the matching call, the entry would otherwise leak into
+    // the next module-lowering session.
+    PENDING_NAMED_DEFAULT_MASKS.with(|q| q.borrow_mut().clear());
 
     // Vararg call-site pack: snapshot `(vararg_index, vararg_elem_ty)`
     // for every callable that declared a vararg parameter, then walk
@@ -28988,7 +29059,46 @@ fn try_lower_multi_stmt_block_with_offset(
                             // framework). Same fall-through used by
                             // the `other` arm below for non-trivial
                             // arg shapes.
-                            if inner_call.lambda_argument().is_some() {
+                            // Any named arg (or fewer args than the
+                            // target's param count when the target has
+                            // defaults) must route through the rich
+                            // lowerer — this fast path neither reorders
+                            // by name nor pads missing-default slots, so
+                            // a call like `println(greet(count = 3))`
+                            // would emit args in source order without
+                            // any default-arg mask, and the `count`
+                            // value would land in slot 0 (name) at the
+                            // target → operand-stack-type-mismatch
+                            // VerifyError.
+                            let inner_uses_named = inner_call
+                                .value_argument_list()
+                                .map(|al| al.arguments().any(|a| a.name().is_some()))
+                                .unwrap_or(false);
+                            let inner_underfilled = (|| {
+                                let cn = match inner_call.callee()? {
+                                    KtExpr::Reference(r) => r.name()?,
+                                    _ => return None,
+                                };
+                                let (fid, _ret) = fn_lookup.get(cn)?;
+                                let total = lookup_fn_sig(cn)
+                                    .map(|s| s.param_names.len())
+                                    .filter(|n| *n > 0)?;
+                                let supplied = inner_call
+                                    .value_argument_list()
+                                    .map(|al| al.arguments().count())
+                                    .unwrap_or(0);
+                                let _ = fid;
+                                if supplied < total {
+                                    Some(())
+                                } else {
+                                    None
+                                }
+                            })()
+                            .is_some();
+                            if inner_call.lambda_argument().is_some()
+                                || inner_uses_named
+                                || inner_underfilled
+                            {
                                 let snap = name_to_local.clone();
                                 let lookup = |n: &str| -> Option<LocalId> {
                                     snap.iter()
@@ -36094,18 +36204,124 @@ fn lower_rich_expr_to_slot(
                         }
                     }
                     if let Some(arg_list) = call.value_argument_list() {
-                        for arg in arg_list.arguments() {
-                            let arg_e = arg.expression()?;
-                            let slot = lower_rich_expr_to_slot(
-                                arg_e,
-                                lookup_name,
-                                fn_lookup,
-                                next_slot,
-                                pre_stmts,
-                                extra_locals,
-                                strings,
-                            )?;
-                            arg_slots.push(slot);
+                        // Named-arg reorder: when the call site uses
+                        // `name = expr` for one or more args (e.g.
+                        // `greet(count = 3)` against `fun greet(name:
+                        // String = "world", count: Int = 1)`), reorder
+                        // into the target's declared positional layout.
+                        // Trailing unfilled slots ride the existing
+                        // default-arg fixup pass (it pads + ORs in the
+                        // tail bits). Interior holes (a named arg
+                        // skipped over an earlier positional slot) are
+                        // dispatched here: materialize a null dummy for
+                        // the hole and push the OR'd mask onto
+                        // PENDING_NAMED_DEFAULT_MASKS — the fixup pass
+                        // pops one entry per call whose target+arg-len
+                        // line up.
+                        let target_names: Option<Vec<String>> = lookup_fn_sig(name)
+                            .map(|s| s.param_names)
+                            .filter(|v| !v.is_empty() && !v.iter().any(|n| n.is_empty()));
+                        let any_named = arg_list.arguments().any(|a| a.name().is_some());
+                        let mut handled = false;
+                        if any_named {
+                            if let Some(target_names) = target_names {
+                                let mut named_map: rustc_hash::FxHashMap<String, KtExpr<'_>> =
+                                    rustc_hash::FxHashMap::default();
+                                let mut positional: Vec<KtExpr<'_>> = Vec::new();
+                                let mut ok = true;
+                                for a in arg_list.arguments() {
+                                    let Some(ae) = a.expression() else {
+                                        ok = false;
+                                        break;
+                                    };
+                                    if let Some(n) = a.name() {
+                                        named_map.insert(n.to_string(), ae);
+                                    } else {
+                                        positional.push(ae);
+                                    }
+                                }
+                                if ok
+                                    && named_map
+                                        .keys()
+                                        .all(|n| target_names.iter().any(|p| p == n))
+                                {
+                                    let mut next_pos = 0usize;
+                                    let mut hole_mask: u32 = 0;
+                                    for (i, pname) in target_names.iter().enumerate() {
+                                        let opt_e = named_map.get(pname).copied().or_else(|| {
+                                            if next_pos < positional.len() {
+                                                let e = positional[next_pos];
+                                                next_pos += 1;
+                                                Some(e)
+                                            } else {
+                                                None
+                                            }
+                                        });
+                                        match opt_e {
+                                            Some(arg_e) => {
+                                                let slot = lower_rich_expr_to_slot(
+                                                    arg_e,
+                                                    lookup_name,
+                                                    fn_lookup,
+                                                    next_slot,
+                                                    pre_stmts,
+                                                    extra_locals,
+                                                    strings,
+                                                )?;
+                                                arg_slots.push(slot);
+                                            }
+                                            None => {
+                                                let any_later = target_names
+                                                    .iter()
+                                                    .enumerate()
+                                                    .skip(i + 1)
+                                                    .any(|(_, nm)| named_map.contains_key(nm))
+                                                    || next_pos < positional.len();
+                                                if any_later {
+                                                    let dummy = LocalId(*next_slot);
+                                                    *next_slot += 1;
+                                                    extra_locals.push(Ty::Any);
+                                                    pre_stmts.push(MStmt::Assign {
+                                                        dest: dummy,
+                                                        value: skotch_mir::Rvalue::Const(
+                                                            skotch_mir::MirConst::Null,
+                                                        ),
+                                                    });
+                                                    arg_slots.push(dummy);
+                                                    if i < 32 {
+                                                        hole_mask |= 1u32 << i;
+                                                    }
+                                                } else {
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                    }
+                                    if hole_mask != 0 {
+                                        push_pending_named_default_mask(
+                                            *fid,
+                                            arg_slots.len() as u32,
+                                            hole_mask,
+                                        );
+                                    }
+                                    handled = true;
+                                }
+                            }
+                        }
+                        if !handled {
+                            for arg in arg_list.arguments() {
+                                let arg_e = arg.expression()?;
+                                let slot = lower_rich_expr_to_slot(
+                                    arg_e,
+                                    lookup_name,
+                                    fn_lookup,
+                                    next_slot,
+                                    pre_stmts,
+                                    extra_locals,
+                                    strings,
+                                )?;
+                                arg_slots.push(slot);
+                            }
                         }
                     }
                     // Trailing lambda arg: `runPipeline(10, steps) {
