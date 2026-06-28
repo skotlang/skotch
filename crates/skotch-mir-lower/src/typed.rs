@@ -16914,6 +16914,81 @@ fn lower_loop_body(
                                     });
                                     continue;
                                 }
+                                // Detect Map receivers: when the array slot's
+                                // Ty is a Map/MutableMap, dispatch to
+                                // `Map.put(K, V)V` via VirtualJava with the
+                                // generic-erased `(LObject;LObject;)LObject;`
+                                // descriptor. Autobox both key and value when
+                                // they are primitive. Covers
+                                // `m[key] = value` for `mutableMapOf<K,V>()`
+                                // (parity 133-hashmap-ops).
+                                let is_map_recv = matches!(
+                                    &arr_ty,
+                                    Ty::Class(c) if matches!(
+                                        c.as_str(),
+                                        "java/util/Map"
+                                            | "kotlin/collections/Map"
+                                            | "kotlin/collections/MutableMap"
+                                            | "java/util/HashMap"
+                                            | "java/util/LinkedHashMap"
+                                    )
+                                );
+                                if is_map_recv {
+                                    let autobox = |slot: LocalId,
+                                                   next_slot: &mut u32,
+                                                   local_tys: &mut Vec<Ty>,
+                                                   body_mstmts: &mut Vec<MStmt>|
+                                     -> LocalId {
+                                        let ty = slot_ty_with_param_fallback(slot.0, local_tys);
+                                        let (cls, prim) = match &ty {
+                                            Ty::Int => ("java/lang/Integer", "I"),
+                                            Ty::Long => ("java/lang/Long", "J"),
+                                            Ty::Float => ("java/lang/Float", "F"),
+                                            Ty::Double => ("java/lang/Double", "D"),
+                                            Ty::Bool => ("java/lang/Boolean", "Z"),
+                                            Ty::Byte => ("java/lang/Byte", "B"),
+                                            Ty::Short => ("java/lang/Short", "S"),
+                                            Ty::Char => ("java/lang/Character", "C"),
+                                            _ => return slot,
+                                        };
+                                        let boxed = LocalId(*next_slot);
+                                        *next_slot += 1;
+                                        local_tys.push(Ty::Class(cls.to_string()));
+                                        body_mstmts.push(MStmt::Assign {
+                                            dest: boxed,
+                                            value: skotch_mir::Rvalue::Call {
+                                                kind: skotch_mir::CallKind::StaticJava {
+                                                    class_name: cls.to_string(),
+                                                    method_name: "valueOf".to_string(),
+                                                    descriptor: format!("({})L{};", prim, cls),
+                                                },
+                                                args: vec![slot],
+                                            },
+                                        });
+                                        boxed
+                                    };
+                                    let boxed_key =
+                                        autobox(index_slot, next_slot, local_tys, &mut body_mstmts);
+                                    let boxed_val =
+                                        autobox(value_slot, next_slot, local_tys, &mut body_mstmts);
+                                    let unused = LocalId(*next_slot);
+                                    *next_slot += 1;
+                                    local_tys.push(Ty::Any);
+                                    body_mstmts.push(MStmt::Assign {
+                                        dest: unused,
+                                        value: skotch_mir::Rvalue::Call {
+                                            kind: skotch_mir::CallKind::VirtualJava {
+                                                class_name: "java/util/Map".to_string(),
+                                                method_name: "put".to_string(),
+                                                descriptor:
+                                                    "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;"
+                                                        .to_string(),
+                                            },
+                                            args: vec![array_slot, boxed_key, boxed_val],
+                                        },
+                                    });
+                                    continue;
+                                }
                                 let unused = LocalId(*next_slot);
                                 *next_slot += 1;
                                 local_tys.push(Ty::Unit);
