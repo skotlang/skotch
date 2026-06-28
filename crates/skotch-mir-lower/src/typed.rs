@@ -33077,6 +33077,46 @@ fn try_lower_multi_stmt_block_with_offset(
                                             },
                                         });
                                         slot
+                                    } else if matches!(
+                                        cname.as_str(),
+                                        "java/util/List"
+                                            | "java/util/Set"
+                                            | "java/util/Map"
+                                            | "java/util/Collection"
+                                            | "java/util/Iterator"
+                                    ) && matches!(prop_n, "size" | "isEmpty")
+                                    {
+                                        // JDK collections expose `size` /
+                                        // `isEmpty` as Java methods, not
+                                        // Kotlin getters. Emit a direct
+                                        // VirtualJava call so the call
+                                        // site dispatches `Set.size()I` /
+                                        // `Set.isEmpty()Z` instead of
+                                        // falling through to the generic
+                                        // GetField path (which emits a
+                                        // `getfield Set.size:Ljava/lang/Object;`
+                                        // that crashes at runtime with
+                                        // NoSuchFieldError).
+                                        let (method_n, desc, ret_ty) = match prop_n {
+                                            "size" => ("size", "()I", Ty::Int),
+                                            "isEmpty" => ("isEmpty", "()Z", Ty::Bool),
+                                            _ => unreachable!(),
+                                        };
+                                        let slot = LocalId(next_slot);
+                                        next_slot += 1;
+                                        local_tys.push(ret_ty);
+                                        stmts.push(MStmt::Assign {
+                                            dest: slot,
+                                            value: skotch_mir::Rvalue::Call {
+                                                kind: skotch_mir::CallKind::VirtualJava {
+                                                    class_name: cname,
+                                                    method_name: method_n.to_string(),
+                                                    descriptor: desc.to_string(),
+                                                },
+                                                args: vec![recv_slot],
+                                            },
+                                        });
+                                        slot
                                     } else {
                                         let getter_name = property_getter_name(prop_n);
                                         let slot_ty = class_method_return_ty(&cname, &getter_name)

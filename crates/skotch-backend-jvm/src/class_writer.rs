@@ -18461,7 +18461,20 @@ fn walk_block(
                         ) || matches!(
                             class_name.as_str(),
                             "java/util/Map" | "java/util/HashMap" | "java/util/LinkedHashMap"
-                        ) && matches!(method_name, "get" | "remove"))
+                        ) && matches!(method_name, "get" | "remove")
+                        // Set/Collection/Iterable `remove(Object)`. `List.remove`
+                        // is intentionally NOT in this set — kotlinc dispatches
+                        // `list.remove(x)` to the positional `remove(int)` overload
+                        // when x is Int. Adding List here would erase the int
+                        // descriptor and box the index.
+                        || matches!(
+                            class_name.as_str(),
+                            "java/util/Set"
+                                | "java/util/HashSet"
+                                | "java/util/LinkedHashSet"
+                                | "java/util/Collection"
+                                | "java/lang/Iterable"
+                        ) && method_name == "remove")
                             && !is_function_invoke
                             && module.find_class(class_name).is_none()
                             // 2-arg `List.add(int, Object)` has its own
@@ -18847,11 +18860,24 @@ fn walk_block(
                     );
                     let map_erased_arg_method =
                         is_map_class && matches!(method_name, "get" | "remove");
+                    // `Set/Collection/Iterable.remove(Object)`. `List.remove(int)`
+                    // is the positional-overload exception — keep it out of this
+                    // set so int args stay as `I` in the descriptor.
+                    let is_set_like_class = matches!(
+                        class_name.as_str(),
+                        "java/util/Set"
+                            | "java/util/HashSet"
+                            | "java/util/LinkedHashSet"
+                            | "java/util/Collection"
+                            | "java/lang/Iterable"
+                    );
+                    let set_erased_arg_method = is_set_like_class && method_name == "remove";
                     let force_object_args = (collection_iface
                         && erased_arg_method
                         && !is_function_invoke
                         && target_method_sig.is_none())
-                        || (map_erased_arg_method && target_method_sig.is_none());
+                        || (map_erased_arg_method && target_method_sig.is_none())
+                        || (set_erased_arg_method && target_method_sig.is_none());
                     // `List.set(int, Object)` — mixed signature. Index at
                     // user-pos 0 stays `I`; value at user-pos 1 becomes
                     // `Ljava/lang/Object;`. Only applies when no
