@@ -47889,6 +47889,198 @@ fn lower_simple_body(
             }
         }
     }
+    // SafeAccess on a `String?` param + Elvis expression body:
+    //   `fun maybeLen(s: String?): Int = s?.length ?: 0`
+    //
+    // The downstream user-class chain arm gates on `class_lookup` having
+    // the base type — which it never does for built-in `String`. Without
+    // this arm, `s?.length ?: 0` falls through to lower_rich's straight-
+    // line Elvis which uses `Objects.requireNonNullElse(Object, Object)`
+    // and unconditionally dereferences the SafeAccess receiver (NPE on
+    // null) before the Elvis can pick the alt.
+    //
+    // Emit a 3-block null-guard CFG:
+    //   block 0: null = const Null; cmp = (s == null); Branch -> alt | then
+    //   block 1 (then): len = s.length(); result = len; Goto join
+    //   block 2 (alt):  alt_v = <rhs>; result = alt_v; Goto join
+    //   block 3 (join): ReturnValue(result)
+    //
+    // Scope: base is a Reference to a single function param whose
+    // declared type is `String?`; the accessor is exactly `.length`.
+    // Mirrors the user-class chain arm's null-guard shape but uses
+    // `String.length()` rather than GetField.
+    if let KtExpr::Binary(elvis_b) = &body_expr {
+        if elvis_b.operation().map(|o| o.text()).as_deref() == Some("?:") {
+            if let (Some(lhs_raw), Some(rhs_raw)) = (elvis_b.lhs(), elvis_b.rhs()) {
+                let lhs_e = unwrap_parens(lhs_raw);
+                let rhs_e = unwrap_parens(rhs_raw);
+                if let KtExpr::SafeAccess(sa) = lhs_e {
+                    let sa_kids: Vec<KtExpr<'_>> = skotch_ast::children(sa.syntax())
+                        .iter()
+                        .filter_map(KtExpr::cast)
+                        .collect();
+                    if sa_kids.len() == 2 {
+                        let recv_e = unwrap_parens(sa_kids[0]);
+                        let accessor_e = sa_kids[1];
+                        if let (KtExpr::Reference(base_ref), KtExpr::Reference(prop_ref)) =
+                            (recv_e, accessor_e)
+                        {
+                            if let (Some(base_name), Some(prop_n)) =
+                                (base_ref.name(), prop_ref.name())
+                            {
+                                if prop_n == "length" {
+                                    let params: Vec<skotch_ast::KtValueParameter<'_>> = f
+                                        .value_parameter_list()
+                                        .map(|pl| pl.parameters().collect())
+                                        .unwrap_or_default();
+                                    if let Some((base_idx, base_param)) = params
+                                        .iter()
+                                        .enumerate()
+                                        .find(|(_, p)| p.name() == Some(base_name))
+                                    {
+                                        // Recognize `String?` (NULLABLE_TYPE wrapping
+                                        // USER_TYPE "String").
+                                        let is_nullable_string = base_param
+                                            .type_reference()
+                                            .and_then(|tr| tr.nullable_type())
+                                            .and_then(|nt| nt.inner_user_type())
+                                            .and_then(|u| u.name())
+                                            .map(|n| n == "String")
+                                            .unwrap_or(false);
+                                        if is_nullable_string {
+                                            let param_count = params.len();
+                                            let mut next_slot = param_count as u32;
+                                            let mut extra_locals: Vec<Ty> = Vec::new();
+                                            // Result Ty for `s?.length ?: <int>`
+                                            // is Int (the function's declared
+                                            // return type).
+                                            let result_ty = f
+                                                .return_type()
+                                                .and_then(|tr| tr.user_type())
+                                                .and_then(|u| u.name())
+                                                .and_then(skotch_types::ty_from_name)
+                                                .unwrap_or(Ty::Int);
+                                            let null_const_slot = LocalId(next_slot);
+                                            next_slot += 1;
+                                            extra_locals.push(Ty::Nullable(Box::new(Ty::Any)));
+                                            let null_cmp_slot = LocalId(next_slot);
+                                            next_slot += 1;
+                                            extra_locals.push(Ty::Bool);
+                                            let len_slot = LocalId(next_slot);
+                                            next_slot += 1;
+                                            extra_locals.push(Ty::Int);
+                                            let result_slot = LocalId(next_slot);
+                                            next_slot += 1;
+                                            extra_locals.push(result_ty.clone());
+
+                                            let base_slot = LocalId(base_idx as u32);
+                                            // Block 0: null cmp + branch.
+                                            let b0_stmts = vec![
+                                                skotch_mir::Stmt::Assign {
+                                                    dest: null_const_slot,
+                                                    value: skotch_mir::Rvalue::Const(
+                                                        MirConst::Null,
+                                                    ),
+                                                },
+                                                skotch_mir::Stmt::Assign {
+                                                    dest: null_cmp_slot,
+                                                    value: skotch_mir::Rvalue::BinOp {
+                                                        op: skotch_mir::BinOp::CmpEq,
+                                                        lhs: base_slot,
+                                                        rhs: null_const_slot,
+                                                    },
+                                                },
+                                            ];
+                                            let then_block_id: u32 = 1;
+                                            let alt_block_id: u32 = 2;
+                                            let join_block_id: u32 = 3;
+                                            let mut blocks: Vec<BasicBlock> = Vec::new();
+                                            blocks.push(BasicBlock {
+                                                stmts: b0_stmts,
+                                                terminator: Terminator::Branch {
+                                                    cond: null_cmp_slot,
+                                                    then_block: alt_block_id,
+                                                    else_block: then_block_id,
+                                                },
+                                            });
+                                            // Block 1 (then): String.length().
+                                            let b1_stmts = vec![
+                                                skotch_mir::Stmt::Assign {
+                                                    dest: len_slot,
+                                                    value: skotch_mir::Rvalue::Call {
+                                                        kind: skotch_mir::CallKind::VirtualJava {
+                                                            class_name: "java/lang/String"
+                                                                .to_string(),
+                                                            method_name: "length".to_string(),
+                                                            descriptor: "()I".to_string(),
+                                                        },
+                                                        args: vec![base_slot],
+                                                    },
+                                                },
+                                                skotch_mir::Stmt::Assign {
+                                                    dest: result_slot,
+                                                    value: skotch_mir::Rvalue::Local(len_slot),
+                                                },
+                                            ];
+                                            blocks.push(BasicBlock {
+                                                stmts: b1_stmts,
+                                                terminator: Terminator::Goto(join_block_id),
+                                            });
+                                            // Block 2 (alt): lower RHS via lower_rich.
+                                            let outer_param_names: Vec<String> = params
+                                                .iter()
+                                                .map(|p| p.name().unwrap_or("").to_string())
+                                                .collect();
+                                            let snap_locals: Vec<(String, LocalId)> =
+                                                outer_param_names
+                                                    .iter()
+                                                    .enumerate()
+                                                    .map(|(i, n)| (n.clone(), LocalId(i as u32)))
+                                                    .collect();
+                                            let snap = snap_locals.clone();
+                                            let lookup = |n: &str| -> Option<LocalId> {
+                                                snap.iter()
+                                                    .rev()
+                                                    .find(|(nm, _)| nm == n)
+                                                    .map(|(_, l)| *l)
+                                            };
+                                            let mut alt_stmts: Vec<skotch_mir::Stmt> = Vec::new();
+                                            let Some(alt_slot) = lower_rich_expr_to_slot(
+                                                rhs_e,
+                                                &lookup,
+                                                fn_lookup,
+                                                &mut next_slot,
+                                                &mut alt_stmts,
+                                                &mut extra_locals,
+                                                strings,
+                                            ) else {
+                                                return make_placeholder();
+                                            };
+                                            alt_stmts.push(skotch_mir::Stmt::Assign {
+                                                dest: result_slot,
+                                                value: skotch_mir::Rvalue::Local(alt_slot),
+                                            });
+                                            blocks.push(BasicBlock {
+                                                stmts: alt_stmts,
+                                                terminator: Terminator::Goto(join_block_id),
+                                            });
+                                            // Block 3 (join).
+                                            blocks.push(BasicBlock {
+                                                stmts: Vec::new(),
+                                                terminator: Terminator::ReturnValue(result_slot),
+                                            });
+                                            return (blocks, extra_locals);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // SafeAccess-chain + Elvis expression body:
     //   `fun depth(o: Outer?): Int = o?.inner?.v ?: -1`
     //
