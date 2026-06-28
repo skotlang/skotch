@@ -39407,6 +39407,158 @@ fn lower_rich_expr_to_slot(
                     Some(KtExpr::Reference(r)) => r.name(),
                     _ => None,
                 };
+                // `"<lit>".format(args)` — Kotlin's String.format(...)
+                // extension on a string literal receiver. kotlinc
+                // desugars to `java.lang.String.format(fmt, Object[])`.
+                // Without this arm, the DotQualified bails because the
+                // String literal receiver has no class-based dispatch
+                // hook below (the recv_ty_candidate path requires a
+                // local Reference) and the template that contains the
+                // expression silently drops. Box primitive args via
+                // valueOf into an Object[], then static-call
+                // java/lang/String.format. Sub-tested by
+                // parity/123-string-template-method (formatted=…).
+                if method_n == Some("format") {
+                    if let KtExpr::String(_) = &dq_exprs[0] {
+                        let fmt_slot = lower_rich_expr_to_slot(
+                            dq_exprs[0],
+                            lookup_name,
+                            fn_lookup,
+                            next_slot,
+                            pre_stmts,
+                            extra_locals,
+                            strings,
+                        )?;
+                        let arg_exprs: Vec<KtExpr<'_>> = call
+                            .value_argument_list()
+                            .map(|al| al.arguments().filter_map(|a| a.expression()).collect())
+                            .unwrap_or_default();
+                        let mut arg_slots: Vec<LocalId> = Vec::with_capacity(arg_exprs.len());
+                        let mut all_ok = true;
+                        for ae in arg_exprs {
+                            let Some(s) = lower_rich_expr_to_slot(
+                                ae,
+                                lookup_name,
+                                fn_lookup,
+                                next_slot,
+                                pre_stmts,
+                                extra_locals,
+                                strings,
+                            ) else {
+                                all_ok = false;
+                                break;
+                            };
+                            arg_slots.push(s);
+                        }
+                        if all_ok {
+                            let n = arg_slots.len() as i32;
+                            let size_slot = LocalId(*next_slot);
+                            *next_slot += 1;
+                            extra_locals.push(Ty::Int);
+                            pre_stmts.push(MStmt::Assign {
+                                dest: size_slot,
+                                value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(n)),
+                            });
+                            let arr_slot = LocalId(*next_slot);
+                            *next_slot += 1;
+                            extra_locals.push(Ty::Any);
+                            pre_stmts.push(MStmt::Assign {
+                                dest: arr_slot,
+                                value: skotch_mir::Rvalue::NewObjectArray(size_slot),
+                            });
+                            for (i, val_slot) in arg_slots.iter().enumerate() {
+                                let val_ty = slot_ty_with_param_fallback(val_slot.0, extra_locals);
+                                let store_slot = match &val_ty {
+                                    Ty::Int
+                                    | Ty::Long
+                                    | Ty::Float
+                                    | Ty::Double
+                                    | Ty::Bool
+                                    | Ty::Byte
+                                    | Ty::Short
+                                    | Ty::Char => {
+                                        let (cls, prim, boxed) = match &val_ty {
+                                            Ty::Int => {
+                                                ("java/lang/Integer", "I", "java/lang/Integer")
+                                            }
+                                            Ty::Long => ("java/lang/Long", "J", "java/lang/Long"),
+                                            Ty::Float => {
+                                                ("java/lang/Float", "F", "java/lang/Float")
+                                            }
+                                            Ty::Double => {
+                                                ("java/lang/Double", "D", "java/lang/Double")
+                                            }
+                                            Ty::Bool => {
+                                                ("java/lang/Boolean", "Z", "java/lang/Boolean")
+                                            }
+                                            Ty::Byte => ("java/lang/Byte", "B", "java/lang/Byte"),
+                                            Ty::Short => {
+                                                ("java/lang/Short", "S", "java/lang/Short")
+                                            }
+                                            Ty::Char => {
+                                                ("java/lang/Character", "C", "java/lang/Character")
+                                            }
+                                            _ => unreachable!(),
+                                        };
+                                        let boxed_slot = LocalId(*next_slot);
+                                        *next_slot += 1;
+                                        extra_locals.push(Ty::Class(boxed.to_string()));
+                                        pre_stmts.push(MStmt::Assign {
+                                            dest: boxed_slot,
+                                            value: skotch_mir::Rvalue::Call {
+                                                kind: skotch_mir::CallKind::StaticJava {
+                                                    class_name: cls.to_string(),
+                                                    method_name: "valueOf".to_string(),
+                                                    descriptor: format!("({})L{};", prim, boxed),
+                                                },
+                                                args: vec![*val_slot],
+                                            },
+                                        });
+                                        boxed_slot
+                                    }
+                                    _ => *val_slot,
+                                };
+                                let idx_slot = LocalId(*next_slot);
+                                *next_slot += 1;
+                                extra_locals.push(Ty::Int);
+                                pre_stmts.push(MStmt::Assign {
+                                    dest: idx_slot,
+                                    value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(
+                                        i as i32,
+                                    )),
+                                });
+                                let store_dest = LocalId(*next_slot);
+                                *next_slot += 1;
+                                extra_locals.push(Ty::Unit);
+                                pre_stmts.push(MStmt::Assign {
+                                    dest: store_dest,
+                                    value: skotch_mir::Rvalue::ObjectArrayStore {
+                                        array: arr_slot,
+                                        index: idx_slot,
+                                        value: store_slot,
+                                    },
+                                });
+                            }
+                            let result_slot = LocalId(*next_slot);
+                            *next_slot += 1;
+                            extra_locals.push(Ty::String);
+                            pre_stmts.push(MStmt::Assign {
+                                dest: result_slot,
+                                value: skotch_mir::Rvalue::Call {
+                                    kind: skotch_mir::CallKind::StaticJava {
+                                        class_name: "java/lang/String".to_string(),
+                                        method_name: "format".to_string(),
+                                        descriptor:
+                                            "(Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/String;"
+                                                .to_string(),
+                                    },
+                                    args: vec![fmt_slot, arr_slot],
+                                },
+                            });
+                            return Some(result_slot);
+                        }
+                    }
+                }
                 // String instance methods → VirtualJava on java/lang/String.
                 if let Some(method_n) = method_n {
                     // Receiver type detection: literal, local ref, or
@@ -41153,6 +41305,170 @@ fn lower_rich_expr_to_slot(
                                 },
                             });
                             return Some(result_slot);
+                        }
+                    }
+                }
+                // `kotlin.math.X(...)` fully-qualified intrinsic call.
+                // Parses as DotQualified(DotQualified(Ref(kotlin),
+                // Ref(math)), Call(Ref(X), args)) — the existing
+                // `Math.X` arm below only matches when the last
+                // receiver Reference is `Math` (uppercase), so the
+                // `kotlin.math.sqrt(x)` shape silently falls through
+                // and the surrounding method body gets stubbed. Detect
+                // the `kotlin.math.X` prefix here and route to the
+                // same java/lang/Math statics used by the bare-`X`
+                // intrinsic arm at line ~37517. Sub-tested by
+                // parity/123-string-template-method (magnitude body).
+                if let KtExpr::DotQualified(prefix_dq) = &dq_exprs[0] {
+                    let prefix_exprs: Vec<KtExpr<'_>> = skotch_ast::children(prefix_dq.syntax())
+                        .iter()
+                        .filter_map(KtExpr::cast)
+                        .collect();
+                    if prefix_exprs.len() == 2 {
+                        if let (KtExpr::Reference(p0), KtExpr::Reference(p1)) =
+                            (&prefix_exprs[0], &prefix_exprs[1])
+                        {
+                            if p0.name() == Some("kotlin") && p1.name() == Some("math") {
+                                if let Some(method_n) = method_n {
+                                    let mapped: Option<(&str, &str, &str, Ty, usize)> =
+                                        match method_n {
+                                            "sqrt" => Some((
+                                                "java/lang/Math",
+                                                "sqrt",
+                                                "(D)D",
+                                                Ty::Double,
+                                                1,
+                                            )),
+                                            "abs" => Some((
+                                                "java/lang/Math",
+                                                "abs",
+                                                "(D)D",
+                                                Ty::Double,
+                                                1,
+                                            )),
+                                            "floor" => Some((
+                                                "java/lang/Math",
+                                                "floor",
+                                                "(D)D",
+                                                Ty::Double,
+                                                1,
+                                            )),
+                                            "ceil" => Some((
+                                                "java/lang/Math",
+                                                "ceil",
+                                                "(D)D",
+                                                Ty::Double,
+                                                1,
+                                            )),
+                                            "round" => Some((
+                                                "java/lang/Math",
+                                                "round",
+                                                "(D)J",
+                                                Ty::Long,
+                                                1,
+                                            )),
+                                            "sin" => Some((
+                                                "java/lang/Math",
+                                                "sin",
+                                                "(D)D",
+                                                Ty::Double,
+                                                1,
+                                            )),
+                                            "cos" => Some((
+                                                "java/lang/Math",
+                                                "cos",
+                                                "(D)D",
+                                                Ty::Double,
+                                                1,
+                                            )),
+                                            "tan" => Some((
+                                                "java/lang/Math",
+                                                "tan",
+                                                "(D)D",
+                                                Ty::Double,
+                                                1,
+                                            )),
+                                            "exp" => Some((
+                                                "java/lang/Math",
+                                                "exp",
+                                                "(D)D",
+                                                Ty::Double,
+                                                1,
+                                            )),
+                                            "ln" => Some((
+                                                "java/lang/Math",
+                                                "log",
+                                                "(D)D",
+                                                Ty::Double,
+                                                1,
+                                            )),
+                                            "log10" => Some((
+                                                "java/lang/Math",
+                                                "log10",
+                                                "(D)D",
+                                                Ty::Double,
+                                                1,
+                                            )),
+                                            "pow" => Some((
+                                                "java/lang/Math",
+                                                "pow",
+                                                "(DD)D",
+                                                Ty::Double,
+                                                2,
+                                            )),
+                                            "min" => Some((
+                                                "java/lang/Math",
+                                                "min",
+                                                "(DD)D",
+                                                Ty::Double,
+                                                2,
+                                            )),
+                                            "max" => Some((
+                                                "java/lang/Math",
+                                                "max",
+                                                "(DD)D",
+                                                Ty::Double,
+                                                2,
+                                            )),
+                                            _ => None,
+                                        };
+                                    if let Some((cls, m, desc, ret_ty, expected_args)) = mapped {
+                                        let mut arg_slots: Vec<LocalId> = Vec::new();
+                                        if let Some(arg_list) = call.value_argument_list() {
+                                            for arg in arg_list.arguments() {
+                                                let arg_e = arg.expression()?;
+                                                let slot = lower_rich_expr_to_slot(
+                                                    arg_e,
+                                                    lookup_name,
+                                                    fn_lookup,
+                                                    next_slot,
+                                                    pre_stmts,
+                                                    extra_locals,
+                                                    strings,
+                                                )?;
+                                                arg_slots.push(slot);
+                                            }
+                                        }
+                                        if arg_slots.len() == expected_args {
+                                            let result_slot = LocalId(*next_slot);
+                                            *next_slot += 1;
+                                            extra_locals.push(ret_ty);
+                                            pre_stmts.push(MStmt::Assign {
+                                                dest: result_slot,
+                                                value: skotch_mir::Rvalue::Call {
+                                                    kind: skotch_mir::CallKind::StaticJava {
+                                                        class_name: cls.to_string(),
+                                                        method_name: m.to_string(),
+                                                        descriptor: desc.to_string(),
+                                                    },
+                                                    args: arg_slots,
+                                                },
+                                            });
+                                            return Some(result_slot);
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
