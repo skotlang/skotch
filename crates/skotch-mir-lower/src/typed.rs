@@ -42120,6 +42120,41 @@ fn lower_rich_expr_to_slot(
                         if let Some(rn) = rcv_ref.name() {
                             let is_class_namespace =
                                 rn.starts_with(char::is_uppercase) && lookup_name(rn).is_none();
+                            // Special-case `EnumName.values()` on an enum
+                            // class: kotlinc emits a static `values()` that
+                            // returns `[LEnum;`, but our enum-class shape
+                            // doesn't synthesize that method. Redirect to
+                            // the `entries: java/util/List` static field
+                            // we already populate in <clinit>, so for-in
+                            // over `EnumName.values()` lands in the
+                            // existing List receiver path (List.size /
+                            // List.get) instead of hitting the bogus
+                            // `EnumName.INSTANCE` singleton fallback that
+                            // crashes at link-time with NoSuchFieldError.
+                            //
+                            // Limited to zero-arg `values()` since that's
+                            // the only valid shape for the enum static.
+                            if is_class_namespace
+                                && is_enum_class(rn)
+                                && method_n == "values"
+                                && call
+                                    .value_argument_list()
+                                    .map(|al| al.arguments().count() == 0)
+                                    .unwrap_or(true)
+                            {
+                                let slot = LocalId(*next_slot);
+                                *next_slot += 1;
+                                extra_locals.push(Ty::Class("java/util/List".to_string()));
+                                pre_stmts.push(MStmt::Assign {
+                                    dest: slot,
+                                    value: skotch_mir::Rvalue::GetStaticField {
+                                        class_name: rn.to_string(),
+                                        field_name: "entries".to_string(),
+                                        descriptor: "Ljava/util/List;".to_string(),
+                                    },
+                                });
+                                return Some(slot);
+                            }
                             if is_class_namespace {
                                 let recv_slot = LocalId(*next_slot);
                                 *next_slot += 1;
