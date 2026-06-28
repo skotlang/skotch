@@ -18378,8 +18378,7 @@ fn walk_block(
                     // known collection-iface erased-arg methods, the JDK
                     // descriptor is `(Object)<ret>` so a primitive arg
                     // on the stack must be boxed before the call.
-                    let force_object_args_load =
-                        (matches!(
+                    let force_object_args_load = (matches!(
                             class_name.as_str(),
                             "java/util/List"
                                 | "java/util/Set"
@@ -18401,7 +18400,19 @@ fn walk_block(
                             "java/util/Map" | "java/util/HashMap" | "java/util/LinkedHashMap"
                         ) && matches!(method_name, "get" | "remove"))
                             && !is_function_invoke
-                            && module.find_class(class_name).is_none();
+                            && module.find_class(class_name).is_none()
+                            // 2-arg `List.add(int, Object)` has its own
+                            // mixed-arg path below; the general
+                            // `force_object_args_load` would wrongly box
+                            // the index `int` into `Integer`.
+                            && !(method_name == "add"
+                                && matches!(
+                                    class_name.as_str(),
+                                    "java/util/List"
+                                        | "java/util/ArrayList"
+                                        | "java/util/LinkedList"
+                                )
+                                && args.len() == 3);
                     // `java/util/List.set(int, Object) -> Object` has a
                     // MIXED-type signature: the index is positional `int`
                     // while the value is erased `Object`. The general
@@ -18413,6 +18424,18 @@ fn walk_block(
                         class_name.as_str(),
                         "java/util/List" | "java/util/ArrayList" | "java/util/LinkedList"
                     ) && method_name == "set"
+                        && args.len() == 3
+                        && !is_function_invoke
+                        && module.find_class(class_name).is_none();
+                    // `java/util/List.add(int, Object) -> void` — same
+                    // MIXED shape as `set`. The 1-arg form
+                    // `add(Object) -> bool` is handled by the general
+                    // `force_object_args_load` path; this flag only
+                    // applies when the call has the index+value form.
+                    let list_add_indexed_method = matches!(
+                        class_name.as_str(),
+                        "java/util/List" | "java/util/ArrayList" | "java/util/LinkedList"
+                    ) && method_name == "add"
                         && args.len() == 3
                         && !is_function_invoke
                         && module.find_class(class_name).is_none();
@@ -18433,8 +18456,9 @@ fn walk_block(
                         // positional int. `force_object_args_load` boxes
                         // all user args (i > 0); `list_set_method` boxes
                         // only the value (i == 2).
-                        let box_this_arg =
-                            (i > 0 && force_object_args_load) || (list_set_method && i == 2);
+                        let box_this_arg = (i > 0 && force_object_args_load)
+                            || (list_set_method && i == 2)
+                            || (list_add_indexed_method && i == 2);
                         if box_this_arg {
                             let arg_ty = &func.locals[a.0 as usize];
                             let box_info: Option<(&str, &str)> = match arg_ty {
@@ -18772,6 +18796,8 @@ fn walk_block(
                     // is the JDK interface, not a user class with its own
                     // `set`).
                     let list_set_desc = list_set_method && target_method_sig.is_none();
+                    let list_add_indexed_desc =
+                        list_add_indexed_method && target_method_sig.is_none();
                     let mut descriptor = String::from("(");
                     // Skip first arg (receiver) in descriptor
                     for (i, a) in args.iter().skip(1).enumerate() {
@@ -18789,7 +18815,7 @@ fn walk_block(
                                 let ty = &func.locals[a.0 as usize];
                                 descriptor.push_str(&jvm_param_type_string(ty));
                             }
-                        } else if list_set_desc {
+                        } else if list_set_desc || list_add_indexed_desc {
                             // user-pos 0 = index (I), user-pos 1 = value (Object)
                             if i == 0 {
                                 descriptor.push('I');

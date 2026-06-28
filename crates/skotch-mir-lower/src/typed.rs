@@ -18039,6 +18039,53 @@ fn lower_loop_body(
                                     continue;
                                 }
                             }
+                            // Kotlin stdlib mutating extensions on
+                            // JDK collection interfaces — the JDK
+                            // type lacks these methods, so the
+                            // generic Virtual emission below would
+                            // produce an `invokeinterface
+                            // List.sort()Object` that fails at run
+                            // time with NoSuchMethodError. Route to
+                            // the CollectionsKt static facade.
+                            // Other CollectionsKt extensions are
+                            // handled by lower_rich (value context);
+                            // this arm covers stmt context shapes.
+                            if let Ty::Class(ref recv_cname) = recv_ty {
+                                let stdlib_static: Option<(&str, &str, Ty)> = match (
+                                    recv_cname.as_str(),
+                                    method_n,
+                                    call.value_argument_list()
+                                        .map(|al| al.arguments().count())
+                                        .unwrap_or(0),
+                                ) {
+                                    (
+                                        "java/util/List"
+                                        | "java/util/ArrayList"
+                                        | "java/util/LinkedList",
+                                        "sort",
+                                        0,
+                                    ) => Some(("sort", "(Ljava/util/List;)V", Ty::Unit)),
+                                    _ => None,
+                                };
+                                if let Some((meth, desc, ret_ty)) = stdlib_static {
+                                    let result_slot = LocalId(*next_slot);
+                                    *next_slot += 1;
+                                    local_tys.push(ret_ty);
+                                    body_mstmts.push(MStmt::Assign {
+                                        dest: result_slot,
+                                        value: skotch_mir::Rvalue::Call {
+                                            kind: skotch_mir::CallKind::StaticJava {
+                                                class_name: "kotlin/collections/CollectionsKt"
+                                                    .to_string(),
+                                                method_name: meth.to_string(),
+                                                descriptor: desc.to_string(),
+                                            },
+                                            args: vec![recv_slot],
+                                        },
+                                    });
+                                    continue;
+                                }
+                            }
                             if let Ty::Class(cname) = recv_ty {
                                 let mut arg_slots: Vec<LocalId> = vec![recv_slot];
                                 let mut ok = true;
@@ -27630,6 +27677,56 @@ fn try_lower_multi_stmt_block_with_offset(
                                 // producing a VerifyError at runtime.
                                 let recv_ty =
                                     Some(slot_ty_with_param_fallback(recv_slot.0, &local_tys));
+                                // Kotlin stdlib extensions on JDK
+                                // collection interfaces that DON'T
+                                // exist on the JDK type — they're
+                                // dispatched as static facades via
+                                // `kotlin/collections/CollectionsKt`.
+                                // The generic Virtual emission below
+                                // would produce e.g.
+                                //   `invokeinterface List.sort()Object`
+                                // which fails at runtime with
+                                // NoSuchMethodError. Emit the static
+                                // call directly here for the no-arg
+                                // mutating-extension shapes we know
+                                // (sort on a MutableList).
+                                let stdlib_static: Option<(&str, &str, Ty)> = match (
+                                    &recv_ty,
+                                    method_name,
+                                    call.value_argument_list()
+                                        .map(|al| al.arguments().count())
+                                        .unwrap_or(0),
+                                ) {
+                                    (Some(Ty::Class(c)), "sort", 0)
+                                        if matches!(
+                                            c.as_str(),
+                                            "java/util/List"
+                                                | "java/util/ArrayList"
+                                                | "java/util/LinkedList"
+                                        ) =>
+                                    {
+                                        Some(("sort", "(Ljava/util/List;)V", Ty::Unit))
+                                    }
+                                    _ => None,
+                                };
+                                if let Some((meth, desc, ret_ty)) = stdlib_static {
+                                    let result_slot = LocalId(next_slot);
+                                    next_slot += 1;
+                                    local_tys.push(ret_ty);
+                                    stmts.push(MStmt::Assign {
+                                        dest: result_slot,
+                                        value: skotch_mir::Rvalue::Call {
+                                            kind: skotch_mir::CallKind::StaticJava {
+                                                class_name: "kotlin/collections/CollectionsKt"
+                                                    .to_string(),
+                                                method_name: meth.to_string(),
+                                                descriptor: desc.to_string(),
+                                            },
+                                            args: vec![recv_slot],
+                                        },
+                                    });
+                                    continue;
+                                }
                                 if let Some(Ty::Class(cname)) = recv_ty {
                                     let mut arg_slots: Vec<LocalId> = vec![recv_slot];
                                     let mut ok = true;
@@ -32811,6 +32908,7 @@ fn try_lower_multi_stmt_block_with_offset(
                                             | "maxOrNull"
                                             | "average"
                                             | "sum"
+                                            | "sort"
                                             | "sorted"
                                             | "sortedDescending"
                                             | "reversed"
@@ -45062,8 +45160,60 @@ fn lower_rich_expr_to_slot(
                                         _ => None,
                                     };
                                     if let Some((desc, ret_ty, autobox)) = direct_method {
+                                        // Per-arg autobox mask. For mixed
+                                        // primitive/Object descriptors
+                                        // like `add(I,LObject;)V` the
+                                        // index slot must stay an `int`
+                                        // — only Object-typed params get
+                                        // autoboxed. Parse the descriptor
+                                        // argument types once.
+                                        let descriptor_param_is_object: Vec<bool> = {
+                                            let mut out = Vec::new();
+                                            if let Some(open) = desc.find('(') {
+                                                let bytes = desc.as_bytes();
+                                                let mut i = open + 1;
+                                                while i < bytes.len() && bytes[i] != b')' {
+                                                    match bytes[i] {
+                                                        b'L' => {
+                                                            out.push(true);
+                                                            while i < bytes.len()
+                                                                && bytes[i] != b';'
+                                                            {
+                                                                i += 1;
+                                                            }
+                                                            i += 1;
+                                                        }
+                                                        b'[' => {
+                                                            out.push(true);
+                                                            i += 1;
+                                                            while i < bytes.len()
+                                                                && bytes[i] == b'['
+                                                            {
+                                                                i += 1;
+                                                            }
+                                                            if i < bytes.len() && bytes[i] == b'L' {
+                                                                while i < bytes.len()
+                                                                    && bytes[i] != b';'
+                                                                {
+                                                                    i += 1;
+                                                                }
+                                                                i += 1;
+                                                            } else if i < bytes.len() {
+                                                                i += 1;
+                                                            }
+                                                        }
+                                                        _ => {
+                                                            out.push(false);
+                                                            i += 1;
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            out
+                                        };
                                         let mut arg_slots: Vec<LocalId> = vec![slot];
                                         let mut all_ok = true;
+                                        let mut arg_idx: usize = 0;
                                         if let Some(arg_list) = call.value_argument_list() {
                                             for arg in arg_list.arguments() {
                                                 let Some(arg_e) = arg.expression() else {
@@ -45085,7 +45235,13 @@ fn lower_rich_expr_to_slot(
                                                 // Autobox primitive
                                                 // args when the JDK
                                                 // signature expects Object.
-                                                let boxed = if autobox {
+                                                let want_box = autobox
+                                                    && descriptor_param_is_object
+                                                        .get(arg_idx)
+                                                        .copied()
+                                                        .unwrap_or(true);
+                                                arg_idx += 1;
+                                                let boxed = if want_box {
                                                     let ty = slot_ty_with_param_fallback(
                                                         s.0,
                                                         extra_locals,
@@ -45554,6 +45710,35 @@ fn lower_rich_expr_to_slot(
                                             "(Ljava/lang/Iterable;)Ljava/util/Set;",
                                             Ty::Class("java/util/Set".to_string()),
                                         )),
+                                        // `xs.toMutableList()` on a
+                                        // List/MutableList receiver.
+                                        // kotlinc emits
+                                        //   checkcast Collection
+                                        //   invokestatic CollectionsKt.toMutableList(LCollection;)LList;
+                                        // The receiver-boxing/checkcast
+                                        // pass below uses the descriptor's
+                                        // first param type to drive a
+                                        // checkcast when needed.
+                                        "toMutableList" => Some((
+                                            "kotlin/collections/CollectionsKt",
+                                            "toMutableList",
+                                            "(Ljava/util/Collection;)Ljava/util/List;",
+                                            Ty::Class("java/util/List".to_string()),
+                                        )),
+                                        // `xs.sort()` on a MutableList<T>
+                                        // receiver. kotlinc emits
+                                        //   invokestatic CollectionsKt.sort(LList;)V
+                                        "sort" if call.value_argument_list()
+                                            .map(|al| al.arguments().count())
+                                            .unwrap_or(0) == 0 =>
+                                        {
+                                            Some((
+                                                "kotlin/collections/CollectionsKt",
+                                                "sort",
+                                                "(Ljava/util/List;)V",
+                                                Ty::Unit,
+                                            ))
+                                        }
                                         // Binary set-algebra extension fns —
                                         // `a.intersect(b)`, `a.subtract(b)`,
                                         // `a.union(b)` on a Set/Iterable
@@ -46846,6 +47031,23 @@ fn lower_rich_expr_to_slot(
                                         "(Ljava/lang/Iterable;)Ljava/util/Set;",
                                         Ty::Class("java/util/Set".to_string()),
                                     )),
+                                    "toMutableList" => Some((
+                                        "kotlin/collections/CollectionsKt",
+                                        "toMutableList",
+                                        "(Ljava/util/Collection;)Ljava/util/List;",
+                                        Ty::Class("java/util/List".to_string()),
+                                    )),
+                                    "sort" if call.value_argument_list()
+                                        .map(|al| al.arguments().count())
+                                        .unwrap_or(0) == 0 =>
+                                    {
+                                        Some((
+                                            "kotlin/collections/CollectionsKt",
+                                            "sort",
+                                            "(Ljava/util/List;)V",
+                                            Ty::Unit,
+                                        ))
+                                    }
                                     // Terminal aggregations on a chained
                                     // collection receiver. Mirror entries
                                     // in the bare-Reference arm above so
