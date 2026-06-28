@@ -4099,6 +4099,29 @@ pub fn lower_file(
                     if let Some(n) = c.name() {
                         map.entry(n.to_string())
                             .or_insert_with(|| format!("{in_file_pkg_prefix}{n}"));
+                        // Nested (non-inner) classes — `class Outer { class
+                        // Inner { ... } }` lowers to a sibling JVM class
+                        // named `Outer$Inner`. Register the simple-name →
+                        // `Outer$Inner` mapping so a bare `Inner` type
+                        // annotation inside `Outer`'s body (e.g. a method
+                        // returning `Inner`) resolves to the right class.
+                        // Without this, `fun makeInner(): Inner` collected
+                        // `Ty::Class("Inner")` and the call-site emitted
+                        // an invokevirtual against owner `Inner` (which
+                        // doesn't exist at the JVM level), leading to
+                        // NoClassDefFoundError at link time.
+                        if let Some(body) = c.body() {
+                            let outer_fq = format!("{in_file_pkg_prefix}{n}");
+                            for d in body.declarations() {
+                                if let KtDecl::Class(nested) = d {
+                                    if let Some(nested_name) = nested.name() {
+                                        let nested_fq = format!("{outer_fq}${nested_name}");
+                                        map.entry(nested_name.to_string())
+                                            .or_insert_with(|| nested_fq);
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
                 KtDecl::Object(o) => {
@@ -5298,10 +5321,21 @@ pub fn lower_file(
                 .and_then(|u| u.name());
             match name_opt {
                 Some(n) => skotch_types::ty_from_name(n).unwrap_or_else(|| {
-                    let fq = skotch_types::intrinsics::kotlin_to_jvm_class(n)
-                        .map(|s| s.to_string())
-                        .unwrap_or_else(|| n.to_string());
-                    Ty::Class(fq)
+                    // Consult the file-imports map so bare nested-class
+                    // names (`fun makeNested(): Nested` inside `class
+                    // Outer { class Nested ... }`) resolve to their JVM
+                    // form (`Ty::Class("Outer$Nested")`). Without this
+                    // the call-site result slot Ty stays as the bare
+                    // `Ty::Class("Nested")` and the subsequent
+                    // invokevirtual emits an owner that doesn't exist
+                    // at the JVM level.
+                    if let Some(fq) = skotch_types::intrinsics::kotlin_to_jvm_class(n) {
+                        return Ty::Class(fq.to_string());
+                    }
+                    if let Some(fq) = lookup_file_import(n) {
+                        return Ty::Class(fq);
+                    }
+                    Ty::Class(n.to_string())
                 }),
                 None => {
                     // Expression-body fn `fun f() = "..."` — inferred
@@ -5357,10 +5391,13 @@ pub fn lower_file(
                 .and_then(|u| u.name());
             match name_opt {
                 Some(n) => skotch_types::ty_from_name(n).unwrap_or_else(|| {
-                    let fq = skotch_types::intrinsics::kotlin_to_jvm_class(n)
-                        .map(|s| s.to_string())
-                        .unwrap_or_else(|| n.to_string());
-                    Ty::Class(fq)
+                    if let Some(fq) = skotch_types::intrinsics::kotlin_to_jvm_class(n) {
+                        return Ty::Class(fq.to_string());
+                    }
+                    if let Some(fq) = lookup_file_import(n) {
+                        return Ty::Class(fq);
+                    }
+                    Ty::Class(n.to_string())
                 }),
                 None => Ty::Unit,
             }
@@ -7415,10 +7452,21 @@ pub fn lower_file(
                 .and_then(|u| u.name());
             match name_opt {
                 Some(n) => skotch_types::ty_from_name(n).unwrap_or_else(|| {
-                    let fq = skotch_types::intrinsics::kotlin_to_jvm_class(n)
-                        .map(|s| s.to_string())
-                        .unwrap_or_else(|| n.to_string());
-                    Ty::Class(fq)
+                    // Consult the file-imports map so bare nested-class
+                    // names (`fun makeNested(): Nested` inside `class
+                    // Outer { class Nested ... }`) resolve to their JVM
+                    // form (`Ty::Class("Outer$Nested")`). Without this
+                    // the call-site result slot Ty stays as the bare
+                    // `Ty::Class("Nested")` and the subsequent
+                    // invokevirtual emits an owner that doesn't exist
+                    // at the JVM level.
+                    if let Some(fq) = skotch_types::intrinsics::kotlin_to_jvm_class(n) {
+                        return Ty::Class(fq.to_string());
+                    }
+                    if let Some(fq) = lookup_file_import(n) {
+                        return Ty::Class(fq);
+                    }
+                    Ty::Class(n.to_string())
                 }),
                 None => {
                     // Expression-body fn `fun f() = "..."` — inferred
@@ -7470,10 +7518,13 @@ pub fn lower_file(
                 .and_then(|u| u.name());
             match name_opt {
                 Some(n) => skotch_types::ty_from_name(n).unwrap_or_else(|| {
-                    let fq = skotch_types::intrinsics::kotlin_to_jvm_class(n)
-                        .map(|s| s.to_string())
-                        .unwrap_or_else(|| n.to_string());
-                    Ty::Class(fq)
+                    if let Some(fq) = skotch_types::intrinsics::kotlin_to_jvm_class(n) {
+                        return Ty::Class(fq.to_string());
+                    }
+                    if let Some(fq) = lookup_file_import(n) {
+                        return Ty::Class(fq);
+                    }
+                    Ty::Class(n.to_string())
                 }),
                 None => Ty::Unit,
             }
@@ -7514,10 +7565,13 @@ pub fn lower_file(
                 tr_opt.and_then(|tr| tr.user_type()).and_then(|u| u.name());
             match name_opt {
                 Some(n) => skotch_types::ty_from_name(n).unwrap_or_else(|| {
-                    let fq = skotch_types::intrinsics::kotlin_to_jvm_class(n)
-                        .map(|s| s.to_string())
-                        .unwrap_or_else(|| n.to_string());
-                    Ty::Class(fq)
+                    if let Some(fq) = skotch_types::intrinsics::kotlin_to_jvm_class(n) {
+                        return Ty::Class(fq.to_string());
+                    }
+                    if let Some(fq) = lookup_file_import(n) {
+                        return Ty::Class(fq);
+                    }
+                    Ty::Class(n.to_string())
                 }),
                 None => Ty::Any,
             }
@@ -56754,6 +56808,36 @@ mod tests {
         let module = lower("class Outer { class Inner }", "TestKt");
         assert!(module.classes.iter().any(|c| c.name == "Outer"));
         assert!(module.classes.iter().any(|c| c.name == "Outer$Inner"));
+    }
+
+    #[test]
+    fn typed_lower_nested_class_bare_return_type_resolves_to_fq() {
+        // `fun makeInner(): Inner = Inner()` inside `class Outer { class
+        // Inner ... }` declares the bare simple name `Inner` as its
+        // return type. The file-imports map registers `Inner →
+        // Outer$Inner` so `makeInner`'s recorded return Ty (used by
+        // `class_method_returns` and propagated to call-site result
+        // slots) becomes `Ty::Class("Outer$Inner")` rather than the
+        // bare `Ty::Class("Inner")`. Without this, the subsequent
+        // `n.describe()` invokevirtual emits an owner-class of `Inner`
+        // (which doesn't exist at the JVM level) and the call site
+        // crashes with NoClassDefFoundError at link time.
+        let module = lower(
+            "class Outer { class Inner { fun describe(): String = \"hi\" } \
+              fun makeInner(): Inner = Inner() }",
+            "TestKt",
+        );
+        let outer = module
+            .classes
+            .iter()
+            .find(|c| c.name == "Outer")
+            .expect("Outer");
+        let make_inner = outer
+            .methods
+            .iter()
+            .find(|m| m.name == "makeInner")
+            .expect("makeInner");
+        assert_eq!(make_inner.return_ty, Ty::Class("Outer$Inner".to_string()));
     }
 
     #[test]
