@@ -1128,6 +1128,13 @@ pub struct MirModule {
     /// to emit `Rvalue::GetStaticField` instead of inlining the literal.
     #[serde(default, skip_serializing_if = "rustc_hash::FxHashSet::is_empty")]
     pub top_level_prop_names: rustc_hash::FxHashSet<String>,
+    /// Subset of `top_level_prop_names` declared with `var` (rather
+    /// than `val`). Backend uses this to drop `ACC_FINAL` from the
+    /// emitted static field so user code can `putstatic` to it
+    /// without tripping the JVM's `IllegalAccessError: Update to
+    /// static final field … from a different method` link-time check.
+    #[serde(default, skip_serializing_if = "rustc_hash::FxHashSet::is_empty")]
+    pub top_level_var_names: rustc_hash::FxHashSet<String>,
 }
 
 impl MirModule {

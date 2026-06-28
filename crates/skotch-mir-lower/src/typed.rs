@@ -7721,6 +7721,9 @@ pub fn lower_file(
                 module.top_level_consts.push(entry);
             } else {
                 module.top_level_prop_names.insert(name.to_string());
+                if p.is_var() {
+                    module.top_level_var_names.insert(name.to_string());
+                }
                 module.top_level_props.push(entry);
             }
         }
@@ -16577,6 +16580,60 @@ fn lower_loop_body(
                                 op: mir_op,
                                 lhs: slot,
                                 rhs: one_slot,
+                            },
+                        });
+                        continue;
+                    }
+                    // Top-level var `globalCount++` / `globalCount--`
+                    // shape — the bare identifier resolves to a static
+                    // field on the file wrapper class via the
+                    // val_lookup_fallback table. Emit
+                    // getstatic / iadd 1 / putstatic so the side
+                    // effect actually persists across calls; without
+                    // this the postfix stmt fell through the
+                    // unrecognized-stmt skip below and the static
+                    // field stayed at its clinit value.
+                    if let Some((ty, wrapper)) = val_lookup_fallback(nm) {
+                        let cur_slot = LocalId(*next_slot);
+                        *next_slot += 1;
+                        local_tys.push(ty.clone());
+                        let desc = ty_to_descriptor(&ty);
+                        body_mstmts.push(MStmt::Assign {
+                            dest: cur_slot,
+                            value: skotch_mir::Rvalue::GetStaticField {
+                                class_name: wrapper.clone(),
+                                field_name: nm.to_string(),
+                                descriptor: desc.clone(),
+                            },
+                        });
+                        let one_slot = LocalId(*next_slot);
+                        *next_slot += 1;
+                        local_tys.push(Ty::Int);
+                        body_mstmts.push(MStmt::Assign {
+                            dest: one_slot,
+                            value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(1)),
+                        });
+                        let new_slot = LocalId(*next_slot);
+                        *next_slot += 1;
+                        local_tys.push(ty.clone());
+                        body_mstmts.push(MStmt::Assign {
+                            dest: new_slot,
+                            value: skotch_mir::Rvalue::BinOp {
+                                op: mir_op,
+                                lhs: cur_slot,
+                                rhs: one_slot,
+                            },
+                        });
+                        let unused = LocalId(*next_slot);
+                        *next_slot += 1;
+                        local_tys.push(Ty::Unit);
+                        body_mstmts.push(MStmt::Assign {
+                            dest: unused,
+                            value: skotch_mir::Rvalue::PutStaticField {
+                                class_name: wrapper,
+                                field_name: nm.to_string(),
+                                descriptor: desc,
+                                value: new_slot,
                             },
                         });
                         continue;
@@ -47289,11 +47346,31 @@ fn lower_rich_expr_to_slot(
                         ok = false;
                         break;
                     };
-                    let Some(slot) = lookup_name(&name) else {
+                    let (slot, ty) = if let Some(slot) = lookup_name(&name) {
+                        let ty = slot_ty_with_param_fallback(slot.0, extra_locals);
+                        (slot, ty)
+                    } else if let Some((ty, wrapper)) = val_lookup_fallback(&name) {
+                        // Top-level val/var referenced inside a
+                        // string template (`"total=$globalCount"`).
+                        // Pre-emit GetStaticField into a fresh slot
+                        // so the interpolation receives the runtime
+                        // value rather than bailing.
+                        let s = LocalId(*next_slot);
+                        *next_slot += 1;
+                        extra_locals.push(ty.clone());
+                        pre_stmts.push(MStmt::Assign {
+                            dest: s,
+                            value: skotch_mir::Rvalue::GetStaticField {
+                                class_name: wrapper,
+                                field_name: name.clone(),
+                                descriptor: ty_to_descriptor(&ty),
+                            },
+                        });
+                        (s, ty)
+                    } else {
                         ok = false;
                         break;
                     };
-                    let ty = slot_ty_with_param_fallback(slot.0, extra_locals);
                     dyn_args.push(slot);
                     dyn_arg_descs.push(ty_to_descriptor(&ty));
                     recipe.push('\u{1}');

@@ -1063,8 +1063,22 @@ fn emit_companion_clinit(
     method
 }
 
-fn emit_property_field(name: &str, ty: &Ty, cp: &mut ConstantPool, out: &mut Vec<u8>) {
-    let access = ACC_PRIVATE | ACC_STATIC | ACC_FINAL;
+fn emit_property_field(
+    name: &str,
+    ty: &Ty,
+    is_var: bool,
+    cp: &mut ConstantPool,
+    out: &mut Vec<u8>,
+) {
+    // `val` → private static final; `var` → private static (no FINAL)
+    // so user code can `putstatic` the field without tripping the JVM
+    // verifier's "Update to static final field from a different method
+    // than <clinit>" link-time check.
+    let access = if is_var {
+        ACC_PRIVATE | ACC_STATIC
+    } else {
+        ACC_PRIVATE | ACC_STATIC | ACC_FINAL
+    };
     let name_idx = cp.utf8(name);
     let desc = jvm_type_string(ty);
     let desc_idx = cp.utf8(&desc);
@@ -1637,7 +1651,8 @@ fn compile_class(class_name: &str, module: &MirModule) -> Vec<u8> {
     // The actual values are stored by the synthesized `<clinit>` below.
     for (name, ty, _value) in &module.top_level_props {
         let mut blob = Vec::new();
-        emit_property_field(name, ty, &mut cp, &mut blob);
+        let is_var = module.top_level_var_names.contains(name);
+        emit_property_field(name, ty, is_var, &mut cp, &mut blob);
         const_field_blobs.push(blob);
     }
 
