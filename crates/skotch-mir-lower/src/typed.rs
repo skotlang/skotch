@@ -17423,6 +17423,7 @@ fn lower_loop_body_blocks(
         /// `PropertyWithReifiedTypeFilter`.
         PropertyWithReifiedFirstOfTypeCall,
         NestedWhile,
+        NestedDoWhile,
         NestedForIn,
         RepeatStmt,
         WhenStmt,
@@ -17631,6 +17632,10 @@ fn lower_loop_body_blocks(
             }
             if matches!(expr, KtExpr::While(_)) {
                 special_at = Some((j, Special::NestedWhile));
+                break;
+            }
+            if matches!(expr, KtExpr::DoWhile(_)) {
+                special_at = Some((j, Special::NestedDoWhile));
                 break;
             }
             if matches!(expr, KtExpr::For(_)) {
@@ -18945,6 +18950,149 @@ fn lower_loop_body_blocks(
                 blocks.extend(inner_body_blocks);
                 // Continue accumulating into the after-inner block
                 // (next push has id == after_inner_id).
+                i = j + 1;
+                continue;
+            }
+            Some((j, Special::NestedDoWhile)) => {
+                // Nested `do { body } while (cond)` inside the outer
+                // block. Layout:
+                //   block pre:      cur_stmts, Goto(body_first)
+                //   block body...:  back_edge=cond_block, break=after
+                //   block cond...:  emit cmp -> bool, Branch per CondShape
+                //                   true => body_first, false => after
+                //   block after:    caller continues
+                let dw_node = body_children[j];
+                let KtExpr::DoWhile(dw) = KtExpr::cast(dw_node)? else {
+                    return None;
+                };
+                let cond_expr = dw
+                    .condition()
+                    .and_then(|c| c.expression())
+                    .map(unwrap_parens)?;
+                let (cond_shape, cond_operands) = classify_cond_chain(cond_expr);
+                if cond_operands.is_empty() {
+                    return None;
+                }
+
+                // Pre block flushes cur_stmts then Goto(body_first).
+                let pre_block_id = block_offset + blocks.len() as u32;
+                let body_first_id = pre_block_id + 1;
+                blocks.push(BasicBlock {
+                    stmts: std::mem::take(&mut cur_stmts),
+                    terminator: Terminator::Goto(body_first_id),
+                });
+
+                // Lower the body first; sentinel back_edge / break get
+                // remapped once cond block IDs are known.
+                let body_block_opt = dw.body().and_then(|b| b.expression());
+                let inner_body_children: Vec<&skotch_sil::SilNode> = match body_block_opt {
+                    Some(KtExpr::Block(bl)) => skotch_ast::children(bl.syntax()).iter().collect(),
+                    Some(other) => vec![other.syntax()],
+                    None => vec![],
+                };
+                const SENT_BACK: u32 = 0xfffffffe;
+                const SENT_BREAK: u32 = 0xfffffffd;
+                let mut inner_body_blocks = lower_loop_body_blocks(
+                    &inner_body_children,
+                    name_to_local,
+                    next_slot,
+                    local_tys,
+                    strings,
+                    fn_lookup_ref,
+                    function_param_names,
+                    body_first_id,
+                    SENT_BACK,
+                    SENT_BREAK,
+                )?;
+                let body_block_count = inner_body_blocks.len() as u32;
+                let cond_block_id = body_first_id + body_block_count;
+                let n_operands = cond_operands.len() as u32;
+                let after_id = cond_block_id + n_operands;
+                for blk in &mut inner_body_blocks {
+                    let remap = |t: u32| -> u32 {
+                        if t == SENT_BACK {
+                            cond_block_id
+                        } else if t == SENT_BREAK {
+                            after_id
+                        } else {
+                            t
+                        }
+                    };
+                    match &mut blk.terminator {
+                        Terminator::Goto(t) => *t = remap(*t),
+                        Terminator::Branch {
+                            then_block,
+                            else_block,
+                            ..
+                        } => {
+                            *then_block = remap(*then_block);
+                            *else_block = remap(*else_block);
+                        }
+                        _ => {}
+                    }
+                }
+
+                // Lower each cond operand into its own block, branching
+                // per CondShape (AllAnd / AnyOr / Single).
+                let snap = name_to_local.clone();
+                let lookup = |n: &str| -> Option<LocalId> {
+                    snap.iter()
+                        .rev()
+                        .find(|(name, _)| name == n)
+                        .map(|(_, l)| *l)
+                };
+                let mut cmp_blocks: Vec<BasicBlock> = Vec::with_capacity(cond_operands.len());
+                for operand in &cond_operands {
+                    let mut cmp_stmts: Vec<MStmt> = Vec::new();
+                    let cmp_slot = lower_rich_expr_to_slot(
+                        *operand,
+                        &lookup,
+                        fn_lookup_ref,
+                        next_slot,
+                        &mut cmp_stmts,
+                        local_tys,
+                        strings,
+                    )?;
+                    cmp_blocks.push(BasicBlock {
+                        stmts: cmp_stmts,
+                        terminator: Terminator::Branch {
+                            cond: cmp_slot,
+                            then_block: 0,
+                            else_block: 0,
+                        },
+                    });
+                }
+                let true_target = body_first_id;
+                let false_target = after_id;
+                for (k, blk) in cmp_blocks.iter_mut().enumerate() {
+                    let is_last = (k as u32 + 1) >= n_operands;
+                    let next_cmp_id = cond_block_id + (k as u32 + 1);
+                    let (on_true, on_false) = match cond_shape {
+                        CondShape::Single => (true_target, false_target),
+                        CondShape::AllAnd => {
+                            let t = if is_last { true_target } else { next_cmp_id };
+                            (t, false_target)
+                        }
+                        CondShape::AnyOr => {
+                            let f = if is_last { false_target } else { next_cmp_id };
+                            (true_target, f)
+                        }
+                    };
+                    if let Terminator::Branch {
+                        then_block,
+                        else_block,
+                        ..
+                    } = &mut blk.terminator
+                    {
+                        *then_block = on_true;
+                        *else_block = on_false;
+                    }
+                }
+
+                blocks.extend(inner_body_blocks);
+                blocks.extend(cmp_blocks);
+                // Continue accumulating into the after-loop block; the
+                // next push has id == after_id.
                 i = j + 1;
                 continue;
             }
@@ -25222,6 +25370,7 @@ fn try_lower_multi_stmt_block_with_offset(
                             matches!(
                                 e,
                                 KtExpr::While(_)
+                                    | KtExpr::DoWhile(_)
                                     | KtExpr::For(_)
                                     | KtExpr::Return(_)
                                     | KtExpr::If(_)
@@ -25398,7 +25547,11 @@ fn try_lower_multi_stmt_block_with_offset(
                     if let Some(e) = KtExpr::cast(c) {
                         matches!(
                             e,
-                            KtExpr::While(_) | KtExpr::For(_) | KtExpr::Return(_) | KtExpr::If(_)
+                            KtExpr::While(_)
+                                | KtExpr::DoWhile(_)
+                                | KtExpr::For(_)
+                                | KtExpr::Return(_)
+                                | KtExpr::If(_)
                         )
                     } else {
                         false
@@ -26324,7 +26477,11 @@ fn try_lower_multi_stmt_block_with_offset(
                     if let Some(e) = KtExpr::cast(c) {
                         matches!(
                             e,
-                            KtExpr::While(_) | KtExpr::For(_) | KtExpr::Return(_) | KtExpr::If(_)
+                            KtExpr::While(_)
+                                | KtExpr::DoWhile(_)
+                                | KtExpr::For(_)
+                                | KtExpr::Return(_)
+                                | KtExpr::If(_)
                         )
                     } else {
                         false
@@ -27489,7 +27646,11 @@ fn try_lower_multi_stmt_block_with_offset(
                     if let Some(e) = KtExpr::cast(c) {
                         matches!(
                             e,
-                            KtExpr::While(_) | KtExpr::For(_) | KtExpr::Return(_) | KtExpr::If(_)
+                            KtExpr::While(_)
+                                | KtExpr::DoWhile(_)
+                                | KtExpr::For(_)
+                                | KtExpr::Return(_)
+                                | KtExpr::If(_)
                         )
                     } else {
                         false
@@ -28306,7 +28467,11 @@ fn try_lower_multi_stmt_block_with_offset(
                     if let Some(e) = KtExpr::cast(c) {
                         matches!(
                             e,
-                            KtExpr::While(_) | KtExpr::For(_) | KtExpr::Return(_) | KtExpr::If(_)
+                            KtExpr::While(_)
+                                | KtExpr::DoWhile(_)
+                                | KtExpr::For(_)
+                                | KtExpr::Return(_)
+                                | KtExpr::If(_)
                         )
                     } else {
                         false
