@@ -17999,6 +17999,18 @@ fn lower_loop_body_blocks(
         /// with `val d = a as? Dog` followed by a `d != null` guarded
         /// return.
         PropertyWithAsSafe,
+        /// `val|var name = IntArray(N) { it -> body }` (or LongArray /
+        /// DoubleArray / ByteArray / BooleanArray variants). Kotlin's
+        /// primitive-array init-lambda constructor expands inline to:
+        ///   i = 0; arr = newarray(N); while (i < N) { it = i;
+        ///                                              arr[i] = body;
+        ///                                              i += 1 }
+        /// The `lower_rich_expr_to_slot` IntArray ctor arm only
+        /// handles the size-only shape — falling through here when a
+        /// trailing lambda is present would drop the lambda silently,
+        /// leaving the array zero-initialized. Lower as a counted-loop
+        /// CFG so the lambda body actually populates each element.
+        PropertyWithPrimArrayInitLambda,
     }
     let mut i: usize = 0;
     while i < body_children.len() {
@@ -18130,6 +18142,39 @@ fn lower_loop_body_blocks(
                                 Some(KtExpr::Reference(r)) => r.name(),
                                 _ => None,
                             };
+                            // `IntArray(N) { it -> body }` and friends —
+                            // primitive-array init-lambda ctor. Detect
+                            // BEFORE the reified-first-of-type arm
+                            // since both match `KtExpr::Call`.
+                            let is_prim_array_ctor = matches!(
+                                callee_name,
+                                Some(
+                                    "IntArray"
+                                        | "LongArray"
+                                        | "DoubleArray"
+                                        | "ByteArray"
+                                        | "BooleanArray"
+                                )
+                            );
+                            if is_prim_array_ctor {
+                                let one_size_arg = c
+                                    .value_argument_list()
+                                    .map(|al| al.arguments().count() == 1)
+                                    .unwrap_or(false);
+                                let has_lambda = c
+                                    .lambda_argument()
+                                    .map(|la| {
+                                        skotch_ast::children(la.syntax()).iter().any(|c| {
+                                            matches!(KtExpr::cast(c), Some(KtExpr::Lambda(_)))
+                                        })
+                                    })
+                                    .unwrap_or(false);
+                                if one_size_arg && has_lambda {
+                                    special_at =
+                                        Some((j, Special::PropertyWithPrimArrayInitLambda));
+                                    break;
+                                }
+                            }
                             let has_type_arg = c
                                 .type_argument_list()
                                 .map(|tal| tal.arguments().next().is_some())
@@ -20718,6 +20763,199 @@ fn lower_loop_body_blocks(
                     terminator: Terminator::Goto(inner_cond_id),
                 });
                 name_to_local.pop();
+                i = j + 1;
+                continue;
+            }
+            Some((j, Special::PropertyWithPrimArrayInitLambda)) => {
+                // `val|var name = IntArray(N) { it -> body }` — inline a
+                // counted loop that allocates the primitive array then
+                // populates each slot from the lambda body. Matches
+                // kotlinc's inline expansion shape.
+                let prop_node = body_children[j];
+                let prop = skotch_ast::KtProperty::cast(prop_node)?;
+                let pname = prop.name()?;
+                let init = prop.initializer().map(unwrap_parens)?;
+                let KtExpr::Call(call) = init else {
+                    return None;
+                };
+                let callee_name = match call.callee() {
+                    Some(KtExpr::Reference(r)) => r.name(),
+                    _ => None,
+                };
+                let (arr_ty, elem_ty) = match callee_name {
+                    Some("IntArray") => (Ty::IntArray, Ty::Int),
+                    Some("LongArray") => (Ty::LongArray, Ty::Long),
+                    Some("DoubleArray") => (Ty::DoubleArray, Ty::Double),
+                    Some("ByteArray") => (Ty::ByteArray, Ty::Byte),
+                    Some("BooleanArray") => (Ty::BooleanArray, Ty::Bool),
+                    _ => return None,
+                };
+                let size_arg = call
+                    .value_argument_list()
+                    .and_then(|al| al.arguments().next())
+                    .and_then(|a| a.expression())
+                    .map(unwrap_parens)?;
+                let lambda_arg = call.lambda_argument()?;
+                let lambda_expr = skotch_ast::children(lambda_arg.syntax())
+                    .iter()
+                    .find_map(KtExpr::cast)?;
+                let KtExpr::Lambda(lambda) = lambda_expr else {
+                    return None;
+                };
+                let func_lit = lambda.function_literal()?;
+                let body_block = func_lit.body()?;
+                let explicit_params: Vec<String> = func_lit
+                    .value_parameter_list()
+                    .map(|pl| {
+                        pl.parameters()
+                            .map(|p| p.name().unwrap_or("").to_string())
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let it_name: String = if explicit_params.is_empty() {
+                    "it".to_string()
+                } else {
+                    explicit_params[0].clone()
+                };
+                // The body is a block — find the single trailing
+                // expression (kotlinc's IntArray-init lambdas are
+                // virtually always a single expression like `it * it`).
+                let body_kids: Vec<&skotch_sil::SilNode> =
+                    skotch_ast::children(body_block.syntax()).iter().collect();
+                let body_exprs: Vec<KtExpr<'_>> =
+                    body_kids.iter().filter_map(|c| KtExpr::cast(c)).collect();
+                if body_exprs.len() != 1 {
+                    return None;
+                }
+                let body_expr = body_exprs[0];
+
+                let snap = name_to_local.clone();
+                let lookup = |n: &str| -> Option<LocalId> {
+                    snap.iter()
+                        .rev()
+                        .find(|(name, _)| name == n)
+                        .map(|(_, l)| *l)
+                };
+                // size_slot = lower(size_arg).
+                let size_slot = lower_rich_expr_to_slot(
+                    size_arg,
+                    &lookup,
+                    fn_lookup_ref,
+                    next_slot,
+                    &mut cur_stmts,
+                    local_tys,
+                    strings,
+                )?;
+                // i_slot = 0.
+                let i_slot = LocalId(*next_slot);
+                *next_slot += 1;
+                local_tys.push(Ty::Int);
+                cur_stmts.push(MStmt::Assign {
+                    dest: i_slot,
+                    value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(0)),
+                });
+                // arr_slot = newarray(size_slot).
+                let arr_slot = LocalId(*next_slot);
+                *next_slot += 1;
+                local_tys.push(arr_ty.clone());
+                cur_stmts.push(MStmt::Assign {
+                    dest: arr_slot,
+                    value: skotch_mir::Rvalue::NewIntArray(size_slot),
+                });
+                // CFG: pre → cond → body → step → cond ... → after.
+                let cond_id = block_offset + blocks.len() as u32 + 1;
+                blocks.push(BasicBlock {
+                    stmts: std::mem::take(&mut cur_stmts),
+                    terminator: Terminator::Goto(cond_id),
+                });
+                let cmp_slot = LocalId(*next_slot);
+                *next_slot += 1;
+                local_tys.push(Ty::Bool);
+                let cond_stmt = MStmt::Assign {
+                    dest: cmp_slot,
+                    value: skotch_mir::Rvalue::BinOp {
+                        op: skotch_mir::BinOp::CmpLt,
+                        lhs: i_slot,
+                        rhs: size_slot,
+                    },
+                };
+                // Body block: bind it = i, evaluate lambda body, then
+                // store result at arr[i].
+                let it_slot = LocalId(*next_slot);
+                *next_slot += 1;
+                local_tys.push(elem_ty.clone());
+                let mut body_stmts: Vec<MStmt> = Vec::new();
+                body_stmts.push(MStmt::Assign {
+                    dest: it_slot,
+                    value: skotch_mir::Rvalue::Local(i_slot),
+                });
+                name_to_local.push((it_name, it_slot));
+                let body_lookup_snap = name_to_local.clone();
+                let body_lookup = |n: &str| -> Option<LocalId> {
+                    body_lookup_snap
+                        .iter()
+                        .rev()
+                        .find(|(name, _)| name == n)
+                        .map(|(_, l)| *l)
+                };
+                let val_slot = lower_rich_expr_to_slot(
+                    body_expr,
+                    &body_lookup,
+                    fn_lookup_ref,
+                    next_slot,
+                    &mut body_stmts,
+                    local_tys,
+                    strings,
+                )?;
+                let unused_slot = LocalId(*next_slot);
+                *next_slot += 1;
+                local_tys.push(Ty::Unit);
+                body_stmts.push(MStmt::Assign {
+                    dest: unused_slot,
+                    value: skotch_mir::Rvalue::ArrayStore {
+                        array: arr_slot,
+                        index: i_slot,
+                        value: val_slot,
+                    },
+                });
+                name_to_local.pop();
+                let body_id = cond_id + 1;
+                let step_id = body_id + 1;
+                let after_id = step_id + 1;
+                blocks.push(BasicBlock {
+                    stmts: vec![cond_stmt],
+                    terminator: Terminator::Branch {
+                        cond: cmp_slot,
+                        then_block: body_id,
+                        else_block: after_id,
+                    },
+                });
+                blocks.push(BasicBlock {
+                    stmts: body_stmts,
+                    terminator: Terminator::Goto(step_id),
+                });
+                let one_slot = LocalId(*next_slot);
+                *next_slot += 1;
+                local_tys.push(Ty::Int);
+                blocks.push(BasicBlock {
+                    stmts: vec![
+                        MStmt::Assign {
+                            dest: one_slot,
+                            value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(1)),
+                        },
+                        MStmt::Assign {
+                            dest: i_slot,
+                            value: skotch_mir::Rvalue::BinOp {
+                                op: skotch_mir::BinOp::AddI,
+                                lhs: i_slot,
+                                rhs: one_slot,
+                            },
+                        },
+                    ],
+                    terminator: Terminator::Goto(cond_id),
+                });
+                // Bind property name to arr_slot for downstream stmts.
+                name_to_local.push((pname.to_string(), arr_slot));
                 i = j + 1;
                 continue;
             }
@@ -38102,9 +38340,15 @@ fn lower_rich_expr_to_slot(
                 _ => None,
             };
             if let Some(arr_ty) = prim_array_ty {
+                // Skip if a trailing lambda is present —
+                // `IntArray(N) { it -> body }` is handled by the
+                // body-walker's Special::PropertyWithPrimArrayInitLambda
+                // path which inlines a counted-loop CFG. Matching here
+                // would silently drop the lambda, leaving the array
+                // zero-initialized.
                 if let Some(arg_list) = call.value_argument_list() {
                     let args: Vec<_> = arg_list.arguments().collect();
-                    if args.len() == 1 {
+                    if args.len() == 1 && call.lambda_argument().is_none() {
                         if let Some(size_e) = args[0].expression() {
                             let size_slot = lower_rich_expr_to_slot(
                                 size_e,
@@ -40484,6 +40728,91 @@ fn lower_rich_expr_to_slot(
                                         descriptor: copyof_desc.to_string(),
                                     },
                                     args: vec![recv_slot, len_slot],
+                                },
+                            });
+                            return Some(result_slot);
+                        }
+                    }
+                    // Primitive-array stdlib reducers — `arr.sum()`,
+                    // `arr.average()`, `arr.max()`, `arr.min()`. kotlinc
+                    // routes these to static methods on
+                    // `kotlin/collections/ArraysKt`:
+                    //   IntArray.sum         → ArraysKt.sum([I)I
+                    //   IntArray.average     → ArraysKt.average([I)D
+                    //   IntArray.max         → ArraysKt.maxOrThrow([I)I
+                    //   IntArray.min         → ArraysKt.minOrThrow([I)I
+                    // (Kotlin 1.7+ renamed source `max`/`min` to the
+                    // `maxOrNull`/`minOrNull`-equivalent shapes; the JVM
+                    // facade keeps the `maxOrThrow`/`minOrThrow` names
+                    // for the `:T` (non-null) variants, which is what
+                    // kotlinc emits for an `IntArray` receiver.)
+                    if matches!(method_n, "sum" | "average" | "max" | "min")
+                        && call
+                            .value_argument_list()
+                            .map(|al| al.arguments().count())
+                            .unwrap_or(0)
+                            == 0
+                        && call.lambda_argument().is_none()
+                    {
+                        // (descriptor, ret_ty, jvm_method_name)
+                        let arr_kind: Option<(&str, Ty, &str)> =
+                            match (&recv_ty_candidate, method_n) {
+                                (Some(Ty::IntArray), "sum") => Some(("([I)I", Ty::Int, "sum")),
+                                (Some(Ty::IntArray), "average") => {
+                                    Some(("([I)D", Ty::Double, "average"))
+                                }
+                                (Some(Ty::IntArray), "max") => {
+                                    Some(("([I)I", Ty::Int, "maxOrThrow"))
+                                }
+                                (Some(Ty::IntArray), "min") => {
+                                    Some(("([I)I", Ty::Int, "minOrThrow"))
+                                }
+                                (Some(Ty::LongArray), "sum") => Some(("([J)J", Ty::Long, "sum")),
+                                (Some(Ty::LongArray), "average") => {
+                                    Some(("([J)D", Ty::Double, "average"))
+                                }
+                                (Some(Ty::LongArray), "max") => {
+                                    Some(("([J)J", Ty::Long, "maxOrThrow"))
+                                }
+                                (Some(Ty::LongArray), "min") => {
+                                    Some(("([J)J", Ty::Long, "minOrThrow"))
+                                }
+                                (Some(Ty::DoubleArray), "sum") => {
+                                    Some(("([D)D", Ty::Double, "sum"))
+                                }
+                                (Some(Ty::DoubleArray), "average") => {
+                                    Some(("([D)D", Ty::Double, "average"))
+                                }
+                                (Some(Ty::DoubleArray), "max") => {
+                                    Some(("([D)D", Ty::Double, "maxOrThrow"))
+                                }
+                                (Some(Ty::DoubleArray), "min") => {
+                                    Some(("([D)D", Ty::Double, "minOrThrow"))
+                                }
+                                _ => None,
+                            };
+                        if let Some((desc, ret_ty, jvm_method)) = arr_kind {
+                            let recv_slot = lower_rich_expr_to_slot(
+                                dq_exprs[0],
+                                lookup_name,
+                                fn_lookup,
+                                next_slot,
+                                pre_stmts,
+                                extra_locals,
+                                strings,
+                            )?;
+                            let result_slot = LocalId(*next_slot);
+                            *next_slot += 1;
+                            extra_locals.push(ret_ty);
+                            pre_stmts.push(MStmt::Assign {
+                                dest: result_slot,
+                                value: skotch_mir::Rvalue::Call {
+                                    kind: skotch_mir::CallKind::StaticJava {
+                                        class_name: "kotlin/collections/ArraysKt".to_string(),
+                                        method_name: jvm_method.to_string(),
+                                        descriptor: desc.to_string(),
+                                    },
+                                    args: vec![recv_slot],
                                 },
                             });
                             return Some(result_slot);
