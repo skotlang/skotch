@@ -6359,6 +6359,65 @@ pub fn lower_file(
                     methods.push(copy_fn);
                 }
 
+                // Data-class componentN(): T accessors — one per
+                // primary-ctor val/var field, in declaration order.
+                // Body is `return this.fieldN` (a single GetField).
+                // Required for destructuring declarations like
+                // `val (a, b) = pos` (the call site is already emitted
+                // by the destructuring lowering, but the target method
+                // needs to exist on the class). Skip per-field when
+                // the user already declared `componentN` explicitly.
+                for (i, (fname, fty)) in data_fields.iter().enumerate() {
+                    let comp_name = format!("component{}", i + 1);
+                    if methods.iter().any(|m| m.name == comp_name) {
+                        continue;
+                    }
+                    let this_slot_comp = LocalId(0);
+                    let field_slot = LocalId(1);
+                    let comp_locals: Vec<Ty> = vec![Ty::Class(name.clone()), fty.clone()];
+                    let comp_stmts: Vec<MStmt> = vec![MStmt::Assign {
+                        dest: field_slot,
+                        value: skotch_mir::Rvalue::GetField {
+                            receiver: this_slot_comp,
+                            class_name: name.clone(),
+                            field_name: fname.clone(),
+                        },
+                    }];
+                    let comp_fn = MirFunction {
+                        id: FuncId(0),
+                        name: comp_name,
+                        params: vec![this_slot_comp],
+                        locals: comp_locals,
+                        blocks: vec![BasicBlock {
+                            stmts: comp_stmts,
+                            terminator: Terminator::ReturnValue(field_slot),
+                        }],
+                        return_ty: fty.clone(),
+                        required_params: 0,
+                        param_names: Vec::new(),
+                        param_receiver_types: Vec::new(),
+                        param_defaults: Vec::new(),
+                        is_abstract: false,
+                        vararg_index: None,
+                        exception_handlers: Vec::new(),
+                        is_suspend: false,
+                        is_inline: false,
+                        is_tailrec: false,
+                        has_type_params: false,
+                        suspend_original_return_ty: None,
+                        suspend_state_machine: None,
+                        annotations: Vec::new(),
+                        named_locals: Vec::new(),
+                        is_private: false,
+                        is_static: false,
+                        default_call_masks: Vec::new(),
+                        needs_leading_nop: false,
+                        local_generic_args: rustc_hash::FxHashMap::default(),
+                        is_value_class_extension: None,
+                    };
+                    methods.push(comp_fn);
+                }
+
                 // Data-class equals(Object): Boolean. Walks each
                 // primary-ctor val/var field and compares via
                 // BinOp::CmpEq (which the JVM backend lowers to the
