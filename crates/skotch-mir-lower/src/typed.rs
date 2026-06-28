@@ -36983,6 +36983,40 @@ fn lower_rich_expr_to_slot(
                                                 | Some("replace")
                                                 | Some("toString")
                                         );
+                                        // String.toInt() / toLong() / toDouble() /
+                                        // toByte() / toShort() / toFloat() are Kotlin
+                                        // stdlib extensions on String that desugar
+                                        // to Integer.parseInt(s) / Long.parseLong(s)
+                                        // / etc. The recv_ty here is Ty::String, so
+                                        // CLASS_METHODS / jdk_method_return_ty both
+                                        // return None (the lookup table for these is
+                                        // structured under a separate str_method arm
+                                        // below the recv_ty_candidate sniffer). Map
+                                        // them explicitly so chains like
+                                        // `s.toInt().toString()` (parity/62-multi-
+                                        // catch try body) surface a primitive recv
+                                        // Ty for the outer DotQualified.toString()
+                                        // dispatch arm.
+                                        let str_parse_return =
+                                            match (recv_ty.as_ref(), method_n.as_deref()) {
+                                                (Some(Ty::String), Some("toInt")) => Some(Ty::Int),
+                                                (Some(Ty::String), Some("toLong")) => {
+                                                    Some(Ty::Long)
+                                                }
+                                                (Some(Ty::String), Some("toDouble")) => {
+                                                    Some(Ty::Double)
+                                                }
+                                                (Some(Ty::String), Some("toByte")) => {
+                                                    Some(Ty::Byte)
+                                                }
+                                                (Some(Ty::String), Some("toShort")) => {
+                                                    Some(Ty::Short)
+                                                }
+                                                (Some(Ty::String), Some("toFloat")) => {
+                                                    Some(Ty::Float)
+                                                }
+                                                _ => None,
+                                            };
                                         // Try CLASS_METHODS first when the
                                         // receiver is a known user class,
                                         // then JDK/classinfo (so chained
@@ -37006,10 +37040,15 @@ fn lower_rich_expr_to_slot(
                                                 }
                                                 _ => None,
                                             };
-                                        match (from_class_methods, string_returning) {
-                                            (Some(ty), _) => Some(ty),
-                                            (None, true) => Some(Ty::String),
-                                            (None, false) => None,
+                                        match (
+                                            from_class_methods,
+                                            str_parse_return,
+                                            string_returning,
+                                        ) {
+                                            (Some(ty), _, _) => Some(ty),
+                                            (None, Some(ty), _) => Some(ty),
+                                            (None, None, true) => Some(Ty::String),
+                                            (None, None, false) => None,
                                         }
                                     }
                                     // Constructor-call receiver: `Foo().bar`
@@ -38721,6 +38760,96 @@ fn lower_rich_expr_to_slot(
                                     return Some(result_slot);
                                 }
                             }
+                        }
+                    }
+                    // Chained-call receiver: `recv.method1().toString()`
+                    // where dq_exprs[0] is itself a DotQualified whose
+                    // inner method has a primitive return type. The
+                    // recv_is_int_like sniffer below only matches simple
+                    // Reference / literal shapes and bails on the
+                    // DotQualified receiver. Re-sniff the inner method's
+                    // return Ty here so the chain lowers to
+                    // `Integer/Long/.../toString(<prim>)Ljava/lang/String;`
+                    // (matches parity/62-multi-catch try body shape
+                    // `s.toInt().toString()`).
+                    if let KtExpr::DotQualified(inner_dq) = &dq_exprs[0] {
+                        let inner_exprs: Vec<KtExpr<'_>> = skotch_ast::children(inner_dq.syntax())
+                            .iter()
+                            .filter_map(KtExpr::cast)
+                            .collect();
+                        let chained_ret_ty: Option<Ty> = if inner_exprs.len() == 2 {
+                            match (&inner_exprs[0], &inner_exprs[1]) {
+                                (KtExpr::Reference(rcv), KtExpr::Call(c)) => {
+                                    let inner_method = match c.callee() {
+                                        Some(KtExpr::Reference(r)) => r.name(),
+                                        _ => None,
+                                    };
+                                    let inner_recv_ty = rcv
+                                        .name()
+                                        .and_then(lookup_name)
+                                        .map(|s| slot_ty_with_param_fallback(s.0, extra_locals));
+                                    match (inner_recv_ty, inner_method) {
+                                        (Some(Ty::String), Some("toInt")) => Some(Ty::Int),
+                                        (Some(Ty::String), Some("toLong")) => Some(Ty::Long),
+                                        (Some(Ty::String), Some("toDouble")) => Some(Ty::Double),
+                                        (Some(Ty::String), Some("toByte")) => Some(Ty::Byte),
+                                        (Some(Ty::String), Some("toShort")) => Some(Ty::Short),
+                                        (Some(Ty::String), Some("toFloat")) => Some(Ty::Float),
+                                        (Some(Ty::Class(cls)), Some(m)) => {
+                                            let inner_arity = c
+                                                .value_argument_list()
+                                                .map(|al| al.arguments().count())
+                                                .unwrap_or(0);
+                                            class_method_return_ty(&cls, m).or_else(|| {
+                                                jdk_method_return_ty(&cls, m, inner_arity)
+                                            })
+                                        }
+                                        _ => None,
+                                    }
+                                }
+                                _ => None,
+                            }
+                        } else {
+                            None
+                        };
+                        let cls_desc: Option<(&str, &str)> = match chained_ret_ty {
+                            Some(Ty::Int) => Some(("java/lang/Integer", "(I)Ljava/lang/String;")),
+                            Some(Ty::Long) => Some(("java/lang/Long", "(J)Ljava/lang/String;")),
+                            Some(Ty::Float) => Some(("java/lang/Float", "(F)Ljava/lang/String;")),
+                            Some(Ty::Double) => Some(("java/lang/Double", "(D)Ljava/lang/String;")),
+                            Some(Ty::Bool) => Some(("java/lang/Boolean", "(Z)Ljava/lang/String;")),
+                            Some(Ty::Char) => {
+                                Some(("java/lang/Character", "(C)Ljava/lang/String;"))
+                            }
+                            Some(Ty::Byte) => Some(("java/lang/Byte", "(B)Ljava/lang/String;")),
+                            Some(Ty::Short) => Some(("java/lang/Short", "(S)Ljava/lang/String;")),
+                            _ => None,
+                        };
+                        if let Some((cls, desc)) = cls_desc {
+                            let recv_slot = lower_rich_expr_to_slot(
+                                dq_exprs[0],
+                                lookup_name,
+                                fn_lookup,
+                                next_slot,
+                                pre_stmts,
+                                extra_locals,
+                                strings,
+                            )?;
+                            let result_slot = LocalId(*next_slot);
+                            *next_slot += 1;
+                            extra_locals.push(Ty::String);
+                            pre_stmts.push(MStmt::Assign {
+                                dest: result_slot,
+                                value: skotch_mir::Rvalue::Call {
+                                    kind: skotch_mir::CallKind::StaticJava {
+                                        class_name: cls.to_string(),
+                                        method_name: "toString".to_string(),
+                                        descriptor: desc.to_string(),
+                                    },
+                                    args: vec![recv_slot],
+                                },
+                            });
+                            return Some(result_slot);
                         }
                     }
                     // Filter out cases where receiver shouldn't use
