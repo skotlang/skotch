@@ -2855,6 +2855,48 @@ impl Drop for ParamTyScope {
 }
 
 thread_local! {
+    /// Smart-cast narrow Ty per absolute slot id. Installed by the
+    /// `&&` arm in `lower_rich_expr_to_slot` when the lhs is shaped
+    /// `Reference is T` (or `(Reference is T) && ...`): the rhs of
+    /// `&&` should see the slot referenced on the lhs as Ty::Class(T)
+    /// so property access like `other.name` after `other is Person`
+    /// dispatches through the user-class getter arm rather than
+    /// bailing on `Ty::Any`.
+    ///
+    /// Consulted by `slot_ty_with_param_fallback` BEFORE the
+    /// PARAM_TY_FALLBACK / extra_locals lookup so the smart-cast
+    /// override wins. RAII guard restores the prior map on drop so
+    /// nested `&&` chains can stack independently.
+    static SMART_CAST_OVERRIDES: std::cell::RefCell<rustc_hash::FxHashMap<u32, Ty>> =
+        std::cell::RefCell::new(rustc_hash::FxHashMap::default());
+}
+
+struct SmartCastScope {
+    prev: rustc_hash::FxHashMap<u32, Ty>,
+}
+
+impl SmartCastScope {
+    /// Install `entries` on top of the current scope, merging keys so
+    /// outer narrowings still apply for slots not narrowed by `entries`.
+    fn new(entries: Vec<(u32, Ty)>) -> Self {
+        let prev = SMART_CAST_OVERRIDES.with(|cell| cell.borrow().clone());
+        SMART_CAST_OVERRIDES.with(|cell| {
+            let mut m = cell.borrow_mut();
+            for (slot, ty) in entries {
+                m.insert(slot, ty);
+            }
+        });
+        SmartCastScope { prev }
+    }
+}
+
+impl Drop for SmartCastScope {
+    fn drop(&mut self) {
+        SMART_CAST_OVERRIDES.with(|cell| *cell.borrow_mut() = std::mem::take(&mut self.prev));
+    }
+}
+
+thread_local! {
     /// Function-scoped cross-file val lookup. Set by the legacy and
     /// builder body-walkers before invoking lower_rich so a bare
     /// Reference that doesn't resolve to a local can fall back to a
@@ -3567,6 +3609,13 @@ fn resolve_type_ref(tr: skotch_ast::KtTypeReference<'_>) -> Ty {
 /// straight to the fallback. Without this split, slot 0 (param)
 /// could erroneously return the body's first local Ty.
 fn slot_ty_with_param_fallback(slot: u32, extra_locals: &[Ty]) -> Ty {
+    // Smart-cast override wins over every other source — the `&&` arm
+    // installs `Reference is T` narrowings that must surface as
+    // `Ty::Class(T)` so the rhs's property-access arm fires instead of
+    // bailing on the raw `Ty::Any?` param slot.
+    if let Some(ty) = SMART_CAST_OVERRIDES.with(|cell| cell.borrow().get(&slot).cloned()) {
+        return ty;
+    }
     let param_count = PARAM_TY_FALLBACK.with(|cell| cell.borrow().len());
     if (slot as usize) < param_count {
         return PARAM_TY_FALLBACK
@@ -35300,6 +35349,73 @@ fn lower_rich_expr_to_slot(
         if op_text == "&&" || op_text == "||" {
             let lhs = b.lhs()?;
             let rhs = b.rhs()?;
+            // Smart-cast narrowing: when the lhs of `&&` contains
+            // `name is T` checks (directly or nested under further `&&`
+            // chains), the rhs sees `name` narrowed to `Ty::Class(T)`.
+            // This unblocks property access like `other.name` after
+            // `other is Person`, which would otherwise bail because the
+            // raw `other: Any?` param has no `Ty::Class(_)` dispatch.
+            //
+            // Walks the lhs tree gathering `(name_slot, target_class)`
+            // pairs from each `Reference is T` clause; the RAII scope
+            // is installed only for the rhs lowering (lhs reads still
+            // see the original Any? type so the `is`-check itself
+            // dispatches via `InstanceOf` rather than a tautological
+            // `Class is Class`).
+            fn collect_is_narrowings<'a>(
+                e: skotch_ast::KtExpr<'a>,
+                lookup_name: &dyn Fn(&str) -> Option<LocalId>,
+                out: &mut Vec<(u32, Ty)>,
+            ) {
+                use skotch_ast::KtExpr;
+                let e = unwrap_parens(e);
+                match e {
+                    KtExpr::Binary(b) => {
+                        if b.operation().map(|o| o.text()).as_deref() == Some("&&") {
+                            if let Some(lhs) = b.lhs() {
+                                collect_is_narrowings(lhs, lookup_name, out);
+                            }
+                            if let Some(rhs) = b.rhs() {
+                                collect_is_narrowings(rhs, lookup_name, out);
+                            }
+                        }
+                    }
+                    KtExpr::Is(is_e) => {
+                        if is_negated_is_expr(is_e) {
+                            return;
+                        }
+                        let children: Vec<_> = skotch_ast::children(is_e.syntax()).iter().collect();
+                        let operand = children
+                            .iter()
+                            .find_map(|c| KtExpr::cast(c))
+                            .map(unwrap_parens);
+                        let type_name = children.iter().find_map(|c| {
+                            if c.kind == skotch_syntax::SyntaxKind::TYPE_REFERENCE {
+                                if let Some(tr) = skotch_ast::KtTypeReference::cast(c) {
+                                    return tr.user_type().and_then(|u| u.name()).map(String::from);
+                                }
+                            }
+                            None
+                        });
+                        if let (Some(KtExpr::Reference(r)), Some(tname)) = (operand, type_name) {
+                            if let Some(n) = r.name() {
+                                if let Some(slot) = lookup_name(n) {
+                                    let descriptor =
+                                        skotch_types::intrinsics::kotlin_to_jvm_class(&tname)
+                                            .map(|s| s.to_string())
+                                            .unwrap_or(tname);
+                                    out.push((slot.0, Ty::Class(descriptor)));
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            let mut narrowings: Vec<(u32, Ty)> = Vec::new();
+            if op_text == "&&" {
+                collect_is_narrowings(lhs, lookup_name, &mut narrowings);
+            }
             let lhs_slot = lower_rich_expr_to_slot(
                 lhs,
                 lookup_name,
@@ -35309,6 +35425,11 @@ fn lower_rich_expr_to_slot(
                 extra_locals,
                 strings,
             )?;
+            let _smart_cast_scope = if narrowings.is_empty() {
+                None
+            } else {
+                Some(SmartCastScope::new(narrowings))
+            };
             let rhs_slot = lower_rich_expr_to_slot(
                 rhs,
                 lookup_name,
@@ -38770,6 +38891,38 @@ fn lower_rich_expr_to_slot(
                                     | "kotlin/ranges/IntRange"
                             ) && !cname.starts_with('[')
                             {
+                                // Smart-cast CheckCast bridge: when the
+                                // receiver Ty came from SMART_CAST_OVERRIDES
+                                // (i.e. an `other is Person && other.name`
+                                // chain) but the underlying slot is still
+                                // declared `Any?` / Object, emit a
+                                // `CheckCast` so the JVM stack carries a
+                                // properly typed `Person` reference before
+                                // `invokevirtual Person.getName()`. Without
+                                // this, the verifier rejects the
+                                // invokevirtual at the (cast-less) `aload
+                                // other` stack entry.
+                                let recv_slot = if let Some(narrowed) = SMART_CAST_OVERRIDES
+                                    .with(|cell| cell.borrow().get(&recv_slot.0).cloned())
+                                {
+                                    if let Ty::Class(target) = narrowed {
+                                        let cs = LocalId(*next_slot);
+                                        *next_slot += 1;
+                                        extra_locals.push(Ty::Class(target.clone()));
+                                        pre_stmts.push(MStmt::Assign {
+                                            dest: cs,
+                                            value: skotch_mir::Rvalue::CheckCast {
+                                                obj: recv_slot,
+                                                target_class: target,
+                                            },
+                                        });
+                                        cs
+                                    } else {
+                                        recv_slot
+                                    }
+                                } else {
+                                    recv_slot
+                                };
                                 // Throwable family (incl. user subclasses
                                 // via CLASS_SUPER walk): `.message` →
                                 // `getMessage()Ljava/lang/String;`. Without
