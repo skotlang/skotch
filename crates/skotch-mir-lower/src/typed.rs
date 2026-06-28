@@ -43409,8 +43409,18 @@ fn lower_simple_body(
         }
     }
 
-    // `as` type cast: `fun toS(x: Any): String = x as String`.
-    // Emits Rvalue::CheckCast with the target class descriptor.
+    // `as` / `as?` type cast in expression-body position:
+    //   `fun toS(x: Any): String = x as String`     → unconditional CheckCast
+    //   `fun safeCast(x: Any): String? = x as? String` → InstanceOf + branch
+    //                                                    + CheckCast-or-null
+    //
+    // The `as?` form is needed to make `fun f(x: Any): T? = x as? T`-shaped
+    // bodies (fixture 500, parity/79) emit a real null-returning method
+    // instead of either throwing ClassCastException or returning null
+    // unconditionally. CFG layout for `as?`:
+    //   block 0: inst = InstanceOf(operand, T); Branch(inst, 1, 2)
+    //   block 1: result = CheckCast(operand, T); ReturnValue(result)
+    //   block 2: result = Const(null);           ReturnValue(result)
     if let KtExpr::BinaryWithTypeRhs(b) = &body_expr {
         let children: Vec<_> = skotch_ast::children(b.syntax()).iter().collect();
         let operand = children
@@ -43425,17 +43435,27 @@ fn lower_simple_body(
             }
             None
         });
-        // Operation must be `as` (KW_AS). The keyword is wrapped in
-        // an OPERATION_REFERENCE composite, so check one level deep.
-        let is_as = children.iter().any(|c| {
-            if c.kind == skotch_syntax::SyntaxKind::OPERATION_REFERENCE {
-                skotch_ast::children(c)
-                    .iter()
-                    .any(|cc| cc.kind == skotch_syntax::SyntaxKind::KW_AS)
-            } else {
-                false
+        // Inspect the OPERATION_REFERENCE child for KW_AS vs AS_SAFE.
+        // AS_SAFE is the lexer-fused `as` `?` pair (see grammar.rs's
+        // `parse_as_expression`).
+        let (is_as, is_safe) = {
+            let mut found_as = false;
+            let mut found_safe = false;
+            for c in children.iter() {
+                if c.kind == skotch_syntax::SyntaxKind::OPERATION_REFERENCE {
+                    for cc in skotch_ast::children(c).iter() {
+                        if cc.kind == skotch_syntax::SyntaxKind::KW_AS {
+                            found_as = true;
+                        }
+                        if cc.kind == skotch_syntax::SyntaxKind::AS_SAFE {
+                            found_as = true;
+                            found_safe = true;
+                        }
+                    }
+                }
             }
-        });
+            (found_as, found_safe)
+        };
         if is_as {
             if let (Some(KtExpr::Reference(r)), Some(tname)) = (operand, type_name) {
                 if let Some(name) = r.name() {
@@ -43453,6 +43473,59 @@ fn lower_simple_body(
                             .unwrap_or(tname.clone());
                         let ret_ty = skotch_types::ty_from_name(&tname).unwrap_or(Ty::Any);
                         let param_count = param_names.len();
+                        if is_safe {
+                            // `x as? T` → instanceof check + branch.
+                            // result_slot has type Nullable(T) because
+                            // the else branch stores null. The 4-block
+                            // CFG (cond / cast / null / join-and-return)
+                            // matches kotlinc's shape: both branches
+                            // converge on a single trailing `areturn`,
+                            // which the backend lowers via `goto` from
+                            // the cast branch.
+                            let inst_slot = skotch_mir::LocalId(param_count as u32);
+                            let result_slot = skotch_mir::LocalId((param_count + 1) as u32);
+                            let nullable_ret_ty = Ty::Nullable(Box::new(ret_ty.clone()));
+                            let blocks = vec![
+                                BasicBlock {
+                                    stmts: vec![skotch_mir::Stmt::Assign {
+                                        dest: inst_slot,
+                                        value: skotch_mir::Rvalue::InstanceOf {
+                                            obj: skotch_mir::LocalId(idx as u32),
+                                            type_descriptor: target_class.clone(),
+                                        },
+                                    }],
+                                    terminator: Terminator::Branch {
+                                        cond: inst_slot,
+                                        then_block: 1,
+                                        else_block: 2,
+                                    },
+                                },
+                                BasicBlock {
+                                    stmts: vec![skotch_mir::Stmt::Assign {
+                                        dest: result_slot,
+                                        value: skotch_mir::Rvalue::CheckCast {
+                                            obj: skotch_mir::LocalId(idx as u32),
+                                            target_class,
+                                        },
+                                    }],
+                                    terminator: Terminator::Goto(3),
+                                },
+                                BasicBlock {
+                                    stmts: vec![skotch_mir::Stmt::Assign {
+                                        dest: result_slot,
+                                        value: skotch_mir::Rvalue::Const(
+                                            skotch_mir::MirConst::Null,
+                                        ),
+                                    }],
+                                    terminator: Terminator::Goto(3),
+                                },
+                                BasicBlock {
+                                    stmts: vec![],
+                                    terminator: Terminator::ReturnValue(result_slot),
+                                },
+                            ];
+                            return (blocks, vec![Ty::Bool, nullable_ret_ty]);
+                        }
                         let result_slot = skotch_mir::LocalId(param_count as u32);
                         let blocks = vec![BasicBlock {
                             stmts: vec![skotch_mir::Stmt::Assign {
