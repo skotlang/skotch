@@ -1135,6 +1135,19 @@ pub struct MirModule {
     /// static final field … from a different method` link-time check.
     #[serde(default, skip_serializing_if = "rustc_hash::FxHashSet::is_empty")]
     pub top_level_var_names: rustc_hash::FxHashSet<String>,
+    /// Subset of `top_level_prop_names` declared with a `by lazy { … }`
+    /// delegate. The backing field is left at its default (zero/null)
+    /// in the auto-`<clinit>` and a synthetic `get<Name>()` MirFunction
+    /// performs the compute-once-on-first-read + caching. Every
+    /// `Rvalue::GetStaticField` against a lazy prop is rewritten to an
+    /// `invokestatic get<Name>()` call at backend emit time so the
+    /// lazy trigger actually fires on first read.
+    ///
+    /// kotlinc emits a real `kotlin.Lazy` delegate + invokedynamic
+    /// site for `by lazy`; this is the "eager once-on-first-read"
+    /// fallback shape until that infrastructure lands.
+    #[serde(default, skip_serializing_if = "rustc_hash::FxHashSet::is_empty")]
+    pub top_level_lazy_props: rustc_hash::FxHashSet<String>,
 }
 
 impl MirModule {

@@ -1104,6 +1104,19 @@ fn emit_clinit_for_props(
     let mut max_stack: i32 = 0;
     let mut stack: i32 = 0;
     for (field_name, ty, value) in props {
+        // Skip lazy props' backing fields: the synthesized lazy getter
+        // writes them on first access. The JVM zero-initializes the
+        // field at class load (0 for int, null for ref, false for
+        // Boolean), so the implicit default is what the getter checks
+        // against via its companion `<name>$initialized: Boolean` flag.
+        //
+        // Emitting an explicit init here is harmful when the prop's
+        // declared type is primitive but `value` is `MirConst::Null`
+        // (the placeholder mir-lower stored): the resulting
+        // `aconst_null; putstatic <name>:I` fails JVM verification.
+        if module.top_level_lazy_props.contains(field_name) {
+            continue;
+        }
         // Push the literal.
         emit_load_const(cp, &mut code, &mut stack, &mut max_stack, value, module);
         // putstatic <wrapper>.<field_name>:<descriptor>
@@ -1649,10 +1662,23 @@ fn compile_class(class_name: &str, module: &MirModule) -> Vec<u8> {
     }
     // Pre-build non-`const val` property fields (private static final).
     // The actual values are stored by the synthesized `<clinit>` below.
+    //
+    // Lazy-prop backing fields (and their companion `$initialized`
+    // flag) cannot be `final`: the synthesized `getX()` writes to
+    // them after `<clinit>` has completed, which is an
+    // `IllegalAccessError` ("Update to static final field … from a
+    // different method than <clinit>") for ACC_FINAL fields. Drop the
+    // FINAL flag exactly like `var` props do.
     for (name, ty, _value) in &module.top_level_props {
         let mut blob = Vec::new();
         let is_var = module.top_level_var_names.contains(name);
-        emit_property_field(name, ty, is_var, &mut cp, &mut blob);
+        let is_lazy_field = module.top_level_lazy_props.contains(name)
+            || name.ends_with("$initialized")
+                && module
+                    .top_level_lazy_props
+                    .contains(&name[..name.len() - "$initialized".len()]);
+        let drop_final = is_var || is_lazy_field;
+        emit_property_field(name, ty, drop_final, &mut cp, &mut blob);
         const_field_blobs.push(blob);
     }
 
@@ -1683,8 +1709,25 @@ fn compile_class(class_name: &str, module: &MirModule) -> Vec<u8> {
     // Getters for top-level props — always emitted (even when the
     // manual <clinit> handles initialization, callers still need the
     // `get<Name>()` accessor methods).
+    //
+    // Skip props in `top_level_lazy_props` (mir-lower synthesizes a
+    // custom getter MirFunction that performs the lazy compute +
+    // caching dance; the regular method-emit loop below picks it up).
+    // Also skip the companion `<name>$initialized: Boolean` flag —
+    // it's an internal implementation detail; user code never reads
+    // it directly, so exposing a `get<Name>$initialized` accessor
+    // would be dead code (and isn't a valid Java identifier shape).
     if !module.top_level_props.is_empty() {
         for (field_name, ty, _value) in &module.top_level_props {
+            if module.top_level_lazy_props.contains(field_name) {
+                continue;
+            }
+            if field_name.ends_with("$initialized") {
+                let stem = &field_name[..field_name.len() - "$initialized".len()];
+                if module.top_level_lazy_props.contains(stem) {
+                    continue;
+                }
+            }
             let getter =
                 emit_property_getter(class_name, field_name, ty, &mut cp, code_attr_name_idx);
             method_blobs.push(getter);
@@ -4047,13 +4090,14 @@ fn emit_method_body(
         }
         out
     };
-    setup_emit_state(
+    setup_emit_state_with_func_name(
         inlinable,
         Some(inlinable_getstatic),
         unused,
         Some(named_const_inits),
         cp as *mut ConstantPool,
         module as *const MirModule,
+        &func.name,
     );
 
     // Compute reachable blocks — skip emitting dead blocks that follow
@@ -16114,15 +16158,34 @@ fn walk_block(
                 store_local(code, stack, slots, next_slot, *dest, &func.locals);
             }
             Rvalue::GetStaticField {
-                class_name,
+                class_name: gs_class,
                 field_name,
                 descriptor,
             } => {
-                let fr = cp.fieldref(class_name, field_name, descriptor);
-                code.push(0xB2); // getstatic
-                code.write_u16::<BigEndian>(fr).unwrap();
-                bump(stack, max_stack, 1);
-                store_local(code, stack, slots, next_slot, *dest, &func.locals);
+                // Lazy-prop read → reroute to `invokestatic get<Name>()`
+                // so the first-read trigger fires (mir-lower synthesized
+                // the lazy getter MirFunction). Suppress the reroute
+                // when we are emitting the lazy getter itself; otherwise
+                // its `getstatic <name>:T` for the cached read would
+                // recurse infinitely.
+                let is_lazy =
+                    gs_class == class_name && module.top_level_lazy_props.contains(field_name);
+                let suppress_reroute = is_lazy && func.name == synthesize_getter_name(field_name);
+                if is_lazy && !suppress_reroute {
+                    let getter_name = synthesize_getter_name(field_name);
+                    let getter_desc = format!("(){}", descriptor);
+                    let mr = cp.methodref(gs_class, &getter_name, &getter_desc);
+                    code.push(0xB8); // invokestatic
+                    code.write_u16::<BigEndian>(mr).unwrap();
+                    bump(stack, max_stack, 1);
+                    store_local(code, stack, slots, next_slot, *dest, &func.locals);
+                } else {
+                    let fr = cp.fieldref(gs_class, field_name, descriptor);
+                    code.push(0xB2); // getstatic
+                    code.write_u16::<BigEndian>(fr).unwrap();
+                    bump(stack, max_stack, 1);
+                    store_local(code, stack, slots, next_slot, *dest, &func.locals);
+                }
             }
             Rvalue::NewInstance(class_name) => {
                 // Phase H4: for `@JvmInline value class` targets the
@@ -19865,6 +19928,12 @@ thread_local! {
     /// SAFETY: only valid while emission is in progress for one method.
     static EMIT_CP: RefCell<Option<*mut ConstantPool>> = const { RefCell::new(None) };
     static EMIT_MODULE: RefCell<Option<*const MirModule>> = const { RefCell::new(None) };
+    /// Name of the currently emitting function — consulted by
+    /// `load_local` to suppress the lazy-prop reroute when the load
+    /// happens inside the lazy getter itself (otherwise the getter's
+    /// cached-value read would recurse through `invokestatic` back
+    /// into itself). Set/cleared by `setup_emit_state`.
+    static EMIT_FUNC_NAME: RefCell<String> = const { RefCell::new(String::new()) };
 }
 
 /// Initialise all six per-method emission slots in one call. Pass
@@ -19890,6 +19959,31 @@ fn setup_emit_state(
     EMIT_MODULE.with(|cell| *cell.borrow_mut() = Some(module));
 }
 
+/// Set the per-method emit state plus the currently emitting function
+/// name (used by `load_local` for the lazy-prop reroute self-recursion
+/// guard). Wraps `setup_emit_state` so callers that don't care about
+/// the function name (the multi-suspend state-machine emitter, etc.)
+/// can keep using the original helper.
+fn setup_emit_state_with_func_name(
+    inlinable: FxHashMap<u32, MirConst>,
+    inlinable_getstatic: Option<FxHashMap<u32, (String, String, String)>>,
+    unused: FxHashSet<u32>,
+    named_const_inits: Option<FxHashMap<u32, MirConst>>,
+    cp: *mut ConstantPool,
+    module: *const MirModule,
+    func_name: &str,
+) {
+    setup_emit_state(
+        inlinable,
+        inlinable_getstatic,
+        unused,
+        named_const_inits,
+        cp,
+        module,
+    );
+    EMIT_FUNC_NAME.with(|cell| *cell.borrow_mut() = func_name.to_string());
+}
+
 /// Clear every emission-state slot. Idempotent — safe to call from
 /// the `Drop` side of an explicit RAII guard as well as inline at the
 /// end of a method-emission scope.
@@ -19900,6 +19994,7 @@ fn reset_emit_state() {
     NAMED_CONST_INITS.with(|cell| cell.borrow_mut().clear());
     EMIT_CP.with(|cell| *cell.borrow_mut() = None);
     EMIT_MODULE.with(|cell| *cell.borrow_mut() = None);
+    EMIT_FUNC_NAME.with(|cell| cell.borrow_mut().clear());
 }
 
 /// Locals that are the receiver of two or more consecutive `componentN()`
@@ -20038,14 +20133,41 @@ fn load_local(
     }
     // Check inlinable-getstatic table. If this local was produced by a
     // single GetStaticField, re-emit `getstatic` instead of `aload`.
+    //
+    // Lazy-prop shortcut: when the field is in `top_level_lazy_props`
+    // the getstatic actually needs to be an `invokestatic get<Name>()`
+    // so the lazy-trigger fires (mir-lower synthesized the getter
+    // MirFunction; the cached field is otherwise zero-initialized).
+    // Without this branch the `println(computed)` use site emitted a
+    // direct `getstatic computed:I` on a JVM-zeroed field and printed
+    // 0 instead of the computed value.
     let getstatic_src = INLINABLE_GETSTATIC.with(|cell| cell.borrow().get(&local.0).cloned());
     if let Some((class, field, descriptor)) = getstatic_src {
         let cp_ptr = EMIT_CP.with(|cell| *cell.borrow());
+        let mod_ptr = EMIT_MODULE.with(|cell| *cell.borrow());
+        let curr_func = EMIT_FUNC_NAME.with(|cell| cell.borrow().clone());
         if let Some(cp_raw) = cp_ptr {
             let cp = unsafe { &mut *cp_raw };
-            let fr = cp.fieldref(&class, &field, &descriptor);
-            code.push(0xB2); // getstatic
-            code.write_u16::<BigEndian>(fr).unwrap();
+            let is_lazy_prop = mod_ptr
+                .map(|m| unsafe { &*m }.top_level_lazy_props.contains(&field))
+                .unwrap_or(false);
+            // Suppress the lazy-reroute when the current function is
+            // itself the lazy getter — its terminal `getstatic <name>:T`
+            // (the cached-value read after the body has run) must stay
+            // a real `getstatic`, not recurse back into `invokestatic
+            // get<Name>()`.
+            let in_self_getter = is_lazy_prop && curr_func == synthesize_getter_name(&field);
+            if is_lazy_prop && !in_self_getter {
+                let getter_name = synthesize_getter_name(&field);
+                let getter_desc = format!("(){}", descriptor);
+                let mr = cp.methodref(&class, &getter_name, &getter_desc);
+                code.push(0xB8); // invokestatic
+                code.write_u16::<BigEndian>(mr).unwrap();
+            } else {
+                let fr = cp.fieldref(&class, &field, &descriptor);
+                code.push(0xB2); // getstatic
+                code.write_u16::<BigEndian>(fr).unwrap();
+            }
             let width = if matches!(ty, Ty::Long | Ty::Double) {
                 2
             } else {

@@ -7662,6 +7662,30 @@ pub fn lower_file(
     let mut clinit_lambda_locals: Vec<Ty> = Vec::new();
     let mut clinit_next_slot: u32 = 0;
     let no_local_lookup = |_n: &str| -> Option<skotch_mir::LocalId> { None };
+    // Pending lazy-getter synthesis records. We can't push the
+    // MirFunctions immediately because the FuncId-bumping pass set
+    // `local_fn_id_base = module.functions.len()` BEFORE this loop and
+    // assigned each regular fn a stable FuncId; inserting anything
+    // ahead of those slots would shift them. Stash here and append
+    // after all regular functions plus the manual `<clinit>`.
+    //
+    // Each record carries the synthesized getter body (already lowered
+    // through `lower_rich_expr_to_slot`) plus the receiver field name,
+    // its declared type, and the `$initialized` flag field name. The
+    // getter shape is:
+    //   block 0: tFlag = getstatic <name>$initialized:Z; branch tFlag
+    //            then=2 else=1
+    //   block 1: <body stmts>; putstatic <name>; tTrue=const(true);
+    //            putstatic <name>$initialized; goto 2
+    //   block 2: tRes = getstatic <name>; return tRes
+    struct PendingLazyGetter {
+        prop_name: String,
+        prop_ty: Ty,
+        body_stmts: Vec<skotch_mir::Stmt>,
+        body_locals: Vec<Ty>,
+        body_result_slot: skotch_mir::LocalId,
+    }
+    let mut pending_lazy_getters: Vec<PendingLazyGetter> = Vec::new();
     for decl in file.decls() {
         if let KtDecl::Property(p) = decl {
             let Some(name) = p.name() else { continue };
@@ -7684,6 +7708,101 @@ pub fn lower_file(
                 _ => None,
             };
             let ty = declared_ty.or(inferred_ty).unwrap_or(skotch_types::Ty::Any);
+
+            // `val X: T by lazy { … }` — lazy delegate shape. Capture
+            // the lambda body, lower it through `lower_rich_expr_to_slot`
+            // into a fresh stmt buffer, and stash a `PendingLazyGetter`
+            // record. The backing field stays in `top_level_props` with
+            // the default `MirConst::Null` (so the JVM-default value
+            // for `T` is what `<clinit>` writes); a parallel
+            // `<name>$initialized: Boolean` field tracks whether the
+            // body has run. Reads of the prop are rerouted at backend
+            // emit time to `invokestatic get<Name>()` so the lazy
+            // trigger actually fires on first access.
+            //
+            // Eager-eval-at-clinit would change observable stdout
+            // ordering (the body's `println` would fire BEFORE main
+            // runs); kotlinc's lazy semantics fire on first read, AFTER
+            // any prior main-body prints. Matching the lazy timing is
+            // the whole point of the `kotlin.Lazy` delegate.
+            let lazy_body_e: Option<skotch_ast::KtBlock<'_>> = if init_e.is_none() {
+                p.delegate_expression().and_then(|de| {
+                    let de = unwrap_parens(de);
+                    let skotch_ast::KtExpr::Call(call) = de else {
+                        return None;
+                    };
+                    let skotch_ast::KtExpr::Reference(r) = call.callee()? else {
+                        return None;
+                    };
+                    if r.name()? != "lazy" {
+                        return None;
+                    }
+                    let la = call.lambda_argument()?;
+                    let inner = skotch_ast::children(la.syntax())
+                        .iter()
+                        .find_map(skotch_ast::KtExpr::cast)?;
+                    let skotch_ast::KtExpr::Lambda(lam) = inner else {
+                        return None;
+                    };
+                    lam.function_literal()?.body()
+                })
+            } else {
+                None
+            };
+            if let Some(body_block) = lazy_body_e {
+                // Lower the body in its own isolated buffer. The body
+                // becomes block 1 of the synthesized `getX()` MirFunction.
+                let mut body_stmts: Vec<skotch_mir::Stmt> = Vec::new();
+                let mut body_locals: Vec<Ty> = Vec::new();
+                let mut body_next_slot: u32 = 0;
+                let body_e = skotch_ast::KtExpr::Block(body_block);
+                let slot_opt = lower_rich_expr_to_slot(
+                    body_e,
+                    &no_local_lookup,
+                    &fn_lookup,
+                    &mut body_next_slot,
+                    &mut body_stmts,
+                    &mut body_locals,
+                    &mut module.strings,
+                );
+                if let Some(result_slot) = slot_opt {
+                    // Field for the cached value — initial MirConst::Null
+                    // (auto-clinit will materialize default zero/null for
+                    // primitive/reference Tys via `emit_load_const`).
+                    module.top_level_props.push((
+                        name.to_string(),
+                        ty.clone(),
+                        skotch_mir::MirConst::Null,
+                    ));
+                    module.top_level_prop_names.insert(name.to_string());
+                    module.top_level_lazy_props.insert(name.to_string());
+                    // Companion `<name>$initialized: Boolean` field —
+                    // tracks first-read so subsequent reads skip the
+                    // body. Default false fits the auto-clinit's
+                    // MirConst::Bool path.
+                    let flag_name = format!("{}$initialized", name);
+                    module.top_level_props.push((
+                        flag_name.clone(),
+                        Ty::Bool,
+                        skotch_mir::MirConst::Bool(false),
+                    ));
+                    module.top_level_prop_names.insert(flag_name);
+                    val_lookup.insert(name.to_string(), ty.clone());
+                    pending_lazy_getters.push(PendingLazyGetter {
+                        prop_name: name.to_string(),
+                        prop_ty: ty,
+                        body_stmts,
+                        body_locals,
+                        body_result_slot: result_slot,
+                    });
+                    continue;
+                }
+                // Body failed to lower — fall through to the regular
+                // null-init prop path so codegen at least emits a class
+                // (callers will see the default value instead of the
+                // lazy result).
+            }
+
             // Lambda-init shortcut: synthesize Lambda$N + accumulate
             // NewInstance/Constructor/PutStaticField into clinit body.
             // The `MirConst::Null` placeholder still flows to the prop
@@ -10005,6 +10124,131 @@ pub fn lower_file(
             is_value_class_extension: None,
         };
         module.functions.push(clinit);
+    }
+
+    // Append synthesized `get<Name>()` accessors for every `by lazy`
+    // prop. Each getter does the if/then/else dance described on the
+    // `PendingLazyGetter` struct definition. Pushed AFTER the manual
+    // `<clinit>` so the FuncId-as-Vec-index invariant for every
+    // regular fn holds (mirrors the manual-clinit deferral above).
+    for plg in pending_lazy_getters {
+        use skotch_mir::{
+            BasicBlock, FuncId, LocalId, MirConst, MirFunction, Rvalue, Stmt as MStmt, Terminator,
+        };
+        let getter_name = format!(
+            "get{}{}",
+            plg.prop_name
+                .chars()
+                .next()
+                .map(|c| c.to_ascii_uppercase().to_string())
+                .unwrap_or_default(),
+            &plg.prop_name[plg
+                .prop_name
+                .chars()
+                .next()
+                .map(|c| c.len_utf8())
+                .unwrap_or(0)..]
+        );
+        let prop_desc = ty_to_descriptor(&plg.prop_ty);
+        let flag_name = format!("{}$initialized", plg.prop_name);
+        // Build the locals vector: body locals at indices 0..N, then
+        // appended slots for the flag-load (Bool), the bool-true const
+        // (Bool), and the final result (prop_ty).
+        let mut locals: Vec<Ty> = plg.body_locals;
+        let flag_slot = LocalId(locals.len() as u32);
+        locals.push(Ty::Bool);
+        let true_slot = LocalId(locals.len() as u32);
+        locals.push(Ty::Bool);
+        let result_slot = LocalId(locals.len() as u32);
+        locals.push(plg.prop_ty.clone());
+
+        // Block 0: branch on flag.
+        let block0 = BasicBlock {
+            stmts: vec![MStmt::Assign {
+                dest: flag_slot,
+                value: Rvalue::GetStaticField {
+                    class_name: fq_wrapper_class.clone(),
+                    field_name: flag_name.clone(),
+                    descriptor: "Z".to_string(),
+                },
+            }],
+            terminator: Terminator::Branch {
+                cond: flag_slot,
+                then_block: 2, // already initialized → return cached
+                else_block: 1, // first read → compute + cache
+            },
+        };
+        // Block 1: compute body, store result, store flag = true.
+        let mut block1_stmts = plg.body_stmts;
+        block1_stmts.push(MStmt::Assign {
+            dest: plg.body_result_slot,
+            value: Rvalue::PutStaticField {
+                class_name: fq_wrapper_class.clone(),
+                field_name: plg.prop_name.clone(),
+                descriptor: prop_desc.clone(),
+                value: plg.body_result_slot,
+            },
+        });
+        block1_stmts.push(MStmt::Assign {
+            dest: true_slot,
+            value: Rvalue::Const(MirConst::Bool(true)),
+        });
+        block1_stmts.push(MStmt::Assign {
+            dest: true_slot,
+            value: Rvalue::PutStaticField {
+                class_name: fq_wrapper_class.clone(),
+                field_name: flag_name.clone(),
+                descriptor: "Z".to_string(),
+                value: true_slot,
+            },
+        });
+        let block1 = BasicBlock {
+            stmts: block1_stmts,
+            terminator: Terminator::Goto(2),
+        };
+        // Block 2: load cached field, return.
+        let block2 = BasicBlock {
+            stmts: vec![MStmt::Assign {
+                dest: result_slot,
+                value: Rvalue::GetStaticField {
+                    class_name: fq_wrapper_class.clone(),
+                    field_name: plg.prop_name.clone(),
+                    descriptor: prop_desc,
+                },
+            }],
+            terminator: Terminator::ReturnValue(result_slot),
+        };
+
+        let lazy_getter = MirFunction {
+            id: FuncId(module.functions.len() as u32),
+            name: getter_name,
+            params: Vec::new(),
+            locals,
+            blocks: vec![block0, block1, block2],
+            return_ty: plg.prop_ty,
+            required_params: 0,
+            param_names: Vec::new(),
+            param_receiver_types: Vec::new(),
+            param_defaults: Vec::new(),
+            is_abstract: false,
+            vararg_index: None,
+            exception_handlers: Vec::new(),
+            is_suspend: false,
+            is_inline: false,
+            is_tailrec: false,
+            has_type_params: false,
+            suspend_original_return_ty: None,
+            suspend_state_machine: None,
+            annotations: Vec::new(),
+            named_locals: Vec::new(),
+            is_private: false,
+            is_static: true,
+            default_call_masks: Vec::new(),
+            needs_leading_nop: false,
+            local_generic_args: rustc_hash::FxHashMap::default(),
+            is_value_class_extension: None,
+        };
+        module.functions.push(lazy_getter);
     }
 
     module
