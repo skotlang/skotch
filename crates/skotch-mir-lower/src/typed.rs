@@ -42184,6 +42184,153 @@ fn lower_rich_expr_to_slot(
                             return Some(result_slot);
                         }
                     }
+                    // `s.split(",")` — Kotlin stdlib extension that
+                    // kotlinc lowers to a static
+                    // `StringsKt.split$default(CharSequence, String[],
+                    // Z, I, I, Object)List` call. The receiver is
+                    // checkcast to CharSequence; the single
+                    // String-literal delimiter becomes a 1-element
+                    // String[] vararg; ignoreCase/limit default to
+                    // false/0; the mask byte is `0b110` (= 6)
+                    // signalling that both optional params are
+                    // defaulted. Result Ty is `java/util/List` so
+                    // downstream `.size` / `for-in` / `.joinToString`
+                    // / `.take` dispatch (CollectionsKt arm) fires
+                    // automatically. Sub-tested by
+                    // parity/132-string-split-join.
+                    if method_n == "split" {
+                        let arg_count = call
+                            .value_argument_list()
+                            .map(|al| al.arguments().count())
+                            .unwrap_or(0);
+                        if arg_count == 1 {
+                            let arg_e = call
+                                .value_argument_list()
+                                .and_then(|al| al.arguments().next())
+                                .and_then(|a| a.expression());
+                            if let Some(arg_e) = arg_e {
+                                let recv_slot = lower_rich_expr_to_slot(
+                                    dq_exprs[0],
+                                    lookup_name,
+                                    fn_lookup,
+                                    next_slot,
+                                    pre_stmts,
+                                    extra_locals,
+                                    strings,
+                                )?;
+                                let delim_slot = lower_rich_expr_to_slot(
+                                    arg_e,
+                                    lookup_name,
+                                    fn_lookup,
+                                    next_slot,
+                                    pre_stmts,
+                                    extra_locals,
+                                    strings,
+                                )?;
+                                // CheckCast receiver to CharSequence
+                                // (matches kotlinc's prologue).
+                                let recv_cs = LocalId(*next_slot);
+                                *next_slot += 1;
+                                extra_locals.push(Ty::Class("java/lang/CharSequence".to_string()));
+                                pre_stmts.push(MStmt::Assign {
+                                    dest: recv_cs,
+                                    value: skotch_mir::Rvalue::CheckCast {
+                                        obj: recv_slot,
+                                        target_class: "java/lang/CharSequence".to_string(),
+                                    },
+                                });
+                                // Build String[] of length 1 with the
+                                // delimiter at index 0.
+                                let size_slot = LocalId(*next_slot);
+                                *next_slot += 1;
+                                extra_locals.push(Ty::Int);
+                                pre_stmts.push(MStmt::Assign {
+                                    dest: size_slot,
+                                    value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(1)),
+                                });
+                                let arr_slot = LocalId(*next_slot);
+                                *next_slot += 1;
+                                extra_locals.push(Ty::Class("[Ljava/lang/String;".to_string()));
+                                pre_stmts.push(MStmt::Assign {
+                                    dest: arr_slot,
+                                    value: skotch_mir::Rvalue::NewTypedObjectArray {
+                                        size: size_slot,
+                                        element_class: "java/lang/String".to_string(),
+                                    },
+                                });
+                                let idx0 = LocalId(*next_slot);
+                                *next_slot += 1;
+                                extra_locals.push(Ty::Int);
+                                pre_stmts.push(MStmt::Assign {
+                                    dest: idx0,
+                                    value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(0)),
+                                });
+                                let astore = LocalId(*next_slot);
+                                *next_slot += 1;
+                                extra_locals.push(Ty::Unit);
+                                pre_stmts.push(MStmt::Assign {
+                                    dest: astore,
+                                    value: skotch_mir::Rvalue::ObjectArrayStore {
+                                        array: arr_slot,
+                                        index: idx0,
+                                        value: delim_slot,
+                                    },
+                                });
+                                // ignoreCase = false (Z); limit = 0 (I);
+                                // mask = 6 (both optional params
+                                // defaulted); marker = null.
+                                let zero_z = LocalId(*next_slot);
+                                *next_slot += 1;
+                                extra_locals.push(Ty::Bool);
+                                pre_stmts.push(MStmt::Assign {
+                                    dest: zero_z,
+                                    value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Bool(
+                                        false,
+                                    )),
+                                });
+                                let zero_i = LocalId(*next_slot);
+                                *next_slot += 1;
+                                extra_locals.push(Ty::Int);
+                                pre_stmts.push(MStmt::Assign {
+                                    dest: zero_i,
+                                    value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(0)),
+                                });
+                                let mask = LocalId(*next_slot);
+                                *next_slot += 1;
+                                extra_locals.push(Ty::Int);
+                                pre_stmts.push(MStmt::Assign {
+                                    dest: mask,
+                                    value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(6)),
+                                });
+                                let marker = LocalId(*next_slot);
+                                *next_slot += 1;
+                                extra_locals.push(Ty::Class("java/lang/Object".to_string()));
+                                pre_stmts.push(MStmt::Assign {
+                                    dest: marker,
+                                    value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Null),
+                                });
+                                let result_slot = LocalId(*next_slot);
+                                *next_slot += 1;
+                                extra_locals.push(Ty::Class("java/util/List".to_string()));
+                                pre_stmts.push(MStmt::Assign {
+                                    dest: result_slot,
+                                    value: skotch_mir::Rvalue::Call {
+                                        kind: skotch_mir::CallKind::StaticJava {
+                                            class_name: "kotlin/text/StringsKt"
+                                                .to_string(),
+                                            method_name: "split$default".to_string(),
+                                            descriptor: "(Ljava/lang/CharSequence;[Ljava/lang/String;ZIILjava/lang/Object;)Ljava/util/List;".to_string(),
+                                        },
+                                        args: vec![
+                                            recv_cs, arr_slot, zero_z, zero_i, mask,
+                                            marker,
+                                        ],
+                                    },
+                                });
+                                return Some(result_slot);
+                            }
+                        }
+                    }
                 }
                 // `kotlin.math.X(...)` fully-qualified intrinsic call.
                 // Parses as DotQualified(DotQualified(Ref(kotlin),
