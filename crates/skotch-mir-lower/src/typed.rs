@@ -34501,6 +34501,120 @@ fn lower_inline_expr_to_slot(
             let op_text = b.operation().map(|o| o.text()).unwrap_or_default();
             let is_cmp_op = matches!(op_text.as_str(), "==" | "!=" | "<" | ">" | "<=" | ">=");
             let is_ref_cmp_op = matches!(op_text.as_str(), "===" | "!==");
+            // `x in lo..hi` (or `!in`): inline the closed-interval range
+            // check as `(lo <= x) && (x <= hi)`. Lowers fully via primitive
+            // CmpLe ops + `MulI` for boolean AND (both operands are 0/1).
+            // Without this, the subjectless-when cond lowerer (which
+            // dispatches to `lower_inline_expr_to_slot`) bails on the
+            // `in` op entirely (the only `in` handler lives in
+            // `lower_rich_expr_to_slot` and requires a Class receiver) —
+            // dropping the whole `when {}` body and producing a `null`
+            // String result at runtime.
+            if op_text == "in" || op_text == "!in" {
+                let range_parts: Option<(KtExpr<'_>, KtExpr<'_>, KtExpr<'_>)> = (|| {
+                    let rhs_e = unwrap_parens(b.rhs()?);
+                    let KtExpr::Binary(range_b) = rhs_e else {
+                        return None;
+                    };
+                    if range_b.operation().map(|o| o.text()).as_deref() != Some("..") {
+                        return None;
+                    }
+                    let lo_e = unwrap_parens(range_b.lhs()?);
+                    let hi_e = unwrap_parens(range_b.rhs()?);
+                    let lhs_e = unwrap_parens(b.lhs()?);
+                    Some((lhs_e, lo_e, hi_e))
+                })(
+                );
+                if let Some((lhs_e, lo_e, hi_e)) = range_parts {
+                    let x_slot = lower_inline_expr_to_slot(
+                        lhs_e,
+                        lookup_name,
+                        next_slot,
+                        pre_stmts,
+                        extra_locals,
+                        strings,
+                    )?;
+                    let lo_slot = lower_inline_expr_to_slot(
+                        lo_e,
+                        lookup_name,
+                        next_slot,
+                        pre_stmts,
+                        extra_locals,
+                        strings,
+                    )?;
+                    let hi_slot = lower_inline_expr_to_slot(
+                        hi_e,
+                        lookup_name,
+                        next_slot,
+                        pre_stmts,
+                        extra_locals,
+                        strings,
+                    )?;
+                    let lo_le_x = LocalId(*next_slot);
+                    *next_slot += 1;
+                    extra_locals.push(Ty::Bool);
+                    pre_stmts.push(MStmt::Assign {
+                        dest: lo_le_x,
+                        value: skotch_mir::Rvalue::BinOp {
+                            op: skotch_mir::BinOp::CmpLe,
+                            lhs: lo_slot,
+                            rhs: x_slot,
+                        },
+                    });
+                    let x_le_hi = LocalId(*next_slot);
+                    *next_slot += 1;
+                    extra_locals.push(Ty::Bool);
+                    pre_stmts.push(MStmt::Assign {
+                        dest: x_le_hi,
+                        value: skotch_mir::Rvalue::BinOp {
+                            op: skotch_mir::BinOp::CmpLe,
+                            lhs: x_slot,
+                            rhs: hi_slot,
+                        },
+                    });
+                    // Bool AND via integer multiplication: both operands are
+                    // 0/1, so `lo_le_x * x_le_hi` is 1 iff both are 1. The
+                    // backend treats `Ty::Bool` as int so the verifier
+                    // accepts the MulI result as a Bool slot.
+                    let in_slot = LocalId(*next_slot);
+                    *next_slot += 1;
+                    extra_locals.push(Ty::Bool);
+                    pre_stmts.push(MStmt::Assign {
+                        dest: in_slot,
+                        value: skotch_mir::Rvalue::BinOp {
+                            op: skotch_mir::BinOp::MulI,
+                            lhs: lo_le_x,
+                            rhs: x_le_hi,
+                        },
+                    });
+                    if op_text == "!in" {
+                        // Flip via `1 - x` (x is 0 or 1).
+                        let one_slot = LocalId(*next_slot);
+                        *next_slot += 1;
+                        extra_locals.push(Ty::Int);
+                        pre_stmts.push(MStmt::Assign {
+                            dest: one_slot,
+                            value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(1)),
+                        });
+                        let neg = LocalId(*next_slot);
+                        *next_slot += 1;
+                        extra_locals.push(Ty::Bool);
+                        pre_stmts.push(MStmt::Assign {
+                            dest: neg,
+                            value: skotch_mir::Rvalue::BinOp {
+                                op: skotch_mir::BinOp::SubI,
+                                lhs: one_slot,
+                                rhs: in_slot,
+                            },
+                        });
+                        return Some(neg);
+                    }
+                    return Some(in_slot);
+                }
+                // Range pattern didn't match — fall through to the
+                // general Binary handling below (which will then bail
+                // since `in`/`!in` isn't in is_cmp_op).
+            }
             // Reference-identity (`===`/`!==`): lower lhs/rhs as refs and
             // emit a dedicated CmpRefEq/CmpRefNe BinOp. The JVM backend
             // lowers these to `if_acmp{eq,ne}` regardless of operand types,
