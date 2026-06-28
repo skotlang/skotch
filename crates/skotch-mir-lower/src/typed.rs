@@ -43091,6 +43091,70 @@ fn lower_rich_expr_to_slot(
                             return Some(result_slot);
                         }
                     }
+                    // Primitive-array `arr.toList()` / `arr.toSet()` —
+                    // kotlinc routes these to static methods on
+                    // `kotlin/collections/ArraysKt`:
+                    //   IntArray.toList       → ArraysKt.toList([I)Ljava/util/List;
+                    //   LongArray.toList      → ArraysKt.toList([J)Ljava/util/List;
+                    //   DoubleArray.toList    → ArraysKt.toList([D)Ljava/util/List;
+                    //   ByteArray.toList      → ArraysKt.toList([B)Ljava/util/List;
+                    //   BooleanArray.toList   → ArraysKt.toList([Z)Ljava/util/List;
+                    // (and `toSet` returning `Ljava/util/Set;`). The
+                    // existing `toList` arms further below only handle
+                    // `Ty::Class(java/util/List)` and the `recv_is_collection`
+                    // path — neither match a `Ty::IntArray`-typed receiver,
+                    // so without this arm the call silently bails out of
+                    // the DotQualified rich-expr lowering and the user
+                    // sees a dropped `println(arr.toList())` statement.
+                    if matches!(method_n, "toList" | "toSet")
+                        && call
+                            .value_argument_list()
+                            .map(|al| al.arguments().count())
+                            .unwrap_or(0)
+                            == 0
+                        && call.lambda_argument().is_none()
+                    {
+                        let recv_desc: Option<&str> = match &recv_ty_candidate {
+                            Some(Ty::IntArray) => Some("[I"),
+                            Some(Ty::LongArray) => Some("[J"),
+                            Some(Ty::DoubleArray) => Some("[D"),
+                            Some(Ty::ByteArray) => Some("[B"),
+                            Some(Ty::BooleanArray) => Some("[Z"),
+                            _ => None,
+                        };
+                        if let Some(in_desc) = recv_desc {
+                            let (ret_class, ret_jvm_class) = match method_n {
+                                "toList" => ("java/util/List", "java/util/List"),
+                                "toSet" => ("java/util/Set", "java/util/Set"),
+                                _ => unreachable!(),
+                            };
+                            let descriptor = format!("({in_desc})L{ret_class};");
+                            let recv_slot = lower_rich_expr_to_slot(
+                                dq_exprs[0],
+                                lookup_name,
+                                fn_lookup,
+                                next_slot,
+                                pre_stmts,
+                                extra_locals,
+                                strings,
+                            )?;
+                            let result_slot = LocalId(*next_slot);
+                            *next_slot += 1;
+                            extra_locals.push(Ty::Class(ret_jvm_class.to_string()));
+                            pre_stmts.push(MStmt::Assign {
+                                dest: result_slot,
+                                value: skotch_mir::Rvalue::Call {
+                                    kind: skotch_mir::CallKind::StaticJava {
+                                        class_name: "kotlin/collections/ArraysKt".to_string(),
+                                        method_name: method_n.to_string(),
+                                        descriptor,
+                                    },
+                                    args: vec![recv_slot],
+                                },
+                            });
+                            return Some(result_slot);
+                        }
+                    }
                     // `arr.copyInto(dest)` stdlib intrinsic on
                     // primitive-array receivers. Kotlin's full sig is
                     // `copyInto(dest, destOffset=0, startIndex=0,
