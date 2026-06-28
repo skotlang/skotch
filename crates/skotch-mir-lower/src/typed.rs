@@ -7416,16 +7416,32 @@ pub fn lower_file(
     // Top-level vals — emit as top_level_consts (if `const val`) or
     // top_level_props (otherwise). The JVM backend synthesizes the
     // `<clinit>` and `getXxx()` accessor from these tables.
+    //
+    // Lambda initializers are special: `val add: IntOp = { x, y -> x + y }`
+    // (a top-level val whose initializer is a lambda) cannot be lowered
+    // to a MirConst. Without synthesis the field stayed `aconst_null` in
+    // `<clinit>`, so passing the val into an apply-style HOF crashed at
+    // runtime with NPE in `Function2.invoke`. For each such val we route
+    // through `lower_rich_expr_to_slot` (which registers a Lambda$N
+    // MirClass into the file-scoped lambda registry) and accumulate the
+    // generated NewInstance + Constructor stmts into a manual `<clinit>`
+    // MirFunction. After the loop, if any lambda inits were accumulated,
+    // we push that `<clinit>` into module.functions; the JVM backend
+    // sees `has_manual_clinit` and skips its auto-emitted prop-init
+    // `<clinit>`. (See parity/109-typealias-fn.)
+    let mut clinit_lambda_stmts: Vec<skotch_mir::Stmt> = Vec::new();
+    let mut clinit_lambda_locals: Vec<Ty> = Vec::new();
+    let mut clinit_next_slot: u32 = 0;
+    let no_local_lookup = |_n: &str| -> Option<skotch_mir::LocalId> { None };
     for decl in file.decls() {
         if let KtDecl::Property(p) = decl {
             let Some(name) = p.name() else { continue };
-            // Type: explicit annotation first; else infer from initializer.
-            let declared_ty = p
-                .type_reference()
-                .and_then(|tr| tr.user_type())
-                .and_then(|u| u.name())
-                .and_then(skotch_types::ty_from_name);
-            let init_const = p.initializer().and_then(|i| {
+            // Type: explicit annotation first (via full type-ref resolver
+            // so `typealias IntOp = (Int,Int)->Int` resolves to
+            // `Function2`); else infer from initializer.
+            let declared_ty = p.type_reference().map(resolve_type_ref);
+            let init_e = p.initializer();
+            let init_const = init_e.and_then(|i| {
                 lower_const_or_string_init(i, &mut module.strings)
                     .or_else(|| lower_passthrough_hof_init(i, file, &mut module.strings))
             });
@@ -7439,6 +7455,47 @@ pub fn lower_file(
                 _ => None,
             };
             let ty = declared_ty.or(inferred_ty).unwrap_or(skotch_types::Ty::Any);
+            // Lambda-init shortcut: synthesize Lambda$N + accumulate
+            // NewInstance/Constructor/PutStaticField into clinit body.
+            // The `MirConst::Null` placeholder still flows to the prop
+            // table so the field carries the right declared type; the
+            // synthesized `<clinit>` overwrites it at class-load time.
+            let is_lambda_init = matches!(
+                init_e.map(unwrap_parens),
+                Some(skotch_ast::KtExpr::Lambda(_))
+            );
+            if is_lambda_init && init_const.is_none() && !p.is_const() {
+                // Per-param Ty hint from the declared function type: if
+                // `ty` is Function<N>, leave Any since we don't have the
+                // arity-specific param Tys here. The lambda synthesizer
+                // defaults to Ty::Any per param which keeps the JVM
+                // invoke descriptor erased to `(Object…)Object` — the
+                // shape the caller (Function2.invoke) expects.
+                let hint_scope = LambdaParamTyHintScope::new(None);
+                let init = unwrap_parens(init_e.unwrap());
+                let slot_opt = lower_rich_expr_to_slot(
+                    init,
+                    &no_local_lookup,
+                    &fn_lookup,
+                    &mut clinit_next_slot,
+                    &mut clinit_lambda_stmts,
+                    &mut clinit_lambda_locals,
+                    &mut module.strings,
+                );
+                drop(hint_scope);
+                if let Some(slot) = slot_opt {
+                    let desc = ty_to_descriptor(&ty);
+                    clinit_lambda_stmts.push(skotch_mir::Stmt::Assign {
+                        dest: slot, // unused for side-effect rvalue
+                        value: skotch_mir::Rvalue::PutStaticField {
+                            class_name: fq_wrapper_class.clone(),
+                            field_name: name.to_string(),
+                            descriptor: desc,
+                            value: slot,
+                        },
+                    });
+                }
+            }
             let entry = (
                 name.to_string(),
                 ty.clone(),
@@ -7455,6 +7512,61 @@ pub fn lower_file(
             }
         }
     }
+    // If any lambda inits were accumulated, stash the body for a
+    // manual `<clinit>` MirFunction that we push AFTER all regular
+    // functions are emitted. We can't push it now because the
+    // FuncId-bumping pass (`local_fn_id_base = module.functions.len()`)
+    // runs before this loop and the per-file-idx → FuncId map already
+    // points each regular fn at a slot in `module.functions`. Inserting
+    // anything ahead of those slots shifts every regular fn off-by-one
+    // and the FuncId-assertion in lower_top_level_function fires
+    // ("expected FuncId(1), got FuncId(0)").
+    let pending_clinit_block = if !clinit_lambda_stmts.is_empty() {
+        let mut stmts = clinit_lambda_stmts;
+        let mut locals = clinit_lambda_locals;
+        let mut next_slot = clinit_next_slot;
+        // Replay the non-lambda prop initializers: literal/const →
+        // Const-into-slot + PutStaticField. Skips lambda props (they
+        // already appear in `stmts`) by name.
+        let lambda_initialized: rustc_hash::FxHashSet<String> = stmts
+            .iter()
+            .filter_map(|s| match s {
+                skotch_mir::Stmt::Assign {
+                    value: skotch_mir::Rvalue::PutStaticField { field_name, .. },
+                    ..
+                } => Some(field_name.clone()),
+                _ => None,
+            })
+            .collect();
+        // Snapshot the props vec ref-side before borrowing `module`
+        // mutably elsewhere; we'll consult `module.top_level_props` here
+        // (read-only). Order: replicate top_level_props order so the
+        // shape mirrors the auto-clinit it replaces.
+        for (field_name, field_ty, field_const) in module.top_level_props.clone().iter() {
+            if lambda_initialized.contains(field_name) {
+                continue;
+            }
+            let slot = skotch_mir::LocalId(next_slot);
+            next_slot += 1;
+            locals.push(field_ty.clone());
+            stmts.push(skotch_mir::Stmt::Assign {
+                dest: slot,
+                value: skotch_mir::Rvalue::Const(field_const.clone()),
+            });
+            stmts.push(skotch_mir::Stmt::Assign {
+                dest: slot,
+                value: skotch_mir::Rvalue::PutStaticField {
+                    class_name: fq_wrapper_class.clone(),
+                    field_name: field_name.clone(),
+                    descriptor: ty_to_descriptor(field_ty),
+                    value: slot,
+                },
+            });
+        }
+        Some((stmts, locals))
+    } else {
+        None
+    };
 
     // val_lookup is already built earlier (pre-pass).
 
@@ -9619,6 +9731,48 @@ pub fn lower_file(
     // for diffing MIR before bytecode emission against expected
     // shape when a function emits wrong bytecode.
     skotch_mir::dump::maybe_dump_module(&module, "post-mir-lower");
+
+    // Append the deferred lambda-init `<clinit>` (see top-level val
+    // loop above). Pushed AFTER all regular functions so the
+    // FuncId-as-Vec-index invariant for the regular fns holds. The
+    // backend's `has_manual_clinit` check then suppresses the auto
+    // prop-init `<clinit>` and routes through this manual one.
+    if let Some((stmts, locals)) = pending_clinit_block {
+        use skotch_mir::{BasicBlock, FuncId, MirFunction, Terminator};
+        let clinit = MirFunction {
+            id: FuncId(module.functions.len() as u32),
+            name: "<clinit>".to_string(),
+            params: Vec::new(),
+            locals,
+            blocks: vec![BasicBlock {
+                stmts,
+                terminator: Terminator::Return,
+            }],
+            return_ty: Ty::Unit,
+            required_params: 0,
+            param_names: Vec::new(),
+            param_receiver_types: Vec::new(),
+            param_defaults: Vec::new(),
+            is_abstract: false,
+            vararg_index: None,
+            exception_handlers: Vec::new(),
+            is_suspend: false,
+            is_inline: false,
+            is_tailrec: false,
+            has_type_params: false,
+            suspend_original_return_ty: None,
+            suspend_state_machine: None,
+            annotations: Vec::new(),
+            named_locals: Vec::new(),
+            is_private: false,
+            is_static: true,
+            default_call_masks: Vec::new(),
+            needs_leading_nop: false,
+            local_generic_args: rustc_hash::FxHashMap::default(),
+            is_value_class_extension: None,
+        };
+        module.functions.push(clinit);
+    }
 
     module
 }
