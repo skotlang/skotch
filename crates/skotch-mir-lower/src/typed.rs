@@ -21620,6 +21620,64 @@ fn lower_loop_body_blocks(
                         strings,
                     )?;
                     (lo, hi, op, st)
+                } else if let KtExpr::DotQualified(dq) = &range_expr {
+                    // `for (i in xs.indices)` — the loop variable is the
+                    // index itself (Ty::Int), NOT a list element. Detect
+                    // the shape `<list>.indices` against a List/Iterable
+                    // slot and synthesize `lo=0, hi=list.size(), step=1,
+                    // CmpLt`. `list_recv` is intentionally NOT set so
+                    // `elem_slot_opt` stays None and `name_to_local` binds
+                    // the loop var to `i_slot`. Mirrors kotlinc's
+                    // emission: `i=0; end=list.size(); while (i<end)`.
+                    let exprs: Vec<KtExpr<'_>> = skotch_ast::children(dq.syntax())
+                        .iter()
+                        .filter_map(KtExpr::cast)
+                        .collect();
+                    if exprs.len() != 2 {
+                        return None;
+                    }
+                    let (KtExpr::Reference(recv_ref), KtExpr::Reference(prop_ref)) =
+                        (&exprs[0], &exprs[1])
+                    else {
+                        return None;
+                    };
+                    if prop_ref.name() != Some("indices") {
+                        return None;
+                    }
+                    let rname = recv_ref.name()?;
+                    let range_slot = lookup(rname)?;
+                    let range_ty = slot_ty_with_param_fallback(range_slot.0, local_tys);
+                    let is_list = matches!(
+                        &range_ty,
+                        Ty::Class(c) if matches!(
+                            c.as_str(),
+                            "java/util/List" | "java/util/Collection" | "java/lang/Iterable"
+                        )
+                    );
+                    if !is_list {
+                        return None;
+                    }
+                    let lo = LocalId(*next_slot);
+                    *next_slot += 1;
+                    local_tys.push(Ty::Int);
+                    cur_stmts.push(MStmt::Assign {
+                        dest: lo,
+                        value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(0)),
+                    });
+                    let hi = LocalId(*next_slot);
+                    *next_slot += 1;
+                    local_tys.push(Ty::Int);
+                    cur_stmts.push(MStmt::Assign {
+                        dest: hi,
+                        value: skotch_mir::Rvalue::Call {
+                            kind: skotch_mir::CallKind::Virtual {
+                                class_name: "java/util/List".to_string(),
+                                method_name: "size".to_string(),
+                            },
+                            args: vec![range_slot],
+                        },
+                    });
+                    (lo, hi, skotch_mir::BinOp::CmpLt, 1)
                 } else if let KtExpr::Reference(rref) = &range_expr {
                     let rname = rref.name()?;
                     let range_slot = lookup(rname)?;
