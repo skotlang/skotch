@@ -18985,7 +18985,7 @@ fn lower_loop_body_blocks(
                 // after the if in the body (i.e. a continuation).
                 let needs_synthetic_unit_join =
                     !has_else && then_is_return && (j + 1) < body_children.len();
-                let (else_block_id, after_block_id) = if has_else {
+                let (else_block_id, mut after_block_id) = if has_else {
                     let e_id = then_block_id + 1;
                     let a_id = e_id + 1;
                     (Some(e_id), a_id)
@@ -19156,19 +19156,97 @@ fn lower_loop_body_blocks(
                                 terminator: Terminator::Throw(throw_slot),
                             });
                         } else {
-                            let else_stmts = lower_loop_body(
-                                &else_children,
-                                name_to_local,
-                                next_slot,
-                                local_tys,
-                                strings,
-                                fn_lookup_ref,
-                                function_param_names,
-                            )?;
-                            blocks.push(BasicBlock {
-                                stmts: else_stmts,
-                                terminator: Terminator::Goto(after_block_id),
-                            });
+                            // `else if (…) return X else …` chain: the else arm
+                            // is itself an `If` expression (not a Block), and
+                            // its own arms contain `return`. `lower_loop_body`
+                            // has no Return handler — it would silently drop
+                            // the inner returns, producing `null` on the falling-
+                            // through path. Recurse via `lower_loop_body_blocks`
+                            // so the nested if-with-return shape is recognized.
+                            // We reserve the next block ID for the else's first
+                            // block (then_block_id + 1) and route its
+                            // back_edge_target to after_block_id, then shift
+                            // after_block_id forward to account for the
+                            // additional blocks the nested chain introduced.
+                            let else_is_nested_if = castable_exprs.len() == 1
+                                && matches!(castable_exprs[0], KtExpr::If(_));
+                            if else_is_nested_if {
+                                let nested_offset = block_offset + blocks.len() as u32;
+                                // back_edge_target for the nested chain = the
+                                // outer if's join (after_block_id). Each
+                                // fall-through (non-return) arm goes here.
+                                let nested = lower_loop_body_blocks(
+                                    &else_children,
+                                    name_to_local,
+                                    next_slot,
+                                    local_tys,
+                                    strings,
+                                    fn_lookup_ref,
+                                    function_param_names,
+                                    nested_offset,
+                                    after_block_id,
+                                    break_target,
+                                )?;
+                                let nested_len = nested.len() as u32;
+                                blocks.extend(nested);
+                                // The nested chain consumed `nested_len`
+                                // block IDs but we only reserved 1. Shift
+                                // after_block_id forward by (nested_len - 1)
+                                // so the next iteration's prefix ends up at
+                                // the correct ID.
+                                if nested_len > 1 {
+                                    let shift = nested_len - 1;
+                                    // Update the cond block's else target if
+                                    // it pointed at the original after_block_id
+                                    // (which now must point past the extra
+                                    // nested blocks).
+                                    let new_after = after_block_id + shift;
+                                    // Rewrite any terminator inside `blocks`
+                                    // (just-emitted) that referenced the old
+                                    // after_block_id so they land on the new
+                                    // join.
+                                    for blk in blocks.iter_mut() {
+                                        match &mut blk.terminator {
+                                            Terminator::Goto(t) if *t == after_block_id => {
+                                                *t = new_after;
+                                            }
+                                            Terminator::Branch {
+                                                then_block,
+                                                else_block,
+                                                ..
+                                            } => {
+                                                if *then_block == after_block_id {
+                                                    *then_block = new_after;
+                                                }
+                                                if *else_block == after_block_id {
+                                                    *else_block = new_after;
+                                                }
+                                            }
+                                            _ => {}
+                                        }
+                                    }
+                                    after_block_id = new_after;
+                                    // `after_block_id` is consumed by the
+                                    // next loop iteration via the implicit
+                                    // block_offset + blocks.len() advance;
+                                    // suppress dead-store lint.
+                                    let _ = after_block_id;
+                                }
+                            } else {
+                                let else_stmts = lower_loop_body(
+                                    &else_children,
+                                    name_to_local,
+                                    next_slot,
+                                    local_tys,
+                                    strings,
+                                    fn_lookup_ref,
+                                    function_param_names,
+                                )?;
+                                blocks.push(BasicBlock {
+                                    stmts: else_stmts,
+                                    terminator: Terminator::Goto(after_block_id),
+                                });
+                            }
                         }
                     }
                 } else if needs_synthetic_unit_join {
@@ -28627,17 +28705,85 @@ fn try_lower_multi_stmt_block_with_offset(
                     arm_mstmts.push(then_mstmts);
                     arm_returns.push(arm_return_slot);
                 }
-                let final_else_mstmts = match &final_else {
-                    Some(children) => Some(lower_loop_body(
-                        children,
-                        &mut name_to_local,
-                        &mut next_slot,
-                        &mut local_tys,
-                        strings,
-                        fn_lookup,
-                        &function_param_names,
-                    )?),
-                    None => None,
+                // Split off a trailing `return X` from the final-else
+                // body so we can emit `Terminator::ReturnValue(slot)` for
+                // that arm instead of `Goto(join)`. Without this split,
+                // `else return "F"` falls through to `lower_loop_body`
+                // which silently drops the Return statement (no Return
+                // handler) — the join block emits `Terminator::Return`
+                // (unit) and the function prints `null` instead of "F".
+                // Parallels the same trailing-return split applied to
+                // each arm body above.
+                let (final_else_mstmts, final_else_return_slot): (
+                    Option<Vec<MStmt>>,
+                    Option<LocalId>,
+                ) = match &final_else {
+                    Some(children) => {
+                        let mut ret_idx: Option<usize> = None;
+                        let mut ret_expr_inner: Option<KtExpr<'_>> = None;
+                        for (i, c) in children.iter().enumerate().rev() {
+                            if let Some(KtExpr::Return(r)) = KtExpr::cast(c) {
+                                ret_idx = Some(i);
+                                ret_expr_inner = skotch_ast::children(r.syntax())
+                                    .iter()
+                                    .find_map(KtExpr::cast)
+                                    .map(unwrap_parens);
+                                break;
+                            }
+                            if KtExpr::cast(c).is_some() {
+                                break;
+                            }
+                        }
+                        let before_ret: Vec<&skotch_sil::SilNode> = match ret_idx {
+                            Some(idx) => children[..idx].to_vec(),
+                            None => children.clone(),
+                        };
+                        let mut mstmts = if before_ret.is_empty() {
+                            Vec::new()
+                        } else {
+                            lower_loop_body(
+                                &before_ret,
+                                &mut name_to_local,
+                                &mut next_slot,
+                                &mut local_tys,
+                                strings,
+                                fn_lookup,
+                                &function_param_names,
+                            )?
+                        };
+                        let ret_slot: Option<LocalId> = if let Some(re) = ret_expr_inner {
+                            prebind_top_level_vals(
+                                re,
+                                &mut name_to_local,
+                                &mut next_slot,
+                                &mut mstmts,
+                                &mut local_tys,
+                                val_lookup,
+                                wrapper_class,
+                            );
+                            let snap = name_to_local.clone();
+                            let lookup = |n: &str| -> Option<LocalId> {
+                                snap.iter()
+                                    .rev()
+                                    .find(|(name, _)| name == n)
+                                    .map(|(_, l)| *l)
+                            };
+                            let slot = lower_rich_expr_to_slot(
+                                re,
+                                &lookup,
+                                fn_lookup,
+                                &mut next_slot,
+                                &mut mstmts,
+                                &mut local_tys,
+                                strings,
+                            )?;
+                            Some(slot)
+                        } else {
+                            None
+                        };
+                        (Some(mstmts), ret_slot)
+                    }
+                    None => (None, None),
                 };
                 let has_more_arms = n_arms > 1;
                 if has_more_arms {
@@ -28887,9 +29033,17 @@ fn try_lower_multi_stmt_block_with_offset(
                         });
                     }
                     let else_block_stmts = final_else_mstmts.unwrap_or_default();
+                    // If the final-else body ended with `return X`, the
+                    // ReturnValue slot is in `final_else_return_slot` and
+                    // we emit the terminator directly here instead of
+                    // falling through to the (unit) join.
+                    let else_terminator = match final_else_return_slot {
+                        Some(slot) => Terminator::ReturnValue(slot),
+                        None => Terminator::Goto(join_idx),
+                    };
                     all_blocks.push(BasicBlock {
                         stmts: else_block_stmts,
-                        terminator: Terminator::Goto(join_idx),
+                        terminator: else_terminator,
                     });
                     let join_terminator = match trailing_return_slot {
                         Some(slot) => Terminator::ReturnValue(slot),
