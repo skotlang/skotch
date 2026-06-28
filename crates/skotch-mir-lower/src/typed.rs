@@ -27283,6 +27283,62 @@ fn try_lower_multi_stmt_block_with_offset(
                         },
                     };
                     name_to_local.pop(); // pop loop var
+                                         // Trailing children (stmts after the for-loop in
+                                         // the enclosing block). Previously dropped — when a
+                                         // for-loop body contained break/continue and the
+                                         // surrounding block had a trailing `while` / `var`
+                                         // / `println` / etc., the entire tail was silently
+                                         // omitted from the emitted bytecode (parity bug
+                                         // 106-break-continue). Lower the trailing children
+                                         // through `lower_loop_body_blocks` so they get
+                                         // proper CFG handling (mirrors the non-jumps
+                                         // multi_block_exit path further below). The
+                                         // for-loop's exit_id points to the first trailing
+                                         // block; sentinel back-edge/break targets in the
+                                         // trailing CFG resolve to a final Return block
+                                         // appended at the end.
+                    let trailing_block_v: Vec<BasicBlock> = if !trailing_children.is_empty() {
+                        const SENT_BACK_T: u32 = 0xfffffffe;
+                        const SENT_BREAK_T: u32 = 0xfffffffd;
+                        let mut bv = lower_loop_body_blocks(
+                            trailing_children,
+                            &mut name_to_local,
+                            &mut next_slot,
+                            &mut local_tys,
+                            strings,
+                            fn_lookup,
+                            &function_param_names,
+                            exit_id,
+                            SENT_BACK_T,
+                            SENT_BREAK_T,
+                        )?;
+                        let n_trailing = bv.len() as u32;
+                        let final_return_id = exit_id + n_trailing;
+                        for blk in &mut bv {
+                            let remap = |t: u32| -> u32 {
+                                if t == SENT_BACK_T || t == SENT_BREAK_T {
+                                    final_return_id
+                                } else {
+                                    t
+                                }
+                            };
+                            match &mut blk.terminator {
+                                Terminator::Goto(t) => *t = remap(*t),
+                                Terminator::Branch {
+                                    then_block,
+                                    else_block,
+                                    ..
+                                } => {
+                                    *then_block = remap(*then_block);
+                                    *else_block = remap(*else_block);
+                                }
+                                _ => {}
+                            }
+                        }
+                        bv
+                    } else {
+                        Vec::new()
+                    };
                     let pre_block = BasicBlock {
                         stmts: std::mem::take(&mut stmts),
                         terminator: Terminator::Goto(1),
@@ -27299,14 +27355,21 @@ fn try_lower_multi_stmt_block_with_offset(
                         stmts: step_stmts,
                         terminator: Terminator::Goto(1),
                     };
-                    let exit_block = BasicBlock {
-                        stmts: Vec::new(),
-                        terminator: Terminator::Return,
-                    };
                     let mut all = vec![pre_block, cond_block];
                     all.extend(body_blocks);
                     all.push(step_block);
-                    all.push(exit_block);
+                    if trailing_block_v.is_empty() {
+                        all.push(BasicBlock {
+                            stmts: Vec::new(),
+                            terminator: Terminator::Return,
+                        });
+                    } else {
+                        all.extend(trailing_block_v);
+                        all.push(BasicBlock {
+                            stmts: Vec::new(),
+                            terminator: Terminator::Return,
+                        });
+                    }
                     return Some((all, local_tys));
                 }
                 // Lower body via shared helper.
