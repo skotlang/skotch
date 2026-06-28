@@ -32435,6 +32435,30 @@ fn lower_inline_expr_to_slot(
                                 if class_method_return_ty(cname, mname).is_some() {
                                     return None;
                                 }
+                                // JDK collection `+` / `-` deferral —
+                                // Set/List/Iterable receivers route
+                                // through SetsKt.plus / CollectionsKt.minus
+                                // in lower_rich's Binary arm. Without
+                                // this, `setA + setB` lowers here as
+                                // `iadd` against two Set-typed slots
+                                // and the resulting Ty::Int masks the
+                                // collection type from any downstream
+                                // `.sorted()` / `.intersect()` dispatch
+                                // (parity/134-set-ops `val u = (a + b).sorted()`).
+                                if matches!(mname, "plus" | "minus")
+                                    && matches!(
+                                        cname.as_str(),
+                                        "java/util/Set"
+                                            | "java/util/LinkedHashSet"
+                                            | "java/util/HashSet"
+                                            | "java/util/List"
+                                            | "java/util/ArrayList"
+                                            | "java/util/Collection"
+                                            | "java/lang/Iterable"
+                                    )
+                                {
+                                    return None;
+                                }
                             }
                         }
                     }
@@ -37171,6 +37195,9 @@ fn lower_rich_expr_to_slot(
     // `x in collection` → `collection.contains(x)` for a user-class
     // collection with `operator fun contains`. Kotlin swaps the args:
     // the lhs becomes the contains arg, the rhs becomes the receiver.
+    // JDK Set/List/Map/Collection receivers fall through to the
+    // invokeinterface path which kotlinc inlines as
+    // `invokeinterface java/util/{Set,List,Map,Collection}.contains:(Object;)Z`.
     if let KtExpr::Binary(b) = e {
         let op_text = b.operation().map(|o| o.text()).unwrap_or_default();
         if op_text == "in" || op_text == "!in" {
@@ -37187,6 +37214,112 @@ fn lower_rich_expr_to_slot(
             )?;
             let recv_ty = slot_ty_with_param_fallback(rhs_slot.0, extra_locals);
             if let Ty::Class(cname) = &recv_ty {
+                let jdk_contains_owner: Option<&str> = match cname.as_str() {
+                    "java/util/Set" | "java/util/LinkedHashSet" | "java/util/HashSet" => {
+                        Some("java/util/Set")
+                    }
+                    "java/util/List" | "java/util/ArrayList" => Some("java/util/List"),
+                    "java/util/Map" | "java/util/HashMap" | "java/util/LinkedHashMap" => {
+                        Some("java/util/Map")
+                    }
+                    "java/util/Collection" | "java/lang/Iterable" => Some("java/util/Collection"),
+                    _ => None,
+                };
+                if let Some(owner) = jdk_contains_owner {
+                    let lhs_slot = lower_rich_expr_to_slot(
+                        lhs,
+                        lookup_name,
+                        fn_lookup,
+                        next_slot,
+                        pre_stmts,
+                        extra_locals,
+                        strings,
+                    )?;
+                    let (method_name, descriptor) = if owner == "java/util/Map" {
+                        ("containsKey", "(Ljava/lang/Object;)Z")
+                    } else {
+                        ("contains", "(Ljava/lang/Object;)Z")
+                    };
+                    // Box primitive lhs into Object for the
+                    // generic-erased contains() signature.
+                    let lhs_b = {
+                        let ty = slot_ty_with_param_fallback(lhs_slot.0, extra_locals);
+                        match ty {
+                            Ty::Int
+                            | Ty::Long
+                            | Ty::Float
+                            | Ty::Double
+                            | Ty::Bool
+                            | Ty::Byte
+                            | Ty::Short
+                            | Ty::Char => {
+                                let (cls, prim, boxed) = match ty {
+                                    Ty::Int => ("java/lang/Integer", "I", "java/lang/Integer"),
+                                    Ty::Long => ("java/lang/Long", "J", "java/lang/Long"),
+                                    Ty::Float => ("java/lang/Float", "F", "java/lang/Float"),
+                                    Ty::Double => ("java/lang/Double", "D", "java/lang/Double"),
+                                    Ty::Bool => ("java/lang/Boolean", "Z", "java/lang/Boolean"),
+                                    Ty::Byte => ("java/lang/Byte", "B", "java/lang/Byte"),
+                                    Ty::Short => ("java/lang/Short", "S", "java/lang/Short"),
+                                    Ty::Char => ("java/lang/Character", "C", "java/lang/Character"),
+                                    _ => unreachable!(),
+                                };
+                                let bs = LocalId(*next_slot);
+                                *next_slot += 1;
+                                extra_locals.push(Ty::Class(boxed.to_string()));
+                                pre_stmts.push(MStmt::Assign {
+                                    dest: bs,
+                                    value: skotch_mir::Rvalue::Call {
+                                        kind: skotch_mir::CallKind::StaticJava {
+                                            class_name: cls.to_string(),
+                                            method_name: "valueOf".to_string(),
+                                            descriptor: format!("({})L{};", prim, boxed),
+                                        },
+                                        args: vec![lhs_slot],
+                                    },
+                                });
+                                bs
+                            }
+                            _ => lhs_slot,
+                        }
+                    };
+                    let result_slot = LocalId(*next_slot);
+                    *next_slot += 1;
+                    extra_locals.push(Ty::Bool);
+                    pre_stmts.push(MStmt::Assign {
+                        dest: result_slot,
+                        value: skotch_mir::Rvalue::Call {
+                            kind: skotch_mir::CallKind::VirtualJava {
+                                class_name: owner.to_string(),
+                                method_name: method_name.to_string(),
+                                descriptor: descriptor.to_string(),
+                            },
+                            args: vec![rhs_slot, lhs_b],
+                        },
+                    });
+                    if op_text == "!in" {
+                        let one_slot = LocalId(*next_slot);
+                        *next_slot += 1;
+                        extra_locals.push(Ty::Int);
+                        pre_stmts.push(MStmt::Assign {
+                            dest: one_slot,
+                            value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(1)),
+                        });
+                        let neg_slot = LocalId(*next_slot);
+                        *next_slot += 1;
+                        extra_locals.push(Ty::Bool);
+                        pre_stmts.push(MStmt::Assign {
+                            dest: neg_slot,
+                            value: skotch_mir::Rvalue::BinOp {
+                                op: skotch_mir::BinOp::SubI,
+                                lhs: one_slot,
+                                rhs: result_slot,
+                            },
+                        });
+                        return Some(neg_slot);
+                    }
+                    return Some(result_slot);
+                }
                 if let Some(ret_ty) = class_method_return_ty(cname, "contains") {
                     let lhs_slot = lower_rich_expr_to_slot(
                         lhs,
@@ -43624,6 +43757,27 @@ fn lower_rich_expr_to_slot(
                                             "(Ljava/lang/Iterable;)Ljava/util/Set;",
                                             Ty::Class("java/util/Set".to_string()),
                                         )),
+                                        // Binary set-algebra extension fns —
+                                        // `a.intersect(b)`, `a.subtract(b)`,
+                                        // `a.union(b)` on a Set/Iterable
+                                        // receiver. Descriptor is
+                                        // (Iterable;Iterable;)Set — kotlinc
+                                        // emits `invokestatic CollectionsKt.{intersect,subtract,union}`.
+                                        // parity/134-set-ops.
+                                        "intersect" | "subtract" | "union"
+                                            if call.lambda_argument().is_none() =>
+                                        {
+                                            Some((
+                                                "kotlin/collections/CollectionsKt",
+                                                match method_n {
+                                                    "intersect" => "intersect",
+                                                    "subtract" => "subtract",
+                                                    _ => "union",
+                                                },
+                                                "(Ljava/lang/Iterable;Ljava/lang/Iterable;)Ljava/util/Set;",
+                                                Ty::Class("java/util/Set".to_string()),
+                                            ))
+                                        }
                                         // `joinToString` is handled by the special
                                         // `joinToString$default` arm above this match —
                                         // the JDK signature (Iterable, CharSequence)String
@@ -44904,6 +45058,24 @@ fn lower_rich_expr_to_slot(
                                         "(Ljava/lang/Iterable;)Ljava/util/List;",
                                         Ty::Class("java/util/List".to_string()),
                                     )),
+                                    // Binary set-algebra extensions on a
+                                    // Set/List receiver. Signatures match
+                                    // CollectionsKt___CollectionsKt:
+                                    //   intersect/subtract/union(Iterable, Iterable) → Set.
+                                    "intersect" | "subtract" | "union"
+                                        if call.lambda_argument().is_none() =>
+                                    {
+                                        Some((
+                                            "kotlin/collections/CollectionsKt",
+                                            match method_n {
+                                                "intersect" => "intersect",
+                                                "subtract" => "subtract",
+                                                _ => "union",
+                                            },
+                                            "(Ljava/lang/Iterable;Ljava/lang/Iterable;)Ljava/util/Set;",
+                                            Ty::Class("java/util/Set".to_string()),
+                                        ))
+                                    }
                                     "count" => {
                                         if call.lambda_argument().is_some() {
                                             None
@@ -45564,6 +45736,54 @@ fn lower_rich_expr_to_slot(
         // Double operands → VerifyError.
         let lhs_ty = slot_ty_with_param_fallback(lhs_slot.0, extra_locals);
         let rhs_ty = slot_ty_with_param_fallback(rhs_slot.0, extra_locals);
+        // Set / List `+` / `-` short-circuit — route to SetsKt /
+        // CollectionsKt facade BEFORE the int/long/double opcode
+        // table picks AddI. Triggered when at least one operand
+        // landed on a JDK collection-typed slot.
+        if op_text == "+" || op_text == "-" {
+            let collection_jvm = |t: &Ty| -> Option<&'static str> {
+                if let Ty::Class(c) = t {
+                    match c.as_str() {
+                        "java/util/Set" | "java/util/LinkedHashSet" | "java/util/HashSet" => {
+                            Some("java/util/Set")
+                        }
+                        "java/util/List" | "java/util/ArrayList" => Some("java/util/List"),
+                        "java/util/Collection" | "java/lang/Iterable" => Some("java/util/List"),
+                        _ => None,
+                    }
+                } else {
+                    None
+                }
+            };
+            let lhs_coll = collection_jvm(&lhs_ty);
+            let rhs_coll = collection_jvm(&rhs_ty);
+            if lhs_coll.is_some() || rhs_coll.is_some() {
+                let ret_jvm = lhs_coll.or(rhs_coll).unwrap();
+                let (facade, recv_desc) = if ret_jvm == "java/util/Set" {
+                    ("kotlin/collections/SetsKt", "Ljava/util/Set;")
+                } else {
+                    // CollectionsKt.plus/minus(Iterable, Iterable) → List
+                    ("kotlin/collections/CollectionsKt", "Ljava/lang/Iterable;")
+                };
+                let method = if op_text == "+" { "plus" } else { "minus" };
+                let desc = format!("({}Ljava/lang/Iterable;)L{};", recv_desc, ret_jvm);
+                let slot = LocalId(*next_slot);
+                *next_slot += 1;
+                extra_locals.push(Ty::Class(ret_jvm.to_string()));
+                pre_stmts.push(MStmt::Assign {
+                    dest: slot,
+                    value: skotch_mir::Rvalue::Call {
+                        kind: skotch_mir::CallKind::StaticJava {
+                            class_name: facade.to_string(),
+                            method_name: method.to_string(),
+                            descriptor: desc,
+                        },
+                        args: vec![lhs_slot, rhs_slot],
+                    },
+                });
+                return Some(slot);
+            }
+        }
         let is_long = matches!(lhs_ty, Ty::Long) || matches!(rhs_ty, Ty::Long);
         let is_double = matches!(lhs_ty, Ty::Double) || matches!(rhs_ty, Ty::Double);
         let mir_op = if is_cmp_op {
@@ -46342,6 +46562,183 @@ fn lower_rich_expr_to_slot(
                                 },
                             });
                             return Some(result_slot);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Set / Collection chained-method fallback. Handles two
+    // correlated shapes that arise in `parity/134-set-ops` and
+    // similar:
+    //   - `setRecv.intersect(other)` / `.subtract(other)` /
+    //     `.union(other)` — `DotQualified(receiver, Call(method, [other]))`
+    //     whose receiver lowers to a Set-typed slot. CollectionsKt's
+    //     intersect/subtract/union are static extension fns with descriptor
+    //     `(Iterable;Iterable;)Set;`.
+    //   - `coll.sorted()` / `.sortedDescending()` / `.reversed()` /
+    //     `.toList()` / `.toSet()` / `.distinct()` / `.first()` /
+    //     `.last()` / `.size` / `.isEmpty` on a collection-typed
+    //     receiver that the earlier specialized arms missed. The
+    //     `(a + b).sorted()` shape lands here because the receiver
+    //     `(a + b)` lowers via the Binary `+`-on-collection arm
+    //     above to a slot typed `java/util/Set`, but the outer
+    //     DotQualified's specialized arms keyed on Reference /
+    //     this-receiver / class-field don't cover an arbitrary
+    //     parenthesised expression result.
+    if let KtExpr::DotQualified(dq) = &e {
+        let dq_exprs: Vec<KtExpr<'_>> = skotch_ast::children(dq.syntax())
+            .iter()
+            .filter_map(KtExpr::cast)
+            .collect();
+        if dq_exprs.len() == 2 {
+            if let KtExpr::Call(call) = &dq_exprs[1] {
+                let method_n = match call.callee() {
+                    Some(KtExpr::Reference(r)) => r.name(),
+                    _ => None,
+                };
+                if let Some(method_n) = method_n {
+                    // Two collection-receiver method families:
+                    //   - `intersect/subtract/union` taking one
+                    //     Iterable arg and returning a Set.
+                    //   - `sorted/sortedDescending/reversed/toList/
+                    //      toSet/distinct/first/last` taking zero
+                    //     args.
+                    //   - `size/isEmpty` taking zero args (primitive
+                    //      return).
+                    let is_set_combinator = matches!(method_n, "intersect" | "subtract" | "union");
+                    let zero_arg_collection_terminal = matches!(
+                        method_n,
+                        "sorted"
+                            | "sortedDescending"
+                            | "reversed"
+                            | "toList"
+                            | "toSet"
+                            | "distinct"
+                            | "first"
+                            | "last"
+                    );
+                    let arg_count = call
+                        .value_argument_list()
+                        .map(|al| al.arguments().count())
+                        .unwrap_or(0);
+                    let want = (is_set_combinator && arg_count == 1)
+                        || (zero_arg_collection_terminal && arg_count == 0);
+                    if want && call.lambda_argument().is_none() {
+                        if let Some(recv_slot) = lower_rich_expr_to_slot(
+                            dq_exprs[0],
+                            lookup_name,
+                            fn_lookup,
+                            next_slot,
+                            pre_stmts,
+                            extra_locals,
+                            strings,
+                        ) {
+                            let recv_ty = slot_ty_with_param_fallback(recv_slot.0, extra_locals);
+                            let recv_is_collection = matches!(
+                                &recv_ty,
+                                Ty::Class(c) if matches!(
+                                    c.as_str(),
+                                    "java/util/Set"
+                                        | "java/util/LinkedHashSet"
+                                        | "java/util/HashSet"
+                                        | "java/util/List"
+                                        | "java/util/ArrayList"
+                                        | "java/util/Collection"
+                                        | "java/lang/Iterable"
+                                )
+                            );
+                            if recv_is_collection {
+                                if is_set_combinator {
+                                    if let Some(arg_e) = call
+                                        .value_argument_list()
+                                        .and_then(|al| al.arguments().next())
+                                        .and_then(|a| a.expression())
+                                    {
+                                        if let Some(arg_slot) = lower_rich_expr_to_slot(
+                                            arg_e,
+                                            lookup_name,
+                                            fn_lookup,
+                                            next_slot,
+                                            pre_stmts,
+                                            extra_locals,
+                                            strings,
+                                        ) {
+                                            let desc = "(Ljava/lang/Iterable;Ljava/lang/Iterable;)Ljava/util/Set;";
+                                            let result_slot = LocalId(*next_slot);
+                                            *next_slot += 1;
+                                            extra_locals
+                                                .push(Ty::Class("java/util/Set".to_string()));
+                                            pre_stmts.push(MStmt::Assign {
+                                                dest: result_slot,
+                                                value: skotch_mir::Rvalue::Call {
+                                                    kind: skotch_mir::CallKind::StaticJava {
+                                                        class_name:
+                                                            "kotlin/collections/CollectionsKt"
+                                                                .to_string(),
+                                                        method_name: method_n.to_string(),
+                                                        descriptor: desc.to_string(),
+                                                    },
+                                                    args: vec![recv_slot, arg_slot],
+                                                },
+                                            });
+                                            return Some(result_slot);
+                                        }
+                                    }
+                                } else {
+                                    // zero-arg collection terminal.
+                                    let (desc, ret_ty) = match method_n {
+                                        "sorted" => (
+                                            "(Ljava/lang/Iterable;)Ljava/util/List;",
+                                            Ty::Class("java/util/List".to_string()),
+                                        ),
+                                        "sortedDescending" => (
+                                            "(Ljava/lang/Iterable;)Ljava/util/List;",
+                                            Ty::Class("java/util/List".to_string()),
+                                        ),
+                                        "reversed" => (
+                                            "(Ljava/lang/Iterable;)Ljava/util/List;",
+                                            Ty::Class("java/util/List".to_string()),
+                                        ),
+                                        "toList" => (
+                                            "(Ljava/lang/Iterable;)Ljava/util/List;",
+                                            Ty::Class("java/util/List".to_string()),
+                                        ),
+                                        "toSet" => (
+                                            "(Ljava/lang/Iterable;)Ljava/util/Set;",
+                                            Ty::Class("java/util/Set".to_string()),
+                                        ),
+                                        "distinct" => (
+                                            "(Ljava/lang/Iterable;)Ljava/util/List;",
+                                            Ty::Class("java/util/List".to_string()),
+                                        ),
+                                        "first" => {
+                                            ("(Ljava/lang/Iterable;)Ljava/lang/Object;", Ty::Any)
+                                        }
+                                        "last" => {
+                                            ("(Ljava/lang/Iterable;)Ljava/lang/Object;", Ty::Any)
+                                        }
+                                        _ => unreachable!(),
+                                    };
+                                    let result_slot = LocalId(*next_slot);
+                                    *next_slot += 1;
+                                    extra_locals.push(ret_ty);
+                                    pre_stmts.push(MStmt::Assign {
+                                        dest: result_slot,
+                                        value: skotch_mir::Rvalue::Call {
+                                            kind: skotch_mir::CallKind::StaticJava {
+                                                class_name: "kotlin/collections/CollectionsKt"
+                                                    .to_string(),
+                                                method_name: method_n.to_string(),
+                                                descriptor: desc.to_string(),
+                                            },
+                                            args: vec![recv_slot],
+                                        },
+                                    });
+                                    return Some(result_slot);
+                                }
+                            }
                         }
                     }
                 }
