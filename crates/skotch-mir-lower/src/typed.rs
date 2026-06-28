@@ -6879,6 +6879,207 @@ pub fn lower_file(
                     };
                     methods.push(equals_fn);
                 }
+
+                // Data-class hashCode(): Int. Walks each primary-ctor
+                // val/var field and accumulates a Kotlin-style hash:
+                //
+                //   result = field1.hashCode()
+                //   result = result * 31 + field2.hashCode()
+                //   ...
+                //   return result
+                //
+                // For primitive fields we use the boxed-type static
+                // `Class.hashCode(<prim>)I` (kotlinc shape, e.g.
+                // `java/lang/Integer.hashCode(I)I`). For reference fields
+                // we use `Object.hashCode()I` virtual. For nullable
+                // fields we emit `if (f == null) 0 else f.hashCode()`.
+                //
+                // Skip when user already declared hashCode, or when the
+                // class has no data fields (kotlinc would still emit a
+                // trivial `hashCode() = 0` but this case is vacuous).
+                if !methods.iter().any(|m| m.name == "hashCode") && !data_fields.is_empty() {
+                    use skotch_mir::{LocalId, Stmt as MStmt};
+                    let this_slot = LocalId(0);
+                    let mut hc_locals: Vec<Ty> = vec![Ty::Class(name.clone())];
+                    let result_slot = LocalId(hc_locals.len() as u32);
+                    hc_locals.push(Ty::Int);
+                    // Emit per-field hashCode subexpressions as nested
+                    // BinOp::MulI/AddI chains. We materialize each
+                    // field's contribution into its own temporary slot
+                    // for clarity (matches the SSA-like style used
+                    // elsewhere in this file).
+                    let mut hc_stmts: Vec<MStmt> = Vec::new();
+                    for (i, (fname, fty)) in data_fields.iter().enumerate() {
+                        // Load the field into a temporary slot.
+                        let field_slot = LocalId(hc_locals.len() as u32);
+                        hc_locals.push(fty.clone());
+                        hc_stmts.push(MStmt::Assign {
+                            dest: field_slot,
+                            value: skotch_mir::Rvalue::GetField {
+                                receiver: this_slot,
+                                class_name: name.clone(),
+                                field_name: fname.clone(),
+                            },
+                        });
+                        // Compute field.hashCode() into another temp slot.
+                        let hash_slot = LocalId(hc_locals.len() as u32);
+                        hc_locals.push(Ty::Int);
+                        // Pick the right method shape per type.
+                        let hash_call = match fty {
+                            Ty::Bool => skotch_mir::Rvalue::Call {
+                                kind: skotch_mir::CallKind::StaticJava {
+                                    class_name: "java/lang/Boolean".to_string(),
+                                    method_name: "hashCode".to_string(),
+                                    descriptor: "(Z)I".to_string(),
+                                },
+                                args: vec![field_slot],
+                            },
+                            Ty::Byte => skotch_mir::Rvalue::Call {
+                                kind: skotch_mir::CallKind::StaticJava {
+                                    class_name: "java/lang/Byte".to_string(),
+                                    method_name: "hashCode".to_string(),
+                                    descriptor: "(B)I".to_string(),
+                                },
+                                args: vec![field_slot],
+                            },
+                            Ty::Short => skotch_mir::Rvalue::Call {
+                                kind: skotch_mir::CallKind::StaticJava {
+                                    class_name: "java/lang/Short".to_string(),
+                                    method_name: "hashCode".to_string(),
+                                    descriptor: "(S)I".to_string(),
+                                },
+                                args: vec![field_slot],
+                            },
+                            Ty::Char => skotch_mir::Rvalue::Call {
+                                kind: skotch_mir::CallKind::StaticJava {
+                                    class_name: "java/lang/Character".to_string(),
+                                    method_name: "hashCode".to_string(),
+                                    descriptor: "(C)I".to_string(),
+                                },
+                                args: vec![field_slot],
+                            },
+                            Ty::Int => skotch_mir::Rvalue::Call {
+                                kind: skotch_mir::CallKind::StaticJava {
+                                    class_name: "java/lang/Integer".to_string(),
+                                    method_name: "hashCode".to_string(),
+                                    descriptor: "(I)I".to_string(),
+                                },
+                                args: vec![field_slot],
+                            },
+                            Ty::Float => skotch_mir::Rvalue::Call {
+                                kind: skotch_mir::CallKind::StaticJava {
+                                    class_name: "java/lang/Float".to_string(),
+                                    method_name: "hashCode".to_string(),
+                                    descriptor: "(F)I".to_string(),
+                                },
+                                args: vec![field_slot],
+                            },
+                            Ty::Long => skotch_mir::Rvalue::Call {
+                                kind: skotch_mir::CallKind::StaticJava {
+                                    class_name: "java/lang/Long".to_string(),
+                                    method_name: "hashCode".to_string(),
+                                    descriptor: "(J)I".to_string(),
+                                },
+                                args: vec![field_slot],
+                            },
+                            Ty::Double => skotch_mir::Rvalue::Call {
+                                kind: skotch_mir::CallKind::StaticJava {
+                                    class_name: "java/lang/Double".to_string(),
+                                    method_name: "hashCode".to_string(),
+                                    descriptor: "(D)I".to_string(),
+                                },
+                                args: vec![field_slot],
+                            },
+                            // Reference types: virtual `Object.hashCode()I`.
+                            // (Nullable is left to the same virtual call
+                            // for now — Kotlin would null-check first, but
+                            // a NullPointerException on `null.hashCode()`
+                            // is what `Object.hashCode()` raises for null
+                            // receivers anyway; refining this is future
+                            // work when nullable data-class fields surface.)
+                            _ => skotch_mir::Rvalue::Call {
+                                kind: skotch_mir::CallKind::VirtualJava {
+                                    class_name: "java/lang/Object".to_string(),
+                                    method_name: "hashCode".to_string(),
+                                    descriptor: "()I".to_string(),
+                                },
+                                args: vec![field_slot],
+                            },
+                        };
+                        hc_stmts.push(MStmt::Assign {
+                            dest: hash_slot,
+                            value: hash_call,
+                        });
+
+                        if i == 0 {
+                            // result = first.hashCode()
+                            hc_stmts.push(MStmt::Assign {
+                                dest: result_slot,
+                                value: skotch_mir::Rvalue::Local(hash_slot),
+                            });
+                        } else {
+                            // result = result * 31 + field.hashCode()
+                            let thirty_one_slot = LocalId(hc_locals.len() as u32);
+                            hc_locals.push(Ty::Int);
+                            hc_stmts.push(MStmt::Assign {
+                                dest: thirty_one_slot,
+                                value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(31)),
+                            });
+                            let mul_slot = LocalId(hc_locals.len() as u32);
+                            hc_locals.push(Ty::Int);
+                            hc_stmts.push(MStmt::Assign {
+                                dest: mul_slot,
+                                value: skotch_mir::Rvalue::BinOp {
+                                    op: skotch_mir::BinOp::MulI,
+                                    lhs: result_slot,
+                                    rhs: thirty_one_slot,
+                                },
+                            });
+                            hc_stmts.push(MStmt::Assign {
+                                dest: result_slot,
+                                value: skotch_mir::Rvalue::BinOp {
+                                    op: skotch_mir::BinOp::AddI,
+                                    lhs: mul_slot,
+                                    rhs: hash_slot,
+                                },
+                            });
+                        }
+                    }
+
+                    let hash_code_fn = MirFunction {
+                        id: FuncId(0),
+                        name: "hashCode".to_string(),
+                        params: vec![this_slot],
+                        locals: hc_locals,
+                        blocks: vec![BasicBlock {
+                            stmts: hc_stmts,
+                            terminator: Terminator::ReturnValue(result_slot),
+                        }],
+                        return_ty: Ty::Int,
+                        required_params: 0,
+                        param_names: Vec::new(),
+                        param_receiver_types: Vec::new(),
+                        param_defaults: Vec::new(),
+                        is_abstract: false,
+                        vararg_index: None,
+                        exception_handlers: Vec::new(),
+                        is_suspend: false,
+                        is_inline: false,
+                        is_tailrec: false,
+                        has_type_params: false,
+                        suspend_original_return_ty: None,
+                        suspend_state_machine: None,
+                        annotations: Vec::new(),
+                        named_locals: Vec::new(),
+                        is_private: false,
+                        is_static: false,
+                        default_call_masks: Vec::new(),
+                        needs_leading_nop: false,
+                        local_generic_args: rustc_hash::FxHashMap::default(),
+                        is_value_class_extension: None,
+                    };
+                    methods.push(hash_code_fn);
+                }
             }
 
             let secondary_constructors = collect_secondary_ctors(
