@@ -177,6 +177,80 @@ fn class_method_return_ty(class_name: &str, method_name: &str) -> Option<Ty> {
     })
 }
 
+thread_local! {
+    /// Module-scoped registry of custom-getter properties that do NOT
+    /// have a backing field. `class_name → prop_name → return Ty`.
+    ///
+    /// Populated alongside `class_fields` during the per-class field
+    /// collection pass. A property like `val info: String get() =
+    /// "..."` has no backing field — kotlinc generates only the
+    /// `getInfo()` accessor method. Any bare reference to `info` from
+    /// inside the class (e.g. in another getter's body, or a
+    /// string-template `$info`) must invoke `getInfo()` rather than
+    /// reading a non-existent `info:Ljava/lang/String;` field.
+    ///
+    /// Cleared at module-end. Lookup helpers consult this BEFORE
+    /// `class_field_lookup` so the GetField path is skipped for
+    /// custom-getter properties.
+    static CLASS_CUSTOM_GETTERS: std::cell::RefCell<rustc_hash::FxHashMap<String, rustc_hash::FxHashMap<String, Ty>>> =
+        std::cell::RefCell::new(rustc_hash::FxHashMap::default());
+}
+
+fn register_class_custom_getter(class_name: &str, prop_name: &str, return_ty: Ty) {
+    CLASS_CUSTOM_GETTERS.with(|c| {
+        c.borrow_mut()
+            .entry(class_name.to_string())
+            .or_default()
+            .insert(prop_name.to_string(), return_ty);
+    });
+}
+
+fn class_custom_getter_return_ty(class_name: &str, prop_name: &str) -> Option<Ty> {
+    CLASS_CUSTOM_GETTERS.with(|c| {
+        c.borrow()
+            .get(class_name)
+            .and_then(|m| m.get(prop_name))
+            .cloned()
+    })
+}
+
+/// Implicit-`this` resolution for a bare reference to a custom-getter
+/// property within a class method body. Returns `Some(slot)` when:
+///   - we're inside a class method (`current_class_name()` is set),
+///   - `name` matches a custom-getter property registered for that
+///     class (no backing field), AND
+///   - the property's getter is registered in CLASS_METHODS.
+///
+/// Emits `invokevirtual <class>.get<Name>()<RetDesc>` against `this`
+/// (slot 0) and returns the result slot. Callers should consult this
+/// BEFORE `class_field_lookup` so a custom-getter property doesn't
+/// fall through to a bogus `getfield` against a non-existent backing
+/// field.
+fn try_emit_implicit_this_custom_getter(
+    name: &str,
+    next_slot: &mut u32,
+    pre_stmts: &mut Vec<skotch_mir::Stmt>,
+    extra_locals: &mut Vec<Ty>,
+) -> Option<skotch_mir::LocalId> {
+    let class = current_class_name()?;
+    let ret_ty = class_custom_getter_return_ty(&class, name)?;
+    let getter = property_getter_name(name);
+    let slot = skotch_mir::LocalId(*next_slot);
+    *next_slot += 1;
+    extra_locals.push(ret_ty);
+    pre_stmts.push(skotch_mir::Stmt::Assign {
+        dest: slot,
+        value: skotch_mir::Rvalue::Call {
+            kind: skotch_mir::CallKind::Virtual {
+                class_name: class,
+                method_name: getter,
+            },
+            args: vec![skotch_mir::LocalId(0)],
+        },
+    });
+    Some(slot)
+}
+
 /// Walk `start`'s super chain (via CLASS_SUPER) and look up
 /// `method_name` at each level. Returns the return Ty of the first
 /// match. Tries CLASS_METHODS first (user classes + cross-file
@@ -6075,6 +6149,29 @@ pub fn lower_file(
             // scope when each body is lowered. Required to graduate
             // parity/101-hash's MD5/SHA*/Blake*/Keccak compress loops.
             register_class_companion_primconsts(c, &name);
+            // Custom-getter properties (no backing field): walk the
+            // class body and register each `val x: T get() = ...`
+            // (no initializer) in CLASS_CUSTOM_GETTERS so subsequent
+            // body lowering (collect_class_methods → synthesized
+            // getter loop) routes bare references through
+            // `try_emit_implicit_this_custom_getter` instead of
+            // emitting a bogus `getfield` against a non-existent
+            // backing field.
+            if let Some(body) = c.body() {
+                for d in body.declarations() {
+                    if let KtDecl::Property(p) = d {
+                        if p.initializer().is_some() {
+                            continue;
+                        }
+                        if !p.property_accessors().any(|a| a.is_getter()) {
+                            continue;
+                        }
+                        let Some(prop_name) = p.name() else { continue };
+                        let ret_ty = p.type_reference().map(resolve_type_ref).unwrap_or(Ty::Any);
+                        register_class_custom_getter(&name, prop_name, ret_ty);
+                    }
+                }
+            }
             let methods = collect_class_methods(
                 c,
                 &name,
@@ -8205,6 +8302,25 @@ pub fn lower_file(
                 for d in body.declarations() {
                     if let KtDecl::Property(p) = d {
                         if let Some(fname) = p.name() {
+                            // Custom-getter-only properties (`val x:
+                            // T get() = ...` with no initializer) have
+                            // NO backing field in kotlinc — only the
+                            // synthesized `getX()` accessor. Register
+                            // them in CLASS_CUSTOM_GETTERS so callers
+                            // of `class_field_lookup` can route bare
+                            // references to `invokevirtual getX()`
+                            // instead of emitting a `getfield` against
+                            // a non-existent backing field. Mirrors
+                            // the skip in `collect_class_fields` at
+                            // ~54460.
+                            if p.initializer().is_none()
+                                && p.property_accessors().any(|a| a.is_getter())
+                            {
+                                let ret_ty =
+                                    p.type_reference().map(resolve_type_ref).unwrap_or(Ty::Any);
+                                register_class_custom_getter(name, fname, ret_ty);
+                                continue;
+                            }
                             // Prefer an explicit `: T` annotation; fall
                             // back to a stdlib collection-factory
                             // initializer shorthand (`val items =
@@ -34417,6 +34533,14 @@ fn lower_inline_expr_to_slot(
                 }
                 return Some(slot);
             }
+            // Custom-getter property (no backing field): emit
+            // `invokevirtual getX()` against `this`. Same intent as
+            // the mirrored arm in `lower_rich_expr_to_slot`.
+            if let Some(slot) =
+                try_emit_implicit_this_custom_getter(n, next_slot, pre_stmts, extra_locals)
+            {
+                return Some(slot);
+            }
             // Implicit `this.field` fallback for class-method bodies:
             // when the bare identifier doesn't resolve to a local
             // and the current method context advertises the name as
@@ -39290,6 +39414,24 @@ fn lower_rich_expr_to_slot(
                     // whole println got dropped.
                     let (slot, ty) = if let Some(s) = lookup_name(&id_name) {
                         let t = slot_ty_with_param_fallback(s.0, extra_locals);
+                        (s, t)
+                    } else if let Some(t) = current_class_name()
+                        .and_then(|c| class_custom_getter_return_ty(&c, &id_name))
+                    {
+                        // Custom-getter property: emit `invokevirtual
+                        // getX()` against `this`. Use the registered
+                        // return Ty directly for the template
+                        // descriptor — `slot_ty_with_param_fallback`
+                        // doesn't see the freshly-pushed entry yet
+                        // when PARAM_TY_FALLBACK is empty (no body
+                        // lowerer above this synth-getter site).
+                        let s = try_emit_implicit_this_custom_getter(
+                            &id_name,
+                            next_slot,
+                            pre_stmts,
+                            extra_locals,
+                        )
+                        .expect("custom getter return_ty checked");
                         (s, t)
                     } else if let Some((cname, fname, fty)) = class_field_lookup(&id_name) {
                         let fresh = LocalId(*next_slot);
@@ -48621,6 +48763,17 @@ fn lower_rich_expr_to_slot(
     if let KtExpr::Reference(r) = &e {
         if let Some(name) = r.name() {
             if let Some(slot) = lookup_name(name) {
+                return Some(slot);
+            }
+            // Custom-getter property (no backing field): emit
+            // `invokevirtual getX()` against `this` instead of
+            // falling through to a `getfield` against a non-existent
+            // backing field. Mirrors the skip in
+            // `collect_class_fields` and the population in the
+            // per-class field-collection pass.
+            if let Some(slot) =
+                try_emit_implicit_this_custom_getter(name, next_slot, pre_stmts, extra_locals)
+            {
                 return Some(slot);
             }
             // Implicit `this.field` for class-method bodies. Mirrors
@@ -60060,6 +60213,17 @@ fn collect_class_methods(
         for d in body.declarations() {
             if let KtDecl::Property(p) = d {
                 if let Some(n) = p.name() {
+                    // Custom-getter-only properties (no initializer +
+                    // explicit `get()`) have NO backing field — skip
+                    // them so `class_field_lookup(n)` returns None
+                    // and the bare-Reference Reference arm in
+                    // lower_rich/lower_inline routes through
+                    // `try_emit_implicit_this_custom_getter` instead
+                    // (emitting `invokevirtual getX()` rather than a
+                    // bogus `getfield n:...`).
+                    if p.initializer().is_none() && p.property_accessors().any(|a| a.is_getter()) {
+                        continue;
+                    }
                     // Mirror the field-Ty inference in
                     // collect_class_fields: when no explicit annotation,
                     // peek at the initializer for a stdlib collection
