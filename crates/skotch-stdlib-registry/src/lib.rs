@@ -121,6 +121,22 @@ pub static STDLIB_EXTENSIONS: &[StdlibExtension] = &[
     StdlibExtension { receiver: "", method: "distinct", facade_class: "kotlin/collections/CollectionsKt", jvm_method: "distinct", descriptor: "(Ljava/lang/Iterable;)Ljava/util/List;", return_ty: ty_list },
     StdlibExtension { receiver: "List", method: "take", facade_class: "kotlin/collections/CollectionsKt", jvm_method: "take", descriptor: "(Ljava/lang/Iterable;I)Ljava/util/List;", return_ty: ty_list },
     StdlibExtension { receiver: "List", method: "drop", facade_class: "kotlin/collections/CollectionsKt", jvm_method: "drop", descriptor: "(Ljava/lang/Iterable;I)Ljava/util/List;", return_ty: ty_list },
+    // `takeLast` / `dropLast` take a `List<T>` (positional) + Int and return
+    // a List. They are NOT `@InlineOnly`, so the static call survives in
+    // kotlinc output (see `parity/141-list-takedrop` reference disassembly).
+    StdlibExtension { receiver: "List", method: "takeLast", facade_class: "kotlin/collections/CollectionsKt", jvm_method: "takeLast", descriptor: "(Ljava/util/List;I)Ljava/util/List;", return_ty: ty_list },
+    StdlibExtension { receiver: "List", method: "dropLast", facade_class: "kotlin/collections/CollectionsKt", jvm_method: "dropLast", descriptor: "(Ljava/util/List;I)Ljava/util/List;", return_ty: ty_list },
+    // `chunked(Int)` returns `List<List<T>>`. The 3-arg overload (with a
+    // transform lambda) is omitted until a fixture exercises it.
+    StdlibExtension { receiver: "List", method: "chunked", facade_class: "kotlin/collections/CollectionsKt", jvm_method: "chunked", descriptor: "(Ljava/lang/Iterable;I)Ljava/util/List;", return_ty: ty_list },
+    // `takeWhile` / `dropWhile` are marked `@InlineOnly` in stdlib, so kotlinc
+    // inlines the loop body at the call site. We don't have lambda-inlining
+    // for stdlib HOFs yet, so route to the non-inline JVM static method that
+    // is still present in `CollectionsKt` (the static bytecode is generated
+    // for cross-language Java callers; Kotlin callers normally never invoke
+    // it). This is byte-divergent vs kotlinc but runtime-correct.
+    StdlibExtension { receiver: "List", method: "takeWhile", facade_class: "kotlin/collections/CollectionsKt", jvm_method: "takeWhile", descriptor: "(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Ljava/util/List;", return_ty: ty_list },
+    StdlibExtension { receiver: "List", method: "dropWhile", facade_class: "kotlin/collections/CollectionsKt", jvm_method: "dropWhile", descriptor: "(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Ljava/util/List;", return_ty: ty_list },
     StdlibExtension { receiver: "", method: "associateWith", facade_class: "kotlin/collections/CollectionsKt", jvm_method: "associateWith", descriptor: "(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Ljava/util/Map;", return_ty: ty_map },
     StdlibExtension { receiver: "", method: "associateBy", facade_class: "kotlin/collections/CollectionsKt", jvm_method: "associateBy", descriptor: "(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Ljava/util/Map;", return_ty: ty_map },
     StdlibExtension { receiver: "", method: "groupBy", facade_class: "kotlin/collections/CollectionsKt", jvm_method: "groupBy", descriptor: "(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Ljava/util/Map;", return_ty: ty_map },

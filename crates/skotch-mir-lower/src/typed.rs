@@ -31981,6 +31981,8 @@ fn try_lower_multi_stmt_block_with_offset(
                                             | "zip"
                                             | "take"
                                             | "drop"
+                                            | "takeLast"
+                                            | "dropLast"
                                             | "takeWhile"
                                             | "dropWhile"
                                             | "joinToString"
@@ -44339,6 +44341,48 @@ fn lower_rich_expr_to_slot(
                                             "kotlin/collections/CollectionsKt",
                                             "drop",
                                             "(Ljava/lang/Iterable;I)Ljava/util/List;",
+                                            Ty::Class("java/util/List".to_string()),
+                                        )),
+                                        // `takeLast` / `dropLast` accept a `List<T>` (positional)
+                                        // + Int; their JVM static method survives kotlinc output
+                                        // since they're NOT `@InlineOnly` — see disassembly in
+                                        // parity/141-list-takedrop.
+                                        "takeLast" => Some((
+                                            "kotlin/collections/CollectionsKt",
+                                            "takeLast",
+                                            "(Ljava/util/List;I)Ljava/util/List;",
+                                            Ty::Class("java/util/List".to_string()),
+                                        )),
+                                        "dropLast" => Some((
+                                            "kotlin/collections/CollectionsKt",
+                                            "dropLast",
+                                            "(Ljava/util/List;I)Ljava/util/List;",
+                                            Ty::Class("java/util/List".to_string()),
+                                        )),
+                                        // `chunked(Int)` is byte-identical with kotlinc — the
+                                        // static method shape is what kotlinc emits.
+                                        "chunked" => Some((
+                                            "kotlin/collections/CollectionsKt",
+                                            "chunked",
+                                            "(Ljava/lang/Iterable;I)Ljava/util/List;",
+                                            Ty::Class("java/util/List".to_string()),
+                                        )),
+                                        // `takeWhile` / `dropWhile` are `@InlineOnly` in
+                                        // kotlin-stdlib, so kotlinc inlines them at the call
+                                        // site (see disassembly). Until we have lambda-inlining
+                                        // for stdlib HOFs, route to the non-inline JVM static
+                                        // method that CollectionsKt still exposes for cross-
+                                        // language callers. Runtime-correct; byte-divergent.
+                                        "takeWhile" => Some((
+                                            "kotlin/collections/CollectionsKt",
+                                            "takeWhile",
+                                            "(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Ljava/util/List;",
+                                            Ty::Class("java/util/List".to_string()),
+                                        )),
+                                        "dropWhile" => Some((
+                                            "kotlin/collections/CollectionsKt",
+                                            "dropWhile",
+                                            "(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Ljava/util/List;",
                                             Ty::Class("java/util/List".to_string()),
                                         )),
                                         "groupBy" => Some((
