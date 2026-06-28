@@ -21505,21 +21505,47 @@ fn lower_loop_body_blocks(
                             Ty::Class(c) if c != "java/lang/Object" => Some(c.clone()),
                             _ => None,
                         };
+                        // List-of-Pair (or other componentN-bearing)
+                        // destructuring: when the for-loop binds
+                        // `for ((a, b) in pairList)`, the per-element
+                        // value carries Pair<A,B> (or any class with
+                        // componentN()). Emit `elem.getFirst()` /
+                        // `elem.getSecond()` into the entry slots so
+                        // the body's references to `a`/`b` resolve to
+                        // initialized locals. Falls back to Pair if no
+                        // element-class info is known (kotlinc emits
+                        // checkcast-to-Pair followed by component
+                        // calls in the same shape).
+                        let is_destructure = !destructuring_slots.is_empty();
                         let mut prepend: Vec<MStmt> = Vec::new();
-                        if let Some(target_class) = target_class {
-                            let raw = LocalId(*next_slot);
-                            *next_slot += 1;
-                            local_tys.push(Ty::Any);
-                            prepend.push(MStmt::Assign {
-                                dest: raw,
-                                value: skotch_mir::Rvalue::Call {
-                                    kind: skotch_mir::CallKind::Virtual {
-                                        class_name: "java/util/List".to_string(),
-                                        method_name: "get".to_string(),
-                                    },
-                                    args: vec![recv, i_slot],
+                        // Always materialize the raw element first so
+                        // we have a single source for both the simple
+                        // elem-slot bind and any componentN calls.
+                        let raw = LocalId(*next_slot);
+                        *next_slot += 1;
+                        local_tys.push(Ty::Any);
+                        prepend.push(MStmt::Assign {
+                            dest: raw,
+                            value: skotch_mir::Rvalue::Call {
+                                kind: skotch_mir::CallKind::Virtual {
+                                    class_name: "java/util/List".to_string(),
+                                    method_name: "get".to_string(),
                                 },
-                            });
+                                args: vec![recv, i_slot],
+                            },
+                        });
+                        // Pick the destructure-receiver class. Prefer
+                        // an inferred element-class; if none and we're
+                        // destructuring, assume Pair (the standard
+                        // `listOf(a to b)` / `xs.zip(ys)` shape).
+                        let comp_recv_class: Option<String> = if let Some(tc) = &target_class {
+                            Some(tc.clone())
+                        } else if is_destructure {
+                            Some("kotlin/Pair".to_string())
+                        } else {
+                            None
+                        };
+                        if let Some(target_class) = comp_recv_class.clone() {
                             prepend.push(MStmt::Assign {
                                 dest: elem,
                                 value: skotch_mir::Rvalue::CheckCast {
@@ -21528,16 +21554,52 @@ fn lower_loop_body_blocks(
                                 },
                             });
                         } else {
+                            // No cast — alias elem to the raw Object
+                            // load. Use Assign-as-copy via NoOp would
+                            // be cleaner; emit as a self-load via
+                            // Rvalue::Call with the right shape isn't
+                            // possible, so just bind elem = raw via a
+                            // CheckCast to java/lang/Object (no-op at
+                            // runtime, preserves the slot type).
                             prepend.push(MStmt::Assign {
                                 dest: elem,
-                                value: skotch_mir::Rvalue::Call {
-                                    kind: skotch_mir::CallKind::Virtual {
-                                        class_name: "java/util/List".to_string(),
-                                        method_name: "get".to_string(),
-                                    },
-                                    args: vec![recv, i_slot],
+                                value: skotch_mir::Rvalue::CheckCast {
+                                    obj: raw,
+                                    target_class: "java/lang/Object".to_string(),
                                 },
                             });
+                        }
+                        // Emit componentN dispatch into destructuring
+                        // slots when the for-loop binds `(a, b, ...)`.
+                        // kotlinc dispatches `kotlin/Pair.getFirst()` /
+                        // `.getSecond()` for Pair, and synthesized
+                        // `componentN()` for arbitrary data classes;
+                        // for now we hardcode Pair's accessors which
+                        // covers the dominant idiom (`xs.zip(ys)`).
+                        if is_destructure {
+                            let recv_class =
+                                comp_recv_class.unwrap_or_else(|| "kotlin/Pair".to_string());
+                            let accessors: &[&str] = if recv_class == "kotlin/Pair" {
+                                &["getFirst", "getSecond"]
+                            } else if recv_class == "kotlin/Triple" {
+                                &["getFirst", "getSecond", "getThird"]
+                            } else {
+                                &[]
+                            };
+                            for (i, slot) in destructuring_slots.iter().enumerate() {
+                                if let Some(accessor) = accessors.get(i) {
+                                    prepend.push(MStmt::Assign {
+                                        dest: *slot,
+                                        value: skotch_mir::Rvalue::Call {
+                                            kind: skotch_mir::CallKind::Virtual {
+                                                class_name: recv_class.clone(),
+                                                method_name: accessor.to_string(),
+                                            },
+                                            args: vec![elem],
+                                        },
+                                    });
+                                }
+                            }
                         }
                         prepend.append(&mut first_body.stmts);
                         first_body.stmts = prepend;
@@ -44517,12 +44579,31 @@ fn lower_rich_expr_to_slot(
                                             "(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)I",
                                             Ty::Int,
                                         )),
-                                        "zip" => Some((
-                                            "kotlin/collections/CollectionsKt",
-                                            "zip",
-                                            "(Ljava/lang/Iterable;Ljava/lang/Iterable;)Ljava/util/List;",
-                                            Ty::Class("java/util/List".to_string()),
-                                        )),
+                                        "zip" => {
+                                            // Two overloads exist in CollectionsKt:
+                                            //   zip(Iterable, Iterable): List<Pair<T,R>>
+                                            //   zip(Iterable, Iterable, Function2): List<V>
+                                            // The transform overload is `inline` in the source
+                                            // but kotlinc still emits a static method that's
+                                            // callable from outside (non-inline JVM facade —
+                                            // same shape as filter/map). Select the variant
+                                            // based on whether the call has a trailing lambda.
+                                            if call.lambda_argument().is_some() {
+                                                Some((
+                                                    "kotlin/collections/CollectionsKt",
+                                                    "zip",
+                                                    "(Ljava/lang/Iterable;Ljava/lang/Iterable;Lkotlin/jvm/functions/Function2;)Ljava/util/List;",
+                                                    Ty::Class("java/util/List".to_string()),
+                                                ))
+                                            } else {
+                                                Some((
+                                                    "kotlin/collections/CollectionsKt",
+                                                    "zip",
+                                                    "(Ljava/lang/Iterable;Ljava/lang/Iterable;)Ljava/util/List;",
+                                                    Ty::Class("java/util/List".to_string()),
+                                                ))
+                                            }
+                                        }
                                         "take" => Some((
                                             "kotlin/collections/CollectionsKt",
                                             "take",
@@ -46016,6 +46097,29 @@ fn lower_rich_expr_to_slot(
                                             ))
                                         }
                                     }
+                                    // Chained-receiver `.zip(other)` and the
+                                    // transform overload `.zip(other) { ... }`.
+                                    // The latter is `inline` in stdlib source
+                                    // but kotlinc still emits a static method
+                                    // on CollectionsKt callable from outside;
+                                    // pick the variant by lambda presence.
+                                    "zip" => {
+                                        if call.lambda_argument().is_some() {
+                                            Some((
+                                                "kotlin/collections/CollectionsKt",
+                                                "zip",
+                                                "(Ljava/lang/Iterable;Ljava/lang/Iterable;Lkotlin/jvm/functions/Function2;)Ljava/util/List;",
+                                                Ty::Class("java/util/List".to_string()),
+                                            ))
+                                        } else {
+                                            Some((
+                                                "kotlin/collections/CollectionsKt",
+                                                "zip",
+                                                "(Ljava/lang/Iterable;Ljava/lang/Iterable;)Ljava/util/List;",
+                                                Ty::Class("java/util/List".to_string()),
+                                            ))
+                                        }
+                                    }
                                     _ => None,
                                 };
                                 if let Some((cls, method, desc, ret_ty)) = mapped {
@@ -46040,6 +46144,34 @@ fn lower_rich_expr_to_slot(
                                                 break;
                                             };
                                             arg_slots.push(s);
+                                        }
+                                    }
+                                    // Trailing-lambda arg (`.zip(other) { x, y -> ... }`).
+                                    // The lambda lives in call.lambda_argument(),
+                                    // separate from value_argument_list. Mirrors
+                                    // the Reference-receiver mapped-table path
+                                    // above so the descriptor's Function-typed
+                                    // trailing param gets an actual slot.
+                                    if all_ok {
+                                        if let Some(la) = call.lambda_argument() {
+                                            if let Some(le) = skotch_ast::children(la.syntax())
+                                                .iter()
+                                                .find_map(KtExpr::cast)
+                                            {
+                                                if let Some(s) = lower_rich_expr_to_slot(
+                                                    le,
+                                                    lookup_name,
+                                                    fn_lookup,
+                                                    next_slot,
+                                                    pre_stmts,
+                                                    extra_locals,
+                                                    strings,
+                                                ) {
+                                                    arg_slots.push(s);
+                                                } else {
+                                                    all_ok = false;
+                                                }
+                                            }
                                         }
                                     }
                                     if all_ok {
