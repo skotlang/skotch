@@ -30535,6 +30535,73 @@ fn lower_inline_expr_to_slot(
             }
             None
         }
+        // Single-step DotQualified: `recv.prop` where `recv` is a local
+        // or param with a recognized receiver type. Limited to the small
+        // set of property accesses that produce Int (`String.length`,
+        // primitive-array `.size` / `.lastIndex`) — these dominate the
+        // `for (i in 0 until s.length)` / `for (i in 0 until arr.size)`
+        // idiom that drives the for-loop range path. Without this,
+        // `lower_inline_expr_to_slot` returns None and the NestedForIn
+        // handler bails the entire function body to empty MIR.
+        KtExpr::DotQualified(dq) => {
+            let exprs: Vec<KtExpr<'_>> = skotch_ast::children(dq.syntax())
+                .iter()
+                .filter_map(KtExpr::cast)
+                .collect();
+            if exprs.len() != 2 {
+                return None;
+            }
+            let KtExpr::Reference(prop_ref) = &exprs[1] else {
+                return None;
+            };
+            let prop_name = prop_ref.name()?;
+            // Recurse into `recv` so `arr.size` chained off a Call or
+            // nested expr still works in the future; the common path
+            // here is a bare Reference.
+            let recv_slot = lower_inline_expr_to_slot(
+                exprs[0],
+                lookup_name,
+                next_slot,
+                pre_stmts,
+                extra_locals,
+                strings,
+            )?;
+            let recv_ty = slot_ty_with_param_fallback(recv_slot.0, extra_locals);
+            match (&recv_ty, prop_name) {
+                (Ty::String, "length") => {
+                    let result_slot = LocalId(*next_slot);
+                    *next_slot += 1;
+                    extra_locals.push(Ty::Int);
+                    pre_stmts.push(MStmt::Assign {
+                        dest: result_slot,
+                        value: skotch_mir::Rvalue::Call {
+                            kind: skotch_mir::CallKind::VirtualJava {
+                                class_name: "java/lang/String".to_string(),
+                                method_name: "length".to_string(),
+                                descriptor: "()I".to_string(),
+                            },
+                            args: vec![recv_slot],
+                        },
+                    });
+                    Some(result_slot)
+                }
+                (Ty::IntArray, "size")
+                | (Ty::LongArray, "size")
+                | (Ty::DoubleArray, "size")
+                | (Ty::ByteArray, "size")
+                | (Ty::BooleanArray, "size") => {
+                    let result_slot = LocalId(*next_slot);
+                    *next_slot += 1;
+                    extra_locals.push(Ty::Int);
+                    pre_stmts.push(MStmt::Assign {
+                        dest: result_slot,
+                        value: skotch_mir::Rvalue::ArrayLength(recv_slot),
+                    });
+                    Some(result_slot)
+                }
+                _ => None,
+            }
+        }
         KtExpr::Binary(b) => {
             let op_text = b.operation().map(|o| o.text()).unwrap_or_default();
             let is_cmp_op = matches!(op_text.as_str(), "==" | "!=" | "<" | ">" | "<=" | ">=");
@@ -44456,20 +44523,31 @@ fn lower_simple_body(
         });
         if let (Some(KtExpr::Reference(ar)), Some(index_e)) = (array_ref, index_expr) {
             if let Some(an) = ar.name() {
-                let param_names: Vec<String> = f
+                let params: Vec<skotch_ast::KtValueParameter<'_>> = f
                     .value_parameter_list()
-                    .map(|pl| {
-                        pl.parameters()
-                            .map(|p| p.name().unwrap_or("").to_string())
-                            .collect()
-                    })
+                    .map(|pl| pl.parameters().collect())
                     .unwrap_or_default();
+                let param_names: Vec<String> = params
+                    .iter()
+                    .map(|p| p.name().unwrap_or("").to_string())
+                    .collect();
                 let param_count = param_names.len();
                 if let Some(a_idx) = param_names.iter().position(|p| p == an) {
                     let array_slot = skotch_mir::LocalId(a_idx as u32);
                     let mut next_slot = param_count as u32;
                     let mut pre_stmts: Vec<skotch_mir::Stmt> = Vec::new();
                     let mut extra_locals: Vec<Ty> = Vec::new();
+                    // Param-type-driven element ty / receiver dispatch.
+                    // `fun firstChar(s: String): Char = s[0]` must route
+                    // to `String.charAt(I)C` — emitting `ArrayLoad` on a
+                    // String reference picks `iaload` against `[I`, which
+                    // the JVM verifier rejects (`Bad type on operand
+                    // stack`).
+                    let array_param_ty: Ty = params
+                        .get(a_idx)
+                        .and_then(|p| p.type_reference())
+                        .map(resolve_type_ref)
+                        .unwrap_or(Ty::Any);
                     // Resolve index: Reference (param) / literal / binary.
                     let resolve_idx = |e: KtExpr<'_>,
                                        next_slot: &mut u32,
@@ -44532,8 +44610,41 @@ fn lower_simple_body(
                     ) else {
                         return make_placeholder();
                     };
+                    // String[i] → String.charAt(int)char.
+                    if matches!(array_param_ty, Ty::String) {
+                        let result_slot = skotch_mir::LocalId(next_slot);
+                        extra_locals.push(Ty::Char);
+                        pre_stmts.push(skotch_mir::Stmt::Assign {
+                            dest: result_slot,
+                            value: skotch_mir::Rvalue::Call {
+                                kind: skotch_mir::CallKind::VirtualJava {
+                                    class_name: "java/lang/String".to_string(),
+                                    method_name: "charAt".to_string(),
+                                    descriptor: "(I)C".to_string(),
+                                },
+                                args: vec![array_slot, index_slot],
+                            },
+                        });
+                        let blocks = vec![BasicBlock {
+                            stmts: pre_stmts,
+                            terminator: Terminator::ReturnValue(result_slot),
+                        }];
+                        return (blocks, extra_locals);
+                    }
+                    // Pick the result Ty from the array param's element
+                    // type so wide-element arrays (Long/Double) and
+                    // narrow primitives (Byte/Bool/Char) propagate the
+                    // right slot width to the verifier.
+                    let elem_ty = match &array_param_ty {
+                        Ty::IntArray => Ty::Int,
+                        Ty::LongArray => Ty::Long,
+                        Ty::DoubleArray => Ty::Double,
+                        Ty::ByteArray => Ty::Byte,
+                        Ty::BooleanArray => Ty::Bool,
+                        _ => Ty::Int,
+                    };
                     let result_slot = skotch_mir::LocalId(next_slot);
-                    extra_locals.push(Ty::Int);
+                    extra_locals.push(elem_ty);
                     pre_stmts.push(skotch_mir::Stmt::Assign {
                         dest: result_slot,
                         value: skotch_mir::Rvalue::ArrayLoad {
