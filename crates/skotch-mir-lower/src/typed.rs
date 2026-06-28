@@ -1044,6 +1044,31 @@ fn take_lambda_classes() -> Vec<skotch_mir::MirClass> {
     LAMBDA_REGISTRY.with(|r| std::mem::take(&mut *r.borrow_mut()))
 }
 
+/// If `name` matches a registered lambda class whose `interfaces` list
+/// includes a `kotlin/jvm/functions/Function<arity>` entry, return the
+/// arity. Used by `lower_rich_expr_to_slot`'s function-typed-local
+/// invocation arm to bridge from the slot's concrete `Lambda$N` Ty
+/// (set by `try_lower_top_level_fn_ref` and the Lambda synthesis path)
+/// to the source-side function arity, so `op1(7)` where `op1`'s slot
+/// holds a synthesized `Lambda$N` instance dispatches via
+/// `Call(FunctionInvoke{arity})` rather than bailing.
+fn lookup_lambda_class_function_arity(name: &str) -> Option<u8> {
+    LAMBDA_REGISTRY.with(|r| {
+        for cls in r.borrow().iter() {
+            if cls.name == name {
+                for iface in &cls.interfaces {
+                    if let Some(rest) = iface.strip_prefix("kotlin/jvm/functions/Function") {
+                        if let Ok(n) = rest.parse::<u8>() {
+                            return Some(n);
+                        }
+                    }
+                }
+            }
+        }
+        None
+    })
+}
+
 fn reset_lambda_counter() {
     LAMBDA_COUNTER.with(|c| c.set(0));
 }
@@ -37026,13 +37051,47 @@ fn lower_rich_expr_to_slot(
                                         _ => false,
                                     }
                                 });
-                                if !all_same {
-                                    return None;
+                                if all_same {
+                                    match first {
+                                        Ty::String | Ty::Class(_) => return Some(first),
+                                        _ => return None,
+                                    }
                                 }
-                                match first {
-                                    Ty::String | Ty::Class(_) => Some(first),
-                                    _ => None,
+                                // Callable-reference fallback:
+                                // `listOf(::a, ::b)` where each arg's
+                                // slot Ty is a distinct synthesized
+                                // `Lambda$N` class. If every arg's
+                                // class implements the SAME
+                                // `kotlin/jvm/functions/Function<arity>`
+                                // interface, promote the list's
+                                // element Ty to that common Function
+                                // class so for-loop element binding
+                                // can resolve `op(5)` via the
+                                // function-typed-local Call arm.
+                                let mut common_arity: Option<u8> = None;
+                                for s in arg_slots.iter() {
+                                    let t = slot_ty_with_param_fallback(s.0, extra_locals);
+                                    let a = match &t {
+                                        Ty::Class(c) => c
+                                            .strip_prefix("kotlin/jvm/functions/Function")
+                                            .and_then(|n| n.parse::<u8>().ok())
+                                            .or_else(|| lookup_lambda_class_function_arity(c)),
+                                        Ty::Function {
+                                            params, is_suspend, ..
+                                        } => Some(
+                                            (params.len() + if *is_suspend { 1 } else { 0 }) as u8,
+                                        ),
+                                        _ => None,
+                                    };
+                                    match (common_arity, a) {
+                                        (None, Some(a)) => common_arity = Some(a),
+                                        (Some(p), Some(a)) if p == a => {}
+                                        _ => return None,
+                                    }
                                 }
+                                common_arity.map(|a| {
+                                    Ty::Class(format!("kotlin/jvm/functions/Function{}", a))
+                                })
                             });
                         if let Some(et) = arr_elem_ty {
                             record_list_element_ty(result_slot.0, et);
@@ -38676,6 +38735,89 @@ fn lower_rich_expr_to_slot(
                         },
                     });
                     return Some(result_slot);
+                }
+            }
+        }
+    }
+    // Function-typed local invocation: `op1(7)` where `op1` is a
+    // local val/var of type `(Int) -> Int`. The Reference callee
+    // resolves via `lookup_name` to a slot whose Ty is one of
+    // `kotlin/jvm/functions/FunctionN`. Emit a `FunctionInvoke{arity}`
+    // call with args = [fn_slot, arg1, arg2, ...]. Without this arm,
+    // bare calls on Function-typed locals fall through every Call arm
+    // (the top-level fn_lookup arm above doesn't fire because `op1`
+    // is a local, not a top-level fn) and bail kind=Call.
+    //
+    // Note: the loop-body walker already has a dispatcher for the
+    // `recv.method()` (method-selector) shape on Function-typed locals
+    // (~line 17354). This arm covers the receiver-less Call shape
+    // (`op1(7)` directly, not `obj.op1(7)`).
+    if let KtExpr::Call(call) = e {
+        if let Some(KtExpr::Reference(rc)) = call.callee() {
+            if let Some(name) = rc.name() {
+                // Skip top-level fns (handled by the arm above) and
+                // local-helper-lift names — those already dispatched.
+                if !fn_lookup.contains_key(name) && local_helper_captures(name).is_none() {
+                    if let Some(fn_slot) = lookup_name(name) {
+                        let fn_ty = slot_ty_with_param_fallback(fn_slot.0, extra_locals);
+                        let fn_arity: Option<u8> = match &fn_ty {
+                            Ty::Class(c) => c
+                                .strip_prefix("kotlin/jvm/functions/Function")
+                                .and_then(|n| n.parse::<u8>().ok())
+                                // Local slot may hold a synthesized
+                                // `Lambda$N` instance (from
+                                // `try_lower_top_level_fn_ref` or the
+                                // Lambda synthesizer) — look up its
+                                // implemented Function<arity>.
+                                .or_else(|| lookup_lambda_class_function_arity(c)),
+                            // Structured Ty::Function — typeck's
+                            // representation of `(args) -> ret`. The
+                            // arity is `params.len()` (bumped by +1
+                            // for suspend's implicit Continuation).
+                            Ty::Function {
+                                params, is_suspend, ..
+                            } => Some((params.len() + if *is_suspend { 1 } else { 0 }) as u8),
+                            _ => None,
+                        };
+                        if let Some(arity) = fn_arity {
+                            let mut invoke_args: Vec<LocalId> = vec![fn_slot];
+                            let mut ok = true;
+                            if let Some(arg_list) = call.value_argument_list() {
+                                for arg in arg_list.arguments() {
+                                    let Some(arg_e) = arg.expression() else {
+                                        ok = false;
+                                        break;
+                                    };
+                                    let Some(s) = lower_rich_expr_to_slot(
+                                        arg_e,
+                                        lookup_name,
+                                        fn_lookup,
+                                        next_slot,
+                                        pre_stmts,
+                                        extra_locals,
+                                        strings,
+                                    ) else {
+                                        ok = false;
+                                        break;
+                                    };
+                                    invoke_args.push(s);
+                                }
+                            }
+                            if ok && invoke_args.len() == (arity as usize) + 1 {
+                                let result_slot = LocalId(*next_slot);
+                                *next_slot += 1;
+                                extra_locals.push(Ty::Any);
+                                pre_stmts.push(MStmt::Assign {
+                                    dest: result_slot,
+                                    value: skotch_mir::Rvalue::Call {
+                                        kind: skotch_mir::CallKind::FunctionInvoke { arity },
+                                        args: invoke_args,
+                                    },
+                                });
+                                return Some(result_slot);
+                            }
+                        }
+                    }
                 }
             }
         }
