@@ -18841,24 +18841,19 @@ fn walk_block(
                     }
                     // Check if receiver type is an interface — if so, use
                     // invokeinterface instead of invokevirtual.
+                    // Delegate to the centralized check so JDK interfaces
+                    // (SortedMap/NavigableMap/...) outside the hardcoded
+                    // shortlist below are still detected via classfile
+                    // ACC_INTERFACE inspection.
                     let is_iface = module
                         .classes
                         .iter()
                         .any(|c| c.name == *class_name && c.is_interface)
-                        || class_name.starts_with("kotlin/jvm/functions/Function")
+                        || is_jvm_interface_check(class_name)
                         || matches!(
                             class_name.as_str(),
                             "kotlinx/coroutines/Deferred"
                                 | "kotlinx/coroutines/Job"
-                                | "java/util/List"
-                                | "java/util/Map"
-                                | "java/util/Map$Entry"
-                                | "java/util/Set"
-                                | "java/util/Iterator"
-                                | "java/util/Collection"
-                                | "java/lang/Iterable"
-                                | "java/lang/Comparable"
-                                | "java/lang/Runnable"
                                 | "java/util/concurrent/Callable"
                                 | "java/util/Comparator"
                         );

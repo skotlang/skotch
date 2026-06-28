@@ -21192,58 +21192,68 @@ fn lower_loop_body_blocks(
                     // (or VerifyError when next()'s Object result was
                     // used with iadd).
                     let range_ty = slot_ty_with_param_fallback(range_slot.0, local_tys);
-                    let user_iter_detected: Option<(String, Ty)> = if let Ty::Class(recv_cls) =
-                        &range_ty
-                    {
-                        match class_method_return_ty(recv_cls, "iterator") {
-                            Some(Ty::Class(iter_cls))
-                                if class_method_return_ty(&iter_cls, "hasNext").is_some() =>
+                    // Map / SortedMap / HashMap destructuring iteration.
+                    // For `for ((k,v) in m)` where m is a Map-shaped
+                    // generic expression result (e.g. `byFirst.toSortedMap()`),
+                    // route through the Map.entrySet() iterator protocol so
+                    // the body sees Map.Entry per-iteration instead of
+                    // being treated as a List. Mirrors the bare-Reference
+                    // Map-destructuring arm above. Used by
+                    // parity/146-list-group-by.
+                    let is_map_recv = matches!(
+                        &range_ty,
+                        Ty::Class(c) if matches!(
+                            c.as_str(),
+                            "java/util/Map"
+                                | "java/util/HashMap"
+                                | "java/util/LinkedHashMap"
+                                | "java/util/SortedMap"
+                                | "java/util/TreeMap"
+                                | "java/util/NavigableMap"
+                        )
+                    );
+                    if is_map_recv && destructuring_entries.is_some() {
+                        let map_iface = match &range_ty {
+                            Ty::Class(c)
+                                if c == "java/util/SortedMap"
+                                    || c == "java/util/TreeMap"
+                                    || c == "java/util/NavigableMap" =>
                             {
-                                class_method_return_ty(&iter_cls, "next").map(|nrt| (iter_cls, nrt))
+                                "java/util/SortedMap"
                             }
-                            _ => None,
-                        }
-                    } else {
-                        None
-                    };
-                    if let (Ty::Class(recv_cls), Some((iter_cls, next_ret_ty))) =
-                        (&range_ty, user_iter_detected)
-                    {
-                        // iter_slot = range.iterator()
-                        let iter_slot = LocalId(*next_slot);
+                            _ => "java/util/Map",
+                        };
+                        let es_slot = LocalId(*next_slot);
                         *next_slot += 1;
-                        local_tys.push(Ty::Class(iter_cls.clone()));
+                        local_tys.push(Ty::Class("java/util/Set".to_string()));
                         cur_stmts.push(MStmt::Assign {
-                            dest: iter_slot,
+                            dest: es_slot,
                             value: skotch_mir::Rvalue::Call {
                                 kind: skotch_mir::CallKind::Virtual {
-                                    class_name: recv_cls.clone(),
-                                    method_name: "iterator".to_string(),
+                                    class_name: map_iface.to_string(),
+                                    method_name: "entrySet".to_string(),
                                 },
                                 args: vec![range_slot],
                             },
                         });
-                        user_iter = Some((iter_slot, iter_cls, next_ret_ty));
-                        // Placeholder bound slots — cond_stmt + body
-                        // prepend below override the cmp + elem load
-                        // when user_iter is set.
-                        let lo = LocalId(*next_slot);
+                        let iter_slot = LocalId(*next_slot);
                         *next_slot += 1;
-                        local_tys.push(Ty::Int);
+                        local_tys.push(Ty::Class("java/util/Iterator".to_string()));
                         cur_stmts.push(MStmt::Assign {
-                            dest: lo,
-                            value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(0)),
+                            dest: iter_slot,
+                            value: skotch_mir::Rvalue::Call {
+                                kind: skotch_mir::CallKind::Virtual {
+                                    class_name: "java/util/Set".to_string(),
+                                    method_name: "iterator".to_string(),
+                                },
+                                args: vec![es_slot],
+                            },
                         });
-                        let hi = LocalId(*next_slot);
-                        *next_slot += 1;
-                        local_tys.push(Ty::Int);
-                        cur_stmts.push(MStmt::Assign {
-                            dest: hi,
-                            value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(0)),
-                        });
-                        list_recv = Some(range_slot); // forces elem_slot path
-                        (lo, hi, skotch_mir::BinOp::CmpLt, 1)
-                    } else {
+                        user_iter = Some((
+                            iter_slot,
+                            "java/util/Iterator".to_string(),
+                            Ty::Class("java/util/Map$Entry".to_string()),
+                        ));
                         list_recv = Some(range_slot);
                         let lo = LocalId(*next_slot);
                         *next_slot += 1;
@@ -21257,15 +21267,86 @@ fn lower_loop_body_blocks(
                         local_tys.push(Ty::Int);
                         cur_stmts.push(MStmt::Assign {
                             dest: hi,
-                            value: skotch_mir::Rvalue::Call {
-                                kind: skotch_mir::CallKind::Virtual {
-                                    class_name: "java/util/List".to_string(),
-                                    method_name: "size".to_string(),
-                                },
-                                args: vec![range_slot],
-                            },
+                            value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(0)),
                         });
                         (lo, hi, skotch_mir::BinOp::CmpLt, 1)
+                    } else {
+                        let user_iter_detected: Option<(String, Ty)> = if let Ty::Class(recv_cls) =
+                            &range_ty
+                        {
+                            match class_method_return_ty(recv_cls, "iterator") {
+                                Some(Ty::Class(iter_cls))
+                                    if class_method_return_ty(&iter_cls, "hasNext").is_some() =>
+                                {
+                                    class_method_return_ty(&iter_cls, "next")
+                                        .map(|nrt| (iter_cls, nrt))
+                                }
+                                _ => None,
+                            }
+                        } else {
+                            None
+                        };
+                        if let (Ty::Class(recv_cls), Some((iter_cls, next_ret_ty))) =
+                            (&range_ty, user_iter_detected)
+                        {
+                            // iter_slot = range.iterator()
+                            let iter_slot = LocalId(*next_slot);
+                            *next_slot += 1;
+                            local_tys.push(Ty::Class(iter_cls.clone()));
+                            cur_stmts.push(MStmt::Assign {
+                                dest: iter_slot,
+                                value: skotch_mir::Rvalue::Call {
+                                    kind: skotch_mir::CallKind::Virtual {
+                                        class_name: recv_cls.clone(),
+                                        method_name: "iterator".to_string(),
+                                    },
+                                    args: vec![range_slot],
+                                },
+                            });
+                            user_iter = Some((iter_slot, iter_cls, next_ret_ty));
+                            // Placeholder bound slots — cond_stmt + body
+                            // prepend below override the cmp + elem load
+                            // when user_iter is set.
+                            let lo = LocalId(*next_slot);
+                            *next_slot += 1;
+                            local_tys.push(Ty::Int);
+                            cur_stmts.push(MStmt::Assign {
+                                dest: lo,
+                                value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(0)),
+                            });
+                            let hi = LocalId(*next_slot);
+                            *next_slot += 1;
+                            local_tys.push(Ty::Int);
+                            cur_stmts.push(MStmt::Assign {
+                                dest: hi,
+                                value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(0)),
+                            });
+                            list_recv = Some(range_slot); // forces elem_slot path
+                            (lo, hi, skotch_mir::BinOp::CmpLt, 1)
+                        } else {
+                            list_recv = Some(range_slot);
+                            let lo = LocalId(*next_slot);
+                            *next_slot += 1;
+                            local_tys.push(Ty::Int);
+                            cur_stmts.push(MStmt::Assign {
+                                dest: lo,
+                                value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(0)),
+                            });
+                            let hi = LocalId(*next_slot);
+                            *next_slot += 1;
+                            local_tys.push(Ty::Int);
+                            cur_stmts.push(MStmt::Assign {
+                                dest: hi,
+                                value: skotch_mir::Rvalue::Call {
+                                    kind: skotch_mir::CallKind::Virtual {
+                                        class_name: "java/util/List".to_string(),
+                                        method_name: "size".to_string(),
+                                    },
+                                    args: vec![range_slot],
+                                },
+                            });
+                            (lo, hi, skotch_mir::BinOp::CmpLt, 1)
+                        }
                     }
                 };
                 let i_slot = LocalId(*next_slot);
@@ -32215,6 +32296,7 @@ fn try_lower_multi_stmt_block_with_offset(
                                             | "toSet"
                                             | "toMutableList"
                                             | "toMutableSet"
+                                            | "toSortedMap"
                                             | "filter"
                                             | "filterNot"
                                             | "filterNotNull"
@@ -36051,6 +36133,7 @@ fn lower_rich_expr_to_slot(
                     Ty::Float => (Some("boxFloat"), "(F)Ljava/lang/Float;"),
                     Ty::Double => (Some("boxDouble"), "(D)Ljava/lang/Double;"),
                     Ty::Bool => (Some("boxBoolean"), "(Z)Ljava/lang/Boolean;"),
+                    Ty::Char => (Some("boxChar"), "(C)Ljava/lang/Character;"),
                     _ => (None, ""),
                 };
                 if let Some(method) = box_method {
@@ -43220,6 +43303,26 @@ fn lower_rich_expr_to_slot(
                                 Ty::String,
                                 "@StringsKt.trimMargin",
                             )),
+                            // `s.first()` / `s.last()` — Kotlin stdlib
+                            // extensions on CharSequence that kotlinc
+                            // lowers to `StringsKt.first(CharSequence)C`
+                            // (resp. `StringsKt.last`). The dispatch
+                            // below uses a `@StringsKtCS.` jvm_name
+                            // prefix to signal that the receiver must
+                            // be CHECKCAST'd to CharSequence before the
+                            // static call (mirroring the kotlinc
+                            // prologue). Used by parity/146-list-group-by
+                            // via `xs.groupBy { it.first() }`.
+                            ("first", 0) => Some((
+                                "(Ljava/lang/CharSequence;)C",
+                                Ty::Char,
+                                "@StringsKtCS.first",
+                            )),
+                            ("last", 0) => Some((
+                                "(Ljava/lang/CharSequence;)C",
+                                Ty::Char,
+                                "@StringsKtCS.last",
+                            )),
                             // ("trim"/"uppercase"/"lowercase"/"isEmpty"/
                             //  "isNotEmpty"/"isBlank", 0) — earlier match
                             //  arms at the top of this list (~19305+) catch
@@ -43293,7 +43396,29 @@ fn lower_rich_expr_to_slot(
                             extra_locals.push(ret_ty);
                             // toInt/toLong/toDouble route to Integer/Long/Double.parseX
                             // (static call with String arg).
-                            let kind = if let Some(m) = jvm_name.strip_prefix("@StringsKt.") {
+                            // `@StringsKtCS.method` prefix: route to
+                            // kotlin/text/StringsKt static call after
+                            // CHECKCAST'ing the String receiver to
+                            // CharSequence (matches kotlinc's prologue
+                            // for `s.first()` / `s.last()`).
+                            let kind = if let Some(m) = jvm_name.strip_prefix("@StringsKtCS.") {
+                                let cs_slot = LocalId(*next_slot);
+                                *next_slot += 1;
+                                extra_locals.push(Ty::Class("java/lang/CharSequence".to_string()));
+                                pre_stmts.push(MStmt::Assign {
+                                    dest: cs_slot,
+                                    value: skotch_mir::Rvalue::CheckCast {
+                                        obj: arg_slots[0],
+                                        target_class: "java/lang/CharSequence".to_string(),
+                                    },
+                                });
+                                arg_slots[0] = cs_slot;
+                                skotch_mir::CallKind::StaticJava {
+                                    class_name: "kotlin/text/StringsKt".to_string(),
+                                    method_name: m.to_string(),
+                                    descriptor: descriptor.to_string(),
+                                }
+                            } else if let Some(m) = jvm_name.strip_prefix("@StringsKt.") {
                                 skotch_mir::CallKind::StaticJava {
                                     class_name: "kotlin/text/StringsKt".to_string(),
                                     method_name: m.to_string(),
@@ -45479,6 +45604,48 @@ fn lower_rich_expr_to_slot(
                                     _ => None,
                                 };
                                 if let Some((cname, result_ty)) = dispatch {
+                                    // `m.toSortedMap()` on a Map-typed
+                                    // receiver — kotlin/collections/MapsKt
+                                    // extension. Intercept before the
+                                    // Virtual fallback below would emit
+                                    // `invokeinterface Map.toSortedMap`
+                                    // (a method that doesn't exist on
+                                    // java.util.Map). Used by
+                                    // parity/146-list-group-by.
+                                    let is_map_recv = matches!(
+                                        cname.as_str(),
+                                        "java/util/Map"
+                                            | "java/util/HashMap"
+                                            | "java/util/LinkedHashMap"
+                                    );
+                                    if is_map_recv
+                                        && method_n == "toSortedMap"
+                                        && call.lambda_argument().is_none()
+                                        && call
+                                            .value_argument_list()
+                                            .map(|al| al.arguments().count() == 0)
+                                            .unwrap_or(true)
+                                    {
+                                        let result_slot = LocalId(*next_slot);
+                                        *next_slot += 1;
+                                        extra_locals
+                                            .push(Ty::Class("java/util/SortedMap".to_string()));
+                                        pre_stmts.push(MStmt::Assign {
+                                            dest: result_slot,
+                                            value: skotch_mir::Rvalue::Call {
+                                                kind: skotch_mir::CallKind::StaticJava {
+                                                    class_name: "kotlin/collections/MapsKt"
+                                                        .to_string(),
+                                                    method_name: "toSortedMap".to_string(),
+                                                    descriptor:
+                                                        "(Ljava/util/Map;)Ljava/util/SortedMap;"
+                                                            .to_string(),
+                                                },
+                                                args: vec![slot],
+                                            },
+                                        });
+                                        return Some(result_slot);
+                                    }
                                     // Trailing-lambda receiver-method dispatch:
                                     // `box.mapIt { it * 2 }` where Box.mapIt
                                     // takes `(Int) -> Int`. Lower the lambda
@@ -46194,6 +46361,45 @@ fn lower_rich_expr_to_slot(
                                 }
                             }
                             if let Ty::Class(cname) = recv_ty {
+                                // `chain().toSortedMap()` — Map extension
+                                // on a non-Reference chained receiver
+                                // (e.g. `xs.groupBy { ... }.toSortedMap()`).
+                                // Mirror the Reference-receiver intercept
+                                // above so the chained shape routes to
+                                // `MapsKt.toSortedMap` instead of an
+                                // invalid `invokeinterface Map.toSortedMap`.
+                                let is_map_recv = matches!(
+                                    cname.as_str(),
+                                    "java/util/Map"
+                                        | "java/util/HashMap"
+                                        | "java/util/LinkedHashMap"
+                                );
+                                if is_map_recv
+                                    && method_n == "toSortedMap"
+                                    && call.lambda_argument().is_none()
+                                    && call
+                                        .value_argument_list()
+                                        .map(|al| al.arguments().count() == 0)
+                                        .unwrap_or(true)
+                                {
+                                    let result_slot = LocalId(*next_slot);
+                                    *next_slot += 1;
+                                    extra_locals.push(Ty::Class("java/util/SortedMap".to_string()));
+                                    pre_stmts.push(MStmt::Assign {
+                                        dest: result_slot,
+                                        value: skotch_mir::Rvalue::Call {
+                                            kind: skotch_mir::CallKind::StaticJava {
+                                                class_name: "kotlin/collections/MapsKt".to_string(),
+                                                method_name: "toSortedMap".to_string(),
+                                                descriptor:
+                                                    "(Ljava/util/Map;)Ljava/util/SortedMap;"
+                                                        .to_string(),
+                                            },
+                                            args: vec![recv_slot],
+                                        },
+                                    });
+                                    return Some(result_slot);
+                                }
                                 // Named-arg reorder mirrors the
                                 // Reference-receiver arm above: when
                                 // the call site has named args, look
