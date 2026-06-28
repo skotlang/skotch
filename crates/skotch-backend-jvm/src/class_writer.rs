@@ -1953,12 +1953,38 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
     // Check if primary constructor would conflict with a secondary constructor.
     // This happens when the class has no explicit primary constructor params
     // and a secondary constructor has the same number of params.
+    //
+    // Refinement: arity-alone is not a true conflict — the JVM
+    // disambiguates `<init>` overloads by descriptor (param types),
+    // not by count. `class Temp(c: Double) {
+    //   constructor(f: Int) : this(...) }` has two ctors with the
+    //   same arity (1) but distinct descriptors (`(D)V` vs `(I)V`),
+    //   so BOTH must be emitted; suppressing the primary on arity-
+    //   alone leaves call sites of `Temp(100.0)` with no matching
+    //   target and NoSuchMethodError at runtime. We only treat a
+    //   same-arity secondary as a conflict when the user-param TYPES
+    //   collapse to the same descriptor string.
     let primary_param_count = class.constructor.params.len().saturating_sub(1);
+    let primary_param_descs: Vec<String> = class
+        .constructor
+        .params
+        .iter()
+        .skip(1)
+        .map(|p| jvm_param_type_string(&class.constructor.locals[p.0 as usize]))
+        .collect();
     let mut primary_conflicts = !class.secondary_constructors.is_empty()
-        && class
-            .secondary_constructors
-            .iter()
-            .any(|sec| sec.params.len().saturating_sub(1) == primary_param_count);
+        && class.secondary_constructors.iter().any(|sec| {
+            if sec.params.len().saturating_sub(1) != primary_param_count {
+                return false;
+            }
+            let sec_descs: Vec<String> = sec
+                .params
+                .iter()
+                .skip(1)
+                .map(|p| jvm_param_type_string(&sec.locals[p.0 as usize]))
+                .collect();
+            sec_descs == primary_param_descs
+        });
     // When the class has no `()` clause on its header AND no primary
     // ctor body to run AND at least one secondary constructor, kotlinc
     // emits NO primary constructor. Skotch's synthesized empty
@@ -17768,41 +17794,82 @@ fn walk_block(
                         // ship with erased Any-typed params, which would make the
                         // emitted descriptor `(Ljava/lang/Object;...)V` instead of
                         // matching the real constructor's typed signature.
-                        let ctor_params: Vec<Ty> = module
+                        // Pick the best matching ctor among primary +
+                        // secondary candidates. We rank by:
+                        //   1. Exact type-by-type match (preferred).
+                        //   2. Arity match (fallback when no types match).
+                        //
+                        // Without (1), `class Temp(val c: Double) {
+                        //   constructor(f: Int) : this(...) }` resolves
+                        // `Temp(32)` to the primary `<init>(D)V` (arity
+                        // matches first) and the call site emits
+                        // `bipush 32; invokespecial Temp.<init>:(D)V`,
+                        // which the JVM verifier rejects with
+                        // "integer is not assignable to double_2nd".
+                        // Selecting the secondary `<init>(I)V` by
+                        // arg-type match emits the correct dispatch.
+                        let arg_tys: Vec<Ty> = args
+                            .iter()
+                            .map(|a| func.locals[a.0 as usize].clone())
+                            .collect();
+                        let ctor_param_lists: Vec<Vec<Ty>> = module
                             .find_class(class_name)
                             .map(|c| {
-                                // Try primary constructor first.
-                                let primary_count = c.constructor.params.len().saturating_sub(1);
-                                if primary_count == args.len() {
-                                    return c
-                                        .constructor
+                                let mut all: Vec<Vec<Ty>> = Vec::new();
+                                all.push(
+                                    c.constructor
                                         .params
                                         .iter()
                                         .skip(1)
                                         .map(|p| c.constructor.locals[p.0 as usize].clone())
-                                        .collect();
-                                }
-                                // Check secondary constructors.
+                                        .collect(),
+                                );
                                 for sec in &c.secondary_constructors {
-                                    let sec_count = sec.params.len().saturating_sub(1);
-                                    if sec_count == args.len() {
-                                        return sec
-                                            .params
+                                    all.push(
+                                        sec.params
                                             .iter()
                                             .skip(1)
                                             .map(|p| sec.locals[p.0 as usize].clone())
-                                            .collect();
-                                    }
+                                            .collect(),
+                                    );
                                 }
-                                // Fallback to primary.
-                                c.constructor
-                                    .params
-                                    .iter()
-                                    .skip(1)
-                                    .map(|p| c.constructor.locals[p.0 as usize].clone())
-                                    .collect()
+                                all
                             })
                             .unwrap_or_default();
+                        // Score a candidate's param list against arg
+                        // types: returns Some(matched_count) when arity
+                        // is right, scored higher when more arg types
+                        // are exact-equal to the corresponding param.
+                        let score_candidate = |params: &[Ty]| -> Option<usize> {
+                            if params.len() != arg_tys.len() {
+                                return None;
+                            }
+                            let mut score = 0usize;
+                            for (p, a) in params.iter().zip(arg_tys.iter()) {
+                                if p == a {
+                                    score += 1;
+                                }
+                            }
+                            Some(score)
+                        };
+                        let ctor_params: Vec<Ty> = {
+                            let mut best: Option<(usize, &Vec<Ty>)> = None;
+                            for params in &ctor_param_lists {
+                                if let Some(s) = score_candidate(params) {
+                                    let pick = match best {
+                                        None => true,
+                                        Some((bs, _)) => s > bs,
+                                    };
+                                    if pick {
+                                        best = Some((s, params));
+                                    }
+                                }
+                            }
+                            match best {
+                                Some((_, params)) => params.clone(),
+                                None => ctor_param_lists.into_iter().next().unwrap_or_default(),
+                            }
+                        };
                         let mut descriptor = String::from("(");
                         for (i, a) in args.iter().enumerate() {
                             let arg_ty = &func.locals[a.0 as usize];
