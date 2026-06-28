@@ -18895,6 +18895,14 @@ fn lower_loop_body_blocks(
                 // (which are typed as `Ty::IntArray` after the vararg
                 // param-Ty rewrite) and on any direct `IntArray` slot.
                 let mut int_arr_recv: Option<LocalId> = None;
+                // When set, the for-in is over a reference-typed `Array<T>`
+                // slot (typed as `Ty::Class("[L<T>;")` by the arrayOf
+                // builder). Mirrors `int_arr_recv` but the body-prepend
+                // emits `elem_slot = arr[i]` with the element class
+                // (from `LIST_ELEMENT_TY`) so the loop variable's slot
+                // carries `Ty::String`/`Ty::Class(_)` for downstream
+                // virtual dispatch (`s.uppercase()` etc.).
+                let mut obj_arr_recv: Option<(LocalId, Ty)> = None;
                 // When set, the for-in dispatches via the user-iterator
                 // protocol: `iter = recv.iterator()`, cond uses
                 // `iter.hasNext()`, body prepends `elem = iter.next()`.
@@ -19097,6 +19105,31 @@ fn lower_loop_body_blocks(
                             value: skotch_mir::Rvalue::ArrayLength(range_slot),
                         });
                         (lo, hi, skotch_mir::BinOp::CmpLt, 1)
+                    } else if matches!(&range_ty, Ty::Class(c) if c.starts_with('[')) {
+                        // `for (s in xs)` where `xs: Array<T>` (typed as
+                        // `Ty::Class("[L<T>;")` by the arrayOf builder).
+                        // Same shape as the IntArray path — kotlinc emits:
+                        //   i = 0; hi = arr.length
+                        //   while (i < hi) { s = arr[i]; <body>; i++ }
+                        // — but the body-preamble below allocates a
+                        // reference-typed elem slot via LIST_ELEMENT_TY.
+                        let elem_ty = lookup_list_element_ty(range_slot.0).unwrap_or(Ty::Any);
+                        obj_arr_recv = Some((range_slot, elem_ty));
+                        let lo = LocalId(*next_slot);
+                        *next_slot += 1;
+                        local_tys.push(Ty::Int);
+                        cur_stmts.push(MStmt::Assign {
+                            dest: lo,
+                            value: skotch_mir::Rvalue::Const(skotch_mir::MirConst::Int(0)),
+                        });
+                        let hi = LocalId(*next_slot);
+                        *next_slot += 1;
+                        local_tys.push(Ty::Int);
+                        cur_stmts.push(MStmt::Assign {
+                            dest: hi,
+                            value: skotch_mir::Rvalue::ArrayLength(range_slot),
+                        });
+                        (lo, hi, skotch_mir::BinOp::CmpLt, 1)
                     } else {
                         let lo = LocalId(*next_slot);
                         *next_slot += 1;
@@ -19276,6 +19309,17 @@ fn lower_loop_body_blocks(
                     let s = LocalId(*next_slot);
                     *next_slot += 1;
                     local_tys.push(Ty::Int);
+                    Some(s)
+                } else if let Some((_, ref obj_elem_ty)) = obj_arr_recv {
+                    // Object-array for-in: each element's slot Ty comes
+                    // from the array's LIST_ELEMENT_TY (set by the
+                    // arrayOf builder), so `for (s in xs: Array<String>)`
+                    // produces a `Ty::String`-typed slot — downstream
+                    // `s.uppercase()` dispatch then routes through the
+                    // String intrinsics arm.
+                    let s = LocalId(*next_slot);
+                    *next_slot += 1;
+                    local_tys.push(obj_elem_ty.clone());
                     Some(s)
                 } else {
                     None
@@ -19501,6 +19545,26 @@ fn lower_loop_body_blocks(
                     // IntArray for-in body prepend: bind the loop variable
                     // to `arr[i]` via `Rvalue::ArrayLoad` so the body sees
                     // an `Int`-typed slot.
+                    if let Some(first_body) = inner_body_blocks.first_mut() {
+                        let mut prepend: Vec<MStmt> = Vec::new();
+                        prepend.push(MStmt::Assign {
+                            dest: elem,
+                            value: skotch_mir::Rvalue::ArrayLoad {
+                                array: recv,
+                                index: i_slot,
+                            },
+                        });
+                        prepend.append(&mut first_body.stmts);
+                        first_body.stmts = prepend;
+                    }
+                } else if let (Some((recv, _)), Some(elem)) = (obj_arr_recv, elem_slot_opt) {
+                    // Object-array for-in body prepend: bind the loop
+                    // variable to `arr[i]` via `Rvalue::ArrayLoad`. The
+                    // backend emits `aaload` because `arr_ty` is a
+                    // reference-typed `[L...;` class. The elem slot's
+                    // Ty was allocated from LIST_ELEMENT_TY above so the
+                    // loop variable carries the element class
+                    // (`Ty::String` / `Ty::Class(_)`).
                     if let Some(first_body) = inner_body_blocks.first_mut() {
                         let mut prepend: Vec<MStmt> = Vec::new();
                         prepend.push(MStmt::Assign {
@@ -36022,7 +36086,24 @@ fn lower_rich_expr_to_slot(
                     });
                     let arr_slot = LocalId(*next_slot);
                     *next_slot += 1;
-                    extra_locals.push(Ty::Any);
+                    // Type the slot as the JVM-internal array descriptor
+                    // (`[L<elem>;`) so the stackmap writer emits the
+                    // correct verification type for `xs` instead of
+                    // erasing to `java/lang/Object`. Without this, a
+                    // subsequent `xs[i] = "QUX"` aastore would fail
+                    // the verifier with `Type 'java/lang/Object' is not
+                    // assignable to reference type` because the loaded
+                    // local's stackmap-typed kind disagrees with the
+                    // value pushed by `anewarray`. Downstream arms
+                    // (DotQualified/size, ArrayAccess, for-in) check
+                    // for the `[`-prefix to route this slot through
+                    // array-specific opcodes (arraylength/aaload/aastore)
+                    // instead of class-virtual dispatch.
+                    let arr_slot_ty = match &elem_class {
+                        Some(ec) => Ty::Class(format!("[L{};", ec)),
+                        None => Ty::Class("[Ljava/lang/Object;".to_string()),
+                    };
+                    extra_locals.push(arr_slot_ty);
                     let new_arr_rvalue = if let Some(ref ec) = elem_class {
                         skotch_mir::Rvalue::NewTypedObjectArray {
                             size: size_slot,
@@ -36520,67 +36601,76 @@ fn lower_rich_expr_to_slot(
                     // same dispatch but only for in-file classes — extend
                     // to JAR classes via inherited_method_return_ty,
                     // which falls through to classinfo and @Metadata.
+                    //
+                    // Skip this lookup for reference-typed arrays
+                    // (`Ty::Class("[L<T>;")`) — they have no `get`
+                    // method; the fallthrough ArrayLoad path is correct.
                     if let Ty::Class(cname) = &array_ty {
-                        let ret_ty = class_method_return_ty(cname, "get")
-                            .or_else(|| inherited_method_return_ty(cname, "get", 1))
-                            .or_else(|| jdk_method_return_ty(cname, "get", 1));
-                        if let Some(ret_ty) = ret_ty {
-                            let result_slot = LocalId(*next_slot);
-                            *next_slot += 1;
-                            extra_locals.push(ret_ty.clone());
-                            pre_stmts.push(MStmt::Assign {
-                                dest: result_slot,
-                                value: skotch_mir::Rvalue::Call {
-                                    kind: skotch_mir::CallKind::Virtual {
-                                        class_name: cname.clone(),
-                                        method_name: "get".to_string(),
+                        if cname.starts_with('[') {
+                            // Object-array: skip the get() dispatch and
+                            // fall through to ArrayLoad below.
+                        } else {
+                            let ret_ty = class_method_return_ty(cname, "get")
+                                .or_else(|| inherited_method_return_ty(cname, "get", 1))
+                                .or_else(|| jdk_method_return_ty(cname, "get", 1));
+                            if let Some(ret_ty) = ret_ty {
+                                let result_slot = LocalId(*next_slot);
+                                *next_slot += 1;
+                                extra_locals.push(ret_ty.clone());
+                                pre_stmts.push(MStmt::Assign {
+                                    dest: result_slot,
+                                    value: skotch_mir::Rvalue::Call {
+                                        kind: skotch_mir::CallKind::Virtual {
+                                            class_name: cname.clone(),
+                                            method_name: "get".to_string(),
+                                        },
+                                        args: vec![array_slot, index_slot],
                                     },
-                                    args: vec![array_slot, index_slot],
-                                },
-                            });
-                            // Generic-erasure unbox: a Kotlin class
-                            // extending a parameterized supertype
-                            // (`F1600 extends State<Long, F1600>`)
-                            // emits its `operator fun get(i: Int): Long`
-                            // with a boxed JVM return `Ljava/lang/Long;`
-                            // even though the Kotlin source declares
-                            // primitive `Long`. When @kotlin.Metadata
-                            // confirms the source-level primitive, emit
-                            // an unbox via `Long.longValue()J` so the
-                            // result slot lands as primitive Long for
-                            // downstream operand-stack arithmetic
-                            // (`lane ushr 8` etc.). Without this, the
-                            // `extract` body in KeccakDigest bails and
-                            // SHA-3 hashes to zeros.
-                            if let Ty::Class(box_cls) = &ret_ty {
-                                if let Some((prim_ty, unbox_name, unbox_desc)) =
-                                    boxed_primitive_unbox(box_cls)
-                                {
-                                    if let Some(meta_ty) = metadata_return_ty(cname, "get") {
-                                        if std::mem::discriminant(&meta_ty)
-                                            == std::mem::discriminant(&prim_ty)
-                                        {
-                                            let unboxed_slot = LocalId(*next_slot);
-                                            *next_slot += 1;
-                                            extra_locals.push(prim_ty);
-                                            pre_stmts.push(MStmt::Assign {
-                                                dest: unboxed_slot,
-                                                value: skotch_mir::Rvalue::Call {
-                                                    kind: skotch_mir::CallKind::VirtualJava {
-                                                        class_name: box_cls.clone(),
-                                                        method_name: unbox_name.to_string(),
-                                                        descriptor: unbox_desc.to_string(),
+                                });
+                                // Generic-erasure unbox: a Kotlin class
+                                // extending a parameterized supertype
+                                // (`F1600 extends State<Long, F1600>`)
+                                // emits its `operator fun get(i: Int): Long`
+                                // with a boxed JVM return `Ljava/lang/Long;`
+                                // even though the Kotlin source declares
+                                // primitive `Long`. When @kotlin.Metadata
+                                // confirms the source-level primitive, emit
+                                // an unbox via `Long.longValue()J` so the
+                                // result slot lands as primitive Long for
+                                // downstream operand-stack arithmetic
+                                // (`lane ushr 8` etc.). Without this, the
+                                // `extract` body in KeccakDigest bails and
+                                // SHA-3 hashes to zeros.
+                                if let Ty::Class(box_cls) = &ret_ty {
+                                    if let Some((prim_ty, unbox_name, unbox_desc)) =
+                                        boxed_primitive_unbox(box_cls)
+                                    {
+                                        if let Some(meta_ty) = metadata_return_ty(cname, "get") {
+                                            if std::mem::discriminant(&meta_ty)
+                                                == std::mem::discriminant(&prim_ty)
+                                            {
+                                                let unboxed_slot = LocalId(*next_slot);
+                                                *next_slot += 1;
+                                                extra_locals.push(prim_ty);
+                                                pre_stmts.push(MStmt::Assign {
+                                                    dest: unboxed_slot,
+                                                    value: skotch_mir::Rvalue::Call {
+                                                        kind: skotch_mir::CallKind::VirtualJava {
+                                                            class_name: box_cls.clone(),
+                                                            method_name: unbox_name.to_string(),
+                                                            descriptor: unbox_desc.to_string(),
+                                                        },
+                                                        args: vec![result_slot],
                                                     },
-                                                    args: vec![result_slot],
-                                                },
-                                            });
-                                            return Some(unboxed_slot);
+                                                });
+                                                return Some(unboxed_slot);
+                                            }
                                         }
                                     }
                                 }
+                                return Some(result_slot);
                             }
-                            return Some(result_slot);
-                        }
+                        } // end of else (not a `[`-prefixed array class)
                     }
                     // Element-Ty: primitive arrays carry the element
                     // shape in `array_ty`; for `Ty::Any` reference arrays
@@ -37492,6 +37582,61 @@ fn lower_rich_expr_to_slot(
                         // Special builtins (Pair/Triple/IntRange) are
                         // handled by the per-prop dispatch below.
                         let recv_ty_pre = slot_ty_with_param_fallback(recv_slot.0, extra_locals);
+                        // Object-array `.size` / `.lastIndex` — when
+                        // the receiver is typed as a JVM array
+                        // descriptor (`[L<T>;` from arrayOf), short-
+                        // circuit to ArrayLength so we don't fall
+                        // through to the generic `getX()` path which
+                        // would emit `[Ljava/lang/String;.getSize()`
+                        // (NoSuchMethod). Mirrors `Ty::IntArray.size`
+                        // behavior for reference arrays.
+                        if let Ty::Class(cname) = &recv_ty_pre {
+                            if cname.starts_with('[') {
+                                match prop_name {
+                                    "size" => {
+                                        let result_slot = LocalId(*next_slot);
+                                        *next_slot += 1;
+                                        extra_locals.push(Ty::Int);
+                                        pre_stmts.push(MStmt::Assign {
+                                            dest: result_slot,
+                                            value: skotch_mir::Rvalue::ArrayLength(recv_slot),
+                                        });
+                                        return Some(result_slot);
+                                    }
+                                    "lastIndex" => {
+                                        let len_slot = LocalId(*next_slot);
+                                        *next_slot += 1;
+                                        extra_locals.push(Ty::Int);
+                                        pre_stmts.push(MStmt::Assign {
+                                            dest: len_slot,
+                                            value: skotch_mir::Rvalue::ArrayLength(recv_slot),
+                                        });
+                                        let one_slot = LocalId(*next_slot);
+                                        *next_slot += 1;
+                                        extra_locals.push(Ty::Int);
+                                        pre_stmts.push(MStmt::Assign {
+                                            dest: one_slot,
+                                            value: skotch_mir::Rvalue::Const(
+                                                skotch_mir::MirConst::Int(1),
+                                            ),
+                                        });
+                                        let result_slot = LocalId(*next_slot);
+                                        *next_slot += 1;
+                                        extra_locals.push(Ty::Int);
+                                        pre_stmts.push(MStmt::Assign {
+                                            dest: result_slot,
+                                            value: skotch_mir::Rvalue::BinOp {
+                                                op: skotch_mir::BinOp::SubI,
+                                                lhs: len_slot,
+                                                rhs: one_slot,
+                                            },
+                                        });
+                                        return Some(result_slot);
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        }
                         if let Ty::Class(cname) = &recv_ty_pre {
                             if !matches!(
                                 cname.as_str(),
@@ -37499,7 +37644,8 @@ fn lower_rich_expr_to_slot(
                                     | "kotlin/Pair"
                                     | "kotlin/Triple"
                                     | "kotlin/ranges/IntRange"
-                            ) {
+                            ) && !cname.starts_with('[')
+                            {
                                 // Throwable family (incl. user subclasses
                                 // via CLASS_SUPER walk): `.message` →
                                 // `getMessage()Ljava/lang/String;`. Without
