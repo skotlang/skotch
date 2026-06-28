@@ -6457,6 +6457,10 @@ fn emit_method_body(
                             0xB0 => {
                                 // areturn — Object of return type. Pick the
                                 // tightest possible class for the descriptor.
+                                // Nullable primitives box to their wrapper
+                                // class (`Int?` → `java/lang/Integer`),
+                                // matching the autoboxed value emitted by
+                                // the call-site `Integer.valueOf(I)`.
                                 buf.push(7);
                                 let cn = match &func.return_ty {
                                     Ty::String => "java/lang/String".to_string(),
@@ -6464,6 +6468,14 @@ fn emit_method_body(
                                     Ty::Nullable(inner) => match inner.as_ref() {
                                         Ty::Class(name) => name.clone(),
                                         Ty::String => "java/lang/String".to_string(),
+                                        Ty::Int => "java/lang/Integer".to_string(),
+                                        Ty::Long => "java/lang/Long".to_string(),
+                                        Ty::Float => "java/lang/Float".to_string(),
+                                        Ty::Double => "java/lang/Double".to_string(),
+                                        Ty::Bool => "java/lang/Boolean".to_string(),
+                                        Ty::Char => "java/lang/Character".to_string(),
+                                        Ty::Byte => "java/lang/Byte".to_string(),
+                                        Ty::Short => "java/lang/Short".to_string(),
                                         _ => "java/lang/Object".to_string(),
                                     },
                                     _ => "java/lang/Object".to_string(),
