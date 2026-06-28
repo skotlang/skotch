@@ -45163,12 +45163,53 @@ fn lower_rich_expr_to_slot(
                                             "(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Z",
                                             Ty::Bool,
                                         )),
-                                        "count" => Some((
-                                            "kotlin/collections/CollectionsKt",
-                                            "count",
-                                            "(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)I",
-                                            Ty::Int,
-                                        )),
+                                        "count" => {
+                                            // `count()` (no predicate) → JDK
+                                            // `Collection.size()` shape on the
+                                            // facade; `count { p }` →
+                                            // CollectionsKt.count(Iterable,
+                                            // Function1). Pick by lambda.
+                                            if call.lambda_argument().is_some() {
+                                                Some((
+                                                    "kotlin/collections/CollectionsKt",
+                                                    "count",
+                                                    "(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)I",
+                                                    Ty::Int,
+                                                ))
+                                            } else {
+                                                Some((
+                                                    "kotlin/collections/CollectionsKt",
+                                                    "count",
+                                                    "(Ljava/lang/Iterable;)I",
+                                                    Ty::Int,
+                                                ))
+                                            }
+                                        }
+                                        // `none()` (no predicate) →
+                                        // CollectionsKt.none(Iterable):Z;
+                                        // `none { p }` →
+                                        // CollectionsKt.none(Iterable,Function1):Z.
+                                        // Both overloads exist as JVM-static
+                                        // methods on CollectionsKt — pick the
+                                        // descriptor by whether the call carries
+                                        // a trailing lambda. parity/152.
+                                        "none" => {
+                                            if call.lambda_argument().is_some() {
+                                                Some((
+                                                    "kotlin/collections/CollectionsKt",
+                                                    "none",
+                                                    "(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Z",
+                                                    Ty::Bool,
+                                                ))
+                                            } else {
+                                                Some((
+                                                    "kotlin/collections/CollectionsKt",
+                                                    "none",
+                                                    "(Ljava/lang/Iterable;)Z",
+                                                    Ty::Bool,
+                                                ))
+                                            }
+                                        }
                                         "zip" => {
                                             // Two overloads exist in CollectionsKt:
                                             //   zip(Iterable, Iterable): List<Pair<T,R>>
@@ -45588,7 +45629,7 @@ fn lower_rich_expr_to_slot(
                                                         match (method, elem_ty.as_ref()) {
                                                             (
                                                                 "filter" | "map" | "forEach"
-                                                                | "any" | "all" | "count"
+                                                                | "any" | "all" | "none" | "count"
                                                                 | "groupBy" | "flatMap",
                                                                 Some(t),
                                                             ) => Some(vec![t.clone()]),
