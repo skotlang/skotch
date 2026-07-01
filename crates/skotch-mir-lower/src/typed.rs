@@ -35612,6 +35612,33 @@ fn emit_join_to_string_default(
     Some(result_slot)
 }
 
+/// Returns true when any positional value argument of `call` is a
+/// function-typed expression (`::foo` callable reference OR a `{ ... }`
+/// lambda literal passed as a value argument, not as a trailing lambda).
+///
+/// Used to pick between the no-predicate and predicate overloads of
+/// stdlib collection extensions like `count(Iterable):I` vs
+/// `count(Iterable, Function1):I` and `firstOrNull(Iterable):Object`
+/// vs `firstOrNull(Iterable, Function1):Object`. The predicate variant
+/// is selected when the user wrote `xs.count(::isPositive)` (positional
+/// value-arg) — Kotlin's overload resolution treats this identically to
+/// the trailing-lambda form `xs.count { isPositive(it) }`.
+fn call_has_functional_value_arg(call: skotch_ast::KtCallExpression<'_>) -> bool {
+    let Some(arg_list) = call.value_argument_list() else {
+        return false;
+    };
+    for arg in arg_list.arguments() {
+        let Some(e) = arg.expression() else {
+            continue;
+        };
+        match unwrap_parens(e) {
+            skotch_ast::KtExpr::CallableRef(_) | skotch_ast::KtExpr::Lambda(_) => return true,
+            _ => continue,
+        }
+    }
+    false
+}
+
 /// Synthesize a small `Lambda$N` class for a `obj::method` or
 /// `Class::method` callable reference and emit the allocation at the
 /// call site. MVP: zero-arg methods only (receiver is captured for
@@ -46579,10 +46606,15 @@ fn lower_rich_expr_to_slot(
                                         "count" => {
                                             // `count()` (no predicate) → JDK
                                             // `Collection.size()` shape on the
-                                            // facade; `count { p }` →
+                                            // facade; `count { p }` OR
+                                            // `count(::fn)` →
                                             // CollectionsKt.count(Iterable,
-                                            // Function1). Pick by lambda.
-                                            if call.lambda_argument().is_some() {
+                                            // Function1). Pick by trailing
+                                            // lambda OR a callable-ref/lambda
+                                            // passed as a positional value arg.
+                                            if call.lambda_argument().is_some()
+                                                || call_has_functional_value_arg(*call)
+                                            {
                                                 Some((
                                                     "kotlin/collections/CollectionsKt",
                                                     "count",
@@ -46595,6 +46627,35 @@ fn lower_rich_expr_to_slot(
                                                     "count",
                                                     "(Ljava/lang/Iterable;)I",
                                                     Ty::Int,
+                                                ))
+                                            }
+                                        }
+                                        // `firstOrNull()` (no predicate) →
+                                        // CollectionsKt.firstOrNull(Iterable):Object;
+                                        // `firstOrNull { p }` OR
+                                        // `firstOrNull(::fn)` →
+                                        // CollectionsKt.firstOrNull(Iterable,
+                                        // Function1):Object. Both overloads
+                                        // exist as JVM-static methods on
+                                        // CollectionsKt; pick by trailing
+                                        // lambda OR a callable-ref/lambda
+                                        // passed as a positional value arg.
+                                        "firstOrNull" => {
+                                            if call.lambda_argument().is_some()
+                                                || call_has_functional_value_arg(*call)
+                                            {
+                                                Some((
+                                                    "kotlin/collections/CollectionsKt",
+                                                    "firstOrNull",
+                                                    "(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Ljava/lang/Object;",
+                                                    Ty::Any,
+                                                ))
+                                            } else {
+                                                Some((
+                                                    "kotlin/collections/CollectionsKt",
+                                                    "firstOrNull",
+                                                    "(Ljava/lang/Iterable;)Ljava/lang/Object;",
+                                                    Ty::Any,
                                                 ))
                                             }
                                         }
@@ -48419,14 +48480,42 @@ fn lower_rich_expr_to_slot(
                                         ))
                                     }
                                     "count" => {
-                                        if call.lambda_argument().is_some() {
-                                            None
+                                        if call.lambda_argument().is_some()
+                                            || call_has_functional_value_arg(*call)
+                                        {
+                                            Some((
+                                                "kotlin/collections/CollectionsKt",
+                                                "count",
+                                                "(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)I",
+                                                Ty::Int,
+                                            ))
                                         } else {
                                             Some((
                                                 "kotlin/collections/CollectionsKt",
                                                 "count",
                                                 "(Ljava/lang/Iterable;)I",
                                                 Ty::Int,
+                                            ))
+                                        }
+                                    }
+                                    // Chained receiver `xs.foo().firstOrNull(...)`.
+                                    // Same overload split as `count`.
+                                    "firstOrNull" => {
+                                        if call.lambda_argument().is_some()
+                                            || call_has_functional_value_arg(*call)
+                                        {
+                                            Some((
+                                                "kotlin/collections/CollectionsKt",
+                                                "firstOrNull",
+                                                "(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Ljava/lang/Object;",
+                                                Ty::Any,
+                                            ))
+                                        } else {
+                                            Some((
+                                                "kotlin/collections/CollectionsKt",
+                                                "firstOrNull",
+                                                "(Ljava/lang/Iterable;)Ljava/lang/Object;",
+                                                Ty::Any,
                                             ))
                                         }
                                     }

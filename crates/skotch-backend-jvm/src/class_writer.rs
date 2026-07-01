@@ -4733,6 +4733,34 @@ fn emit_method_body(
                             code.push(0xC0);
                             code.write_u16::<BigEndian>(ci).unwrap();
                         }
+                        // Nullable return type: JVM descriptor is the
+                        // BOXED form of the inner Ty (`Nullable(Int)` →
+                        // `Ljava/lang/Integer;`, `Nullable(Class(c))` →
+                        // `Lc;`). The value on the stack is Object
+                        // (from a Function<N>.invoke() etc.) — cast it
+                        // to the boxed class and let areturn accept it.
+                        // No primitive unboxing here because the
+                        // outgoing descriptor IS the boxed type.
+                        Ty::Nullable(inner) => {
+                            let boxed: Option<&str> = match inner.as_ref() {
+                                Ty::Int => Some("java/lang/Integer"),
+                                Ty::Long => Some("java/lang/Long"),
+                                Ty::Float => Some("java/lang/Float"),
+                                Ty::Double => Some("java/lang/Double"),
+                                Ty::Bool => Some("java/lang/Boolean"),
+                                Ty::Byte => Some("java/lang/Byte"),
+                                Ty::Short => Some("java/lang/Short"),
+                                Ty::Char => Some("java/lang/Character"),
+                                Ty::String => Some("java/lang/String"),
+                                Ty::Class(name) => Some(name.as_str()),
+                                _ => None,
+                            };
+                            if let Some(bcls) = boxed {
+                                let ci = cp.class(bcls);
+                                code.push(0xC0);
+                                code.write_u16::<BigEndian>(ci).unwrap();
+                            }
+                        }
                         _ => {}
                     }
                 }
