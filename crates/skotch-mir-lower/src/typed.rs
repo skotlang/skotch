@@ -33674,20 +33674,65 @@ fn try_lower_multi_stmt_block_with_offset(
                                             }
                                         }
                                     }
-                                    let slot = LocalId(next_slot);
-                                    next_slot += 1;
-                                    local_tys.push(Ty::Any);
-                                    stmts.push(MStmt::Assign {
-                                        dest: slot,
-                                        value: skotch_mir::Rvalue::Call {
-                                            kind: skotch_mir::CallKind::Virtual {
-                                                class_name: cname,
-                                                method_name: method_n.to_string(),
+                                    // Fixture 179 value-class parity: when the
+                                    // method is a top-level extension fn (in
+                                    // fn_lookup) and the receiver class does NOT
+                                    // define it as a real member, emit
+                                    // CallKind::Static(fid). The backend's H5b
+                                    // value-class dispatch (unbox-impl + mangled
+                                    // static call) then fires for `@JvmInline`
+                                    // receivers. Class members still take the
+                                    // Virtual arm below since they resolve via
+                                    // `class_method_return_ty`. Prevents a
+                                    // top-level fn from clobbering a same-named
+                                    // real class method.
+                                    let has_class_member =
+                                        class_method_return_ty(&cname, method_n).is_some();
+                                    if !has_class_member {
+                                        if let Some((fid, ret_ty)) = fn_lookup.get(method_n) {
+                                            let slot = LocalId(next_slot);
+                                            next_slot += 1;
+                                            local_tys.push(ret_ty.clone());
+                                            stmts.push(MStmt::Assign {
+                                                dest: slot,
+                                                value: skotch_mir::Rvalue::Call {
+                                                    kind: skotch_mir::CallKind::Static(*fid),
+                                                    args: arg_slots,
+                                                },
+                                            });
+                                            slot
+                                        } else {
+                                            let slot = LocalId(next_slot);
+                                            next_slot += 1;
+                                            local_tys.push(Ty::Any);
+                                            stmts.push(MStmt::Assign {
+                                                dest: slot,
+                                                value: skotch_mir::Rvalue::Call {
+                                                    kind: skotch_mir::CallKind::Virtual {
+                                                        class_name: cname,
+                                                        method_name: method_n.to_string(),
+                                                    },
+                                                    args: arg_slots,
+                                                },
+                                            });
+                                            slot
+                                        }
+                                    } else {
+                                        let slot = LocalId(next_slot);
+                                        next_slot += 1;
+                                        local_tys.push(Ty::Any);
+                                        stmts.push(MStmt::Assign {
+                                            dest: slot,
+                                            value: skotch_mir::Rvalue::Call {
+                                                kind: skotch_mir::CallKind::Virtual {
+                                                    class_name: cname,
+                                                    method_name: method_n.to_string(),
+                                                },
+                                                args: arg_slots,
                                             },
-                                            args: arg_slots,
-                                        },
-                                    });
-                                    slot
+                                        });
+                                        slot
+                                    }
                                 }
                                 _ => return None,
                             }
