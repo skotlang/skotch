@@ -5301,6 +5301,7 @@ pub fn lower_file(
                     name: fname.clone(),
                     ty: fty.clone(),
                     is_jvm_field: false,
+                    is_mutable: false,
                 })
                 .collect();
             // SealedInterface is a separate ExternalClassKind variant but
@@ -6404,6 +6405,7 @@ pub fn lower_file(
                                 name: param_name.clone(),
                                 ty: Ty::Class(iface_jvm.clone()),
                                 is_jvm_field: false,
+                                is_mutable: false,
                             });
                             // 2. PutField in constructor.
                             let Some(idx) = param_names_v.iter().position(|n| n == param_name)
@@ -7587,6 +7589,7 @@ pub fn lower_file(
                     name: entry_name.clone(),
                     ty: Ty::Class(name.clone()),
                     is_jvm_field: false,
+                    is_mutable: false,
                 })
                 .collect();
             // Synthesize an `entries: List` static field that holds the
@@ -7602,6 +7605,7 @@ pub fn lower_file(
                     name: "entries".to_string(),
                     ty: Ty::Class("java/util/List".to_string()),
                     is_jvm_field: false,
+                    is_mutable: false,
                 });
             }
             // Synthesize enum <init>(String, int) that calls
@@ -7892,6 +7896,7 @@ pub fn lower_file(
                     name: pname.clone(),
                     ty: pty.clone(),
                     is_jvm_field: false,
+                    is_mutable: false,
                 })
                 .collect();
             // Lower user-defined enum-class methods (`fun apply(...)
@@ -35872,6 +35877,7 @@ fn try_lower_callable_ref(
             name: "receiver".to_string(),
             ty: Ty::Any,
             is_jvm_field: false,
+            is_mutable: false,
         }]
     } else {
         Vec::new()
@@ -37718,6 +37724,7 @@ fn lower_rich_expr_to_slot(
                 name: n.clone(),
                 ty: cap_ty.clone(),
                 is_jvm_field: false,
+                is_mutable: false,
             })
             .collect();
         let lambda_class = skotch_mir::MirClass {
@@ -38202,6 +38209,7 @@ fn lower_rich_expr_to_slot(
                 name: n.clone(),
                 ty: slot_ty_with_param_fallback(cap_slot.0, extra_locals),
                 is_jvm_field: false,
+                is_mutable: false,
             })
             .collect();
         let obj_class = skotch_mir::MirClass {
@@ -55280,6 +55288,7 @@ fn collect_class_fields(c: skotch_ast::KtClass<'_>) -> Vec<skotch_mir::MirField>
                             name: n.to_string(),
                             ty,
                             is_jvm_field: false,
+                            is_mutable: p.is_var(),
                         });
                     }
                 }
@@ -55350,6 +55359,7 @@ fn collect_class_fields(c: skotch_ast::KtClass<'_>) -> Vec<skotch_mir::MirField>
                         name: n.to_string(),
                         ty,
                         is_jvm_field: false,
+                        is_mutable: p.is_var(),
                     });
                 }
             }

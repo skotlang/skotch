@@ -869,6 +869,7 @@ mod tests {
                 name: n.to_string(),
                 ty: ty.clone(),
                 is_jvm_field: false,
+                is_mutable: false,
             })
             .collect();
         MirClass {

@@ -1224,11 +1224,13 @@ mod tests {
                     name: "x".to_string(),
                     ty: Ty::Int,
                     is_jvm_field: false,
+                    is_mutable: false,
                 },
                 skotch_mir::MirField {
                     name: "y".to_string(),
                     ty: Ty::Int,
                     is_jvm_field: false,
+                    is_mutable: false,
                 },
             ],
             vec![],
@@ -1250,6 +1252,7 @@ mod tests {
                 name: "value".to_string(),
                 ty: Ty::Int,
                 is_jvm_field: false,
+                is_mutable: false,
             }],
             vec![equals_fn],
         ));

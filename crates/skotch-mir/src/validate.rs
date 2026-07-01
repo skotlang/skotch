@@ -584,6 +584,7 @@ mod tests {
                 name: "x".into(),
                 ty: Ty::Int,
                 is_jvm_field: false,
+                is_mutable: false,
             }],
             methods: Vec::new(),
             constructor: empty_func("<init>", 0),

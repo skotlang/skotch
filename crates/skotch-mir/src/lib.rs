@@ -963,6 +963,13 @@ pub struct MirField {
     /// so existing fixtures are unchanged.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub is_jvm_field: bool,
+    /// True when the source declaration used `var` (mutable). Defaults
+    /// to false (`val`, immutable). Backends emit `ACC_PRIVATE | ACC_FINAL`
+    /// for val, `ACC_PRIVATE` for var — matching kotlinc's shape. Kept
+    /// as an opt-in serde default so pre-existing MIR blobs deserialize
+    /// as val (immutable) and preserve current bytecode.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub is_mutable: bool,
 }
 
 #[derive(Default, Clone, Debug, Serialize, Deserialize)]

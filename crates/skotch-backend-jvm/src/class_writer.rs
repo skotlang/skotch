@@ -2221,8 +2221,25 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
     let super2 = cp2.class(super_name);
     let code2 = cp2.utf8("Code");
     let sf_name2 = cp2.utf8("SourceFile");
-    let sf_simple = class.name.rsplit('/').next().unwrap_or(&class.name);
-    let sf_val2 = cp2.utf8(&format!("{}.kt", sf_simple));
+    // kotlinc's SourceFile attribute names the ORIGINAL Kotlin source
+    // file that declared this class, NOT the class name. When a file
+    // like `Main.kt` declares `class Rect`, kotlinc still emits
+    // `SourceFile: "Main.kt"` on `Rect.class`. Use the module's wrapper
+    // class (e.g. `MainKt`) to derive the source-file name (`Main.kt`).
+    // Fall back to `{ClassName}.kt` if the wrapper isn't set (defensive).
+    let wrapper_simple = module
+        .wrapper_class
+        .rsplit('/')
+        .next()
+        .unwrap_or(module.wrapper_class.as_str());
+    let source_file_name = wrapper_simple
+        .strip_suffix("Kt")
+        .map(|s| format!("{s}.kt"))
+        .unwrap_or_else(|| {
+            let sf_simple = class.name.rsplit('/').next().unwrap_or(&class.name);
+            format!("{sf_simple}.kt")
+        });
+    let sf_val2 = cp2.utf8(&source_file_name);
     // Pre-register field entries. Each tuple is (name_idx, desc_idx,
     // access_flags).
     let mut field_infos: Vec<(u16, u16, u16)> = Vec::new();
@@ -2237,7 +2254,30 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
     for field in &class.fields {
         let n = cp2.utf8(&field.name);
         let d = cp2.utf8(&jvm_param_type_string(&field.ty));
-        field_infos.push((n, d, ACC_PUBLIC));
+        // kotlinc's shape for property backing fields:
+        //   `val x`        → `private final` (accessed via getter)
+        //   `var x`        → `private`       (accessed via getter/setter)
+        //   `@JvmField val` → `public final`  (direct field access ABI)
+        //   `@JvmField var` → `public`
+        // Everything else (captured locals inside lambda classes,
+        // synthesized state fields) already flows through explicit call
+        // sites — leave them ACC_PUBLIC to preserve the existing shape.
+        let is_synthetic_holder =
+            class.is_lambda || class.is_suspend_lambda || class.is_value_class;
+        let flags = if is_synthetic_holder {
+            ACC_PUBLIC
+        } else if field.is_jvm_field {
+            if field.is_mutable {
+                ACC_PUBLIC
+            } else {
+                ACC_PUBLIC | ACC_FINAL
+            }
+        } else if field.is_mutable {
+            ACC_PRIVATE
+        } else {
+            ACC_PRIVATE | ACC_FINAL
+        };
+        field_infos.push((n, d, flags));
     }
     // Enum entry singletons: `public static final <Enum> ENTRY;`. The
     // values are constructed once in this class's synthetic `<clinit>`
@@ -2259,7 +2299,28 @@ fn compile_user_class(class: &skotch_mir::MirClass, module: &MirModule) -> Vec<u
     // / companion-only classes / value classes, kotlinc skips this field
     // — we mirror. (Value classes have no instance state beyond their
     // single underlying value so Compose's stability check is moot.)
-    if !effective_suspend_lambda
+    // The `$stable` field is emitted by kotlinc ONLY when the Compose
+    // compiler plugin runs against the module — vanilla kotlinc does not
+    // add it to arbitrary user classes. We approximate the plugin's
+    // module-wide behaviour by looking for any Compose annotation on
+    // this class or any of its methods (@Composable / @Stable /
+    // @Immutable). Any class in a fixture that has none of those is
+    // treated as a plain non-Compose class and gets no $stable field.
+    // Object singletons of ComposableSingletons are still needed for
+    // Compose lambda memoization, so preserve that.
+    let has_compose_marker = class.annotations.iter().any(|a| {
+        a.descriptor.contains("Composable")
+            || a.descriptor.contains("compose/runtime/Stable")
+            || a.descriptor.contains("compose/runtime/Immutable")
+    }) || class.methods.iter().any(|m| {
+        m.annotations.iter().any(|a| {
+            a.descriptor.contains("Composable")
+                || a.descriptor.contains("compose/runtime/Stable")
+                || a.descriptor.contains("compose/runtime/Immutable")
+        })
+    }) || class.name.starts_with("ComposableSingletons$");
+    if has_compose_marker
+        && !effective_suspend_lambda
         && !class.is_interface
         && !class.is_object_singleton
         && !class.is_lambda
@@ -3867,6 +3928,26 @@ fn emit_user_method(
     } else {
         access
     };
+    // Kotlin methods are final by default: for a non-open class,
+    // instance methods emit ACC_FINAL unless they are `<init>`,
+    // abstract, or on an interface (interfaces get ACC_PUBLIC only for
+    // default methods). kotlinc adds ACC_FINAL uniformly on final
+    // classes' concrete instance methods (both auto-synthesized getters
+    // and user-declared methods).
+    let owning_class = module.classes.iter().find(|c| c.name == class_name);
+    let class_is_open_like = owning_class
+        .map(|c| c.is_open || c.is_abstract || c.is_interface)
+        .unwrap_or(false);
+    let access = if !is_init
+        && !func.is_static
+        && !func.is_abstract
+        && !class_is_open_like
+        && owning_class.is_some()
+    {
+        access | ACC_FINAL
+    } else {
+        access
+    };
     let name_idx = cp.utf8(&func.name);
     let desc_idx = cp.utf8(&descriptor);
 
@@ -4989,10 +5070,17 @@ fn emit_method_body(
         // kotlinc.
         let safe_for_liveness = matches!(kind, MethodKind::Static) && !has_back_edges(&code);
         if safe_for_liveness {
-            // Treat slots stored to multiple times as preserved (vars).
+            // Treat slots stored to multiple times as preserved (vars),
+            // and slots loaded more than once as preserved too — those
+            // are almost always source-level `val` locals that kotlinc
+            // keeps in a dedicated slot for the LocalVariableTable. A
+            // single-store + single-load slot is almost always an
+            // anonymous expression temp that can be reused freely.
             let preserved_slots = compute_repeated_store_slots(&code);
+            let multi_load_slots = compute_multi_load_slots(&code);
             let mut effective_named = named_slots.clone();
             effective_named.extend(preserved_slots.iter().copied());
+            effective_named.extend(multi_load_slots.iter().copied());
             let reused_max = liveness_reuse_slots(&mut code, initial_param_slots, &effective_named);
             if reused_max > 0 && (reused_max as u16) < max_locals {
                 max_locals = (reused_max as u16).max(param_slot_count as u16);
@@ -5545,15 +5633,30 @@ fn emit_method_body(
                     Some(&mut slots),
                 );
                 max_locals = new_max as u16;
-                // NOTE: `liveness_reuse_slots` is intentionally NOT called
-                // here. Its current implementation uses a linear "last
-                // load" walk that doesn't see loop back-edges; in a
-                // function with a loop, the walk can mis-identify a slot
-                // as free for a temporary, clobbering the loop variable.
-                // (Specific failure: 164-identity-matrix's nested `for`
-                // loops.) Re-enable only after teaching the analysis
-                // about the CFG.
-                //
+                // Historically `liveness_reuse_slots` was disabled here
+                // because its linear "last load" walk mis-identifies a
+                // slot as free when the only later loads sit behind a
+                // loop back-edge (fixture 164-identity-matrix). We
+                // re-enable it here ONLY when the bytecode has no
+                // back-edges — the walk is exact for straight-line +
+                // forward-branch code. Multi-load slots are treated as
+                // preserved (like source-level `val`s that kotlinc keeps
+                // in a dedicated slot), so only single-use anonymous
+                // temps get compacted — matches fixture 114-bit-shifts
+                // and the many `main() { println(expr); … }` shapes
+                // where kotlinc reuses one temp slot per println line.
+                if matches!(kind, MethodKind::Static) && !has_back_edges(&code) {
+                    let preserved_slots = compute_repeated_store_slots(&code);
+                    let multi_load_slots = compute_multi_load_slots(&code);
+                    let mut effective_named = named_slots.clone();
+                    effective_named.extend(preserved_slots.iter().copied());
+                    effective_named.extend(multi_load_slots.iter().copied());
+                    let reused_max =
+                        liveness_reuse_slots(&mut code, initial_param_slots, &effective_named);
+                    if reused_max > 0 && (reused_max as u16) < max_locals {
+                        max_locals = reused_max as u16;
+                    }
+                }
                 // The targeted `try_reuse_catch_param_slots` pass below
                 // handles the named-slot-reuse-for-catch-param case
                 // (matches kotlinc) without the over-packing that broke
@@ -29766,6 +29869,29 @@ fn compute_repeated_store_slots(code: &[u8]) -> FxHashSet<u8> {
         i += instruction_len(code, i);
     }
     store_counts
+        .into_iter()
+        .filter_map(|(s, c)| if c > 1 { Some(s) } else { None })
+        .collect()
+}
+
+/// Find slots that are loaded 2+ times in `code`. A slot with multiple
+/// loads is almost always a source-level `val` that gets referenced
+/// several times — kotlinc keeps such slots reserved for the whole
+/// method rather than reusing them for later temps once the last load
+/// is past. Treating them as "preserved" in the liveness pass matches
+/// that shape. Note: single-load slots (like a right-hand-side expression
+/// temp used exactly once by a `println` or a `return`) are NOT included
+/// — those are safe to share with the next temp.
+fn compute_multi_load_slots(code: &[u8]) -> FxHashSet<u8> {
+    let mut load_counts: FxHashMap<u8, u32> = FxHashMap::default();
+    let mut i = 0;
+    while i < code.len() {
+        if let Some((slot, _w)) = decode_load_reference(code, i) {
+            *load_counts.entry(slot).or_insert(0) += 1;
+        }
+        i += instruction_len(code, i);
+    }
+    load_counts
         .into_iter()
         .filter_map(|(s, c)| if c > 1 { Some(s) } else { None })
         .collect()
