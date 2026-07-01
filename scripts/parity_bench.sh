@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Run every parity example under parity/NN-*/ and record (status,
-# kotlinc_ms, skotch_ms) into a TSV. Per-failure diff snippets are
-# written to $OUT_DIR/diffs/. This script ALWAYS exits 0 — example
-# failures are data, not CI failures.
+# Run every parity example under parity/unit/*/ and parity/full/*/
+# and record (status, kotlinc_ms, skotch_ms, similarity) into a TSV.
+# Per-failure diff snippets are written to $OUT_DIR/diffs/. This
+# script ALWAYS exits 0 — example failures are data, not CI failures.
 #
 # Usage:
 #   scripts/parity_bench.sh
@@ -44,14 +44,22 @@ printf 'name\tstatus\tkotlinc_ms\tskotch_ms\tsimilarity\n' > "$OUT_TSV"
 
 # Iterate parity examples in two passes so the natural numeric
 # ordering survives — bash globs sort lexicographically, which would
-# otherwise put `100-` before `02-`. The 2-digit slots (00–99) hold
-# the standalone code examples; the 3-digit slots (100+) hold
-# "project mode" examples that clone an external repository and
+# otherwise put `100-` before `02-`. The `unit/` bucket holds the
+# standalone code examples (2- and 3-digit slots); the `full/` bucket
+# holds "project mode" examples that clone an external repository and
 # compile the project itself.
 shopt -s nullglob
-parity_dirs=("$PARITY_DIR"/[0-9][0-9]-*/ "$PARITY_DIR"/[0-9][0-9][0-9]-*/)
+parity_dirs=(
+    "$PARITY_DIR"/unit/[0-9][0-9]-*/
+    "$PARITY_DIR"/unit/[0-9][0-9][0-9]-*/
+    "$PARITY_DIR"/full/[0-9][0-9][0-9]-*/
+)
 for dir in "${parity_dirs[@]}"; do
-    name="$(basename "${dir%/}")"
+    # Preserve the `unit/…` or `full/…` prefix in the TSV name column so
+    # downstream tools (summary link generation, artifact triage) can
+    # locate the source folder without re-globbing.
+    name="${dir#"$PARITY_DIR"/}"
+    name="${name%/}"
 
     # Run kotlinc $KOTLINC_RUNS times and keep the minimum compile
     # time. JVM startup + class loading + JIT warmup add a multi-hundred-
@@ -107,7 +115,10 @@ for dir in "${parity_dirs[@]}"; do
         # output, which often surfaces the actual error), and a
         # unified diff of the stdouts. summary script truncates to a
         # readable snippet; the artifact has the full thing.
-        diff_file="$DIFFS_DIR/$name.txt"
+        # Flatten `unit/01-…` → `unit__01-…` for the diff filename so
+        # the file lives directly under $DIFFS_DIR (no subdirs).
+        diff_slug="${name//\//__}"
+        diff_file="$DIFFS_DIR/$diff_slug.txt"
         {
             echo "=== $name ($status) ==="
             echo "--- kotlinc stdout (rc=$kc_rc) ---"

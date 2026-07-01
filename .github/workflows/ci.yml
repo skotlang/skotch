@@ -171,11 +171,13 @@ jobs:
     name: parity bench (kotlinc ${{ matrix.kotlin }})
     runs-on: ubuntu-latest
     # End-to-end parity + benchmark: build the skotch release CLI,
-    # then run every parity/NN-* example against the matrix-pinned
-    # kotlinc version. Per-example status (pass / fail-diff /
-    # fail-compile) and skotch-vs-kotlinc timings are aggregated into
-    # a markdown summary; failure diff snippets are inlined and the
-    # full TSV is uploaded as an artifact.
+    # then run every parity example against the matrix-pinned kotlinc
+    # version. `parity/unit/` holds the standalone code examples;
+    # `parity/full/` holds project-mode examples that clone an
+    # external repo. Per-example status (pass / fail-diff / fail-
+    # compile) and skotch-vs-kotlinc timings are aggregated into a
+    # markdown summary; failure diff snippets are inlined and the full
+    # TSV is uploaded as an artifact.
     #
     # NOT gated on the unit-test jobs — parity is informational and we
     # want it on every run even if a unit test broke.
@@ -217,17 +219,17 @@ jobs:
       - name: Build skotch (release)
         run: cargo build --release -p skotch-cli
 
-      # Cache the external repo clones that parity/[0-9][0-9][0-9]-*/
-      # examples pull down via their project.sh declarations. The cache
-      # key includes every project.sh on disk, so a tag/repo bump in any
-      # project.sh invalidates the cache and triggers a fresh checkout.
-      # Without this, every CI run re-clones each project (1s for clikt
-      # 5.1.0 — small, but it adds up across matrix entries).
+      # Cache the external repo clones that parity/full/* examples pull
+      # down via their project.sh declarations. The cache key includes
+      # every project.sh on disk, so a tag/repo bump in any project.sh
+      # invalidates the cache and triggers a fresh checkout. Without
+      # this, every CI run re-clones each project (1s for clikt 5.1.0 —
+      # small, but it adds up across matrix entries).
       - name: Cache parity project checkouts
         uses: actions/cache@v5
         with:
-          path: parity/*/.checkout
-          key: parity-projects-${{ hashFiles('parity/[0-9][0-9][0-9]-*/project.sh') }}
+          path: parity/full/*/.checkout
+          key: parity-projects-${{ hashFiles('parity/full/*/project.sh') }}
 
       - name: Run parity bench
         # Always succeeds; per-example failures land in the TSV and
@@ -236,9 +238,9 @@ jobs:
         # min wins. Filters out JVM cold-start + JIT-warmup tax that
         # otherwise doubles the first-run timing.
         #
-        # Project-mode examples (parity/[0-9][0-9][0-9]-*) clone their
-        # target repository on demand inside the harness. `git` is
-        # preinstalled on ubuntu-latest, so no setup step is needed.
+        # Project-mode examples (parity/full/*) clone their target
+        # repository on demand inside the harness. `git` is preinstalled
+        # on ubuntu-latest, so no setup step is needed.
         env:
           KOTLINC_RUNS: '1'
         run: ./scripts/parity_bench.sh

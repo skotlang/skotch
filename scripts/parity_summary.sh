@@ -54,11 +54,15 @@ rows=()
 while IFS=$'\t' read -r name status kc_ms sk_ms sim; do
     [[ "$name" == "name" ]] && continue
     total=$(( total + 1 ))
-    # Example name shape is `NN-rest` (2-digit slot) or `NNN-rest`
-    # (3-digit project-mode slot). Split on the first `-` so the
-    # numeric prefix doesn't get truncated for 100+ entries.
-    idx="${name%%-*}"
-    rest="${name#*-}"
+    # Example name shape is `<category>/<slot>-<rest>` where category is
+    # either `unit` (standalone examples) or `full` (project-mode
+    # examples that clone an external repo). Peel off the category so
+    # the numeric slot survives the split — otherwise the leading
+    # `unit/` would ruin the `${name%%-*}` prefix split.
+    category="${name%%/*}"
+    slot_name="${name#*/}"
+    idx="${slot_name%%-*}"
+    rest="${slot_name#*-}"
 
     case "$status" in
         pass)         icon="✅"; passed=$(( passed + 1 ));;
@@ -158,8 +162,11 @@ if [[ -d "$DIFFS_DIR" ]]; then
             found_diffs=1
         fi
         bn="$(basename "$diff_file" .txt)"
+        # Un-flatten `unit__01-…` back to `unit/01-…` for display so
+        # readers see the same name that appears in the summary table.
+        display_bn="${bn/__//}"
         line_count=$(wc -l < "$diff_file" | tr -d ' ')
-        echo "<details><summary><strong>${bn}</strong> · ${line_count} lines</summary>"
+        echo "<details><summary><strong>${display_bn}</strong> · ${line_count} lines</summary>"
         echo ""
         echo '```'
         head -"$DIFF_LINES" "$diff_file"

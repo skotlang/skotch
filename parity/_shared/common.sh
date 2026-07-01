@@ -386,7 +386,7 @@ load_project_config() {
     # PROJECT_EXTRA_ARGS is the per-project escape hatch for additional
     # compiler flags: opt-ins, `-Xmulti-platform`, fragment-source
     # mappings, `-Xreturn-value-checker=full`, etc. A multiplatform
-    # project (e.g. parity/102-result) writes one `-Xfragment-sources`
+    # project (e.g. parity/full/102-result) writes one `-Xfragment-sources`
     # entry per file into this array from its `project_prepare` hook.
     PROJECT_EXTRA_ARGS=()
     # Also un-define a previous example's `project_prepare` hook so a
@@ -453,7 +453,7 @@ list_project_kt_files() {
 # LAST_*_MS timing slot, returns the underlying compiler's exit code.
 compile_project_with() {
     local tool="$1"        # "kotlinc" or "skotch"
-    local dir="$2"         # example dir (parity/100-clikt)
+    local dir="$2"         # example dir (parity/full/100-clikt)
     local lib_dir="$3"     # output dir for compiled project classes
     rm -rf "$lib_dir"
     mkdir -p "$lib_dir"
@@ -517,7 +517,7 @@ compile_project_with() {
     # that set the single-file knob expecting it to cover project mode.
     # Without this guard, a skotch infinite loop on any project file
     # wedges the bench for the CI job's overall timeout (typically
-    # 6 hours) — exactly what bit us on parity/101-hash.
+    # 6 hours) — exactly what bit us on parity/full/101-hash.
     local cc_to="${PARITY_PROJECT_COMPILE_TIMEOUT:-${PARITY_COMPILE_TIMEOUT:-300}}"
     local timeout_bin=""
     if command -v timeout >/dev/null 2>&1; then
