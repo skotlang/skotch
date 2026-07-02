@@ -150,36 +150,52 @@ pub fn type_check(
 
     // ── Imports / typealiases (per-file) ────────────────────────────
     let mut imports = collect_imports(file);
+    // Compute the FQ prefix for same-file classes: `package foo.bar`
+    // produces `foo/bar/`. Without prefixing, a same-file `class
+    // Container` was mapped to bare `"Container"` and downstream method
+    // descriptors emitted `LContainer;` for the return type instead of
+    // `Lfoo/Container;` — cross-file call sites then hit NoSuchMethodError.
+    let pkg_prefix: String = file
+        .package_directive()
+        .map(|p| {
+            let name = p.name();
+            if name.is_empty() {
+                String::new()
+            } else {
+                format!("{}/", name.replace('.', "/"))
+            }
+        })
+        .unwrap_or_default();
     // Add same-file class/interface/object/enum names so a body
-    // reference to one of them maps to `Ty::Class(SimpleName)`.
+    // reference to one of them maps to `Ty::Class(<pkg>/SimpleName)`.
     for d in file.decls() {
         match d {
             KtDecl::Class(c) => {
                 if let Some(n) = c.name() {
                     imports
                         .entry(n.to_string())
-                        .or_insert_with(|| n.to_string());
+                        .or_insert_with(|| format!("{pkg_prefix}{n}"));
                 }
             }
             KtDecl::Interface(i) => {
                 if let Some(n) = i.name() {
                     imports
                         .entry(n.to_string())
-                        .or_insert_with(|| n.to_string());
+                        .or_insert_with(|| format!("{pkg_prefix}{n}"));
                 }
             }
             KtDecl::Object(o) => {
                 if let Some(n) = o.name() {
                     imports
                         .entry(n.to_string())
-                        .or_insert_with(|| n.to_string());
+                        .or_insert_with(|| format!("{pkg_prefix}{n}"));
                 }
             }
             KtDecl::EnumClass(e) => {
                 if let Some(n) = e.name() {
                     imports
                         .entry(n.to_string())
-                        .or_insert_with(|| n.to_string());
+                        .or_insert_with(|| format!("{pkg_prefix}{n}"));
                 }
             }
             _ => {}
@@ -209,28 +225,28 @@ pub fn type_check(
                 if let Some(n) = c.name() {
                     class_names
                         .entry(n.to_string())
-                        .or_insert_with(|| n.to_string());
+                        .or_insert_with(|| format!("{pkg_prefix}{n}"));
                 }
             }
             KtDecl::Interface(i) => {
                 if let Some(n) = i.name() {
                     class_names
                         .entry(n.to_string())
-                        .or_insert_with(|| n.to_string());
+                        .or_insert_with(|| format!("{pkg_prefix}{n}"));
                 }
             }
             KtDecl::Object(o) => {
                 if let Some(n) = o.name() {
                     class_names
                         .entry(n.to_string())
-                        .or_insert_with(|| n.to_string());
+                        .or_insert_with(|| format!("{pkg_prefix}{n}"));
                 }
             }
             KtDecl::EnumClass(e) => {
                 if let Some(n) = e.name() {
                     class_names
                         .entry(n.to_string())
-                        .or_insert_with(|| n.to_string());
+                        .or_insert_with(|| format!("{pkg_prefix}{n}"));
                 }
             }
             _ => {}

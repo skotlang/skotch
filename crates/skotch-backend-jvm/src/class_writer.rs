@@ -16360,7 +16360,18 @@ fn walk_block(
                 //
                 // Prefer the real MirClass over a cross-file stub when
                 // both exist — see the PutField path above for why.
-                let owning_class = module.find_class(field_class);
+                // Cross-file class stubs are registered under their SIMPLE
+                // name (`Container`), but the call site passes the FQ
+                // (`foo/Container`). Fall back to the last-segment lookup
+                // so the stub's synthesized `getX` getter is visible and
+                // the field read routes through invokevirtual instead of
+                // getfield.
+                let owning_class = module.find_class(field_class).or_else(|| {
+                    field_class
+                        .rsplit('/')
+                        .next()
+                        .and_then(|s| module.find_class(s))
+                });
                 let declared_ty = owning_class
                     .and_then(|c| c.fields.iter().find(|f| &f.name == field_name))
                     .map(|f| f.ty.clone())
@@ -16453,23 +16464,26 @@ fn walk_block(
                     && (has_inherited_field
                         || owning_class
                             .map(|c| {
-                                // Cross-file value-class stubs: allow the
-                                // getter route so `r.isOk` on an imported
-                                // `@JvmInline value class Result(...)`
-                                // dispatches `invokevirtual isOk()Z`
-                                // against the boxed wrapper instead of
-                                // `getfield isOk:Z` (which fails because
-                                // value classes carry only the underlying
-                                // field, no per-property backing field).
+                                // Cross-file stub: use the getter route
+                                // whenever the stub's method list carries a
+                                // matching `getX(this)` entry. The resolver's
+                                // `property_getter_method` pass registers
+                                // every primary-ctor val/var's synthesized
+                                // getter into `ext.methods`, so real cross-
+                                // file property reads (`c.value`,
+                                // `r.isOk`) dispatch through
+                                // `invokevirtual getX()T` instead of
+                                // `getfield x:T` — the latter fails with
+                                // IllegalAccessError on private backing
+                                // fields, and on `@JvmInline` value classes
+                                // there is no per-property backing field at
+                                // all so `getfield isOk:Z` would fault at
+                                // link time.
                                 if c.is_cross_file_stub {
-                                    if c.is_value_class
-                                        && c.methods
-                                            .iter()
-                                            .any(|m| m.name == getter_name && m.params.len() == 1)
-                                    {
-                                        return true;
-                                    }
-                                    return false;
+                                    return c
+                                        .methods
+                                        .iter()
+                                        .any(|m| m.name == getter_name && m.params.len() == 1);
                                 }
                                 if c.methods
                                     .iter()
@@ -18308,10 +18322,18 @@ fn walk_block(
                                 // this, invokespecial sees `Object` on the
                                 // stack where `Light` is required and the
                                 // verifier rejects. kotlinc emits the same
-                                // checkcast at the call site.
+                                // checkcast at the call site. Extended to
+                                // Ty::String targets so `Container(transform(
+                                // value))` (Function1.invoke returns Object,
+                                // Container ctor expects String) inserts the
+                                // `checkcast String` kotlinc emits.
                                 if matches!(arg_ty, Ty::Any | Ty::Nullable(_)) {
                                     if let Ty::Class(target) = param_ty {
                                         let ci = cp.class(target);
+                                        code.push(0xC0); // checkcast
+                                        code.write_u16::<BigEndian>(ci).unwrap();
+                                    } else if matches!(param_ty, Ty::String) {
+                                        let ci = cp.class("java/lang/String");
                                         code.push(0xC0); // checkcast
                                         code.write_u16::<BigEndian>(ci).unwrap();
                                     }

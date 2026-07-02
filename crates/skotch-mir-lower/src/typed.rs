@@ -1917,6 +1917,13 @@ struct CrossFileExtFn {
     /// an `inline fun V.foo()` body shape is registered in the
     /// `VALUE_CLASS_INLINE_EXT_FN_BODIES` table.
     is_inline: bool,
+    /// When the ext fn's trailing param is a `Ty::Function { params, .. }`
+    /// (a lambda arg), record the FunctionN's positional param types so
+    /// call-site lambda lowering can install a `LambdaParamTyHintScope`
+    /// with the right shapes. Without this, `it.uppercase()` inside a
+    /// cross-file `Container.mapValue { it.uppercase() }` lands with
+    /// `it: Ty::Any` and the body bails on the DotQualified receiver.
+    lambda_param_types: Option<Vec<Ty>>,
 }
 
 /// Emit the 7-block inline expansion of `recv.firstOfType<T>()` /
@@ -4813,6 +4820,16 @@ pub fn lower_file(
                     && recv_class == "java/lang/Object"
                     && decl.param_count == 0
                     && matches!(&decl.return_ty, Ty::Bool);
+                // When the last positional param is a `Ty::Function`,
+                // extract its `params` so the call-site's lambda-arg
+                // lowering can install a `LambdaParamTyHintScope` and
+                // type `it` / positional lambda params correctly.
+                // `param_tys` here EXCLUDES the receiver (it's the tail
+                // of the value-param list).
+                let lambda_param_types: Option<Vec<Ty>> = match decl.param_tys.last() {
+                    Some(Ty::Function { params, .. }) => Some(params.clone()),
+                    _ => None,
+                };
                 let cf_ext = CrossFileExtFn {
                     owner_class: decl.owner_class.clone(),
                     method_name: name.clone(),
@@ -4831,6 +4848,7 @@ pub fn lower_file(
                     // splice the recorded body shape in place of the
                     // unbox + static-dispatch sequence.
                     is_inline: decl.is_inline,
+                    lambda_param_types,
                 };
                 register_cross_file_ext_fn(name, &recv_class, cf_ext.clone());
                 // Phase H5c follow-up: also register under the simple
@@ -9425,7 +9443,16 @@ pub fn lower_file(
             let (mut blocks, extra_locals) = if is_extension {
                 // Route extension fns through the method body lowerer
                 // so `this` resolves to slot 0 and user params to 1..N.
-                let receiver_class = receiver_type_name.clone().unwrap_or_default();
+                // Prefer the FQ-resolved `receiver_ty` (which flowed through
+                // `resolve_user_ty` and picks up same-file/imported class
+                // package prefixes) over the raw source-form name. Without
+                // this, bodies emitted `GetField Container.value` (bare)
+                // even when the class was `foo/Container`, so the JVM
+                // failed to resolve the field ref at runtime.
+                let receiver_class = match &receiver_ty {
+                    Some(Ty::Class(c)) => c.clone(),
+                    _ => receiver_type_name.clone().unwrap_or_default(),
+                };
                 // Phase H5a: for a value-class extension receiver,
                 // expose the value class's underlying val as a
                 // CLASS_METHOD_CTX-visible field so the body's bare
@@ -9440,16 +9467,18 @@ pub fn lower_file(
                 // Non-value-class user-class receiver: expose the
                 // receiver class's fields via CLASS_METHOD_CTX so bare
                 // identifier reads inside the body (`fun Container.
-                // doubled() = value * 2`) resolve to `this.<field>` via
-                // `class_field_lookup`. Without this, `value` inside the
-                // body doesn't resolve to any local/field and the whole
-                // body bails to empty MIR. Same-file receivers register
-                // under both simple and FQ names in CLASS_FIELDS; try
-                // the source-level receiver name (simple form) first,
-                // then the package-qualified form for a cross-file
-                // receiver whose FQ hasn't been seeded on the simple
-                // key. Empty vec covers JDK receivers (`String`, `Int`,
-                // etc.) — those aren't in CLASS_FIELDS.
+                // doubled() = value * 2` or `... = Container(transform(value))`)
+                // resolve to `this.<field>` via `class_field_lookup`.
+                // Without this, `value` inside the body doesn't resolve
+                // to any local/field and the whole body bails to empty
+                // MIR. CLASS_FIELDS entries are keyed by simple name for
+                // local classes; try the source-level receiver name
+                // (simple form) first, then the package-qualified form
+                // for a same-file/cross-package receiver, then the
+                // simple tail for a packaged FQ receiver whose FQ hasn't
+                // been seeded on the simple key. Empty vec covers JDK
+                // receivers (`String`, `Int`, etc.) — those aren't in
+                // CLASS_FIELDS.
                 let user_class_fields: Vec<(String, Ty)> = if value_class_ext_info.is_none() {
                     lookup_class_fields(&receiver_class)
                         .or_else(|| {
@@ -9458,6 +9487,12 @@ pub fn lower_file(
                             } else {
                                 lookup_class_fields(&format!("{pkg_prefix}{receiver_class}"))
                             }
+                        })
+                        .or_else(|| {
+                            receiver_class
+                                .rsplit('/')
+                                .next()
+                                .and_then(lookup_class_fields)
                         })
                         .unwrap_or_default()
                 } else {
@@ -9468,8 +9503,8 @@ pub fn lower_file(
                 } else {
                     user_class_fields.as_slice()
                 };
-                // For a user-class receiver (fields non-empty),
-                // install the class's fully-qualified JVM name in
+                // For a user-class receiver (fields non-empty), install
+                // the class's fully-qualified JVM name in
                 // CLASS_METHOD_CTX so `class_field_lookup` returns the
                 // FQ owner (which the getfield opcode uses to resolve
                 // the field at load time). Without this the ext body's
@@ -27696,22 +27731,34 @@ fn try_lower_multi_stmt_block_with_offset(
                                     // they can attempt the construction
                                     // (e.g. captures lambda path).
                                 } else {
-                                    // FQ-qualify class name via file imports
-                                    // (`import foo.Result` → `foo/Result`) so
-                                    // cross-package ctor calls reference the
-                                    // right class file. Prefer the intrinsic
-                                    // Kotlin→JVM class map when it applies
-                                    // (`String` → `java/lang/String`) so
-                                    // built-in ctors keep their canonical
-                                    // shape; otherwise consult the file's
-                                    // import table. Falls back to the bare
-                                    // simple name when neither resolves —
-                                    // preserves same-package/same-file class
-                                    // ctor lowering.
+                                    // FQ-qualify the class name via file
+                                    // imports (`import foo.Result` →
+                                    // `foo/Result`) so cross-package ctor
+                                    // calls reference the right class file.
+                                    // Prefer the intrinsic Kotlin→JVM class
+                                    // map when it applies (`String` →
+                                    // `java/lang/String`) so built-in ctors
+                                    // keep their canonical shape; then
+                                    // consult the file's import table
+                                    // (only for uppercase-first names — a
+                                    // lowercase `cname` here is a top-
+                                    // level fn callee, not a class ctor;
+                                    // routing it through the class import
+                                    // table would mis-FQ it). Falls back
+                                    // to the bare simple name when neither
+                                    // resolves — preserves
+                                    // same-package/same-file class ctor
+                                    // lowering.
                                     let jvm_class =
                                         skotch_types::intrinsics::kotlin_to_jvm_class(cname)
                                             .map(|s| s.to_string())
-                                            .or_else(|| lookup_file_import(cname))
+                                            .or_else(|| {
+                                                if cname.starts_with(char::is_uppercase) {
+                                                    lookup_file_import(cname)
+                                                } else {
+                                                    None
+                                                }
+                                            })
                                             .unwrap_or_else(|| cname.to_string());
                                     let new_slot = LocalId(next_slot);
                                     next_slot += 1;
@@ -42999,8 +43046,26 @@ fn lower_rich_expr_to_slot(
                                 // entries are registered in CLASS_METHODS
                                 // alongside user-declared methods so
                                 // this lookup hits for every property.
-                                let mut result_ty =
-                                    class_method_return_ty(cname, &getter_name).unwrap_or(Ty::Any);
+                                // Cross-file class stubs are pushed to
+                                // module.classes keyed by SIMPLE name
+                                // (`Container`), but call-site receivers
+                                // carry the FQ Ty (`Ty::Class("foo/Container")`)
+                                // — try the simple form as a fallback so
+                                // synthesized getters like `getValue`
+                                // resolve their real return Ty instead of
+                                // erasing to `Ty::Any` (which downstream
+                                // descriptor building spelled as
+                                // `()Ljava/lang/Object;` and tripped
+                                // NoSuchMethodError against the real
+                                // `()Ljava/lang/String;` accessor).
+                                let mut result_ty = class_method_return_ty(cname, &getter_name)
+                                    .or_else(|| {
+                                        cname
+                                            .rsplit('/')
+                                            .next()
+                                            .and_then(|s| class_method_return_ty(s, &getter_name))
+                                    })
+                                    .unwrap_or(Ty::Any);
                                 // Inherited-field fallback: when the
                                 // direct lookup misses (the property
                                 // lives on a parent class, e.g.
@@ -45249,6 +45314,80 @@ fn lower_rich_expr_to_slot(
                                 });
                                 return Some(result_slot);
                             }
+                        }
+                    }
+                    // `String.reversed(): String` — Kotlin stdlib inline
+                    // extension. Kotlinc inlines to
+                    // `(this as CharSequence).reversed().toString()`.
+                    // Emit the equivalent multi-op sequence explicitly:
+                    // `new StringBuilder(str).reverse().toString()`.
+                    if matches!(recv_ty_candidate, Some(Ty::String)) && method_n == "reversed" {
+                        let arg_count = call
+                            .value_argument_list()
+                            .map(|al| al.arguments().count())
+                            .unwrap_or(0);
+                        if arg_count == 0 && call.lambda_argument().is_none() {
+                            let recv_slot = lower_rich_expr_to_slot(
+                                dq_exprs[0],
+                                lookup_name,
+                                fn_lookup,
+                                next_slot,
+                                pre_stmts,
+                                extra_locals,
+                                strings,
+                            )?;
+                            // NewInstance StringBuilder.
+                            let sb_slot = LocalId(*next_slot);
+                            *next_slot += 1;
+                            extra_locals.push(Ty::Class("java/lang/StringBuilder".to_string()));
+                            pre_stmts.push(MStmt::Assign {
+                                dest: sb_slot,
+                                value: skotch_mir::Rvalue::NewInstance(
+                                    "java/lang/StringBuilder".to_string(),
+                                ),
+                            });
+                            // StringBuilder(String) ctor: dup + ldc + invokespecial.
+                            pre_stmts.push(MStmt::Assign {
+                                dest: sb_slot,
+                                value: skotch_mir::Rvalue::Call {
+                                    kind: skotch_mir::CallKind::ConstructorJava {
+                                        class_name: "java/lang/StringBuilder".to_string(),
+                                        descriptor: "(Ljava/lang/String;)V".to_string(),
+                                    },
+                                    args: vec![recv_slot],
+                                },
+                            });
+                            // .reverse() → StringBuilder.
+                            let rev_slot = LocalId(*next_slot);
+                            *next_slot += 1;
+                            extra_locals.push(Ty::Class("java/lang/StringBuilder".to_string()));
+                            pre_stmts.push(MStmt::Assign {
+                                dest: rev_slot,
+                                value: skotch_mir::Rvalue::Call {
+                                    kind: skotch_mir::CallKind::VirtualJava {
+                                        class_name: "java/lang/StringBuilder".to_string(),
+                                        method_name: "reverse".to_string(),
+                                        descriptor: "()Ljava/lang/StringBuilder;".to_string(),
+                                    },
+                                    args: vec![sb_slot],
+                                },
+                            });
+                            // .toString() → String.
+                            let str_slot = LocalId(*next_slot);
+                            *next_slot += 1;
+                            extra_locals.push(Ty::String);
+                            pre_stmts.push(MStmt::Assign {
+                                dest: str_slot,
+                                value: skotch_mir::Rvalue::Call {
+                                    kind: skotch_mir::CallKind::VirtualJava {
+                                        class_name: "java/lang/StringBuilder".to_string(),
+                                        method_name: "toString".to_string(),
+                                        descriptor: "()Ljava/lang/String;".to_string(),
+                                    },
+                                    args: vec![rev_slot],
+                                },
+                            });
+                            return Some(str_slot);
                         }
                     }
                     if matches!(recv_ty_candidate, Some(Ty::String)) {
@@ -47985,6 +48124,20 @@ fn lower_rich_expr_to_slot(
                                                     .iter()
                                                     .find_map(KtExpr::cast)
                                                 {
+                                                    // Install the lambda-param Ty hint
+                                                    // recorded on the ext-fn entry so
+                                                    // `it` (or positional lambda params)
+                                                    // resolve to the FunctionN's
+                                                    // declared param types rather than
+                                                    // Ty::Any. Without this,
+                                                    // `c.mapValue { it.uppercase() }`
+                                                    // types `it` as Any and the
+                                                    // DotQualified receiver on
+                                                    // `.uppercase()` bails.
+                                                    let _lambda_hint_scope =
+                                                        LambdaParamTyHintScope::new(
+                                                            ext.lambda_param_types.clone(),
+                                                        );
                                                     if let Some(s) = lower_rich_expr_to_slot(
                                                         le,
                                                         lookup_name,
