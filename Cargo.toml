@@ -229,6 +229,18 @@ skotch-lsp             = { path = "crates/skotch-lsp" }
 skotch-bsp             = { path = "crates/skotch-bsp" }
 skotch-compose         = { path = "crates/skotch-compose" }
 
+[workspace.lints.rust]
+# Warnings-as-errors project-wide so local builds fail on the same
+# lints CI enforces (e.g. `unused_variable`, `dead_code`,
+# `unused_imports`). Without this, `cargo build` on a workstation
+# silently accepts warnings that then break the CI `-D warnings`
+# gate; issues like the stale `prim_unbox` binding that shipped in
+# 30a9a105c go unnoticed until push. Individual crates can still opt
+# out per-item with `#[allow(...)]`, per-mod with `#![allow(...)]`,
+# or per-lint at the workspace level below by moving the lint from
+# `deny` to `warn`/`allow`.
+warnings = "deny"
+
 [workspace.lints.clippy]
 # Pedantic / quality lints currently triggered by the SIL/FIR mid-
 # refactor codebase. Silencing at the workspace level keeps CI green

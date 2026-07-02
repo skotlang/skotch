@@ -22700,25 +22700,6 @@ fn lower_loop_body_blocks(
                             Ty::String => Some("java/lang/String".to_string()),
                             _ => None,
                         };
-                        // For `List<Int>` / `List<Double>` etc, elem_ty is a
-                        // primitive Ty. The Object returned by `List.get(i)`
-                        // is a boxed wrapper (Integer/Double/Boolean/…), so
-                        // to satisfy the JVM verifier for `acc += v` (where
-                        // `acc: Int`), we must `checkcast` to the wrapper
-                        // class and then unbox via `Number.intValue()` etc.
-                        // Mirrors kotlinc's shape:
-                        //   next → checkcast Number → invokevirtual intValue → istore
-                        let prim_unbox: Option<(&str, &str, &str)> = match &elem_ty {
-                            Ty::Int => Some(("java/lang/Number", "intValue", "()I")),
-                            Ty::Long => Some(("java/lang/Number", "longValue", "()J")),
-                            Ty::Float => Some(("java/lang/Number", "floatValue", "()F")),
-                            Ty::Double => Some(("java/lang/Number", "doubleValue", "()D")),
-                            Ty::Short => Some(("java/lang/Number", "shortValue", "()S")),
-                            Ty::Byte => Some(("java/lang/Number", "byteValue", "()B")),
-                            Ty::Bool => Some(("java/lang/Boolean", "booleanValue", "()Z")),
-                            Ty::Char => Some(("java/lang/Character", "charValue", "()C")),
-                            _ => None,
-                        };
                         // List-of-Pair (or other componentN-bearing)
                         // destructuring: when the for-loop binds
                         // `for ((a, b) in pairList)`, the per-element
