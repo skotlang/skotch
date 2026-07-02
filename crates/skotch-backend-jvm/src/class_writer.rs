@@ -18336,6 +18336,61 @@ fn walk_block(
                                         let ci = cp.class("java/lang/String");
                                         code.push(0xC0); // checkcast
                                         code.write_u16::<BigEndian>(ci).unwrap();
+                                    } else {
+                                        // Ty::Any → primitive param: unbox
+                                        // via `checkcast <Wrapper>` +
+                                        // `invokevirtual <Wrapper>.<prim>Value()`.
+                                        // Mirrors kotlinc's emission when a
+                                        // `Function1.invoke` (or any Object-
+                                        // returning source) feeds a primitive-
+                                        // typed ctor param: `Pipe(f(value))`
+                                        // where `Pipe(val value: Int)` and
+                                        // `f: (Int) -> Int`. Without this,
+                                        // the invokespecial descriptor is
+                                        // `(I)V` but the stack carries
+                                        // `Object` → VerifyError.
+                                        let unbox_pair: Option<(&str, &str, &str)> = match param_ty
+                                        {
+                                            Ty::Int => {
+                                                Some(("java/lang/Integer", "intValue", "()I"))
+                                            }
+                                            Ty::Long => {
+                                                Some(("java/lang/Long", "longValue", "()J"))
+                                            }
+                                            Ty::Float => {
+                                                Some(("java/lang/Float", "floatValue", "()F"))
+                                            }
+                                            Ty::Double => {
+                                                Some(("java/lang/Double", "doubleValue", "()D"))
+                                            }
+                                            Ty::Bool => {
+                                                Some(("java/lang/Boolean", "booleanValue", "()Z"))
+                                            }
+                                            Ty::Byte => {
+                                                Some(("java/lang/Byte", "byteValue", "()B"))
+                                            }
+                                            Ty::Short => {
+                                                Some(("java/lang/Short", "shortValue", "()S"))
+                                            }
+                                            Ty::Char => {
+                                                Some(("java/lang/Character", "charValue", "()C"))
+                                            }
+                                            _ => None,
+                                        };
+                                        if let Some((wrapper, meth, desc)) = unbox_pair {
+                                            let ci = cp.class(wrapper);
+                                            code.push(0xC0); // checkcast
+                                            code.write_u16::<BigEndian>(ci).unwrap();
+                                            let mr = cp.methodref(wrapper, meth, desc);
+                                            code.push(0xB6); // invokevirtual
+                                            code.write_u16::<BigEndian>(mr).unwrap();
+                                            // Widen stack for wide-primitive
+                                            // returns (long/double add 1 more
+                                            // stack slot than the ref popped).
+                                            if matches!(param_ty, Ty::Long | Ty::Double) {
+                                                bump(stack, max_stack, 1);
+                                            }
+                                        }
                                     }
                                 }
                                 descriptor.push_str(&jvm_param_type_string(param_ty));

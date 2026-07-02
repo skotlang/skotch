@@ -48690,6 +48690,48 @@ fn lower_rich_expr_to_slot(
                                             idx += 1;
                                         }
                                     }
+                                    // Trailing-lambda support for chained
+                                    // cross-file ext-fn dispatch — mirrors
+                                    // the Reference-receiver arm above.
+                                    // Without this, `Pipe(7).andThen { ... }
+                                    // .andThen { ... }` (each `.andThen`
+                                    // is a cross-file inline extension
+                                    // returning a fresh Pipe) fails the
+                                    // arity-check (arg_slots.len()=1 vs
+                                    // param_descs.len()=2) and falls
+                                    // through to a virtual dispatch on the
+                                    // raw class, producing
+                                    // NoSuchMethodError. The recorded
+                                    // lambda-param Ty hint is installed so
+                                    // `it` inside the lambda body resolves
+                                    // to the declared param type rather
+                                    // than Ty::Any.
+                                    if all_ok {
+                                        if let Some(la) = call.lambda_argument() {
+                                            if let Some(le) = skotch_ast::children(la.syntax())
+                                                .iter()
+                                                .find_map(KtExpr::cast)
+                                            {
+                                                let _lambda_hint_scope =
+                                                    LambdaParamTyHintScope::new(
+                                                        ext.lambda_param_types.clone(),
+                                                    );
+                                                if let Some(s) = lower_rich_expr_to_slot(
+                                                    le,
+                                                    lookup_name,
+                                                    fn_lookup,
+                                                    next_slot,
+                                                    pre_stmts,
+                                                    extra_locals,
+                                                    strings,
+                                                ) {
+                                                    arg_slots.push(s);
+                                                } else {
+                                                    all_ok = false;
+                                                }
+                                            }
+                                        }
+                                    }
                                     if all_ok && arg_slots.len() == param_descs.len() {
                                         let result_slot = LocalId(*next_slot);
                                         *next_slot += 1;
