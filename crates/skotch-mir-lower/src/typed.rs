@@ -52786,7 +52786,24 @@ fn lower_simple_body(
                     let mut next_slot = outer_param_count as u32;
                     let mut pre_stmts: Vec<skotch_mir::Stmt> = Vec::new();
                     let mut extra_locals: Vec<Ty> = Vec::new();
-                    let class_ty = Ty::Class(name.to_string());
+                    // Qualify same-file / imported class simple names to
+                    // their JVM FQ form. Without this, an expression-body
+                    // `fun make(): P = P(v)` where P is a same-file class
+                    // (e.g. `foo/Box` in Lib.kt) emits `new Box` (bare)
+                    // which crashes with NoClassDefFoundError at link
+                    // time. Mirrors the qualification used by the deeper
+                    // NewInstance path (line ~42114).
+                    let jvm_class = skotch_types::intrinsics::kotlin_to_jvm_class(name)
+                        .map(|s| s.to_string())
+                        .or_else(|| {
+                            if name.starts_with(char::is_uppercase) {
+                                lookup_file_import(name)
+                            } else {
+                                None
+                            }
+                        })
+                        .unwrap_or_else(|| name.to_string());
+                    let class_ty = Ty::Class(jvm_class.clone());
 
                     // NewInstance slot — the receiver for the
                     // Constructor call.
@@ -52795,7 +52812,7 @@ fn lower_simple_body(
                     extra_locals.push(class_ty.clone());
                     pre_stmts.push(skotch_mir::Stmt::Assign {
                         dest: new_slot,
-                        value: skotch_mir::Rvalue::NewInstance(name.to_string()),
+                        value: skotch_mir::Rvalue::NewInstance(jvm_class.clone()),
                     });
 
                     // Backend convention: Constructor args do NOT include
@@ -52948,7 +52965,7 @@ fn lower_simple_body(
                         pre_stmts.push(skotch_mir::Stmt::Assign {
                             dest: new_slot,
                             value: skotch_mir::Rvalue::Call {
-                                kind: skotch_mir::CallKind::Constructor(name.to_string()),
+                                kind: skotch_mir::CallKind::Constructor(jvm_class.clone()),
                                 args: arg_slots,
                             },
                         });
