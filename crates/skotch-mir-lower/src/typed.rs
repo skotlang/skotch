@@ -22739,7 +22739,57 @@ fn lower_loop_body_blocks(
                         } else {
                             None
                         };
-                        if let Some(target_class) = comp_recv_class.clone() {
+                        // Detect a primitive elem_ty (e.g. `List<Int>` →
+                        // Ty::Int). In that case `List.get(i)` returned
+                        // an autoboxed Integer/Long/... and we need to
+                        // checkcast-to-Number + invoke intValue()/
+                        // longValue()/... to land a real primitive in
+                        // the elem slot. Without this, downstream
+                        // `iadd`/`imul`/etc on the elem slot see an
+                        // Object on the stack and the verifier rejects.
+                        let prim_unbox: Option<(&'static str, &'static str)> = match &elem_ty {
+                            Ty::Int | Ty::Short | Ty::Byte => Some(("intValue", "()I")),
+                            Ty::Long => Some(("longValue", "()J")),
+                            Ty::Float => Some(("floatValue", "()F")),
+                            Ty::Double => Some(("doubleValue", "()D")),
+                            Ty::Char => Some(("charValue", "()C")),
+                            Ty::Bool => Some(("booleanValue", "()Z")),
+                            _ => None,
+                        };
+                        if let Some((mname, mdesc)) = prim_unbox {
+                            // For Char/Bool the boxed class is
+                            // java/lang/Character / java/lang/Boolean
+                            // (they don't extend Number). Everything
+                            // else routes through java/lang/Number,
+                            // which is what kotlinc emits for
+                            // Int/Long/Float/Double/Short/Byte.
+                            let cast_class = match &elem_ty {
+                                Ty::Char => "java/lang/Character",
+                                Ty::Bool => "java/lang/Boolean",
+                                _ => "java/lang/Number",
+                            };
+                            let cast_slot = LocalId(*next_slot);
+                            *next_slot += 1;
+                            local_tys.push(Ty::Class(cast_class.to_string()));
+                            prepend.push(MStmt::Assign {
+                                dest: cast_slot,
+                                value: skotch_mir::Rvalue::CheckCast {
+                                    obj: raw,
+                                    target_class: cast_class.to_string(),
+                                },
+                            });
+                            prepend.push(MStmt::Assign {
+                                dest: elem,
+                                value: skotch_mir::Rvalue::Call {
+                                    kind: skotch_mir::CallKind::VirtualJava {
+                                        class_name: cast_class.to_string(),
+                                        method_name: mname.to_string(),
+                                        descriptor: mdesc.to_string(),
+                                    },
+                                    args: vec![cast_slot],
+                                },
+                            });
+                        } else if let Some(target_class) = comp_recv_class.clone() {
                             prepend.push(MStmt::Assign {
                                 dest: elem,
                                 value: skotch_mir::Rvalue::CheckCast {
