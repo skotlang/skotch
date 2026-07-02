@@ -50259,12 +50259,23 @@ fn lower_rich_expr_to_slot(
                 extra_locals,
                 strings,
             )?;
-            // FQ-qualify the tested class via the file imports map so
-            // `is Failure<*>` inside a packaged file emits `instanceof
-            // foo/Failure`, not the bare `Failure` (which the JVM can't
-            // resolve — `NoClassDefFoundError` at runtime).
-            let descriptor = skotch_types::intrinsics::kotlin_to_jvm_class(&tname)
+            // FQ-qualify the tested class. `runtime_check_jvm_class`
+            // maps the Kotlin primitive type names (`Int`, `Long`,
+            // `Char`, `Boolean`, …) to their boxed JVM classes
+            // (`java/lang/Integer`, …), because a runtime `is Int`
+            // check on the JVM must dispatch against the boxed form —
+            // primitives have no `Class<T>` object. `kotlin_to_jvm_class`
+            // then handles the read-only/mutable collection remapping
+            // (`List → java/util/List`, `Any → java/lang/Object`, …).
+            // Falling back to `lookup_file_import` resolves same-file /
+            // imported class simple names to their FQ form so `is Failure`
+            // in a packaged file emits `instanceof foo/Failure`, not the
+            // bare `Failure` (which the JVM can't resolve at runtime).
+            let descriptor = skotch_types::intrinsics::runtime_check_jvm_class(&tname)
                 .map(|s| s.to_string())
+                .or_else(|| {
+                    skotch_types::intrinsics::kotlin_to_jvm_class(&tname).map(|s| s.to_string())
+                })
                 .or_else(|| lookup_file_import(&tname))
                 .unwrap_or(tname);
             let result_slot = LocalId(*next_slot);
@@ -52317,9 +52328,20 @@ fn lower_simple_body(
                     })
                     .unwrap_or_default();
                 if let Some(idx) = param_names.iter().position(|p| p == name) {
-                    // Boxed JVM type descriptor for primitive types
-                    let descriptor = skotch_types::intrinsics::kotlin_to_jvm_class(&tname)
+                    // Boxed JVM type descriptor for primitive types.
+                    // `runtime_check_jvm_class` handles the primitive
+                    // Kotlin type names (`Int`, `Long`, `Char`,
+                    // `Boolean`, …) → boxed JVM classes required by
+                    // the `instanceof` opcode; `kotlin_to_jvm_class`
+                    // then covers the read-only/mutable collection
+                    // remapping (`List → java/util/List`, `Any →
+                    // java/lang/Object`, …).
+                    let descriptor = skotch_types::intrinsics::runtime_check_jvm_class(&tname)
                         .map(|s| s.to_string())
+                        .or_else(|| {
+                            skotch_types::intrinsics::kotlin_to_jvm_class(&tname)
+                                .map(|s| s.to_string())
+                        })
                         .unwrap_or(tname.clone());
                     let param_count = param_names.len();
                     let result_slot = skotch_mir::LocalId(param_count as u32);
@@ -59824,8 +59846,18 @@ fn method_simple_body_full(
         });
         if let (Some(KtExpr::Reference(r)), Some(tname)) = (operand, type_name) {
             if let Some(name) = r.name() {
-                let descriptor = skotch_types::intrinsics::kotlin_to_jvm_class(&tname)
+                // Boxed JVM type descriptor for primitive types.
+                // `runtime_check_jvm_class` handles the primitive
+                // Kotlin type names (`Int`, `Long`, `Char`,
+                // `Boolean`, …) → boxed JVM classes required by
+                // the `instanceof` opcode; `kotlin_to_jvm_class`
+                // then covers the read-only/mutable collection
+                // remapping.
+                let descriptor = skotch_types::intrinsics::runtime_check_jvm_class(&tname)
                     .map(|s| s.to_string())
+                    .or_else(|| {
+                        skotch_types::intrinsics::kotlin_to_jvm_class(&tname).map(|s| s.to_string())
+                    })
                     .unwrap_or(tname.clone());
                 // Try param first.
                 if let Some(idx) = param_names.iter().position(|p| p == name) {
