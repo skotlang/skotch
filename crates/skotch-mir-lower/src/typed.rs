@@ -22697,6 +22697,26 @@ fn lower_loop_body_blocks(
                         let elem_ty = slot_ty_with_param_fallback(elem.0, local_tys);
                         let target_class = match &elem_ty {
                             Ty::Class(c) if c != "java/lang/Object" => Some(c.clone()),
+                            Ty::String => Some("java/lang/String".to_string()),
+                            _ => None,
+                        };
+                        // For `List<Int>` / `List<Double>` etc, elem_ty is a
+                        // primitive Ty. The Object returned by `List.get(i)`
+                        // is a boxed wrapper (Integer/Double/Boolean/…), so
+                        // to satisfy the JVM verifier for `acc += v` (where
+                        // `acc: Int`), we must `checkcast` to the wrapper
+                        // class and then unbox via `Number.intValue()` etc.
+                        // Mirrors kotlinc's shape:
+                        //   next → checkcast Number → invokevirtual intValue → istore
+                        let prim_unbox: Option<(&str, &str, &str)> = match &elem_ty {
+                            Ty::Int => Some(("java/lang/Number", "intValue", "()I")),
+                            Ty::Long => Some(("java/lang/Number", "longValue", "()J")),
+                            Ty::Float => Some(("java/lang/Number", "floatValue", "()F")),
+                            Ty::Double => Some(("java/lang/Number", "doubleValue", "()D")),
+                            Ty::Short => Some(("java/lang/Number", "shortValue", "()S")),
+                            Ty::Byte => Some(("java/lang/Number", "byteValue", "()B")),
+                            Ty::Bool => Some(("java/lang/Boolean", "booleanValue", "()Z")),
+                            Ty::Char => Some(("java/lang/Character", "charValue", "()C")),
                             _ => None,
                         };
                         // List-of-Pair (or other componentN-bearing)
@@ -26298,7 +26318,18 @@ fn try_lower_function_body_via_blocks(
     // and downstream `step.method(...)` dispatch falls through.
     if let Some(pl) = f.value_parameter_list() {
         for (i, p) in pl.parameters().enumerate() {
-            if let Some(elem_ty) = p.type_reference().and_then(tref_collection_element_ty) {
+            if let Some(mut elem_ty) = p.type_reference().and_then(tref_collection_element_ty) {
+                // Rewrite type-parameter elem-Ty (`List<T>`) to Ty::Any
+                // so downstream for-in dispatch doesn't emit a bogus
+                // `checkcast T` against a non-existent class named T.
+                // Same shape as the param-Ty rewrite above.
+                if !fn_type_param_names.is_empty() {
+                    if let Ty::Class(n) = &elem_ty {
+                        if fn_type_param_names.contains(n) {
+                            elem_ty = Ty::Any;
+                        }
+                    }
+                }
                 record_list_element_ty(i as u32 + slot_offset, elem_ty);
             }
         }
