@@ -10399,6 +10399,34 @@ pub fn lower_file(
     class_ctor_param_tys.insert("kotlin/Triple".to_string(), vec![Ty::Any, Ty::Any, Ty::Any]);
     fixup_ctor_arg_autobox(&mut module, &class_ctor_param_tys);
 
+    // Cross-file top-level-fn arg autobox fixup. Mirrors the ctor
+    // autobox above but for `CallKind::Static(FuncId)` targets whose
+    // FuncId is registered in `module.cross_file_fn_stubs`. When the
+    // sibling-file fn declares a generic-erased param — e.g.
+    // `fun <V> Wrap(value: V): String` — its ExternalFunDecl carries
+    // `param_tys[0] = Ty::Any` and its JVM descriptor is
+    // `(Ljava/lang/Object;)Ljava/lang/String;`. Without this pass, a
+    // call site like `Wrap(7)` pushes `bipush 7` directly against the
+    // Object-typed slot → JVM VerifyError "Type integer is not
+    // assignable to java/lang/Object". We insert
+    // `java/lang/<Wrapper>.valueOf(prim)Wrapper` right before the
+    // invokestatic to autobox primitive args — matching kotlinc's
+    // exact byte-shape at generic-erased user-fn call sites.
+    let stub_param_tys: rustc_hash::FxHashMap<u32, Vec<Ty>> = module
+        .cross_file_fn_stubs
+        .keys()
+        .filter_map(|&fid| {
+            let f = module.functions.get(fid as usize)?;
+            let tys: Vec<Ty> = f
+                .params
+                .iter()
+                .map(|p| f.locals.get(p.0 as usize).cloned().unwrap_or(Ty::Any))
+                .collect();
+            Some((fid, tys))
+        })
+        .collect();
+    fixup_cross_file_fn_arg_autobox(&mut module, &stub_param_tys);
+
     // Optional MIR dump for debugging. Gated on `SKOTCH_DUMP_MIR` env
     // var (one or more `Wrapper.method` patterns, comma-separated).
     // Same shape as the post-compose dump in skotch-compose; useful
@@ -10783,6 +10811,126 @@ fn fixup_ctor_arg_autobox(
         fix(&mut c.constructor, class_ctor_param_tys);
         for sc in &mut c.secondary_constructors {
             fix(sc, class_ctor_param_tys);
+        }
+    }
+}
+
+/// Pre-autobox primitive args at cross-file top-level-fn call sites
+/// where the target's stub params include `Ty::Any` (generic-erased).
+/// See the block comment at the call site (search for
+/// `fixup_cross_file_fn_arg_autobox`) for the motivating VerifyError.
+///
+/// `stub_param_tys` maps `FuncId → Vec<Ty>` where each Ty is the stub
+/// function's locals[params[i]] — i.e. the declared param Ty carried
+/// across from the sibling file's ExternalFunDecl. We only rewrite
+/// arg slots whose local Ty is a primitive AND the expected stub-param
+/// Ty is `Ty::Any` — the erased-generic case that produces a descriptor
+/// mismatch. Other combinations (primitive→primitive, class→class,
+/// class→Any) are already verifier-safe.
+///
+/// Uses `java/lang/<Wrapper>.valueOf` (matches kotlinc's emission at
+/// generic-erased user-fn call sites) rather than
+/// `kotlin/coroutines/jvm/internal/Boxing.box*` (which kotlinc reserves
+/// for coroutines suspend-frame plumbing). Boxing.box* trampolines to
+/// the same valueOf under the hood — runtime-equivalent — but byte-shape
+/// parity matters for the parity ratchet.
+fn fixup_cross_file_fn_arg_autobox(
+    module: &mut skotch_mir::MirModule,
+    stub_param_tys: &rustc_hash::FxHashMap<u32, Vec<Ty>>,
+) {
+    use skotch_mir::{CallKind, LocalId, Rvalue, Stmt as MStmt};
+    let box_helper = |ty: &Ty| -> Option<(&'static str, &'static str, &'static str)> {
+        match ty {
+            Ty::Int => Some(("java/lang/Integer", "valueOf", "(I)Ljava/lang/Integer;")),
+            Ty::Long => Some(("java/lang/Long", "valueOf", "(J)Ljava/lang/Long;")),
+            Ty::Float => Some(("java/lang/Float", "valueOf", "(F)Ljava/lang/Float;")),
+            Ty::Double => Some(("java/lang/Double", "valueOf", "(D)Ljava/lang/Double;")),
+            Ty::Bool => Some(("java/lang/Boolean", "valueOf", "(Z)Ljava/lang/Boolean;")),
+            Ty::Byte => Some(("java/lang/Byte", "valueOf", "(B)Ljava/lang/Byte;")),
+            Ty::Short => Some(("java/lang/Short", "valueOf", "(S)Ljava/lang/Short;")),
+            Ty::Char => Some(("java/lang/Character", "valueOf", "(C)Ljava/lang/Character;")),
+            _ => None,
+        }
+    };
+    let fix = |f: &mut MirFunction, stub_param_tys: &rustc_hash::FxHashMap<u32, Vec<Ty>>| {
+        for block in f.blocks.iter_mut() {
+            let mut new_stmts: Vec<MStmt> = Vec::with_capacity(block.stmts.len());
+            for stmt in std::mem::take(&mut block.stmts) {
+                let expected = match &stmt {
+                    MStmt::Assign {
+                        value:
+                            Rvalue::Call {
+                                kind: CallKind::Static(fid),
+                                ..
+                            },
+                        ..
+                    } => stub_param_tys.get(&fid.0),
+                    _ => None,
+                };
+                let Some(expected) = expected else {
+                    new_stmts.push(stmt);
+                    continue;
+                };
+                let MStmt::Assign { dest, value } = stmt;
+                let (kind, args) = match value {
+                    Rvalue::Call { kind, args } => (kind, args),
+                    other => {
+                        new_stmts.push(MStmt::Assign { dest, value: other });
+                        continue;
+                    }
+                };
+                let mut new_args: Vec<LocalId> = Vec::with_capacity(args.len());
+                for (i, arg_slot) in args.iter().enumerate() {
+                    let Some(arg_ty) = f.locals.get(arg_slot.0 as usize).cloned() else {
+                        new_args.push(*arg_slot);
+                        continue;
+                    };
+                    let Some(exp_ty) = expected.get(i) else {
+                        new_args.push(*arg_slot);
+                        continue;
+                    };
+                    let needs_box = matches!(exp_ty, Ty::Any) && box_helper(&arg_ty).is_some();
+                    if !needs_box {
+                        new_args.push(*arg_slot);
+                        continue;
+                    }
+                    let (class_name, method, desc) = box_helper(&arg_ty).unwrap();
+                    let boxed_slot = LocalId(f.locals.len() as u32);
+                    f.locals.push(Ty::Any);
+                    new_stmts.push(MStmt::Assign {
+                        dest: boxed_slot,
+                        value: Rvalue::Call {
+                            kind: CallKind::StaticJava {
+                                class_name: class_name.to_string(),
+                                method_name: method.to_string(),
+                                descriptor: desc.to_string(),
+                            },
+                            args: vec![*arg_slot],
+                        },
+                    });
+                    new_args.push(boxed_slot);
+                }
+                new_stmts.push(MStmt::Assign {
+                    dest,
+                    value: Rvalue::Call {
+                        kind,
+                        args: new_args,
+                    },
+                });
+            }
+            block.stmts = new_stmts;
+        }
+    };
+    for f in &mut module.functions {
+        fix(f, stub_param_tys);
+    }
+    for c in &mut module.classes {
+        for m in &mut c.methods {
+            fix(m, stub_param_tys);
+        }
+        fix(&mut c.constructor, stub_param_tys);
+        for sc in &mut c.secondary_constructors {
+            fix(sc, stub_param_tys);
         }
     }
 }
