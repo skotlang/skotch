@@ -9437,15 +9437,64 @@ pub fn lower_file(
                     .as_ref()
                     .map(|(_, field, ty)| vec![(field.clone(), ty.clone())])
                     .unwrap_or_default();
+                // Non-value-class user-class receiver: expose the
+                // receiver class's fields via CLASS_METHOD_CTX so bare
+                // identifier reads inside the body (`fun Container.
+                // doubled() = value * 2`) resolve to `this.<field>` via
+                // `class_field_lookup`. Without this, `value` inside the
+                // body doesn't resolve to any local/field and the whole
+                // body bails to empty MIR. Same-file receivers register
+                // under both simple and FQ names in CLASS_FIELDS; try
+                // the source-level receiver name (simple form) first,
+                // then the package-qualified form for a cross-file
+                // receiver whose FQ hasn't been seeded on the simple
+                // key. Empty vec covers JDK receivers (`String`, `Int`,
+                // etc.) — those aren't in CLASS_FIELDS.
+                let user_class_fields: Vec<(String, Ty)> = if value_class_ext_info.is_none() {
+                    lookup_class_fields(&receiver_class)
+                        .or_else(|| {
+                            if pkg_prefix.is_empty() {
+                                None
+                            } else {
+                                lookup_class_fields(&format!("{pkg_prefix}{receiver_class}"))
+                            }
+                        })
+                        .unwrap_or_default()
+                } else {
+                    Vec::new()
+                };
                 let field_names_slice: &[(String, Ty)] = if value_class_ext_info.is_some() {
                     value_class_fields.as_slice()
                 } else {
-                    &[]
+                    user_class_fields.as_slice()
+                };
+                // For a user-class receiver (fields non-empty),
+                // install the class's fully-qualified JVM name in
+                // CLASS_METHOD_CTX so `class_field_lookup` returns the
+                // FQ owner (which the getfield opcode uses to resolve
+                // the field at load time). Without this the ext body's
+                // `getfield Container.value:I` refers to a bare
+                // `Container` class that doesn't exist at runtime →
+                // NoClassDefFoundError. JDK receivers (String, Int,
+                // etc.) don't have a CLASS_FIELDS entry so
+                // `user_class_fields` is empty; keep them at the
+                // source-level simple name so downstream
+                // primitive/receiver dispatch stays intact.
+                let receiver_class_effective = if !user_class_fields.is_empty() {
+                    if let Some(fq) = lookup_file_import(&receiver_class) {
+                        fq
+                    } else if !pkg_prefix.is_empty() && !receiver_class.contains('/') {
+                        format!("{pkg_prefix}{receiver_class}")
+                    } else {
+                        receiver_class.clone()
+                    }
+                } else {
+                    receiver_class.clone()
                 };
                 method_simple_body_full(
                     f,
                     &mut module.strings,
-                    Some(&receiver_class),
+                    Some(&receiver_class_effective),
                     field_names_slice,
                     &fn_lookup,
                     &val_lookup,
@@ -27650,10 +27699,15 @@ fn try_lower_multi_stmt_block_with_offset(
                                     // FQ-qualify class name via file imports
                                     // (`import foo.Result` → `foo/Result`) so
                                     // cross-package ctor calls reference the
-                                    // right class file. Without this, the JVM
-                                    // classloader can't find `Result.class`
-                                    // because kotlinc emits it at
-                                    // `foo/Result.class`.
+                                    // right class file. Prefer the intrinsic
+                                    // Kotlin→JVM class map when it applies
+                                    // (`String` → `java/lang/String`) so
+                                    // built-in ctors keep their canonical
+                                    // shape; otherwise consult the file's
+                                    // import table. Falls back to the bare
+                                    // simple name when neither resolves —
+                                    // preserves same-package/same-file class
+                                    // ctor lowering.
                                     let jvm_class =
                                         skotch_types::intrinsics::kotlin_to_jvm_class(cname)
                                             .map(|s| s.to_string())
@@ -33868,7 +33922,44 @@ fn try_lower_multi_stmt_block_with_offset(
                                     let has_class_member =
                                         class_method_return_ty(&cname, method_n).is_some();
                                     if !has_class_member {
-                                        if let Some((fid, ret_ty)) = fn_lookup.get(method_n) {
+                                        // Cross-file user-defined extension fn
+                                        // dispatch (STMT-context arm mirror of
+                                        // the value-context arm in
+                                        // `lower_rich_expr_to_slot`). When the
+                                        // receiver class doesn't define this
+                                        // method as a real member AND the
+                                        // sibling-file extension-fn registry
+                                        // has an entry for
+                                        // `(method_n, cname)`, emit a
+                                        // `StaticJava` call against the
+                                        // declaring facade (`foo/LibKt`)
+                                        // instead of a fake `invokevirtual
+                                        // Container.doubled()` — which would
+                                        // fail at link time with
+                                        // NoSuchMethodError. Fixes fixture
+                                        // 182-cross-file-extension-fn. The
+                                        // receiver slot is already the first
+                                        // entry in `arg_slots`.
+                                        if let Some(ext) =
+                                            lookup_cross_file_ext_fn_compat(method_n, &cname)
+                                        {
+                                            let slot = LocalId(next_slot);
+                                            next_slot += 1;
+                                            local_tys.push(ext.return_ty.clone());
+                                            stmts.push(MStmt::Assign {
+                                                dest: slot,
+                                                value: skotch_mir::Rvalue::Call {
+                                                    kind: skotch_mir::CallKind::StaticJava {
+                                                        class_name: ext.owner_class.clone(),
+                                                        method_name: ext.method_name.clone(),
+                                                        descriptor: ext.descriptor.clone(),
+                                                    },
+                                                    args: arg_slots,
+                                                },
+                                            });
+                                            slot
+                                        } else if let Some((fid, ret_ty)) = fn_lookup.get(method_n)
+                                        {
                                             let slot = LocalId(next_slot);
                                             next_slot += 1;
                                             local_tys.push(ret_ty.clone());
