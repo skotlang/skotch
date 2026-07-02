@@ -5315,8 +5315,14 @@ pub fn lower_file(
                 skotch_resolve::ExternalClassKind::Interface
                     | skotch_resolve::ExternalClassKind::SealedInterface
             );
+            // Cross-file stub: preserve the FQ JVM name so backend
+            // call-site rewrites (value-class box-impl / -impl statics)
+            // reference the class by its actual JVM path (`foo/Result`),
+            // not the bare simple name (`Result`). Simple-name lookups
+            // still succeed via the fallback alias registered below.
+            let stub_class_name = ext.jvm_name.clone();
             module.push_class(skotch_mir::MirClass {
-                name: simple_name.clone(),
+                name: stub_class_name.clone(),
                 // Preserve the supertype chain for cross-file stubs so
                 // the backend's inherited-method walker (which steps
                 // through `super_class`) can resolve methods declared
@@ -5356,6 +5362,21 @@ pub fn lower_file(
                 },
                 value_underlying_ty: ext.value_underlying_ty.clone(),
             });
+            // Alias the simple name → the same MirClass so `find_class`
+            // callers that key on the source-form Kotlin name (which
+            // still shows up in many call-site lowerings, e.g. the ctor
+            // handler's `cname`) resolve to the FQ stub above. Only add
+            // the alias when the FQ name differs from the simple name
+            // (packaged classes) — otherwise `push_class` already keyed
+            // by the simple name.
+            if stub_class_name != *simple_name {
+                let last_idx = (module.classes.len() as u32).saturating_sub(1);
+                module
+                    .classes_by_name
+                    .entry(simple_name.clone())
+                    .or_default()
+                    .push(last_idx);
+            }
             // Cross-file companion stub: when the cross-file class
             // declares a `companion object`, the companion's methods
             // are reachable via `<Outer>.<method>` call sites that the
@@ -27626,19 +27647,29 @@ fn try_lower_multi_stmt_block_with_offset(
                                     // they can attempt the construction
                                     // (e.g. captures lambda path).
                                 } else {
+                                    // FQ-qualify class name via file imports
+                                    // (`import foo.Result` → `foo/Result`) so
+                                    // cross-package ctor calls reference the
+                                    // right class file. Without this, the JVM
+                                    // classloader can't find `Result.class`
+                                    // because kotlinc emits it at
+                                    // `foo/Result.class`.
+                                    let jvm_class =
+                                        skotch_types::intrinsics::kotlin_to_jvm_class(cname)
+                                            .map(|s| s.to_string())
+                                            .or_else(|| lookup_file_import(cname))
+                                            .unwrap_or_else(|| cname.to_string());
                                     let new_slot = LocalId(next_slot);
                                     next_slot += 1;
-                                    local_tys.push(Ty::Class(cname.to_string()));
+                                    local_tys.push(Ty::Class(jvm_class.clone()));
                                     stmts.push(MStmt::Assign {
                                         dest: new_slot,
-                                        value: skotch_mir::Rvalue::NewInstance(cname.to_string()),
+                                        value: skotch_mir::Rvalue::NewInstance(jvm_class.clone()),
                                     });
                                     stmts.push(MStmt::Assign {
                                         dest: new_slot,
                                         value: skotch_mir::Rvalue::Call {
-                                            kind: skotch_mir::CallKind::Constructor(
-                                                cname.to_string(),
-                                            ),
+                                            kind: skotch_mir::CallKind::Constructor(jvm_class),
                                             args: arg_slots,
                                         },
                                     });
@@ -49861,8 +49892,13 @@ fn lower_rich_expr_to_slot(
                 extra_locals,
                 strings,
             )?;
+            // FQ-qualify the tested class via the file imports map so
+            // `is Failure<*>` inside a packaged file emits `instanceof
+            // foo/Failure`, not the bare `Failure` (which the JVM can't
+            // resolve — `NoClassDefFoundError` at runtime).
             let descriptor = skotch_types::intrinsics::kotlin_to_jvm_class(&tname)
                 .map(|s| s.to_string())
+                .or_else(|| lookup_file_import(&tname))
                 .unwrap_or(tname);
             let result_slot = LocalId(*next_slot);
             *next_slot += 1;

@@ -16453,7 +16453,22 @@ fn walk_block(
                     && (has_inherited_field
                         || owning_class
                             .map(|c| {
+                                // Cross-file value-class stubs: allow the
+                                // getter route so `r.isOk` on an imported
+                                // `@JvmInline value class Result(...)`
+                                // dispatches `invokevirtual isOk()Z`
+                                // against the boxed wrapper instead of
+                                // `getfield isOk:Z` (which fails because
+                                // value classes carry only the underlying
+                                // field, no per-property backing field).
                                 if c.is_cross_file_stub {
+                                    if c.is_value_class
+                                        && c.methods
+                                            .iter()
+                                            .any(|m| m.name == getter_name && m.params.len() == 1)
+                                    {
+                                        return true;
+                                    }
                                     return false;
                                 }
                                 if c.methods
@@ -17868,6 +17883,81 @@ fn walk_block(
                                     }
                                     (Ty::Float, Ty::Double) => {
                                         code.push(0x8D); // f2d
+                                    }
+                                    // Autobox primitives when the value
+                                    // class's underlying is a reference
+                                    // type (`Any?` / `Ljava/lang/Object;`
+                                    // / a user class). Without this,
+                                    // `Result(42)` where `Result` wraps
+                                    // `Any?` pushes a raw int onto the
+                                    // stack and box-impl expects an
+                                    // Object — VerifyError "int not
+                                    // assignable to Object".
+                                    (
+                                        prim,
+                                        Ty::Any | Ty::Class(_) | Ty::Nullable(_) | Ty::String,
+                                    ) => {
+                                        let box_pair: Option<(&str, &str, &str, bool)> = match prim
+                                        {
+                                            Ty::Int => Some((
+                                                "java/lang/Integer",
+                                                "valueOf",
+                                                "(I)Ljava/lang/Integer;",
+                                                false,
+                                            )),
+                                            Ty::Long => Some((
+                                                "java/lang/Long",
+                                                "valueOf",
+                                                "(J)Ljava/lang/Long;",
+                                                true,
+                                            )),
+                                            Ty::Float => Some((
+                                                "java/lang/Float",
+                                                "valueOf",
+                                                "(F)Ljava/lang/Float;",
+                                                false,
+                                            )),
+                                            Ty::Double => Some((
+                                                "java/lang/Double",
+                                                "valueOf",
+                                                "(D)Ljava/lang/Double;",
+                                                true,
+                                            )),
+                                            Ty::Bool => Some((
+                                                "java/lang/Boolean",
+                                                "valueOf",
+                                                "(Z)Ljava/lang/Boolean;",
+                                                false,
+                                            )),
+                                            Ty::Char => Some((
+                                                "java/lang/Character",
+                                                "valueOf",
+                                                "(C)Ljava/lang/Character;",
+                                                false,
+                                            )),
+                                            Ty::Byte => Some((
+                                                "java/lang/Byte",
+                                                "valueOf",
+                                                "(B)Ljava/lang/Byte;",
+                                                false,
+                                            )),
+                                            Ty::Short => Some((
+                                                "java/lang/Short",
+                                                "valueOf",
+                                                "(S)Ljava/lang/Short;",
+                                                false,
+                                            )),
+                                            _ => None,
+                                        };
+                                        if let Some((cls, meth, desc, wide)) = box_pair {
+                                            let m = cp.methodref(cls, meth, desc);
+                                            code.push(0xB8); // invokestatic
+                                            code.write_u16::<BigEndian>(m).unwrap();
+                                            if wide {
+                                                // 2-slot input → 1-slot ref
+                                                bump(stack, max_stack, -1);
+                                            }
+                                        }
                                     }
                                     _ => {}
                                 }
