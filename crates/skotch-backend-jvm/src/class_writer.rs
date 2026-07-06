@@ -1471,6 +1471,17 @@ fn emit_checknotnull_prologue(
     let mut intrinsic: Option<u16> = None;
     // Walk parameters in declaration order.
     let mut emitted_any = false;
+    // Value-class extension fns are emitted as `Static` methods but
+    // still carry an implicit receiver in slot 0 (the underlying value
+    // of the value class). The receiver's Ty may be `Any` when the
+    // underlying is `Any?` — resolve_type_ref currently drops the
+    // Nullable wrap on user types — so treating slot 0 as a normal
+    // Static param would fire a spurious checkNotNullParameter with
+    // the wrong name (the first USER param's name, since func.param_names
+    // doesn't include the receiver). Detect this shape and skip slot 0
+    // + shift name_idx down by 1 for the remaining slots, mirroring
+    // the MethodKind::Instance handling.
+    let is_value_class_ext = func.is_value_class_extension.is_some();
     for (idx, param_id) in func.params.iter().enumerate() {
         let ty = &func.locals[param_id.0 as usize];
         if !is_non_null_reference_param(ty) {
@@ -1487,6 +1498,10 @@ fn emit_checknotnull_prologue(
         if matches!(kind, MethodKind::Instance) && idx == 0 {
             continue;
         }
+        // Skip the implicit receiver on a value-class extension fn.
+        if is_value_class_ext && idx == 0 {
+            continue;
+        }
         // `func.param_names` is 0-indexed by USER param (no entry
         // for the implicit `this`), so for Instance methods we need
         // to subtract 1 from the loop index to land on the right
@@ -1496,7 +1511,7 @@ fn emit_checknotnull_prologue(
         // wrong name AND missing the second check entirely — so
         // calling `Add(l, r)` with non-null args still threw NPE
         // referencing the wrong field.
-        let name_idx = if matches!(kind, MethodKind::Instance) {
+        let name_idx = if matches!(kind, MethodKind::Instance) || is_value_class_ext {
             idx.saturating_sub(1)
         } else {
             idx
@@ -4231,7 +4246,23 @@ fn emit_method_body(
     // every non-null reference parameter. kotlinc emits this at method entry
     // to enforce Kotlin's null-safety on Java callers. We mirror this for
     // bytecode parity.
-    emit_checknotnull_prologue(func, &kind, &slots, cp, &mut code, &mut max_stack);
+    //
+    // Fixture 189 (value-class with `Any?` underlying): kotlinc's private
+    // `<init>` on a `@JvmInline value class` never emits
+    // `checkNotNullParameter` on the underlying param — the ctor's caller
+    // (`box-impl`) has already validated the incoming value (or accepts
+    // null when the underlying is nullable). The current resolve_type_ref
+    // path drops the `Nullable` wrap on `Any?` fields, so this prologue
+    // would fire on `Box(null)` calls and throw NPE at ctor entry.
+    // Skipping the prologue on value-class `<init>` matches kotlinc.
+    let is_value_class_ctor = func.name == "<init>"
+        && module
+            .find_class(class_name)
+            .map(|c| c.is_value_class)
+            .unwrap_or(false);
+    if !is_value_class_ctor {
+        emit_checknotnull_prologue(func, &kind, &slots, cp, &mut code, &mut max_stack);
+    }
 
     // Leading-nop for functions whose body is a single when-without-subject,
     // if-else-if chain, or try-catch (or a return of one). kotlinc emits
@@ -18572,24 +18603,45 @@ fn walk_block(
                             });
                             if let Some(m) = target_method {
                                 // Load receiver.
+                                let recv_ty =
+                                    args.first().map(|r| func.locals[r.0 as usize].clone());
                                 if let Some(recv) = args.first() {
                                     load_local(code, stack, max_stack, slots, *recv, &func.locals);
                                 }
-                                // Unbox to underlying.
+                                // Fixture 189: inside a value-class extension
+                                // body, slot 0 is already the underlying
+                                // (retyped by mir-lower's H5a pass). Emitting
+                                // `invokevirtual V.unbox-impl()` on such a
+                                // slot fails the JVM verifier because unbox-
+                                // impl expects a `LV;` receiver, but the
+                                // slot's Ty (and StackMap frame) is `<U>`
+                                // (e.g. `Ljava/lang/Object;` for
+                                // `value class Box(val v: Any?)`). Kotlinc's
+                                // shape at this site is a direct
+                                // `invokestatic Box.isOk-impl(Object)Z` with
+                                // no unbox. Detect the "already underlying"
+                                // shape by comparing the receiver slot's Ty
+                                // to `u_ty` and skip the unbox emission —
+                                // mirrors the same check on the H5b path
+                                // above (`already_unboxed = recv_ty == u_ty`).
+                                let already_unboxed = recv_ty.as_ref().is_some_and(|t| t == &u_ty);
+                                // Unbox to underlying (skipped when already).
                                 let u_desc = value_class::underlying_descriptor(&u_ty);
-                                let unbox_desc = format!("(){u_desc}");
-                                let unbox_mref =
-                                    cp.methodref(class_name, "unbox-impl", &unbox_desc);
-                                code.push(0xB6); // invokevirtual unbox-impl
-                                code.write_u16::<BigEndian>(unbox_mref).unwrap();
                                 let u_width = if matches!(u_ty, Ty::Long | Ty::Double) {
                                     2
                                 } else {
                                     1
                                 };
-                                // unbox-impl pops receiver (1) and
-                                // pushes underlying (1 or 2). Net = -1 + u_width.
-                                bump(stack, max_stack, -1 + u_width);
+                                if !already_unboxed {
+                                    let unbox_desc = format!("(){u_desc}");
+                                    let unbox_mref =
+                                        cp.methodref(class_name, "unbox-impl", &unbox_desc);
+                                    code.push(0xB6); // invokevirtual unbox-impl
+                                    code.write_u16::<BigEndian>(unbox_mref).unwrap();
+                                    // unbox-impl pops receiver (1) and
+                                    // pushes underlying (1 or 2). Net = -1 + u_width.
+                                    bump(stack, max_stack, -1 + u_width);
+                                }
                                 // Build mangle-param list for KEEP-104.
                                 let mangle_params: Vec<value_class::MangleParam> = m
                                     .params

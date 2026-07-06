@@ -9602,6 +9602,54 @@ pub fn lower_file(
                 if !locals.is_empty() {
                     locals[0] = vc_underlying.clone();
                 }
+                // Fixture 189: when the body returns `this` (slot 0, the
+                // receiver, whose Ty is now the underlying `<u>` after
+                // the retype above) from a value-class ext fn whose
+                // declared return type is the value class itself
+                // (`fun V.foo(): V`), the raw `ReturnValue(0)` would leave
+                // the underlying Object on the stack while the JVM
+                // descriptor promises an `LV;`. Emitting a plain
+                // `checkcast V` on a null underlying yields a null V
+                // reference — the caller then NPEs on subsequent
+                // `V.member` dispatches. Instead, wrap the returned slot
+                // in `V.box-impl(<u>)` so the returned reference is a
+                // real `V` instance holding the underlying value.
+                //
+                // Only rewrite when the returned slot is EXACTLY the
+                // receiver (slot 0). Other Ty::Any slots (e.g. the
+                // Function1.invoke result inside the body) already carry
+                // an actual V reference and get bridged with a plain
+                // checkcast at return.
+                if let Ty::Class(rt_name) = &return_ty {
+                    if rt_name == vc_name {
+                        for block in blocks.iter_mut() {
+                            if let Terminator::ReturnValue(slot) = &block.terminator {
+                                if slot.0 != 0 {
+                                    continue;
+                                }
+                                let slot_ty = locals.get(slot.0 as usize).cloned();
+                                if slot_ty.as_ref() == Some(vc_underlying) {
+                                    let u_desc = vc_underlying_descriptor(vc_underlying);
+                                    let box_desc = format!("({u_desc})L{vc_name};");
+                                    let boxed_slot = skotch_mir::LocalId(locals.len() as u32);
+                                    locals.push(return_ty.clone());
+                                    block.stmts.push(MStmt::Assign {
+                                        dest: boxed_slot,
+                                        value: Rvalue::Call {
+                                            kind: skotch_mir::CallKind::StaticJava {
+                                                class_name: vc_name.clone(),
+                                                method_name: "box-impl".to_string(),
+                                                descriptor: box_desc,
+                                            },
+                                            args: vec![*slot],
+                                        },
+                                    });
+                                    block.terminator = Terminator::ReturnValue(boxed_slot);
+                                }
+                            }
+                        }
+                    }
+                }
                 // Phase H5d: register a snapshot of the lowered body
                 // for inline substitution at call sites in this file.
                 // Only `inline` ext fns get registered (matches
@@ -27576,6 +27624,88 @@ fn try_lower_multi_stmt_block_with_offset(
                                                     } else {
                                                         ok = false;
                                                         break;
+                                                    }
+                                                }
+                                            }
+                                            // Fixture 189: trailing-lambda arg
+                                            // for a val-decl RHS ext-fn call
+                                            // (`val mapped = ok.thenMap { ... }`).
+                                            // Without this, `call.lambda_argument()`
+                                            // silently drops the closure and
+                                            // the resulting invokestatic
+                                            // sees N-1 args on the operand
+                                            // stack → VerifyError. Mirrors
+                                            // the stmt-level arm at
+                                            // `if let Some(la) = call.lambda_argument()`
+                                            // and the lower_rich_expr_to_slot
+                                            // ext-fn-with-trailing-lambda arm.
+                                            if ok {
+                                                if let Some(la) = call.lambda_argument() {
+                                                    if let Some(le) =
+                                                        skotch_ast::children(la.syntax())
+                                                            .iter()
+                                                            .find_map(KtExpr::cast)
+                                                    {
+                                                        let snap = name_to_local.clone();
+                                                        let lookup = |n: &str| -> Option<LocalId> {
+                                                            snap.iter()
+                                                                .rev()
+                                                                .find(|(name, _)| name == n)
+                                                                .map(|(_, l)| *l)
+                                                        };
+                                                        // Install lambda-param
+                                                        // type hint from the
+                                                        // callee's declared
+                                                        // trailing param so
+                                                        // `it` inside the
+                                                        // lambda body picks
+                                                        // the right Ty. The
+                                                        // trailing lambda's
+                                                        // param_idx excludes
+                                                        // the ext receiver, so
+                                                        // it maps to
+                                                        // `arg_slots.len() - 1`
+                                                        // (arg_slots holds
+                                                        // recv + positional
+                                                        // value args).
+                                                        let lambda_param_idx =
+                                                            arg_slots.len().saturating_sub(1);
+                                                        let recv_class_hint =
+                                                            lookup_fn_lambda_receiver_class(
+                                                                method_n,
+                                                                lambda_param_idx,
+                                                            );
+                                                        let param_ty_hint =
+                                                            lookup_fn_lambda_param_tys(
+                                                                method_n,
+                                                                lambda_param_idx,
+                                                            );
+                                                        let final_hint = recv_class_hint
+                                                            .as_ref()
+                                                            .map(|rc| vec![Ty::Class(rc.clone())])
+                                                            .or(param_ty_hint);
+                                                        let _ty_hint =
+                                                            LambdaParamTyHintScope::new(final_hint);
+                                                        let _recv_hint =
+                                                            recv_class_hint.as_ref().map(|rc| {
+                                                                LambdaReceiverHintScope::new(Some(
+                                                                    rc.clone(),
+                                                                ))
+                                                            });
+                                                        let s = lower_rich_expr_to_slot(
+                                                            le,
+                                                            &lookup,
+                                                            fn_lookup,
+                                                            &mut next_slot,
+                                                            &mut stmts,
+                                                            &mut local_tys,
+                                                            strings,
+                                                        );
+                                                        if let Some(s) = s {
+                                                            arg_slots.push(s);
+                                                        } else {
+                                                            ok = false;
+                                                        }
                                                     }
                                                 }
                                             }
@@ -50331,11 +50461,64 @@ fn lower_rich_expr_to_slot(
                     extra_locals,
                     strings,
                 )?;
-                let target_class = skotch_types::intrinsics::kotlin_to_jvm_class(&tname)
+                // Prefer the runtime-check table for the checkcast target
+                // (Kotlin primitives map to their boxed JVM class), then
+                // fall back to the general kotlin_to_jvm_class mapping
+                // for reference types, then to the raw source name (which
+                // will be interpreted as a user class). Without the
+                // runtime-check path, `it as Int` emits `checkcast Int`
+                // which isn't a real JVM class — VerifyError at load.
+                let target_class = skotch_types::intrinsics::runtime_check_jvm_class(&tname)
+                    .or_else(|| skotch_types::intrinsics::kotlin_to_jvm_class(&tname))
                     .map(|s| s.to_string())
-                    .unwrap_or(tname.clone());
+                    .unwrap_or_else(|| tname.clone());
                 let ret_ty = skotch_types::ty_from_name(&tname)
                     .unwrap_or_else(|| Ty::Class(target_class.clone()));
+                // For primitive-typed casts (`it as Int`) the checkcast
+                // lands the BOXED value on the stack; kotlinc follows
+                // with an unbox call (`invokevirtual Integer.intValue()I`)
+                // so the resulting slot holds a real primitive. Without
+                // this, storing a Class("java/lang/Integer") reference
+                // into an `int`-typed slot fails the JVM verifier with
+                // `Type 'Integer' is not assignable to integer`.
+                let primitive_unbox: Option<(&str, &str, &str)> = match &ret_ty {
+                    Ty::Int => Some(("java/lang/Integer", "intValue", "()I")),
+                    Ty::Long => Some(("java/lang/Long", "longValue", "()J")),
+                    Ty::Float => Some(("java/lang/Float", "floatValue", "()F")),
+                    Ty::Double => Some(("java/lang/Double", "doubleValue", "()D")),
+                    Ty::Bool => Some(("java/lang/Boolean", "booleanValue", "()Z")),
+                    Ty::Char => Some(("java/lang/Character", "charValue", "()C")),
+                    Ty::Byte => Some(("java/lang/Byte", "byteValue", "()B")),
+                    Ty::Short => Some(("java/lang/Short", "shortValue", "()S")),
+                    _ => None,
+                };
+                if let Some((box_class, unbox_method, unbox_desc)) = primitive_unbox {
+                    let cast_slot = LocalId(*next_slot);
+                    *next_slot += 1;
+                    extra_locals.push(Ty::Class(box_class.to_string()));
+                    pre_stmts.push(MStmt::Assign {
+                        dest: cast_slot,
+                        value: skotch_mir::Rvalue::CheckCast {
+                            obj: obj_slot,
+                            target_class: target_class.clone(),
+                        },
+                    });
+                    let prim_slot = LocalId(*next_slot);
+                    *next_slot += 1;
+                    extra_locals.push(ret_ty);
+                    pre_stmts.push(MStmt::Assign {
+                        dest: prim_slot,
+                        value: skotch_mir::Rvalue::Call {
+                            kind: skotch_mir::CallKind::VirtualJava {
+                                class_name: box_class.to_string(),
+                                method_name: unbox_method.to_string(),
+                                descriptor: unbox_desc.to_string(),
+                            },
+                            args: vec![cast_slot],
+                        },
+                    });
+                    return Some(prim_slot);
+                }
                 let result_slot = LocalId(*next_slot);
                 *next_slot += 1;
                 extra_locals.push(ret_ty);
