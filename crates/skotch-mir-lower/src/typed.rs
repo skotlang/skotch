@@ -36207,8 +36207,26 @@ fn try_lower_callable_ref(
 ) -> Option<skotch_mir::LocalId> {
     use skotch_ast::KtExpr;
     use skotch_mir::{LocalId, Stmt as MStmt};
-    let KtExpr::Reference(lhs_ref) = unwrap_parens(lhs) else {
-        return None;
+    let lhs_ref = match unwrap_parens(lhs) {
+        KtExpr::Reference(r) => r,
+        // Generic class lhs: `Box<V, E>::isOk` parses the receiver as
+        // a CALL_EXPRESSION wrapping the class Reference plus a
+        // TYPE_ARGUMENT_LIST — with NO value-argument list and no
+        // trailing lambda (`Box<V, E>` is not an invocation). The type
+        // arguments are erased on the JVM, so unwrap to the class
+        // Reference and lower identically to the non-generic
+        // `Box::isOk` form. parity/190.
+        KtExpr::Call(c)
+            if c.type_argument_list().is_some()
+                && c.value_argument_list().is_none()
+                && c.lambda_argument().is_none() =>
+        {
+            match c.callee() {
+                Some(KtExpr::Reference(r)) => r,
+                _ => return None,
+            }
+        }
+        _ => return None,
     };
     let lhs_name = lhs_ref.name()?;
     let bound_slot: Option<LocalId> = lookup_name(lhs_name);
@@ -51116,6 +51134,106 @@ fn lower_rich_expr_to_slot(
                                     return Some(result_slot);
                                 }
                             }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Bare collection-HOF call on the implicit extension receiver:
+    // `all(Box<V, E>::isOk)` inside
+    // `fun <V, E> Iterable<Box<V, E>>.allOk()`. Kotlin resolves the
+    // bare `all` against the extension receiver (`this.all(...)`),
+    // but the specialized DotQualified facade arms above only fire
+    // for explicit receivers. Route the same
+    // `CollectionsKt.<name>(Iterable, Function1)` facade call with
+    // `this` (the extension-receiver slot) as arg 0 when:
+    //   - the callee is a bare Reference named all/any/none/count,
+    //   - the name is NOT a user fn and NOT a local (both would have
+    //     lowered through earlier arms — this also keeps user fns
+    //     named `all` etc. from being shadowed),
+    //   - the enclosing method context's class is a JDK collection
+    //     interface (i.e. we're inside an Iterable-family extension
+    //     body), and
+    //   - the call carries a predicate: a callable-ref/lambda
+    //     positional value arg or a trailing lambda. parity/190.
+    if let KtExpr::Call(call) = &e {
+        let callee_name: Option<&str> = match call.callee() {
+            Some(KtExpr::Reference(r)) => r.name(),
+            _ => None,
+        };
+        if let Some(fn_name) = callee_name {
+            if matches!(fn_name, "all" | "any" | "none" | "count")
+                && !fn_lookup.contains_key(fn_name)
+                && lookup_name(fn_name).is_none()
+            {
+                let recv_is_collection = matches!(
+                    current_class_name().as_deref(),
+                    Some(
+                        "java/lang/Iterable"
+                            | "java/util/Collection"
+                            | "java/util/List"
+                            | "java/util/Set"
+                    )
+                );
+                let positional_args = call
+                    .value_argument_list()
+                    .map(|al| al.arguments().count())
+                    .unwrap_or(0);
+                let has_predicate = (positional_args == 1
+                    && call_has_functional_value_arg(*call)
+                    && call.lambda_argument().is_none())
+                    || (positional_args == 0 && call.lambda_argument().is_some());
+                if recv_is_collection && has_predicate {
+                    let pred_expr: Option<KtExpr<'_>> = call
+                        .value_argument_list()
+                        .and_then(|al| al.arguments().next())
+                        .and_then(|a| a.expression())
+                        .or_else(|| {
+                            call.lambda_argument().and_then(|la| {
+                                skotch_ast::children(la.syntax())
+                                    .iter()
+                                    .find_map(KtExpr::cast)
+                            })
+                        });
+                    if let Some(pred_e) = pred_expr {
+                        if let Some(pred_slot) = lower_rich_expr_to_slot(
+                            pred_e,
+                            lookup_name,
+                            fn_lookup,
+                            next_slot,
+                            pre_stmts,
+                            extra_locals,
+                            strings,
+                        ) {
+                            let (desc, ret_ty) = if fn_name == "count" {
+                                (
+                                    "(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)I",
+                                    Ty::Int,
+                                )
+                            } else {
+                                (
+                                    "(Ljava/lang/Iterable;Lkotlin/jvm/functions/Function1;)Z",
+                                    Ty::Bool,
+                                )
+                            };
+                            let this_slot = current_extension_this_slot().unwrap_or(LocalId(0));
+                            let result_slot = LocalId(*next_slot);
+                            *next_slot += 1;
+                            extra_locals.push(ret_ty);
+                            pre_stmts.push(MStmt::Assign {
+                                dest: result_slot,
+                                value: skotch_mir::Rvalue::Call {
+                                    kind: skotch_mir::CallKind::StaticJava {
+                                        class_name: "kotlin/collections/CollectionsKt".to_string(),
+                                        method_name: fn_name.to_string(),
+                                        descriptor: desc.to_string(),
+                                    },
+                                    args: vec![this_slot, pred_slot],
+                                },
+                            });
+                            return Some(result_slot);
                         }
                     }
                 }
